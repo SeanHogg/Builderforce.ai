@@ -6,6 +6,7 @@ import { EditorTabs } from './EditorTabs';
 import { CodeEditor } from './CodeEditor';
 import { Terminal } from './Terminal';
 import { AIChat } from './AIChat';
+import { AITrainingPanel } from './AITrainingPanel';
 import { PreviewFrame } from './PreviewFrame';
 import { useWebContainer } from '@/hooks/useWebContainer';
 import { useCollaboration } from '@/hooks/useCollaboration';
@@ -18,6 +19,7 @@ interface IDEProps {
 }
 
 type BottomTab = 'terminal' | 'preview';
+type RightTab = 'ai' | 'train';
 
 export function IDE({ project, initialFiles }: IDEProps) {
   const [files, setFiles] = useState<FileEntry[]>(initialFiles);
@@ -25,6 +27,7 @@ export function IDE({ project, initialFiles }: IDEProps) {
   const [activeFile, setActiveFile] = useState<string | undefined>();
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
   const [bottomTab, setBottomTab] = useState<BottomTab>('terminal');
+  const [rightTab, setRightTab] = useState<RightTab>('ai');
   const [previewUrl, setPreviewUrl] = useState<string | undefined>();
   const [terminalWriter, setTerminalWriter] = useState<((data: string) => void) | undefined>();
   const [shellWriter, setShellWriter] = useState<WritableStreamDefaultWriter<string> | undefined>();
@@ -240,9 +243,34 @@ export function IDE({ project, initialFiles }: IDEProps) {
           </div>
         </div>
 
-        {/* AI Chat */}
-        <div className="w-72 shrink-0 border-l border-gray-700 overflow-hidden">
-          <AIChat projectId={project.id} />
+        {/* AI Chat / Training Panel */}
+        <div className="w-72 shrink-0 border-l border-gray-700 overflow-hidden flex flex-col">
+          {/* Right panel tabs */}
+          <div className="flex border-b border-gray-700 shrink-0">
+            <button
+              className={`px-3 py-1.5 text-xs ${rightTab === 'ai' ? 'bg-gray-800 text-white border-t-2 border-t-blue-500' : 'text-gray-400 hover:text-white'}`}
+              onClick={() => setRightTab('ai')}
+            >
+              AI Assistant
+            </button>
+            <button
+              className={`px-3 py-1.5 text-xs ${rightTab === 'train' ? 'bg-gray-800 text-white border-t-2 border-t-blue-500' : 'text-gray-400 hover:text-white'}`}
+              onClick={() => setRightTab('train')}
+            >
+              🧠 Train
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden relative">
+            <div className={`absolute inset-0 ${rightTab === 'ai' ? '' : 'invisible pointer-events-none'}`}>
+              <AIChat projectId={project.id} />
+            </div>
+            <div className={`absolute inset-0 ${rightTab === 'train' ? '' : 'invisible pointer-events-none'}`}>
+              <AITrainingPanel
+                projectId={project.id}
+                onLog={(msg) => terminalWriter?.(`\r\n\x1b[35m[Train]\x1b[0m ${msg}`)}
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>
