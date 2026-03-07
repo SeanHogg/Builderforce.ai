@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { buildTree } from '@/lib/utils';
+import type { TreeNode } from '@/lib/utils';
 import type { FileEntry } from '@/lib/types';
 
 interface FileExplorerProps {
@@ -9,46 +11,6 @@ interface FileExplorerProps {
   onFileSelect: (path: string) => void;
   onFileCreate: (path: string) => void;
   onFileDelete: (path: string) => void;
-}
-
-interface TreeNode {
-  name: string;
-  path: string;
-  type: 'file' | 'directory';
-  children?: TreeNode[];
-}
-
-function buildTree(files: FileEntry[]): TreeNode[] {
-  const root: TreeNode[] = [];
-  const map: Record<string, TreeNode> = {};
-
-  for (const file of files) {
-    const parts = file.path.split('/');
-    let current = root;
-    let currentPath = '';
-
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      currentPath = currentPath ? `${currentPath}/${part}` : part;
-      const isLast = i === parts.length - 1;
-
-      if (!map[currentPath]) {
-        const node: TreeNode = {
-          name: part,
-          path: currentPath,
-          type: isLast ? file.type : 'directory',
-          children: isLast && file.type === 'file' ? undefined : [],
-        };
-        map[currentPath] = node;
-        current.push(node);
-      }
-      if (!isLast) {
-        current = map[currentPath].children!;
-      }
-    }
-  }
-
-  return root;
 }
 
 function TreeNodeComponent({

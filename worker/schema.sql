@@ -37,3 +37,12 @@ CREATE TABLE IF NOT EXISTS collaboration_sessions (
   started_at TIMESTAMPTZ DEFAULT NOW(),
   ended_at TIMESTAMPTZ
 );
+
+CREATE TABLE IF NOT EXISTS file_versions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  content TEXT NOT NULL,
+  author_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);

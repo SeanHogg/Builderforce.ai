@@ -27,9 +27,10 @@ export function IDE({ project, initialFiles }: IDEProps) {
   const [bottomTab, setBottomTab] = useState<BottomTab>('terminal');
   const [previewUrl, setPreviewUrl] = useState<string | undefined>();
   const [terminalWriter, setTerminalWriter] = useState<((data: string) => void) | undefined>();
+  const [shellWriter, setShellWriter] = useState<WritableStreamDefaultWriter<string> | undefined>();
   const [isRunning, setIsRunning] = useState(false);
 
-  const { state: wcState, startDevServer } = useWebContainer();
+  const { state: wcState, mountFiles, runCommand, startShell, startDevServer } = useWebContainer();
   const { doc: ydoc, connected: collabConnected } = useCollaboration(project.id, 'user-local');
 
   const openFile = useCallback(async (path: string) => {
@@ -93,6 +94,35 @@ export function IDE({ project, initialFiles }: IDEProps) {
     setIsRunning(true);
     setBottomTab('terminal');
     try {
+      // Fetch any file contents not yet loaded and build the full map
+      const allContents: Record<string, string> = { ...fileContents };
+      const unfetched = files.filter(f => f.type === 'file' && !(f.path in allContents));
+      await Promise.all(
+        unfetched.map(async (f) => {
+          try {
+            allContents[f.path] = await fetchFileContent(project.id, f.path);
+          } catch {
+            allContents[f.path] = '';
+          }
+        })
+      );
+      setFileContents(allContents);
+
+      // Mount files into the WebContainer
+      terminalWriter?.('\r\n\x1b[36mMounting project files...\x1b[0m\r\n');
+      await mountFiles(allContents);
+
+      // Run npm install if package.json exists
+      if (allContents['package.json']) {
+        terminalWriter?.('\r\n\x1b[36mRunning npm install...\x1b[0m\r\n');
+        await runCommand('npm', ['install'], (data) => terminalWriter?.(data));
+      }
+
+      // Spawn an interactive shell for the terminal panel
+      const writer = await startShell((data) => terminalWriter?.(data));
+      setShellWriter(writer);
+
+      // Start the dev server
       const url = await startDevServer((data) => {
         terminalWriter?.(data);
       });
@@ -104,13 +134,12 @@ export function IDE({ project, initialFiles }: IDEProps) {
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, startDevServer, terminalWriter]);
+  }, [isRunning, startDevServer, mountFiles, runCommand, startShell, terminalWriter, files, fileContents, project.id]);
 
-  const handleTerminalInput = useCallback(async (data: string) => {
-    if (data === '\r') {
-      terminalWriter?.('\r\n');
-    }
-  }, [terminalWriter]);
+  // Forward keystrokes directly to the WebContainer shell
+  const handleTerminalInput = useCallback((data: string) => {
+    shellWriter?.write(data);
+  }, [shellWriter]);
 
   return (
     <div className="h-screen flex flex-col bg-gray-950 text-white overflow-hidden">
@@ -179,7 +208,7 @@ export function IDE({ project, initialFiles }: IDEProps) {
             </div>
           </div>
 
-          {/* Bottom panel */}
+          {/* Bottom panel — both panels always mounted; CSS controls visibility */}
           <div className="h-72 border-t border-gray-700 flex flex-col shrink-0">
             <div className="flex items-center bg-gray-900 border-b border-gray-700">
               <button
@@ -195,15 +224,18 @@ export function IDE({ project, initialFiles }: IDEProps) {
                 Preview {previewUrl && <span className="ml-1 text-green-400">●</span>}
               </button>
             </div>
-            <div className="flex-1 overflow-hidden">
-              {bottomTab === 'terminal' ? (
+            <div className="flex-1 overflow-hidden relative">
+              {/* Terminal — always mounted so terminalWriter / shellWriter are never lost */}
+              <div className={`absolute inset-0 ${bottomTab === 'terminal' ? '' : 'invisible pointer-events-none'}`}>
                 <Terminal
                   onReady={(write) => setTerminalWriter(() => write)}
                   onInput={handleTerminalInput}
                 />
-              ) : (
+              </div>
+              {/* Preview iframe */}
+              <div className={`absolute inset-0 ${bottomTab === 'preview' ? '' : 'invisible pointer-events-none'}`}>
                 <PreviewFrame url={previewUrl} />
-              )}
+              </div>
             </div>
           </div>
         </div>

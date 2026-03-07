@@ -1,14 +1,12 @@
 'use client';
 
+import { getFileName } from '@/lib/utils';
+
 interface EditorTabsProps {
   openFiles: string[];
   activeFile?: string;
   onTabSelect: (path: string) => void;
   onTabClose: (path: string) => void;
-}
-
-function getFileName(path: string): string {
-  return path.split('/').pop() || path;
 }
 
 export function EditorTabs({ openFiles, activeFile, onTabSelect, onTabClose }: EditorTabsProps) {

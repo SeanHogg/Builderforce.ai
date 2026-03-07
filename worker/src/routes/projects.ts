@@ -3,12 +3,50 @@ import { neon } from '@neondatabase/serverless';
 
 interface Env {
   NEON_DATABASE_URL: string;
+  STORAGE: R2Bucket;
 }
 
 const projects = new Hono<{ Bindings: Env }>();
 
-function generateId(): string {
+export function generateId(): string {
   return crypto.randomUUID();
+}
+
+export const VANILLA_TEMPLATE: Record<string, string> = {
+  'package.json': JSON.stringify({
+    name: 'my-app',
+    version: '1.0.0',
+    private: true,
+    scripts: { dev: 'vite --port 3000', build: 'vite build' },
+    dependencies: { vite: '^5.4.0' },
+  }, null, 2),
+  'index.html': `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My App</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
+`,
+  'src/main.js': `document.getElementById('app').innerHTML = \`
+  <h1>Hello from Builderforce.ai! 🚀</h1>
+  <p>Edit <code>src/main.js</code> to get started.</p>
+\`;
+`,
+};
+
+export async function createTemplateFiles(storage: R2Bucket, projectId: string, template: string): Promise<void> {
+  const files = VANILLA_TEMPLATE;
+  await Promise.all(
+    Object.entries(files).map(([path, content]) =>
+      storage.put(`${projectId}/${path}`, content)
+    )
+  );
 }
 
 projects.get('/', async (c) => {
@@ -26,11 +64,13 @@ projects.post('/', async (c) => {
     const body = await c.req.json<{ name: string; description?: string; template?: string }>();
     const sql = neon(c.env.NEON_DATABASE_URL);
     const id = generateId();
+    const template = body.template ?? 'vanilla';
     const rows = await sql`
       INSERT INTO projects (id, name, description, owner_id, template)
-      VALUES (${id}, ${body.name}, ${body.description ?? null}, 'anonymous', ${body.template ?? 'vanilla'})
+      VALUES (${id}, ${body.name}, ${body.description ?? null}, 'anonymous', ${template})
       RETURNING *
     `;
+    await createTemplateFiles(c.env.STORAGE, id, template);
     return c.json(rows[0], 201);
   } catch (e) {
     return c.json({ error: 'Failed to create project' }, 500);
