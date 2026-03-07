@@ -10,8 +10,11 @@ import {
   saveFile,
   deleteFile,
   sendAIMessage,
+  publishAgent,
+  listAgents,
+  hireAgent,
 } from './api';
-import type { Project, FileEntry } from './types';
+import type { Project, FileEntry, PublishedAgent } from './types';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -347,5 +350,91 @@ describe('sendAIMessage', () => {
   it('throws when the server returns a non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(500));
     await expect(sendAIMessage('proj-1', [], () => {})).rejects.toThrow('Failed to send AI message');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Agent Registry
+// ---------------------------------------------------------------------------
+
+const sampleAgent: PublishedAgent = {
+  id: 'agent-1',
+  project_id: 'proj-1',
+  job_id: 'job-1',
+  name: 'Code Expert',
+  title: 'Senior TypeScript Developer',
+  bio: 'Specializes in Node.js and React',
+  skills: ['TypeScript', 'React', 'Node.js'],
+  base_model: 'gpt-neox-20m',
+  lora_rank: 8,
+  r2_artifact_key: 'proj-1/jobs/job-1/adapter.bin',
+  status: 'active',
+  hire_count: 0,
+  created_at: '2024-01-01T00:00:00Z',
+  updated_at: '2024-01-01T00:00:00Z',
+};
+
+describe('publishAgent', () => {
+  it('POSTs to /api/agents and returns the published agent', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify(sampleAgent), { status: 201 })
+    );
+    const result = await publishAgent({
+      project_id: 'proj-1',
+      name: 'Code Expert',
+      title: 'Senior TypeScript Developer',
+      bio: 'Specializes in Node.js and React',
+      skills: ['TypeScript'],
+      base_model: 'gpt-neox-20m',
+    });
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/api\/agents$/);
+    expect(init.method).toBe('POST');
+    const body = JSON.parse(init.body as string);
+    expect(body.name).toBe('Code Expert');
+    expect(result.id).toBe('agent-1');
+  });
+
+  it('throws on non-ok response', async () => {
+    fetchSpy.mockResolvedValueOnce(mockError(500));
+    await expect(
+      publishAgent({ project_id: 'p', name: 'x', title: 't', bio: 'b', skills: [], base_model: 'm' })
+    ).rejects.toThrow('Failed to publish agent');
+  });
+});
+
+describe('listAgents', () => {
+  it('GETs /api/agents and returns an array', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify([sampleAgent]), { status: 200 })
+    );
+    const result = await listAgents();
+    expect(fetchSpy.mock.calls[0][0]).toMatch(/\/api\/agents$/);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('agent-1');
+  });
+
+  it('throws on non-ok response', async () => {
+    fetchSpy.mockResolvedValueOnce(mockError(500));
+    await expect(listAgents()).rejects.toThrow('Failed to fetch agents');
+  });
+});
+
+describe('hireAgent', () => {
+  it('POSTs to /api/agents/:id/hire and returns the updated agent', async () => {
+    const hired = { ...sampleAgent, hire_count: 1 };
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify(hired), { status: 200 })
+    );
+    const result = await hireAgent('agent-1');
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/api\/agents\/agent-1\/hire$/);
+    expect(init.method).toBe('POST');
+    expect(result.hire_count).toBe(1);
+  });
+
+  it('throws on non-ok response', async () => {
+    fetchSpy.mockResolvedValueOnce(mockError(404));
+    await expect(hireAgent('missing')).rejects.toThrow('Failed to hire agent');
   });
 });

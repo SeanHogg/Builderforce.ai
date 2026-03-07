@@ -19,6 +19,7 @@ import { WebGPUTrainer, isWebGPUAvailable, shouldUseWebGPU, type TrainingStep } 
 interface AITrainingPanelProps {
   projectId: string;
   onLog?: (message: string) => void;
+  onJobCompleted?: (job: TrainingJob) => void;
 }
 
 type PanelTab = 'configure' | 'datasets' | 'jobs';
@@ -32,7 +33,7 @@ const DEFAULT_CONFIG: TrainingConfig = {
   learningRate: 0.0002,
 };
 
-export function AITrainingPanel({ projectId, onLog }: AITrainingPanelProps) {
+export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITrainingPanelProps) {
   const [tab, setTab] = useState<PanelTab>('configure');
   const [config, setConfig] = useState<TrainingConfig>(DEFAULT_CONFIG);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
@@ -128,11 +129,11 @@ export function AITrainingPanel({ projectId, onLog }: AITrainingPanelProps) {
           },
           onComplete: (artifactKey) => {
             appendLog(`✅ Training complete! Artifact: ${artifactKey}`);
-            setJobs(prev => prev.map(j =>
-              j.id === job.id
-                ? { ...j, status: 'completed', r2_artifact_key: artifactKey }
-                : j
-            ));
+            setJobs(prev => {
+              const completedJob = { ...prev.find(j => j.id === job.id)!, status: 'completed' as const, r2_artifact_key: artifactKey };
+              onJobCompleted?.(completedJob);
+              return prev.map(j => j.id === job.id ? completedJob : j);
+            });
             setIsTraining(false);
           },
           onError: (err) => {
@@ -179,16 +180,18 @@ export function AITrainingPanel({ projectId, onLog }: AITrainingPanelProps) {
         }
 
         appendLog('✅ Cloud training complete!');
-        setJobs(prev => prev.map(j =>
-          j.id === job.id ? { ...j, status: 'completed' } : j
-        ));
+        setJobs(prev => {
+          const completedJob = { ...prev.find(j => j.id === job.id)!, status: 'completed' as const };
+          onJobCompleted?.(completedJob);
+          return prev.map(j => j.id === job.id ? completedJob : j);
+        });
         setIsTraining(false);
       }
     } catch (e) {
       appendLog(`❌ Failed to start training: ${e instanceof Error ? e.message : 'Unknown error'}`);
       setIsTraining(false);
     }
-  }, [config, selectedModel, selectedDatasetId, projectId, webgpuAvailable, canUseWebGPU, appendLog]);
+  }, [config, selectedModel, selectedDatasetId, projectId, webgpuAvailable, canUseWebGPU, appendLog, onJobCompleted]);
 
   const handleStopTraining = useCallback(() => {
     trainerRef.current?.stop();
