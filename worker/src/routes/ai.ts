@@ -3,7 +3,6 @@ import { stream } from 'hono/streaming';
 
 interface Env {
   AI: Ai;
-  DB: D1Database;
 }
 
 const ai = new Hono<{ Bindings: Env }>();
