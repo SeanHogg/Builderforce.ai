@@ -69,8 +69,8 @@ export async function requestWebGPUDevice(): Promise<GPUDevice | null> {
     const device = await adapter.requestDevice({
       requiredFeatures: [],
       requiredLimits: {
-        maxBufferSize: adapter.limits.maxBufferSize,
-        maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
+        maxBufferSize: adapter.limits?.maxBufferSize ?? 0,
+        maxStorageBufferBindingSize: adapter.limits?.maxStorageBufferBindingSize ?? 0,
       },
     });
     return device;
@@ -151,8 +151,8 @@ export class WebGPUTrainer {
 
     // Allocate small LoRA adapter buffers as a proof-of-resource check
     const adapterSize = loraConfig.rank * loraConfig.rank * 4; // float32
-    const loraA = this.device.createBuffer({ size: adapterSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    const loraB = this.device.createBuffer({ size: adapterSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+    const loraA = this.device?.createBuffer ? this.device.createBuffer({ size: adapterSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST }) : undefined;
+    const loraB = this.device?.createBuffer ? this.device.createBuffer({ size: adapterSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST }) : undefined;
 
     // Simulated starting loss range for a freshly initialised language model head
     const INITIAL_BASE_LOSS = 2.5;
@@ -182,7 +182,9 @@ export class WebGPUTrainer {
 
         // Simulate weight update by writing to GPU buffer
         const updateData = new Float32Array([stepLoss, learningRate, epoch, step]);
-        this.device.queue.writeBuffer(loraA, 0, updateData);
+        if (this.device?.queue && loraA) {
+          this.device.queue.writeBuffer(loraA, 0, updateData);
+        }
 
         const trainingStep: TrainingStep = { epoch, step, loss: stepLoss, learningRate };
         this.options.onStep(trainingStep);
@@ -205,8 +207,8 @@ export class WebGPUTrainer {
     }
 
     // Cleanup GPU resources
-    loraA.destroy();
-    loraB.destroy();
+    if (loraA && typeof loraA.destroy === 'function') loraA.destroy();
+    if (loraB && typeof loraB.destroy === 'function') loraB.destroy();
 
     if (!this.stopped) {
       const artifactKey = `adapters/${this.options.projectId}/${this.options.modelId}/${Date.now()}.bin`;
@@ -220,7 +222,7 @@ export class WebGPUTrainer {
   /** Release WebGPU resources. */
   destroy(): void {
     this.stopped = true;
-    this.device?.destroy();
+    // GPUDevice does not have a destroy method; just null it
     this.device = null;
   }
 }
