@@ -10,7 +10,12 @@ export { CollaborationRoom };
 interface Env {
   NEON_DATABASE_URL: string;
   STORAGE: R2Bucket;
-  AI: Ai;
+  /** Cloudflare Workers AI binding — used when AI_PROVIDER is "cloudflare" (default) or "ab". */
+  AI?: Ai;
+  /** OpenRouter API key — used when AI_PROVIDER is "openrouter" or "ab". */
+  OPENROUTER_API_KEY?: string;
+  /** Selects the active AI provider: "cloudflare" | "openrouter" | "ab". Defaults to "cloudflare". */
+  AI_PROVIDER?: 'cloudflare' | 'openrouter' | 'ab';
   COLLABORATION_ROOM: DurableObjectNamespace;
 }
 

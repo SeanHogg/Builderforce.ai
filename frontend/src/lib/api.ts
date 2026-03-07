@@ -92,7 +92,15 @@ export async function sendAIMessage(
         if (data === '[DONE]') return;
         try {
           const parsed = JSON.parse(data);
-          const chunk = parsed.response || parsed.text || parsed.delta || '';
+          // Extract the text chunk from whichever SSE format the active provider uses:
+          //   choices[0].delta.content — OpenRouter / OpenAI-compatible (AI_PROVIDER=openrouter|ab)
+          //   response                 — Cloudflare Workers AI (AI_PROVIDER=cloudflare)
+          const chunk =
+            parsed.choices?.[0]?.delta?.content ||
+            parsed.response ||
+            parsed.text ||
+            parsed.delta ||
+            '';
           if (chunk) onChunk(chunk);
         } catch {
           if (data) onChunk(data);

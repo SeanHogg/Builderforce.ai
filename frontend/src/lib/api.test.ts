@@ -307,6 +307,32 @@ describe('sendAIMessage', () => {
     expect(chunks).toEqual(['plain text chunk']);
   });
 
+  it('handles OpenRouter / OpenAI SSE format (choices[0].delta.content)', async () => {
+    const chunks: string[] = [];
+    fetchSpy.mockResolvedValueOnce(
+      sseStream(
+        'data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":null}]}\n\n',
+        'data: {"choices":[{"delta":{"content":" world"},"finish_reason":null}]}\n\n',
+        'data: [DONE]\n\n',
+      )
+    );
+    await sendAIMessage('proj-1', [{ role: 'user', content: 'hi' }], (c) => chunks.push(c));
+    expect(chunks).toEqual(['Hello', ' world']);
+  });
+
+  it('ignores OpenRouter chunks where delta.content is empty or absent', async () => {
+    const chunks: string[] = [];
+    fetchSpy.mockResolvedValueOnce(
+      sseStream(
+        'data: {"choices":[{"delta":{},"finish_reason":null}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"done"},"finish_reason":"stop"}]}\n\n',
+        'data: [DONE]\n\n',
+      )
+    );
+    await sendAIMessage('proj-1', [], (c) => chunks.push(c));
+    expect(chunks).toEqual(['done']);
+  });
+
   it('POSTs to /api/ai/chat with messages', async () => {
     fetchSpy.mockResolvedValueOnce(sseStream('data: [DONE]\n\n'));
     await sendAIMessage('proj-1', [{ role: 'user', content: 'test' }], () => {});
