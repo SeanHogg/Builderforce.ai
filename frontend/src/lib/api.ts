@@ -306,3 +306,9 @@ export async function hireAgent(agentId: string): Promise<import('./types').Publ
   return res.json();
 }
 
+export async function fetchAgentPackage(agentId: string): Promise<import('./types').AgentPackage> {
+  const res = await fetch(`${WORKER_URL}/api/agents/${agentId}/package`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Failed to fetch agent package');
+  return res.json();
+}
+

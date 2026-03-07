@@ -13,8 +13,9 @@ import {
   publishAgent,
   listAgents,
   hireAgent,
+  fetchAgentPackage,
 } from './api';
-import type { Project, FileEntry, PublishedAgent } from './types';
+import type { Project, FileEntry, PublishedAgent, AgentPackage } from './types';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -436,5 +437,43 @@ describe('hireAgent', () => {
   it('throws on non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(404));
     await expect(hireAgent('missing')).rejects.toThrow('Failed to hire agent');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchAgentPackage
+// ---------------------------------------------------------------------------
+
+const samplePackage: AgentPackage = {
+  version: '1.0',
+  platform: 'builderforce.ai',
+  name: 'Code Expert',
+  title: 'Senior TypeScript Developer',
+  bio: 'Specializes in Node.js and React',
+  skills: ['TypeScript', 'React', 'Node.js'],
+  base_model: 'gpt-neox-20m',
+  lora_config: { rank: 8, alpha: 16, target_modules: ['q_proj', 'v_proj'] },
+  training_job_id: 'job-1',
+  r2_artifact_key: 'proj-1/jobs/job-1/adapter.bin',
+  created_at: '2024-01-01T00:00:00Z',
+};
+
+describe('fetchAgentPackage', () => {
+  it('GETs /api/agents/:id/package and returns the package', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify(samplePackage), { status: 200 })
+    );
+    const result = await fetchAgentPackage('agent-1');
+    expect(fetchSpy.mock.calls[0][0]).toMatch(/\/api\/agents\/agent-1\/package$/);
+    expect(result.version).toBe('1.0');
+    expect(result.platform).toBe('builderforce.ai');
+    expect(result.name).toBe('Code Expert');
+    expect(result.lora_config.rank).toBe(8);
+    expect(result.skills).toEqual(['TypeScript', 'React', 'Node.js']);
+  });
+
+  it('throws on non-ok response', async () => {
+    fetchSpy.mockResolvedValueOnce(mockError(404));
+    await expect(fetchAgentPackage('missing')).rejects.toThrow('Failed to fetch agent package');
   });
 });
