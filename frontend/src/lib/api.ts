@@ -258,3 +258,51 @@ export async function evaluateModel(jobId: string): Promise<import('./types').Ev
   return res.json();
 }
 
+// ---------------------------------------------------------------------------
+// Agent Registry (Workforce)
+// ---------------------------------------------------------------------------
+
+export async function publishAgent(data: {
+  project_id: string;
+  job_id?: string;
+  name: string;
+  title: string;
+  bio: string;
+  skills: string[];
+  base_model: string;
+  lora_rank?: number;
+  r2_artifact_key?: string;
+  resume_md?: string;
+  eval_score?: number;
+}): Promise<import('./types').PublishedAgent> {
+  const res = await fetch(`${WORKER_URL}/api/agents`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to publish agent');
+  return res.json();
+}
+
+export async function listAgents(): Promise<import('./types').PublishedAgent[]> {
+  const res = await fetch(`${WORKER_URL}/api/agents`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Failed to fetch agents');
+  return res.json();
+}
+
+export async function fetchAgent(agentId: string): Promise<import('./types').PublishedAgent> {
+  const res = await fetch(`${WORKER_URL}/api/agents/${agentId}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Failed to fetch agent');
+  return res.json();
+}
+
+export async function hireAgent(agentId: string): Promise<import('./types').PublishedAgent> {
+  const res = await fetch(`${WORKER_URL}/api/agents/${agentId}/hire`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) throw new Error('Failed to hire agent');
+  return res.json();
+}
+

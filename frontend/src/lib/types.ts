@@ -162,3 +162,54 @@ export interface EvaluationResult {
   details: string;
   created_at: string;
 }
+
+// ---------------------------------------------------------------------------
+// Agent Registry (Workforce)
+// ---------------------------------------------------------------------------
+
+export interface AgentProfile {
+  name: string;
+  title: string;
+  bio: string;
+  skills: string[];
+  resumeMarkdown: string;
+}
+
+export interface PublishedAgent {
+  id: string;
+  project_id: string;
+  job_id?: string;
+  name: string;
+  title: string;
+  bio: string;
+  skills: string[];
+  base_model: string;
+  lora_rank?: number;
+  r2_artifact_key?: string;
+  resume_md?: string;
+  status: 'active' | 'inactive';
+  hire_count: number;
+  eval_score?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Portable agent package that can be downloaded and used to deploy the agent. */
+export interface AgentPackage {
+  version: '1.0';
+  platform: 'builderforce.ai';
+  name: string;
+  title: string;
+  bio: string;
+  skills: string[];
+  base_model: string;
+  lora_config: {
+    rank: number;
+    alpha: number;
+    target_modules: string[];
+  };
+  training_job_id?: string;
+  r2_artifact_key?: string;
+  resume_md?: string;
+  created_at: string;
+}
