@@ -1,3 +1,5 @@
+export const runtime = 'edge';
+
 import { IDE } from '@/components/IDE';
 import type { Project, FileEntry } from '@/lib/types';
 
