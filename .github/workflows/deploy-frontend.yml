@@ -31,6 +31,17 @@ jobs:
         run: |
           npx @cloudflare/next-on-pages
 
+      - name: Patch assetsFetcher guard
+        working-directory: frontend
+        run: |
+          # ensure assetsFetcher is defined to avoid undefined.fetch errors
+          worker_file=".vercel/output/static/_worker.js/index.js"
+          if [ -f "$worker_file" ]; then
+            # insert guard at start of function k
+            sed -i "/async function k(e/ a \
+    if (!assetsFetcher) { assetsFetcher = { fetch: req => fetch(req) }; }\n" "$worker_file"
+          fi
+
       - name: Install wrangler
         run: npm install -g wrangler
 
