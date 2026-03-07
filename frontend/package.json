@@ -16,7 +16,7 @@
     "@xterm/xterm": "^5.3.0",
     "lib0": "^0.2.94",
     "monaco-editor": "^0.55.1",
-    "next": "^14.2.35",
+    "next": "15.5.12",
     "react": "^18",
     "react-dom": "^18",
     "y-monaco": "^0.1.4",

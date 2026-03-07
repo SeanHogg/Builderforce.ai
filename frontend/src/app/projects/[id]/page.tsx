@@ -23,10 +23,11 @@ async function getFiles(projectId: string): Promise<FileEntry[]> {
   }
 }
 
-export default async function ProjectPage({ params }: { params: { id: string } }) {
+export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const [project, files] = await Promise.all([
-    getProject(params.id),
-    getFiles(params.id),
+    getProject(id),
+    getFiles(id),
   ]);
 
   if (!project) {
