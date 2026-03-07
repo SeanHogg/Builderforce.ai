@@ -1,3 +1,31 @@
+// ---------------------------------------------------------------------------
+// Authentication & Multi-tenant
+// ---------------------------------------------------------------------------
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  name?: string;
+  avatar?: string;
+}
+
+export interface Tenant {
+  id: string;
+  name: string;
+  slug?: string;
+}
+
+export interface AuthState {
+  webToken: string | null;
+  tenantToken: string | null;
+  user: AuthUser | null;
+  tenant: Tenant | null;
+}
+
+// ---------------------------------------------------------------------------
+// Projects
+// ---------------------------------------------------------------------------
+
 export interface Project {
   id: string;
   name: string;
