@@ -1,0 +1,14 @@
+# dependencies
+/node_modules
+
+# wrangler
+/.wrangler/
+
+# misc
+.DS_Store
+
+# debug
+npm-debug.log*
+
+# env files
+.dev.vars

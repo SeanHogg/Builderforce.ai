@@ -1,0 +1,24 @@
+name = "builderforce-worker"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "builderforce-db"
+database_id = "placeholder-database-id"
+
+[[r2_buckets]]
+binding = "STORAGE"
+bucket_name = "builderforce-storage"
+
+[ai]
+binding = "AI"
+
+[[durable_objects.bindings]]
+name = "COLLABORATION_ROOM"
+class_name = "CollaborationRoom"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["CollaborationRoom"]
