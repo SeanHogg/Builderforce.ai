@@ -46,3 +46,54 @@ CREATE TABLE IF NOT EXISTS file_versions (
   author_id TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS datasets (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  capability_prompt TEXT NOT NULL,
+  r2_key TEXT NOT NULL,
+  example_count INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'pending',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS training_jobs (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  dataset_id TEXT,
+  base_model TEXT NOT NULL,
+  lora_rank INTEGER DEFAULT 8,
+  epochs INTEGER DEFAULT 3,
+  batch_size INTEGER DEFAULT 4,
+  learning_rate REAL DEFAULT 0.0002,
+  status TEXT DEFAULT 'pending',
+  current_epoch INTEGER DEFAULT 0,
+  current_loss REAL,
+  r2_artifact_key TEXT,
+  error_message TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS training_logs (
+  id TEXT PRIMARY KEY,
+  job_id TEXT NOT NULL,
+  epoch INTEGER,
+  step INTEGER,
+  loss REAL,
+  message TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS model_artifacts (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  job_id TEXT NOT NULL,
+  base_model TEXT NOT NULL,
+  r2_key TEXT NOT NULL,
+  eval_score REAL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);

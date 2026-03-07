@@ -109,3 +109,141 @@ export async function sendAIMessage(
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Datasets
+// ---------------------------------------------------------------------------
+
+export async function generateDataset(
+  projectId: string,
+  capabilityPrompt: string,
+  name: string,
+  onChunk?: (chunk: string) => void
+): Promise<import('./types').Dataset> {
+  const res = await fetch(`${WORKER_URL}/api/datasets/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectId, capabilityPrompt, name }),
+  });
+  if (!res.ok) throw new Error('Failed to generate dataset');
+
+  if (onChunk && res.headers.get('content-type')?.includes('text/event-stream')) {
+    const reader = res.body?.getReader();
+    if (reader) {
+      const decoder = new TextDecoder();
+      let finalDataset: import('./types').Dataset | undefined;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value, { stream: true });
+        for (const line of text.split('\n')) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') break;
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.type === 'chunk' && parsed.content) onChunk(parsed.content);
+              if (parsed.type === 'done') finalDataset = parsed.dataset;
+            } catch {
+              if (data) onChunk(data);
+            }
+          }
+        }
+      }
+      if (finalDataset) return finalDataset;
+    }
+  }
+
+  return res.json();
+}
+
+export async function listDatasets(projectId: string): Promise<import('./types').Dataset[]> {
+  const res = await fetch(`${WORKER_URL}/api/datasets?projectId=${encodeURIComponent(projectId)}`);
+  if (!res.ok) throw new Error('Failed to fetch datasets');
+  return res.json();
+}
+
+export async function fetchDataset(datasetId: string): Promise<import('./types').Dataset> {
+  const res = await fetch(`${WORKER_URL}/api/datasets/${datasetId}`);
+  if (!res.ok) throw new Error('Failed to fetch dataset');
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Training Jobs
+// ---------------------------------------------------------------------------
+
+export async function createTrainingJob(data: {
+  projectId: string;
+  datasetId?: string;
+  baseModel: string;
+  loraRank: number;
+  epochs: number;
+  batchSize: number;
+  learningRate: number;
+}): Promise<import('./types').TrainingJob> {
+  const res = await fetch(`${WORKER_URL}/api/training`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create training job');
+  return res.json();
+}
+
+export async function listTrainingJobs(projectId: string): Promise<import('./types').TrainingJob[]> {
+  const res = await fetch(`${WORKER_URL}/api/training?projectId=${encodeURIComponent(projectId)}`);
+  if (!res.ok) throw new Error('Failed to fetch training jobs');
+  return res.json();
+}
+
+export async function fetchTrainingJob(jobId: string): Promise<import('./types').TrainingJob> {
+  const res = await fetch(`${WORKER_URL}/api/training/${jobId}`);
+  if (!res.ok) throw new Error('Failed to fetch training job');
+  return res.json();
+}
+
+export async function fetchTrainingLogs(jobId: string): Promise<import('./types').TrainingLog[]> {
+  const res = await fetch(`${WORKER_URL}/api/training/${jobId}/logs`);
+  if (!res.ok) throw new Error('Failed to fetch training logs');
+  return res.json();
+}
+
+export async function streamTrainingLogs(
+  jobId: string,
+  onLog: (log: import('./types').TrainingLog) => void
+): Promise<void> {
+  const res = await fetch(`${WORKER_URL}/api/training/${jobId}/logs/stream`);
+  if (!res.ok) throw new Error('Failed to stream training logs');
+  const reader = res.body?.getReader();
+  if (!reader) return;
+  const decoder = new TextDecoder();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const text = decoder.decode(value, { stream: true });
+    for (const line of text.split('\n')) {
+      if (line.startsWith('data: ')) {
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') return;
+        try {
+          const log = JSON.parse(data) as import('./types').TrainingLog;
+          onLog(log);
+        } catch {
+          // ignore malformed lines
+        }
+      }
+    }
+  }
+}
+
+export async function evaluateModel(jobId: string): Promise<import('./types').EvaluationResult> {
+  const res = await fetch(`${WORKER_URL}/api/training/${jobId}/evaluate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) throw new Error('Failed to evaluate model');
+  return res.json();
+}
+
