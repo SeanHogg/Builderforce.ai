@@ -31,14 +31,18 @@ jobs:
         run: |
           npx @cloudflare/next-on-pages
 
-      - name: Patch r.fetch usage
+      - name: Patch r.fetch usage and add debug logs
         working-directory: frontend
         run: |
-          # make r.fetch safe when r is undefined
+          # make r.fetch safe when r is undefined and add logging for diagnostics
           worker_file=".vercel/output/static/_worker.js/index.js"
           if [ -f "$worker_file" ]; then
-            sed -i 's/\([Ar]\.\)fetch/\1fetch/g' "$worker_file" || true
+            # global fallback for any r.fetch calls
             sed -i 's/\br\.fetch\b/(r||self).fetch/g' "$worker_file" || true
+            # logging when assetsFetcher (r) is undefined in k()
+            sed -i 's/async function k(e,{request:t,assetsFetcher:r,ctx:s})/async function k(e,{request:t,assetsFetcher:r,ctx:s}){if(!r)console.log("k assetsFetcher undefined",e);/' "$worker_file" || true
+            # log each incoming request URL at start of Ts.fetch
+            sed -i 's/var Ts={async fetch(e,t,r){/var Ts={async fetch(e,t,r){console.log("Ts.fetch",e.url);/' "$worker_file" || true
           fi
 
       - name: Install wrangler

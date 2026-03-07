@@ -2,6 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
+/* CoderClaw brand palette */
+:root {
+  --bg-deep: #050810;
+  --bg-surface: #0a0f1a;
+  --bg-elevated: #111827;
+
+  --coral-bright: #4d9eff;
+  --coral-mid: #3b82f6;
+  --coral-dark: #1e40af;
+
+  --cyan-bright: #00e5cc;
+
+  --text-primary: #f0f4ff;
+  --text-secondary: #8892b0;
+}
+
+html, body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+}
+
 * {
   box-sizing: border-box;
   padding: 0;
@@ -13,6 +34,20 @@ body {
   max-width: 100vw;
   overflow-x: hidden;
 }
+
+/* background stars/nebula placeholders */
+.stars, .nebula {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.stars { background-image: url("/stars.png"); opacity: 0.3; }
+.nebula { background-image: url("/nebula.png"); opacity: 0.2; }
 
 ::-webkit-scrollbar {
   width: 6px;

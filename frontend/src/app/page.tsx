@@ -2,24 +2,25 @@ import Link from 'next/link';
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className="min-h-screen bg-bg-deep text-text-primary">
       {/* Navigation */}
       <nav className="border-b border-gray-800 px-6 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-blue-400 text-2xl">⚡</span>
+            <img src="/coderclaw.png" alt="CoderClaw" className="h-6 w-auto" />
+            <span className="text-coral-bright text-2xl">⚡</span>
             <span className="text-xl font-bold">Builderforce.ai</span>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/workforce" className="text-gray-400 hover:text-white text-sm transition-colors">
+            <Link href="/workforce" className="text-text-secondary hover:text-text-primary text-sm transition-colors">
               Workforce
             </Link>
-            <Link href="/login" className="text-gray-400 hover:text-white text-sm transition-colors">
+            <Link href="/login" className="text-text-secondary hover:text-text-primary text-sm transition-colors">
               Sign In
             </Link>
             <Link
               href="/register"
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              className="bg-coral-bright hover:bg-coral-mid text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
             >
               Get Started Free
             </Link>
@@ -29,13 +30,13 @@ export default function LandingPage() {
 
       {/* Hero */}
       <section className="max-w-6xl mx-auto px-6 py-24 text-center">
-        <div className="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-full px-4 py-1.5 text-blue-400 text-sm mb-8">
-          <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+        <div className="inline-flex items-center gap-2 bg-coral-bright/10 border border-coral-bright/20 rounded-full px-4 py-1.5 text-coral-bright text-sm mb-8">
+          <span className="w-2 h-2 bg-coral-bright rounded-full animate-pulse" />
           Powered by CoderClaw Technology
         </div>
         <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
           Build Your LLM.{' '}
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-coral-bright to-coral-dark">
             Train Your Agent.
           </span>
           {' '}Join the Workforce.
@@ -48,7 +49,7 @@ export default function LandingPage() {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link
             href="/register"
-            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl text-base font-semibold transition-colors"
+            className="w-full sm:w-auto bg-coral-bright hover:bg-coral-mid text-white px-8 py-3 rounded-xl text-base font-semibold transition-colors"
           >
             Join the Workforce — Free
           </Link>
@@ -73,10 +74,10 @@ export default function LandingPage() {
           {PILLARS.map((p) => (
             <div
               key={p.title}
-              className="bg-gray-900 border border-gray-800 rounded-xl p-6 hover:border-blue-700/50 transition-colors text-center"
+              className="bg-surface border border-gray-800 rounded-xl p-6 hover:border-coral-dark/50 transition-colors text-center"
             >
               <div className="text-4xl mb-4">{p.icon}</div>
-              <h3 className="text-lg font-semibold mb-2 text-blue-300">{p.title}</h3>
+              <h3 className="text-lg font-semibold mb-2 text-coral-mid">{p.title}</h3>
               <p className="text-gray-400 text-sm leading-relaxed">{p.desc}</p>
             </div>
           ))}
