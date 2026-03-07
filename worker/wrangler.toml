@@ -7,10 +7,29 @@ compatibility_flags = ["nodejs_compat"]
 # [vars]
 # NEON_DATABASE_URL = "postgresql://user:password@host.neon.tech/dbname?sslmode=require"
 
+# ---------------------------------------------------------------------------
+# AI provider configuration
+# ---------------------------------------------------------------------------
+# AI_PROVIDER controls which backend handles chat requests.
+#   "cloudflare" (default) — Cloudflare Workers AI (requires the [ai] binding below)
+#   "openrouter"           — OpenRouter free-model pool (requires OPENROUTER_API_KEY secret)
+#   "ab"                   — randomly routes each request 50/50 between both
+#                            providers for A/B validation (requires both configured)
+#
+# Set the active provider:
+#   wrangler secret put AI_PROVIDER          # or add to [vars] below
+#
+# OpenRouter API key (only required for "openrouter" or "ab" modes):
+#   wrangler secret put OPENROUTER_API_KEY
+
+[vars]
+AI_PROVIDER = "cloudflare"
+
 [[r2_buckets]]
 binding = "STORAGE"
 bucket_name = "builderforce-storage"
 
+# Cloudflare Workers AI binding (used in "cloudflare" and "ab" modes)
 [ai]
 binding = "AI"
 
