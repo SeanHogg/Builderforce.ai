@@ -1,0 +1,42 @@
+# Builderforce.ai root .gitignore
+
+# Node
+node_modules/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs
+frontend/.next/
+frontend/out/
+worker/dist/
+
+# Env
+.env
+.env.*
+frontend/.env.local
+worker/.env
+
+# IDE
+.vscode/
+.idea/
+
+# Misc
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Coverage
+coverage/
+
+# Test
+frontend/test-output/
+worker/test-output/
+
+# Ignore local secrets
+worker/secrets.json
