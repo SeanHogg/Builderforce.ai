@@ -13,6 +13,7 @@ Thumbs.db
 # Build outputs
 frontend/.next/
 frontend/out/
+.vercel/
 worker/.next/
 worker/dist/
 

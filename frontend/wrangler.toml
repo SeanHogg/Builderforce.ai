@@ -1,0 +1,9 @@
+name = "builderforce-frontend"
+main = ".vercel/output/static/_worker.js"
+compatibility_date = "2026-03-07"
+
+[assets]
+directory = ".next/static"
+
+[vars]
+NEXT_PUBLIC_WORKER_URL = "https://builderforce-worker.seanhogg.workers.dev"
