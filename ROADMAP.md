@@ -6,13 +6,16 @@
 
 **Primary:** Developers and AI builders who want to create specialized AI agents without managing infrastructure.
 
-**Secondary:** Product teams and companies looking to integrate domain-specific AI agents into their workflows.
+**Secondary:** Domain experts (engineering, law, finance, medicine) who want to encode their expertise into a personal LLM and register it into the agentic workforce.
+
+**Tertiary:** Product teams and companies looking to integrate domain-specific agents from the Workforce Registry into their workflows.
 
 ### GTM Phases
 
 #### Phase 1 — Platform (Now)
 - Launch the browser-based build & train IDE
-- Enable developers to fine-tune LLMs using their own instruction datasets
+- Enable developers to fine-tune LLMs using their own instruction datasets (**human-in-the-loop training**)
+- Embed trained agents using **CoderClaw technology** — users register themselves into the agentic workforce
 - Allow agents to be registered in the Workforce Registry
 - **First customer use-case:** [CoderClaw](https://github.com/SeanHogg/coderClaw) — an AI-powered code review and automation tool powered by a Builderforce-trained agent
 
