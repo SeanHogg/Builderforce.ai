@@ -1,13 +1,22 @@
+import { getStoredTenantToken } from './auth';
+
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787';
 
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const token = getStoredTenantToken();
+  const headers: Record<string, string> = { ...extra };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+}
+
 export async function fetchProjects(): Promise<import('./types').Project[]> {
-  const res = await fetch(`${WORKER_URL}/api/projects`);
+  const res = await fetch(`${WORKER_URL}/api/projects`, { headers: authHeaders() });
   if (!res.ok) throw new Error('Failed to fetch projects');
   return res.json();
 }
 
 export async function fetchProject(id: string): Promise<import('./types').Project> {
-  const res = await fetch(`${WORKER_URL}/api/projects/${id}`);
+  const res = await fetch(`${WORKER_URL}/api/projects/${id}`, { headers: authHeaders() });
   if (!res.ok) throw new Error('Failed to fetch project');
   return res.json();
 }
@@ -15,7 +24,7 @@ export async function fetchProject(id: string): Promise<import('./types').Projec
 export async function createProject(data: { name: string; description?: string; template?: string }): Promise<import('./types').Project> {
   const res = await fetch(`${WORKER_URL}/api/projects`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error('Failed to create project');
@@ -25,7 +34,7 @@ export async function createProject(data: { name: string; description?: string; 
 export async function updateProject(id: string, data: Partial<import('./types').Project>): Promise<import('./types').Project> {
   const res = await fetch(`${WORKER_URL}/api/projects/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error('Failed to update project');
@@ -35,18 +44,19 @@ export async function updateProject(id: string, data: Partial<import('./types').
 export async function deleteProject(id: string): Promise<void> {
   const res = await fetch(`${WORKER_URL}/api/projects/${id}`, {
     method: 'DELETE',
+    headers: authHeaders(),
   });
   if (!res.ok) throw new Error('Failed to delete project');
 }
 
 export async function fetchFiles(projectId: string): Promise<import('./types').FileEntry[]> {
-  const res = await fetch(`${WORKER_URL}/api/projects/${projectId}/files`);
+  const res = await fetch(`${WORKER_URL}/api/projects/${projectId}/files`, { headers: authHeaders() });
   if (!res.ok) throw new Error('Failed to fetch files');
   return res.json();
 }
 
 export async function fetchFileContent(projectId: string, filePath: string): Promise<string> {
-  const res = await fetch(`${WORKER_URL}/api/projects/${projectId}/files/${filePath}`);
+  const res = await fetch(`${WORKER_URL}/api/projects/${projectId}/files/${filePath}`, { headers: authHeaders() });
   if (!res.ok) throw new Error('Failed to fetch file content');
   return res.text();
 }
@@ -54,7 +64,7 @@ export async function fetchFileContent(projectId: string, filePath: string): Pro
 export async function saveFile(projectId: string, filePath: string, content: string): Promise<void> {
   const res = await fetch(`${WORKER_URL}/api/projects/${projectId}/files/${filePath}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'text/plain' },
+    headers: { ...authHeaders(), 'Content-Type': 'text/plain' },
     body: content,
   });
   if (!res.ok) throw new Error('Failed to save file');
@@ -63,6 +73,7 @@ export async function saveFile(projectId: string, filePath: string, content: str
 export async function deleteFile(projectId: string, filePath: string): Promise<void> {
   const res = await fetch(`${WORKER_URL}/api/projects/${projectId}/files/${filePath}`, {
     method: 'DELETE',
+    headers: authHeaders(),
   });
   if (!res.ok) throw new Error('Failed to delete file');
 }
@@ -74,7 +85,7 @@ export async function sendAIMessage(
 ): Promise<void> {
   const res = await fetch(`${WORKER_URL}/api/ai/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ projectId, messages }),
   });
   if (!res.ok) throw new Error('Failed to send AI message');
@@ -122,7 +133,7 @@ export async function generateDataset(
 ): Promise<import('./types').Dataset> {
   const res = await fetch(`${WORKER_URL}/api/datasets/generate`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ projectId, capabilityPrompt, name }),
   });
   if (!res.ok) throw new Error('Failed to generate dataset');
@@ -158,13 +169,13 @@ export async function generateDataset(
 }
 
 export async function listDatasets(projectId: string): Promise<import('./types').Dataset[]> {
-  const res = await fetch(`${WORKER_URL}/api/datasets?projectId=${encodeURIComponent(projectId)}`);
+  const res = await fetch(`${WORKER_URL}/api/datasets?projectId=${encodeURIComponent(projectId)}`, { headers: authHeaders() });
   if (!res.ok) throw new Error('Failed to fetch datasets');
   return res.json();
 }
 
 export async function fetchDataset(datasetId: string): Promise<import('./types').Dataset> {
-  const res = await fetch(`${WORKER_URL}/api/datasets/${datasetId}`);
+  const res = await fetch(`${WORKER_URL}/api/datasets/${datasetId}`, { headers: authHeaders() });
   if (!res.ok) throw new Error('Failed to fetch dataset');
   return res.json();
 }
@@ -184,7 +195,7 @@ export async function createTrainingJob(data: {
 }): Promise<import('./types').TrainingJob> {
   const res = await fetch(`${WORKER_URL}/api/training`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error('Failed to create training job');
@@ -192,19 +203,19 @@ export async function createTrainingJob(data: {
 }
 
 export async function listTrainingJobs(projectId: string): Promise<import('./types').TrainingJob[]> {
-  const res = await fetch(`${WORKER_URL}/api/training?projectId=${encodeURIComponent(projectId)}`);
+  const res = await fetch(`${WORKER_URL}/api/training?projectId=${encodeURIComponent(projectId)}`, { headers: authHeaders() });
   if (!res.ok) throw new Error('Failed to fetch training jobs');
   return res.json();
 }
 
 export async function fetchTrainingJob(jobId: string): Promise<import('./types').TrainingJob> {
-  const res = await fetch(`${WORKER_URL}/api/training/${jobId}`);
+  const res = await fetch(`${WORKER_URL}/api/training/${jobId}`, { headers: authHeaders() });
   if (!res.ok) throw new Error('Failed to fetch training job');
   return res.json();
 }
 
 export async function fetchTrainingLogs(jobId: string): Promise<import('./types').TrainingLog[]> {
-  const res = await fetch(`${WORKER_URL}/api/training/${jobId}/logs`);
+  const res = await fetch(`${WORKER_URL}/api/training/${jobId}/logs`, { headers: authHeaders() });
   if (!res.ok) throw new Error('Failed to fetch training logs');
   return res.json();
 }
@@ -213,7 +224,7 @@ export async function streamTrainingLogs(
   jobId: string,
   onLog: (log: import('./types').TrainingLog) => void
 ): Promise<void> {
-  const res = await fetch(`${WORKER_URL}/api/training/${jobId}/logs/stream`);
+  const res = await fetch(`${WORKER_URL}/api/training/${jobId}/logs/stream`, { headers: authHeaders() });
   if (!res.ok) throw new Error('Failed to stream training logs');
   const reader = res.body?.getReader();
   if (!reader) return;
@@ -240,7 +251,7 @@ export async function streamTrainingLogs(
 export async function evaluateModel(jobId: string): Promise<import('./types').EvaluationResult> {
   const res = await fetch(`${WORKER_URL}/api/training/${jobId}/evaluate`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({}),
   });
   if (!res.ok) throw new Error('Failed to evaluate model');
