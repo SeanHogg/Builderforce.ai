@@ -4,6 +4,8 @@ import { useState, useCallback, useRef } from 'react';
 import type { TrainingJob, AgentProfile, AgentPackage } from '@/lib/types';
 import { publishAgent } from '@/lib/api';
 
+const INSTALL_COMMAND = 'iwr -useb https://coderclaw.ai/install.ps1 | iex';
+
 interface AgentPublishPanelProps {
   projectId: string;
   completedJobs: TrainingJob[];
@@ -51,6 +53,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishedId, setPublishedId] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [copiedInstall, setCopiedInstall] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedJob = completedJobs.find(j => j.id === selectedJobId);
@@ -130,6 +133,13 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
       setIsPublishing(false);
     }
   }, [isProfileValid, projectId, selectedJob, profile]);
+
+  const handleCopyInstall = useCallback(() => {
+    navigator.clipboard.writeText(INSTALL_COMMAND).then(() => {
+      setCopiedInstall(true);
+      setTimeout(() => setCopiedInstall(false), 2000);
+    });
+  }, []);
 
   return (
     <div className="h-full flex flex-col bg-gray-900 text-white text-sm">
@@ -323,6 +333,27 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                     {publishedId}
                   </div>
                 </div>
+
+                {/* Install command */}
+                <div>
+                  <div className="text-xs text-gray-400 mb-1">📦 Install Command</div>
+                  <div className="bg-gray-950 border border-gray-700 rounded p-2 flex items-center gap-2">
+                    <code className="flex-1 font-mono text-xs text-green-300 break-all select-all">
+                      {INSTALL_COMMAND}
+                    </code>
+                    <button
+                      onClick={handleCopyInstall}
+                      className="shrink-0 bg-gray-700 hover:bg-gray-600 text-white text-xs px-2 py-1 rounded"
+                      title="Copy to clipboard"
+                    >
+                      {copiedInstall ? '✓ Copied' : 'Copy'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Run this in PowerShell to browse and install agents from the registry.
+                  </p>
+                </div>
+
                 <a
                   href="/workforce"
                   target="_blank"
