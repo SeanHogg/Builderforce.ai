@@ -3,10 +3,9 @@ main = "src/index.ts"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-[[d1_databases]]
-binding = "DB"
-database_name = "builderforce-db"
-database_id = "placeholder-database-id"
+# Neon Postgres — set via: wrangler secret put NEON_DATABASE_URL
+# [vars]
+# NEON_DATABASE_URL = "postgresql://user:password@host.neon.tech/dbname?sslmode=require"
 
 [[r2_buckets]]
 binding = "STORAGE"

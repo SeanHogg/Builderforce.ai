@@ -7,7 +7,7 @@ import { CollaborationRoom } from './durable-objects/CollaborationRoom';
 export { CollaborationRoom };
 
 interface Env {
-  DB: D1Database;
+  NEON_DATABASE_URL: string;
   STORAGE: R2Bucket;
   AI: Ai;
   COLLABORATION_ROOM: DurableObjectNamespace;

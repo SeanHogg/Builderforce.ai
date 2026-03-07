@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
+import { neon } from '@neondatabase/serverless';
 
 interface Env {
-  DB: D1Database;
+  NEON_DATABASE_URL: string;
 }
 
 const projects = new Hono<{ Bindings: Env }>();
@@ -12,10 +13,9 @@ function generateId(): string {
 
 projects.get('/', async (c) => {
   try {
-    const result = await c.env.DB.prepare(
-      'SELECT * FROM projects ORDER BY updated_at DESC'
-    ).all();
-    return c.json(result.results);
+    const sql = neon(c.env.NEON_DATABASE_URL);
+    const rows = await sql`SELECT * FROM projects ORDER BY updated_at DESC`;
+    return c.json(rows);
   } catch (e) {
     return c.json({ error: 'Failed to fetch projects' }, 500);
   }
@@ -24,13 +24,14 @@ projects.get('/', async (c) => {
 projects.post('/', async (c) => {
   try {
     const body = await c.req.json<{ name: string; description?: string; template?: string }>();
+    const sql = neon(c.env.NEON_DATABASE_URL);
     const id = generateId();
-    const now = new Date().toISOString();
-    await c.env.DB.prepare(
-      'INSERT INTO projects (id, name, description, owner_id, template, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).bind(id, body.name, body.description || null, 'anonymous', body.template || 'vanilla', now, now).run();
-    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(id).first();
-    return c.json(project, 201);
+    const rows = await sql`
+      INSERT INTO projects (id, name, description, owner_id, template)
+      VALUES (${id}, ${body.name}, ${body.description ?? null}, 'anonymous', ${body.template ?? 'vanilla'})
+      RETURNING *
+    `;
+    return c.json(rows[0], 201);
   } catch (e) {
     return c.json({ error: 'Failed to create project' }, 500);
   }
@@ -38,11 +39,10 @@ projects.post('/', async (c) => {
 
 projects.get('/:id', async (c) => {
   try {
-    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?')
-      .bind(c.req.param('id'))
-      .first();
-    if (!project) return c.json({ error: 'Project not found' }, 404);
-    return c.json(project);
+    const sql = neon(c.env.NEON_DATABASE_URL);
+    const rows = await sql`SELECT * FROM projects WHERE id = ${c.req.param('id')}`;
+    if (rows.length === 0) return c.json({ error: 'Project not found' }, 404);
+    return c.json(rows[0]);
   } catch (e) {
     return c.json({ error: 'Failed to fetch project' }, 500);
   }
@@ -51,15 +51,18 @@ projects.get('/:id', async (c) => {
 projects.put('/:id', async (c) => {
   try {
     const body = await c.req.json<{ name?: string; description?: string }>();
-    const now = new Date().toISOString();
-    await c.env.DB.prepare(
-      'UPDATE projects SET name = COALESCE(?, name), description = COALESCE(?, description), updated_at = ? WHERE id = ?'
-    ).bind(body.name || null, body.description || null, now, c.req.param('id')).run();
-    const project = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?')
-      .bind(c.req.param('id'))
-      .first();
-    if (!project) return c.json({ error: 'Project not found' }, 404);
-    return c.json(project);
+    const sql = neon(c.env.NEON_DATABASE_URL);
+    const rows = await sql`
+      UPDATE projects
+      SET
+        name        = COALESCE(${body.name ?? null}, name),
+        description = COALESCE(${body.description ?? null}, description),
+        updated_at  = NOW()
+      WHERE id = ${c.req.param('id')}
+      RETURNING *
+    `;
+    if (rows.length === 0) return c.json({ error: 'Project not found' }, 404);
+    return c.json(rows[0]);
   } catch (e) {
     return c.json({ error: 'Failed to update project' }, 500);
   }
@@ -67,9 +70,9 @@ projects.put('/:id', async (c) => {
 
 projects.delete('/:id', async (c) => {
   try {
-    await c.env.DB.prepare('DELETE FROM projects WHERE id = ?')
-      .bind(c.req.param('id'))
-      .run();
+    const sql = neon(c.env.NEON_DATABASE_URL);
+    const rows = await sql`DELETE FROM projects WHERE id = ${c.req.param('id')} RETURNING id`;
+    if (rows.length === 0) return c.json({ error: 'Project not found' }, 404);
     return c.json({ success: true });
   } catch (e) {
     return c.json({ error: 'Failed to delete project' }, 500);

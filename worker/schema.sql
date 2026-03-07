@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS projects (
@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS projects (
   description TEXT,
   owner_id TEXT NOT NULL,
   template TEXT DEFAULT 'vanilla',
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS project_members (
@@ -27,13 +27,13 @@ CREATE TABLE IF NOT EXISTS ai_messages (
   project_id TEXT NOT NULL,
   role TEXT NOT NULL,
   content TEXT NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS collaboration_sessions (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
-  started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  ended_at DATETIME
+  started_at TIMESTAMPTZ DEFAULT NOW(),
+  ended_at TIMESTAMPTZ
 );
