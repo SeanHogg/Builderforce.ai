@@ -87,7 +87,16 @@ Versions are simple date‑based strings (e.g. `2026.3.7`). Before deploying bum
     cd worker && pnpm run deploy   # migrations + wrangler deploy
     ```
 
-4. Build & deploy the frontend as appropriate (Cloudflare Pages, Vercel, etc.).
+4. Build & deploy the frontend as SSR (Cloudflare Workers):
+     - **SSR Next.js requires Cloudflare Workers, not Pages.**
+     - **Next.js version must be <= 15.5.2 for Cloudflare compatibility.**
+     - Use the provided Dockerfile to build and deploy from a Linux container:
+         ```bash
+         docker build -t builderforce-frontend .
+         docker run -it --rm -v ~/.wrangler:/root/.wrangler builderforce-frontend
+         ```
+     - If you see build errors about `generateStaticParams()`, you must add it to all dynamic routes (e.g., `/projects/[id]`) or refactor for SSR.
+     - For SSR deployment, ensure your API endpoints and environment variables are set correctly.
 
      **Frontend build instructions:**
      - Always run the build from the `frontend` directory:
