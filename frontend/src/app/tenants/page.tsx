@@ -26,7 +26,20 @@ export default function TenantsPage() {
   useEffect(() => {
     if (!isAuthenticated) return;
     fetchTenants()
-      .then(setTenants)
+      .then((data) => {
+        if (!Array.isArray(data)) {
+          console.warn('fetchTenants did not return array', data);
+          // try to recover from { tenants: [...] } shape
+          const arr = (data as any)?.tenants;
+          if (Array.isArray(arr)) {
+            setTenants(arr);
+            return;
+          }
+          setTenants([]);
+        } else {
+          setTenants(data);
+        }
+      })
       .catch((err: unknown) =>
         setError(err instanceof Error ? err.message : 'Failed to load tenants')
       )
