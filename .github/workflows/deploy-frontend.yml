@@ -31,15 +31,14 @@ jobs:
         run: |
           npx @cloudflare/next-on-pages
 
-      - name: Patch assetsFetcher guard
+      - name: Patch r.fetch usage
         working-directory: frontend
         run: |
-          # ensure assetsFetcher is defined to avoid undefined.fetch errors
+          # make r.fetch safe when r is undefined
           worker_file=".vercel/output/static/_worker.js/index.js"
           if [ -f "$worker_file" ]; then
-            # insert guard at start of function k
-            sed -i "/async function k(e/ a \
-    if (!assetsFetcher) { assetsFetcher = { fetch: req => fetch(req) }; }\n" "$worker_file"
+            sed -i 's/\([Ar]\.\)fetch/\1fetch/g' "$worker_file" || true
+            sed -i 's/\br\.fetch\b/(r||self).fetch/g' "$worker_file" || true
           fi
 
       - name: Install wrangler
