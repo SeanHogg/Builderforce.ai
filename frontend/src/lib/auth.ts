@@ -63,21 +63,23 @@ export function persistSession(
   tenant?: Tenant
 ): void {
   if (!isBrowser()) return;
+  const secure = window.location?.protocol === 'https:' ? '; Secure' : '';
   localStorage.setItem(WEB_TOKEN_KEY, webToken);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
-  document.cookie = `bf_web_token=${webToken}; path=/; SameSite=Lax`;
+  document.cookie = `bf_web_token=${webToken}; path=/; SameSite=Lax${secure}`;
   if (tenantToken) {
     localStorage.setItem(TENANT_TOKEN_KEY, tenantToken);
-    document.cookie = `bf_tenant_token=${tenantToken}; path=/; SameSite=Lax`;
+    document.cookie = `bf_tenant_token=${tenantToken}; path=/; SameSite=Lax${secure}`;
   }
   if (tenant) localStorage.setItem(TENANT_KEY, JSON.stringify(tenant));
 }
 
 export function persistTenantSession(tenantToken: string, tenant: Tenant): void {
   if (!isBrowser()) return;
+  const secure = window.location?.protocol === 'https:' ? '; Secure' : '';
   localStorage.setItem(TENANT_TOKEN_KEY, tenantToken);
   localStorage.setItem(TENANT_KEY, JSON.stringify(tenant));
-  document.cookie = `bf_tenant_token=${tenantToken}; path=/; SameSite=Lax`;
+  document.cookie = `bf_tenant_token=${tenantToken}; path=/; SameSite=Lax${secure}`;
 }
 
 export function clearSession(): void {
