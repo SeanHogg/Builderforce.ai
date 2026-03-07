@@ -81,5 +81,21 @@ export function useWebContainer() {
     });
   }, [getOrBootWebContainer]);
 
-  return { state, mountFiles, runCommand, startDevServer, getOrBootWebContainer };
+  const startShell = useCallback(async (
+    onOutput?: (data: string) => void,
+    size?: { cols: number; rows: number }
+  ): Promise<WritableStreamDefaultWriter<string>> => {
+    const instance = await getOrBootWebContainer();
+    const shellProcess = await instance.spawn('jsh', {
+      terminal: size ?? { cols: 80, rows: 24 },
+    });
+    if (onOutput) {
+      shellProcess.output.pipeTo(new WritableStream({
+        write(data) { onOutput(data); },
+      }));
+    }
+    return shellProcess.input.getWriter();
+  }, [getOrBootWebContainer]);
+
+  return { state, mountFiles, runCommand, startShell, startDevServer, getOrBootWebContainer };
 }

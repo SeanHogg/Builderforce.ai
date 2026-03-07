@@ -8,11 +8,11 @@ interface Env {
 
 const projects = new Hono<{ Bindings: Env }>();
 
-function generateId(): string {
+export function generateId(): string {
   return crypto.randomUUID();
 }
 
-const VANILLA_TEMPLATE: Record<string, string> = {
+export const VANILLA_TEMPLATE: Record<string, string> = {
   'package.json': JSON.stringify({
     name: 'my-app',
     version: '1.0.0',
@@ -40,7 +40,7 @@ const VANILLA_TEMPLATE: Record<string, string> = {
 `,
 };
 
-async function createTemplateFiles(storage: R2Bucket, projectId: string, template: string): Promise<void> {
+export async function createTemplateFiles(storage: R2Bucket, projectId: string, template: string): Promise<void> {
   const files = VANILLA_TEMPLATE;
   await Promise.all(
     Object.entries(files).map(([path, content]) =>
