@@ -34,8 +34,10 @@ See [ROADMAP.md](./ROADMAP.md) for the full Go-to-Market Strategy and phased rol
 
 ### Key Differentiators
 
+- **Human-in-the-loop LLM** — train a model on your own expertise and embed yourself into the agentic workforce
 - **Build-to-deploy in the browser** — no local GPU, no cloud account required
 - **You own your model** — fine-tuned weights are yours, stored in your own Cloudflare R2
+- **CoderClaw technology embedding** — your trained agent is embedded directly into CoderClaw for real production impact
 - **Decentralized registry** — agents are registered once and usable everywhere
 - **Real product integration** — not a demo platform; agents power production products like CoderClaw
 
@@ -63,6 +65,49 @@ Developer  ──builds──►  Custom LLM  ──trains──►  Agent
                                              CoderClaw 🦀
                                          (and any future product)
 ```
+
+---
+
+## Human-in-the-Loop
+
+A core differentiator of Builderforce.ai is the **human-in-the-loop** model. Unlike generic AI agents that run on foundation models with no personalization, Builderforce allows any user to:
+
+1. **Encode their own expertise** — curate instruction-tuning datasets from their codebase, documentation, past decisions, and domain knowledge
+2. **Fine-tune a personal LLM** — run LoRA training in the browser to produce a model that reasons like *them*
+3. **Embed themselves as an agent** — wrap the trained model in an autonomous agent using **CoderClaw technology**, giving the user a persistent AI representative that acts on their behalf
+4. **Register into the workforce** — publish the agent to the Builderforce Workforce Registry so it can be integrated into any CoderClaw-powered product or third-party platform
+
+This means developers and domain experts can effectively *register themselves into the agentic workforce* — their knowledge and decision-making style encoded once, then working autonomously at machine speed across all integrated products.
+
+### Why human-in-the-loop matters
+
+| Approach | Generic AI | Builderforce Agent |
+|---|---|---|
+| Model | Shared foundation model | Your fine-tuned personal LLM |
+| Knowledge | General | Domain-specific to you |
+| Behaviour | Unpredictable | Aligned to your patterns |
+| Ownership | Vendor-controlled | You own the weights |
+| Integration | Prompt engineering only | Embedded via CoderClaw technology |
+
+---
+
+## Target Markets
+
+### Primary — AI Developers & Independent Builders
+
+Developers who want to create specialized AI agents without managing infrastructure. Builderforce provides the full stack: dataset curation, browser-based LoRA fine-tuning, agent wrapping, and workforce registration — all without a cloud account or local GPU.
+
+### Secondary — Domain Experts
+
+Professionals in any field (engineering, law, medicine, finance) who want to encode their expertise into a custom model. Builderforce lets them train on their own data and deploy an autonomous representative that works on their behalf.
+
+### Tertiary — Product Teams & Enterprises
+
+Companies that want to integrate battle-tested domain-specific agents into their products without building an ML team. The Workforce Registry provides a marketplace of production-ready agents that can be consumed via API.
+
+### First Vertical — Developer Tooling (CoderClaw)
+
+[CoderClaw](https://github.com/SeanHogg/coderClaw) is the first vertical: an AI-powered code review and automation tool. Builderforce-trained agents are embedded into CoderClaw to provide personalised code review, automated refactoring, and codebase-specific reasoning — powered by each developer's own fine-tuned model.
 
 ---
 
