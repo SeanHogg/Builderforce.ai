@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
+import { getLanguage } from '@/lib/utils';
 import type * as Y from 'yjs';
 
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
@@ -11,32 +12,6 @@ interface CodeEditorProps {
   content: string;
   onChange: (value: string) => void;
   ydoc?: Y.Doc | null;
-}
-
-function getLanguage(filePath?: string): string {
-  if (!filePath) return 'plaintext';
-  const ext = filePath.split('.').pop()?.toLowerCase() || '';
-  const map: Record<string, string> = {
-    ts: 'typescript',
-    tsx: 'typescriptreact',
-    js: 'javascript',
-    jsx: 'javascriptreact',
-    css: 'css',
-    scss: 'scss',
-    html: 'html',
-    json: 'json',
-    md: 'markdown',
-    py: 'python',
-    rs: 'rust',
-    go: 'go',
-    java: 'java',
-    sh: 'shell',
-    yaml: 'yaml',
-    yml: 'yaml',
-    toml: 'toml',
-    sql: 'sql',
-  };
-  return map[ext] || 'plaintext';
 }
 
 type MonacoEditorInstance = Parameters<
