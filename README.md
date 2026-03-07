@@ -1,4 +1,94 @@
-# Builderforce.ai
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/40bc436d-a042-47ca-83c3-25b5a10ae9b4" alt="Builderforce.ai — Decentralized Agent Workforce Platform" width="600" />
+</p>
+
+<h1 align="center">Builderforce.ai</h1>
+
+<p align="center">
+  <strong>Decentralized Agent Workforce Platform</strong><br/>
+  Build your own LLM. Train your own Agent. Register it into the Workforce.
+</p>
+
+---
+
+## Vision
+
+**Builderforce.ai** is the platform where developers build, train, and deploy custom AI agents — then register them into a decentralized workforce that powers real products.
+
+We believe the future of software is **agent-native**: every application will have an AI brain capable of reasoning, planning, and acting autonomously. Builderforce gives every developer the tools to build that brain directly in the browser, with no infrastructure overhead.
+
+### Core Pillars
+
+| Pillar | Description |
+|--------|-------------|
+| 🧠 **Build** | Fine-tune a custom LLM in the browser using WebGPU LoRA training on your own datasets |
+| 🤖 **Agent** | Wrap your model in an autonomous agent with tools, memory, and decision-making capabilities |
+| 🌐 **Register** | Publish your agent to the Builderforce Workforce Registry for integration into any platform |
+| ⚡ **Deploy** | Power real products — starting with [CoderClaw](https://github.com/SeanHogg/coderClaw) |
+
+---
+
+## Go-to-Market Strategy
+
+### Target Market
+
+**Primary:** Developers and AI builders who want to create specialized AI agents without managing infrastructure.
+
+**Secondary:** Product teams and companies looking to integrate domain-specific AI agents into their workflows.
+
+### GTM Phases
+
+#### Phase 1 — Platform (Now)
+- Launch the browser-based build & train IDE
+- Enable developers to fine-tune LLMs using their own instruction datasets
+- Allow agents to be registered in the Workforce Registry
+- **First customer use-case:** [CoderClaw](https://github.com/SeanHogg/coderClaw) — an AI-powered code review and automation tool powered by a Builderforce-trained agent
+
+#### Phase 2 — Ecosystem
+- Open the Workforce Registry to the public — any developer can list an agent
+- Introduce agent versioning, capability tagging, and performance benchmarks
+- Launch a marketplace where products can discover and integrate registered agents
+
+#### Phase 3 — Network Effects
+- Agents earn reputation scores based on real-world usage across integrated products
+- Introduce agent composition — combine multiple specialized agents into multi-agent pipelines
+- Open API for third-party platforms to consume agents from the Workforce Registry
+
+### Key Differentiators
+
+- **Build-to-deploy in the browser** — no local GPU, no cloud account required
+- **You own your model** — fine-tuned weights are yours, stored in your own Cloudflare R2
+- **Decentralized registry** — agents are registered once and usable everywhere
+- **Real product integration** — not a demo platform; agents power production products like CoderClaw
+
+---
+
+## CoderClaw Integration
+
+[**CoderClaw**](https://github.com/SeanHogg/coderClaw) is the first production application powered by a Builderforce-trained agent.
+
+Developers use Builderforce.ai to:
+1. **Train** a custom coding/reasoning LLM on their codebase patterns, code review guidelines, and best practices
+2. **Wrap** it as an autonomous coding agent with the ability to read files, propose changes, and run evaluations
+3. **Register** the agent in the Builderforce Workforce Registry
+4. **Connect** CoderClaw to that registered agent — the agent becomes CoderClaw's internal AI brain
+
+This end-to-end loop — **build → train → register → integrate** — is the core workflow that Builderforce.ai is designed to support.
+
+```
+Developer  ──builds──►  Custom LLM  ──trains──►  Agent
+                                                    │
+                                              Register in
+                                           Workforce Registry
+                                                    │
+                                                    ▼
+                                             CoderClaw 🦀
+                                         (and any future product)
+```
+
+---
+
+## Platform Overview
 
 A **browser-based AI coding platform** (Replit / AI Studio style) with **full AI-to-AI model training capabilities**, built on a **Cloudflare-first architecture**. Users can code, collaborate in real time, and fine-tune their own AI coding/reasoning models directly in the browser — leveraging **WebContainers**, **WebGPU LoRA training**, **Cloudflare R2 + Workers**, and **Neon Postgres**.
 
