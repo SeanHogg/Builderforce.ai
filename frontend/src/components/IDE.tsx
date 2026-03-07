@@ -29,7 +29,7 @@ export function IDE({ project, initialFiles }: IDEProps) {
   const [terminalWriter, setTerminalWriter] = useState<((data: string) => void) | undefined>();
   const [isRunning, setIsRunning] = useState(false);
 
-  const { state: wcState, startDevServer } = useWebContainer();
+  const { state: wcState, mountFiles, runCommand, startDevServer } = useWebContainer();
   const { doc: ydoc, connected: collabConnected } = useCollaboration(project.id, 'user-local');
 
   const openFile = useCallback(async (path: string) => {
@@ -93,6 +93,31 @@ export function IDE({ project, initialFiles }: IDEProps) {
     setIsRunning(true);
     setBottomTab('terminal');
     try {
+      // Fetch any file contents not yet loaded and build the full map
+      const allContents: Record<string, string> = { ...fileContents };
+      const unfetched = files.filter(f => f.type === 'file' && !(f.path in allContents));
+      await Promise.all(
+        unfetched.map(async (f) => {
+          try {
+            allContents[f.path] = await fetchFileContent(project.id, f.path);
+          } catch {
+            allContents[f.path] = '';
+          }
+        })
+      );
+      setFileContents(allContents);
+
+      // Mount files into the WebContainer
+      terminalWriter?.('\r\n\x1b[36mMounting project files...\x1b[0m\r\n');
+      await mountFiles(allContents);
+
+      // Run npm install if package.json exists
+      if (allContents['package.json']) {
+        terminalWriter?.('\r\n\x1b[36mRunning npm install...\x1b[0m\r\n');
+        await runCommand('npm', ['install'], (data) => terminalWriter?.(data));
+      }
+
+      // Start the dev server
       const url = await startDevServer((data) => {
         terminalWriter?.(data);
       });
@@ -104,7 +129,7 @@ export function IDE({ project, initialFiles }: IDEProps) {
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, startDevServer, terminalWriter]);
+  }, [isRunning, startDevServer, mountFiles, runCommand, terminalWriter, files, fileContents, project.id]);
 
   const handleTerminalInput = useCallback(async (data: string) => {
     if (data === '\r') {
