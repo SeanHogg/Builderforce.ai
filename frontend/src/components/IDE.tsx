@@ -7,10 +7,11 @@ import { CodeEditor } from './CodeEditor';
 import { Terminal } from './Terminal';
 import { AIChat } from './AIChat';
 import { AITrainingPanel } from './AITrainingPanel';
+import { AgentPublishPanel } from './AgentPublishPanel';
 import { PreviewFrame } from './PreviewFrame';
 import { useWebContainer } from '@/hooks/useWebContainer';
 import { useCollaboration } from '@/hooks/useCollaboration';
-import type { Project, FileEntry } from '@/lib/types';
+import type { Project, FileEntry, TrainingJob } from '@/lib/types';
 import { saveFile, fetchFileContent, deleteFile } from '@/lib/api';
 
 interface IDEProps {
@@ -19,7 +20,7 @@ interface IDEProps {
 }
 
 type BottomTab = 'terminal' | 'preview';
-type RightTab = 'ai' | 'train';
+type RightTab = 'ai' | 'train' | 'publish';
 
 export function IDE({ project, initialFiles }: IDEProps) {
   const [files, setFiles] = useState<FileEntry[]>(initialFiles);
@@ -32,6 +33,7 @@ export function IDE({ project, initialFiles }: IDEProps) {
   const [terminalWriter, setTerminalWriter] = useState<((data: string) => void) | undefined>();
   const [shellWriter, setShellWriter] = useState<WritableStreamDefaultWriter<string> | undefined>();
   const [isRunning, setIsRunning] = useState(false);
+  const [completedJobs, setCompletedJobs] = useState<TrainingJob[]>([]);
 
   const { state: wcState, mountFiles, runCommand, startShell, startDevServer } = useWebContainer();
   const { doc: ydoc, connected: collabConnected } = useCollaboration(project.id, 'user-local');
@@ -259,6 +261,12 @@ export function IDE({ project, initialFiles }: IDEProps) {
             >
               🧠 Train
             </button>
+            <button
+              className={`px-3 py-1.5 text-xs ${rightTab === 'publish' ? 'bg-gray-800 text-white border-t-2 border-t-blue-500' : 'text-gray-400 hover:text-white'}`}
+              onClick={() => setRightTab('publish')}
+            >
+              🚀 Publish
+            </button>
           </div>
           <div className="flex-1 overflow-hidden relative">
             <div className={`absolute inset-0 ${rightTab === 'ai' ? '' : 'invisible pointer-events-none'}`}>
@@ -268,7 +276,14 @@ export function IDE({ project, initialFiles }: IDEProps) {
               <AITrainingPanel
                 projectId={project.id}
                 onLog={(msg) => terminalWriter?.(`\r\n\x1b[35m[Train]\x1b[0m ${msg}`)}
+                onJobCompleted={(job) => setCompletedJobs(prev => {
+                  const exists = prev.some(j => j.id === job.id);
+                  return exists ? prev.map(j => j.id === job.id ? job : j) : [job, ...prev];
+                })}
               />
+            </div>
+            <div className={`absolute inset-0 ${rightTab === 'publish' ? '' : 'invisible pointer-events-none'}`}>
+              <AgentPublishPanel projectId={project.id} completedJobs={completedJobs} />
             </div>
           </div>
         </div>

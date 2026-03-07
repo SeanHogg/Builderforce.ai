@@ -5,6 +5,7 @@ import filesRouter from './routes/files';
 import aiRouter from './routes/ai';
 import datasetsRouter from './routes/datasets';
 import trainingRouter from './routes/training';
+import agentsRouter from './routes/agents';
 import { CollaborationRoom } from './durable-objects/CollaborationRoom';
 
 export { CollaborationRoom };
@@ -34,6 +35,7 @@ app.route('/api/projects/:projectId/files', filesRouter);
 app.route('/api/ai', aiRouter);
 app.route('/api/datasets', datasetsRouter);
 app.route('/api/training', trainingRouter);
+app.route('/api/agents', agentsRouter);
 
 app.get('/api/collab/:sessionId/ws', async (c) => {
   const sessionId = c.req.param('sessionId');
