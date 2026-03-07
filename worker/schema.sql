@@ -97,3 +97,22 @@ CREATE TABLE IF NOT EXISTS model_artifacts (
   eval_score REAL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS agents (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  job_id TEXT,
+  name TEXT NOT NULL,
+  title TEXT NOT NULL,
+  bio TEXT NOT NULL,
+  skills TEXT NOT NULL DEFAULT '[]',
+  base_model TEXT NOT NULL,
+  lora_rank INTEGER,
+  r2_artifact_key TEXT,
+  resume_md TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  hire_count INTEGER NOT NULL DEFAULT 0,
+  eval_score REAL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);

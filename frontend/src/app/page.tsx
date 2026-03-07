@@ -11,6 +11,9 @@ export default function LandingPage() {
             <span className="text-xl font-bold">Builderforce.ai</span>
           </div>
           <div className="flex items-center gap-4">
+            <Link href="/workforce" className="text-gray-400 hover:text-white text-sm transition-colors">
+              Workforce
+            </Link>
             <Link href="/login" className="text-gray-400 hover:text-white text-sm transition-colors">
               Sign In
             </Link>
