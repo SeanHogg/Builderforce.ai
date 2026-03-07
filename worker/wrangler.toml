@@ -40,3 +40,24 @@ class_name = "CollaborationRoom"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["CollaborationRoom"]
+
+# expose on our custom domain
+[[routes]]
+pattern = "builderforce.ai/*"
+zone_name = "builderforce.ai"
+
+# observability settings
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1
