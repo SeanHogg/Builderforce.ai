@@ -2,17 +2,16 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 
 export default function TopBar() {
-  const router = useRouter();
-  const { user, tenant, logout } = useAuth();
+  const { tenant, logout } = useAuth();
 
   const handleSignOut = () => {
     logout();
-    router.push('/');
+    // Full page navigation so middleware and app see cleared cookies/tokens
+    window.location.href = '/login';
   };
 
   return (
@@ -31,27 +30,13 @@ export default function TopBar() {
           <span className="brand-badge">BETA</span>
         </Link>
       </div>
-      <div className="topbar-right">
-        <Link
-          href="/brainstorm"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            fontSize: '0.875rem',
-            color: 'var(--text-secondary)',
-            textDecoration: 'none',
-            padding: '6px 10px',
-            borderRadius: 8,
-          }}
-        >
-          <span style={{ fontSize: '1rem' }}>🧠</span>
-          Brain
-        </Link>
-        <Link href="/workforce" className="tenant-chip" style={{ textDecoration: 'none' }}>
+      <div className="topbar-center">
+        <Link href="/marketplace" className="tenant-chip topbar-center-link" style={{ textDecoration: 'none' }}>
           <span style={{ fontSize: '1rem' }}>🛒</span>
           Marketplace
         </Link>
+      </div>
+      <div className="topbar-right">
         {tenant && (
           <Link href="/tenants" className="tenant-chip" style={{ textDecoration: 'none' }} title={tenant.name}>
             {tenant.name || tenant.id}

@@ -3,9 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
-import { getDefaultTenantId, setDefaultTenantId, clearDefaultTenantId } from '@/lib/auth';
+import { getDefaultTenantId, setDefaultTenantId, clearDefaultTenantId, createTenant as apiCreateTenant } from '@/lib/auth';
 import type { Tenant } from '@/lib/types';
-import AppHeader from '@/components/AppHeader';
 
 /** Auto-select tenant when there is only one or a default is set (CoderClawLink-style). Returns the tenant to select or null. */
 function resolveAutoSelectTenant(list: Tenant[]): Tenant | null {
@@ -20,12 +19,15 @@ function resolveAutoSelectTenant(list: Tenant[]): Tenant | null {
 export default function TenantsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, fetchTenants, selectTenant, logout, user } = useAuth();
+  const { isAuthenticated, hasTenant, webToken, fetchTenants, selectTenant } = useAuth();
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSelecting, setIsSelecting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createName, setCreateName] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
   const autoSelectAttempted = useRef(false);
 
   // Redirect if not authenticated
@@ -57,9 +59,9 @@ export default function TenantsPage() {
       .finally(() => setIsLoading(false));
   }, [isAuthenticated, fetchTenants]);
 
-  // Auto-select tenant when list is ready: single tenant or saved default (CoderClawLink-style)
+  // Auto-select tenant only when user has no tenant (e.g. just from login). If they already have a tenant, they're visiting to switch or create one — don't redirect.
   useEffect(() => {
-    if (!isAuthenticated || isLoading || tenants.length === 0 || autoSelectAttempted.current) return;
+    if (!isAuthenticated || hasTenant || isLoading || tenants.length === 0 || autoSelectAttempted.current) return;
     const target = resolveAutoSelectTenant(tenants);
     if (!target) return;
     autoSelectAttempted.current = true;
@@ -71,7 +73,7 @@ export default function TenantsPage() {
       .catch(() => {
         autoSelectAttempted.current = false;
       });
-  }, [isAuthenticated, isLoading, tenants, searchParams, router, selectTenant]);
+  }, [isAuthenticated, hasTenant, isLoading, tenants, searchParams, router, selectTenant]);
 
   const handleSelect = async (tenant: Tenant) => {
     setIsSelecting(tenant.id);
@@ -86,35 +88,46 @@ export default function TenantsPage() {
     }
   };
 
-  const defaultTenantId = getDefaultTenantId();
+  const [defaultTenantId, setDefaultTenantIdState] = useState<string | null>(() => getDefaultTenantId());
   const handleSetDefault = (e: React.MouseEvent, tenant: Tenant) => {
     e.preventDefault();
     e.stopPropagation();
-    setDefaultTenantId(String(tenant.id));
+    const id = String(tenant.id);
+    setDefaultTenantId(id);
+    setDefaultTenantIdState(id);
   };
   const handleClearDefault = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     clearDefaultTenantId();
+    setDefaultTenantIdState(null);
+  };
+  // Sync default from storage on mount / when tenants change (e.g. after navigation)
+  useEffect(() => {
+    setDefaultTenantIdState(getDefaultTenantId());
+  }, [tenants.length]);
+
+  const handleCreateTenant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!webToken || !createName.trim()) return;
+    setError(null);
+    setIsCreating(true);
+    try {
+      const newTenant = await apiCreateTenant(webToken, createName);
+      setTenants((prev) => [...prev, newTenant]);
+      setCreateName('');
+      setShowCreate(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create workspace');
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   if (!isAuthenticated) return null;
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-deep)', color: 'var(--text-primary)', display: 'flex', flexDirection: 'column' }}>
-      <AppHeader
-        actions={
-          <>
-            {user && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{user.email}</span>}
-            <button
-              onClick={() => { logout(); router.push('/login'); }}
-              style={{ fontSize: '0.8rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
-            >Sign out</button>
-          </>
-        }
-      />
-
-      {/* Content */}
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
           <h1 className="text-2xl font-bold text-white mb-2">Select workspace</h1>
@@ -134,22 +147,61 @@ export default function TenantsPage() {
                 <div key={i} className="bg-gray-800 rounded-xl p-4 h-16 animate-pulse" />
               ))}
             </div>
-          ) : tenants.length === 0 ? (
+          ) : tenants.length === 0 && !showCreate ? (
             <div className="text-center py-10">
               <div className="text-4xl mb-4">🏢</div>
-              <p className="text-gray-400 mb-2">No workspaces found.</p>
-              <p className="text-gray-500 text-sm">
-                Contact your administrator to be added to an organization, or create one on{' '}
-                <a
-                  href="https://api.builderforce.ai"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-400 hover:text-blue-300 transition-colors"
-                >
-                  api.builderforce.ai
-                </a>
-                .
+              <p className="text-gray-400 mb-2">No workspaces yet.</p>
+              <p className="text-gray-500 text-sm mb-6">
+                Create a workspace to get started.
               </p>
+              <button
+                type="button"
+                onClick={() => setShowCreate(true)}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm transition-colors"
+              >
+                Create workspace
+              </button>
+            </div>
+          ) : showCreate ? (
+            <div className="space-y-4">
+              <form onSubmit={handleCreateTenant} className="bg-gray-900 border border-gray-700 rounded-xl p-4 space-y-4">
+                <h2 className="text-lg font-semibold text-white">Create new Tenant</h2>
+                <input
+                  type="text"
+                  value={createName}
+                  onChange={(e) => setCreateName(e.target.value)}
+                  placeholder="Workspace name"
+                  className="w-full px-4 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                  autoFocus
+                  disabled={isCreating}
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={isCreating || !createName.trim()}
+                    className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium text-sm"
+                  >
+                    {isCreating ? 'Creating…' : 'Create'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowCreate(false); setCreateName(''); setError(null); }}
+                    disabled={isCreating}
+                    className="px-4 py-2 rounded-lg border border-gray-600 hover:border-gray-500 text-gray-300 text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+              {tenants.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowCreate(false)}
+                  className="text-sm text-gray-500 hover:text-gray-400"
+                >
+                  ← Back to workspaces
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
@@ -182,7 +234,14 @@ export default function TenantsPage() {
                         {(t.name || t.id).charAt(0).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-white truncate">{t.name || t.id}</div>
+                        <div className="font-semibold text-white truncate flex items-center gap-2">
+                          {t.name || t.id}
+                          {isDefault && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600/30 text-blue-300 border border-blue-500/40">
+                              Default
+                            </span>
+                          )}
+                        </div>
                         {t.slug && (
                           <div className="text-xs text-gray-500 truncate">{t.slug}</div>
                         )}
@@ -195,12 +254,21 @@ export default function TenantsPage() {
                         </svg>
                       )}
                     </button>
-                    {!isDefault && (
+                    {isDefault ? (
+                      <button
+                        type="button"
+                        onClick={handleClearDefault}
+                        className="flex-shrink-0 px-2 py-1 text-xs text-gray-500 hover:text-gray-300 border border-gray-600 hover:border-gray-500 rounded transition-opacity"
+                        title="Clear default tenant"
+                      >
+                        Clear default
+                      </button>
+                    ) : (
                       <button
                         type="button"
                         onClick={(e) => handleSetDefault(e, t)}
-                        className="flex-shrink-0 px-2 py-1 text-xs text-gray-500 hover:text-gray-300 border border-gray-600 hover:border-gray-500 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Set as default workspace"
+                        className="flex-shrink-0 px-2 py-1 text-xs text-gray-500 hover:text-gray-300 border border-gray-600 hover:border-gray-500 rounded transition-opacity"
+                        title="Set as default tenant"
                       >
                         Set default
                       </button>
@@ -208,6 +276,15 @@ export default function TenantsPage() {
                   </div>
                 );
               })}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowCreate(true); setError(null); }}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-gray-600 hover:border-gray-500 text-gray-400 hover:text-gray-300 text-sm transition-colors"
+                >
+                  <span className="text-lg">+</span> Create new Tenant
+                </button>
+              </div>
             </div>
           )}
         </div>

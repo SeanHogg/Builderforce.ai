@@ -110,6 +110,9 @@ export function persistTenantSession(tenantToken: string, tenant: Tenant): void 
   document.cookie = `bf_tenant_token=${tenantToken}; path=/; SameSite=Lax${secure}`;
 }
 
+/** Past date for cookie expiry so the browser removes the cookie. */
+const COOKIE_EXPIRE = 'Thu, 01 Jan 1970 00:00:00 GMT';
+
 export function clearSession(): void {
   if (!isBrowser()) return;
   localStorage.removeItem(WEB_TOKEN_KEY);
@@ -118,8 +121,9 @@ export function clearSession(): void {
   localStorage.removeItem(TENANT_KEY);
   localStorage.removeItem(LAST_PROJECT_KEY);
   localStorage.removeItem(DEFAULT_TENANT_KEY);
-  document.cookie = 'bf_web_token=; path=/; Max-Age=0';
-  document.cookie = 'bf_tenant_token=; path=/; Max-Age=0';
+  // Clear cookies (path and expires required for reliable removal)
+  document.cookie = `bf_web_token=; path=/; expires=${COOKIE_EXPIRE}; Max-Age=0`;
+  document.cookie = `bf_tenant_token=; path=/; expires=${COOKIE_EXPIRE}; Max-Age=0`;
 }
 
 // ---------------------------------------------------------------------------
@@ -191,11 +195,29 @@ export async function getTenantToken(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${webToken}`,
     },
-    body: JSON.stringify({ tenantId }),
+    body: JSON.stringify({ tenantId: Number(tenantId) }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { message?: string };
     throw new Error(body.message ?? 'Failed to get tenant token');
   }
   return res.json() as Promise<TenantTokenResponse>;
+}
+
+/** Create a new workspace (tenant). Requires WebJWT; caller becomes owner. */
+export async function createTenant(webToken: string, name: string): Promise<Tenant> {
+  const res = await fetch(`${AUTH_API_URL}/api/tenants/create`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${webToken}`,
+    },
+    body: JSON.stringify({ name: name.trim() }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { message?: string; error?: string };
+    throw new Error(body.message ?? body.error ?? 'Failed to create workspace');
+  }
+  const data = await res.json() as { id: number; name: string; slug?: string };
+  return { id: String(data.id), name: data.name, slug: data.slug };
 }

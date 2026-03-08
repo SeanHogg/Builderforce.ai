@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import type { Project } from '@/lib/types';
 import { updateProject } from '@/lib/api';
+import { ObservabilityContent } from './ObservabilityContent';
 
 export type ProjectPanelTab =
   | 'details'
@@ -74,7 +75,6 @@ export function ProjectDetailsPanel({
   projectHref,
 }: ProjectDetailsPanelProps) {
   const [activeTab, setActiveTab] = useState<ProjectPanelTab>(initialTab);
-  const [observabilityView, setObservabilityView] = useState<'logs' | 'timeline'>('logs');
   const [taskMgmtView, setTaskMgmtView] = useState<'board' | 'list'>('board');
   const [editingProject, setEditingProject] = useState(false);
   const [editName, setEditName] = useState(project.name);
@@ -618,106 +618,7 @@ export function ProjectDetailsPanel({
             </div>
           )}
 
-          {activeTab === 'observability' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>View:</span>
-                <button
-                  type="button"
-                  onClick={() => setObservabilityView('logs')}
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    background: observabilityView === 'logs' ? 'var(--surface-coral-soft)' : 'var(--bg-deep)',
-                    color: observabilityView === 'logs' ? 'var(--coral-bright)' : 'var(--text-secondary)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Logs
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setObservabilityView('timeline')}
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    background: observabilityView === 'timeline' ? 'var(--surface-coral-soft)' : 'var(--bg-deep)',
-                    color: observabilityView === 'timeline' ? 'var(--coral-bright)' : 'var(--text-secondary)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Timeline
-                </button>
-              </div>
-
-              {observabilityView === 'logs' && (
-                <div style={cardStyle}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Active Claw</span>
-                    <select
-                      style={{
-                        padding: '6px 10px',
-                        fontSize: 13,
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 8,
-                        background: 'var(--bg-deep)',
-                        color: 'var(--text-primary)',
-                        minWidth: 200,
-                      }}
-                    >
-                      <option value="">No agent selected</option>
-                    </select>
-                  </div>
-                  <div
-                    style={{
-                      background: 'var(--bg-deep)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
-                      padding: 12,
-                      minHeight: 280,
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 12,
-                      color: 'var(--text-muted)',
-                      overflow: 'auto',
-                    }}
-                  >
-                    Streaming logs will appear here when an agent is selected and running.
-                  </div>
-                </div>
-              )}
-
-              {observabilityView === 'timeline' && (
-                <div style={cardStyle}>
-                  <div style={{ fontWeight: 600, marginBottom: 10 }}>Timeline</div>
-                  <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-                    Visualize execution and task flow over time. Timeline view will show task states and agent activity.
-                  </p>
-                  <div
-                    style={{
-                      background: 'var(--bg-deep)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
-                      padding: 24,
-                      minHeight: 240,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--text-muted)',
-                      fontSize: 13,
-                    }}
-                  >
-                    Timeline visualization will appear here when execution data is available.
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          {activeTab === 'observability' && <ObservabilityContent />}
         </div>
       </div>
     </>

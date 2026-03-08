@@ -2,12 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useAuth } from '@/lib/AuthContext';
 
 interface NavItem {
   href: string;
   label: string;
   icon: string;
   activePaths?: string[];
+  /** When true, use warning (yellow) color for this nav item */
+  highlight?: boolean;
 }
 
 const mainNav: NavItem[] = [
@@ -20,7 +23,7 @@ const mainNav: NavItem[] = [
 ];
 
 const meshNav: NavItem[] = [
-  { href: '/workforce', label: 'Workforce & Agents', icon: '👤' },
+  { href: '/workforce', label: 'Workforce', icon: '👤' },
   { href: '/chats', label: 'Chats', icon: '💬' },
 ];
 
@@ -35,10 +38,11 @@ const systemNav: NavItem[] = [
   { href: '/security', label: 'Security', icon: '🔒' },
   { href: '/settings', label: 'Settings', icon: '⚙' },
   { href: '/tenants', label: 'Tenant & Workspace', icon: '🏢' },
-  { href: '/logs', label: 'Logs', icon: '📄' },
-  { href: '/timeline', label: 'Timeline', icon: '📈' },
+  { href: '/observability', label: 'Observability', icon: '📊' },
   { href: '/debug', label: 'Debug', icon: '🐛' },
 ];
+
+const adminNavItem: NavItem = { href: '/admin', label: 'Platform Admin', icon: '⚙', highlight: true };
 
 function isActive(pathname: string, item: NavItem): boolean {
   if (pathname === item.href) return true;
@@ -64,7 +68,7 @@ function NavSection({
           <Link
             key={item.href + item.label}
             href={item.href}
-            className={`nav-item ${active ? 'active' : ''}`}
+            className={`nav-item ${active ? 'active' : ''} ${item.highlight ? 'nav-item-highlight' : ''}`}
           >
             <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{item.icon}</span>
             {!collapsed && <span className="nav-item-label">{item.label}</span>}
@@ -82,6 +86,8 @@ interface SidebarProps {
 
 export default function Sidebar({ collapsed, onToggleCollapsed }: SidebarProps) {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const showAdmin = Boolean(user?.isSuperadmin);
 
   return (
     <nav className={`nav ${collapsed ? 'collapsed' : ''}`}>
@@ -94,6 +100,12 @@ export default function Sidebar({ collapsed, onToggleCollapsed }: SidebarProps) 
         <NavSection items={extensionsNav} collapsed={collapsed} pathname={pathname || ''} />
         <div className="nav-section-label">SYSTEM</div>
         <NavSection items={systemNav} collapsed={collapsed} pathname={pathname || ''} />
+        {showAdmin && (
+          <>
+            <div className="nav-section-label">ADMIN</div>
+            <NavSection items={[adminNavItem]} collapsed={collapsed} pathname={pathname || ''} />
+          </>
+        )}
       </div>
       <div className="nav-footer">
         <button

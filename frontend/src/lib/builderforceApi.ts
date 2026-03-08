@@ -169,3 +169,143 @@ export const claws = {
       body: JSON.stringify({ name: name.trim() }),
     }).then((r) => ({ ...r.claw, apiKey: r.apiKey } as ClawRegistration)),
 };
+
+// ---------------------------------------------------------------------------
+// Marketplace (skills catalog – public read)
+// ---------------------------------------------------------------------------
+
+export interface MarketplaceSkill {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  category: string | null;
+  tags: string[] | null;
+  version: string | null;
+  icon_url: string | null;
+  repo_url: string | null;
+  downloads: number;
+  likes: number;
+  created_at: string;
+  author_username?: string;
+  author_display_name?: string;
+  author_avatar_url?: string;
+}
+
+/** List published marketplace skills (public, no auth required). */
+export async function listMarketplaceSkills(params?: {
+  category?: string;
+  q?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ skills: MarketplaceSkill[]; total: number; page: number; limit: number }> {
+  const q = new URLSearchParams();
+  if (params?.category) q.set('category', params.category);
+  if (params?.q) q.set('q', params.q);
+  if (params?.page != null) q.set('page', String(params.page));
+  if (params?.limit != null) q.set('limit', String(params.limit));
+  const query = q.toString();
+  const res = await fetch(`${AUTH_API_URL}/marketplace/skills${query ? `?${query}` : ''}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error || res.statusText || 'Request failed');
+  }
+  const data = (await res.json()) as {
+    skills: MarketplaceSkill[];
+    total: number;
+    page: number;
+    limit: number;
+  };
+  return data;
+}
+
+// ---------------------------------------------------------------------------
+// Artifact assignments (skills, personas, content → tenant/claw/project/task)
+// ---------------------------------------------------------------------------
+
+export type ArtifactType = 'skill' | 'persona' | 'content';
+export type AssignmentScope = 'tenant' | 'claw' | 'project' | 'task';
+
+export interface ArtifactAssignment {
+  tenantId: number;
+  artifactType: ArtifactType;
+  artifactSlug: string;
+  scope: AssignmentScope;
+  scopeId: number;
+  assignedBy: string | null;
+  config: string | null;
+  assignedAt: string;
+}
+
+export const artifactAssignments = {
+  list: (scope: AssignmentScope, scopeId: number, artifactType?: ArtifactType) => {
+    const q = new URLSearchParams({ scope: String(scope), scopeId: String(scopeId) });
+    if (artifactType) q.set('artifactType', artifactType);
+    return request<{ assignments: ArtifactAssignment[] }>(`/api/artifact-assignments?${q}`).then((r) => r.assignments);
+  },
+
+  assign: (
+    artifactType: ArtifactType,
+    artifactSlug: string,
+    scope: AssignmentScope,
+    scopeId: number,
+    config?: string
+  ) =>
+    request<{ ok: boolean }>('/api/artifact-assignments', {
+      method: 'POST',
+      body: JSON.stringify({ artifactType, artifactSlug, scope, scopeId, config }),
+    }),
+
+  unassign: (
+    artifactType: ArtifactType,
+    artifactSlug: string,
+    scope: AssignmentScope,
+    scopeId: number
+  ) =>
+    request<void>(
+      `/api/artifact-assignments/${artifactType}/${encodeURIComponent(artifactSlug)}/${scope}/${scopeId}`,
+      { method: 'DELETE' }
+    ),
+};
+
+// ---------------------------------------------------------------------------
+// Marketplace stats (likes + install counts)
+// ---------------------------------------------------------------------------
+
+export interface ArtifactStats {
+  likes: number;
+  installs: number;
+  liked: boolean;
+}
+
+export const marketplaceStats = {
+  getStats: (type: ArtifactType, slugs: string[]) => {
+    if (slugs.length === 0) return Promise.resolve({} as Record<string, ArtifactStats>);
+    const q = new URLSearchParams({ type, slugs: slugs.join(',') });
+    return request<{ stats: Record<string, ArtifactStats> }>(`/api/marketplace-stats/stats?${q}`).then((r) => r.stats);
+  },
+
+  toggleLike: (type: ArtifactType, artifactSlug: string) =>
+    request<{ liked: boolean }>('/api/marketplace-stats/like', {
+      method: 'POST',
+      body: JSON.stringify({ artifactType: type, artifactSlug }),
+    }).then((r) => r.liked),
+};
+
+// ---------------------------------------------------------------------------
+// Tasks (for ArtifactAssigner)
+// ---------------------------------------------------------------------------
+
+export interface TaskSummary {
+  id: number;
+  key?: string;
+  title: string;
+  projectId: number;
+  status?: string;
+}
+
+export async function listTasks(projectId?: number): Promise<TaskSummary[]> {
+  const q = projectId != null ? `?project_id=${projectId}` : '';
+  const data = await request<{ tasks: TaskSummary[] }>(`/api/tasks${q}`);
+  return data?.tasks ?? [];
+}

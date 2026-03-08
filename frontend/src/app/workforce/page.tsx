@@ -121,9 +121,9 @@ export default function WorkforcePage() {
     <div style={{ maxWidth: 960, margin: '0 auto' }}>
       <div className="page-header" style={{ marginBottom: 24 }}>
         <div>
-          <h1 className="page-title" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-strong)', margin: 0 }}>Workforce (Claws)</h1>
+          <h1 className="page-title" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-strong)', margin: 0 }}>Workforce</h1>
           <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
-            Register and manage your CoderClaw instances. Connect agents to your workspace.
+            Register and manage your CoderClaw instances (claws). Connect agents to your workspace and hire from the registry.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
