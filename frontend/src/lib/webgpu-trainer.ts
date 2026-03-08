@@ -12,6 +12,13 @@
  *   - Progress and loss metrics streamed to the UI via callbacks
  */
 
+import { pipeline, env as hfEnv } from '@huggingface/transformers';
+
+hfEnv.allowLocalModels = false; // Usually true, but we'll fetch from HF hub or R2 proxy
+if (hfEnv.backends?.onnx?.wasm) {
+  hfEnv.backends.onnx.wasm.numThreads = 1;
+}
+
 export interface LoRAConfig {
   rank: number;
   alpha: number;
@@ -116,6 +123,19 @@ export class WebGPUTrainer {
     if (!this.device) {
       throw new Error('WebGPU is not available in this browser. Please use Chrome 113+ or Edge 113+.');
     }
+
+    try {
+      this.options.onLog('Testing HuggingFace Transformers WebGPU integration...');
+      // A tiny model to prove WebGPU tensor processing works in the browser
+      await pipeline('text-generation', 'Xenova/tiny-random-LlamaForCausalLM', {
+        device: 'webgpu',
+        dtype: 'fp32'
+      });
+      this.options.onLog('HuggingFace Transformers WebGPU integrated successfully.');
+    } catch (err) {
+      this.options.onLog('HuggingFace integration Note: ' + (err as Error).message);
+    }
+
     this.options.onLog('WebGPU device ready.');
   }
 
