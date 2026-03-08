@@ -55,7 +55,15 @@ projects.get('/', async (c) => {
     const rows = await sql`SELECT * FROM projects ORDER BY updated_at DESC`;
     return c.json(rows);
   } catch (e) {
-    return c.json({ error: 'Failed to fetch projects' }, 500);
+    // Log error to R2 in Worker, console.error for local
+    const logPath = 'logs/errors.txt';
+    const logMsg = `[${new Date().toISOString()}] GET /api/projects error: ${e instanceof Error ? e.stack : e}\n`;
+    if (typeof c.env.STORAGE?.put === 'function') {
+      await c.env.STORAGE.put(logPath, logMsg, { httpMetadata: { contentType: 'text/plain' } });
+    }
+    // Always print error details to console
+    console.error('GET /api/projects error:', e instanceof Error ? e.stack : e);
+    return c.json({ error: 'Failed to fetch projects', logPath }, 500);
   }
 });
 

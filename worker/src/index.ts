@@ -30,6 +30,26 @@ app.use('*', cors({
   allowHeaders: ['Content-Type', 'Authorization'],
 }));
 
+// Global error handler middleware
+app.onError((err, c) => {
+  const errorDetails = {
+    message: err instanceof Error ? err.message : String(err),
+    stack: err instanceof Error ? err.stack : undefined,
+    route: c.req.path,
+    method: c.req.method,
+    timestamp: new Date().toISOString(),
+  };
+  // Log to console
+  console.error('Global error handler:', errorDetails);
+  // Optionally log to R2 if available
+  if (typeof c.env?.STORAGE?.put === 'function') {
+    const logPath = 'logs/global-errors.txt';
+    const logMsg = `${JSON.stringify(errorDetails)}\n`;
+    c.env.STORAGE.put(logPath, logMsg, { httpMetadata: { contentType: 'text/plain' } });
+  }
+  return c.json({ error: 'Internal Server Error', details: errorDetails }, 500);
+});
+
 app.route('/api/projects', projectsRouter);
 app.route('/api/projects/:projectId/files', filesRouter);
 app.route('/api/ai', aiRouter);
