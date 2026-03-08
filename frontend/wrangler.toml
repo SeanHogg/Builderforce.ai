@@ -4,7 +4,8 @@ compatibility_date = "2026-03-07"
 compatibility_flags = ["nodejs_compat"]
 
 [assets]
-directory = ".vercel/output/static/_next/static"
+directory = ".vercel/output/static"
+binding = "ASSETS"
 
 [vars]
 NEXT_PUBLIC_WORKER_URL = "https://builderforce-worker.seanhogg.workers.dev"
