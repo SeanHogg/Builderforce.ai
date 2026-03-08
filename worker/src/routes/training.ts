@@ -259,6 +259,52 @@ training.get('/:id/logs/stream', async (c) => {
 });
 
 /**
+ * POST /api/training/:id/artifact
+ * Accepts a raw binary LoRA adapter blob from the browser WebGPU trainer,
+ * saves it to R2 under artifacts/{projectId}/{jobId}/adapter.bin,
+ * and updates the training_jobs record with the artifact key.
+ *
+ * Content-Type: application/octet-stream
+ */
+training.post('/:id/artifact', async (c) => {
+  try {
+    const jobId = c.req.param('id');
+    const sql = neon(c.env.NEON_DATABASE_URL);
+
+    const jobRows = await sql`SELECT project_id FROM training_jobs WHERE id = ${jobId}`;
+    if (jobRows.length === 0) return c.json({ error: 'Training job not found' }, 404);
+    const projectId = jobRows[0].project_id as string;
+
+    const body = await c.req.arrayBuffer();
+    if (!body || body.byteLength === 0) {
+      return c.json({ error: 'Empty artifact body' }, 400);
+    }
+
+    const r2Key = `artifacts/${projectId}/${jobId}/adapter.bin`;
+    await c.env.STORAGE.put(r2Key, body, {
+      httpMetadata: { contentType: 'application/octet-stream' },
+      customMetadata: { jobId, projectId, uploadedAt: new Date().toISOString() },
+    });
+
+    await sql`
+      UPDATE training_jobs
+      SET r2_artifact_key = ${r2Key}, updated_at = NOW()
+      WHERE id = ${jobId}
+    `;
+
+    await sql`
+      INSERT INTO training_logs (id, job_id, message)
+      VALUES (${crypto.randomUUID()}, ${jobId}, ${'LoRA adapter uploaded to R2: ' + r2Key})
+    `;
+
+    return c.json({ r2Key }, 201);
+  } catch (e) {
+    console.error('Failed to upload artifact:', e);
+    return c.json({ error: 'Failed to upload artifact' }, 500);
+  }
+});
+
+/**
  * POST /api/training/:id/evaluate
  * Evaluates the fine-tuned model using an AI judge.
  * Returns quality scores and stores the result in R2.

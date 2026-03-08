@@ -312,3 +312,40 @@ export async function fetchAgentPackage(agentId: string): Promise<import('./type
   return res.json();
 }
 
+/** Download raw JSONL text for a dataset from R2 via the worker. */
+export async function downloadDataset(datasetId: string): Promise<string> {
+  const res = await fetch(`${WORKER_URL}/api/datasets/${datasetId}/download`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Failed to download dataset');
+  return res.text();
+}
+
+/** Upload a raw LoRA adapter ArrayBuffer to R2 via the worker. */
+export async function uploadArtifact(jobId: string, data: ArrayBuffer): Promise<{ r2Key: string }> {
+  const res = await fetch(`${WORKER_URL}/api/training/${jobId}/artifact`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/octet-stream' },
+    body: data,
+  });
+  if (!res.ok) throw new Error('Failed to upload artifact');
+  return res.json();
+}
+
+/** Update training job status/epoch/loss from the browser. */
+export async function updateTrainingJob(
+  jobId: string,
+  data: {
+    status?: string;
+    currentEpoch?: number;
+    currentLoss?: number;
+    r2ArtifactKey?: string;
+    errorMessage?: string;
+  },
+): Promise<import('./types').TrainingJob> {
+  const res = await fetch(`${WORKER_URL}/api/training/${jobId}`, {
+    method: 'PUT',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update training job');
+  return res.json();
+}

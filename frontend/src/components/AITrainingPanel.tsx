@@ -62,8 +62,8 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
 
   // Load datasets and jobs when the panel opens
   useEffect(() => {
-    listDatasets(projectId).then(setDatasets).catch(() => {});
-    listTrainingJobs(projectId).then(setJobs).catch(() => {});
+    listDatasets(projectId).then(setDatasets).catch(() => { });
+    listTrainingJobs(projectId).then(setJobs).catch(() => { });
   }, [projectId]);
 
   const handleGenerateDataset = useCallback(async () => {
@@ -115,6 +115,8 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
           modelId: config.baseModel,
           workerUrl: process.env.NEXT_PUBLIC_WORKER_URL ?? 'http://localhost:8787',
           projectId,
+          jobId: job.id,
+          datasetId: selectedDatasetId || undefined,
           onLog: appendLog,
           onStep: (step) => {
             setLossHistory(prev => [...prev, step]);
@@ -147,9 +149,10 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
         trainerRef.current = trainer;
 
         await trainer.init();
-        // Use placeholder dataset examples (a real implementation would fetch from R2)
-        const examples = [`Example for ${config.capabilityPrompt}`];
-        // Target effective batch size: accumulate gradients until we reach this.
+        // Fallback examples used if no dataset is selected or download fails
+        const fallbackExamples = config.capabilityPrompt
+          ? [`${config.capabilityPrompt} — example 1`, `${config.capabilityPrompt} — example 2`]
+          : ['General coding task example'];
         const TARGET_EFFECTIVE_BATCH_SIZE = 16;
         await trainer.train(
           {
@@ -160,7 +163,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
             precision: 'float16',
             loraConfig: { rank: config.loraRank, alpha: config.loraRank * 2, targetModules: ['q_proj', 'v_proj'] },
           },
-          examples
+          fallbackExamples,
         );
         trainerRef.current = null;
       } else {
@@ -424,12 +427,11 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
               <div key={d.id} className="bg-gray-800 rounded p-2 space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-xs">{d.name}</span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${
-                    d.status === 'ready' ? 'bg-green-900 text-green-300' :
-                    d.status === 'generating' ? 'bg-blue-900 text-blue-300' :
-                    d.status === 'error' ? 'bg-red-900 text-red-300' :
-                    'bg-gray-700 text-gray-300'
-                  }`}>{d.status}</span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded ${d.status === 'ready' ? 'bg-green-900 text-green-300' :
+                      d.status === 'generating' ? 'bg-blue-900 text-blue-300' :
+                        d.status === 'error' ? 'bg-red-900 text-red-300' :
+                          'bg-gray-700 text-gray-300'
+                    }`}>{d.status}</span>
                 </div>
                 <div className="text-xs text-gray-400">{d.capability_prompt}</div>
                 <div className="text-xs text-gray-500">{d.example_count} examples</div>
@@ -454,12 +456,11 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
               <div key={job.id} className="bg-gray-800 rounded p-2 space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-xs truncate max-w-32">{job.base_model}</span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${
-                    job.status === 'completed' ? 'bg-green-900 text-green-300' :
-                    job.status === 'running' ? 'bg-blue-900 text-blue-300' :
-                    job.status === 'failed' ? 'bg-red-900 text-red-300' :
-                    'bg-gray-700 text-gray-300'
-                  }`}>{job.status}</span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${job.status === 'completed' ? 'bg-green-900 text-green-300' :
+                      job.status === 'running' ? 'bg-blue-900 text-blue-300' :
+                        job.status === 'failed' ? 'bg-red-900 text-red-300' :
+                          'bg-gray-700 text-gray-300'
+                    }`}>{job.status}</span>
                 </div>
                 <div className="text-xs text-gray-400">
                   Epoch {job.current_epoch}/{job.epochs}
