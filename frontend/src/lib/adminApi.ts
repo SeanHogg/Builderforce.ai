@@ -55,6 +55,18 @@ export interface AdminHealth {
       available: boolean;
       cooldownUntil?: number;
     }>;
+    free: Array<{
+      model: string;
+      preferred: boolean;
+      available: boolean;
+      cooldownUntil?: number;
+    }>;
+    pro: Array<{
+      model: string;
+      preferred: boolean;
+      available: boolean;
+      cooldownUntil?: number;
+    }>;
   };
   timestamp: string;
 }

@@ -10,6 +10,7 @@ import { ProjectAIChat } from './ProjectAIChat';
 import { AITrainingPanel } from './AITrainingPanel';
 import { AgentPublishPanel } from './AgentPublishPanel';
 import { PreviewFrame } from './PreviewFrame';
+import { ProjectsSlideOutPanel } from './ProjectsSlideOutPanel';
 import { useWebContainer } from '@/hooks/useWebContainer';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
@@ -19,7 +20,6 @@ import { brain } from '@/lib/builderforceApi';
 interface IDEProps {
   project: Project;
   initialFiles: FileEntry[];
-  onToggleLayout?: () => void;
   onProjectUpdate?: (project: Project) => void;
   /** Open the project details slide-out panel. */
   onOpenProjectDetails?: () => void;
@@ -30,7 +30,7 @@ interface IDEProps {
 type CenterView = 'preview' | 'code';
 type RightTab = 'files' | 'train' | 'publish';
 
-export function IDE({ project, initialFiles, onToggleLayout, onProjectUpdate, onOpenProjectDetails, initialChatId }: IDEProps) {
+export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId }: IDEProps) {
   const router = useRouter();
   const [files, setFiles] = useState<FileEntry[]>(initialFiles);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
@@ -45,6 +45,7 @@ export function IDE({ project, initialFiles, onToggleLayout, onProjectUpdate, on
   const [completedJobs, setCompletedJobs] = useState<TrainingJob[]>([]);
   const [projectTitle, setProjectTitle] = useState(project.name);
   const [isSavingTitle, setIsSavingTitle] = useState(false);
+  const [projectsPanelOpen, setProjectsPanelOpen] = useState(false);
   const shellStartedRef = useRef(false);
   const terminalWriteRef = useRef<((data: string) => void) | null>(null);
 
@@ -165,9 +166,10 @@ export function IDE({ project, initialFiles, onToggleLayout, onProjectUpdate, on
       terminalWriter?.('\x1b[36m▶ Run started\x1b[0m\r\n');
       terminalWriter?.('\x1b[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n\r\n');
 
-      // Fetch all file contents not yet loaded
+      // Build project contents only (no overwriting user's files)
       const allContents: Record<string, string> = { ...fileContents };
       const unfetched = files.filter(f => f.type === 'file' && !(f.path in allContents));
+      const fetchedContents: Record<string, string> = {};
 
       terminalWriter?.('\x1b[36m[1/4] Fetching file contents...\x1b[0m\r\n');
       if (unfetched.length === 0) {
@@ -178,6 +180,7 @@ export function IDE({ project, initialFiles, onToggleLayout, onProjectUpdate, on
             try {
               const content = await fetchFileContent(project.id, f.path);
               allContents[f.path] = content;
+              fetchedContents[f.path] = content;
               terminalWriter?.(`  \x1b[32m✓\x1b[0m ${f.path}\r\n`);
             } catch (error) {
               terminalWriter?.(`  \x1b[31m✗\x1b[0m ${f.path} - Failed to fetch\r\n`);
@@ -187,35 +190,31 @@ export function IDE({ project, initialFiles, onToggleLayout, onProjectUpdate, on
         );
         terminalWriter?.(`  Fetched ${unfetched.length} file(s).\r\n`);
       }
+      // Update state only with project data (newly fetched), never with Run defaults
+      if (Object.keys(fetchedContents).length > 0) {
+        setFileContents(prev => ({ ...prev, ...fetchedContents }));
+        setFiles(prev => {
+          const existingPaths = new Set(prev.map(f => f.path));
+          const added = Object.keys(fetchedContents)
+            .filter(p => !existingPaths.has(p))
+            .map(path => ({ path, content: fetchedContents[path], type: 'file' as const }));
+          return added.length > 0 ? [...prev, ...added] : prev;
+        });
+      }
       terminalWriter?.('\r\n');
 
       terminalWriter?.('\x1b[36m[2/4] Checking project files...\x1b[0m\r\n');
-      // Stub empty files with default content
-      if (!allContents['package.json'] || allContents['package.json'].trim() === '') {
-        terminalWriter?.('  \x1b[33m⚠\x1b[0m package.json is empty, using default\r\n');
-        allContents['package.json'] = JSON.stringify({
-          name: 'my-app',
-          version: '1.0.0',
-          type: 'module',
-          scripts: {
-            dev: 'vite',
-            build: 'vite build',
-            preview: 'vite preview'
-          },
-          dependencies: {
-            react: '^18.2.0',
-            'react-dom': '^18.2.0'
-          },
-          devDependencies: {
-            '@vitejs/plugin-react': '^4.0.0',
-            vite: '^4.3.9'
-          }
-        }, null, 2);
-      }
-
-      if (!allContents['index.html'] || allContents['index.html'].trim() === '') {
-        terminalWriter?.('  \x1b[33m⚠\x1b[0m index.html is empty, using default\r\n');
-        allContents['index.html'] = `<!DOCTYPE html>
+      // For mount only: use a copy and fill defaults for missing/empty required files (do not overwrite project state)
+      const mountContents: Record<string, string> = { ...allContents };
+      const defaultPackageJson = JSON.stringify({
+        name: 'my-app',
+        version: '1.0.0',
+        type: 'module',
+        scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
+        dependencies: { react: '^18.2.0', 'react-dom': '^18.2.0' },
+        devDependencies: { '@vitejs/plugin-react': '^4.0.0', vite: '^4.3.9' }
+      }, null, 2);
+      const defaultIndexHtml = `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -227,11 +226,7 @@ export function IDE({ project, initialFiles, onToggleLayout, onProjectUpdate, on
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>`;
-      }
-
-      if (!allContents['src/main.jsx'] || allContents['src/main.jsx'].trim() === '') {
-        terminalWriter?.('  \x1b[33m⚠\x1b[0m src/main.jsx is empty, using default\r\n');
-        allContents['src/main.jsx'] = `import React from 'react';
+      const defaultMainJsx = `import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 
@@ -245,44 +240,42 @@ function App() {
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);`;
-      }
-
-      if (!allContents['src/index.css'] || allContents['src/index.css'].trim() === '') {
-        terminalWriter?.('  \x1b[33m⚠\x1b[0m src/index.css is empty, using default\r\n');
-        allContents['src/index.css'] = `body {
+      const defaultIndexCss = `body {
   margin: 0;
   padding: 0;
   font-family: system-ui, -apple-system, sans-serif;
 }`;
-      }
-
-      if (!allContents['vite.config.js'] || allContents['vite.config.js'].trim() === '') {
-        terminalWriter?.('  \x1b[33m⚠\x1b[0m vite.config.js is empty, using default\r\n');
-        allContents['vite.config.js'] = `import { defineConfig } from 'vite';
+      const defaultViteConfig = `import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
 });`;
+
+      if (!mountContents['package.json'] || mountContents['package.json'].trim() === '') {
+        terminalWriter?.('  \x1b[33m⚠\x1b[0m package.json is empty, using default for this run only\r\n');
+        mountContents['package.json'] = defaultPackageJson;
+      }
+      if (!mountContents['index.html'] || mountContents['index.html'].trim() === '') {
+        terminalWriter?.('  \x1b[33m⚠\x1b[0m index.html is empty, using default for this run only\r\n');
+        mountContents['index.html'] = defaultIndexHtml;
+      }
+      if (!mountContents['src/main.jsx'] || mountContents['src/main.jsx'].trim() === '') {
+        terminalWriter?.('  \x1b[33m⚠\x1b[0m src/main.jsx is empty, using default for this run only\r\n');
+        mountContents['src/main.jsx'] = defaultMainJsx;
+      }
+      if (!mountContents['src/index.css'] || mountContents['src/index.css'].trim() === '') {
+        terminalWriter?.('  \x1b[33m⚠\x1b[0m src/index.css is empty, using default for this run only\r\n');
+        mountContents['src/index.css'] = defaultIndexCss;
+      }
+      if (!mountContents['vite.config.js'] || mountContents['vite.config.js'].trim() === '') {
+        terminalWriter?.('  \x1b[33m⚠\x1b[0m vite.config.js is empty, using default for this run only\r\n');
+        mountContents['vite.config.js'] = defaultViteConfig;
       }
 
-      setFileContents(allContents);
-
-      // Ensure Files tab shows all paths we have content for (including defaults we just added)
-      const existingPaths = new Set(files.map(f => f.path));
-      const added = Object.keys(allContents).filter(p => !existingPaths.has(p)).map(path => ({
-        path,
-        content: allContents[path],
-        type: 'file' as const,
-      }));
-      if (added.length > 0) {
-        setFiles(prev => [...prev, ...added]);
-      }
-
-      // Validate package.json
-      if (allContents['package.json']) {
+      if (mountContents['package.json']) {
         try {
-          JSON.parse(allContents['package.json']);
+          JSON.parse(mountContents['package.json']);
         } catch (e) {
           terminalWriter?.('\r\n\x1b[31m✗ Invalid package.json\x1b[0m\r\n');
           throw new Error('Invalid package.json: ' + (e instanceof Error ? e.message : 'Parse error'));
@@ -291,11 +284,11 @@ export default defineConfig({
       terminalWriter?.('  \x1b[32m✓\x1b[0m Project files ready.\r\n\r\n');
 
       terminalWriter?.('\x1b[36m[3/4] Mounting project files...\x1b[0m\r\n');
-      await mountFiles(allContents);
-      const fileCount = Object.keys(allContents).length;
+      await mountFiles(mountContents);
+      const fileCount = Object.keys(mountContents).length;
       terminalWriter?.(`  \x1b[32m✓\x1b[0m Mounted ${fileCount} file(s).\r\n\r\n`);
 
-      if (allContents['package.json']) {
+      if (mountContents['package.json']) {
         terminalWriter?.('\x1b[36m[4/4] Running npm install...\x1b[0m\r\n');
         const installCode = await runCommandAndWait('npm', ['install'], (data) => terminalWriter?.(data));
         if (installCode !== 0) {
@@ -441,29 +434,60 @@ export default defineConfig({
           </span>
         )}
 
-        {/* Spacer */}
-        <div style={{ flex: 1 }} />
-
-        {/* Right: collab status, layout toggle, run, details (projects icon) */}
-        {onToggleLayout && (
+        {/* Next to title: Details + Hamburger (projects panel) */}
+        {onOpenProjectDetails && (
           <button
-            onClick={onToggleLayout}
+            type="button"
+            onClick={onOpenProjectDetails}
             style={{
               background: 'var(--bg-elevated)',
               color: 'var(--text-secondary)',
               border: '1px solid var(--border-subtle)',
               borderRadius: 8,
-              padding: '5px 12px',
-              fontSize: '0.75rem',
+              padding: '5px 10px',
+              fontSize: '0.82rem',
               cursor: 'pointer',
               flexShrink: 0,
               fontFamily: 'var(--font-display)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
             }}
-            title="Switch to old layout"
+            title="Project details"
           >
-            🔄 Old Layout
+            <span style={{ fontSize: '1rem' }}>▦</span>
+            Details
           </button>
         )}
+        <button
+          type="button"
+          onClick={() => setProjectsPanelOpen(true)}
+          aria-label="Open projects"
+          style={{
+            background: 'var(--bg-elevated)',
+            color: 'var(--text-secondary)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 8,
+            padding: '6px 10px',
+            cursor: 'pointer',
+            flexShrink: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 3,
+          }}
+          title="All projects"
+        >
+          <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 1 }} />
+          <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 1 }} />
+          <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 1 }} />
+        </button>
+
+        {/* Spacer */}
+        <div style={{ flex: 1 }} />
+
+        {/* Right: collab status, run */}
         {collabConnected && (
           <span style={{ fontSize: '0.72rem', color: '#4ade80', display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ width: 6, height: 6, background: '#4ade80', borderRadius: '50%', display: 'inline-block' }} />
@@ -487,31 +511,13 @@ export default defineConfig({
         >
           {isRunning ? '⏳ Running…' : '▶ Run'}
         </button>
-        {onOpenProjectDetails && (
-          <button
-            type="button"
-            onClick={onOpenProjectDetails}
-            style={{
-              background: 'var(--bg-elevated)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
-              padding: '5px 12px',
-              fontSize: '0.82rem',
-              cursor: 'pointer',
-              flexShrink: 0,
-              fontFamily: 'var(--font-display)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-            }}
-            title="Project details"
-          >
-            <span style={{ fontSize: '1rem' }}>▦</span>
-            Details
-          </button>
-        )}
       </div>
+
+      <ProjectsSlideOutPanel
+        open={projectsPanelOpen}
+        onClose={() => setProjectsPanelOpen(false)}
+        currentProjectId={typeof project.id === 'number' ? project.id : Number(project.id)}
+      />
 
       {/* Main content */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>

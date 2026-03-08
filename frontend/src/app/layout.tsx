@@ -4,10 +4,75 @@ import { AuthProvider } from '@/lib/AuthContext';
 import ThemeProvider from './ThemeProvider';
 import ConditionalAppShell from '@/components/ConditionalAppShell';
 
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://builderforce.ai';
+
 export const metadata: Metadata = {
-  title: 'Builderforce.ai — AI Agent Training Platform',
+  metadataBase: new URL(BASE_URL),
+  title: {
+    default: 'Builderforce.ai — AI Agent Training Platform | Build & Deploy AI Agents',
+    template: '%s | Builderforce.ai',
+  },
   description:
-    'Build, train, and deploy custom AI agents. WebGPU LoRA fine-tuning in the browser. Generate datasets, evaluate with AI judges, publish to the Workforce Registry.',
+    'Build, train, and deploy custom AI agents. WebGPU LoRA fine-tuning in the browser. Generate datasets, evaluate with AI judges, publish to the Workforce Registry. Skills marketplace, personas, and AI-native workflows.',
+  keywords: [
+    'AI agent training',
+    'AI agents',
+    'WebGPU',
+    'LoRA fine-tuning',
+    'AI workforce',
+    'agent orchestration',
+    'Builderforce',
+    'AI coding',
+    'skills marketplace',
+    'AI personas',
+  ],
+  authors: [{ name: 'Builderforce', url: BASE_URL }],
+  creator: 'Builderforce',
+  publisher: 'Builderforce',
+  robots: 'index, follow',
+  alternates: { canonical: '/' },
+  openGraph: {
+    type: 'website',
+    url: BASE_URL,
+    siteName: 'Builderforce.ai',
+    title: 'Builderforce.ai — AI Agent Training Platform',
+    description:
+      'Build, train, and deploy custom AI agents. WebGPU LoRA fine-tuning, skills marketplace, personas, and AI-native workflows. Publish to the Workforce Registry.',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'Builderforce.ai — AI Agent Training Platform',
+      },
+    ],
+    locale: 'en_US',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Builderforce.ai — AI Agent Training Platform',
+    description:
+      'Build, train, and deploy custom AI agents. WebGPU LoRA, skills marketplace, personas. Publish to the Workforce Registry.',
+    images: ['/og-image.png'],
+  },
+  applicationName: 'Builderforce.ai',
+  appleWebApp: {
+    capable: true,
+    title: 'Builderforce.ai',
+    statusBarStyle: 'black-translucent',
+  },
+  themeColor: [
+    { media: '(prefers-color-scheme: dark)', color: '#0f0f14' },
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+  ],
+  icons: {
+    icon: [{ url: '/icon.png', type: 'image/png', sizes: '32x32' }, { url: '/icon-192.png', type: 'image/png', sizes: '192x192' }],
+    shortcut: '/icon.png',
+    apple: [{ url: '/apple-touch-icon.png', type: 'image/png', sizes: '180x180' }],
+  },
+  other: {
+    'color-scheme': 'dark light',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -39,6 +104,47 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link
           href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap"
           rel="stylesheet"
+        />
+        {/* JSON-LD Structured Data (SEO) */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@graph': [
+                {
+                  '@type': 'Organization',
+                  '@id': `${BASE_URL}/#organization`,
+                  name: 'Builderforce',
+                  url: BASE_URL,
+                  logo: { '@type': 'ImageObject', url: `${BASE_URL}/icon.png` },
+                  contactPoint: {
+                    '@type': 'ContactPoint',
+                    contactType: 'customer support',
+                    url: BASE_URL,
+                  },
+                },
+                {
+                  '@type': 'SoftwareApplication',
+                  '@id': `${BASE_URL}/#app`,
+                  name: 'Builderforce.ai',
+                  description:
+                    'AI agent training platform. Build, train, and deploy custom AI agents with WebGPU LoRA fine-tuning in the browser, skills marketplace, personas, and publish to the Workforce Registry.',
+                  url: BASE_URL,
+                  applicationCategory: 'DeveloperApplication',
+                  operatingSystem: 'Web',
+                  author: { '@id': `${BASE_URL}/#organization` },
+                },
+                {
+                  '@type': 'WebSite',
+                  '@id': `${BASE_URL}/#website`,
+                  url: BASE_URL,
+                  name: 'Builderforce.ai',
+                  publisher: { '@id': `${BASE_URL}/#organization` },
+                },
+              ],
+            }),
+          }}
         />
       </head>
       <body>

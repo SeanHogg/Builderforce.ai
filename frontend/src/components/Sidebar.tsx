@@ -18,7 +18,7 @@ const mainNav: NavItem[] = [
   { href: '/brainstorm', label: 'Brain Storm', icon: '💡' },
   { href: '/projects', label: 'Projects', icon: '▦' },
   { href: '/ide', label: 'IDE', icon: '</>', activePaths: ['/ide', '/projects'] },
-  { href: '/tasks', label: 'Tasks', icon: '☑' },
+  { href: '/tasks', label: 'Task Mgmt', icon: '☑' },
   { href: '/training', label: 'Training', icon: '🎓' },
 ];
 

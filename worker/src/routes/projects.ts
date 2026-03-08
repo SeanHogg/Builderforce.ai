@@ -12,13 +12,15 @@ export function generateId(): string {
   return crypto.randomUUID();
 }
 
+/** Default files for new (vanilla) projects. Must match API template and Run flow. */
 export const VANILLA_TEMPLATE: Record<string, string> = {
   'package.json': JSON.stringify({
     name: 'my-app',
     version: '1.0.0',
-    private: true,
-    scripts: { dev: 'vite --port 3000', build: 'vite build' },
-    dependencies: { vite: '^5.4.0' },
+    type: 'module',
+    scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
+    dependencies: { react: '^18.2.0', 'react-dom': '^18.2.0' },
+    devDependencies: { '@vitejs/plugin-react': '^4.0.0', vite: '^4.3.9' },
   }, null, 2),
   'index.html': `<!DOCTYPE html>
 <html lang="en">
@@ -28,16 +30,35 @@ export const VANILLA_TEMPLATE: Record<string, string> = {
     <title>My App</title>
   </head>
   <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
   </body>
-</html>
-`,
-  'src/main.js': `document.getElementById('app').innerHTML = \`
-  <h1>Hello from Builderforce.ai! 🚀</h1>
-  <p>Edit <code>src/main.js</code> to get started.</p>
-\`;
-`,
+</html>`,
+  'src/main.jsx': `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+
+function App() {
+  return (
+    <div style={{ padding: '2rem', fontFamily: 'system-ui' }}>
+      <h1>Hello World! 🚀</h1>
+      <p>Edit src/main.jsx to get started.</p>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);`,
+  'src/index.css': `body {
+  margin: 0;
+  padding: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+}`,
+  'vite.config.js': `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+});`,
 };
 
 export async function createTemplateFiles(storage: R2Bucket, projectId: string, template: string): Promise<void> {
