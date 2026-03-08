@@ -30,8 +30,8 @@ export function IDE({ project, initialFiles }: IDEProps) {
   }, [useNewLayout]);
 
   if (useNewLayout) {
-    return <IDENew project={project} initialFiles={initialFiles} onToggleLayout={() => setUseNewLayout(false)} />;
+    return <IDENew key="new" project={project} initialFiles={initialFiles} onToggleLayout={() => setUseNewLayout(false)} />;
   }
 
-  return <IDEOld project={project} initialFiles={initialFiles} onToggleLayout={() => setUseNewLayout(true)} />;
+  return <IDEOld key="old" project={project} initialFiles={initialFiles} onToggleLayout={() => setUseNewLayout(true)} />;
 }

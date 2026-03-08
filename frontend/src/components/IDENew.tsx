@@ -23,7 +23,7 @@ interface IDEProps {
   onToggleLayout?: () => void;
 }
 
-type BottomTab = 'terminal' | 'preview';
+type CenterView = 'preview' | 'code';
 type RightTab = 'files' | 'train' | 'publish';
 
 export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
@@ -31,7 +31,7 @@ export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
   const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [activeFile, setActiveFile] = useState<string | undefined>();
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
-  const [bottomTab, setBottomTab] = useState<BottomTab>('terminal');
+  const [centerView, setCenterView] = useState<CenterView>('preview');
   const [rightTab, setRightTab] = useState<RightTab>('files');
   const [previewUrl, setPreviewUrl] = useState<string | undefined>();
   const [terminalWriter, setTerminalWriter] = useState<((data: string) => void) | undefined>();
@@ -150,24 +150,113 @@ export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
   const handleRun = useCallback(async () => {
     if (isRunning) return;
     setIsRunning(true);
-    setBottomTab('terminal');
     try {
       // Fetch all file contents not yet loaded
       const allContents: Record<string, string> = { ...fileContents };
       const unfetched = files.filter(f => f.type === 'file' && !(f.path in allContents));
+      
+      terminalWriter?.('\r\n\x1b[36mFetching file contents...\x1b[0m\r\n');
       await Promise.all(
         unfetched.map(async (f) => {
           try {
-            allContents[f.path] = await fetchFileContent(project.id, f.path);
-          } catch {
-            allContents[f.path] = '';
+            const content = await fetchFileContent(project.id, f.path);
+            allContents[f.path] = content;
+            terminalWriter?.(`\x1b[32m✓\x1b[0m ${f.path}\r\n`);
+          } catch (error) {
+            terminalWriter?.(`\x1b[31m✗\x1b[0m ${f.path} - Failed to fetch\r\n`);
+            console.error(`Failed to fetch ${f.path}:`, error);
           }
         })
       );
+
+      // Stub empty files with default content
+      if (!allContents['package.json'] || allContents['package.json'].trim() === '') {
+        terminalWriter?.('\x1b[33m⚠\x1b[0m package.json is empty, using default\r\n');
+        allContents['package.json'] = JSON.stringify({
+          name: 'my-app',
+          version: '1.0.0',
+          type: 'module',
+          scripts: {
+            dev: 'vite',
+            build: 'vite build',
+            preview: 'vite preview'
+          },
+          dependencies: {
+            react: '^18.2.0',
+            'react-dom': '^18.2.0'
+          },
+          devDependencies: {
+            '@vitejs/plugin-react': '^4.0.0',
+            vite: '^4.3.9'
+          }
+        }, null, 2);
+      }
+
+      if (!allContents['index.html'] || allContents['index.html'].trim() === '') {
+        terminalWriter?.('\x1b[33m⚠\x1b[0m index.html is empty, using default\r\n');
+        allContents['index.html'] = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My App</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>`;
+      }
+
+      if (!allContents['src/main.js'] || allContents['src/main.js'].trim() === '') {
+        terminalWriter?.('\x1b[33m⚠\x1b[0m src/main.js is empty, using default\r\n');
+        allContents['src/main.js'] = `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+
+function App() {
+  return (
+    <div style={{ padding: '2rem', fontFamily: 'system-ui' }}>
+      <h1>Hello World! 🚀</h1>
+      <p>Edit src/main.js to get started.</p>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);`;
+      }
+
+      if (!allContents['src/index.css'] || allContents['src/index.css'].trim() === '') {
+        allContents['src/index.css'] = `body {
+  margin: 0;
+  padding: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+}`;
+      }
+
+      if (!allContents['vite.config.js'] || allContents['vite.config.js'].trim() === '') {
+        allContents['vite.config.js'] = `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+});`;
+      }
+
       setFileContents(allContents);
 
+      // Validate package.json
+      if (allContents['package.json']) {
+        try {
+          JSON.parse(allContents['package.json']);
+        } catch (e) {
+          terminalWriter?.('\r\n\x1b[31m✗ Invalid package.json\x1b[0m\r\n');
+          throw new Error('Invalid package.json: ' + (e instanceof Error ? e.message : 'Parse error'));
+        }
+      }
+
       terminalWriter?.('\r\n\x1b[36mMounting project files...\x1b[0m\r\n');
-      await mountFiles(allContents);  // Task 1: now uses proper nested tree
+      await mountFiles(allContents);
 
       if (allContents['package.json']) {
         terminalWriter?.('\r\n\x1b[36mRunning npm install...\x1b[0m\r\n');
@@ -175,12 +264,42 @@ export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
       }
 
       // Start the dev server
+      terminalWriter?.('\r\n\x1b[36mStarting dev server...\x1b[0m\r\n');
       const url = await startDevServer((data) => terminalWriter?.(data));
       setPreviewUrl(url);
-      setBottomTab('preview');
+      setCenterView('preview');
     } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : String(e);
       console.error('Failed to start dev server:', e);
-      terminalWriter?.('\r\n\x1b[31mFailed to start dev server\x1b[0m\r\n');
+      
+      // Parse and display npm errors in a user-friendly way
+      if (errorMsg.includes('EJSONPARSE')) {
+        terminalWriter?.('\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
+        terminalWriter?.('\x1b[31m✗ PACKAGE.JSON ERROR\x1b[0m\r\n');
+        terminalWriter?.('\r\n\x1b[33mYour package.json file is invalid or empty.\x1b[0m\r\n');
+        terminalWriter?.('\x1b[33mPlease check the Files tab and ensure package.json contains valid JSON.\x1b[0m\r\n');
+        terminalWriter?.('\r\n\x1b[36mExpected format:\x1b[0m\r\n');
+        terminalWriter?.('{\r\n');
+        terminalWriter?.('  "name": "my-app",\r\n');
+        terminalWriter?.('  "version": "1.0.0",\r\n');
+        terminalWriter?.('  "scripts": { "dev": "vite" },\r\n');
+        terminalWriter?.('  "dependencies": { ... }\r\n');
+        terminalWriter?.('}\r\n');
+        terminalWriter?.('\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
+      } else if (errorMsg.includes('output:')) {
+        // Extract and display the npm output
+        const outputMatch = errorMsg.match(/output:\n([\s\S]+)/);
+        if (outputMatch) {
+          terminalWriter?.('\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
+          terminalWriter?.('\x1b[31m✗ DEV SERVER ERROR\x1b[0m\r\n\r\n');
+          terminalWriter?.(outputMatch[1]);
+          terminalWriter?.('\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
+        } else {
+          terminalWriter?.(`\r\n\x1b[31m✗ Error: ${errorMsg}\x1b[0m\r\n`);
+        }
+      } else {
+        terminalWriter?.(`\r\n\x1b[31m✗ Error: ${errorMsg}\x1b[0m\r\n`);
+      }
     } finally {
       setIsRunning(false);
     }
@@ -315,58 +434,73 @@ export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
           </div>
         </div>
 
-        {/* Editor + Bottom panel */}
+        {/* Center panel: Preview/Code toggle + Terminal */}
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-          {/* Editor area */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <EditorTabs
-              openFiles={openFiles}
-              activeFile={activeFile}
-              onTabSelect={setActiveFile}
-              onTabClose={closeTab}
-            />
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              <CodeEditor
-                filePath={activeFile}
-                content={activeFile ? (fileContents[activeFile] || '') : ''}
-                onChange={handleEditorChange}
-                ydoc={ydoc}
+          {/* Preview/Code toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)', padding: '4px 8px', gap: 8, flexShrink: 0 }}>
+            {(['preview', 'code'] as CenterView[]).map(view => (
+              <button
+                key={view}
+                onClick={() => setCenterView(view)}
+                style={{
+                  padding: '6px 16px', fontSize: '0.8rem', fontWeight: 600,
+                  background: centerView === view ? 'var(--bg-elevated)' : 'transparent',
+                  color: centerView === view ? 'var(--text-primary)' : 'var(--text-muted)',
+                  border: 'none', borderBottom: centerView === view ? '2px solid var(--coral-bright)' : '2px solid transparent',
+                  cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  borderRadius: 6,
+                }}
+              >
+                {view === 'preview' ? (
+                  <>🌐 Preview {previewUrl && <span style={{ color: '#4ade80' }}>●</span>}</>
+                ) : (
+                  '💻 Code'
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Main content area */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+            {/* Preview */}
+            <div style={{ position: 'absolute', inset: 0, visibility: centerView === 'preview' ? 'visible' : 'hidden', pointerEvents: centerView === 'preview' ? 'auto' : 'none', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <PreviewFrame url={previewUrl} />
+              </div>
+            </div>
+
+            {/* Code Editor */}
+            <div style={{ position: 'absolute', inset: 0, visibility: centerView === 'code' ? 'visible' : 'hidden', pointerEvents: centerView === 'code' ? 'auto' : 'none', display: 'flex', flexDirection: 'column' }}>
+              <EditorTabs
+                openFiles={openFiles}
+                activeFile={activeFile}
+                onTabSelect={setActiveFile}
+                onTabClose={closeTab}
               />
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <CodeEditor
+                  filePath={activeFile}
+                  content={activeFile ? (fileContents[activeFile] || '') : ''}
+                  onChange={handleEditorChange}
+                  ydoc={ydoc}
+                />
+              </div>
             </div>
           </div>
 
-          {/* Bottom panel */}
-          <div style={{ height: 260, borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)' }}>
-              {(['terminal', 'preview'] as BottomTab[]).map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setBottomTab(tab)}
-                  style={{
-                    padding: '6px 16px', fontSize: '0.8rem',
-                    background: bottomTab === tab ? 'var(--bg-elevated)' : 'transparent',
-                    color: bottomTab === tab ? 'var(--text-primary)' : 'var(--text-muted)',
-                    border: 'none', borderTop: bottomTab === tab ? '2px solid var(--coral-bright)' : '2px solid transparent',
-                    cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: 6,
-                  }}
-                >
-                  {tab === 'terminal' ? 'Terminal' : (
-                    <>Preview {previewUrl && <span style={{ color: '#4ade80' }}>●</span>}</>
-                  )}
-                </button>
-              ))}
+          {/* Terminal at bottom */}
+          <div style={{ height: 200, borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)', padding: '4px 8px' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                📟 Terminal
+              </span>
             </div>
-            <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-              <div style={{ position: 'absolute', inset: 0, visibility: bottomTab === 'terminal' ? 'visible' : 'hidden', pointerEvents: bottomTab === 'terminal' ? 'auto' : 'none' }}>
-                <Terminal
-                  onReady={handleTerminalReady}
-                  onInput={handleTerminalInput}
-                />
-              </div>
-              <div style={{ position: 'absolute', inset: 0, visibility: bottomTab === 'preview' ? 'visible' : 'hidden', pointerEvents: bottomTab === 'preview' ? 'auto' : 'none' }}>
-                <PreviewFrame url={previewUrl} />
-              </div>
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <Terminal
+                onReady={handleTerminalReady}
+                onInput={handleTerminalInput}
+              />
             </div>
           </div>
         </div>

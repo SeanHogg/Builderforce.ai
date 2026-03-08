@@ -97,20 +97,26 @@ export function useWebContainer() {
     const instance = await getOrBootWebContainer();
     return new Promise((resolve, reject) => {
       let serverReady = false;
+      let accumulatedOutput = '';
+
       instance.on('server-ready', (port, url) => {
         serverReady = true;
         setState(prev => ({ ...prev, url }));
         resolve(url);
       });
       instance.spawn('npm', ['run', 'dev']).then(process => {
-        if (onOutput) {
-          process.output.pipeTo(new WritableStream({
-            write(data) { onOutput(data); },
-          }));
-        }
+        const writer = new WritableStream({
+          write(data) {
+            accumulatedOutput += data;
+            if (onOutput) onOutput(data);
+          },
+        });
+        process.output.pipeTo(writer);
+
         process.exit.then(code => {
           if (code !== 0 && !serverReady) {
-            reject(new Error(`Dev server exited with code ${code}. Check terminal output for details.`));
+            const msg = `Dev server exited with code ${code}. output:\n${accumulatedOutput}`;
+            reject(new Error(msg));
           }
         });
       }).catch(reject);
