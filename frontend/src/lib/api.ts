@@ -28,7 +28,8 @@ export async function fetchProjects(): Promise<import('./types').Project[]> {
 
 export async function fetchProject(id: string): Promise<import('./types').Project> {
   const res = await fetch(`${WORKER_URL}/api/projects/${id}`, { headers: authHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch project');
+  if (res.status === 404) throw new Error('404 Project not found');
+  if (!res.ok) throw new Error(`Failed to fetch project (${res.status})`);
   return res.json();
 }
 

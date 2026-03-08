@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
 import { FileExplorer } from './FileExplorer';
 import { EditorTabs } from './EditorTabs';
 import { CodeEditor } from './CodeEditor';
@@ -9,10 +11,11 @@ import { AIChat } from './AIChat';
 import { AITrainingPanel } from './AITrainingPanel';
 import { AgentPublishPanel } from './AgentPublishPanel';
 import { PreviewFrame } from './PreviewFrame';
+import { ThemeToggleButton } from '@/app/ThemeProvider';
 import { useWebContainer } from '@/hooks/useWebContainer';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
-import { saveFile, fetchFileContent, deleteFile } from '@/lib/api';
+import { saveFile, fetchFileContent, deleteFile, fetchFiles } from '@/lib/api';
 
 interface IDEProps {
   project: Project;
@@ -34,9 +37,58 @@ export function IDE({ project, initialFiles }: IDEProps) {
   const [shellWriter, setShellWriter] = useState<WritableStreamDefaultWriter<string> | undefined>();
   const [isRunning, setIsRunning] = useState(false);
   const [completedJobs, setCompletedJobs] = useState<TrainingJob[]>([]);
+  const shellStartedRef = useRef(false);
 
-  const { state: wcState, mountFiles, runCommand, startShell, startDevServer } = useWebContainer();
+  const { state: wcState, mountFiles, runCommand, startShell, startDevServer, getOrBootWebContainer } = useWebContainer();
   const { doc: ydoc, connected: collabConnected } = useCollaboration(project.id, 'user-local');
+
+  // Task 2: Boot WebContainer and spawn an interactive shell immediately on IDE load.
+  // This makes the terminal live from the moment the IDE opens, not just after clicking Run.
+  useEffect(() => {
+    if (shellStartedRef.current) return;
+    shellStartedRef.current = true;
+
+    const initShell = async () => {
+      try {
+        await getOrBootWebContainer();
+        // Wait for terminalWriter — poll briefly (terminal mounts asynchronously)
+        let attempts = 0;
+        const trySpawn = async () => {
+          const writer = await startShell((data) => {
+            setTerminalWriter((prev: ((data: string) => void) | undefined) => {
+              prev?.(data);
+              return prev;
+            });
+          });
+          setShellWriter(writer);
+        };
+        // Retry a few times to wait for terminalWriter to be registered
+        const waitAndSpawn = () => {
+          attempts++;
+          trySpawn().catch((e) => {
+            if (attempts < 5) setTimeout(waitAndSpawn, 500);
+            else console.warn('Shell spawn failed:', e);
+          });
+        };
+        setTimeout(waitAndSpawn, 300);
+      } catch (e) {
+        console.warn('WebContainer boot failed (may not be supported in this browser):', e);
+      }
+    };
+
+    initShell();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Once terminalWriter is ready, wire up the shellWriter output to it
+  const handleTerminalReady = useCallback((write: (data: string) => void) => {
+    setTerminalWriter(() => write);
+    // If shell is already started, we need to re-spawn with this writer
+    if (!shellStartedRef.current) return;
+    startShell((data) => write(data))
+      .then(writer => setShellWriter(writer))
+      .catch(e => console.warn('Shell re-spawn failed:', e));
+  }, [startShell]);
 
   const openFile = useCallback(async (path: string) => {
     setActiveFile(path);
@@ -99,7 +151,7 @@ export function IDE({ project, initialFiles }: IDEProps) {
     setIsRunning(true);
     setBottomTab('terminal');
     try {
-      // Fetch any file contents not yet loaded and build the full map
+      // Fetch all file contents not yet loaded
       const allContents: Record<string, string> = { ...fileContents };
       const unfetched = files.filter(f => f.type === 'file' && !(f.path in allContents));
       await Promise.all(
@@ -113,24 +165,16 @@ export function IDE({ project, initialFiles }: IDEProps) {
       );
       setFileContents(allContents);
 
-      // Mount files into the WebContainer
       terminalWriter?.('\r\n\x1b[36mMounting project files...\x1b[0m\r\n');
-      await mountFiles(allContents);
+      await mountFiles(allContents);  // Task 1: now uses proper nested tree
 
-      // Run npm install if package.json exists
       if (allContents['package.json']) {
         terminalWriter?.('\r\n\x1b[36mRunning npm install...\x1b[0m\r\n');
         await runCommand('npm', ['install'], (data) => terminalWriter?.(data));
       }
 
-      // Spawn an interactive shell for the terminal panel
-      const writer = await startShell((data) => terminalWriter?.(data));
-      setShellWriter(writer);
-
       // Start the dev server
-      const url = await startDevServer((data) => {
-        terminalWriter?.(data);
-      });
+      const url = await startDevServer((data) => terminalWriter?.(data));
       setPreviewUrl(url);
       setBottomTab('preview');
     } catch (e) {
@@ -139,71 +183,113 @@ export function IDE({ project, initialFiles }: IDEProps) {
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, startDevServer, mountFiles, runCommand, startShell, terminalWriter, files, fileContents, project.id]);
+  }, [isRunning, startDevServer, mountFiles, runCommand, terminalWriter, files, fileContents, project.id]);
 
-  // Forward keystrokes directly to the WebContainer shell
   const handleTerminalInput = useCallback((data: string) => {
     shellWriter?.write(data);
   }, [shellWriter]);
 
+  // Refresh file list after create/delete
+  const refreshFiles = useCallback(async () => {
+    try {
+      const updated = await fetchFiles(project.id);
+      setFiles(updated);
+    } catch { /* silent */ }
+  }, [project.id]);
+
+  const statusLabel = wcState.status === 'booting'
+    ? '⏳ Booting…'
+    : wcState.status === 'ready'
+      ? '✅ Ready'
+      : wcState.status === 'error'
+        ? '⚠️ WC Error'
+        : '';
+
   return (
-    <div className="h-screen flex flex-col bg-gray-950 text-white overflow-hidden">
-      {/* Top bar */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-gray-900 border-b border-gray-700 shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-blue-400 font-bold">⚡</span>
-          <span className="font-semibold">{project.name}</span>
-          {project.description && (
-            <span className="text-gray-500 text-sm hidden md:block">— {project.description}</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2 ml-auto">
-          {collabConnected && (
-            <span className="text-xs text-green-400 flex items-center gap-1">
-              <span className="w-2 h-2 bg-green-400 rounded-full inline-block" />
-              Live
-            </span>
-          )}
-          <span className="text-xs text-gray-500">
-            {wcState.status === 'booting' ? '⏳ Booting...' : wcState.status === 'ready' ? '✅ Ready' : ''}
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)', overflow: 'hidden' }}>
+      {/* Task 5: Top bar — claw logo, project name, back link, theme toggle, run button */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10, padding: '6px 14px',
+        background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)',
+        flexShrink: 0, minHeight: 46,
+      }}>
+        {/* Left: back + logo + project */}
+        <Link href="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', color: 'var(--text-muted)', fontSize: '0.78rem', flexShrink: 0, padding: '4px 8px', borderRadius: 6, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+          ← Dashboard
+        </Link>
+        <Image src="/claw.png" alt="" width={20} height={20} style={{ filter: 'drop-shadow(0 0 6px var(--logo-glow))', flexShrink: 0 }} />
+        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+          {project.name}
+        </span>
+        {project.description && (
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>
+            — {project.description}
           </span>
-          <button
-            onClick={handleRun}
-            disabled={isRunning}
-            className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm px-4 py-1.5 rounded flex items-center gap-1"
-          >
-            {isRunning ? '⏳' : '▶'} Run
-          </button>
-          <button className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-3 py-1.5 rounded">
-            Share
-          </button>
-        </div>
+        )}
+
+        {/* Spacer */}
+        <div style={{ flex: 1 }} />
+
+        {/* Right: collab status, WC status, theme toggle, run, share */}
+        {collabConnected && (
+          <span style={{ fontSize: '0.72rem', color: '#4ade80', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 6, height: 6, background: '#4ade80', borderRadius: '50%', display: 'inline-block' }} />
+            Live
+          </span>
+        )}
+        {statusLabel && (
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{statusLabel}</span>
+        )}
+        <ThemeToggleButton />
+        <button
+          onClick={handleRun}
+          disabled={isRunning}
+          style={{
+            background: isRunning ? 'var(--bg-elevated)' : 'linear-gradient(135deg, #22c55e, #16a34a)',
+            color: '#fff', border: 'none', borderRadius: 8,
+            padding: '5px 14px', fontSize: '0.82rem', fontWeight: 600,
+            cursor: isRunning ? 'wait' : 'pointer', fontFamily: 'var(--font-display)',
+            display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
+            opacity: isRunning ? 0.6 : 1,
+          }}
+        >
+          {isRunning ? '⏳ Running…' : '▶ Run'}
+        </button>
+        <button
+          style={{
+            background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+            border: '1px solid var(--border-subtle)', borderRadius: 8,
+            padding: '5px 12px', fontSize: '0.82rem', cursor: 'pointer', flexShrink: 0,
+          }}
+        >
+          Share
+        </button>
       </div>
 
       {/* Main content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* File Explorer */}
-        <div className="w-60 shrink-0 border-r border-gray-700 overflow-hidden">
+        <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--border-subtle)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <FileExplorer
             files={files}
             activeFile={activeFile}
             onFileSelect={openFile}
-            onFileCreate={handleFileCreate}
-            onFileDelete={handleFileDelete}
+            onFileCreate={async (path) => { await handleFileCreate(path); refreshFiles(); }}
+            onFileDelete={async (path) => { await handleFileDelete(path); refreshFiles(); }}
           />
         </div>
 
-        {/* Editor + Bottom */}
-        <div className="flex flex-col flex-1 overflow-hidden">
+        {/* Editor + Bottom panel */}
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
           {/* Editor area */}
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <EditorTabs
               openFiles={openFiles}
               activeFile={activeFile}
               onTabSelect={setActiveFile}
               onTabClose={closeTab}
             />
-            <div className="flex-1 overflow-hidden">
+            <div style={{ flex: 1, overflow: 'hidden' }}>
               <CodeEditor
                 filePath={activeFile}
                 content={activeFile ? (fileContents[activeFile] || '') : ''}
@@ -213,66 +299,74 @@ export function IDE({ project, initialFiles }: IDEProps) {
             </div>
           </div>
 
-          {/* Bottom panel — both panels always mounted; CSS controls visibility */}
-          <div className="h-72 border-t border-gray-700 flex flex-col shrink-0">
-            <div className="flex items-center bg-gray-900 border-b border-gray-700">
-              <button
-                className={`px-4 py-1.5 text-sm ${bottomTab === 'terminal' ? 'bg-gray-800 text-white border-t-2 border-t-blue-500' : 'text-gray-400 hover:text-white'}`}
-                onClick={() => setBottomTab('terminal')}
-              >
-                Terminal
-              </button>
-              <button
-                className={`px-4 py-1.5 text-sm ${bottomTab === 'preview' ? 'bg-gray-800 text-white border-t-2 border-t-blue-500' : 'text-gray-400 hover:text-white'}`}
-                onClick={() => setBottomTab('preview')}
-              >
-                Preview {previewUrl && <span className="ml-1 text-green-400">●</span>}
-              </button>
+          {/* Bottom panel */}
+          <div style={{ height: 260, borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)' }}>
+              {(['terminal', 'preview'] as BottomTab[]).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setBottomTab(tab)}
+                  style={{
+                    padding: '6px 16px', fontSize: '0.8rem',
+                    background: bottomTab === tab ? 'var(--bg-elevated)' : 'transparent',
+                    color: bottomTab === tab ? 'var(--text-primary)' : 'var(--text-muted)',
+                    border: 'none', borderTop: bottomTab === tab ? '2px solid var(--coral-bright)' : '2px solid transparent',
+                    cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  {tab === 'terminal' ? 'Terminal' : (
+                    <>Preview {previewUrl && <span style={{ color: '#4ade80' }}>●</span>}</>
+                  )}
+                </button>
+              ))}
             </div>
-            <div className="flex-1 overflow-hidden relative">
-              {/* Terminal — always mounted so terminalWriter / shellWriter are never lost */}
-              <div className={`absolute inset-0 ${bottomTab === 'terminal' ? '' : 'invisible pointer-events-none'}`}>
+            <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+              <div style={{ position: 'absolute', inset: 0, visibility: bottomTab === 'terminal' ? 'visible' : 'hidden', pointerEvents: bottomTab === 'terminal' ? 'auto' : 'none' }}>
                 <Terminal
-                  onReady={(write) => setTerminalWriter(() => write)}
+                  onReady={handleTerminalReady}
                   onInput={handleTerminalInput}
                 />
               </div>
-              {/* Preview iframe */}
-              <div className={`absolute inset-0 ${bottomTab === 'preview' ? '' : 'invisible pointer-events-none'}`}>
+              <div style={{ position: 'absolute', inset: 0, visibility: bottomTab === 'preview' ? 'visible' : 'hidden', pointerEvents: bottomTab === 'preview' ? 'auto' : 'none' }}>
                 <PreviewFrame url={previewUrl} />
               </div>
             </div>
           </div>
         </div>
 
-        {/* AI Chat / Training Panel */}
-        <div className="w-72 shrink-0 border-l border-gray-700 overflow-hidden flex flex-col">
-          {/* Right panel tabs */}
-          <div className="flex border-b border-gray-700 shrink-0">
-            <button
-              className={`px-3 py-1.5 text-xs ${rightTab === 'ai' ? 'bg-gray-800 text-white border-t-2 border-t-blue-500' : 'text-gray-400 hover:text-white'}`}
-              onClick={() => setRightTab('ai')}
-            >
-              AI Assistant
-            </button>
-            <button
-              className={`px-3 py-1.5 text-xs ${rightTab === 'train' ? 'bg-gray-800 text-white border-t-2 border-t-blue-500' : 'text-gray-400 hover:text-white'}`}
-              onClick={() => setRightTab('train')}
-            >
-              🧠 Train
-            </button>
-            <button
-              className={`px-3 py-1.5 text-xs ${rightTab === 'publish' ? 'bg-gray-800 text-white border-t-2 border-t-blue-500' : 'text-gray-400 hover:text-white'}`}
-              onClick={() => setRightTab('publish')}
-            >
-              🚀 Publish
-            </button>
+        {/* Right panel: AI / Train / Publish */}
+        <div style={{ width: 300, flexShrink: 0, borderLeft: '1px solid var(--border-subtle)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+            {([['ai', 'AI Assistant'], ['train', '🧠 Train'], ['publish', '🚀 Publish']] as [RightTab, string][]).map(([tab, label]) => (
+              <button
+                key={tab}
+                onClick={() => setRightTab(tab)}
+                style={{
+                  flex: 1, padding: '7px 4px', fontSize: '0.72rem', fontWeight: 600,
+                  background: rightTab === tab ? 'var(--bg-elevated)' : 'transparent',
+                  color: rightTab === tab ? 'var(--text-primary)' : 'var(--text-muted)',
+                  border: 'none', borderTop: rightTab === tab ? '2px solid var(--coral-bright)' : '2px solid transparent',
+                  cursor: 'pointer', fontFamily: 'var(--font-display)',
+                  whiteSpace: 'nowrap',
+                }}
+              >{label}</button>
+            ))}
           </div>
-          <div className="flex-1 overflow-hidden relative">
-            <div className={`absolute inset-0 ${rightTab === 'ai' ? '' : 'invisible pointer-events-none'}`}>
-              <AIChat projectId={project.id} />
+          <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+            {/* Task 3: Pass activeFile + content to AIChat for context */}
+            <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'ai' ? 'visible' : 'hidden', pointerEvents: rightTab === 'ai' ? 'auto' : 'none' }}>
+              <AIChat
+                projectId={project.id}
+                activeFile={activeFile}
+                activeFileContent={activeFile ? (fileContents[activeFile] || '') : undefined}
+                onApplyCode={activeFile ? (code) => {
+                  setFileContents(prev => ({ ...prev, [activeFile]: code }));
+                  saveFile(project.id, activeFile, code).catch(console.error);
+                } : undefined}
+              />
             </div>
-            <div className={`absolute inset-0 ${rightTab === 'train' ? '' : 'invisible pointer-events-none'}`}>
+            <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'train' ? 'visible' : 'hidden', pointerEvents: rightTab === 'train' ? 'auto' : 'none' }}>
               <AITrainingPanel
                 projectId={project.id}
                 onLog={(msg) => terminalWriter?.(`\r\n\x1b[35m[Train]\x1b[0m ${msg}`)}
@@ -282,7 +376,7 @@ export function IDE({ project, initialFiles }: IDEProps) {
                 })}
               />
             </div>
-            <div className={`absolute inset-0 ${rightTab === 'publish' ? '' : 'invisible pointer-events-none'}`}>
+            <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'publish' ? 'visible' : 'hidden', pointerEvents: rightTab === 'publish' ? 'auto' : 'none' }}>
               <AgentPublishPanel projectId={project.id} completedJobs={completedJobs} />
             </div>
           </div>

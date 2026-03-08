@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { listAgents, hireAgent } from '@/lib/api';
 import type { PublishedAgent } from '@/lib/types';
+import AppHeader from '@/components/AppHeader';
 
 function SkillBadge({ skill }: { skill: string }) {
   return (
@@ -145,34 +146,14 @@ export default function WorkforcePage() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      {/* Nav */}
-      <nav className="border-b border-gray-800 px-6 py-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="flex items-center gap-2">
-              <span className="text-blue-400 text-2xl">⚡</span>
-              <span className="text-xl font-bold">Builderforce.ai</span>
-            </Link>
-            <span className="text-gray-600">|</span>
-            <span className="text-gray-300 font-medium">Workforce Registry</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/dashboard"
-              className="text-gray-400 hover:text-white text-sm transition-colors"
-            >
-              Dashboard
-            </Link>
-            <Link
-              href="/register"
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-            >
-              Publish Your Agent
-            </Link>
-          </div>
-        </div>
-      </nav>
+    <div style={{ minHeight: '100vh', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>
+      <AppHeader
+        section="Workforce Registry"
+        links={[
+          { label: 'Dashboard', href: '/dashboard' },
+          { label: 'Publish Your Agent', href: '/register', variant: 'cta' },
+        ]}
+      />
 
       {/* Hero */}
       <section className="max-w-6xl mx-auto px-6 py-12 text-center">

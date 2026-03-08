@@ -6,6 +6,27 @@ import type { WebContainerState } from '@/lib/types';
 let webContainerInstance: import('@webcontainer/api').WebContainer | null = null;
 let bootPromise: Promise<import('@webcontainer/api').WebContainer> | null = null;
 
+// Task 1: Build a proper nested FileSystemTree from flat path→content map.
+// WebContainers expects: { src: { directory: { 'main.js': { file: { contents } } } } }
+// A plain flat map { 'src/main.js': { file: ... } } silently fails to mount subdirs.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildFileSystemTree(files: Record<string, string>): Record<string, any> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tree: Record<string, any> = {};
+  for (const [rawPath, contents] of Object.entries(files)) {
+    const parts = rawPath.split('/').filter(Boolean);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let node: Record<string, any> = tree;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const dir = parts[i];
+      if (!node[dir]) node[dir] = { directory: {} };
+      node = node[dir].directory;
+    }
+    node[parts[parts.length - 1]] = { file: { contents } };
+  }
+  return tree;
+}
+
 export function useWebContainer() {
   const [state, setState] = useState<WebContainerState>({ status: 'idle' });
   const instanceRef = useRef<import('@webcontainer/api').WebContainer | null>(null);
@@ -13,6 +34,7 @@ export function useWebContainer() {
   const getOrBootWebContainer = useCallback(async () => {
     if (webContainerInstance) {
       instanceRef.current = webContainerInstance;
+      setState({ status: 'ready' });
       return webContainerInstance;
     }
     if (bootPromise) {
@@ -39,11 +61,8 @@ export function useWebContainer() {
 
   const mountFiles = useCallback(async (files: Record<string, string>) => {
     const instance = await getOrBootWebContainer();
-    const fileSystemTree: Record<string, { file: { contents: string } }> = {};
-    for (const [path, contents] of Object.entries(files)) {
-      fileSystemTree[path] = { file: { contents } };
-    }
-    await instance.mount(fileSystemTree);
+    const tree = buildFileSystemTree(files);
+    await instance.mount(tree);
   }, [getOrBootWebContainer]);
 
   const runCommand = useCallback(async (
@@ -81,6 +100,7 @@ export function useWebContainer() {
     });
   }, [getOrBootWebContainer]);
 
+  // Task 2: startShell now exposed so IDE can call it immediately on mount
   const startShell = useCallback(async (
     onOutput?: (data: string) => void,
     size?: { cols: number; rows: number }

@@ -10,15 +10,11 @@ interface Env {
 const agents = new Hono<{ Bindings: Env }>();
 
 agents.get('/', async (c) => {
-  try {
-    const sql = neon(c.env.NEON_DATABASE_URL);
-    const rows = await sql`
-      SELECT * FROM agents WHERE status = 'active' ORDER BY hire_count DESC, created_at DESC
-    `;
-    return c.json(rows);
-  } catch (e) {
-    return c.json({ error: 'Failed to fetch agents' }, 500);
-  }
+  const sql = neon(c.env.NEON_DATABASE_URL);
+  const rows = await sql`
+    SELECT * FROM agents WHERE status = 'active' ORDER BY hire_count DESC, created_at DESC
+  `;
+  return c.json(rows);
 });
 
 agents.post('/', async (c) => {
