@@ -33,8 +33,13 @@ describe('VANILLA_TEMPLATE', () => {
     expect(VANILLA_TEMPLATE).toHaveProperty('index.html');
   });
 
-  it('contains src/main.js', () => {
-    expect(VANILLA_TEMPLATE).toHaveProperty('src/main.js');
+  it('contains src/main.jsx', () => {
+    expect(VANILLA_TEMPLATE).toHaveProperty('src/main.jsx');
+  });
+
+  it('contains src/index.css and vite.config.js', () => {
+    expect(VANILLA_TEMPLATE).toHaveProperty('src/index.css');
+    expect(VANILLA_TEMPLATE).toHaveProperty('vite.config.js');
   });
 
   it('package.json is valid JSON with a "scripts.dev" field', () => {
@@ -43,17 +48,18 @@ describe('VANILLA_TEMPLATE', () => {
     expect(typeof pkg.scripts.dev).toBe('string');
   });
 
-  it('package.json includes vite as a dependency', () => {
+  it('package.json includes vite (devDependencies) and react (dependencies)', () => {
     const pkg = JSON.parse(VANILLA_TEMPLATE['package.json']);
-    expect(pkg.dependencies).toHaveProperty('vite');
+    expect(pkg.devDependencies).toHaveProperty('vite');
+    expect(pkg.dependencies).toHaveProperty('react');
   });
 
   it('index.html references the main entry script', () => {
-    expect(VANILLA_TEMPLATE['index.html']).toContain('src/main.js');
+    expect(VANILLA_TEMPLATE['index.html']).toContain('src/main.jsx');
   });
 
-  it('src/main.js contains non-empty content', () => {
-    expect(VANILLA_TEMPLATE['src/main.js'].trim().length).toBeGreaterThan(0);
+  it('src/main.jsx contains non-empty content', () => {
+    expect(VANILLA_TEMPLATE['src/main.jsx'].trim().length).toBeGreaterThan(0);
   });
 });
 

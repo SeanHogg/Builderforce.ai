@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { getStoredWebToken } from '@/lib/auth';
@@ -93,6 +93,7 @@ export default function AdminPage() {
   const [privacyRequests, setPrivacyRequests] = useState<AdminPrivacyRequest[]>([]);
   const [privacyStatusFilter, setPrivacyStatusFilter] = useState('');
   const [privacyTypeFilter, setPrivacyTypeFilter] = useState('');
+  const [privacySearch, setPrivacySearch] = useState('');
   const [securityTenantId, setSecurityTenantId] = useState<number | null>(null);
   const [securityUsers, setSecurityUsers] = useState<AdminSecurityUser[]>([]);
   const [securityUserId, setSecurityUserId] = useState<string | null>(null);
@@ -102,6 +103,26 @@ export default function AdminPage() {
   const [legalPublishTitle, setLegalPublishTitle] = useState('Terms of Use');
   const [legalPublishContent, setLegalPublishContent] = useState('');
   const [legalPublishing, setLegalPublishing] = useState(false);
+
+  const [llmPoolTab, setLlmPoolTab] = useState<'free' | 'pro'>('free');
+  const [expandedErrorId, setExpandedErrorId] = useState<number | null>(null);
+
+  const [newsletterTemplateName, setNewsletterTemplateName] = useState('');
+  const [newsletterTemplateSubject, setNewsletterTemplateSubject] = useState('');
+  const [newsletterTemplatePreheader, setNewsletterTemplatePreheader] = useState('');
+  const [newsletterTemplateBody, setNewsletterTemplateBody] = useState('');
+  const [newsletterTemplateBusy, setNewsletterTemplateBusy] = useState(false);
+  const [newsletterTrackTemplateId, setNewsletterTrackTemplateId] = useState('');
+  const [newsletterTrackEmail, setNewsletterTrackEmail] = useState('');
+  const [newsletterTrackBusy, setNewsletterTrackBusy] = useState(false);
+
+  const [privacyUpdateBusy, setPrivacyUpdateBusy] = useState(false);
+
+  const [securityMfaCode, setSecurityMfaCode] = useState('');
+  const [securityRecoveryCode, setSecurityRecoveryCode] = useState('');
+  const [securityMfaMode, setSecurityMfaMode] = useState<'totp' | 'recovery'>('totp');
+  const [securityMfaManualKey, setSecurityMfaManualKey] = useState('');
+  const [securityRecoveryCodes, setSecurityRecoveryCodes] = useState<string[]>([]);
 
   const isSuperadmin = Boolean(user?.isSuperadmin);
 
@@ -159,6 +180,7 @@ export default function AdminPage() {
           const reqs = await adminApi.privacyRequests({
             status: privacyStatusFilter || undefined,
             type: privacyTypeFilter || undefined,
+            q: privacySearch || undefined,
             limit: 400,
           });
           setPrivacyRequests(reqs);
@@ -172,7 +194,7 @@ export default function AdminPage() {
         setLoading(false);
       }
     },
-    [usageDays, newsletterStatusFilter, newsletterSearch, privacyStatusFilter, privacyTypeFilter]
+    [usageDays, newsletterStatusFilter, newsletterSearch, privacyStatusFilter, privacyTypeFilter, privacySearch]
   );
 
   useEffect(() => {
@@ -274,10 +296,14 @@ export default function AdminPage() {
     return `mailto:${encodeURIComponent(email)}?${q.toString()}`;
   };
 
-  const handleSecurityTenantChange = (tid: number) => {
+  const handleSecurityTenantChange = (tid: number | null) => {
     setSecurityTenantId(tid);
     setSecurityUserId(null);
     setSecurityDetails(null);
+    if (!tid) {
+      setSecurityUsers([]);
+      return;
+    }
     setLoading(true);
     setErrorMsg('');
     adminApi
@@ -357,12 +383,16 @@ export default function AdminPage() {
           <>
             {tab === 'health' && health && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  <span className="text-muted" style={{ fontSize: 14 }}>Last updated: {health.timestamp ? fmtDateTime(health.timestamp) : '—'}</span>
+                  <button type="button" className="btn-ghost" onClick={() => loadTab('health')}>↻ Refresh</button>
+                </div>
+                <div className={`health-card ${health.db.ok ? 'health-ok' : 'health-degraded'}`} style={{ padding: 16 }}>
+                  <div className="health-label">System Status</div>
+                  <div className="health-value" style={{ fontSize: 18 }}>{health.db.ok ? 'OK' : 'Degraded'}</div>
+                  <div style={{ fontSize: 12 }}>DB latency: {health.db.latencyMs} ms</div>
+                </div>
                 <div className="health-grid">
-                  <div className="health-card">
-                    <div className="health-label">DB</div>
-                    <div className="health-value">{health.db.ok ? 'OK' : 'Degraded'}</div>
-                    <div style={{ fontSize: 12 }}>{health.db.latencyMs} ms</div>
-                  </div>
                   <div className="health-card">
                     <div className="health-label">Users</div>
                     <div className="health-value">{fmtNum(health.platform.userCount)}</div>
@@ -372,31 +402,77 @@ export default function AdminPage() {
                     <div className="health-value">{fmtNum(health.platform.tenantCount)}</div>
                   </div>
                   <div className="health-card">
+                    <div className="health-label">Paid Workspaces</div>
+                    <div className="health-value">{fmtNum(health.platform.paidTenantCount)}</div>
+                  </div>
+                  <div className="health-card">
                     <div className="health-label">Claws</div>
                     <div className="health-value">{fmtNum(health.platform.clawCount)}</div>
                   </div>
                   <div className="health-card">
+                    <div className="health-label">Executions</div>
+                    <div className="health-value">{fmtNum(health.platform.executionCount)}</div>
+                  </div>
+                  <div className="health-card">
                     <div className="health-label">Errors (log)</div>
                     <div className="health-value">{fmtNum(health.platform.errorCount)}</div>
+                    {health.platform.errorCount > 0 && (
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        style={{ marginTop: 4, fontSize: 12 }}
+                        onClick={() => { setTab('errors'); loadTab('errors'); }}
+                      >
+                        View errors →
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div>
-                  <div className="health-label" style={{ marginBottom: 8 }}>LLM pool ({health.llm.pool} models)</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {health.llm.models.map((m) => (
-                      <span
-                        key={m.model}
-                        style={{
-                          padding: '4px 8px',
-                          borderRadius: 6,
-                          fontSize: 12,
-                          background: m.available ? 'var(--success-bg, #d1fae5)' : 'var(--error-bg, #fee2e2)',
-                          color: m.available ? 'var(--success-text)' : 'var(--error-text)',
-                        }}
-                      >
-                        {m.preferred ? '★ ' : ''}{m.model}
-                      </span>
-                    ))}
+                  <div className="health-label" style={{ marginBottom: 12 }}>LLM pool ({health.llm.pool} models) — status by usage and errors</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div>
+                      <div className="health-label" style={{ marginBottom: 8 }}>Free models ({(health.llm.free ?? health.llm.models).length})</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {(health.llm.free ?? health.llm.models).map((m) => (
+                          <span
+                            key={`free-${m.model}`}
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: 6,
+                              fontSize: 12,
+                              background: m.available ? 'var(--success-bg, #d1fae5)' : 'var(--error-bg, #fee2e2)',
+                              color: m.available ? 'var(--success-text)' : 'var(--error-text)',
+                            }}
+                            title={m.cooldownUntil ? `Cooldown until ${new Date(m.cooldownUntil).toLocaleString()}` : m.available ? 'Available' : 'Unavailable (rate limit or error)'}
+                          >
+                            {m.preferred ? '★ ' : ''}{m.model}
+                            {m.cooldownUntil && !m.available ? ' (cooldown)' : ''}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="health-label" style={{ marginBottom: 8 }}>Premium models ({health.llm.pro?.length ?? 0})</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {(health.llm.pro ?? []).map((m) => (
+                          <span
+                            key={`pro-${m.model}`}
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: 6,
+                              fontSize: 12,
+                              background: m.available ? 'var(--success-bg, #d1fae5)' : 'var(--error-bg, #fee2e2)',
+                              color: m.available ? 'var(--success-text)' : 'var(--error-text)',
+                            }}
+                            title={m.cooldownUntil ? `Cooldown until ${new Date(m.cooldownUntil).toLocaleString()}` : m.available ? 'Available' : 'Unavailable (rate limit or error)'}
+                          >
+                            {m.preferred ? '★ ' : ''}{m.model}
+                            {m.cooldownUntil && !m.available ? ' (cooldown)' : ''}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -463,7 +539,9 @@ export default function AdminPage() {
                       <tr>
                         <th>Name</th>
                         <th>Slug</th>
+                        <th>Status</th>
                         <th>Plan</th>
+                        <th>Billing</th>
                         <th>Members</th>
                         <th>Claws</th>
                         <th>Created</th>
@@ -474,7 +552,17 @@ export default function AdminPage() {
                         <tr key={t.id}>
                           <td>{t.name}</td>
                           <td style={{ fontFamily: 'var(--mono)', fontSize: 13 }}>{t.slug}</td>
-                          <td>{t.effectivePlan}</td>
+                          <td>
+                            <span className={`badge ${t.status === 'active' ? 'badge-success' : 'badge-neutral'}`}>
+                              {t.status}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`badge ${t.effectivePlan === 'pro' ? 'badge-danger' : 'badge-neutral'}`}>
+                              {t.effectivePlan}
+                            </span>
+                          </td>
+                          <td className="text-muted">{t.billingStatus}</td>
                           <td>{t.memberCount}</td>
                           <td>{t.clawCount}</td>
                           <td className="text-muted">{fmtDate(t.createdAt)}</td>
@@ -494,30 +582,55 @@ export default function AdminPage() {
                     ↻ Refresh
                   </button>
                 </div>
-                <div className="table-wrap">
-                  <table className="data-table" style={{ fontSize: 13 }}>
-                    <thead>
-                      <tr>
-                        <th>Time</th>
-                        <th>Method</th>
-                        <th>Path</th>
-                        <th>Message</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {errors.map((e) => (
-                        <tr key={e.id}>
-                          <td className="text-muted" style={{ whiteSpace: 'nowrap' }}>{fmtDateTime(e.createdAt)}</td>
-                          <td>{e.method ?? '—'}</td>
-                          <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{e.path ?? '—'}</td>
-                          <td style={{ maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis' }} title={e.message ?? undefined}>
-                            {e.message ?? '—'}
-                          </td>
+                {errors.length === 0 ? (
+                  <p className="text-muted" style={{ padding: 24 }}>No errors recorded.</p>
+                ) : (
+                  <div className="table-wrap">
+                    <table className="data-table" style={{ fontSize: 13 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ width: 24 }}></th>
+                          <th>Time</th>
+                          <th>Method</th>
+                          <th>Path</th>
+                          <th>Message</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {errors.map((e) => (
+                          <React.Fragment key={e.id}>
+                            <tr
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => setExpandedErrorId(expandedErrorId === e.id ? null : e.id)}
+                              onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setExpandedErrorId(expandedErrorId === e.id ? null : e.id); } }}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              <td style={{ verticalAlign: 'middle' }}>
+                                <span style={{ display: 'inline-block', transition: 'transform 0.2s', transform: expandedErrorId === e.id ? 'rotate(90deg)' : 'none' }}>▶</span>
+                              </td>
+                              <td className="text-muted" style={{ whiteSpace: 'nowrap' }}>{fmtDateTime(e.createdAt)}</td>
+                              <td>{e.method ?? '—'}</td>
+                              <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{e.path ?? '—'}</td>
+                              <td style={{ maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis' }} title={e.message ?? undefined}>
+                                {e.message ?? '—'}
+                              </td>
+                            </tr>
+                            {expandedErrorId === e.id && e.stack && (
+                              <tr>
+                                <td colSpan={5} style={{ padding: 0, verticalAlign: 'top' }}>
+                                  <pre style={{ margin: 0, padding: 12, fontSize: 11, fontFamily: 'var(--mono)', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                                    {e.stack}
+                                  </pre>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
 
@@ -536,7 +649,40 @@ export default function AdminPage() {
                     <div className="health-label">Models</div>
                     <div className="health-value">{llmUsage.totals.modelCount}</div>
                   </div>
+                  <div className="health-card">
+                    <div className="health-label">Spend</div>
+                    <div className="health-value">$0</div>
+                    <div style={{ fontSize: 12 }}>free tier</div>
+                  </div>
                 </div>
+                {llmUsage.daily.length > 0 && (
+                  <div>
+                    <div className="health-label" style={{ marginBottom: 8 }}>Daily requests</div>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, minHeight: 120 }}>
+                      {llmUsage.daily.slice(-30).map((d) => {
+                        const maxReq = Math.max(1, ...llmUsage!.daily.map((x) => x.requests));
+                        const h = maxReq ? (d.requests / maxReq) * 100 : 0;
+                        return (
+                          <div
+                            key={d.day}
+                            title={`${d.day}: ${d.requests} requests`}
+                            style={{
+                              flex: 1,
+                              minWidth: 8,
+                              height: `${Math.max(4, h)}%`,
+                              background: 'var(--accent)',
+                              borderRadius: 4,
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>
+                      <span>{llmUsage.daily[llmUsage.daily.length - 30]?.day ?? ''}</span>
+                      <span>{llmUsage.daily[llmUsage.daily.length - 1]?.day ?? ''}</span>
+                    </div>
+                  </div>
+                )}
                 <div>
                   <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span className="text-muted" style={{ fontSize: 14 }}>By model — last</span>
@@ -568,24 +714,72 @@ export default function AdminPage() {
                         <tr>
                           <th>Model</th>
                           <th style={{ textAlign: 'right' }}>Requests</th>
+                          <th style={{ textAlign: 'right' }}>Retries</th>
+                          <th style={{ textAlign: 'right' }}>Streamed</th>
                           <th style={{ textAlign: 'right' }}>Prompt tokens</th>
                           <th style={{ textAlign: 'right' }}>Completion tokens</th>
                           <th style={{ textAlign: 'right' }}>Total tokens</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {llmUsage.byModel.map((m) => (
-                          <tr key={m.model}>
-                            <td>{m.model}</td>
-                            <td style={{ textAlign: 'right' }}>{fmtNum(m.requests)}</td>
-                            <td style={{ textAlign: 'right' }}>{fmtNum(m.prompt_tokens)}</td>
-                            <td style={{ textAlign: 'right' }}>{fmtNum(m.completion_tokens)}</td>
-                            <td style={{ textAlign: 'right' }}>{fmtNum(m.total_tokens)}</td>
-                          </tr>
-                        ))}
+                        {llmUsage.byModel.length === 0 ? (
+                          <tr><td colSpan={7} className="text-muted" style={{ padding: 24 }}>No usage in this period.</td></tr>
+                        ) : (
+                          llmUsage.byModel.map((m) => (
+                            <tr key={m.model}>
+                              <td>{m.model}</td>
+                              <td style={{ textAlign: 'right' }}>{fmtNum(m.requests)}</td>
+                              <td style={{ textAlign: 'right' }}>{fmtNum(m.retries)}</td>
+                              <td style={{ textAlign: 'right' }}>{fmtNum(m.streamed_requests)}</td>
+                              <td style={{ textAlign: 'right' }}>{fmtNum(m.prompt_tokens)}</td>
+                              <td style={{ textAlign: 'right' }}>{fmtNum(m.completion_tokens)}</td>
+                              <td style={{ textAlign: 'right' }}>{fmtNum(m.total_tokens)}</td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
+                      <tfoot>
+                        {llmUsage.byModel.length > 0 && (
+                          <tr style={{ fontWeight: 600 }}>
+                            <td>Total</td>
+                            <td style={{ textAlign: 'right' }}>{fmtNum(llmUsage.totals.requests)}</td>
+                            <td style={{ textAlign: 'right' }}>{fmtNum(llmUsage.byModel.reduce((s, m) => s + m.retries, 0))}</td>
+                            <td style={{ textAlign: 'right' }}>{fmtNum(llmUsage.byModel.reduce((s, m) => s + m.streamed_requests, 0))}</td>
+                            <td style={{ textAlign: 'right' }}>{fmtNum(llmUsage.totals.promptTokens)}</td>
+                            <td style={{ textAlign: 'right' }}>{fmtNum(llmUsage.totals.completionTokens)}</td>
+                            <td style={{ textAlign: 'right' }}>{fmtNum(llmUsage.totals.totalTokens)}</td>
+                          </tr>
+                        )}
+                      </tfoot>
                     </table>
                   </div>
+                </div>
+                <div>
+                  <div className="health-label" style={{ marginBottom: 8 }}>Failover events</div>
+                  {llmUsage.failovers.length === 0 ? (
+                    <p className="text-muted" style={{ fontSize: 13 }}>No failover events in this period.</p>
+                  ) : (
+                    <div className="table-wrap">
+                      <table className="data-table" style={{ fontSize: 13 }}>
+                        <thead>
+                          <tr>
+                            <th>Model</th>
+                            <th style={{ textAlign: 'right' }}>HTTP code</th>
+                            <th style={{ textAlign: 'right' }}>Count</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {llmUsage.failovers.map((f, i) => (
+                            <tr key={`${f.model}-${f.errorCode}-${i}`}>
+                              <td>{f.model}</td>
+                              <td style={{ textAlign: 'right' }}>{f.errorCode}</td>
+                              <td style={{ textAlign: 'right' }}>{f.count}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -683,6 +877,48 @@ export default function AdminPage() {
                 </div>
                 <div>
                   <div style={{ marginBottom: 12 }}>
+                    <span className="text-muted">Upgrade communications (free workspaces)</span>
+                  </div>
+                  <div className="table-wrap">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Workspace</th>
+                          <th>Billing Email</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tenants
+                          .filter((t) => t.effectivePlan === 'free')
+                          .map((t) => (
+                            <tr key={t.id}>
+                              <td>{t.name}</td>
+                              <td className="text-muted">{t.billingEmail ?? '—'}</td>
+                              <td>
+                                {t.billingEmail ? (
+                                  <a
+                                    className="btn-ghost"
+                                    href={composeMailto(
+                                      t.billingEmail,
+                                      'Upgrade to Builderforce Pro',
+                                      'Hi team,\n\nUpgrade to Pro for more capacity and features.\n\nThanks,\nBuilderforce'
+                                    )}
+                                  >
+                                    Send upgrade message
+                                  </a>
+                                ) : (
+                                  <span className="text-muted" style={{ fontSize: 12 }}>No billing email</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ marginBottom: 12 }}>
                     <span className="text-muted">Feedback & issues ({errors.slice(0, 20).length})</span>
                     <button
                       type="button"
@@ -726,13 +962,29 @@ export default function AdminPage() {
                   <select
                     className="admin-select"
                     value={securityTenantId ?? ''}
-                    onChange={(e) => handleSecurityTenantChange(Number(e.target.value))}
+                    onChange={(e) => handleSecurityTenantChange(Number(e.target.value) || null)}
                   >
                     <option value="">Select…</option>
                     {tenants.map((t) => (
                       <option key={t.id} value={t.id}>{t.name}</option>
                     ))}
                   </select>
+                  {securityTenantId && (
+                    <>
+                      <label className="text-muted" style={{ fontSize: 14 }}>User</label>
+                      <select
+                        className="admin-select"
+                        value={securityUserId ?? ''}
+                        onChange={(e) => handleSecurityUserSelect(e.target.value || null)}
+                        style={{ minWidth: 200 }}
+                      >
+                        <option value="">Select user…</option>
+                        {securityUsers.map((u) => (
+                          <option key={u.id} value={u.id}>{u.email}</option>
+                        ))}
+                      </select>
+                    </>
+                  )}
                   <button type="button" className="btn-ghost" onClick={() => loadTab('security')}>↻ Refresh</button>
                 </div>
                 {securityTenantId && (
@@ -770,48 +1022,291 @@ export default function AdminPage() {
                       </table>
                     </div>
                     {securityDetails && (
-                      <div className="health-card" style={{ padding: 16 }}>
-                        <h3 style={{ margin: '0 0 12px', fontSize: 16 }}>{securityDetails.user.email}</h3>
-                        <p className="text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
-                          MFA: {securityDetails.mfa.enabled ? 'Enabled' : 'Off'}
-                          {securityDetails.mfa.setupPending && ' (setup pending)'}
-                        </p>
-                        <div style={{ fontSize: 12 }}>
-                          <strong>Sessions:</strong> {securityDetails.sessions.length}
-                          <strong style={{ marginLeft: 16 }}>Tokens:</strong> {securityDetails.tokens.length}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                        <div className="health-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                          <div className="health-card" style={{ padding: 12 }}>
+                            <div className="health-label">User</div>
+                            <div style={{ fontSize: 14 }}>{securityDetails.user.email}</div>
+                          </div>
+                          <div className="health-card" style={{ padding: 12 }}>
+                            <div className="health-label">MFA</div>
+                            <div style={{ fontSize: 14 }}>{securityDetails.mfa.enabled ? 'Enabled' : 'Off'}</div>
+                          </div>
+                          <div className="health-card" style={{ padding: 12 }}>
+                            <div className="health-label">Active sessions</div>
+                            <div className="health-value">{securityDetails.sessions.length}</div>
+                          </div>
+                          <div className="health-card" style={{ padding: 12 }}>
+                            <div className="health-label">Active tokens</div>
+                            <div className="health-value">{securityDetails.tokens.length}</div>
+                          </div>
                         </div>
-                        <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          {!securityDetails.mfa.enabled && (
+                        <div className="health-card" style={{ padding: 16 }}>
+                          <div className="health-label" style={{ marginBottom: 12 }}>MFA</div>
+                          {!securityDetails.mfa.enabled && !securityDetails.mfa.setupPending && (
                             <button
                               type="button"
                               className="admin-tab"
                               onClick={async () => {
+                                setErrorMsg('');
                                 try {
                                   const r = await adminApi.securityMfaSetup(securityTenantId!, securityUserId!);
+                                  setSecurityMfaManualKey(r.manualEntryKey ?? '');
                                   window.open(r.otpauthUrl);
-                                  setErrorMsg('Complete MFA setup in the app with code from your authenticator.');
+                                  setErrorMsg('Scan QR in the opened tab (or use manual key below). Enter 6-digit code and click Enable MFA.');
+                                  handleSecurityUserSelect(securityUserId);
                                 } catch (e) {
                                   setErrorMsg(e instanceof Error ? e.message : String(e));
                                 }
                               }}
                             >
-                              MFA setup
+                              Set up MFA
                             </button>
                           )}
-                          <button
-                            type="button"
-                            className="admin-tab"
-                            onClick={async () => {
-                              try {
-                                await adminApi.securityRevokeAllSessions(securityTenantId!, securityUserId!);
-                                handleSecurityUserSelect(securityUserId);
-                              } catch (e) {
-                                setErrorMsg(e instanceof Error ? e.message : String(e));
-                              }
-                            }}
-                          >
-                            Revoke all sessions
-                          </button>
+                          {!securityDetails.mfa.enabled && securityDetails.mfa.setupPending && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              {securityMfaManualKey && (
+                                <div style={{ fontSize: 12 }}>
+                                  <span className="text-muted">Manual entry key: </span>
+                                  <code style={{ background: 'var(--bg-elevated)', padding: '2px 6px', borderRadius: 4 }}>{securityMfaManualKey}</code>
+                                </div>
+                              )}
+                              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                <input
+                                  type="text"
+                                  placeholder="6-digit code"
+                                  value={securityMfaCode}
+                                  onChange={(e) => setSecurityMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                  className="admin-select"
+                                  style={{ width: 120 }}
+                                />
+                                <button
+                                  type="button"
+                                  className="admin-tab active"
+                                  disabled={securityMfaCode.length !== 6}
+                                  onClick={async () => {
+                                    setErrorMsg('');
+                                    try {
+                                      const r = await adminApi.securityMfaEnable(securityTenantId!, securityUserId!, securityMfaCode);
+                                      setSecurityRecoveryCodes(r.recoveryCodes ?? []);
+                                      setSecurityMfaCode('');
+                                      setSecurityMfaManualKey('');
+                                      setErrorMsg('');
+                                      handleSecurityUserSelect(securityUserId);
+                                    } catch (e) {
+                                      setErrorMsg(e instanceof Error ? e.message : String(e));
+                                    }
+                                  }}
+                                >
+                                  Enable MFA
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          {securityDetails.mfa.enabled && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                <label className="text-muted" style={{ fontSize: 12 }}>Disable with:</label>
+                                <select
+                                  className="admin-select"
+                                  value={securityMfaMode}
+                                  onChange={(e) => setSecurityMfaMode(e.target.value as 'totp' | 'recovery')}
+                                  style={{ width: 100 }}
+                                >
+                                  <option value="totp">TOTP code</option>
+                                  <option value="recovery">Recovery code</option>
+                                </select>
+                                <input
+                                  type="text"
+                                  placeholder={securityMfaMode === 'totp' ? '6-digit code' : 'Recovery code'}
+                                  value={securityMfaMode === 'totp' ? securityMfaCode : securityRecoveryCode}
+                                  onChange={(e) =>
+                                    securityMfaMode === 'totp'
+                                      ? setSecurityMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))
+                                      : setSecurityRecoveryCode(e.target.value)
+                                  }
+                                  className="admin-select"
+                                  style={{ width: 160 }}
+                                />
+                                <button
+                                  type="button"
+                                  className="btn-ghost"
+                                  onClick={async () => {
+                                    setErrorMsg('');
+                                    try {
+                                      await adminApi.securityMfaDisable(securityTenantId!, securityUserId!, securityMfaMode === 'totp' ? { code: securityMfaCode } : { recoveryCode: securityRecoveryCode });
+                                      setSecurityMfaCode('');
+                                      setSecurityRecoveryCode('');
+                                      handleSecurityUserSelect(securityUserId);
+                                    } catch (e) {
+                                      setErrorMsg(e instanceof Error ? e.message : String(e));
+                                    }
+                                  }}
+                                >
+                                  Disable MFA
+                                </button>
+                              </div>
+                              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                <span className="text-muted" style={{ fontSize: 12 }}>Regenerate recovery codes:</span>
+                                <input
+                                  type="text"
+                                  placeholder={securityMfaMode === 'totp' ? '6-digit code' : 'Recovery code'}
+                                  value={securityMfaMode === 'totp' ? securityMfaCode : securityRecoveryCode}
+                                  onChange={(e) =>
+                                    securityMfaMode === 'totp'
+                                      ? setSecurityMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))
+                                      : setSecurityRecoveryCode(e.target.value)
+                                  }
+                                  className="admin-select"
+                                  style={{ width: 160 }}
+                                />
+                                <button
+                                  type="button"
+                                  className="btn-ghost"
+                                  onClick={async () => {
+                                    setErrorMsg('');
+                                    try {
+                                      const r = await adminApi.securityRegenerateRecoveryCodes(securityTenantId!, securityUserId!, securityMfaMode === 'totp' ? { code: securityMfaCode } : { recoveryCode: securityRecoveryCode });
+                                      setSecurityRecoveryCodes(r.recoveryCodes ?? []);
+                                      handleSecurityUserSelect(securityUserId);
+                                    } catch (e) {
+                                      setErrorMsg(e instanceof Error ? e.message : String(e));
+                                    }
+                                  }}
+                                >
+                                  Regenerate
+                                </button>
+                              </div>
+                              {securityRecoveryCodes.length > 0 && (
+                                <div style={{ fontSize: 12 }}>
+                                  <div className="health-label">Recovery codes (save these)</div>
+                                  <pre style={{ background: 'var(--bg-elevated)', padding: 12, borderRadius: 8, overflow: 'auto' }}>{securityRecoveryCodes.join('\n')}</pre>
+                                  <button
+                                    type="button"
+                                    className="btn-ghost"
+                                    style={{ marginTop: 4 }}
+                                    onClick={() => {
+                                      const blob = new Blob([securityRecoveryCodes.join('\n')], { type: 'text/plain' });
+                                      const a = document.createElement('a');
+                                      a.href = URL.createObjectURL(blob);
+                                      a.download = `recovery-codes-${securityDetails.user.email}-${new Date().toISOString().slice(0, 10)}.txt`;
+                                      a.click();
+                                      URL.revokeObjectURL(a.href);
+                                    }}
+                                  >
+                                    Download recovery codes
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="health-card" style={{ padding: 16 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                            <div className="health-label">Sessions</div>
+                            <button
+                              type="button"
+                              className="btn-ghost"
+                              onClick={async () => {
+                                setErrorMsg('');
+                                try {
+                                  await adminApi.securityRevokeAllSessions(securityTenantId!, securityUserId!);
+                                  handleSecurityUserSelect(securityUserId);
+                                } catch (e) {
+                                  setErrorMsg(e instanceof Error ? e.message : String(e));
+                                }
+                              }}
+                            >
+                              Revoke all sessions
+                            </button>
+                          </div>
+                          <div className="table-wrap">
+                            <table className="data-table" style={{ fontSize: 13 }}>
+                              <thead>
+                                <tr>
+                                  <th>Name</th>
+                                  <th>User agent</th>
+                                  <th>IP</th>
+                                  <th>Tokens</th>
+                                  <th>Last seen</th>
+                                  <th></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {securityDetails.sessions.filter((s) => s.isActive).map((s) => (
+                                  <tr key={s.id}>
+                                    <td>{s.sessionName ?? '—'}</td>
+                                    <td className="text-muted" style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }} title={s.userAgent ?? undefined}>{s.userAgent ?? '—'}</td>
+                                    <td className="text-muted">{s.ipAddress ?? '—'}</td>
+                                    <td>{s.activeTokens}</td>
+                                    <td className="text-muted">{s.lastSeenAt ? fmtDateTime(s.lastSeenAt) : '—'}</td>
+                                    <td>
+                                      <button
+                                        type="button"
+                                        className="btn-ghost"
+                                        onClick={async () => {
+                                          setErrorMsg('');
+                                          try {
+                                            await adminApi.securityRevokeSession(securityTenantId!, securityUserId!, s.id);
+                                            handleSecurityUserSelect(securityUserId);
+                                          } catch (e) {
+                                            setErrorMsg(e instanceof Error ? e.message : String(e));
+                                          }
+                                        }}
+                                      >
+                                        Revoke
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                        <div className="health-card" style={{ padding: 16 }}>
+                          <div className="health-label" style={{ marginBottom: 12 }}>JWT tokens</div>
+                          <div className="table-wrap">
+                            <table className="data-table" style={{ fontSize: 13 }}>
+                              <thead>
+                                <tr>
+                                  <th>jti</th>
+                                  <th>Type</th>
+                                  <th>Tenant</th>
+                                  <th>Expires</th>
+                                  <th>Active</th>
+                                  <th></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {securityDetails.tokens.filter((t) => t.isActive).map((tok) => (
+                                  <tr key={tok.jti}>
+                                    <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{tok.jti.slice(0, 12)}…</td>
+                                    <td>{tok.tokenType}</td>
+                                    <td className="text-muted">{tok.tenantId ?? '—'}</td>
+                                    <td className="text-muted">{fmtDateTime(tok.expiresAt)}</td>
+                                    <td>{tok.isActive ? '✓' : '—'}</td>
+                                    <td>
+                                      <button
+                                        type="button"
+                                        className="btn-ghost"
+                                        onClick={async () => {
+                                          setErrorMsg('');
+                                          try {
+                                            await adminApi.securityRevokeToken(securityTenantId!, securityUserId!, tok.jti);
+                                            handleSecurityUserSelect(securityUserId);
+                                          } catch (e) {
+                                            setErrorMsg(e instanceof Error ? e.message : String(e));
+                                          }
+                                        }}
+                                      >
+                                        Revoke
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -824,19 +1319,41 @@ export default function AdminPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                 {legalCurrent && (
                   <>
-                    <div className="health-card" style={{ padding: 16 }}>
-                      <div className="health-label">Current Terms</div>
-                      <div style={{ fontSize: 12 }}>v{legalCurrent.terms.version} — {legalCurrent.terms.title}</div>
-                      <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12, maxHeight: 200, overflow: 'auto', marginTop: 8 }}>
-                        {legalCurrent.terms.content.slice(0, 500)}…
-                      </pre>
+                    <div className="health-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+                      <div className="health-card" style={{ padding: 16 }}>
+                        <div className="health-label">Terms version</div>
+                        <div className="health-value" style={{ fontSize: 16 }}>v{legalCurrent.terms.version}</div>
+                        <div style={{ fontSize: 12 }}>{legalCurrent.terms.title}</div>
+                        <div className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                          Published {legalCurrent.terms.publishedAt ? fmtDateTime(legalCurrent.terms.publishedAt) : '—'}
+                        </div>
+                      </div>
+                      <div className="health-card" style={{ padding: 16 }}>
+                        <div className="health-label">Privacy version</div>
+                        <div className="health-value" style={{ fontSize: 16 }}>v{legalCurrent.privacy.version}</div>
+                        <div style={{ fontSize: 12 }}>{legalCurrent.privacy.title}</div>
+                        <div className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                          Published {legalCurrent.privacy.publishedAt ? fmtDateTime(legalCurrent.privacy.publishedAt) : '—'}
+                        </div>
+                      </div>
                     </div>
                     <div className="health-card" style={{ padding: 16 }}>
-                      <div className="health-label">Current Privacy</div>
-                      <div style={{ fontSize: 12 }}>v{legalCurrent.privacy.version}</div>
-                      <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12, maxHeight: 200, overflow: 'auto', marginTop: 8 }}>
-                        {legalCurrent.privacy.content.slice(0, 500)}…
-                      </pre>
+                      <div className="health-label">Current Terms (full text)</div>
+                      <textarea
+                        readOnly
+                        value={legalCurrent.terms.content}
+                        className="admin-token-textarea"
+                        style={{ minHeight: 200, fontSize: 12 }}
+                      />
+                    </div>
+                    <div className="health-card" style={{ padding: 16 }}>
+                      <div className="health-label">Current Privacy (full text)</div>
+                      <textarea
+                        readOnly
+                        value={legalCurrent.privacy.content}
+                        className="admin-token-textarea"
+                        style={{ minHeight: 200, fontSize: 12 }}
+                      />
                     </div>
                   </>
                 )}
@@ -879,6 +1396,20 @@ export default function AdminPage() {
 
             {tab === 'newsletter' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div className="health-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                  <div className="health-card">
+                    <div className="health-label">Subscribers</div>
+                    <div className="health-value">{fmtNum(newsletterSubscribers.length)}</div>
+                  </div>
+                  <div className="health-card">
+                    <div className="health-label">Templates</div>
+                    <div className="health-value">{newsletterTemplates.length}</div>
+                  </div>
+                  <div className="health-card">
+                    <div className="health-label">Tracked events</div>
+                    <div className="health-value">{fmtNum(newsletterEvents.length)}</div>
+                  </div>
+                </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                   <select
                     className="admin-select"
@@ -909,21 +1440,139 @@ export default function AdminPage() {
                       <tr>
                         <th>Email</th>
                         <th>Status</th>
-                        <th>Subscribed</th>
                         <th>Source</th>
+                        <th>User</th>
+                        <th>Subscribed</th>
+                        <th>Unsubscribed</th>
                       </tr>
                     </thead>
                     <tbody>
                       {newsletterSubscribers.slice(0, 200).map((s) => (
                         <tr key={s.id}>
                           <td>{s.email}</td>
-                          <td>{s.status}</td>
-                          <td className="text-muted">{s.subscribedAt ? fmtDate(s.subscribedAt) : '—'}</td>
+                          <td>
+                            <span className={`badge ${s.status === 'subscribed' ? 'badge-success' : 'badge-neutral'}`}>
+                              {s.status}
+                            </span>
+                          </td>
                           <td className="text-muted">{s.source}</td>
+                          <td className="text-muted">{(s.userDisplayName || s.userUsername) ? `${s.userDisplayName ?? s.userUsername ?? ''} (${s.userUsername ?? ''})` : '—'}</td>
+                          <td className="text-muted">{s.subscribedAt ? fmtDate(s.subscribedAt) : '—'}</td>
+                          <td className="text-muted">{s.unsubscribedAt ? fmtDate(s.unsubscribedAt) : '—'}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                </div>
+                <div className="health-card" style={{ padding: 16 }}>
+                  <div className="health-label" style={{ marginBottom: 12 }}>Create template</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                    <input
+                      type="text"
+                      placeholder="Name"
+                      value={newsletterTemplateName}
+                      onChange={(e) => setNewsletterTemplateName(e.target.value)}
+                      className="admin-select"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Subject"
+                      value={newsletterTemplateSubject}
+                      onChange={(e) => setNewsletterTemplateSubject(e.target.value)}
+                      className="admin-select"
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Preheader"
+                    value={newsletterTemplatePreheader}
+                    onChange={(e) => setNewsletterTemplatePreheader(e.target.value)}
+                    className="admin-select"
+                    style={{ width: '100%', marginBottom: 8 }}
+                  />
+                  <textarea
+                    placeholder="Body (Markdown)"
+                    value={newsletterTemplateBody}
+                    onChange={(e) => setNewsletterTemplateBody(e.target.value)}
+                    className="admin-token-textarea"
+                    style={{ minHeight: 120, marginBottom: 8 }}
+                  />
+                  <button
+                    type="button"
+                    className="admin-tab active"
+                    disabled={newsletterTemplateBusy || !newsletterTemplateName.trim() || !newsletterTemplateSubject.trim() || !newsletterTemplateBody.trim()}
+                    onClick={async () => {
+                      setNewsletterTemplateBusy(true);
+                      setErrorMsg('');
+                      try {
+                        await adminApi.createNewsletterTemplate({
+                          name: newsletterTemplateName.trim(),
+                          subject: newsletterTemplateSubject.trim(),
+                          preheader: newsletterTemplatePreheader.trim() || undefined,
+                          bodyMarkdown: newsletterTemplateBody.trim(),
+                        });
+                        setNewsletterTemplateName('');
+                        setNewsletterTemplateSubject('');
+                        setNewsletterTemplatePreheader('');
+                        setNewsletterTemplateBody('');
+                        await loadTab('newsletter');
+                      } catch (e) {
+                        setErrorMsg(e instanceof Error ? e.message : String(e));
+                      } finally {
+                        setNewsletterTemplateBusy(false);
+                      }
+                    }}
+                  >
+                    {newsletterTemplateBusy ? 'Saving…' : 'Save template'}
+                  </button>
+                </div>
+                <div className="health-card" style={{ padding: 16 }}>
+                  <div className="health-label" style={{ marginBottom: 12 }}>Track send</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <select
+                      className="admin-select"
+                      value={newsletterTrackTemplateId}
+                      onChange={(e) => setNewsletterTrackTemplateId(e.target.value)}
+                      style={{ minWidth: 180 }}
+                    >
+                      <option value="">Select template</option>
+                      {newsletterTemplates.map((t) => (
+                        <option key={t.id} value={String(t.id)}>{t.name}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="email"
+                      placeholder="Subscriber email"
+                      value={newsletterTrackEmail}
+                      onChange={(e) => setNewsletterTrackEmail(e.target.value)}
+                      className="admin-select"
+                      style={{ width: 220 }}
+                    />
+                    <button
+                      type="button"
+                      className="admin-tab"
+                      disabled={newsletterTrackBusy || !newsletterTrackTemplateId || !newsletterTrackEmail.trim()}
+                      onClick={async () => {
+                        setNewsletterTrackBusy(true);
+                        setErrorMsg('');
+                        try {
+                          await adminApi.trackNewsletterEvent({
+                            subscriberEmail: newsletterTrackEmail.trim(),
+                            templateId: newsletterTrackTemplateId ? Number(newsletterTrackTemplateId) : undefined,
+                            eventType: 'template_sent',
+                          });
+                          setNewsletterTrackEmail('');
+                          await loadTab('newsletter');
+                        } catch (e) {
+                          setErrorMsg(e instanceof Error ? e.message : String(e));
+                        } finally {
+                          setNewsletterTrackBusy(false);
+                        }
+                      }}
+                    >
+                      {newsletterTrackBusy ? 'Sending…' : 'Track send'}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <div className="health-label" style={{ marginBottom: 8 }}>Templates ({newsletterTemplates.length})</div>
@@ -935,6 +1584,7 @@ export default function AdminPage() {
                           <th>Slug</th>
                           <th>Subject</th>
                           <th>Active</th>
+                          <th>Updated</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -944,6 +1594,7 @@ export default function AdminPage() {
                             <td style={{ fontFamily: 'var(--mono)' }}>{t.slug}</td>
                             <td>{t.subject}</td>
                             <td>{t.isActive ? '✓' : '—'}</td>
+                            <td className="text-muted">{t.updatedAt ? fmtDateTime(t.updatedAt) : '—'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -980,7 +1631,7 @@ export default function AdminPage() {
 
             {tab === 'privacy' && (
               <div>
-                <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                   <select
                     className="admin-select"
                     value={privacyStatusFilter}
@@ -1006,7 +1657,15 @@ export default function AdminPage() {
                     <option value="ccpa">CCPA</option>
                     <option value="gdpr">GDPR</option>
                   </select>
-                  <button type="button" className="btn-ghost" onClick={() => loadTab('privacy')}>↻ Refresh</button>
+                  <input
+                    type="text"
+                    placeholder="Search email"
+                    value={privacySearch}
+                    onChange={(e) => setPrivacySearch(e.target.value)}
+                    className="admin-select"
+                    style={{ width: 180 }}
+                  />
+                  <button type="button" className="btn-ghost" onClick={() => loadTab('privacy')}>Search / Refresh</button>
                 </div>
                 <div className="table-wrap">
                   <table className="data-table">
@@ -1015,8 +1674,10 @@ export default function AdminPage() {
                         <th>Email</th>
                         <th>Type</th>
                         <th>Status</th>
-                        <th>Created</th>
+                        <th>Requested</th>
+                        <th>Details</th>
                         <th>Resolution</th>
+                        <th>Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1024,9 +1685,58 @@ export default function AdminPage() {
                         <tr key={r.id}>
                           <td>{r.email}</td>
                           <td>{r.requestType}</td>
-                          <td>{r.status}</td>
-                          <td className="text-muted">{r.createdAt ? fmtDate(r.createdAt) : '—'}</td>
-                          <td className="text-muted" style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.resolution ?? '—'}</td>
+                          <td>
+                            <span className={`badge ${r.status === 'pending' ? 'badge-neutral' : r.status === 'completed' ? 'badge-success' : 'badge-neutral'}`}>
+                              {r.status}
+                            </span>
+                          </td>
+                          <td className="text-muted">{r.createdAt ? fmtDateTime(r.createdAt) : '—'}</td>
+                          <td className="text-muted" style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.details ?? undefined}>{r.details ?? '—'}</td>
+                          <td className="text-muted" style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.resolution ?? undefined}>{r.resolution ?? '—'}</td>
+                          <td>
+                            {r.status === 'pending' && (
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                <button
+                                  type="button"
+                                  className="btn-ghost"
+                                  disabled={privacyUpdateBusy}
+                                  onClick={async () => {
+                                    setPrivacyUpdateBusy(true);
+                                    setErrorMsg('');
+                                    try {
+                                      await adminApi.updatePrivacyRequest(r.id, { status: 'completed', resolution: 'Processed' });
+                                      await loadTab('privacy');
+                                    } catch (e) {
+                                      setErrorMsg(e instanceof Error ? e.message : String(e));
+                                    } finally {
+                                      setPrivacyUpdateBusy(false);
+                                    }
+                                  }}
+                                >
+                                  Mark Resolved
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-ghost"
+                                  disabled={privacyUpdateBusy}
+                                  onClick={async () => {
+                                    setPrivacyUpdateBusy(true);
+                                    setErrorMsg('');
+                                    try {
+                                      await adminApi.updatePrivacyRequest(r.id, { status: 'closed', resolution: null });
+                                      await loadTab('privacy');
+                                    } catch (e) {
+                                      setErrorMsg(e instanceof Error ? e.message : String(e));
+                                    } finally {
+                                      setPrivacyUpdateBusy(false);
+                                    }
+                                  }}
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import type { Project } from '@/lib/types';
 import { updateProject } from '@/lib/api';
 import { ObservabilityContent } from './ObservabilityContent';
+import { TaskMgmtContent } from './TaskMgmtContent';
 
 export type ProjectPanelTab =
   | 'details'
@@ -75,7 +76,6 @@ export function ProjectDetailsPanel({
   projectHref,
 }: ProjectDetailsPanelProps) {
   const [activeTab, setActiveTab] = useState<ProjectPanelTab>(initialTab);
-  const [taskMgmtView, setTaskMgmtView] = useState<'board' | 'list'>('board');
   const [editingProject, setEditingProject] = useState(false);
   const [editName, setEditName] = useState(project.name);
   const [editDescription, setEditDescription] = useState(project.description ?? '');
@@ -441,79 +441,11 @@ export function ProjectDetailsPanel({
           )}
 
           {activeTab === 'taskMgmt' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>View:</span>
-                <button
-                  type="button"
-                  onClick={() => setTaskMgmtView('board')}
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    background: taskMgmtView === 'board' ? 'var(--surface-coral-soft)' : 'var(--bg-deep)',
-                    color: taskMgmtView === 'board' ? 'var(--coral-bright)' : 'var(--text-secondary)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Board
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTaskMgmtView('list')}
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    background: taskMgmtView === 'list' ? 'var(--surface-coral-soft)' : 'var(--bg-deep)',
-                    color: taskMgmtView === 'list' ? 'var(--coral-bright)' : 'var(--text-secondary)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                  }}
-                >
-                  List
-                </button>
-              </div>
-              {taskMgmtView === 'board' && (
-                <div style={cardStyle}>
-                  <div style={{ fontWeight: 600, marginBottom: 10 }}>Task board</div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                    Kanban board will show here. Create tasks from the List view or from Brain.
-                  </div>
-                  <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
-                    {['To Do', 'In Progress', 'In Review', 'Done'].map((col) => (
-                      <div
-                        key={col}
-                        style={{
-                          background: 'var(--bg-deep)',
-                          border: '1px dashed var(--border-subtle)',
-                          borderRadius: 10,
-                          padding: 12,
-                          minHeight: 120,
-                        }}
-                      >
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8 }}>{col}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No tasks</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {taskMgmtView === 'list' && (
-                <div style={cardStyle}>
-                  <div style={{ fontWeight: 600, marginBottom: 10 }}>Create task</div>
-                  <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-                    Task creation and list will be available when the tasks API is connected.
-                  </p>
-                  <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                    Tasks for this project: {taskCount}
-                  </div>
-                </div>
-              )}
-            </div>
+            <TaskMgmtContent
+              projectId={project.id}
+              projectName={project.name}
+              compact
+            />
           )}
 
           {activeTab === 'prds' && (

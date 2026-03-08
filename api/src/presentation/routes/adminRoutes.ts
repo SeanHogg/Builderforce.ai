@@ -1179,7 +1179,12 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       status:       dbOk ? 'ok' : 'degraded',
       db:           { ok: dbOk, latencyMs: dbLatencyMs },
       platform:     counts,
-      llm:          { pool: modelPool.length, models: modelPool },
+      llm:          {
+        pool:   modelPool.length,
+        models: modelPool,
+        free:   freeModelPool,
+        pro:    proModelPool,
+      },
       timestamp:    new Date().toISOString(),
     });
   });

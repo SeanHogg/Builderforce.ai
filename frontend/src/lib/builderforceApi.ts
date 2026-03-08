@@ -293,8 +293,38 @@ export const marketplaceStats = {
 };
 
 // ---------------------------------------------------------------------------
-// Tasks (for ArtifactAssigner)
+// Tasks (full CRUD + ArtifactAssigner summary)
 // ---------------------------------------------------------------------------
+
+export type TaskStatus =
+  | 'backlog'
+  | 'todo'
+  | 'ready'
+  | 'in_progress'
+  | 'in_review'
+  | 'done'
+  | 'blocked';
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+export interface Task {
+  id: number;
+  projectId: number;
+  key: string;
+  title: string;
+  description: string | null;
+  status: TaskStatus;
+  priority: TaskPriority;
+  assignedAgentType: string | null;
+  assignedClawId: number | null;
+  githubPrUrl: string | null;
+  githubPrNumber: number | null;
+  startDate: string | null;
+  dueDate: string | null;
+  persona: string | null;
+  archived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface TaskSummary {
   id: number;
@@ -304,8 +334,57 @@ export interface TaskSummary {
   status?: string;
 }
 
+export const tasksApi = {
+  list: (projectId?: number): Promise<Task[]> => {
+    const q = projectId != null ? `?project_id=${projectId}` : '';
+    return request<{ tasks: Task[] }>(`/api/tasks${q}`).then((r) => r.tasks ?? []);
+  },
+
+  get: (id: number): Promise<Task> =>
+    request<Task>(`/api/tasks/${id}`),
+
+  create: (body: {
+    projectId: number;
+    title: string;
+    description?: string | null;
+    priority?: TaskPriority;
+    assignedClawId?: number | null;
+    dueDate?: string | null;
+  }): Promise<Task> =>
+    request<Task>('/api/tasks', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  update: (
+    id: number,
+    body: Partial<{
+      title: string;
+      description: string | null;
+      status: TaskStatus;
+      priority: TaskPriority;
+      assignedClawId: number | null;
+      dueDate: string | null;
+      archived: boolean;
+    }>
+  ): Promise<Task> =>
+    request<Task>(`/api/tasks/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  delete: (id: number): Promise<void> =>
+    request<void>(`/api/tasks/${id}`, { method: 'DELETE' }),
+};
+
+/** @deprecated Use tasksApi.list for full Task[]; kept for ArtifactAssigner. */
 export async function listTasks(projectId?: number): Promise<TaskSummary[]> {
-  const q = projectId != null ? `?project_id=${projectId}` : '';
-  const data = await request<{ tasks: TaskSummary[] }>(`/api/tasks${q}`);
-  return data?.tasks ?? [];
+  const list = await tasksApi.list(projectId);
+  return list.map((t) => ({
+    id: t.id,
+    key: t.key,
+    title: t.title,
+    projectId: t.projectId,
+    status: t.status,
+  }));
 }

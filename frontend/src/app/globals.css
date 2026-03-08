@@ -804,6 +804,16 @@ html[data-theme='light'] .nebula {
   font-size: 1.25rem;
 }
 
+.admin-page .health-card.health-ok {
+  border-color: var(--success, #10b981);
+  background: var(--success-bg, rgba(16, 185, 129, 0.08));
+}
+
+.admin-page .health-card.health-degraded {
+  border-color: var(--error, #ef4444);
+  background: var(--error-bg, rgba(239, 68, 68, 0.08));
+}
+
 .admin-page .btn-ghost {
   padding: 6px 10px;
   font-size: 12px;
@@ -1058,6 +1068,38 @@ html[data-theme='light'] .nebula {
   color: var(--muted);
 }
 
+.badge-gray {
+  background: rgba(107, 114, 128, 0.2);
+  color: #9ca3af;
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 6px);
+  font-size: 11px;
+  font-weight: 600;
+}
+.badge-blue {
+  background: rgba(77, 158, 255, 0.2);
+  color: var(--coral-bright);
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 6px);
+  font-size: 11px;
+  font-weight: 600;
+}
+.badge-yellow {
+  background: rgba(234, 179, 8, 0.2);
+  color: #eab308;
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 6px);
+  font-size: 11px;
+  font-weight: 600;
+}
+.badge-red {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 6px);
+  font-size: 11px;
+  font-weight: 600;
+}
 .badge-green {
   background: rgba(34, 197, 94, 0.15);
   color: #22c55e;
