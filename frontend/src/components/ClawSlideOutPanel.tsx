@@ -1,0 +1,313 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import type { Claw } from '@/lib/builderforceApi';
+
+export type ClawPanelTab = 'details' | 'config';
+
+export interface ClawSlideOutPanelProps {
+  claw: Claw;
+  open: boolean;
+  onClose: () => void;
+  /** Current tenant id (number) for "Set as default" when available. */
+  tenantId?: number | null;
+  /** Current default claw id; if matches claw.id, show "Default" and "Clear default". */
+  defaultClawId?: number | null;
+  onSetDefaultClaw?: (clawId: number | null) => Promise<void>;
+  initialTab?: ClawPanelTab;
+}
+
+const TABS: { id: ClawPanelTab; label: string }[] = [
+  { id: 'details', label: 'Details' },
+  { id: 'config', label: 'Config' },
+];
+
+const panelOverlayStyle: React.CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 9998,
+};
+
+const panelDrawerStyle: React.CSSProperties = {
+  position: 'fixed',
+  top: 0,
+  right: 0,
+  bottom: 0,
+  width: 'min(560px, 96vw)',
+  maxWidth: '100%',
+  borderLeft: '1px solid var(--border-subtle)',
+  boxShadow: '-8px 0 24px rgba(0,0,0,0.2)',
+  zIndex: 9999,
+  display: 'flex',
+  flexDirection: 'column',
+};
+
+const cardStyle: React.CSSProperties = {
+  background: 'var(--bg-base)',
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 12,
+  padding: 16,
+};
+
+export function ClawSlideOutPanel({
+  claw,
+  open,
+  onClose,
+  tenantId,
+  defaultClawId,
+  onSetDefaultClaw,
+  initialTab = 'details',
+}: ClawSlideOutPanelProps) {
+  const [activeTab, setActiveTab] = useState<ClawPanelTab>(initialTab);
+  const [savingDefault, setSavingDefault] = useState(false);
+
+  useEffect(() => {
+    if (open) setActiveTab(initialTab);
+  }, [open, initialTab]);
+
+  if (!open) return null;
+
+  const isDefault = defaultClawId != null && claw.id === defaultClawId;
+  const canSetDefault = tenantId != null && onSetDefaultClaw;
+
+  const handleSetDefault = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!onSetDefaultClaw) return;
+    setSavingDefault(true);
+    try {
+      await onSetDefaultClaw(claw.id);
+    } finally {
+      setSavingDefault(false);
+    }
+  };
+
+  const handleClearDefault = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!onSetDefaultClaw) return;
+    setSavingDefault(true);
+    try {
+      await onSetDefaultClaw(null);
+    } finally {
+      setSavingDefault(false);
+    }
+  };
+
+  const statusLabel = claw.status ?? (claw.connectedAt ? 'active' : 'offline');
+  const slug = claw.slug;
+  const statusColor =
+    statusLabel === 'active'
+      ? 'var(--surface-success-soft, rgba(34,197,94,0.15))'
+      : statusLabel === 'suspended'
+        ? 'var(--surface-danger-soft, rgba(239,68,68,0.15))'
+        : 'var(--bg-elevated)';
+
+  return (
+    <>
+      <div
+        className="project-panel-overlay slide-panel-overlay"
+        role="presentation"
+        style={panelOverlayStyle}
+        onClick={onClose}
+        aria-hidden
+      />
+      <div
+        className="project-panel-drawer slide-panel-drawer"
+        style={panelDrawerStyle}
+        role="dialog"
+        aria-label="Claw details"
+      >
+        {/* Header */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '16px 20px',
+            borderBottom: '1px solid var(--border-subtle)',
+            flexShrink: 0,
+            flexWrap: 'wrap',
+          }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              width: 36,
+              height: 36,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 8,
+              background: 'var(--bg-base)',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+            }}
+            aria-label="Close panel"
+          >
+            <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>{claw.name}</div>
+            {claw.slug && (
+              <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginTop: 2 }}>
+                {claw.slug}
+              </div>
+            )}
+          </div>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              padding: '4px 8px',
+              borderRadius: 6,
+              background: statusColor,
+              color: 'var(--text-secondary)',
+            }}
+          >
+            {statusLabel}
+          </span>
+          {isDefault && (
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                padding: '4px 8px',
+                borderRadius: 6,
+                background: 'var(--surface-coral-soft, rgba(244,114,94,0.15))',
+                color: 'var(--coral-bright, #f4726e)',
+              }}
+            >
+              Default
+            </span>
+          )}
+          {canSetDefault &&
+            (isDefault ? (
+              <button
+                type="button"
+                onClick={handleClearDefault}
+                disabled={savingDefault}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: 'var(--bg-base)',
+                  color: 'var(--text-secondary)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 8,
+                  cursor: savingDefault ? 'wait' : 'pointer',
+                }}
+              >
+                {savingDefault ? 'Updating…' : 'Clear default'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSetDefault}
+                disabled={savingDefault}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: 'var(--surface-interactive)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 8,
+                  cursor: savingDefault ? 'wait' : 'pointer',
+                }}
+              >
+                {savingDefault ? 'Setting…' : 'Set as default'}
+              </button>
+            ))}
+        </div>
+
+        {/* Tabs */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 2,
+            padding: '0 20px',
+            borderBottom: '1px solid var(--border-subtle)',
+            overflowX: 'auto',
+            flexShrink: 0,
+          }}
+        >
+          {TABS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setActiveTab(id)}
+              style={{
+                padding: '12px 14px',
+                fontSize: 13,
+                fontWeight: 600,
+                color: activeTab === id ? 'var(--coral-bright)' : 'var(--text-secondary)',
+                background: 'none',
+                border: 'none',
+                borderBottom: activeTab === id ? '2px solid var(--coral-bright)' : '2px solid transparent',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                marginBottom: -1,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
+          {activeTab === 'details' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={cardStyle}>
+                <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>Overview</div>
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Name</span>
+                    <span>{claw.name}</span>
+                  </div>
+                  {slug && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Slug</span>
+                      <span style={{ fontFamily: 'var(--font-mono)' }}>{slug}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Status</span>
+                    <span>{statusLabel}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Last seen</span>
+                    <span>{claw.lastSeenAt ? new Date(claw.lastSeenAt).toLocaleString() : '—'}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Connected at</span>
+                    <span>{claw.connectedAt ? new Date(claw.connectedAt).toLocaleString() : '—'}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Created</span>
+                    <span>{claw.createdAt ? new Date(claw.createdAt).toLocaleString() : '—'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          {activeTab === 'config' && (
+            <div style={cardStyle}>
+              <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Config</div>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                Claw-specific configuration (e.g. env, capabilities) can be managed from the CoderClaw instance or via API.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}

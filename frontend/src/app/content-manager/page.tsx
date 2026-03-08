@@ -274,31 +274,53 @@ export default function ContentManagerPage() {
               aria-label="Search content"
             />
           </div>
-          {/* Type filters: All types | page | template | snippet */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}>
-            {(['all', 'page', 'template', 'snippet'] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                className={`btn btn-sm ${filter === t ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setFilter(t)}
-              >
-                {t === 'all' ? 'All types' : t}
-              </button>
-            ))}
+          {/* Type filters */}
+          <div style={{ marginBottom: 12 }}>
+            <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Type</span>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {(['all', 'page', 'template', 'snippet'] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  className={filter === t ? 'btn btn-primary' : 'btn btn-secondary'}
+                  onClick={() => setFilter(t)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: 8,
+                    border: '1px solid var(--border)',
+                    fontWeight: 500,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {t === 'all' ? 'All types' : t}
+                </button>
+              ))}
+            </div>
           </div>
-          {/* Status filters: All status | published | draft */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 20, flexWrap: 'wrap' }}>
-            {(['all', 'published', 'draft'] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                className={`btn btn-sm ${statusFilter === s ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setStatusFilter(s)}
-              >
-                {s === 'all' ? 'All status' : s}
-              </button>
-            ))}
+          {/* Status filters */}
+          <div style={{ marginBottom: 20 }}>
+            <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Status</span>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {(['all', 'published', 'draft'] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className={statusFilter === s ? 'btn btn-primary' : 'btn btn-secondary'}
+                  onClick={() => setStatusFilter(s)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: 8,
+                    border: '1px solid var(--border)',
+                    fontWeight: 500,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {s === 'all' ? 'All status' : s}
+                </button>
+              ))}
+            </div>
           </div>
           {filtered.length === 0 ? (
             <div className="empty-state" style={{ padding: '48px 24px', textAlign: 'center' }}>
@@ -409,7 +431,7 @@ export default function ContentManagerPage() {
       )}
 
       {panelOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setPanelOpen(false)}>
+        <div className="modal-overlay" onClick={() => setPanelOpen(false)}>
           <div className="card" style={{ maxWidth: 780, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div className="modal-title">{editTarget ? 'Edit content' : 'New content block'}</div>

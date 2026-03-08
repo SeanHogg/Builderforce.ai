@@ -392,7 +392,7 @@ export default function PersonasPage() {
       )}
 
       {createOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setCreateOpen(false)}>
+        <div className="modal-overlay" onClick={() => setCreateOpen(false)}>
           <div className="card" style={{ maxWidth: 540, width: '100%', padding: 24 }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div className="modal-title">Create Persona</div>

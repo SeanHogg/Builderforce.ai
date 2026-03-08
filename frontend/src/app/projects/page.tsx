@@ -76,7 +76,7 @@ export default function ProjectsPage() {
       <main className="max-w-6xl mx-auto px-4 py-5">
         {/* New Project Modal */}
         {showForm && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="modal-overlay" style={{ zIndex: 50 }}>
             <div
               className="rounded-xl p-6 w-full max-w-md border border-gray-700"
               style={{ background: 'var(--bg-elevated)' }}

@@ -42,6 +42,8 @@ export interface Project {
   updatedAt?: string;
   /** From list endpoint */
   taskCount?: number;
+  /** From list endpoint: primary assigned Workforce agent (claw) for this project */
+  assignedClaw?: { id: number; name: string } | null;
 }
 
 export interface FileEntry {

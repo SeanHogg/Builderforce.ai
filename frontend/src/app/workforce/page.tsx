@@ -2,38 +2,68 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { claws, type Claw, type ClawRegistration } from '@/lib/builderforceApi';
+import { claws, tenantDefaultClaw, type Claw, type ClawRegistration } from '@/lib/builderforceApi';
 import { listAgents, hireAgent } from '@/lib/api';
+import { useAuth } from '@/lib/AuthContext';
+import { ClawSlideOutPanel } from '@/components/ClawSlideOutPanel';
 import type { PublishedAgent } from '@/lib/types';
 
-function ClawCard({ claw }: { claw: Claw }) {
+function ClawCard({
+  claw,
+  isDefault,
+  onClick,
+}: {
+  claw: Claw;
+  isDefault?: boolean;
+  onClick: () => void;
+}) {
   const connected = !!claw.connectedAt;
   const lastSeen = claw.lastSeenAt ? new Date(claw.lastSeenAt).toLocaleString() : '—';
 
   return (
     <div
       className="card"
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
       style={{
         padding: 20,
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
         position: 'relative',
+        cursor: 'pointer',
       }}
     >
-      <div style={{ position: 'absolute', top: 12, right: 12 }}>
+      <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+        {isDefault && (
+          <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>
+            Default
+          </span>
+        )}
         <span className={connected ? 'badge-green' : ''} style={!connected ? { background: 'var(--bg-elevated)', color: 'var(--muted)', padding: '2px 8px', borderRadius: 9999, fontSize: 11 } : {}}>
           {connected ? 'ONLINE' : 'OFFLINE'}
         </span>
       </div>
       <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-strong)' }}>{claw.name}</div>
-      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{claw.name}</div>
+      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{claw.slug ?? claw.name}</div>
       <div style={{ fontSize: 12, color: 'var(--muted)' }}>Last seen {lastSeen}</div>
+      <div style={{ marginTop: 4 }}>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onClick(); }}
+          style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}
+        >
+          Open
+        </button>
+      </div>
     </div>
   );
 }
 
 export default function WorkforcePage() {
+  const { tenant } = useAuth();
   const [clawList, setClawList] = useState<Claw[]>([]);
   const [loadingClaws, setLoadingClaws] = useState(true);
   const [clawError, setClawError] = useState('');
@@ -43,6 +73,9 @@ export default function WorkforcePage() {
   const [registerError, setRegisterError] = useState('');
   const [newClaw, setNewClaw] = useState<ClawRegistration | null>(null);
   const [apiKeyCopied, setApiKeyCopied] = useState(false);
+
+  const [selectedClaw, setSelectedClaw] = useState<Claw | null>(null);
+  const [defaultClawId, setDefaultClawId] = useState<number | null>(null);
 
   const [agents, setAgents] = useState<PublishedAgent[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
@@ -64,6 +97,21 @@ export default function WorkforcePage() {
   useEffect(() => {
     loadClaws();
   }, [loadClaws]);
+
+  const tenantId = tenant?.id != null ? Number(tenant.id) : undefined;
+  useEffect(() => {
+    if (tenantId == null) return;
+    tenantDefaultClaw.get(tenantId).then(setDefaultClawId).catch(() => setDefaultClawId(null));
+  }, [tenantId]);
+
+  const handleSetDefaultClaw = useCallback(
+    async (clawId: number | null) => {
+      if (tenantId == null) return;
+      const next = await tenantDefaultClaw.set(tenantId, clawId);
+      setDefaultClawId(next);
+    },
+    [tenantId]
+  );
 
   useEffect(() => {
     listAgents()
@@ -158,7 +206,7 @@ export default function WorkforcePage() {
         <div className="empty-state" style={{ padding: 48 }}>
           <div className="empty-state-icon">📁</div>
           <div className="empty-state-title">No claws yet</div>
-          <div className="empty-state-sub">Create your first project to start organizing work</div>
+          <div className="empty-state-sub">Register a CoderClaw instance to add it to your workforce.</div>
           <button
             type="button"
             onClick={() => setShowRegisterModal(true)}
@@ -170,9 +218,25 @@ export default function WorkforcePage() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
           {clawList.map((claw) => (
-            <ClawCard key={claw.id} claw={claw} />
+            <ClawCard
+              key={claw.id}
+              claw={claw}
+              isDefault={defaultClawId != null && claw.id === defaultClawId}
+              onClick={() => setSelectedClaw(claw)}
+            />
           ))}
         </div>
+      )}
+
+      {selectedClaw && (
+        <ClawSlideOutPanel
+          claw={selectedClaw}
+          open={!!selectedClaw}
+          onClose={() => setSelectedClaw(null)}
+          tenantId={tenantId ?? undefined}
+          defaultClawId={defaultClawId}
+          onSetDefaultClaw={tenantId != null ? handleSetDefaultClaw : undefined}
+        />
       )}
 
       {/* Marketplace / Hire agents section */}
@@ -208,7 +272,7 @@ export default function WorkforcePage() {
       {/* Register claw modal */}
       {showRegisterModal && (
         <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          className="modal-overlay"
           onClick={(e) => e.target === e.currentTarget && closeRegisterModal()}
         >
           <div

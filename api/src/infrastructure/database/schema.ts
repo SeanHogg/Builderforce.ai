@@ -560,6 +560,28 @@ export const artifactAssignments = pgTable('artifact_assignments', {
   primaryKey({ columns: [t.tenantId, t.artifactType, t.artifactSlug, t.scope, t.scopeId] }),
 ]);
 
+/**
+ * Platform personas — admin-managed personas (CRUD in Platform Admin).
+ * Merged with built-in personas for marketplace display.
+ */
+export const platformPersonas = pgTable('platform_personas', {
+  id:             serial('id').primaryKey(),
+  name:           varchar('name', { length: 255 }).notNull(),
+  slug:           varchar('slug', { length: 255 }).notNull().unique(),
+  description:    text('description'),
+  voice:          varchar('voice', { length: 500 }),
+  perspective:    varchar('perspective', { length: 500 }),
+  decisionStyle:  varchar('decision_style', { length: 500 }),
+  outputPrefix:   varchar('output_prefix', { length: 50 }),
+  capabilities:   text('capabilities'), // JSON array
+  tags:           text('tags'),         // JSON array
+  source:         varchar('source', { length: 50 }).notNull().default('builtin'),
+  author:         varchar('author', { length: 255 }),
+  active:         boolean('active').notNull().default(true),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+});
+
 // ---------------------------------------------------------------------------
 // Claw ↔ Project associations and synced workspace directories
 // ---------------------------------------------------------------------------

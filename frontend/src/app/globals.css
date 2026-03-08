@@ -888,11 +888,32 @@ html[data-theme='light'] .nebula {
   resize: vertical;
 }
 
+/* Modal overlays: same blur theme as slide-out panels */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--panel-overlay-bg) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Modal content: fully solid (same as slide-out drawer) so the background is not visible through the modal */
+.modal-overlay > div {
+  background: var(--panel-drawer-bg) !important;
+}
+
 /* Admin modal (impersonate) */
 .admin-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--panel-overlay-bg) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -900,7 +921,7 @@ html[data-theme='light'] .nebula {
 }
 
 .admin-modal {
-  background: var(--bg-elevated);
+  background: var(--panel-drawer-bg) !important;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 24px;

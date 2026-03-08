@@ -345,10 +345,28 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       taskCounts.map((row) => [row.projectId, Number(row.taskCount)]),
     );
 
+    const tenantId = c.get('tenantId');
+    const assignedClawRows = await db
+      .select({
+        projectId: clawProjects.projectId,
+        clawId: coderclawInstances.id,
+        clawName: coderclawInstances.name,
+      })
+      .from(clawProjects)
+      .innerJoin(coderclawInstances, eq(clawProjects.clawId, coderclawInstances.id))
+      .where(and(eq(clawProjects.tenantId, tenantId), inArray(clawProjects.projectId, projectIds)));
+    const assignedClawByProject = new Map<number, { id: number; name: string }>();
+    for (const row of assignedClawRows) {
+      if (!assignedClawByProject.has(row.projectId)) {
+        assignedClawByProject.set(row.projectId, { id: row.clawId, name: row.clawName });
+      }
+    }
+
     return c.json({
       projects: plainProjects.map((project) => ({
         ...project,
         taskCount: taskCountByProject.get(project.id) ?? 0,
+        assignedClaw: assignedClawByProject.get(project.id) ?? null,
       })),
     });
   });

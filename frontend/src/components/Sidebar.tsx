@@ -9,6 +9,8 @@ interface NavItem {
   label: string;
   icon: string;
   activePaths?: string[];
+  /** When true, only href exact match is active (no prefix match) */
+  exactMatch?: boolean;
   /** When true, use warning (yellow) color for this nav item */
   highlight?: boolean;
 }
@@ -16,8 +18,8 @@ interface NavItem {
 const mainNav: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
   { href: '/brainstorm', label: 'Brain Storm', icon: '💡' },
-  { href: '/projects', label: 'Projects', icon: '▦' },
-  { href: '/ide', label: 'IDE', icon: '</>', activePaths: ['/ide', '/projects'] },
+  { href: '/projects', label: 'Projects', icon: '▦', exactMatch: true },
+  { href: '/ide', label: 'IDE', icon: '</>', activePaths: ['/ide', '/projects/'] },
   { href: '/tasks', label: 'Task Mgmt', icon: '☑' },
   { href: '/training', label: 'Training', icon: '🎓' },
 ];
@@ -45,6 +47,7 @@ const systemNav: NavItem[] = [
 const adminNavItem: NavItem = { href: '/admin', label: 'Platform Admin', icon: '⚙', highlight: true };
 
 function isActive(pathname: string, item: NavItem): boolean {
+  if (item.exactMatch) return pathname === item.href;
   if (pathname === item.href) return true;
   if (item.href !== '/dashboard' && pathname.startsWith(item.href)) return true;
   if (item.activePaths?.some((p) => pathname.startsWith(p))) return true;

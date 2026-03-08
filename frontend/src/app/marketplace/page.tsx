@@ -17,9 +17,11 @@ import {
   type Persona,
   type BuiltinSkill,
 } from '@/lib/marketplaceData';
+import { listAgents, hireAgent } from '@/lib/api';
+import type { PublishedAgent } from '@/lib/types';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
 
-type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'content';
+type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'content' | 'workforce';
 
 interface ContentBlock {
   id: string;
@@ -155,6 +157,9 @@ export default function MarketplacePage() {
   const [installed, setInstalled] = useState<Set<string>>(new Set());
   const [hasClaws, setHasClaws] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [agents, setAgents] = useState<PublishedAgent[]>([]);
+  const [loadingAgents, setLoadingAgents] = useState(true);
+  const [hiringId, setHiringId] = useState<string | null>(null);
 
   const key = (type: MarketplaceListing['type'], slug: string) => `${type}:${slug}`;
 
@@ -218,6 +223,14 @@ export default function MarketplacePage() {
     refreshListings().finally(() => setLoading(false));
   }, [refreshListings]);
 
+  useEffect(() => {
+    setLoadingAgents(true);
+    listAgents()
+      .then((list) => setAgents(list.filter((a) => a.status === 'active')))
+      .catch(() => setAgents([]))
+      .finally(() => setLoadingAgents(false));
+  }, []);
+
   const toggleLike = async (item: MarketplaceListing) => {
     const k = key(item.type, item.artifactSlug);
     const prev = stats[k] ?? { likes: 0, installs: 0, liked: false };
@@ -277,17 +290,42 @@ export default function MarketplacePage() {
     );
   }
 
+  const filteredAgents = agents.filter(
+    (a) =>
+      !q ||
+      a.name.toLowerCase().includes(q) ||
+      (a.title && a.title.toLowerCase().includes(q)) ||
+      (a.bio && a.bio.toLowerCase().includes(q)) ||
+      (a.skills && a.skills.some((s) => s.toLowerCase().includes(q)))
+  );
+
+  const handleHire = useCallback(async (agentId: string) => {
+    setHiringId(agentId);
+    try {
+      const updated = await hireAgent(agentId);
+      setAgents((prev) => prev.map((a) => (a.id === agentId ? updated : a)));
+    } catch {
+      // keep UI stable
+    } finally {
+      setHiringId(null);
+    }
+  }, []);
+
   const categories: { id: MarketplaceCategory; label: string }[] = [
     { id: 'all', label: 'All' },
     { id: 'personas', label: 'Personas' },
     { id: 'skills', label: 'Skills' },
     { id: 'content', label: 'Content' },
+    { id: 'workforce', label: 'Workforce Agents' },
   ];
 
-  if (loading) {
+  const loadingPage = loading || (category === 'workforce' && loadingAgents);
+  if (loadingPage) {
     return (
       <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
-        <div style={{ color: 'var(--muted)', fontSize: 14 }}>Loading marketplace…</div>
+        <div style={{ color: 'var(--muted)', fontSize: 14 }}>
+          {category === 'workforce' ? 'Loading workforce agents…' : 'Loading marketplace…'}
+        </div>
       </div>
     );
   }
@@ -337,22 +375,113 @@ export default function MarketplacePage() {
           }}
           aria-label="Search marketplace"
         />
-        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }} role="group" aria-label="Filter by type">
-          {categories.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => setCategory(c.id)}
-              className={category === c.id ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
-              aria-pressed={category === c.id}
-            >
-              {c.label}
-            </button>
-          ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }} role="group" aria-label="Filter by type">
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-strong)' }}>Category</span>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {categories.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setCategory(c.id)}
+                className={category === c.id ? 'btn btn-primary' : 'btn btn-secondary'}
+                aria-pressed={category === c.id}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  fontWeight: 500,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {category === 'workforce' ? (
+        filteredAgents.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--muted)' }}>
+            {agents.length === 0
+              ? 'No published workforce agents yet. Publish an agent from a project to list it here.'
+              : 'No workforce agents match your search.'}
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+            {filteredAgents.map((agent) => (
+              <div key={agent.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 24 }}>👤</span>
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-strong)' }}>{agent.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{agent.title || 'Workforce agent'}</div>
+                    </div>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: 99,
+                      background: 'var(--accent)',
+                      color: '#fff',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    Agent
+                  </span>
+                </div>
+                {agent.bio && (
+                  <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, flex: 1 }}>{agent.bio}</div>
+                )}
+                {agent.skills && agent.skills.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {agent.skills.slice(0, 5).map((s) => (
+                      <span
+                        key={s}
+                        style={{
+                          fontSize: 10,
+                          padding: '2px 6px',
+                          borderRadius: 99,
+                          background: 'var(--surface-2)',
+                          color: 'var(--text)',
+                          border: '1px solid var(--border)',
+                        }}
+                      >
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    borderTop: '1px solid var(--border)',
+                    paddingTop: 10,
+                  }}
+                >
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                    {agent.hire_count != null ? `Hired ${agent.hire_count}×` : null}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={hiringId === agent.id}
+                    onClick={() => handleHire(agent.id)}
+                  >
+                    {hiringId === agent.id ? 'Hiring…' : 'Hire'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      ) : filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--muted)' }}>
           No items match your search.
         </div>

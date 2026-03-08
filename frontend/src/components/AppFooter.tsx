@@ -68,16 +68,7 @@ export default function AppFooter() {
           role="dialog"
           aria-modal="true"
           aria-label={modalTitle}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 9999,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(0,0,0,0.6)',
-            padding: 24,
-          }}
+          className="modal-overlay"
           onClick={(e) => {
             if (e.target === e.currentTarget) setModalType(null);
           }}
