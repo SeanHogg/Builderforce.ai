@@ -39,6 +39,10 @@ jobs:
           echo "✅ Created .assetsignore:"
           cat .vercel/output/static/.assetsignore
 
+      - name: Strip ORT/WASM from worker (keep under 3 MiB; serve from static)
+        working-directory: frontend
+        run: node scripts/strip-worker-assets.js
+
       - name: Patch r.fetch and add diagnostics
         working-directory: frontend
         run: |
