@@ -98,6 +98,19 @@ CREATE TABLE IF NOT EXISTS model_artifacts (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Lightweight alias table linking datasets → training jobs: used for iterative
+-- self-improvement loops (generate → train → evaluate → regenerate).
+CREATE TABLE IF NOT EXISTS training_sessions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  model_id TEXT,
+  dataset_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  metrics JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS agents (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL,
