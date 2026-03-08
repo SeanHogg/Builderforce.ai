@@ -15,6 +15,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -177,6 +178,16 @@ export default function RegisterPage() {
                 </div>
               </div>
 
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                <input
+                  type="checkbox"
+                  checked={agreeToTerms}
+                  onChange={e => setAgreeToTerms(e.target.checked)}
+                  style={{ marginTop: 3, accentColor: 'var(--coral-bright)' }}
+                />
+                <span>I agree to the Terms of Use and Privacy Policy (see footer links below)</span>
+              </label>
+
               {error && (
                 <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', borderRadius: 10, padding: '10px 14px', fontSize: '0.875rem' }}>
                   {error}
@@ -185,14 +196,14 @@ export default function RegisterPage() {
 
               <button
                 type="submit"
-                disabled={isLoading || !email || !password || !confirmPassword}
+                disabled={isLoading || !email || !password || !confirmPassword || !agreeToTerms}
                 style={{
                   width: '100%', marginTop: 4,
                   background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
                   color: '#fff', border: 'none', borderRadius: 12, padding: '13px',
                   fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem',
                   cursor: isLoading ? 'wait' : 'pointer',
-                  opacity: (isLoading || !email || !password || !confirmPassword) ? 0.5 : 1,
+                  opacity: (isLoading || !email || !password || !confirmPassword || !agreeToTerms) ? 0.5 : 1,
                   transition: 'opacity 0.2s, box-shadow 0.2s',
                   boxShadow: '0 6px 20px var(--shadow-coral-mid)',
                   letterSpacing: '0.02em',

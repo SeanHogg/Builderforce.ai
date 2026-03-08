@@ -1,7 +1,7 @@
 import { eq, and, desc, isNull, sql } from 'drizzle-orm';
 import {
-  brainChats,
-  brainMessages,
+  ideProjectChats,
+  ideProjectChatMessages,
   chatMemories,
   chatSessions,
   chatMessages,
@@ -13,6 +13,8 @@ import {
   FREE_MODEL_POOL,
 } from '../llm/LlmProxyService';
 import type { Db } from '../../infrastructure/database/connection';
+
+const BRAIN_ORIGIN = 'brainstorm';
 
 // ---------------------------------------------------------------------------
 // DTOs
@@ -35,29 +37,30 @@ export interface AppendMessagesDto {
 }
 
 // ---------------------------------------------------------------------------
-// Return shapes (presentation-agnostic)
+// Return shapes (presentation-agnostic) — unified project chats, origin=brainstorm
 // ---------------------------------------------------------------------------
 
 const chatColumns = {
-  id: brainChats.id,
-  projectId: brainChats.projectId,
-  title: brainChats.title,
-  createdAt: brainChats.createdAt,
-  updatedAt: brainChats.updatedAt,
+  id: ideProjectChats.id,
+  projectId: ideProjectChats.projectId,
+  origin: ideProjectChats.origin,
+  title: ideProjectChats.title,
+  createdAt: ideProjectChats.createdAt,
+  updatedAt: ideProjectChats.updatedAt,
 } as const;
 
 const chatDetailColumns = {
   ...chatColumns,
-  isArchived: brainChats.isArchived,
+  isArchived: ideProjectChats.isArchived,
 } as const;
 
 const messageColumns = {
-  id: brainMessages.id,
-  role: brainMessages.role,
-  content: brainMessages.content,
-  metadata: brainMessages.metadata,
-  seq: brainMessages.seq,
-  createdAt: brainMessages.createdAt,
+  id: ideProjectChatMessages.id,
+  role: ideProjectChatMessages.role,
+  content: ideProjectChatMessages.content,
+  metadata: ideProjectChatMessages.metadata,
+  seq: ideProjectChatMessages.seq,
+  createdAt: ideProjectChatMessages.createdAt,
 } as const;
 
 type MessageFeedback = 'up' | 'down' | null;
@@ -85,15 +88,16 @@ export class BrainService {
     userId: string,
     selectExtra?: Record<string, unknown>,
   ) {
-    const columns = { id: brainChats.id, ...(selectExtra ?? {}) };
+    const columns = { id: ideProjectChats.id, ...(selectExtra ?? {}) };
     const [chat] = await this.db
-      .select(columns as typeof columns & { id: typeof brainChats.id })
-      .from(brainChats)
+      .select(columns as typeof columns & { id: typeof ideProjectChats.id })
+      .from(ideProjectChats)
       .where(
         and(
-          eq(brainChats.id, chatId),
-          eq(brainChats.tenantId, tenantId),
-          eq(brainChats.userId, userId),
+          eq(ideProjectChats.id, chatId),
+          eq(ideProjectChats.tenantId, tenantId),
+          eq(ideProjectChats.userId, userId),
+          eq(ideProjectChats.origin, BRAIN_ORIGIN),
         ),
       )
       .limit(1);
@@ -131,16 +135,17 @@ export class BrainService {
     opts?: { projectId?: string; limit?: number; offset?: number },
   ) {
     const conditions = [
-      eq(brainChats.tenantId, tenantId),
-      eq(brainChats.userId, userId),
-      eq(brainChats.isArchived, false),
+      eq(ideProjectChats.tenantId, tenantId),
+      eq(ideProjectChats.userId, userId),
+      eq(ideProjectChats.origin, BRAIN_ORIGIN),
+      eq(ideProjectChats.isArchived, false),
     ];
 
     if (opts?.projectId === 'none') {
-      conditions.push(isNull(brainChats.projectId));
+      conditions.push(isNull(ideProjectChats.projectId));
     } else if (opts?.projectId) {
       const pid = Number(opts.projectId);
-      if (!Number.isNaN(pid)) conditions.push(eq(brainChats.projectId, pid));
+      if (!Number.isNaN(pid)) conditions.push(eq(ideProjectChats.projectId, pid));
     }
 
     const limit = Math.min(opts?.limit ?? 50, 200);
@@ -148,9 +153,9 @@ export class BrainService {
 
     return this.db
       .select(chatColumns)
-      .from(brainChats)
+      .from(ideProjectChats)
       .where(and(...conditions))
-      .orderBy(desc(brainChats.updatedAt))
+      .orderBy(desc(ideProjectChats.updatedAt))
       .limit(limit)
       .offset(offset);
   }
@@ -164,8 +169,14 @@ export class BrainService {
     }
 
     const [chat] = await this.db
-      .insert(brainChats)
-      .values({ tenantId: dto.tenantId, userId: dto.userId, projectId: dto.projectId ?? null, title })
+      .insert(ideProjectChats)
+      .values({
+        tenantId: dto.tenantId,
+        userId: dto.userId,
+        origin: BRAIN_ORIGIN,
+        projectId: dto.projectId ?? null,
+        title,
+      })
       .returning(chatColumns);
 
     return chat;
@@ -174,12 +185,13 @@ export class BrainService {
   async getChat(chatId: number, tenantId: number, userId: string) {
     const [chat] = await this.db
       .select(chatDetailColumns)
-      .from(brainChats)
+      .from(ideProjectChats)
       .where(
         and(
-          eq(brainChats.id, chatId),
-          eq(brainChats.tenantId, tenantId),
-          eq(brainChats.userId, userId),
+          eq(ideProjectChats.id, chatId),
+          eq(ideProjectChats.tenantId, tenantId),
+          eq(ideProjectChats.userId, userId),
+          eq(ideProjectChats.origin, BRAIN_ORIGIN),
         ),
       )
       .limit(1);
@@ -205,9 +217,9 @@ export class BrainService {
     if (dto.projectId !== undefined) updates.projectId = dto.projectId;
 
     const [updated] = await this.db
-      .update(brainChats)
+      .update(ideProjectChats)
       .set(updates)
-      .where(eq(brainChats.id, chatId))
+      .where(eq(ideProjectChats.id, chatId))
       .returning(chatColumns);
 
     return updated;
@@ -218,9 +230,9 @@ export class BrainService {
     if (!existing) return { error: 'Chat not found' as const };
 
     await this.db
-      .update(brainChats)
+      .update(ideProjectChats)
       .set({ isArchived: true, updatedAt: new Date() })
-      .where(eq(brainChats.id, chatId));
+      .where(eq(ideProjectChats.id, chatId));
 
     return { ok: true };
   }
@@ -235,9 +247,9 @@ export class BrainService {
 
     const msgs = await this.db
       .select(messageColumns)
-      .from(brainMessages)
-      .where(eq(brainMessages.chatId, chatId))
-      .orderBy(brainMessages.seq)
+      .from(ideProjectChatMessages)
+      .where(eq(ideProjectChatMessages.chatId, chatId))
+      .orderBy(ideProjectChatMessages.seq)
       .limit(Math.min(limit, 500));
 
     return msgs;
@@ -258,9 +270,9 @@ export class BrainService {
 
     // Get current max seq
     const [maxRow] = await this.db
-      .select({ maxSeq: sql<number>`COALESCE(MAX(${brainMessages.seq}), 0)` })
-      .from(brainMessages)
-      .where(eq(brainMessages.chatId, chatId));
+      .select({ maxSeq: sql<number>`COALESCE(MAX(${ideProjectChatMessages.seq}), 0)` })
+      .from(ideProjectChatMessages)
+      .where(eq(ideProjectChatMessages.chatId, chatId));
     let seq = maxRow?.maxSeq ?? 0;
 
     const inserted: Array<{
@@ -276,7 +288,7 @@ export class BrainService {
       if (!msg.role || typeof msg.content !== 'string') continue;
       seq += 1;
       const [row] = await this.db
-        .insert(brainMessages)
+        .insert(ideProjectChatMessages)
         .values({
           chatId,
           role: msg.role,
@@ -290,9 +302,9 @@ export class BrainService {
 
     // Touch updatedAt on the chat
     await this.db
-      .update(brainChats)
+      .update(ideProjectChats)
       .set({ updatedAt: new Date() })
-      .where(eq(brainChats.id, chatId));
+      .where(eq(ideProjectChats.id, chatId));
 
     return inserted;
   }
@@ -310,12 +322,12 @@ export class BrainService {
     // Find the message and verify ownership through its chat
     const [msg] = await this.db
       .select({
-        id: brainMessages.id,
-        chatId: brainMessages.chatId,
-        metadata: brainMessages.metadata,
+        id: ideProjectChatMessages.id,
+        chatId: ideProjectChatMessages.chatId,
+        metadata: ideProjectChatMessages.metadata,
       })
-      .from(brainMessages)
-      .where(eq(brainMessages.id, messageId));
+      .from(ideProjectChatMessages)
+      .where(eq(ideProjectChatMessages.id, messageId));
     if (!msg) return { error: 'Message not found' as const };
 
     // Verify ownership of the parent chat
@@ -327,9 +339,9 @@ export class BrainService {
     existing.feedback = feedback;
 
     const [updated] = await this.db
-      .update(brainMessages)
+      .update(ideProjectChatMessages)
       .set({ metadata: JSON.stringify(existing) })
-      .where(eq(brainMessages.id, messageId))
+      .where(eq(ideProjectChatMessages.id, messageId))
       .returning(messageColumns);
 
     return updated ?? { error: 'Update failed' as const };
@@ -341,15 +353,15 @@ export class BrainService {
 
   async summarizeChat(chatId: number, tenantId: number, userId: string, apiKey: string) {
     const chat = await this.verifyChatOwnership(chatId, tenantId, userId, {
-      projectId: brainChats.projectId,
+      projectId: ideProjectChats.projectId,
     }) as { id: number; projectId: number | null } | null;
     if (!chat) return { error: 'Chat not found' as const };
 
     const msgs = await this.db
-      .select({ role: brainMessages.role, content: brainMessages.content })
-      .from(brainMessages)
-      .where(eq(brainMessages.chatId, chatId))
-      .orderBy(brainMessages.seq)
+      .select({ role: ideProjectChatMessages.role, content: ideProjectChatMessages.content })
+      .from(ideProjectChatMessages)
+      .where(eq(ideProjectChatMessages.chatId, chatId))
+      .orderBy(ideProjectChatMessages.seq)
       .limit(500);
 
     if (msgs.length < 2) {
@@ -382,14 +394,11 @@ export class BrainService {
       return { summary: null, reason: 'LLM returned empty response' };
     }
 
-    // Upsert chat memory (one per chat)
+    // Store summary on the unified chat row (Brain Storm chats use ide_project_chats)
     await this.db
-      .insert(chatMemories)
-      .values({ tenantId, chatId, projectId: chat.projectId, summary })
-      .onConflictDoUpdate({
-        target: chatMemories.chatId,
-        set: { summary, updatedAt: new Date() },
-      });
+      .update(ideProjectChats)
+      .set({ summary, updatedAt: new Date() })
+      .where(eq(ideProjectChats.id, chatId));
 
     return { summary };
   }

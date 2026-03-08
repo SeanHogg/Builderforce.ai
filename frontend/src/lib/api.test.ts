@@ -303,11 +303,11 @@ describe('sendAIMessage', () => {
     expect(chunks).toHaveLength(0);
   });
 
-  it('passes raw non-JSON data lines through as-is', async () => {
+  it('skips malformed or non-JSON data lines (never appends raw to message)', async () => {
     const chunks: string[] = [];
     fetchSpy.mockResolvedValueOnce(sseStream('data: plain text chunk\n\n'));
     await sendAIMessage('proj-1', [], (c) => chunks.push(c));
-    expect(chunks).toEqual(['plain text chunk']);
+    expect(chunks).toEqual([]);
   });
 
   it('handles OpenRouter / OpenAI SSE format (choices[0].delta.content)', async () => {

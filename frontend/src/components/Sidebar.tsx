@@ -12,15 +12,15 @@ interface NavItem {
 
 const mainNav: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
-  { href: '/projects', label: 'Projects', icon: '▦' },
-  { href: '/tasks', label: 'Tasks', icon: '☑' },
   { href: '/brainstorm', label: 'Brain Storm', icon: '💡' },
-  { href: '/ide', label: 'Code Editor', icon: '</>', activePaths: ['/ide', '/projects'] },
+  { href: '/projects', label: 'Projects', icon: '▦' },
+  { href: '/ide', label: 'IDE', icon: '</>', activePaths: ['/ide', '/projects'] },
+  { href: '/tasks', label: 'Tasks', icon: '☑' },
   { href: '/training', label: 'Training', icon: '🎓' },
 ];
 
 const meshNav: NavItem[] = [
-  { href: '/workforce', label: 'Workforce', icon: '👤' },
+  { href: '/workforce', label: 'Workforce & Agents', icon: '👤' },
   { href: '/chats', label: 'Chats', icon: '💬' },
 ];
 

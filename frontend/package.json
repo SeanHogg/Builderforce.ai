@@ -26,6 +26,8 @@
     "next": "15.5.2",
     "react": "^18",
     "react-dom": "^18",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "y-monaco": "^0.1.4",
     "y-protocols": "^1.0.6",
     "y-websocket": "^2.0.3",

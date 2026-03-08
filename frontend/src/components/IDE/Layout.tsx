@@ -12,8 +12,9 @@ export function IDELayout({ leftPanel, centerPanel, rightPanel }: LayoutProps) {
   return (
     <div style={{
       display: 'flex',
-      height: '100vh',
-      width: '100vw',
+      height: '100%',
+      minHeight: 0,
+      width: '100%',
       overflow: 'hidden',
       background: 'var(--bg-deep)',
       fontFamily: 'var(--font-display)',

@@ -30,6 +30,21 @@ bucket_name = "builderforce-uploads"
 tag = "v1"
 new_sqlite_classes = ["ClawRelayDO"]
 
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1
+
 [dev]
 port = 8787
 local_protocol = "http"

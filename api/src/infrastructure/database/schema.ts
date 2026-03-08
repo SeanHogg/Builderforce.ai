@@ -12,6 +12,12 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 
+/**
+ * Data model aligns with product flow (see README "Data model & API"):
+ * Brain Storm (ideate) → Execute → Project → IDE (build) or Tasks + Workforce (assign to Claws).
+ * Unified chats: ide_project_chats (origin + optional projectId). Tasks link projects to claws/executions.
+ */
+
 // custom tsvector type for full-text search
 const tsvector = customType<{ data: string }>({
   dataType() { return 'tsvector'; },
@@ -757,7 +763,8 @@ export const approvals = pgTable('approvals', {
 });
 
 // ---------------------------------------------------------------------------
-// Brain chats — server-persisted brainstorming / LLM conversations
+// Brain chats (legacy) — superseded by ide_project_chats for the product flow:
+// Brain Storm → Project → IDE or Tasks/Workforce. Kept for reference only.
 // ---------------------------------------------------------------------------
 
 export const brainChats = pgTable('brain_chats', {
@@ -807,4 +814,32 @@ export const projectMemories = pgTable('project_memories', {
   consolidatedSummary:  text('consolidated_summary').notNull().default(''),
   createdAt:            timestamp('created_at').notNull().defaultNow(),
   updatedAt:            timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Project chats (unified) — Brain Storm, IDE, and project-level chat.
+// origin = 'brainstorm' | 'ide' | 'project' tells the page which tools/actions to load.
+// ---------------------------------------------------------------------------
+
+export const ideProjectChats = pgTable('ide_project_chats', {
+  id:        serial('id').primaryKey(),
+  projectId: integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  userId:    varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  origin:     varchar('origin', { length: 32 }).notNull().default('ide'),
+  title:      varchar('title', { length: 500 }).notNull().default('New chat'),
+  summary:    text('summary'),
+  isArchived: boolean('is_archived').notNull().default(false),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const ideProjectChatMessages = pgTable('ide_project_chat_messages', {
+  id:        serial('id').primaryKey(),
+  chatId:    integer('chat_id').notNull().references(() => ideProjectChats.id, { onDelete: 'cascade' }),
+  role:      varchar('role', { length: 16 }).notNull(),
+  content:   text('content').notNull().default(''),
+  metadata:  text('metadata'),
+  seq:       integer('seq').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
 });

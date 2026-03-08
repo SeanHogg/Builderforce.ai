@@ -93,6 +93,16 @@ export function useWebContainer() {
     return process;
   }, [getOrBootWebContainer]);
 
+  /** Run a command and wait for it to exit. Returns exit code. Use for npm install so dev server runs after deps are ready. */
+  const runCommandAndWait = useCallback(async (
+    command: string,
+    args: string[],
+    onOutput?: (data: string) => void
+  ): Promise<number> => {
+    const proc = await runCommand(command, args, onOutput);
+    return proc.exit;
+  }, [runCommand]);
+
   const startDevServer = useCallback(async (onOutput?: (data: string) => void): Promise<string> => {
     const instance = await getOrBootWebContainer();
     return new Promise((resolve, reject) => {
@@ -115,11 +125,17 @@ export function useWebContainer() {
 
         process.exit.then(code => {
           if (code !== 0 && !serverReady) {
-            const msg = `Dev server exited with code ${code}. output:\n${accumulatedOutput}`;
+            let msg = `Dev server exited with code ${code}. output:\n${accumulatedOutput}`;
+            if (/command not found|not found:|ENOENT/i.test(accumulatedOutput)) {
+              msg += '\n\nHint: Ensure dependencies are installed (npm install completed) and your package.json "dev" script is correct (e.g. "vite" or "npx vite").';
+            }
             reject(new Error(msg));
           }
         });
-      }).catch(reject);
+      }).catch(err => {
+        setState(prev => (prev.status === 'ready' ? { ...prev, error: err instanceof Error ? err.message : String(err) } : prev));
+        reject(err);
+      });
     });
   }, [getOrBootWebContainer]);
 
@@ -140,5 +156,5 @@ export function useWebContainer() {
     return shellProcess.input.getWriter();
   }, [getOrBootWebContainer]);
 
-  return { state, mountFiles, runCommand, startShell, startDevServer, getOrBootWebContainer };
+  return { state, mountFiles, runCommand, runCommandAndWait, startShell, startDevServer, getOrBootWebContainer };
 }

@@ -1,11 +1,11 @@
 import { Hono, type Context } from 'hono';
-import { and, count, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import { ProjectService } from '../../application/project/ProjectService';
 import type { HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { ProjectStatus, TenantRole } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
-import { clawProjects, coderclawInstances, projectInsightEvents, projects, sourceControlIntegrations, tasks, tenants } from '../../infrastructure/database/schema';
+import { clawProjects, coderclawInstances, ideProjectChatMessages, ideProjectChats, projectInsightEvents, projects, sourceControlIntegrations, tasks, tenants } from '../../infrastructure/database/schema';
 
 const IDE_PREFIX = 'ide/';
 
@@ -327,6 +327,117 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     const id = Number(c.req.param('id'));
     const project = await projectService.getProject(id, c.get('tenantId'));
     return c.json(project.toPlain());
+  });
+
+  // GET /api/projects/:id/chats — list all chats for this project (any origin: ide, brainstorm assigned here, etc.)
+  router.get('/:id/chats', async (c) => {
+    const projectId = Number(c.req.param('id'));
+    const tenantId = c.get('tenantId');
+    await projectService.getProject(projectId, tenantId);
+    const list = await db
+      .select({
+        id: ideProjectChats.id,
+        title: ideProjectChats.title,
+        origin: ideProjectChats.origin,
+        createdAt: ideProjectChats.createdAt,
+        updatedAt: ideProjectChats.updatedAt,
+      })
+      .from(ideProjectChats)
+      .where(and(eq(ideProjectChats.projectId, projectId), eq(ideProjectChats.tenantId, tenantId)))
+      .orderBy(desc(ideProjectChats.updatedAt));
+    return c.json({ chats: list });
+  });
+
+  // POST /api/projects/:id/chats — create a new chat in this project (origin=ide)
+  router.post('/:id/chats', async (c) => {
+    const projectId = Number(c.req.param('id'));
+    const tenantId = c.get('tenantId');
+    await projectService.getProject(projectId, tenantId);
+    const body = await c.req.json<{ title?: string }>().catch((): { title?: string } => ({}));
+    const title = (body.title ?? 'New chat').trim().slice(0, 500) || 'New chat';
+    const [chat] = await db
+      .insert(ideProjectChats)
+      .values({
+        projectId,
+        tenantId,
+        origin: 'ide',
+        title,
+      })
+      .returning({
+        id: ideProjectChats.id,
+        title: ideProjectChats.title,
+        origin: ideProjectChats.origin,
+        createdAt: ideProjectChats.createdAt,
+        updatedAt: ideProjectChats.updatedAt,
+      });
+    return c.json(chat!, 201);
+  });
+
+  // GET /api/projects/:id/chats/:chatId — get one chat with messages (origin included so UI can load right tools)
+  router.get('/:id/chats/:chatId', async (c) => {
+    const projectId = Number(c.req.param('id'));
+    const chatId = Number(c.req.param('chatId'));
+    const tenantId = c.get('tenantId');
+    await projectService.getProject(projectId, tenantId);
+    const [chat] = await db
+      .select()
+      .from(ideProjectChats)
+      .where(and(eq(ideProjectChats.id, chatId), eq(ideProjectChats.projectId, projectId), eq(ideProjectChats.tenantId, tenantId)))
+      .limit(1);
+    if (!chat) return c.json({ error: 'Chat not found' }, 404);
+    const messages = await db
+      .select({ id: ideProjectChatMessages.id, role: ideProjectChatMessages.role, content: ideProjectChatMessages.content, seq: ideProjectChatMessages.seq, createdAt: ideProjectChatMessages.createdAt })
+      .from(ideProjectChatMessages)
+      .where(eq(ideProjectChatMessages.chatId, chatId))
+      .orderBy(ideProjectChatMessages.seq);
+    return c.json({ ...chat, messages });
+  });
+
+  // PATCH /api/projects/:id/chats/:chatId — append messages and optionally update title
+  router.patch('/:id/chats/:chatId', async (c) => {
+    const projectId = Number(c.req.param('id'));
+    const chatId = Number(c.req.param('chatId'));
+    const tenantId = c.get('tenantId');
+    await projectService.getProject(projectId, tenantId);
+    const [chat] = await db
+      .select()
+      .from(ideProjectChats)
+      .where(and(eq(ideProjectChats.id, chatId), eq(ideProjectChats.projectId, projectId), eq(ideProjectChats.tenantId, tenantId)))
+      .limit(1);
+    if (!chat) return c.json({ error: 'Chat not found' }, 404);
+    const body = await c.req.json<{ title?: string; messages?: Array<{ role: string; content: string }> }>();
+    if (body.title !== undefined) {
+      await db
+        .update(ideProjectChats)
+        .set({ title: String(body.title).trim().slice(0, 500) || chat.title, updatedAt: new Date() })
+        .where(eq(ideProjectChats.id, chatId));
+    }
+    if (Array.isArray(body.messages) && body.messages.length > 0) {
+      const lastMsg = await db
+        .select({ seq: ideProjectChatMessages.seq })
+        .from(ideProjectChatMessages)
+        .where(eq(ideProjectChatMessages.chatId, chatId))
+        .orderBy(desc(ideProjectChatMessages.seq))
+        .limit(1);
+      let seq = (lastMsg[0]?.seq ?? -1) + 1;
+      for (const m of body.messages) {
+        await db.insert(ideProjectChatMessages).values({
+          chatId,
+          role: (m.role ?? 'user').slice(0, 16),
+          content: String(m.content ?? '').slice(0, 1_000_000),
+          seq,
+        });
+        seq += 1;
+      }
+      await db.update(ideProjectChats).set({ updatedAt: new Date() }).where(eq(ideProjectChats.id, chatId));
+    }
+    const [updated] = await db.select().from(ideProjectChats).where(eq(ideProjectChats.id, chatId)).limit(1);
+    const messages = await db
+      .select({ id: ideProjectChatMessages.id, role: ideProjectChatMessages.role, content: ideProjectChatMessages.content, seq: ideProjectChatMessages.seq, createdAt: ideProjectChatMessages.createdAt })
+      .from(ideProjectChatMessages)
+      .where(eq(ideProjectChatMessages.chatId, chatId))
+      .orderBy(ideProjectChatMessages.seq);
+    return c.json({ ...updated!, messages });
   });
 
   // POST /api/projects/:id/insights/code-changes

@@ -221,25 +221,35 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
   const maxLoss = lossHistory.length > 0 ? Math.max(...lossHistory.map(s => s.loss)) : 3;
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 text-white text-sm">
+    <div className="h-full flex flex-col text-sm" style={{ background: 'var(--bg-base)', color: 'var(--text-primary)' }}>
       {/* Header */}
-      <div className="px-3 py-2 border-b border-gray-700 flex items-center justify-between">
-        <h2 className="font-semibold text-gray-300 flex items-center gap-1">
+      <div className="px-3 py-2 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+        <h2 className="font-semibold flex items-center gap-1" style={{ color: 'var(--text-primary)' }}>
           <span>🧠</span> AI Model Training
         </h2>
-        <div className="flex items-center gap-1 text-xs">
+        <div className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
           <span className={`w-2 h-2 rounded-full ${webgpuAvailable ? 'bg-green-400' : 'bg-yellow-400'}`} />
-          <span className="text-gray-400">{webgpuAvailable ? 'WebGPU' : 'CPU'}</span>
+          <span>{webgpuAvailable ? 'WebGPU' : 'CPU'}</span>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-gray-700">
+      {/* Tabs — theme-aware so readable in light mode */}
+      <div className="flex" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
         {(['configure', 'datasets', 'jobs'] as PanelTab[]).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-3 py-1.5 text-xs capitalize ${tab === t ? 'bg-gray-800 text-white border-t-2 border-t-blue-500' : 'text-gray-400 hover:text-white'}`}
+            style={{
+              padding: '6px 12px',
+              fontSize: '0.75rem',
+              textTransform: 'capitalize',
+              background: tab === t ? 'var(--bg-elevated)' : 'transparent',
+              color: tab === t ? 'var(--text-primary)' : 'var(--text-secondary)',
+              border: 'none',
+              borderTop: tab === t ? '2px solid var(--coral-bright)' : '2px solid transparent',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-display)',
+            }}
           >
             {t}
           </button>

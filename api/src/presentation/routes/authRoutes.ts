@@ -516,13 +516,15 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
 
   // POST /api/auth/web/register
   router.post('/web/register', async (c) => {
-    const body = await c.req.json<{ email: string; username: string; password: string }>();
-    if (!body.email || !body.username || !body.password) {
-      return c.json({ error: 'email, username and password are required' }, 400);
+    const body = await c.req.json<{ email: string; username?: string; password: string }>();
+    if (!body.email || !body.password) {
+      return c.json({ error: 'email and password are required' }, 400);
     }
 
     const email = body.email.toLowerCase().trim();
-    const username = body.username.toLowerCase().trim();
+    const username = (body.username && body.username.trim())
+      ? body.username.toLowerCase().trim()
+      : email;
     if (!email.includes('@')) return c.json({ error: 'Invalid email address' }, 400);
     if (body.password.length < 8) return c.json({ error: 'Password must be at least 8 characters' }, 400);
 

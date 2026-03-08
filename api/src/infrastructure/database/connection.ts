@@ -12,6 +12,12 @@ export type Db = NeonHttpDatabase<typeof schema>;
  * fully compatible with Cloudflare Workers without nodejs_compat TCP quirks.
  */
 export function buildDatabase(env: Env): Db {
-  const sql = neon(env.NEON_DATABASE_URL);
+  const url = env.NEON_DATABASE_URL;
+  if (!url || typeof url !== 'string' || !url.trim()) {
+    throw new Error(
+      'NEON_DATABASE_URL is not set. Set it with: wrangler secret put NEON_DATABASE_URL (in the api/ directory)'
+    );
+  }
+  const sql = neon(url);
   return drizzle(sql, { schema });
 }
