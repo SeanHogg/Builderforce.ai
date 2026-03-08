@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchProjects } from '@/lib/api';
-import { ProjectList } from './ProjectList';
+import { ProjectCard } from './ProjectCard';
 import type { Project } from '@/lib/types';
 
 export interface ProjectsSlideOutPanelProps {
@@ -29,7 +29,7 @@ export function ProjectsSlideOutPanel({ open, onClose, currentProjectId }: Proje
 
   const handleSelect = (project: Project) => {
     onClose();
-    router.push(`/projects/${project.id}`);
+    router.push(`/ide/${project.id}`);
   };
 
   if (!open) return null;
@@ -39,20 +39,25 @@ export function ProjectsSlideOutPanel({ open, onClose, currentProjectId }: Proje
       <div
         role="presentation"
         onClick={onClose}
+        className="projects-panel-overlay"
         style={{
           position: 'fixed',
-          inset: 0,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 'var(--footer-height, 44px)',
           background: 'rgba(0,0,0,0.4)',
           zIndex: 9998,
         }}
       />
       <div
+        className="projects-panel-drawer"
         style={{
           position: 'fixed',
           top: 0,
           right: 0,
-          bottom: 0,
-          width: 'min(400px, 90vw)',
+          bottom: 'var(--footer-height, 44px)',
+          width: 'min(420px, 90vw)',
           background: 'var(--bg-deep)',
           borderLeft: '1px solid var(--border-subtle)',
           boxShadow: '-4px 0 24px rgba(0,0,0,0.2)',
@@ -91,13 +96,35 @@ export function ProjectsSlideOutPanel({ open, onClose, currentProjectId }: Proje
             ×
           </button>
         </div>
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <ProjectList
-            projects={projects}
-            currentProjectId={currentProjectId}
-            onSelect={handleSelect}
-            loading={loading}
-          />
+        <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
+          {loading ? (
+            <div style={{ padding: 24, color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+              Loading projects…
+            </div>
+          ) : projects.length === 0 ? (
+            <div style={{ padding: 24, color: 'var(--text-muted)', fontSize: '0.875rem', textAlign: 'center' }}>
+              No projects yet.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {projects.map((project) => (
+                <div
+                  key={project.id}
+                  style={
+                    currentProjectId != null && project.id === currentProjectId
+                      ? { position: 'relative', boxShadow: '0 0 0 2px var(--coral-bright)' }
+                      : undefined
+                  }
+                >
+                  <ProjectCard
+                    project={project}
+                    onCardClick={handleSelect}
+                    showDetailsButton={false}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </>

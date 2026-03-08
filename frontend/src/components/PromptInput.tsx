@@ -58,7 +58,7 @@ const buttonStyle = (disabled: boolean): React.CSSProperties => ({
   justifyContent: 'center',
   gap: 6,
   background: disabled ? 'var(--bg-elevated)' : 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-  color: disabled ? 'var(--text-muted)' : '#fff',
+  color: disabled ? 'var(--text-muted)' : 'var(--text-on-accent)',
   border: '1px solid var(--border-subtle)',
   borderRadius: 10,
   cursor: disabled ? 'not-allowed' : 'pointer',

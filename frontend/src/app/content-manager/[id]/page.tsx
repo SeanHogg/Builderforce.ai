@@ -85,7 +85,7 @@ export default function ContentDetailPage() {
           {block.tags.map((t) => <span key={t} className="badge badge-gray">{t}</span>)}
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12 }}>
-          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 13, color: stats?.liked ? '#ef4444' : 'var(--muted)' }} onClick={toggleLike}>
+          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 13, color: stats?.liked ? 'var(--error)' : 'var(--muted)' }} onClick={toggleLike}>
             {stats?.liked ? '❤️' : '🤍'} {stats?.likes ?? 0} likes
           </button>
           <span style={{ fontSize: 13, color: 'var(--muted)' }}>⬇️ {stats?.installs ?? 0} installs</span>

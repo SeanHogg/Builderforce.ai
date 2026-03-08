@@ -199,7 +199,7 @@ export default function PersonasPage() {
       </div>
 
       {error && (
-        <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'rgba(239,68,68,0.15)', color: '#ef4444', borderRadius: 8 }}>{error}</div>
+        <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 8 }}>{error}</div>
       )}
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 20 }}>
@@ -341,7 +341,7 @@ export default function PersonasPage() {
                       </div>
                       {p.description && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '8px 0' }}>{p.description}</div>}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--muted)', margin: '4px 0 8px' }}>
-                        <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? '#ef4444' : 'var(--muted)' }} title={stat.liked ? 'Unlike' : 'Like'} onClick={(e) => { e.stopPropagation(); toggleLike(p.name); }}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
+                        <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? 'Unlike' : 'Like'} onClick={(e) => { e.stopPropagation(); toggleLike(p.name); }}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
                         <span title="Installs">⬇️ {stat.installs}</span>
                         {p.author && <span>by {p.author}</span>}
                       </div>

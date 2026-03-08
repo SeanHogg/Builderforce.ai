@@ -484,7 +484,7 @@ export default function BrainstormPage() {
       </div>
       <div className="bs-main">
         {error && (
-          <div style={{ margin: '8px 12px 0', padding: '8px 12px', fontSize: 13, background: 'rgba(239,68,68,0.15)', color: '#ef4444', borderRadius: 8 }}>
+          <div style={{ margin: '8px 12px 0', padding: '8px 12px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 8 }}>
             {error}
           </div>
         )}

@@ -96,7 +96,7 @@ export default function PersonaDetailPage() {
         <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-strong)', margin: '8px 0' }}>{persona.name}</h1>
         <p style={{ fontSize: 14, color: 'var(--muted)' }}>{persona.description}</p>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
-          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 13, color: stats?.liked ? '#ef4444' : 'var(--muted)' }} onClick={toggleLike}>
+          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 13, color: stats?.liked ? 'var(--error)' : 'var(--muted)' }} onClick={toggleLike}>
             {stats?.liked ? '❤️' : '🤍'} {stats?.likes ?? 0} likes
           </button>
           <span style={{ fontSize: 13, color: 'var(--muted)' }}>⬇️ {stats?.installs ?? 0} installs</span>

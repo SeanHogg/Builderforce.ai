@@ -1,12 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Project } from '@/lib/types';
+import type { Claw } from '@/lib/builderforceApi';
 import { fetchProjects, createProject } from '@/lib/api';
+import { claws } from '@/lib/builderforceApi';
 import { useAuth } from '@/lib/AuthContext';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
 import { ProjectCard } from '@/components/ProjectCard';
+import { ClawSlideOutPanel } from '@/components/ClawSlideOutPanel';
 
 /**
  * Projects page — full project list, create project modal, open project → IDE.
@@ -18,6 +22,7 @@ export default function ProjectsPage() {
   const { isAuthenticated, hasTenant } = useAuth();
 
   const [projects, setProjects] = useState<Project[]>([]);
+  const [clawList, setClawList] = useState<Claw[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
@@ -25,6 +30,8 @@ export default function ProjectsPage() {
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailsProject, setDetailsProject] = useState<Project | null>(null);
+  const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
+  const [selectedClaw, setSelectedClaw] = useState<Claw | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -36,10 +43,16 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     if (!isAuthenticated || !hasTenant) return;
-    fetchProjects()
-      .then(setProjects)
-      .catch(() => setError('Failed to load projects. Check your connection and try again.'))
-      .finally(() => setIsLoading(false));
+    Promise.all([
+      fetchProjects().catch(() => {
+        setError('Failed to load projects. Check your connection and try again.');
+        return [] as Project[];
+      }),
+      claws.list().catch(() => [] as Claw[]),
+    ]).then(([projs, clawsData]) => {
+      setProjects(projs);
+      setClawList(clawsData);
+    }).finally(() => setIsLoading(false));
   }, [isAuthenticated, hasTenant]);
 
   useEffect(() => {
@@ -159,35 +172,71 @@ export default function ProjectsPage() {
         {error && (
           <div
             className="rounded-lg px-4 py-3 mb-6 text-sm"
-            style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5' }}
+            style={{ background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)' }}
           >
             {error}
           </div>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>Projects</h1>
-          <button
-            type="button"
-            onClick={() => setShowForm(true)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '10px 18px',
-              fontSize: '0.875rem',
-              fontWeight: 600,
-              background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 10,
-              cursor: 'pointer',
-              fontFamily: 'var(--font-display)',
-              boxShadow: '0 4px 14px var(--shadow-coral-mid)',
-            }}
-          >
-            + New project
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 2 }}>
+              <button
+                type="button"
+                onClick={() => setViewMode('card')}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  border: 'none',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  background: viewMode === 'card' ? 'var(--coral-bright)' : 'transparent',
+                  color: viewMode === 'card' ? '#fff' : 'var(--text-secondary)',
+                }}
+              >
+                Card
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  border: 'none',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  background: viewMode === 'table' ? 'var(--coral-bright)' : 'transparent',
+                  color: viewMode === 'table' ? '#fff' : 'var(--text-secondary)',
+                }}
+              >
+                List
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowForm(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 18px',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 10,
+                cursor: 'pointer',
+                fontFamily: 'var(--font-display)',
+                boxShadow: '0 4px 14px var(--shadow-coral-mid)',
+              }}
+            >
+              + New project
+            </button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -221,7 +270,7 @@ export default function ProjectsPage() {
               Create project
             </button>
           </div>
-        ) : (
+        ) : viewMode === 'card' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {projects.map((project) => (
               <ProjectCard
@@ -230,8 +279,95 @@ export default function ProjectsPage() {
                 onCardClick={setDetailsProject}
                 onDetailsClick={setDetailsProject}
                 showDetailsButton
+                onAssignedAgentClick={(ac) => {
+                  const claw = clawList.find((c) => c.id === ac.id);
+                  if (claw) setSelectedClaw(claw);
+                }}
               />
             ))}
+          </div>
+        ) : (
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
+                  <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Name</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Description</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Agent</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {projects.map((project) => (
+                  <tr key={project.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                    <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--text-primary)' }}>{project.name}</td>
+                    <td style={{ padding: '12px 16px', color: 'var(--text-secondary)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {project.description ?? '—'}
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      {project.assignedClaw ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const claw = clawList.find((c) => c.id === project.assignedClaw!.id);
+                            if (claw) setSelectedClaw(claw);
+                          }}
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: 'var(--coral-bright)',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: 0,
+                            textDecoration: 'underline',
+                          }}
+                        >
+                          {project.assignedClaw.name}
+                        </button>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          onClick={() => setDetailsProject(project)}
+                          style={{
+                            padding: '6px 10px',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            background: 'var(--surface-interactive)',
+                            color: 'var(--text-secondary)',
+                            border: '1px solid var(--border-subtle)',
+                            borderRadius: 8,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Details
+                        </button>
+                        <Link
+                          href={`/ide/${project.id}`}
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: 'var(--coral-bright)',
+                            textDecoration: 'none',
+                            border: '1px solid var(--coral-bright)',
+                            borderRadius: 8,
+                            background: 'var(--bg-base)',
+                          }}
+                        >
+                          Open in IDE
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 
@@ -241,9 +377,17 @@ export default function ProjectsPage() {
             open={!!detailsProject}
             onClose={() => setDetailsProject(null)}
             onProjectUpdate={(updated) => {
-              setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+              setProjects((prev) => prev.map((p) => (p.id === updated.id ? { ...updated, assignedClaw: p.assignedClaw } : p)));
               setDetailsProject((p) => (p && p.id === updated.id ? updated : p));
             }}
+          />
+        )}
+
+        {selectedClaw && (
+          <ClawSlideOutPanel
+            claw={selectedClaw}
+            open={!!selectedClaw}
+            onClose={() => setSelectedClaw(null)}
           />
         )}
       </main>

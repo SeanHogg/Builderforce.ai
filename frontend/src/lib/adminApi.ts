@@ -4,7 +4,7 @@
  */
 
 import { getApiBaseUrl } from './apiClient';
-import { getStoredWebToken } from './auth';
+import { checkUnauthorizedAndRedirect, getStoredWebToken } from './auth';
 
 // ---------------------------------------------------------------------------
 // Types (mirror api/admin routes)
@@ -266,6 +266,7 @@ async function adminRequest<T>(
 ): Promise<T> {
   const webToken = getStoredWebToken();
   if (!webToken) throw new Error('Not authenticated. Sign in with a superadmin account.');
+  const hadToken = true;
   const { body, ...init } = opts;
   const url = `${getApiBaseUrl()}${path}`;
   const res = await fetch(url, {
@@ -277,6 +278,7 @@ async function adminRequest<T>(
     },
     ...(body !== undefined && { body }),
   });
+  checkUnauthorizedAndRedirect(res, hadToken);
   if (!res.ok) {
     const msg = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(msg.error || res.statusText || `Admin request failed (${res.status})`);

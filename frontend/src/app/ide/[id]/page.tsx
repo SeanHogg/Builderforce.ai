@@ -126,7 +126,7 @@ export default function IDEPage() {
         <pre style={{
           background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
           borderRadius: 10, padding: '12px 20px', fontSize: '0.78rem',
-          color: '#f87171', maxWidth: 560, overflowX: 'auto', whiteSpace: 'pre-wrap',
+          color: 'var(--error-text)', maxWidth: 560, overflowX: 'auto', whiteSpace: 'pre-wrap',
         }}>
           {errorMsg || 'Unknown error. Check your connection and try again.'}
         </pre>

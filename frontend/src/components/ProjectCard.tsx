@@ -11,6 +11,8 @@ export interface ProjectCardProps {
   onDetailsClick?: (project: Project) => void;
   /** Show the Details button. Default true when onDetailsClick is provided. */
   showDetailsButton?: boolean;
+  /** When user clicks the assigned agent (Workforce), called with assignedClaw so parent can open agent panel. */
+  onAssignedAgentClick?: (assignedClaw: { id: number; name: string }) => void;
 }
 
 const createdDate = (project: Project): string => {
@@ -24,6 +26,7 @@ export function ProjectCard({
   onCardClick,
   onDetailsClick,
   showDetailsButton = !!onDetailsClick,
+  onAssignedAgentClick,
 }: ProjectCardProps) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (onCardClick && e.key === 'Enter') {
@@ -113,6 +116,30 @@ export function ProjectCard({
         >
           {project.description}
         </p>
+      )}
+      {project.assignedClaw && (
+        <div style={{ marginBottom: 4 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', marginRight: 4 }}>Agent:</span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAssignedAgentClick?.(project.assignedClaw!);
+            }}
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: 'var(--coral-bright)',
+              background: 'none',
+              border: 'none',
+              cursor: onAssignedAgentClick ? 'pointer' : 'default',
+              padding: 0,
+              textDecoration: 'underline',
+            }}
+          >
+            {project.assignedClaw.name}
+          </button>
+        </div>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto', flexWrap: 'wrap' }}>
         {project.taskCount != null && (

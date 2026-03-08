@@ -46,14 +46,7 @@ export interface ChatInputProps {
   className?: string;
 }
 
-/* Match reference: capsule bar, light grey icons, black send with white arrow */
-const CHAT_BAR_BG = 'rgba(248, 247, 245, 0.95)';
-const CHAT_BAR_BORDER = 'rgba(0, 0, 0, 0.08)';
-const CHAT_ICON_GREY = '#6b7280';
-const CHAT_PLUS_GREY = '#4b5563';
-const CHAT_SEND_BG = '#1f2937';
-const CHAT_SEND_ARROW = '#fff';
-
+/* Theme-aware: uses --chat-input-* from globals.css (light and dark) */
 const iconButtonStyle = (disabled?: boolean): React.CSSProperties => ({
   width: 40,
   height: 40,
@@ -63,15 +56,14 @@ const iconButtonStyle = (disabled?: boolean): React.CSSProperties => ({
   alignItems: 'center',
   justifyContent: 'center',
   borderRadius: '50%',
-  border: `1px solid ${CHAT_BAR_BORDER}`,
-  background: CHAT_BAR_BG,
-  color: disabled ? '#9ca3af' : CHAT_ICON_GREY,
+  border: '1px solid var(--chat-input-border)',
+  background: 'var(--chat-input-bg)',
+  color: disabled ? 'var(--chat-input-disabled-icon)' : 'var(--chat-input-icon)',
   cursor: disabled ? 'not-allowed' : 'pointer',
 });
 
 const plusButtonStyle = (disabled?: boolean): React.CSSProperties => ({
   ...iconButtonStyle(disabled),
-  color: CHAT_PLUS_GREY,
   fontWeight: 300,
   fontSize: '1.25rem',
   lineHeight: 1,
@@ -81,7 +73,7 @@ const inputStyle: React.CSSProperties = {
   flex: 1,
   minWidth: 0,
   background: 'transparent',
-  color: '#111827',
+  color: 'var(--chat-input-text)',
   fontSize: '0.9375rem',
   borderRadius: 0,
   padding: '10px 12px',
@@ -102,8 +94,8 @@ const sendButtonStyle = (disabled: boolean): React.CSSProperties => ({
   justifyContent: 'center',
   borderRadius: '50%',
   border: 'none',
-  background: disabled ? '#d1d5db' : CHAT_SEND_BG,
-  color: CHAT_SEND_ARROW,
+  background: disabled ? 'var(--chat-input-disabled-send-bg)' : 'var(--chat-input-send-bg)',
+  color: 'var(--chat-input-send-icon)',
   cursor: disabled ? 'not-allowed' : 'pointer',
 });
 
@@ -275,9 +267,9 @@ export function ChatInput({
           width: '100%',
           padding: '8px 10px 8px 12px',
           borderRadius: 9999,
-          border: `1px solid ${CHAT_BAR_BORDER}`,
-          background: CHAT_BAR_BG,
-          boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+          border: '1px solid var(--chat-input-border)',
+          background: 'var(--chat-input-bg)',
+          boxShadow: 'var(--chat-input-shadow)',
         }}
       >
         {onAttach && (
@@ -324,7 +316,7 @@ export function ChatInput({
             onClick={recording ? stopVoice : startVoice}
             disabled={disabled}
             title={recording ? 'Stop dictation' : 'Dictate'}
-            style={{ ...iconButtonStyle(disabled), background: recording ? 'rgba(0,0,0,0.06)' : undefined }}
+            style={{ ...iconButtonStyle(disabled), background: recording ? 'var(--surface-interactive)' : undefined }}
           >
             <MicIcon />
           </button>

@@ -249,7 +249,7 @@ export function ProjectAIChat({
       {/* Chat list (same style as Brain Storm sidebar) */}
       <div style={{ flex: '0 1 35%', minHeight: 120, maxHeight: 280, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
         {chatNotFoundError && (
-          <div style={{ padding: 12, fontSize: 13, background: 'rgba(239,68,68,0.1)', color: '#ef4444', borderRadius: 8, margin: 8 }}>
+          <div style={{ padding: 12, fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 8, margin: 8 }}>
             {chatNotFoundError}
           </div>
         )}

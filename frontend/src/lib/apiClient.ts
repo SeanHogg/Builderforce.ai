@@ -4,8 +4,11 @@
  * otherwise they use the auth API. Auth always uses AUTH_API_URL.
  */
 
-import { getStoredTenantToken } from './auth';
-import { AUTH_API_URL } from './auth';
+import {
+  AUTH_API_URL,
+  checkUnauthorizedAndRedirect,
+  getStoredTenantToken,
+} from './auth';
 
 export function getApiBaseUrl(): string {
   return AUTH_API_URL;
@@ -43,16 +46,20 @@ export interface RequestOptions extends Omit<RequestInit, 'headers'> {
 
 /**
  * Authenticated request to the API. Throws on !res.ok.
+ * On 401 (invalid/expired token), clears session and redirects to login.
  */
 export async function apiRequest<T = unknown>(
   path: string,
   opts: RequestOptions = {}
 ): Promise<T> {
   const { raw, headers: optHeaders, ...init } = opts;
+  const authHeaders = getAuthHeaders();
+  const hadToken = !!authHeaders.Authorization;
   const res = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
-    headers: { ...getAuthHeaders(), ...optHeaders } as HeadersInit,
+    headers: { ...authHeaders, ...optHeaders } as HeadersInit,
   });
+  checkUnauthorizedAndRedirect(res, hadToken);
   if (!res.ok) {
     const msg = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(msg.error || res.statusText || `Request failed (${res.status})`);
@@ -62,20 +69,27 @@ export async function apiRequest<T = unknown>(
   return res.json() as Promise<T>;
 }
 
-/** Request that returns response text (e.g. dataset download). */
+/** Request that returns response text (e.g. dataset download). On 401, redirects to login. */
 export async function apiRequestText(path: string, opts: RequestInit = {}): Promise<string> {
+  const authHeaders = getAuthHeaders();
+  const hadToken = !!authHeaders.Authorization;
   const res = await fetch(`${getApiBaseUrl()}${path}`, {
     ...opts,
-    headers: { ...getAuthHeaders(), ...(opts.headers as Record<string, string>) },
+    headers: { ...authHeaders, ...(opts.headers as Record<string, string>) },
   });
+  checkUnauthorizedAndRedirect(res, hadToken);
   if (!res.ok) throw new Error(res.statusText || 'Request failed');
   return res.text();
 }
 
-/** Request that returns the Response for streaming (e.g. SSE). Caller must read body. */
-export function apiRequestStream(path: string, opts: RequestInit = {}): Promise<Response> {
-  return fetch(`${getApiBaseUrl()}${path}`, {
+/** Request that returns the Response for streaming (e.g. SSE). Caller must read body. On 401, redirects to login. */
+export async function apiRequestStream(path: string, opts: RequestInit = {}): Promise<Response> {
+  const authHeaders = getAuthHeaders();
+  const hadToken = !!authHeaders.Authorization;
+  const res = await fetch(`${getApiBaseUrl()}${path}`, {
     ...opts,
-    headers: { ...getAuthHeaders(), ...(opts.headers as Record<string, string>) },
+    headers: { ...authHeaders, ...(opts.headers as Record<string, string>) },
   });
+  checkUnauthorizedAndRedirect(res, hadToken);
+  return res;
 }
