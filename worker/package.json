@@ -17,10 +17,12 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240718.0",
+    "@types/ws": "^8.18.1",
     "dotenv": "^17.3.1",
     "tsx": "^4.21.0",
     "typescript": "^5.5.2",
     "vitest": "^4.0.18",
-    "wrangler": "^4.71.0"
+    "wrangler": "^4.71.0",
+    "ws": "^8.19.0"
   }
 }

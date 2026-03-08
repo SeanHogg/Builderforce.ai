@@ -1,9 +1,13 @@
-import { neon } from '@neondatabase/serverless';
+import { Pool, neonConfig } from '@neondatabase/serverless';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
+import ws from 'ws';
 
 dotenv.config();
+
+// Configure WebSocket for Node.js environment
+neonConfig.webSocketConstructor = ws;
 
 async function migrate() {
     const connectionString = process.env.NEON_DATABASE_URL;
@@ -12,7 +16,7 @@ async function migrate() {
         process.exit(1);
     }
 
-    const sql = neon(connectionString);
+    const pool = new Pool({ connectionString });
     const schemaPath = path.join(__dirname, '..', 'schema.sql');
     const schemaStr = fs.readFileSync(schemaPath, 'utf-8');
 
@@ -26,16 +30,18 @@ async function migrate() {
 
     for (let i = 0; i < statements.length; i++) {
         try {
-            await sql(statements[i]);
+            await pool.query(statements[i]);
             console.log(`✅ Statement ${i + 1} succeeded`);
         } catch (e) {
             console.error(`❌ Statement ${i + 1} failed:`);
             console.error(statements[i]);
             console.error(e);
+            await pool.end();
             process.exit(1);
         }
     }
 
+    await pool.end();
     console.log('✅ Migration complete!');
 }
 
