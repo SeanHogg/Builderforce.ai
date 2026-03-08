@@ -14,6 +14,8 @@ import type { Project, FileEntry } from '@/lib/types';
  * caused 404s because the fetch ran at build time against a localhost URL
  * that was not available during CI/CD.
  */
+export const runtime = 'edge';
+
 export default function ProjectPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
