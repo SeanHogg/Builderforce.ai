@@ -157,43 +157,126 @@ export async function deleteFile(
 }
 
 // ---------------------------------------------------------------------------
+// Project chats (persisted on auth API)
+// ---------------------------------------------------------------------------
+
+export interface ProjectChatSummary {
+  id: number;
+  title: string;
+  /** Where the chat was created: 'brainstorm' | 'ide' | 'project'. Tells the page which tools to load. */
+  origin?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectChatMessage {
+  id: number;
+  role: string;
+  content: string;
+  seq: number;
+  createdAt: string;
+}
+
+export interface ProjectChat extends ProjectChatSummary {
+  projectId?: number;
+  tenantId?: number;
+  messages: ProjectChatMessage[];
+}
+
+/** Normalize a single chat from API (handles snake_case or camelCase from server). */
+function normalizeProjectChatSummary(raw: Record<string, unknown>): ProjectChatSummary {
+  return {
+    id: Number(raw.id),
+    title: String(raw.title ?? 'New chat'),
+    origin: raw.origin != null ? String(raw.origin) : undefined,
+    createdAt: String(raw.createdAt ?? raw.created_at ?? ''),
+    updatedAt: String(raw.updatedAt ?? raw.updated_at ?? ''),
+  };
+}
+
+export async function listProjectChats(projectId: number | string): Promise<ProjectChatSummary[]> {
+  const res = await apiRequest<{ chats?: ProjectChatSummary[] } | ProjectChatSummary[]>(
+    `/api/projects/${String(projectId)}/chats`
+  );
+  const rawList = Array.isArray(res) ? res : (res && typeof res === 'object' && res.chats) ? res.chats : [];
+  if (!Array.isArray(rawList)) return [];
+  return rawList.map((item) => normalizeProjectChatSummary(item as unknown as Record<string, unknown>));
+}
+
+export async function getProjectChat(projectId: number | string, chatId: number): Promise<ProjectChat> {
+  return apiRequest<ProjectChat>(`/api/projects/${projectId}/chats/${chatId}`);
+}
+
+export async function createProjectChat(projectId: number | string, title?: string): Promise<ProjectChatSummary> {
+  return apiRequest<ProjectChatSummary>(`/api/projects/${projectId}/chats`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: title ?? 'New chat' }),
+  });
+}
+
+export async function appendProjectChatMessages(
+  projectId: number | string,
+  chatId: number,
+  messages: Array<{ role: string; content: string }>,
+  title?: string
+): Promise<ProjectChat> {
+  const body: { messages: Array<{ role: string; content: string }>; title?: string } = { messages };
+  if (title !== undefined) body.title = title;
+  return apiRequest<ProjectChat>(`/api/projects/${projectId}/chats/${chatId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // IDE: AI chat (streaming)
 // ---------------------------------------------------------------------------
 
 export async function sendAIMessage(
-  _projectId: number | string,
+  projectId: number | string,
   messages: { role: string; content: string }[],
   onChunk: (chunk: string) => void
 ): Promise<void> {
   const res = await apiRequestStream(`${AI}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ projectId: String(projectId), messages }),
   });
   if (!res.ok) throw new Error('Failed to send AI message');
   const reader = res.body?.getReader();
   if (!reader) return;
   const decoder = new TextDecoder();
+  let buffer = '';
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    const text = decoder.decode(value, { stream: true });
-    for (const line of text.split('\n')) {
-      if (line.startsWith('data: ')) {
-        const data = line.slice(6).trim();
-        if (data === '[DONE]') return;
-        try {
-          const parsed = JSON.parse(data);
-          const chunk =
-            parsed.choices?.[0]?.delta?.content ||
-            parsed.response ||
-            parsed.text ||
-            parsed.delta ||
-            '';
-          if (chunk) onChunk(chunk);
-        } catch {
-          if (data) onChunk(data);
-        }
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data: ')) continue;
+      const data = trimmed.slice(6).trim();
+      if (data === '[DONE]') return;
+      try {
+        const parsed = JSON.parse(data) as {
+          choices?: Array<{ delta?: { content?: string; reasoning?: string } }>;
+          response?: string;
+          text?: string;
+          delta?: string;
+        };
+        const delta = parsed.choices?.[0]?.delta;
+        const chunk =
+          (delta && typeof delta.content === 'string' ? delta.content : null) ||
+          parsed.response ||
+          parsed.text ||
+          parsed.delta ||
+          '';
+        if (chunk) onChunk(chunk);
+      } catch {
+        // Never append raw JSON to the message; skip malformed chunks
       }
     }
   }

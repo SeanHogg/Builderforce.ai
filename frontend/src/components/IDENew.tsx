@@ -1,32 +1,37 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { FileExplorer } from './FileExplorer';
 import { EditorTabs } from './EditorTabs';
 import { CodeEditor } from './CodeEditor';
 import { Terminal } from './Terminal';
-import { AIChat } from './AIChat';
+import { ProjectAIChat } from './ProjectAIChat';
 import { AITrainingPanel } from './AITrainingPanel';
 import { AgentPublishPanel } from './AgentPublishPanel';
 import { PreviewFrame } from './PreviewFrame';
-import { ThemeToggleButton } from '@/app/ThemeProvider';
 import { useWebContainer } from '@/hooks/useWebContainer';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
-import { saveFile, fetchFileContent, deleteFile, fetchFiles } from '@/lib/api';
+import { saveFile, fetchFileContent, deleteFile, fetchFiles, updateProject } from '@/lib/api';
+import { brain } from '@/lib/builderforceApi';
 
 interface IDEProps {
   project: Project;
   initialFiles: FileEntry[];
   onToggleLayout?: () => void;
+  onProjectUpdate?: (project: Project) => void;
+  /** Open the project details slide-out panel. */
+  onOpenProjectDetails?: () => void;
+  /** When opening from "Open in IDE" with a chat, select this project chat on load. */
+  initialChatId?: number | null;
 }
 
 type CenterView = 'preview' | 'code';
 type RightTab = 'files' | 'train' | 'publish';
 
-export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
+export function IDE({ project, initialFiles, onToggleLayout, onProjectUpdate, onOpenProjectDetails, initialChatId }: IDEProps) {
+  const router = useRouter();
   const [files, setFiles] = useState<FileEntry[]>(initialFiles);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [activeFile, setActiveFile] = useState<string | undefined>();
@@ -38,9 +43,17 @@ export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
   const [shellWriter, setShellWriter] = useState<WritableStreamDefaultWriter<string> | undefined>();
   const [isRunning, setIsRunning] = useState(false);
   const [completedJobs, setCompletedJobs] = useState<TrainingJob[]>([]);
+  const [projectTitle, setProjectTitle] = useState(project.name);
+  const [isSavingTitle, setIsSavingTitle] = useState(false);
   const shellStartedRef = useRef(false);
+  const terminalWriteRef = useRef<((data: string) => void) | null>(null);
 
-  const { state: wcState, mountFiles, runCommand, startShell, startDevServer, getOrBootWebContainer } = useWebContainer();
+  // Keep title in sync when project prop changes (e.g. after save elsewhere)
+  useEffect(() => {
+    setProjectTitle(project.name);
+  }, [project.name]);
+
+  const { state: wcState, mountFiles, runCommand, runCommandAndWait, startShell, startDevServer, getOrBootWebContainer } = useWebContainer();
   const { doc: ydoc, connected: collabConnected } = useCollaboration(project.id, 'user-local');
 
   // Task 2: Boot WebContainer and spawn an interactive shell immediately on IDE load.
@@ -52,18 +65,14 @@ export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
     const initShell = async () => {
       try {
         await getOrBootWebContainer();
-        // Wait for terminalWriter — poll briefly (terminal mounts asynchronously)
+        // Pipe shell output to terminal via ref so it works whether Terminal has mounted yet or not
         let attempts = 0;
         const trySpawn = async () => {
           const writer = await startShell((data) => {
-            setTerminalWriter((prev: ((data: string) => void) | undefined) => {
-              prev?.(data);
-              return prev;
-            });
+            terminalWriteRef.current?.(data);
           });
           setShellWriter(writer);
         };
-        // Retry a few times to wait for terminalWriter to be registered
         const waitAndSpawn = () => {
           attempts++;
           trySpawn().catch((e) => {
@@ -81,28 +90,29 @@ export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Once terminalWriter is ready, wire up the shellWriter output to it
+  // When Terminal mounts, store its write function in a ref so the single shell's output reaches it
   const handleTerminalReady = useCallback((write: (data: string) => void) => {
+    terminalWriteRef.current = write;
     setTerminalWriter(() => write);
-    // If shell is already started, we need to re-spawn with this writer
-    if (!shellStartedRef.current) return;
-    startShell((data) => write(data))
-      .then(writer => setShellWriter(writer))
-      .catch(e => console.warn('Shell re-spawn failed:', e));
-  }, [startShell]);
+  }, []);
 
   const openFile = useCallback(async (path: string) => {
-    setActiveFile(path);
-    if (!openFiles.includes(path)) {
-      setOpenFiles(prev => [...prev, path]);
-    }
-    if (!fileContents[path]) {
-      try {
-        const content = await fetchFileContent(project.id, path);
-        setFileContents(prev => ({ ...prev, [path]: content }));
-      } catch {
-        setFileContents(prev => ({ ...prev, [path]: '' }));
+    if (fileContents[path] !== undefined) {
+      setActiveFile(path);
+      if (!openFiles.includes(path)) {
+        setOpenFiles(prev => [...prev, path]);
       }
+      return;
+    }
+    try {
+      const content = await fetchFileContent(project.id, path);
+      setFileContents(prev => ({ ...prev, [path]: content }));
+      setOpenFiles(prev => (prev.includes(path) ? prev : [...prev, path]));
+      setActiveFile(path);
+    } catch {
+      setFileContents(prev => ({ ...prev, [path]: '' }));
+      setOpenFiles(prev => (prev.includes(path) ? prev : [...prev, path]));
+      setActiveFile(path);
     }
   }, [openFiles, fileContents, project.id]);
 
@@ -151,27 +161,38 @@ export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
     if (isRunning) return;
     setIsRunning(true);
     try {
+      terminalWriter?.('\r\n\x1b[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
+      terminalWriter?.('\x1b[36m▶ Run started\x1b[0m\r\n');
+      terminalWriter?.('\x1b[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n\r\n');
+
       // Fetch all file contents not yet loaded
       const allContents: Record<string, string> = { ...fileContents };
       const unfetched = files.filter(f => f.type === 'file' && !(f.path in allContents));
-      
-      terminalWriter?.('\r\n\x1b[36mFetching file contents...\x1b[0m\r\n');
-      await Promise.all(
-        unfetched.map(async (f) => {
-          try {
-            const content = await fetchFileContent(project.id, f.path);
-            allContents[f.path] = content;
-            terminalWriter?.(`\x1b[32m✓\x1b[0m ${f.path}\r\n`);
-          } catch (error) {
-            terminalWriter?.(`\x1b[31m✗\x1b[0m ${f.path} - Failed to fetch\r\n`);
-            console.error(`Failed to fetch ${f.path}:`, error);
-          }
-        })
-      );
 
+      terminalWriter?.('\x1b[36m[1/4] Fetching file contents...\x1b[0m\r\n');
+      if (unfetched.length === 0) {
+        terminalWriter?.('  No files to fetch (using cached content).\r\n');
+      } else {
+        await Promise.all(
+          unfetched.map(async (f) => {
+            try {
+              const content = await fetchFileContent(project.id, f.path);
+              allContents[f.path] = content;
+              terminalWriter?.(`  \x1b[32m✓\x1b[0m ${f.path}\r\n`);
+            } catch (error) {
+              terminalWriter?.(`  \x1b[31m✗\x1b[0m ${f.path} - Failed to fetch\r\n`);
+              console.error(`Failed to fetch ${f.path}:`, error);
+            }
+          })
+        );
+        terminalWriter?.(`  Fetched ${unfetched.length} file(s).\r\n`);
+      }
+      terminalWriter?.('\r\n');
+
+      terminalWriter?.('\x1b[36m[2/4] Checking project files...\x1b[0m\r\n');
       // Stub empty files with default content
       if (!allContents['package.json'] || allContents['package.json'].trim() === '') {
-        terminalWriter?.('\x1b[33m⚠\x1b[0m package.json is empty, using default\r\n');
+        terminalWriter?.('  \x1b[33m⚠\x1b[0m package.json is empty, using default\r\n');
         allContents['package.json'] = JSON.stringify({
           name: 'my-app',
           version: '1.0.0',
@@ -193,7 +214,7 @@ export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
       }
 
       if (!allContents['index.html'] || allContents['index.html'].trim() === '') {
-        terminalWriter?.('\x1b[33m⚠\x1b[0m index.html is empty, using default\r\n');
+        terminalWriter?.('  \x1b[33m⚠\x1b[0m index.html is empty, using default\r\n');
         allContents['index.html'] = `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -203,14 +224,14 @@ export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.js"></script>
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>`;
       }
 
-      if (!allContents['src/main.js'] || allContents['src/main.js'].trim() === '') {
-        terminalWriter?.('\x1b[33m⚠\x1b[0m src/main.js is empty, using default\r\n');
-        allContents['src/main.js'] = `import React from 'react';
+      if (!allContents['src/main.jsx'] || allContents['src/main.jsx'].trim() === '') {
+        terminalWriter?.('  \x1b[33m⚠\x1b[0m src/main.jsx is empty, using default\r\n');
+        allContents['src/main.jsx'] = `import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 
@@ -218,7 +239,7 @@ function App() {
   return (
     <div style={{ padding: '2rem', fontFamily: 'system-ui' }}>
       <h1>Hello World! 🚀</h1>
-      <p>Edit src/main.js to get started.</p>
+      <p>Edit src/main.jsx to get started.</p>
     </div>
   );
 }
@@ -227,6 +248,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);`;
       }
 
       if (!allContents['src/index.css'] || allContents['src/index.css'].trim() === '') {
+        terminalWriter?.('  \x1b[33m⚠\x1b[0m src/index.css is empty, using default\r\n');
         allContents['src/index.css'] = `body {
   margin: 0;
   padding: 0;
@@ -235,6 +257,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);`;
       }
 
       if (!allContents['vite.config.js'] || allContents['vite.config.js'].trim() === '') {
+        terminalWriter?.('  \x1b[33m⚠\x1b[0m vite.config.js is empty, using default\r\n');
         allContents['vite.config.js'] = `import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -245,6 +268,17 @@ export default defineConfig({
 
       setFileContents(allContents);
 
+      // Ensure Files tab shows all paths we have content for (including defaults we just added)
+      const existingPaths = new Set(files.map(f => f.path));
+      const added = Object.keys(allContents).filter(p => !existingPaths.has(p)).map(path => ({
+        path,
+        content: allContents[path],
+        type: 'file' as const,
+      }));
+      if (added.length > 0) {
+        setFiles(prev => [...prev, ...added]);
+      }
+
       // Validate package.json
       if (allContents['package.json']) {
         try {
@@ -254,25 +288,34 @@ export default defineConfig({
           throw new Error('Invalid package.json: ' + (e instanceof Error ? e.message : 'Parse error'));
         }
       }
+      terminalWriter?.('  \x1b[32m✓\x1b[0m Project files ready.\r\n\r\n');
 
-      terminalWriter?.('\r\n\x1b[36mMounting project files...\x1b[0m\r\n');
+      terminalWriter?.('\x1b[36m[3/4] Mounting project files...\x1b[0m\r\n');
       await mountFiles(allContents);
+      const fileCount = Object.keys(allContents).length;
+      terminalWriter?.(`  \x1b[32m✓\x1b[0m Mounted ${fileCount} file(s).\r\n\r\n`);
 
       if (allContents['package.json']) {
-        terminalWriter?.('\r\n\x1b[36mRunning npm install...\x1b[0m\r\n');
-        await runCommand('npm', ['install'], (data) => terminalWriter?.(data));
+        terminalWriter?.('\x1b[36m[4/4] Running npm install...\x1b[0m\r\n');
+        const installCode = await runCommandAndWait('npm', ['install'], (data) => terminalWriter?.(data));
+        if (installCode !== 0) {
+          terminalWriter?.('\r\n\x1b[31m✗ npm install failed (exit code ' + installCode + '). Fix errors above and try again.\x1b[0m\r\n');
+          return;
+        }
+        terminalWriter?.('\r\n  \x1b[32m✓\x1b[0m npm install completed.\r\n\r\n');
       }
 
-      // Start the dev server
-      terminalWriter?.('\r\n\x1b[36mStarting dev server...\x1b[0m\r\n');
+      terminalWriter?.('\x1b[36mStarting dev server...\x1b[0m\r\n');
       const url = await startDevServer((data) => terminalWriter?.(data));
+      terminalWriter?.(`\r\n  \x1b[32m✓\x1b[0m Dev server ready at \x1b[33m${url}\x1b[0m\r\n`);
+      terminalWriter?.('\x1b[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n\r\n');
       setPreviewUrl(url);
       setCenterView('preview');
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
-      console.error('Failed to start dev server:', e);
-      
-      // Parse and display npm errors in a user-friendly way
+      console.error('Run failed:', e);
+
+      // Always surface the error in the terminal so the user sees it
       if (errorMsg.includes('EJSONPARSE')) {
         terminalWriter?.('\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
         terminalWriter?.('\x1b[31m✗ PACKAGE.JSON ERROR\x1b[0m\r\n');
@@ -287,7 +330,6 @@ export default defineConfig({
         terminalWriter?.('}\r\n');
         terminalWriter?.('\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
       } else if (errorMsg.includes('output:')) {
-        // Extract and display the npm output
         const outputMatch = errorMsg.match(/output:\n([\s\S]+)/);
         if (outputMatch) {
           terminalWriter?.('\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
@@ -303,7 +345,7 @@ export default defineConfig({
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, startDevServer, mountFiles, runCommand, terminalWriter, files, fileContents, project.id]);
+  }, [isRunning, startDevServer, mountFiles, runCommand, runCommandAndWait, terminalWriter, files, fileContents, project.id]);
 
   const handleTerminalInput = useCallback((data: string) => {
     shellWriter?.write(data);
@@ -317,6 +359,23 @@ export default defineConfig({
     } catch { /* silent */ }
   }, [project.id]);
 
+  const handleStartBrainStormSession = useCallback(
+    async (message: string) => {
+      try {
+        const title = message.slice(0, 80).trim() || 'New chat';
+        const chat = await brain.createChat({
+          title,
+          projectId: typeof project.id === 'number' ? project.id : Number(project.id),
+        });
+        await brain.sendMessages(chat.id, [{ role: 'user', content: message }]);
+        router.push(`/brainstorm?chat=${chat.id}`);
+      } catch (e) {
+        console.error('Start Brain Storm session failed:', e);
+      }
+    },
+    [project.id, router]
+  );
+
   const statusLabel = wcState.status === 'booting'
     ? '⏳ Booting…'
     : wcState.status === 'ready'
@@ -326,21 +385,56 @@ export default defineConfig({
         : '';
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)', overflow: 'hidden' }}>
-      {/* Task 5: Top bar — claw logo, project name, back link, theme toggle, run button */}
+    <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)', overflow: 'hidden' }}>
+      {/* Top bar — editable project title, theme toggle, run button */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 10, padding: '6px 14px',
+        display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px',
         background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)',
-        flexShrink: 0, minHeight: 46,
+        flexShrink: 0, minHeight: 40,
       }}>
-        {/* Left: back + logo + project */}
-        <Link href="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', color: 'var(--text-muted)', fontSize: '0.78rem', flexShrink: 0, padding: '4px 8px', borderRadius: 6, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
-          ← Dashboard
-        </Link>
-        <Image src="/claw.png" alt="" width={20} height={20} style={{ filter: 'drop-shadow(0 0 6px var(--logo-glow))', flexShrink: 0 }} />
-        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-          {project.name}
-        </span>
+        {/* Left: editable project title */}
+        <input
+          type="text"
+          value={projectTitle}
+          onChange={e => setProjectTitle(e.target.value)}
+          onBlur={async (e) => {
+            e.currentTarget.style.borderColor = 'var(--border-subtle)';
+            const name = projectTitle.trim() || project.name;
+            if (name === project.name) {
+              setProjectTitle(project.name);
+              return;
+            }
+            setIsSavingTitle(true);
+            try {
+              const updated = await updateProject(project.id, { name });
+              onProjectUpdate?.({ ...project, ...updated });
+              setProjectTitle(updated.name);
+            } catch {
+              setProjectTitle(project.name);
+            } finally {
+              setIsSavingTitle(false);
+            }
+          }}
+          onKeyDown={e => {
+            if (e.key === 'Enter') e.currentTarget.blur();
+          }}
+          onFocus={e => { e.currentTarget.style.borderColor = 'var(--coral-bright)'; }}
+          disabled={isSavingTitle}
+          title="Edit project name (saves on blur or Enter)"
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontWeight: 700,
+            fontSize: '0.9rem',
+            color: 'var(--text-primary)',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 6,
+            padding: '6px 10px',
+            minWidth: 120,
+            maxWidth: 320,
+            outline: 'none',
+          }}
+        />
         {project.description && (
           <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>
             — {project.description}
@@ -350,7 +444,7 @@ export default defineConfig({
         {/* Spacer */}
         <div style={{ flex: 1 }} />
 
-        {/* Right: collab status, WC status, theme toggle, layout toggle, run, share */}
+        {/* Right: collab status, layout toggle, run, details (projects icon) */}
         {onToggleLayout && (
           <button
             onClick={onToggleLayout}
@@ -379,7 +473,6 @@ export default defineConfig({
         {statusLabel && (
           <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{statusLabel}</span>
         )}
-        <ThemeToggleButton />
         <button
           onClick={handleRun}
           disabled={isRunning}
@@ -394,50 +487,70 @@ export default defineConfig({
         >
           {isRunning ? '⏳ Running…' : '▶ Run'}
         </button>
-        <button
-          style={{
-            background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-            border: '1px solid var(--border-subtle)', borderRadius: 8,
-            padding: '5px 12px', fontSize: '0.82rem', cursor: 'pointer', flexShrink: 0,
-          }}
-        >
-          Share
-        </button>
+        {onOpenProjectDetails && (
+          <button
+            type="button"
+            onClick={onOpenProjectDetails}
+            style={{
+              background: 'var(--bg-elevated)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 8,
+              padding: '5px 12px',
+              fontSize: '0.82rem',
+              cursor: 'pointer',
+              flexShrink: 0,
+              fontFamily: 'var(--font-display)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+            }}
+            title="Project details"
+          >
+            <span style={{ fontSize: '1rem' }}>▦</span>
+            Details
+          </button>
+        )}
       </div>
 
       {/* Main content */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* AI Chat */}
+        {/* Brain: project-scoped chats (same selector as Brain Storm, project fixed) */}
         <div style={{ width: 320, flexShrink: 0, borderRight: '1px solid var(--border-subtle)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={{
-            padding: '14px 16px',
-            borderBottom: '1px solid var(--border-subtle)',
-            background: 'var(--bg-base)',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ fontSize: '1.5rem' }}>🤖</div>
-              <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>
-                AI Assistant
-              </div>
-            </div>
-          </div>
-          <div style={{ flex: 1, overflow: 'hidden' }}>
-            <AIChat
-              projectId={project.id}
-              activeFile={activeFile}
-              activeFileContent={activeFile ? (fileContents[activeFile] || '') : undefined}
-              onApplyCode={activeFile ? (code) => {
-                setFileContents(prev => ({ ...prev, [activeFile]: code }));
-                saveFile(project.id, activeFile, code).catch(console.error);
-              } : undefined}
-            />
-          </div>
+          <ProjectAIChat
+            projectId={project.id}
+            projectName={project.name}
+            activeFile={activeFile}
+            activeFileContent={activeFile ? (fileContents[activeFile] || '') : undefined}
+            onApplyCode={activeFile ? (code) => {
+              setFileContents(prev => ({ ...prev, [activeFile]: code }));
+              saveFile(project.id, activeFile, code).catch(console.error);
+            } : undefined}
+            onCreateFile={(path, content) => {
+              setFileContents(prev => ({ ...prev, [path]: content }));
+              saveFile(project.id, path, content)
+                .then(() => {
+                  refreshFiles();
+                  if (!openFiles.includes(path)) {
+                    setOpenFiles(prev => [...prev, path]);
+                    setActiveFile(path);
+                  }
+                })
+                .catch(console.error);
+            }}
+            onStartBrainStormSession={handleStartBrainStormSession}
+            initialChatId={initialChatId}
+            onChatSelect={(chatId) => {
+              const path = `/ide/${project.id}`;
+              router.replace(chatId != null ? `${path}?chat=${chatId}` : path, { scroll: false });
+            }}
+          />
         </div>
 
         {/* Center panel: Preview/Code toggle + Terminal */}
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
           {/* Preview/Code toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)', padding: '4px 8px', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)', padding: '2px 6px', gap: 6, flexShrink: 0 }}>
             {(['preview', 'code'] as CenterView[]).map(view => (
               <button
                 key={view}
@@ -480,8 +593,9 @@ export default defineConfig({
               />
               <div style={{ flex: 1, overflow: 'hidden' }}>
                 <CodeEditor
+                  key={activeFile ?? 'none'}
                   filePath={activeFile}
-                  content={activeFile ? (fileContents[activeFile] || '') : ''}
+                  content={activeFile ? (fileContents[activeFile] ?? '') : ''}
                   onChange={handleEditorChange}
                   ydoc={ydoc}
                 />
@@ -489,14 +603,14 @@ export default defineConfig({
             </div>
           </div>
 
-          {/* Terminal at bottom */}
-          <div style={{ height: 200, borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)', padding: '4px 8px' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                📟 Terminal
+          {/* Terminal at bottom — shell container */}
+          <div style={{ height: 220, borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', flexShrink: 0, background: '#1a1a2e' }}>
+            <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.25)', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '2px 8px', flexShrink: 0 }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Terminal
               </span>
             </div>
-            <div style={{ flex: 1, overflow: 'hidden' }}>
+            <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
               <Terminal
                 onReady={handleTerminalReady}
                 onInput={handleTerminalInput}
@@ -513,9 +627,9 @@ export default defineConfig({
                 key={tab}
                 onClick={() => setRightTab(tab)}
                 style={{
-                  flex: 1, padding: '7px 4px', fontSize: '0.72rem', fontWeight: 600,
+                  flex: 1, padding: '5px 4px', fontSize: '0.72rem', fontWeight: 600,
                   background: rightTab === tab ? 'var(--bg-elevated)' : 'transparent',
-                  color: rightTab === tab ? 'var(--text-primary)' : 'var(--text-muted)',
+                  color: rightTab === tab ? 'var(--text-primary)' : 'var(--text-secondary)',
                   border: 'none', borderTop: rightTab === tab ? '2px solid var(--coral-bright)' : '2px solid transparent',
                   cursor: 'pointer', fontFamily: 'var(--font-display)',
                   whiteSpace: 'nowrap',

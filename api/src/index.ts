@@ -129,7 +129,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/approvals', createApprovalRoutes(db));
   app.route('/api/brain',     createBrainRoutes(brainService, db));
   app.route('/api/ide',       createIdeRoutes());
-  app.route('/api/ai',        createIdeAiRoutes());
+  app.route('/api/ai',        createIdeAiRoutes(projectService));
 
   app.onError(errorHandler);
   app.notFound((c) => addCorsToResponse(c, c.json({ error: 'Not found' }, 404)));
@@ -141,8 +141,33 @@ function buildApp(env: Env): Hono<HonoEnv> {
 // Worker export
 // ---------------------------------------------------------------------------
 
+const DEV_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5173', 'http://127.0.0.1:5173'];
+
+function optionCorsAllowOrigin(origin: string | null, corsOrigins: string | undefined): string {
+  if (!origin) return '*';
+  if (corsOrigins === '*') return '*';
+  const allowed = (corsOrigins ?? 'https://builderforce.ai').split(',').map((s) => s.trim()).filter(Boolean);
+  if (allowed.includes(origin) || DEV_ORIGINS.includes(origin)) return origin;
+  return '*';
+}
+
 export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext): Response | Promise<Response> {
+    // Handle OPTIONS without building the app so we never require NEON_DATABASE_URL for preflight.
+    if (request.method === 'OPTIONS') {
+      const origin = request.headers.get('Origin');
+      const allow = optionCorsAllowOrigin(origin, env.CORS_ORIGINS);
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': allow,
+          'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+          'Access-Control-Max-Age': '86400',
+          Vary: 'Origin',
+        },
+      });
+    }
     return buildApp(env).fetch(request, env, ctx);
   },
 } satisfies ExportedHandler<Env>;

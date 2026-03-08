@@ -1,30 +1,27 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { fetchProject, fetchFiles, updateProject } from '@/lib/api';
 import { persistLastProjectId } from '@/lib/auth';
 import type { Project, FileEntry } from '@/lib/types';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
 
-/**
- * Load IDE only on the client so @huggingface/transformers (ONNX WASM ~21MB)
- * is not bundled into the edge function. Keeps worker under Cloudflare's 3 MiB limit.
- */
 const IDE = dynamic(() => import('@/components/IDE').then((m) => m.IDE), { ssr: false });
 
 /**
- * ProjectPage — loads project and files from api.builderforce.ai.
- * Project id in URL is numeric (unified API project).
+ * IDE page — opens a project in the IDE. Use ?chat= to open with a specific project chat active
+ * (e.g. from Brain Storm "Open in IDE" with the current chat).
  */
-export const runtime = 'edge';
-
-export default function ProjectPage() {
+export default function IDEPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const idRaw = params?.id ?? '';
   const id = idRaw ? (Number(idRaw) || idRaw) : '';
+  const chatIdParam = searchParams.get('chat');
+  const initialChatId = chatIdParam ? (Number(chatIdParam) || null) : null;
 
   const [project, setProject] = useState<Project | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -50,7 +47,6 @@ export default function ProjectPage() {
         setFiles(fileList);
         setStatus('ready');
         persistLastProjectId(String(proj.id));
-        // First-time modal for Untitled projects, once per session
         const isUntitled = proj.name === 'Untitled' || proj.name.startsWith('Untitled-');
         if (isUntitled && typeof sessionStorage !== 'undefined') {
           const key = 'builderforce-first-time-modal-shown';
@@ -174,6 +170,7 @@ export default function ProjectPage() {
           initialFiles={files}
           onProjectUpdate={setProject}
           onOpenProjectDetails={() => setProjectDetailsOpen(true)}
+          initialChatId={initialChatId}
         />
       </div>
       {project && (
@@ -182,10 +179,9 @@ export default function ProjectPage() {
           open={projectDetailsOpen}
           onClose={() => setProjectDetailsOpen(false)}
           onProjectUpdate={setProject}
-          projectHref={`/projects/${project.id}`}
+          projectHref={`/ide/${project.id}`}
         />
       )}
-      {/* First-time / Untitled project: prompt to name project and optionally create workspace */}
       {openFirstTimeModal && (
         <div
           style={{
@@ -214,7 +210,7 @@ export default function ProjectPage() {
               Name your project
             </h3>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: 16 }}>
-              Give your project a name to save it. Your first workspace is set as default.
+              Give your project a name to save it.
             </p>
             <form onSubmit={handleSaveProjectName}>
               <input
@@ -270,17 +266,6 @@ export default function ProjectPage() {
                 </button>
               </div>
             </form>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 16 }}>
-              Need another workspace? Create one at{' '}
-              <a
-                href="https://api.builderforce.ai"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ color: 'var(--coral-bright)' }}
-              >
-                api.builderforce.ai
-              </a>
-            </p>
           </div>
         </div>
       )}

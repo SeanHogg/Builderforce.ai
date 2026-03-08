@@ -128,7 +128,7 @@ export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, on
       )}
 
       {!showHeader && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
           <button
             onClick={() => setIsCreating(true)}
             title="New file"
@@ -138,7 +138,7 @@ export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, on
       )}
 
       {isCreating && (
-        <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+        <div style={{ padding: '4px 6px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
           <input
             autoFocus
             value={newFileName}
@@ -160,7 +160,7 @@ export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, on
 
       <div style={{ flex: 1, overflowY: 'auto', paddingTop: 4 }}>
         {tree.length === 0 ? (
-          <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px 12px', fontSize: '0.78rem' }}>
+          <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '16px 10px', fontSize: '0.78rem' }}>
             <div style={{ fontSize: '1.5rem', marginBottom: 6 }}>📂</div>
             No files yet.<br />Click + to create one.
           </div>

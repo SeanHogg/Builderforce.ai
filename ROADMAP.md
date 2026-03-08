@@ -17,7 +17,7 @@
 - Enable developers to fine-tune LLMs using their own instruction datasets (**human-in-the-loop training**)
 - Embed trained agents using **CoderClaw technology** — users register themselves into the agentic workforce
 - Allow agents to be registered in the Workforce Registry
-- **First customer use-case:** [CoderClaw](https://github.com/SeanHogg/coderClaw) — an AI-powered code review and automation tool powered by a Builderforce-trained agent
+- **First customer use-case:** [CoderClaw](https://github.com/SeanHogg/coderClaw) — an AI-powered code review and automation tool powered by a Builderforce-trained agent. CoderClawLink orchestration docs: [docs.coderclaw.ai/link/](https://docs.coderclaw.ai/link/).
 
 #### Phase 2 — Ecosystem
 - Open the Workforce Registry to the public — any developer can list an agent

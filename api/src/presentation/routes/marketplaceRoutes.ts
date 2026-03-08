@@ -96,18 +96,23 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
 
   /**
    * POST /marketplace/auth/register
-   * Body: { email, username, password, display_name? }
+   * Body: { email, password, username?, display_name? } — username defaults to email
    */
   router.post('/auth/register', async (c) => {
     const body = await c.req.json<{
       email: string;
-      username: string;
+      username?: string;
       password: string;
       display_name?: string;
     }>();
-    const { email, username, password, display_name } = body;
-    if (!email || !username || !password) {
-      return c.json({ error: 'email, username, and password are required' }, 400);
+    const email = (body.email ?? '').toLowerCase().trim();
+    const username = (body.username && body.username.trim())
+      ? body.username.trim().toLowerCase()
+      : email;
+    const password = body.password;
+    const display_name = body.display_name;
+    if (!email || !password) {
+      return c.json({ error: 'email and password are required' }, 400);
     }
 
     // Check for duplicates

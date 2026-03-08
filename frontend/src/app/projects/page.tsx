@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Project } from '@/lib/types';
 import { fetchProjects, createProject } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
+import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
+import { ProjectCard } from '@/components/ProjectCard';
 
 /**
  * Projects page — full project list, create project modal, open project → IDE.
@@ -23,6 +24,7 @@ export default function ProjectsPage() {
   const [newProjectDesc, setNewProjectDesc] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detailsProject, setDetailsProject] = useState<Project | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -71,7 +73,7 @@ export default function ProjectsPage() {
 
   return (
     <div style={{ flex: 1, background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      <main className="max-w-6xl mx-auto px-4 py-5">
         {/* New Project Modal */}
         {showForm && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -222,62 +224,27 @@ export default function ProjectsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {projects.map((project) => (
-              <Link
+              <ProjectCard
                 key={project.id}
-                href={`/projects/${project.id}`}
-                style={{
-                  display: 'block',
-                  padding: 20,
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 12,
-                  textDecoration: 'none',
-                  color: 'inherit',
-                  transition: 'border-color 0.2s',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                  <span style={{ fontSize: 24 }}>💻</span>
-                  {project.template && (
-                    <span
-                      style={{
-                        fontSize: 11,
-                        color: 'var(--text-muted)',
-                        background: 'var(--surface-interactive)',
-                        padding: '2px 8px',
-                        borderRadius: 6,
-                      }}
-                    >
-                      {project.template}
-                    </span>
-                  )}
-                </div>
-                <h3 style={{ fontWeight: 600, marginBottom: 4, color: 'var(--text-primary)' }}>{project.name}</h3>
-                {project.description && (
-                  <p
-                    style={{
-                      fontSize: 13,
-                      color: 'var(--text-secondary)',
-                      marginBottom: 8,
-                      overflow: 'hidden',
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                    }}
-                  >
-                    {project.description}
-                  </p>
-                )}
-                <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  {project.created_at
-                    ? new Date(project.created_at).toLocaleDateString()
-                    : (project as { createdAt?: string }).createdAt
-                      ? new Date((project as { createdAt?: string }).createdAt!).toLocaleDateString()
-                      : ''}
-                </p>
-              </Link>
+                project={project}
+                onCardClick={setDetailsProject}
+                onDetailsClick={setDetailsProject}
+                showDetailsButton
+              />
             ))}
           </div>
+        )}
+
+        {detailsProject && (
+          <ProjectDetailsPanel
+            project={detailsProject}
+            open={!!detailsProject}
+            onClose={() => setDetailsProject(null)}
+            onProjectUpdate={(updated) => {
+              setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+              setDetailsProject((p) => (p && p.id === updated.id ? updated : p));
+            }}
+          />
         )}
       </main>
     </div>

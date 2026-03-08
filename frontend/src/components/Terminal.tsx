@@ -80,8 +80,8 @@ export function Terminal({ onReady, onInput }: TerminalProps) {
   }, []);
 
   return (
-    <div className="h-full bg-gray-900 p-1">
-      <div ref={containerRef} className="h-full" />
+    <div className="shell-container h-full">
+      <div ref={containerRef} className="h-full w-full" />
     </div>
   );
 }

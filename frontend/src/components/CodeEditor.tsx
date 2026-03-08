@@ -1,11 +1,45 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { Component, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { getLanguage } from '@/lib/utils';
 import type * as Y from 'yjs';
 
-const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
+/** Catches ChunkLoadError when Monaco fails to load and offers retry (reload). */
+class EditorChunkErrorBoundary extends Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="h-full flex items-center justify-center bg-gray-900 text-gray-600">
+          <div className="text-center max-w-sm">
+            <div className="text-4xl mb-4">📝</div>
+            <p className="text-sm mb-2">Editor failed to load (chunk error).</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 rounded bg-gray-700 text-white text-sm hover:bg-gray-600"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const MonacoEditor = dynamic(
+  () => import(/* webpackChunkName: "monaco-editor-react" */ '@monaco-editor/react'),
+  { ssr: false, loading: () => <div className="h-full flex items-center justify-center bg-gray-900 text-gray-500"><div className="text-center"><div className="text-4xl mb-4">📝</div><p className="text-sm">Loading editor…</p></div></div> }
+);
 
 interface CodeEditorProps {
   filePath?: string;
@@ -67,24 +101,26 @@ export function CodeEditor({ filePath, content, onChange, ydoc }: CodeEditorProp
   }
 
   return (
-    <MonacoEditor
-      height="100%"
-      language={getLanguage(filePath)}
-      value={content}
-      theme="vs-dark"
-      onChange={(value) => onChange(value || '')}
-      onMount={handleMount}
-      options={{
-        fontSize: 14,
-        minimap: { enabled: true },
-        scrollBeyondLastLine: false,
-        automaticLayout: true,
-        tabSize: 2,
-        wordWrap: 'on',
-        lineNumbers: 'on',
-        renderWhitespace: 'selection',
-        fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-      }}
-    />
+    <EditorChunkErrorBoundary>
+      <MonacoEditor
+        height="100%"
+        language={getLanguage(filePath)}
+        value={content}
+        theme="vs-dark"
+        onChange={(value) => onChange(value || '')}
+        onMount={handleMount}
+        options={{
+          fontSize: 14,
+          minimap: { enabled: true },
+          scrollBeyondLastLine: false,
+          automaticLayout: true,
+          tabSize: 2,
+          wordWrap: 'on',
+          lineNumbers: 'on',
+          renderWhitespace: 'selection',
+          fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+        }}
+      />
+    </EditorChunkErrorBoundary>
   );
 }

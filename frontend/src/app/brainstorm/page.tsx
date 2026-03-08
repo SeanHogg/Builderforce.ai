@@ -1,7 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { brain, llmChat, type BrainChat, type BrainMessage } from '@/lib/builderforceApi';
+import { fetchProjects, createProject } from '@/lib/api';
+import type { Project } from '@/lib/types';
+import { ChatInput, type ChatInputAttachment } from '@/components/ChatInput';
+import { ChatMessageContent } from '@/components/ChatMessageContent';
 
 function formatTime(ts: string) {
   const d = new Date(ts);
@@ -11,6 +17,7 @@ function formatTime(ts: string) {
 }
 
 export default function BrainstormPage() {
+  const searchParams = useSearchParams();
   const [chatList, setChatList] = useState<BrainChat[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [activeChat, setActiveChat] = useState<BrainChat | null>(null);
@@ -19,24 +26,59 @@ export default function BrainstormPage() {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [assigningTo, setAssigningTo] = useState<number | null>(null);
+  const [filterProjectId, setFilterProjectId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [pendingAttachments, setPendingAttachments] = useState<ChatInputAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [summarizingId, setSummarizingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
+  const [feedbackMap, setFeedbackMap] = useState<Record<number, 'up' | 'down'>>({});
   const msgEndRef = useRef<HTMLDivElement>(null);
+  const autoRepliedChatIdRef = useRef<number | null>(null);
 
   const loadChats = useCallback(async () => {
     setLoadingList(true);
     setError('');
     try {
-      const chats = await brain.listChats();
+      const params = filterProjectId === 'none' ? { projectId: 'none' } : filterProjectId ? { projectId: filterProjectId } : undefined;
+      const chats = await brain.listChats(params);
       setChatList(chats);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load chats');
     } finally {
       setLoadingList(false);
     }
-  }, []);
+  }, [filterProjectId]);
 
   useEffect(() => {
     loadChats();
   }, [loadChats]);
+
+  useEffect(() => {
+    fetchProjects().then(setProjects).catch(() => setProjects([]));
+  }, []);
+
+  const assignChatToProject = useCallback(async (chatId: number, projectId: number | null) => {
+    setAssigningTo(chatId);
+    setError('');
+    try {
+      const updated = await brain.updateChat(chatId, { projectId });
+      setChatList((prev) => prev.map((c) => (c.id === chatId ? { ...c, projectId: updated.projectId } : c)));
+      if (activeChat?.id === chatId) setActiveChat((c) => (c && c.id === chatId ? { ...c, projectId: updated.projectId } : c));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to assign to project');
+    } finally {
+      setAssigningTo(null);
+    }
+  }, [activeChat?.id]);
 
   const selectChat = useCallback(async (chat: BrainChat) => {
     if (activeChat?.id === chat.id) return;
@@ -55,15 +97,165 @@ export default function BrainstormPage() {
     }
   }, [activeChat?.id]);
 
+  useEffect(() => {
+    const map: Record<number, 'up' | 'down'> = {};
+    messages.forEach((msg) => {
+      if (msg.metadata) {
+        try {
+          const meta = JSON.parse(msg.metadata) as { feedback?: 'up' | 'down' };
+          if (meta.feedback === 'up' || meta.feedback === 'down') map[msg.id] = meta.feedback;
+        } catch { /* ignore */ }
+      }
+    });
+    setFeedbackMap(map);
+  }, [messages]);
+
+  const copyMessage = useCallback(async (msg: BrainMessage) => {
+    try {
+      await navigator.clipboard.writeText(msg.content);
+      setCopiedMessageId(msg.id);
+      setTimeout(() => setCopiedMessageId((id) => (id === msg.id ? null : id)), 2000);
+    } catch { /* ignore */ }
+  }, []);
+
+  const submitFeedback = useCallback(async (msg: BrainMessage, value: 'up' | 'down') => {
+    const current = feedbackMap[msg.id];
+    const newValue = current === value ? null : value;
+    setFeedbackMap((prev) => {
+      const next = { ...prev };
+      if (newValue) next[msg.id] = newValue;
+      else delete next[msg.id];
+      return next;
+    });
+    try {
+      await brain.setMessageFeedback(msg.id, newValue);
+    } catch { /* best-effort */ }
+  }, [feedbackMap]);
+
+  const chatIdFromUrl = searchParams.get('chat');
+  useEffect(() => {
+    if (!chatIdFromUrl) return;
+    const id = Number(chatIdFromUrl);
+    if (Number.isNaN(id)) return;
+    let chat = chatList.find((c) => c.id === id);
+    if (chat && activeChat?.id !== chat.id) {
+      selectChat(chat);
+      return;
+    }
+    if (!loadingList && !chat && id) {
+      brain.getChat(id).then((c) => {
+        setChatList((prev) => {
+          if (prev.some((x) => x.id === c.id)) return prev;
+          return [c, ...prev];
+        });
+        selectChat(c);
+      }).catch(() => {});
+    }
+  }, [chatIdFromUrl, loadingList, chatList, activeChat?.id, selectChat]);
+
   const createNewChat = useCallback(async () => {
     try {
-      const chat = await brain.createChat({ title: 'New chat' });
+      // Associate new chat with the project currently selected in the Project dropdown (if any).
+      const projectId =
+        filterProjectId && filterProjectId !== 'none'
+          ? Number(filterProjectId)
+          : null;
+      const chat = await brain.createChat({ title: 'New chat', projectId });
       setChatList((prev) => [chat, ...prev]);
       await selectChat(chat);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create chat');
     }
-  }, [selectChat]);
+  }, [selectChat, filterProjectId]);
+
+  const handleAttach = useCallback(async (file: File) => {
+    setUploading(true);
+    try {
+      const result = await brain.upload(file);
+      setPendingAttachments((prev) => [...prev, { key: result.key, name: result.name, type: result.type }]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  }, []);
+
+  const createProjectAndAssign = useCallback(async () => {
+    const name = newProjectName.trim();
+    if (!name || !activeChat || creatingProject) return;
+    setCreatingProject(true);
+    try {
+      const project = await createProject({ name });
+      setProjects((prev) => [...prev, project]);
+      await assignChatToProject(activeChat.id, project.id);
+      setShowNewProject(false);
+      setNewProjectName('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to create project');
+    } finally {
+      setCreatingProject(false);
+    }
+  }, [activeChat, newProjectName, creatingProject, assignChatToProject]);
+
+  const filteredChatList = searchQuery.trim()
+    ? chatList.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
+    : chatList;
+
+  const projectName = (id: number | null) => (id == null ? '' : (projects.find((p) => p.id === id)?.name ?? `#${id}`));
+
+  const handleRename = useCallback(async () => {
+    if (renamingId == null || !renameValue.trim()) {
+      setRenamingId(null);
+      setRenameValue('');
+      return;
+    }
+    try {
+      const updated = await brain.updateChat(renamingId, { title: renameValue.trim() });
+      setChatList((prev) => prev.map((c) => (c.id === renamingId ? { ...c, title: updated.title } : c)));
+      if (activeChat?.id === renamingId) setActiveChat((c) => (c && c.id === renamingId ? { ...c, title: updated.title } : c));
+      setRenamingId(null);
+      setRenameValue('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Rename failed');
+    }
+  }, [renamingId, renameValue, activeChat?.id]);
+
+  const handleSummarize = useCallback(async (chatId: number) => {
+    setSummarizingId(chatId);
+    setError('');
+    try {
+      const result = await brain.summarizeChat(chatId);
+      if ('error' in result) {
+        setError(result.error);
+        return;
+      }
+      if (result.summary) {
+        const updated = await brain.updateChat(chatId, { title: result.summary });
+        setChatList((prev) => prev.map((c) => (c.id === chatId ? { ...c, title: updated.title } : c)));
+        if (activeChat?.id === chatId) setActiveChat((c) => (c && c.id === chatId ? { ...c, title: updated.title } : c));
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Summarize failed');
+    } finally {
+      setSummarizingId(null);
+    }
+  }, [activeChat?.id]);
+
+  const handleDelete = useCallback(async (chat: BrainChat) => {
+    const title = chat.title?.trim() || 'this chat';
+    if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
+    setDeletingId(chat.id);
+    setError('');
+    try {
+      await brain.deleteChat(chat.id);
+      setChatList((prev) => prev.filter((c) => c.id !== chat.id));
+      if (activeChat?.id === chat.id) setActiveChat(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed');
+    } finally {
+      setDeletingId(null);
+    }
+  }, [activeChat?.id]);
 
   const send = useCallback(async () => {
     const text = input.trim();
@@ -71,7 +263,8 @@ export default function BrainstormPage() {
     let chat = activeChat;
     if (!chat) {
       try {
-        chat = await brain.createChat({ title: 'New chat' });
+        const projectId = filterProjectId && filterProjectId !== 'none' ? Number(filterProjectId) : null;
+        chat = await brain.createChat({ title: 'New chat', projectId });
         setChatList((prev) => [chat!, ...prev]);
         setActiveChat(chat);
         setMessages([]);
@@ -81,11 +274,19 @@ export default function BrainstormPage() {
         return;
       }
     }
+    const attachments = [...pendingAttachments];
+    setPendingAttachments([]);
     setInput('');
     setSending(true);
     setError('');
+    let content = text;
+    if (attachments.length > 0) {
+      const refs = attachments.map((a) => `[Attached: ${a.name}](${brain.uploadUrl(a.key)})`).join('\n');
+      content = `${text}\n\n${refs}`;
+    }
+    const metadata = attachments.length > 0 ? JSON.stringify({ attachments }) : undefined;
     try {
-      const [userMsg] = await brain.sendMessages(chat.id, [{ role: 'user', content: text }]);
+      const [userMsg] = await brain.sendMessages(chat.id, [{ role: 'user', content, metadata }]);
       setMessages((prev) => [...prev, userMsg]);
       setTimeout(() => msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
 
@@ -107,7 +308,42 @@ export default function BrainstormPage() {
     } finally {
       setSending(false);
     }
-  }, [activeChat, input, sending, messages, createNewChat]);
+  }, [activeChat, input, sending, messages, createNewChat, filterProjectId, pendingAttachments]);
+
+  const getAiReplyForCurrentMessages = useCallback(async () => {
+    if (!activeChat || sending || messages.length === 0) return;
+    const last = messages[messages.length - 1];
+    if (last.role !== 'user') return;
+    setSending(true);
+    setError('');
+    try {
+      const history = messages.slice(-80).map((m: BrainMessage) => ({
+        role: m.role as 'user' | 'assistant' | 'system',
+        content: m.content,
+      }));
+      const systemPrompt = 'You are Brain, the AI assistant inside Builderforce. Help the user brainstorm and plan. Be concise and use markdown when helpful.';
+      const { content: reply } = await llmChat(
+        [{ role: 'system', content: systemPrompt }, ...history],
+        { temperature: 0.3, maxTokens: 4096 }
+      );
+      const [assistantMsg] = await brain.sendMessages(activeChat.id, [{ role: 'assistant', content: reply || 'No response.' }]);
+      setMessages((prev) => [...prev, assistantMsg]);
+      setTimeout(() => msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Reply failed');
+    } finally {
+      setSending(false);
+    }
+  }, [activeChat, messages, sending]);
+
+  useEffect(() => {
+    if (!activeChat || loadingMessages || sending || messages.length === 0) return;
+    const last = messages[messages.length - 1];
+    if (last.role !== 'user') return;
+    if (autoRepliedChatIdRef.current === activeChat.id) return;
+    autoRepliedChatIdRef.current = activeChat.id;
+    getAiReplyForCurrentMessages();
+  }, [activeChat?.id, loadingMessages, messages, sending, getAiReplyForCurrentMessages]);
 
   return (
     <div className="bs-shell" style={{ marginBottom: 0 }}>
@@ -132,15 +368,57 @@ export default function BrainstormPage() {
               + New
             </button>
           </div>
+          <label style={{ display: 'block', marginBottom: 6, fontSize: 12, color: 'var(--muted)' }}>
+            Project
+            <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+              New chats are added to the selected project.
+            </span>
+            <select
+              value={filterProjectId ?? ''}
+              onChange={(e) => setFilterProjectId(e.target.value === '' ? null : e.target.value)}
+              style={{
+                display: 'block',
+                marginTop: 4,
+                width: '100%',
+                padding: '6px 8px',
+                fontSize: 12,
+                borderRadius: 6,
+                border: '1px solid var(--border)',
+                background: 'var(--bg)',
+                color: 'var(--text)',
+              }}
+            >
+              <option value="">All</option>
+              <option value="none">No project</option>
+              {projects.map((p) => (
+                <option key={p.id} value={String(p.id)}>{p.name}</option>
+              ))}
+            </select>
+          </label>
+          <input
+            type="search"
+            placeholder="Search chats…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '6px 8px',
+              fontSize: 12,
+              borderRadius: 6,
+              border: '1px solid var(--border)',
+              background: 'var(--bg)',
+              color: 'var(--text)',
+            }}
+          />
         </div>
         <div className="bs-chat-list">
           {loadingList && <div style={{ padding: 12, fontSize: 13, color: 'var(--muted)' }}>Loading…</div>}
-          {!loadingList && chatList.length === 0 && (
+          {!loadingList && filteredChatList.length === 0 && (
             <div style={{ padding: 12, fontSize: 13, color: 'var(--muted)', textAlign: 'center' }}>
-              No chats yet. Click <strong>+ New</strong> to start.
+              {chatList.length === 0 ? 'No chats yet. Click + New to start.' : 'No chats match your search.'}
             </div>
           )}
-          {chatList.map((chat) => (
+          {filteredChatList.map((chat) => (
             <div
               key={chat.id}
               className={`bs-chat-item ${activeChat?.id === chat.id ? 'active' : ''}`}
@@ -150,11 +428,56 @@ export default function BrainstormPage() {
               tabIndex={0}
             >
               <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {chat.title}
+                {renamingId === chat.id ? (
+                  <input
+                    autoFocus
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onBlur={handleRename}
+                    onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') { setRenamingId(null); setRenameValue(''); } }}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ width: '100%', fontSize: 13, padding: 2, border: '1px solid var(--border)', borderRadius: 4 }}
+                  />
+                ) : (
+                  chat.title
+                )}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                {chat.projectId != null && (
+                  <span style={{ background: 'var(--bg-elevated)', padding: '1px 4px', borderRadius: 4, fontSize: 10 }}>
+                    {projectName(chat.projectId)}
+                  </span>
+                )}
                 {formatTime(chat.updatedAt)}
               </div>
+              {activeChat?.id === chat.id && renamingId !== chat.id && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }} onClick={(e) => e.stopPropagation()}>
+                  <button type="button" onClick={() => { setRenamingId(chat.id); setRenameValue(chat.title); }} style={{ fontSize: 11, padding: '2px 6px', cursor: 'pointer' }}>Rename</button>
+                  <button type="button" onClick={() => handleSummarize(chat.id)} disabled={summarizingId === chat.id} style={{ fontSize: 11, padding: '2px 6px', cursor: 'pointer' }}>{summarizingId === chat.id ? '…' : 'Summarize'}</button>
+                  <button type="button" onClick={() => handleDelete(chat)} disabled={deletingId === chat.id} style={{ fontSize: 11, padding: '2px 6px', cursor: 'pointer', color: 'var(--coral-bright)' }}>{deletingId === chat.id ? '…' : 'Delete'}</button>
+                  {chat.projectId == null && (
+                    <label style={{ fontSize: 11 }}>
+                      Add to:
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '__new__') setShowNewProject(true);
+                          else if (val !== '') assignChatToProject(chat.id, Number(val));
+                        }}
+                        disabled={assigningTo === chat.id}
+                        style={{ marginLeft: 4, fontSize: 11, padding: '2px 4px' }}
+                      >
+                        <option value="">Add to project…</option>
+                        <option value="__new__">+ Create new project</option>
+                        {projects.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -189,9 +512,85 @@ export default function BrainstormPage() {
           </div>
         ) : (
           <>
-            <div className="bs-chat-header">
+            <div className="bs-chat-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
               <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-strong)' }}>{activeChat.title}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {activeChat.projectId == null ? (
+                  <>
+                    <label style={{ fontSize: 12, color: 'var(--muted)' }}>
+                      Assign to project:
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '__new__') setShowNewProject(true);
+                          else if (val !== '') assignChatToProject(activeChat.id, Number(val));
+                        }}
+                        disabled={assigningTo === activeChat.id}
+                        style={{
+                          marginLeft: 6,
+                          padding: '4px 8px',
+                          fontSize: 12,
+                          borderRadius: 6,
+                          border: '1px solid var(--border)',
+                          background: 'var(--bg)',
+                          color: 'var(--text)',
+                        }}
+                      >
+                        <option value="">No project</option>
+                        <option value="__new__">+ Create new project</option>
+                        {projects.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {assigningTo === activeChat.id && <span style={{ fontSize: 12, color: 'var(--muted)' }}>Assigning…</span>}
+                    <button
+                      type="button"
+                      onClick={() => setShowNewProject(true)}
+                      style={{ fontSize: 12, padding: '4px 8px', cursor: 'pointer', fontWeight: 600, color: 'var(--accent)' }}
+                    >
+                      + Project
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontSize: 12, color: 'var(--muted)' }}>{projectName(activeChat.projectId)}</span>
+                    <Link
+                      href={`/ide/${activeChat.projectId}?chat=${activeChat.id}`}
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: 'var(--coral-bright)',
+                        textDecoration: 'none',
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        border: '1px solid var(--coral-bright)',
+                      }}
+                    >
+                      Open in IDE →
+                    </Link>
+                  </>
+                )}
+              </div>
             </div>
+            {showNewProject && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                <input
+                  placeholder="New project name"
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && createProjectAndAssign()}
+                  style={{ flex: 1, padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+                />
+                <button type="button" onClick={createProjectAndAssign} disabled={!newProjectName.trim() || creatingProject} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                  {creatingProject ? '…' : 'Create & assign'}
+                </button>
+                <button type="button" onClick={() => { setShowNewProject(false); setNewProjectName(''); }} style={{ padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>Cancel</button>
+              </div>
+            )}
             <div className="bs-messages">
               {loadingMessages && <div style={{ color: 'var(--muted)', fontSize: 13 }}>Loading messages…</div>}
               {messages.map((msg) => (
@@ -206,7 +605,37 @@ export default function BrainstormPage() {
                     {msg.role === 'user' ? 'U' : '🧠'}
                   </div>
                   <div className={`bs-bubble ${msg.role === 'user' ? 'bs-bubble-user' : 'bs-bubble-ai'}`}>
-                    <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+                    <ChatMessageContent content={msg.content} />
+                    {msg.role !== 'user' && (
+                      <div className="bs-msg-actions">
+                        <button
+                          type="button"
+                          className="bs-action-btn"
+                          onClick={() => copyMessage(msg)}
+                          title="Copy"
+                        >
+                          {copiedMessageId === msg.id ? '✓ Copied!' : 'Copy'}
+                        </button>
+                        <button
+                          type="button"
+                          className={`bs-action-btn ${feedbackMap[msg.id] === 'up' ? 'active' : ''}`}
+                          onClick={() => submitFeedback(msg, 'up')}
+                          title="Good response"
+                          aria-label="Thumbs up"
+                        >
+                          👍
+                        </button>
+                        <button
+                          type="button"
+                          className={`bs-action-btn ${feedbackMap[msg.id] === 'down' ? 'active' : ''}`}
+                          onClick={() => submitFeedback(msg, 'down')}
+                          title="Bad response"
+                          aria-label="Thumbs down"
+                        >
+                          👎
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -219,52 +648,21 @@ export default function BrainstormPage() {
               <div ref={msgEndRef} />
             </div>
             <div className="bs-input-area">
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                <textarea
-                  style={{
-                    flex: 1,
-                    resize: 'none',
-                    padding: '10px 12px',
-                    borderRadius: 10,
-                    border: '1px solid var(--border)',
-                    background: 'var(--bg)',
-                    color: 'var(--text)',
-                    fontSize: 14,
-                    minHeight: 42,
-                    maxHeight: 120,
-                    fontFamily: 'inherit',
-                  }}
-                  placeholder="Message Brain…"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      send();
-                    }
-                  }}
-                  disabled={sending}
-                />
-                <button
-                  type="button"
-                  onClick={send}
-                  disabled={sending || !input.trim()}
-                  style={{
-                    height: 42,
-                    padding: '0 16px',
-                    fontSize: 14,
-                    fontWeight: 600,
-                    background: 'var(--accent)',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: 10,
-                    cursor: sending || !input.trim() ? 'not-allowed' : 'pointer',
-                    opacity: sending || !input.trim() ? 0.7 : 1,
-                  }}
-                >
-                  {sending ? '…' : 'Send'}
-                </button>
-              </div>
+              <ChatInput
+                value={input}
+                onChange={setInput}
+                onSubmit={send}
+                placeholder="Message Brain…"
+                disabled={sending}
+                rows={2}
+                submitOnEnter={false}
+                onAttach={handleAttach}
+                showBrainIcon={false}
+                showVoice={true}
+                pendingAttachments={pendingAttachments}
+                onRemoveAttachment={(key) => setPendingAttachments((prev) => prev.filter((a) => a.key !== key))}
+              />
+              {uploading && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Uploading…</div>}
             </div>
           </>
         )}

@@ -29,6 +29,45 @@ Builderforce.ai is a full-stack, cloud-native IDE that combines:
 
 ---
 
+## CoderClawLink → Builderforce.ai
+
+**CoderClawLink has been replaced by Builderforce.ai.** The orchestration portal, API, and mesh relay now live at [builderforce.ai](https://builderforce.ai) and [api.builderforce.ai](https://api.builderforce.ai). Builderforce.ai adds a browser IDE and in-browser LoRA training on top of the same orchestration API.
+
+**CoderClaw integration:** Configure the CLI and gateway with `CODERCLAW_LINK_URL=https://api.builderforce.ai` (or use the Builderforce onboarding flow). Documentation for the API surface (auth, tenants, claws, runtime, marketplace) lives at [docs.coderclaw.ai/link/](https://docs.coderclaw.ai/link/).
+
+---
+
+## Product flow
+
+The experience is built around one path from idea to execution, with an alternative path via agents:
+
+1. **Brain Storm** — Start here. Users brainstorm in chat (no project required). Chats are ideas and plans.
+2. **Execute → Project** — User turns ideas into a project: assign a chat to a project (or create a project). Same chat is now tied to that project.
+3. **Transform ideas → IDE** — In the project, users get **IDE tools** (editor, terminal, AI chat with project context, Apply/Create file). They build from the same conversation.
+4. **Or: Tasks & Agents** — Instead of (or in addition to) building in the IDE, users can **register or hire BuilderForce agents (Claws)**, use **Tasks / Project management**, and assign work to those agents.
+
+So: **Brain Storm → Project → IDE** (hands-on build), or **Brain Storm → Project → Tasks + Claws** (assign to agents). Chats are unified and project-scoped; the **origin** of a chat (brainstorm, ide, project) only tells each page which tools to load.
+
+---
+
+## Data model & API (strategy alignment)
+
+The schema and API are structured to match the product flow above.
+
+| Flow step | Data model | API (api.builderforce.ai) |
+|-----------|------------|---------------------------|
+| **Brain Storm** (ideate) | `ide_project_chats` (origin=’brainstorm’, projectId nullable), `ide_project_chat_messages` | `GET/POST /api/brain/chats`, `PATCH /api/brain/chats/:id` (title, **projectId** = assign to project), `GET/POST .../messages`, `POST .../summarize` |
+| **Execute → Project** | `projects`, chat row updated with projectId | `GET/POST /api/projects`, `PATCH /api/brain/chats/:id` with projectId |
+| **Same chat in IDE** | Same `ide_project_chats` row (projectId set), `origin` unchanged | `GET /api/projects/:id/chats` (lists all chats for project), `GET /api/projects/:id/chats/:chatId` (messages + origin), `POST /api/ai/chat` (projectId → inject file tree + package.json context) |
+| **IDE tools** | R2 project files, project chats | `GET/PUT/DELETE /api/ide/projects/:id/files/*`, project chats as above |
+| **Tasks** (assign work) | `tasks` (projectId, assignedClawId, status, priority), `executions` | `GET/POST/PATCH/DELETE /api/tasks`, `POST /api/tasks/next`, `POST/GET /api/runtime/executions` |
+| **Workforce / Claws** | `coderclaw_instances`, `claw_projects`, `agents`, `skills` | `GET/POST /api/claws`, `GET/PUT/DELETE /api/claws/:id/projects/:projectId`, `GET/POST /api/agents`, `GET/POST /api/skill-assignments/...` |
+
+- **Unified chats:** One conversation can start in Brain (no project), be assigned to a project, then be opened in the IDE or anywhere else; **origin** tells the UI which tools to load.
+- **Tasks and Claws:** Tasks belong to a project; they can be assigned to a Claw (`assignedClawId`). Executions track runs. Claws are registered per tenant and linked to projects via `claw_projects`.
+
+---
+
 ## Architecture
 
 ```
@@ -229,7 +268,7 @@ builderforce.ai/
 - Files stored as `{projectId}/{path}` objects in R2
 - Fetched and mounted into WebContainer on project open
 - Auto-saved on editor change via `PUT /api/projects/:id/files/:path`
-- Vite template seeded on project creation (`index.html`, `src/main.js`, `package.json`)
+- Vite template seeded on project creation (`index.html`, `src/main.jsx`, `package.json`)
 
 #### Dataset Generation
 - `POST /api/datasets` — generates JSONL instruction-tuning datasets from a capability prompt using AI
@@ -299,6 +338,11 @@ CREATE TABLE collaboration_sessions (id UUID PRIMARY KEY, project_id UUID, ...);
 See [`worker/schema.sql`](worker/schema.sql) for the full schema.
 
 ---
+
+## Documentation
+
+- **CoderClawLink / orchestration:** Full docs (getting started, architecture, API reference, marketplace, multi-agent, pricing) live at [docs.coderclaw.ai/link/](https://docs.coderclaw.ai/link/). Builderforce.ai’s API is a CoderClawLink-style port; use those guides for auth, tenants, projects, tasks, claws, runtime, and marketplace concepts.
+- **Builderforce.ai Worker** (IDE, files, training, collaboration): see Worker API Reference below.
 
 ## Worker API Reference
 
@@ -414,11 +458,19 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ```bash
 cd api
-npx wrangler secret put JWT_SECRET
-npx wrangler secret put NEON_DATABASE_URL
-npx wrangler secret put OPENROUTER_API_KEY   # optional
+# From api/.env, push all secrets to the Worker in one go:
+npm run secrets:from-env
+
+# Or set individually:
+# npx wrangler secret put NEON_DATABASE_URL
+# npx wrangler secret put JWT_SECRET
+# npx wrangler secret put OPENROUTER_API_KEY   # required for IDE AI chat (get key at openrouter.ai)
 npm run deploy   # runs migrate then wrangler deploy
 ```
+
+Project chat endpoints (`GET/POST /api/projects/:id/chats`, etc.) and IDE AI with project context require the latest API code and migrations. If you see **404 on POST /api/projects/:id/chats**, redeploy the API and ensure migration `0025_ide_project_chats.sql` has been applied.
+
+For CoderClawLink-style API concepts (auth, tenants, claws, runtime, marketplace), see [docs.coderclaw.ai/link/](https://docs.coderclaw.ai/link/) (getting started, architecture, API reference, multi-agent orchestration, pricing).
 
 ### Frontend (Cloudflare Pages)
 

@@ -35,6 +35,8 @@ export interface BrainChat {
   id: number;
   title: string;
   projectId: number | null;
+  /** Where the chat was created: 'brainstorm' | 'ide' | 'project'. Tells the page which tools to load. */
+  origin?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -69,16 +71,50 @@ export const brain = {
   deleteChat: (id: number) =>
     request<{ archived: boolean }>(`/api/brain/chats/${id}`, { method: 'DELETE' }),
 
+  /** Summarize chat and store summary on the chat. Returns { summary } or { error }. */
+  summarizeChat: (chatId: number) =>
+    request<{ summary: string } | { error: string }>(`/api/brain/chats/${chatId}/summarize`, { method: 'POST' }),
+
   getMessages: (chatId: number, limit?: number) => {
     const q = limit != null ? `?limit=${limit}` : '';
     return request<{ messages: BrainMessage[] }>(`/api/brain/chats/${chatId}/messages${q}`).then((r) => r.messages);
   },
 
   sendMessages: (chatId: number, messages: Array<{ role: string; content: string; metadata?: string }>) =>
-    request<BrainMessage[]>(`/api/brain/chats/${chatId}/messages`, {
+    request<{ messages: BrainMessage[] }>(`/api/brain/chats/${chatId}/messages`, {
       method: 'POST',
       body: JSON.stringify({ messages }),
-    }).then((r) => r as unknown as BrainMessage[]),
+    }).then((r) => r.messages),
+
+  /** Set thumbs up/down on a message. feedback: 'up' | 'down' | null. */
+  setMessageFeedback: (messageId: number, feedback: 'up' | 'down' | null) =>
+    request<{ ok: boolean }>(`/api/brain/messages/${messageId}/feedback`, {
+      method: 'PATCH',
+      body: JSON.stringify({ feedback }),
+    }),
+
+  /** Upload a file for use as an attachment in chat. Returns key, name, type. */
+  upload: async (file: File): Promise<{ key: string; name: string; type: string }> => {
+    const token = getStoredTenantToken();
+    const form = new FormData();
+    form.append('file', file);
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${AUTH_API_URL}/api/brain/upload`, {
+      method: 'POST',
+      headers,
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { error?: string };
+      throw new Error(body.error || res.statusText || 'Upload failed');
+    }
+    const data = (await res.json()) as { key: string; name: string; type: string };
+    return data;
+  },
+
+  /** URL to view/download an uploaded file by key. */
+  uploadUrl: (key: string) => `${AUTH_API_URL}/api/brain/uploads/${key}`,
 };
 
 /** OpenAI-compatible chat completion (uses tenant JWT for billing). */

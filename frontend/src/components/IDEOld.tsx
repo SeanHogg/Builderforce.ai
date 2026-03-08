@@ -7,11 +7,10 @@ import { FileExplorer } from './FileExplorer';
 import { EditorTabs } from './EditorTabs';
 import { CodeEditor } from './CodeEditor';
 import { Terminal } from './Terminal';
-import { AIChat } from './AIChat';
+import { ProjectAIChat } from './ProjectAIChat';
 import { AITrainingPanel } from './AITrainingPanel';
 import { AgentPublishPanel } from './AgentPublishPanel';
 import { PreviewFrame } from './PreviewFrame';
-import { ThemeToggleButton } from '@/app/ThemeProvider';
 import { useWebContainer } from '@/hooks/useWebContainer';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
@@ -21,12 +20,15 @@ interface IDEProps {
   project: Project;
   initialFiles: FileEntry[];
   onToggleLayout?: () => void;
+  onProjectUpdate?: (project: Project) => void;
+  onOpenProjectDetails?: () => void;
+  initialChatId?: number | null;
 }
 
 type BottomTab = 'terminal' | 'preview';
 type RightTab = 'ai' | 'train' | 'publish';
 
-export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
+export function IDE({ project, initialFiles, onToggleLayout, onProjectUpdate: _onProjectUpdate, onOpenProjectDetails, initialChatId }: IDEProps) {
   const [files, setFiles] = useState<FileEntry[]>(initialFiles);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [activeFile, setActiveFile] = useState<string | undefined>();
@@ -40,7 +42,7 @@ export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
   const [completedJobs, setCompletedJobs] = useState<TrainingJob[]>([]);
   const shellStartedRef = useRef(false);
 
-  const { state: wcState, mountFiles, runCommand, startShell, startDevServer, getOrBootWebContainer } = useWebContainer();
+  const { state: wcState, mountFiles, runCommand, runCommandAndWait, startShell, startDevServer, getOrBootWebContainer } = useWebContainer();
   const { doc: ydoc, connected: collabConnected } = useCollaboration(project.id, 'user-local');
 
   // Task 2: Boot WebContainer and spawn an interactive shell immediately on IDE load.
@@ -171,20 +173,35 @@ export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
 
       if (allContents['package.json']) {
         terminalWriter?.('\r\n\x1b[36mRunning npm install...\x1b[0m\r\n');
-        await runCommand('npm', ['install'], (data) => terminalWriter?.(data));
+        const installCode = await runCommandAndWait('npm', ['install'], (data) => terminalWriter?.(data));
+        if (installCode !== 0) {
+          terminalWriter?.('\r\n\x1b[31m✗ npm install failed (exit code ' + installCode + '). Fix errors above and try again.\x1b[0m\r\n');
+          return;
+        }
       }
 
       // Start the dev server
+      terminalWriter?.('\r\n\x1b[36mStarting dev server...\x1b[0m\r\n');
       const url = await startDevServer((data) => terminalWriter?.(data));
       setPreviewUrl(url);
       setBottomTab('preview');
     } catch (e) {
-      console.error('Failed to start dev server:', e);
-      terminalWriter?.('\r\n\x1b[31mFailed to start dev server\x1b[0m\r\n');
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      console.error('Run failed:', e);
+      terminalWriter?.('\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
+      terminalWriter?.('\x1b[31m✗ RUN ERROR\x1b[0m\r\n\r\n');
+      if (errorMsg.includes('output:')) {
+        const outputMatch = errorMsg.match(/output:\n([\s\S]+)/);
+        if (outputMatch) terminalWriter?.(outputMatch[1]);
+        else terminalWriter?.(errorMsg + '\r\n');
+      } else {
+        terminalWriter?.(errorMsg + '\r\n');
+      }
+      terminalWriter?.('\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, startDevServer, mountFiles, runCommand, terminalWriter, files, fileContents, project.id]);
+  }, [isRunning, startDevServer, mountFiles, runCommand, runCommandAndWait, terminalWriter, files, fileContents, project.id]);
 
   const handleTerminalInput = useCallback((data: string) => {
     shellWriter?.write(data);
@@ -231,7 +248,7 @@ export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
         {/* Spacer */}
         <div style={{ flex: 1 }} />
 
-        {/* Right: collab status, WC status, theme toggle, layout toggle, run, share */}
+        {/* Right: layout toggle, run, details (projects icon) */}
         {onToggleLayout && (
           <button
             onClick={onToggleLayout}
@@ -260,7 +277,6 @@ export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
         {statusLabel && (
           <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{statusLabel}</span>
         )}
-        <ThemeToggleButton />
         <button
           onClick={handleRun}
           disabled={isRunning}
@@ -275,15 +291,30 @@ export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
         >
           {isRunning ? '⏳ Running…' : '▶ Run'}
         </button>
-        <button
-          style={{
-            background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-            border: '1px solid var(--border-subtle)', borderRadius: 8,
-            padding: '5px 12px', fontSize: '0.82rem', cursor: 'pointer', flexShrink: 0,
-          }}
-        >
-          Share
-        </button>
+        {onOpenProjectDetails && (
+          <button
+            type="button"
+            onClick={onOpenProjectDetails}
+            style={{
+              background: 'var(--bg-elevated)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 8,
+              padding: '5px 12px',
+              fontSize: '0.82rem',
+              cursor: 'pointer',
+              flexShrink: 0,
+              fontFamily: 'var(--font-display)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+            }}
+            title="Project details"
+          >
+            <span style={{ fontSize: '1rem' }}>▦</span>
+            Details
+          </button>
+        )}
       </div>
 
       {/* Main content */}
@@ -376,7 +407,7 @@ export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
           <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
             {/* Task 3: Pass activeFile + content to AIChat for context */}
             <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'ai' ? 'visible' : 'hidden', pointerEvents: rightTab === 'ai' ? 'auto' : 'none' }}>
-              <AIChat
+              <ProjectAIChat
                 projectId={project.id}
                 activeFile={activeFile}
                 activeFileContent={activeFile ? (fileContents[activeFile] || '') : undefined}
@@ -384,6 +415,19 @@ export function IDE({ project, initialFiles, onToggleLayout }: IDEProps) {
                   setFileContents(prev => ({ ...prev, [activeFile]: code }));
                   saveFile(project.id, activeFile, code).catch(console.error);
                 } : undefined}
+                onCreateFile={(path, content) => {
+                  setFileContents(prev => ({ ...prev, [path]: content }));
+                  saveFile(project.id, path, content)
+                    .then(() => {
+                      refreshFiles();
+                      if (!openFiles.includes(path)) {
+                        setOpenFiles(prev => [...prev, path]);
+                        setActiveFile(path);
+                      }
+                    })
+                    .catch(console.error);
+                }}
+                initialChatId={initialChatId}
               />
             </div>
             <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'train' ? 'visible' : 'hidden', pointerEvents: rightTab === 'train' ? 'auto' : 'none' }}>

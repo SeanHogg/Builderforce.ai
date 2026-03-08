@@ -8,11 +8,15 @@ import type { Project, FileEntry } from '@/lib/types';
 interface IDEProps {
   project: Project;
   initialFiles: FileEntry[];
+  onProjectUpdate?: (project: Project) => void;
+  onOpenProjectDetails?: () => void;
+  /** When opening from "Open in IDE" with a chat, select this project chat on load. */
+  initialChatId?: number | null;
 }
 
 const LAYOUT_STORAGE_KEY = 'builderforce-ide-layout';
 
-export function IDE({ project, initialFiles }: IDEProps) {
+export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId }: IDEProps) {
   const [useNewLayout, setUseNewLayout] = useState(() => {
     // Load preference from localStorage on mount
     if (typeof window !== 'undefined') {
@@ -30,8 +34,8 @@ export function IDE({ project, initialFiles }: IDEProps) {
   }, [useNewLayout]);
 
   if (useNewLayout) {
-    return <IDENew key="new" project={project} initialFiles={initialFiles} onToggleLayout={() => setUseNewLayout(false)} />;
+    return <IDENew key="new" project={project} initialFiles={initialFiles} onToggleLayout={() => setUseNewLayout(false)} onProjectUpdate={onProjectUpdate} onOpenProjectDetails={onOpenProjectDetails} initialChatId={initialChatId} />;
   }
 
-  return <IDEOld key="old" project={project} initialFiles={initialFiles} onToggleLayout={() => setUseNewLayout(true)} />;
+  return <IDEOld key="old" project={project} initialFiles={initialFiles} onToggleLayout={() => setUseNewLayout(true)} onProjectUpdate={onProjectUpdate} onOpenProjectDetails={onOpenProjectDetails} initialChatId={initialChatId} />;
 }

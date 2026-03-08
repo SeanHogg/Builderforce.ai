@@ -32,6 +32,11 @@ function b64urlToStr(s: string): string {
 }
 
 async function importKey(secret: string): Promise<CryptoKey> {
+  if (!secret || typeof secret !== 'string' || !secret.trim()) {
+    throw new Error(
+      'JWT_SECRET is not set. Set it with: wrangler secret put JWT_SECRET (in the api/ directory), or add JWT_SECRET to api/.env and run npm run secrets:from-env'
+    );
+  }
   return crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(secret),
