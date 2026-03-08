@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import type { Project } from '@/lib/types';
 import { fetchProjects, createProject } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
+import AppHeader from '@/components/AppHeader';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -65,47 +66,31 @@ export default function DashboardPage() {
   if (!isAuthenticated || !hasTenant) return null;
 
   return (
-    <div className="min-h-screen bg-gray-950">
-      {/* Header */}
-      <header className="border-b border-gray-800 px-6 py-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-2">
-              <span className="text-blue-400 text-2xl">⚡</span>
-              <span className="text-xl font-bold text-white">Builderforce.ai</span>
-            </Link>
-            {tenant && (
-              <div className="flex items-center gap-1.5 ml-2">
-                <span className="text-gray-600">/</span>
-                <Link
-                  href="/tenants"
-                  className="text-sm text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 px-2.5 py-0.5 rounded-md transition-colors"
-                  title="Switch workspace"
-                >
-                  {tenant.name || tenant.id}
-                </Link>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            {user && (
-              <span className="text-sm text-gray-500 hidden sm:block">{user.email}</span>
-            )}
+    <div style={{ minHeight: '100vh', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>
+      <AppHeader
+        links={[
+          ...(tenant ? [{ label: tenant.name || tenant.id, href: '/tenants' }] : []),
+        ]}
+        actions={
+          <>
+            {user && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }} className="hidden sm:block">{user.email}</span>}
             <button
               onClick={() => setShowForm(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-            >
-              + New Project
-            </button>
+              style={{
+                background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
+                color: '#fff', border: 'none', padding: '7px 14px',
+                borderRadius: 10, fontSize: '0.85rem', fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'var(--font-display)',
+                boxShadow: '0 4px 14px var(--shadow-coral-mid)',
+              }}
+            >+ New Project</button>
             <button
               onClick={handleLogout}
-              className="text-sm text-gray-500 hover:text-white transition-colors"
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
-      </header>
+              style={{ fontSize: '0.8rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+            >Sign out</button>
+          </>
+        }
+      />
 
       <main className="max-w-6xl mx-auto px-6 py-8">
         {/* New Project Modal */}

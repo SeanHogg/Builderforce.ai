@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
+import { ThemeToggleButton } from '@/app/ThemeProvider';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,7 +17,6 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
       const next = searchParams.get('next') || (hasTenant ? '/dashboard' : '/tenants');
@@ -38,77 +39,150 @@ export default function LoginPage() {
     }
   };
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    background: 'var(--bg-elevated)',
+    color: 'var(--text-primary)',
+    border: '1px solid var(--border-subtle)',
+    borderRadius: 10,
+    padding: '11px 14px',
+    fontSize: '0.9rem',
+    outline: 'none',
+    transition: 'border-color 0.2s, box-shadow 0.2s',
+    fontFamily: 'var(--font-body)',
+  };
+
+  const labelStyle: React.CSSProperties = {
+    display: 'block',
+    fontSize: '0.8rem',
+    fontWeight: 600,
+    color: 'var(--text-secondary)',
+    marginBottom: 6,
+    fontFamily: 'var(--font-display)',
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
+  };
+
   return (
-    <div className="min-h-screen bg-gray-950 flex flex-col">
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)', position: 'relative', zIndex: 1 }}>
       {/* Nav */}
-      <nav className="border-b border-gray-800 px-6 py-4">
-        <div className="max-w-6xl mx-auto">
-          <Link href="/" className="flex items-center gap-2 w-fit">
-            <span className="text-blue-400 text-2xl">⚡</span>
-            <span className="text-xl font-bold text-white">Builderforce.ai</span>
+      <nav style={{
+        borderBottom: '1px solid var(--border-subtle)',
+        background: 'color-mix(in srgb, var(--bg-surface) 90%, transparent)',
+        backdropFilter: 'blur(16px)',
+        padding: '0 24px',
+      }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+            <Image src="/claw.png" alt="" width={28} height={28} style={{ filter: 'drop-shadow(0 0 8px var(--logo-glow))' }} />
+            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>
+              Builderforce.ai
+            </span>
           </Link>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <ThemeToggleButton />
+            <Link href="/register" style={{
+              padding: '7px 16px', borderRadius: 10,
+              background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
+              color: '#fff', textDecoration: 'none',
+              fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.875rem',
+            }}>
+              Sign up free
+            </Link>
+          </div>
         </div>
       </nav>
 
-      {/* Form */}
-      <div className="flex-1 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-sm">
-          <h1 className="text-2xl font-bold text-white mb-2">Welcome back</h1>
-          <p className="text-gray-400 text-sm mb-8">
-            Sign in to your Builderforce.ai account
-          </p>
+      {/* Centred card */}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 20px' }}>
+        <div style={{ width: '100%', maxWidth: 400 }}>
+          {/* Logo + heading */}
+          <div style={{ textAlign: 'center', marginBottom: 32 }}>
+            <Image src="/claw.png" alt="" width={56} height={56} style={{ filter: 'drop-shadow(0 0 16px var(--logo-glow))', animation: 'float 4s ease-in-out infinite', marginBottom: 16 }} />
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.75rem', fontWeight: 700, marginBottom: 6, color: 'var(--text-primary)' }}>
+              Welcome back
+            </h1>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+              Sign in to your Builderforce.ai account
+            </p>
+          </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm text-gray-400 mb-1" htmlFor="email">
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                autoFocus
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full bg-gray-800 text-white rounded-lg px-4 py-2.5 outline-none border border-gray-700 focus:border-blue-500 transition-colors"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-400 mb-1" htmlFor="password">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-gray-800 text-white rounded-lg px-4 py-2.5 outline-none border border-gray-700 focus:border-blue-500 transition-colors"
-                required
-              />
-            </div>
-
-            {error && (
-              <div className="bg-red-900/40 border border-red-700 text-red-300 rounded-lg px-4 py-3 text-sm">
-                {error}
+          {/* Glass card form */}
+          <div style={{
+            background: 'var(--surface-card)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 20,
+            padding: '32px 28px',
+            backdropFilter: 'blur(12px)',
+            boxShadow: '0 16px 48px var(--shadow-coral-soft)',
+          }}>
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              <div>
+                <label htmlFor="email" style={labelStyle}>Email</label>
+                <input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  autoFocus
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  style={inputStyle}
+                  required
+                  onFocus={e => { e.currentTarget.style.borderColor = 'var(--coral-bright)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--surface-coral-soft)'; }}
+                  onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.boxShadow = 'none'; }}
+                />
               </div>
-            )}
+              <div>
+                <label htmlFor="password" style={labelStyle}>Password</label>
+                <input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  style={inputStyle}
+                  required
+                  onFocus={e => { e.currentTarget.style.borderColor = 'var(--coral-bright)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--surface-coral-soft)'; }}
+                  onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.boxShadow = 'none'; }}
+                />
+              </div>
 
-            <button
-              type="submit"
-              disabled={isLoading || !email || !password}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-2.5 rounded-lg font-semibold transition-colors"
-            >
-              {isLoading ? 'Signing in…' : 'Sign In'}
-            </button>
-          </form>
+              {error && (
+                <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', borderRadius: 10, padding: '10px 14px', fontSize: '0.875rem' }}>
+                  {error}
+                </div>
+              )}
 
-          <p className="text-center text-sm text-gray-500 mt-6">
+              <button
+                type="submit"
+                disabled={isLoading || !email || !password}
+                style={{
+                  width: '100%',
+                  background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 12,
+                  padding: '13px',
+                  fontFamily: 'var(--font-display)',
+                  fontWeight: 700,
+                  fontSize: '0.95rem',
+                  cursor: isLoading ? 'wait' : 'pointer',
+                  opacity: (isLoading || !email || !password) ? 0.5 : 1,
+                  transition: 'opacity 0.2s, transform 0.2s, box-shadow 0.2s',
+                  boxShadow: '0 6px 20px var(--shadow-coral-mid)',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                {isLoading ? 'Signing in…' : 'Sign In →'}
+              </button>
+            </form>
+          </div>
+
+          <p style={{ textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: 20 }}>
             Don&apos;t have an account?{' '}
-            <Link href="/register" className="text-blue-400 hover:text-blue-300 transition-colors">
+            <Link href="/register" style={{ color: 'var(--coral-bright)', textDecoration: 'none', fontWeight: 600 }}>
               Sign up free
             </Link>
           </p>

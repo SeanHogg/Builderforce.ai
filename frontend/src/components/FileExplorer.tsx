@@ -13,32 +13,46 @@ interface FileExplorerProps {
   onFileDelete: (path: string) => void;
 }
 
+function fileIcon(name: string): string {
+  const ext = name.split('.').pop()?.toLowerCase();
+  const icons: Record<string, string> = {
+    ts: '🔷', tsx: '⚛️', js: '🟨', jsx: '⚛️',
+    css: '🎨', html: '🌐', json: '📋', md: '📝',
+    py: '🐍', sh: '⚙️', env: '🔒',
+  };
+  return icons[ext || ''] || '📄';
+}
+
 function TreeNodeComponent({
-  node,
-  activeFile,
-  onFileSelect,
-  onFileDelete,
-  depth = 0,
+  node, activeFile, onFileSelect, onFileDelete, depth = 0,
 }: {
-  node: TreeNode;
-  activeFile?: string;
+  node: TreeNode; activeFile?: string;
   onFileSelect: (path: string) => void;
   onFileDelete: (path: string) => void;
   depth?: number;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const [hovered, setHovered] = useState(false);
+  const indent = depth * 14 + 10;
 
   if (node.type === 'directory') {
     return (
       <div>
         <div
-          className="flex items-center gap-1 px-2 py-0.5 hover:bg-gray-700 cursor-pointer text-sm text-gray-300"
-          style={{ paddingLeft: `${depth * 12 + 8}px` }}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            paddingLeft: indent, paddingTop: 3, paddingBottom: 3, paddingRight: 8,
+            cursor: 'pointer', fontSize: '0.8rem', userSelect: 'none',
+            background: hovered ? 'var(--bg-elevated)' : 'transparent',
+            color: 'var(--text-secondary)',
+          }}
           onClick={() => setExpanded(!expanded)}
         >
-          <span>{expanded ? '▼' : '▶'}</span>
+          <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', width: 10, flexShrink: 0 }}>{expanded ? '▼' : '▶'}</span>
           <span>📁</span>
-          <span>{node.name}</span>
+          <span style={{ fontWeight: 600, fontFamily: 'var(--font-display)', fontSize: '0.78rem' }}>{node.name}</span>
         </div>
         {expanded && node.children?.map(child => (
           <TreeNodeComponent
@@ -54,27 +68,32 @@ function TreeNodeComponent({
     );
   }
 
+  const isActive = activeFile === node.path;
   return (
     <div
-      className={`flex items-center justify-between px-2 py-0.5 hover:bg-gray-700 cursor-pointer text-sm group ${
-        activeFile === node.path ? 'bg-gray-600 text-white' : 'text-gray-400'
-      }`}
-      style={{ paddingLeft: `${depth * 12 + 8}px` }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        paddingLeft: indent, paddingTop: 3, paddingBottom: 3, paddingRight: 6,
+        cursor: 'pointer', fontSize: '0.8rem',
+        background: isActive ? 'var(--surface-coral-soft)' : hovered ? 'var(--bg-elevated)' : 'transparent',
+        color: isActive ? 'var(--coral-bright)' : 'var(--text-secondary)',
+        borderLeft: isActive ? '2px solid var(--coral-bright)' : '2px solid transparent',
+      }}
       onClick={() => onFileSelect(node.path)}
     >
-      <span className="flex items-center gap-1 truncate">
-        <span>📄</span>
-        <span className="truncate">{node.name}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+        <span style={{ fontSize: '0.72rem' }}>{fileIcon(node.name)}</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem' }}>{node.name}</span>
       </span>
-      <button
-        className="hidden group-hover:block text-gray-500 hover:text-red-400 px-1"
-        onClick={(e) => {
-          e.stopPropagation();
-          onFileDelete(node.path);
-        }}
-      >
-        ✕
-      </button>
+      {hovered && (
+        <button
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', fontSize: '0.7rem', padding: '0 2px', flexShrink: 0 }}
+          onClick={(e) => { e.stopPropagation(); onFileDelete(node.path); }}
+          title="Delete"
+        >✕</button>
+      )}
     </div>
   );
 }
@@ -93,19 +112,20 @@ export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, on
   };
 
   return (
-    <div className="h-full bg-gray-800 flex flex-col">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700">
-        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Files</span>
+    <div style={{ height: '100%', background: 'var(--bg-surface)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+        <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--font-display)' }}>
+          Explorer
+        </span>
         <button
-          className="text-gray-400 hover:text-white text-lg leading-none"
           onClick={() => setIsCreating(true)}
           title="New file"
-        >
-          +
-        </button>
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.1rem', lineHeight: 1, padding: '2px 4px', borderRadius: 4 }}
+        >+</button>
       </div>
+
       {isCreating && (
-        <div className="px-2 py-1 border-b border-gray-700">
+        <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
           <input
             autoFocus
             value={newFileName}
@@ -114,13 +134,24 @@ export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, on
               if (e.key === 'Enter') handleCreate();
               if (e.key === 'Escape') { setIsCreating(false); setNewFileName(''); }
             }}
-            placeholder="filename.ts"
-            className="w-full bg-gray-700 text-white text-sm px-2 py-1 rounded outline-none border border-blue-500"
+            placeholder="src/newfile.ts"
+            style={{
+              width: '100%', background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+              fontSize: '0.78rem', padding: '4px 8px', borderRadius: 6,
+              outline: 'none', border: '1px solid var(--coral-bright)',
+              fontFamily: "'JetBrains Mono', monospace", boxSizing: 'border-box',
+            }}
           />
         </div>
       )}
-      <div className="flex-1 overflow-y-auto py-1">
-        {tree.map(node => (
+
+      <div style={{ flex: 1, overflowY: 'auto', paddingTop: 4 }}>
+        {tree.length === 0 ? (
+          <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px 12px', fontSize: '0.78rem' }}>
+            <div style={{ fontSize: '1.5rem', marginBottom: 6 }}>📂</div>
+            No files yet.<br />Click + to create one.
+          </div>
+        ) : tree.map(node => (
           <TreeNodeComponent
             key={node.path}
             node={node}

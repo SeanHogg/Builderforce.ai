@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import type { Tenant } from '@/lib/types';
+import AppHeader from '@/components/AppHeader';
 
 export default function TenantsPage() {
   const router = useRouter();
@@ -62,27 +63,18 @@ export default function TenantsPage() {
   if (!isAuthenticated) return null;
 
   return (
-    <div className="min-h-screen bg-gray-950 flex flex-col">
-      {/* Header */}
-      <header className="border-b border-gray-800 px-6 py-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-blue-400 text-2xl">⚡</span>
-            <span className="text-xl font-bold text-white">Builderforce.ai</span>
-          </div>
-          <div className="flex items-center gap-3">
-            {user && (
-              <span className="text-sm text-gray-400">{user.email}</span>
-            )}
+    <div style={{ minHeight: '100vh', background: 'var(--bg-deep)', color: 'var(--text-primary)', display: 'flex', flexDirection: 'column' }}>
+      <AppHeader
+        actions={
+          <>
+            {user && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{user.email}</span>}
             <button
               onClick={() => { logout(); router.push('/login'); }}
-              className="text-sm text-gray-500 hover:text-white transition-colors"
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
-      </header>
+              style={{ fontSize: '0.8rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+            >Sign out</button>
+          </>
+        }
+      />
 
       {/* Content */}
       <main className="flex-1 flex items-center justify-center px-4 py-12">
