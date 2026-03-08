@@ -293,8 +293,43 @@ training.post('/:id/evaluate', async (c) => {
       }
     }
 
-    // Use placeholder model outputs for evaluation (in production, run inference)
-    const modelOutputs = examples.map(ex => `Generated response for: ${ex.instruction}`);
+    // Ask the AI to act as the fine-tuned model and generate realistic outputs
+    const { streamAIResponse } = await import('../services/ai');
+
+    const modelOutputs: string[] = [];
+    for (const ex of examples) {
+      try {
+        const genRes = await streamAIResponse([
+          { role: 'system', content: `You are answering as a fine-tuned agent for: ${job.base_model}. Provide a high-quality output for the instruction.` },
+          { role: 'user', content: ex.instruction + (ex.input ? `\nContext: ${ex.input}` : '') }
+        ], c.env);
+
+        let outText = '';
+        if (genRes.body) {
+          const reader = genRes.body.getReader();
+          const decoder = new TextDecoder();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const text = decoder.decode(value, { stream: true });
+            for (const line of text.split('\n')) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6).trim();
+                if (data === '[DONE]') break;
+                try {
+                  const parsed = JSON.parse(data);
+                  const chunk = parsed.choices?.[0]?.delta?.content ?? parsed.response ?? '';
+                  outText += chunk;
+                } catch { } // ignore
+              }
+            }
+          }
+        }
+        modelOutputs.push(outText || `(Failed to generate output for: ${ex.instruction})`);
+      } catch {
+        modelOutputs.push(`(Error generating output)`);
+      }
+    }
 
     const result = await evaluateModelOutputs(examples, modelOutputs, jobId, c.env);
 
