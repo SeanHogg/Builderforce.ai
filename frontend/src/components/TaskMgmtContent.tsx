@@ -246,9 +246,9 @@ export function TaskMgmtContent({
           style={{
             padding: '10px 14px',
             borderRadius: 8,
-            background: 'rgba(239,68,68,0.15)',
-            border: '1px solid rgba(239,68,68,0.5)',
-            color: '#fca5a5',
+            background: 'var(--error-bg)',
+            border: '1px solid var(--error-border)',
+            color: 'var(--error-text)',
             fontSize: 13,
           }}
         >
@@ -610,8 +610,8 @@ export function TaskMgmtContent({
                               ...buttonTertiary,
                               padding: '4px 8px',
                               fontSize: 12,
-                              color: 'var(--danger, #f87171)',
-                              borderColor: 'rgba(248,113,113,0.5)',
+                              color: 'var(--error-text)',
+                              borderColor: 'var(--error-border)',
                             }}
                             onClick={(e) => removeTask(task, e)}
                           >
@@ -981,8 +981,8 @@ export function TaskMgmtContent({
                   type="button"
                   style={{
                     ...buttonTertiary,
-                    color: 'var(--danger, #f87171)',
-                    borderColor: 'rgba(248,113,113,0.5)',
+                    color: 'var(--error-text)',
+                    borderColor: 'var(--error-border)',
                   }}
                   onClick={(e) => removeTask(drawerTask, e)}
                 >

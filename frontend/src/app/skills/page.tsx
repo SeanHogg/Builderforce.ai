@@ -190,7 +190,7 @@ export default function SkillsPage() {
         <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>+ Create Skill</button>
       </div>
 
-      {error && <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'rgba(239,68,68,0.15)', color: '#ef4444', borderRadius: 8 }}>{error}</div>}
+      {error && <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 8 }}>{error}</div>}
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 20 }}>
         <button type="button" className={`btn ${tab === 'assigned' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('assigned')}>Assigned ({assigned.length})</button>

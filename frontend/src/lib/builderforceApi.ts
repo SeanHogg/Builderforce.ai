@@ -4,8 +4,11 @@
  * Uses tenant JWT from auth.
  */
 
-import { getStoredTenantToken } from './auth';
-import { AUTH_API_URL } from './auth';
+import {
+  AUTH_API_URL,
+  checkUnauthorizedAndRedirect,
+  getStoredTenantToken,
+} from './auth';
 
 function authHeaders(): Record<string, string> {
   const token = getStoredTenantToken();
@@ -15,10 +18,13 @@ function authHeaders(): Record<string, string> {
 }
 
 async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
+  const headers = authHeaders();
+  const hadToken = !!headers.Authorization;
   const res = await fetch(`${AUTH_API_URL}${path}`, {
     ...opts,
-    headers: { ...authHeaders(), ...(opts.headers as Record<string, string>) },
+    headers: { ...headers, ...(opts.headers as Record<string, string>) },
   });
+  checkUnauthorizedAndRedirect(res, hadToken);
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(body.error || res.statusText || 'Request failed');
@@ -96,6 +102,7 @@ export const brain = {
   /** Upload a file for use as an attachment in chat. Returns key, name, type. */
   upload: async (file: File): Promise<{ key: string; name: string; type: string }> => {
     const token = getStoredTenantToken();
+    const hadToken = !!token;
     const form = new FormData();
     form.append('file', file);
     const headers: Record<string, string> = {};
@@ -105,6 +112,7 @@ export const brain = {
       headers,
       body: form,
     });
+    checkUnauthorizedAndRedirect(res, hadToken);
     if (!res.ok) {
       const body = await res.json().catch(() => ({})) as { error?: string };
       throw new Error(body.error || res.statusText || 'Upload failed');
@@ -122,9 +130,11 @@ export async function llmChat(
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
   options?: { temperature?: number; maxTokens?: number }
 ): Promise<{ content: string }> {
+  const headers = authHeaders();
+  const hadToken = !!headers.Authorization;
   const res = await fetch(`${AUTH_API_URL}/llm/v1/chat/completions`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers,
     body: JSON.stringify({
       model: 'openai/gpt-4o-mini',
       messages,
@@ -132,6 +142,7 @@ export async function llmChat(
       max_tokens: options?.maxTokens ?? 4096,
     }),
   });
+  checkUnauthorizedAndRedirect(res, hadToken);
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
     throw new Error(err.error?.message || res.statusText || 'LLM request failed');

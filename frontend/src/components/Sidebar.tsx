@@ -19,7 +19,7 @@ const mainNav: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
   { href: '/brainstorm', label: 'Brain Storm', icon: '💡' },
   { href: '/projects', label: 'Projects', icon: '▦', exactMatch: true },
-  { href: '/ide', label: 'IDE', icon: '</>', activePaths: ['/ide', '/projects/'] },
+  { href: '/ide', label: 'IDE', icon: '</>', activePaths: ['/ide'] },
   { href: '/tasks', label: 'Task Mgmt', icon: '☑' },
   { href: '/training', label: 'Training', icon: '🎓' },
 ];

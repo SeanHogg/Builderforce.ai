@@ -39,7 +39,7 @@ export default function IDEEntryPage() {
           const proj = await fetchProject(lastId);
           if (!cancelled) {
             persistLastProjectId(String(proj.id));
-            router.replace(`/projects/${proj.id}`);
+            router.replace(`/ide/${proj.id}`);
             return;
           }
         }
@@ -57,7 +57,7 @@ export default function IDEEntryPage() {
         });
         if (cancelled) return;
         persistLastProjectId(String(project.id));
-        router.replace(`/projects/${project.id}`);
+        router.replace(`/ide/${project.id}`);
       } catch (e) {
         if (!cancelled) {
           setErrorMsg(e instanceof Error ? e.message : 'Failed to open IDE');

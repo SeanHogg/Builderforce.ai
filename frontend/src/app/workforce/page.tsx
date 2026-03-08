@@ -195,7 +195,7 @@ export default function WorkforcePage() {
       </div>
 
       {clawError && (
-        <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'rgba(239,68,68,0.15)', color: '#ef4444', borderRadius: 8 }}>
+        <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 8 }}>
           {clawError}
         </div>
       )}
@@ -296,7 +296,7 @@ export default function WorkforcePage() {
                       autoFocus
                     />
                   </div>
-                  {registerError && <div style={{ marginBottom: 12, fontSize: 13, color: '#ef4444' }}>{registerError}</div>}
+                  {registerError && <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--error-text)' }}>{registerError}</div>}
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                     <button type="button" onClick={closeRegisterModal} style={{ padding: '8px 16px', fontSize: 13, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' }}>Cancel</button>
                     <button type="submit" disabled={registering || !registerName.trim()} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>

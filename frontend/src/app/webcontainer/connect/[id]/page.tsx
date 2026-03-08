@@ -35,20 +35,20 @@ export default function WebContainerConnectPage() {
 
   if (status === 'ok') {
     return (
-      <div style={{ padding: 24, fontFamily: 'system-ui', fontSize: 14, color: '#666' }}>
+      <div style={{ padding: 24, fontFamily: 'system-ui', fontSize: 14, color: 'var(--text-secondary)' }}>
         Connected. You can close this tab if the preview is showing in your IDE.
       </div>
     );
   }
   if (status === 'error') {
     return (
-      <div style={{ padding: 24, fontFamily: 'system-ui', fontSize: 14, color: '#c00' }}>
+      <div style={{ padding: 24, fontFamily: 'system-ui', fontSize: 14, color: 'var(--error-text)' }}>
         Connection failed: {error}
       </div>
     );
   }
   return (
-    <div style={{ padding: 24, fontFamily: 'system-ui', fontSize: 14, color: '#666' }}>
+    <div style={{ padding: 24, fontFamily: 'system-ui', fontSize: 14, color: 'var(--text-secondary)' }}>
       Connecting to IDE…
     </div>
   );

@@ -90,7 +90,7 @@ function TreeNodeComponent({
       </span>
       {hovered && (
         <button
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', fontSize: '0.7rem', padding: '0 2px', flexShrink: 0 }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error-text)', fontSize: '0.7rem', padding: '0 2px', flexShrink: 0 }}
           onClick={(e) => { e.stopPropagation(); onFileDelete(node.path); }}
           title="Delete"
         >✕</button>

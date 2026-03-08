@@ -355,7 +355,7 @@ export default function ContentManagerPage() {
                     </div>
                     {b.body && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>{b.body.slice(0, 160)}</div>}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--muted)' }}>
-                      <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? '#ef4444' : 'var(--muted)' }} onClick={() => toggleContentLike(b.id)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
+                      <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} onClick={() => toggleContentLike(b.id)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
                       <span>⬇️ {stat.installs}</span>
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 'auto' }}>
@@ -418,7 +418,7 @@ export default function ContentManagerPage() {
                     </div>
                     {b.body && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>{b.body.slice(0, 160)}</div>}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--muted)' }}>
-                      <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? '#ef4444' : 'var(--muted)' }} onClick={() => toggleContentLike(b.id)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
+                      <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} onClick={() => toggleContentLike(b.id)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
                       <span>⬇️ {stat.installs}</span>
                     </div>
                     <Link href={`/content-manager/${encodeURIComponent(b.id)}`} className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }}>View</Link>
@@ -487,7 +487,7 @@ export default function ContentManagerPage() {
                 </div>
                 <button type="button" className="btn btn-secondary btn-sm" disabled={generating || !generatePrompt.trim()} onClick={generateContent}>{generating ? 'Generating…' : '✨ Generate'}</button>
               </div>
-              {generateError && <div style={{ fontSize: 13, color: '#ef4444' }}>{generateError}</div>}
+              {generateError && <div style={{ fontSize: 13, color: 'var(--error-text)' }}>{generateError}</div>}
               <div style={{ display: 'flex', gap: 4 }}>
                 <button type="button" className={`btn btn-sm ${!previewMode ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setPreviewMode(false)}>Edit</button>
                 <button type="button" className={`btn btn-sm ${previewMode ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setPreviewMode(true)}>Preview</button>

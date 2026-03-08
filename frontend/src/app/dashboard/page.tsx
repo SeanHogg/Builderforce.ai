@@ -8,6 +8,8 @@ import { fetchProjects } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 import { ChatInput } from '@/components/ChatInput';
 import { ProjectCard } from '@/components/ProjectCard';
+import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
+import { ClawSlideOutPanel } from '@/components/ClawSlideOutPanel';
 import { claws, type Claw } from '@/lib/builderforceApi';
 
 /**
@@ -22,6 +24,8 @@ export default function DashboardPage() {
   const [clawList, setClawList] = useState<Claw[]>([]);
   const [loading, setLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
+  const [detailsProject, setDetailsProject] = useState<Project | null>(null);
+  const [selectedClaw, setSelectedClaw] = useState<Claw | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -180,14 +184,38 @@ export default function DashboardPage() {
                 <ProjectCard
                   key={p.id}
                   project={p}
-                  onCardClick={(proj) => router.push(`/projects/${proj.id}`)}
-                  onDetailsClick={(proj) => router.push(`/projects/${proj.id}`)}
+                  onCardClick={setDetailsProject}
+                  onDetailsClick={setDetailsProject}
                   showDetailsButton
+                  onAssignedAgentClick={(ac) => {
+                    const claw = clawList.find((c) => c.id === ac.id);
+                    if (claw) setSelectedClaw(claw);
+                  }}
                 />
               ))}
             </div>
           )}
         </section>
+
+        {detailsProject && (
+          <ProjectDetailsPanel
+            project={detailsProject}
+            open={!!detailsProject}
+            onClose={() => setDetailsProject(null)}
+            onProjectUpdate={(updated) => {
+              setProjects((prev) => prev.map((p) => (p.id === updated.id ? { ...updated, assignedClaw: p.assignedClaw } : p)));
+              setDetailsProject((p) => (p && p.id === updated.id ? updated : p));
+            }}
+          />
+        )}
+
+        {selectedClaw && (
+          <ClawSlideOutPanel
+            claw={selectedClaw}
+            open={!!selectedClaw}
+            onClose={() => setSelectedClaw(null)}
+          />
+        )}
 
         {/* Workforce section */}
         <section>

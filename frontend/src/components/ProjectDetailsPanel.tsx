@@ -25,7 +25,7 @@ export interface ProjectDetailsPanelProps {
   initialTab?: ProjectPanelTab;
   /** Called when project is updated (e.g. name, description). */
   onProjectUpdate?: (project: Project) => void;
-  /** Optional: project base path for links (e.g. /projects/123). */
+  /** Optional: project base path for links (e.g. /ide/123). */
   projectHref?: string;
 }
 
@@ -92,7 +92,7 @@ export function ProjectDetailsPanel({
 
   if (!open) return null;
 
-  const href = projectHref ?? `/projects/${project.id}`;
+  const href = projectHref ?? `/ide/${project.id}`;
   const taskCount = project.taskCount ?? 0;
 
   const handleSaveProject = async (e: React.FormEvent) => {

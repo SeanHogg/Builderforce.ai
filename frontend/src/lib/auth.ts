@@ -127,6 +127,40 @@ export function clearSession(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Centralized 401 (invalid/expired token) handling — redirect to login
+// ---------------------------------------------------------------------------
+
+/**
+ * Call when an API response is 401 and we had sent a token.
+ * Clears session and redirects to /login?next=currentPath so the user can re-authenticate.
+ * Use only in the browser; throws on server.
+ */
+export function handleApiUnauthorized(): never {
+  if (!isBrowser()) {
+    throw new Error('Unauthorized');
+  }
+  clearSession();
+  const next = encodeURIComponent(
+    window.location.pathname + window.location.search || '/'
+  );
+  window.location.href = `/login?next=${next}`;
+  throw new Error('Session expired');
+}
+
+/**
+ * If response is 401 and we had sent a bearer token, clear session and redirect to login.
+ * Call this after any authenticated fetch so all API paths behave the same.
+ */
+export function checkUnauthorizedAndRedirect(
+  response: Response,
+  hadToken: boolean
+): void {
+  if (response.status === 401 && hadToken) {
+    handleApiUnauthorized();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // API calls to api.builderforce.ai
 // ---------------------------------------------------------------------------
 
@@ -178,6 +212,7 @@ export async function getMyTenants(webToken: string): Promise<Tenant[]> {
   const res = await fetch(`${AUTH_API_URL}/api/auth/my-tenants`, {
     headers: { Authorization: `Bearer ${webToken}` },
   });
+  checkUnauthorizedAndRedirect(res, !!webToken);
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { message?: string };
     throw new Error(body.message ?? 'Failed to fetch tenants');
@@ -197,6 +232,7 @@ export async function getTenantToken(
     },
     body: JSON.stringify({ tenantId: Number(tenantId) }),
   });
+  checkUnauthorizedAndRedirect(res, !!webToken);
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { message?: string };
     throw new Error(body.message ?? 'Failed to get tenant token');
@@ -214,6 +250,7 @@ export async function createTenant(webToken: string, name: string): Promise<Tena
     },
     body: JSON.stringify({ name: name.trim() }),
   });
+  checkUnauthorizedAndRedirect(res, !!webToken);
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { message?: string; error?: string };
     throw new Error(body.message ?? body.error ?? 'Failed to create workspace');

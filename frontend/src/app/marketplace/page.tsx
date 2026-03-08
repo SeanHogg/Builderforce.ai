@@ -570,7 +570,7 @@ export default function MarketplacePage() {
                         cursor: 'pointer',
                         padding: 0,
                         fontSize: 11,
-                        color: stat.liked ? '#ef4444' : 'var(--muted)',
+                        color: stat.liked ? 'var(--error)' : 'var(--muted)',
                       }}
                       title={stat.liked ? 'Unlike' : 'Like'}
                       onClick={() => toggleLike(item)}

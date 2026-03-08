@@ -4,6 +4,7 @@
  * Auth, datasets, training, AI always use the auth API.
  */
 
+import { checkUnauthorizedAndRedirect } from './auth';
 import {
   apiRequest,
   apiRequestText,
@@ -31,13 +32,16 @@ async function projectsRequest<T>(
   path: string,
   opts: RequestInit & { body?: string } = {}
 ): Promise<T> {
+  const authHeaders = getAuthHeaders();
+  const hadToken = !!authHeaders.Authorization;
   const { body, ...init } = opts;
   const url = `${getProjectsBaseUrl()}${path}`;
   const res = await fetch(url, {
     ...init,
-    headers: { ...getAuthHeaders(), ...(init.headers as Record<string, string>) },
+    headers: { ...authHeaders, ...(init.headers as Record<string, string>) },
     ...(body !== undefined && { body }),
   });
+  checkUnauthorizedAndRedirect(res, hadToken);
   if (!res.ok) {
     const msg = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(msg.error || res.statusText || `Request failed (${res.status})`);
@@ -130,7 +134,10 @@ export async function fetchFileContent(
 ): Promise<string> {
   const base = getProjectsBaseUrl();
   const url = `${base}${filesBase(projectId)}/${encodeURIComponent(filePath)}`;
-  const res = await fetch(url, { headers: getAuthHeaders() as HeadersInit });
+  const authHeaders = getAuthHeaders();
+  const hadToken = !!authHeaders.Authorization;
+  const res = await fetch(url, { headers: authHeaders as HeadersInit });
+  checkUnauthorizedAndRedirect(res, hadToken);
   if (!res.ok) throw new Error('Failed to fetch file content');
   return res.text();
 }
@@ -433,14 +440,17 @@ export async function uploadArtifact(
   jobId: string,
   data: ArrayBuffer
 ): Promise<{ r2Key: string }> {
+  const authHeaders = getAuthHeaders({ 'Content-Type': 'application/octet-stream' });
+  const hadToken = !!authHeaders.Authorization;
   const res = await fetch(
     `${getApiBaseUrl()}${IDE}/training/${jobId}/artifact`,
     {
       method: 'POST',
-      headers: getAuthHeaders({ 'Content-Type': 'application/octet-stream' }) as HeadersInit,
+      headers: authHeaders as HeadersInit,
       body: data,
     }
   );
+  checkUnauthorizedAndRedirect(res, hadToken);
   if (!res.ok) throw new Error('Failed to upload artifact');
   return res.json();
 }
