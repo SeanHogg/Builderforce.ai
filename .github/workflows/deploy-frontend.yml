@@ -24,6 +24,8 @@ jobs:
 
       - name: Build Next.js
         working-directory: frontend
+        env:
+          NEXT_PUBLIC_WORKER_URL: https://builderforce-worker.seanhogg.workers.dev
         run: npx next build
 
       - name: Generate Cloudflare Worker (next-on-pages)

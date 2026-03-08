@@ -1,6 +1,17 @@
 import { getStoredTenantToken } from './auth';
 
-const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787';
+const WORKER_URL = (() => {
+  const url = process.env.NEXT_PUBLIC_WORKER_URL;
+  if (!url) {
+    console.warn(
+      '[builderforce] NEXT_PUBLIC_WORKER_URL is not set. ' +
+      'Falling back to http://localhost:8787. ' +
+      'Set this env var during `next build` for production.'
+    );
+    return 'http://localhost:8787';
+  }
+  return url;
+})();
 
 function authHeaders(extra?: Record<string, string>): Record<string, string> {
   const token = getStoredTenantToken();
