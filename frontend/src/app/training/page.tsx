@@ -2,6 +2,7 @@ import React from 'react';
 
 export const runtime = 'edge';
 
+"use client";
 // basic AI Model Training Panel UI
 import { useEffect, useState } from 'react';
 

@@ -60,6 +60,35 @@ datasets.get('/:id', async (c) => {
 });
 
 /**
+ * GET /api/datasets/:id/download
+ * Streams the raw JSONL file from R2 for use in browser-side training.
+ */
+datasets.get('/:id/download', async (c) => {
+  try {
+    const sql = neon(c.env.NEON_DATABASE_URL);
+    const rows = await sql`SELECT r2_key, status FROM datasets WHERE id = ${c.req.param('id')}`;
+    if (rows.length === 0) return c.json({ error: 'Dataset not found' }, 404);
+    const row = rows[0];
+    if (row.status !== 'ready') return c.json({ error: 'Dataset is not ready' }, 409);
+    if (!row.r2_key) return c.json({ error: 'Dataset has no R2 key' }, 404);
+
+    const obj = await c.env.STORAGE.get(row.r2_key as string);
+    if (!obj) return c.json({ error: 'Dataset file not found in R2' }, 404);
+
+    return new Response(obj.body, {
+      headers: {
+        'Content-Type': 'application/jsonl',
+        'Cache-Control': 'no-cache',
+      },
+    });
+  } catch (e) {
+    console.error('Failed to download dataset:', e);
+    return c.json({ error: 'Failed to download dataset' }, 500);
+  }
+});
+
+
+/**
  * POST /api/datasets/generate
  * Generates an AI-powered instruction-tuning dataset and stores it in R2 + Postgres.
  *
