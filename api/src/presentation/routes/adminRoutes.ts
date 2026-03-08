@@ -67,13 +67,13 @@ const DEFAULT_LEGAL: Record<'terms' | 'privacy', Omit<LegalDocResponse, 'documen
   terms: {
     version: '1.0.0',
     title: 'Terms of Use',
-    content: 'By using CoderClawLink, you agree to these Terms of Use. Continued use of the service indicates acceptance of current terms.',
+    content: 'By using Builderforce.ai, you agree to these Terms of Use. Continued use of the service indicates acceptance of current terms.',
     publishedAt: new Date(0).toISOString(),
   },
   privacy: {
     version: '1.0.0',
     title: 'Privacy Policy',
-    content: 'CoderClawLink processes account, usage, and operational metadata to provide and secure the service.',
+    content: 'Builderforce.ai processes account, usage, and operational metadata to provide and secure the service.',
     publishedAt: new Date(0).toISOString(),
   },
 };
@@ -849,7 +849,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const otpauthUrl = buildOtpAuthUrl({
       accountName: user.email,
       secret,
-      issuer: 'CoderClawLink',
+      issuer: 'Builderforce',
     });
 
     return c.json({

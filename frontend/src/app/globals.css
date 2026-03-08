@@ -426,10 +426,16 @@ html[data-theme='light'] .nebula {
 }
 
 .topbar-left,
+.topbar-center,
 .topbar-right {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.topbar-center {
+  flex: 1;
+  justify-content: center;
 }
 
 .brand {
@@ -602,6 +608,21 @@ html[data-theme='light'] .nebula {
   border-color: rgba(77, 158, 255, 0.15);
 }
 
+.nav-item-highlight {
+  color: var(--warning, #f59e0b);
+}
+
+.nav-item-highlight:hover {
+  color: var(--warning, #f59e0b);
+  background: color-mix(in srgb, var(--warning, #f59e0b) 15%, transparent);
+}
+
+.nav-item-highlight.active {
+  color: var(--warning, #f59e0b);
+  background: color-mix(in srgb, var(--warning, #f59e0b) 20%, transparent);
+  border-color: color-mix(in srgb, var(--warning, #f59e0b) 40%, transparent);
+}
+
 .nav.collapsed {
   padding: 16px 8px;
 }
@@ -650,6 +671,232 @@ html[data-theme='light'] .nebula {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+/* Page title / sub (Settings, Security, Admin, etc.) */
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: var(--text-strong);
+}
+
+.page-sub {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin: 0 0 24px;
+}
+
+/* Admin page (inside shell) */
+.admin-page {
+  flex: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  color: var(--text);
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.admin-tab {
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  text-transform: capitalize;
+  transition: color var(--duration-fast) ease, background var(--duration-fast) ease, border-color var(--duration-fast) ease;
+}
+
+.admin-tab:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.admin-tab.active {
+  background: var(--accent-subtle);
+  color: var(--text-strong);
+  border-color: rgba(77, 158, 255, 0.2);
+}
+
+.admin-content {
+  min-height: 200px;
+}
+
+/* Alerts */
+.alert {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.alert-error {
+  background: var(--error-bg, #fef2f2);
+  color: var(--error-text, #991b1b);
+  border: 1px solid var(--error-border, #fecaca);
+}
+
+/* Admin data tables (same shell style) */
+.admin-page .table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+.admin-page .data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.admin-page .data-table th,
+.admin-page .data-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-page .data-table thead tr {
+  border-bottom: 2px solid var(--border);
+  background: var(--bg-muted);
+}
+
+.admin-page .data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-page .text-muted,
+.admin-page .data-table .text-muted {
+  color: var(--text-muted);
+}
+
+.admin-page .health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.admin-page .health-card {
+  padding: 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.admin-page .health-card .health-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.admin-page .health-card .health-value {
+  font-weight: 600;
+  font-size: 1.25rem;
+}
+
+.admin-page .btn-ghost {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.admin-page .btn-ghost:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.admin-page .badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.admin-page .badge-danger {
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+.admin-page .badge-neutral {
+  background: var(--bg-muted);
+  color: var(--text-muted);
+}
+
+.admin-page .badge-success {
+  background: var(--success-bg, #d1fae5);
+  color: var(--success-text, #065f46);
+}
+
+.admin-page .admin-select {
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.admin-page .admin-token-card {
+  max-width: 640px;
+}
+
+.admin-page .admin-token-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.admin-page .admin-token-actions .admin-tab {
+  margin-bottom: 0;
+}
+
+.admin-page .admin-token-textarea {
+  width: 100%;
+  min-height: 84px;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  resize: vertical;
+}
+
+/* Admin modal (impersonate) */
+.admin-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.admin-modal {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
 }
 
 /* Brain Storm layout classes (reused on brainstorm page) */

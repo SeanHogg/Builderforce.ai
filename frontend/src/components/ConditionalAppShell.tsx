@@ -22,6 +22,7 @@ function useShowAppShell(): boolean {
   if (pathname.startsWith('/projects')) return true; // /projects list
   if (pathname.startsWith('/tasks')) return true;
   if (pathname.startsWith('/workforce')) return true;
+  if (pathname.startsWith('/marketplace')) return true;
   if (pathname.startsWith('/chats')) return true;
   if (pathname.startsWith('/brainstorm')) return true;
   if (pathname.startsWith('/content-manager')) return true;
@@ -30,9 +31,11 @@ function useShowAppShell(): boolean {
   if (pathname.startsWith('/pricing')) return true;
   if (pathname.startsWith('/security')) return true;
   if (pathname.startsWith('/settings')) return true;
+  if (pathname.startsWith('/admin')) return true;
+  if (pathname.startsWith('/observability')) return true;
+  if (pathname.startsWith('/debug')) return true;
   if (pathname.startsWith('/logs')) return true;
   if (pathname.startsWith('/timeline')) return true;
-  if (pathname.startsWith('/debug')) return true;
   return false;
 }
 

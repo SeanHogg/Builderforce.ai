@@ -7,6 +7,8 @@ export interface AuthUser {
   email: string;
   name?: string;
   avatar?: string;
+  /** When true, user can access Platform Admin (/admin). */
+  isSuperadmin?: boolean;
 }
 
 export interface Tenant {

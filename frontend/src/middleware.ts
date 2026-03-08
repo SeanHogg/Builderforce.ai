@@ -16,10 +16,22 @@ import type { NextRequest } from 'next/server';
  * WEB-TOKEN + TENANT-TOKEN required (fully authenticated):
  *   /dashboard, /ide, /projects, /training, /tasks, /workforce, /chats,
  *   /brainstorm, /content-manager, /skills, /personas, /pricing, /security,
- *   /settings, /logs, /timeline, /debug
+ *   /settings, /observability, /debug
  */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Redirect legacy routes to Observability
+  if (pathname === '/logs' || pathname.startsWith('/logs/')) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/observability';
+    return NextResponse.redirect(url);
+  }
+  if (pathname === '/timeline' || pathname.startsWith('/timeline/')) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/observability';
+    return NextResponse.redirect(url);
+  }
 
   const webToken = request.cookies.get('bf_web_token')?.value;
   const tenantToken = request.cookies.get('bf_tenant_token')?.value;
@@ -58,8 +70,7 @@ export function middleware(request: NextRequest) {
     '/pricing',
     '/security',
     '/settings',
-    '/logs',
-    '/timeline',
+    '/observability',
     '/debug',
   ];
   const isProtected = protectedPaths.some((p) => pathname === p || pathname.startsWith(p + '/'));
@@ -75,6 +86,8 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/logs/:path*',
+    '/timeline/:path*',
     '/dashboard/:path*',
     '/ide',
     '/tenants/:path*',
@@ -90,8 +103,7 @@ export const config = {
     '/pricing/:path*',
     '/security/:path*',
     '/settings/:path*',
-    '/logs/:path*',
-    '/timeline/:path*',
+    '/observability/:path*',
     '/debug/:path*',
   ],
 };

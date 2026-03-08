@@ -5,7 +5,27 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
+import { getStoredWebToken, getMyTenants, getTenantToken, persistTenantSession } from '@/lib/auth';
+import type { Tenant } from '@/lib/types';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
+
+function tenantsFromResponse(data: unknown): Tenant[] {
+  if (Array.isArray(data)) {
+    return data.map((t: { id?: unknown; name?: string; slug?: string }) => ({
+      id: String(t.id),
+      name: t.name ?? '',
+      slug: t.slug,
+    }));
+  }
+  type TenantItem = { id?: unknown; name?: string; slug?: string };
+  const arr = (data as { tenants?: TenantItem[] })?.tenants;
+  if (!Array.isArray(arr)) return [];
+  return arr.map((t: TenantItem) => ({
+    id: String(t.id),
+    name: t.name ?? '',
+    slug: t.slug,
+  }));
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -30,8 +50,25 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       await login(email, password);
-      const next = searchParams.get('next') || (hasTenant ? '/ide' : '/tenants');
-      router.push(next);
+      const next = searchParams.get('next') || '/dashboard';
+      const token = getStoredWebToken();
+      if (!token) {
+        router.push(hasTenant ? next : '/tenants' + (next !== '/dashboard' ? `?next=${encodeURIComponent(next)}` : ''));
+        return;
+      }
+      const raw = await getMyTenants(token);
+      const tenants = tenantsFromResponse(raw);
+      if (tenants.length === 1) {
+        const res = await getTenantToken(token, tenants[0].id);
+        persistTenantSession(res.token, tenants[0]);
+        window.location.href = next;
+        return;
+      }
+      if (tenants.length === 0) {
+        router.push('/tenants' + (next !== '/dashboard' ? `?next=${encodeURIComponent(next)}` : ''));
+        return;
+      }
+      router.push('/tenants' + (next !== '/dashboard' ? `?next=${encodeURIComponent(next)}` : ''));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
