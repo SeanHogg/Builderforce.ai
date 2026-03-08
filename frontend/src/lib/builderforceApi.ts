@@ -149,6 +149,8 @@ export interface Claw {
   id: number;
   name: string;
   tenantId: number;
+  slug?: string;
+  status?: string;
   apiKeyHash?: string;
   connectedAt: string | null;
   lastSeenAt: string | null;
@@ -168,6 +170,17 @@ export const claws = {
       method: 'POST',
       body: JSON.stringify({ name: name.trim() }),
     }).then((r) => ({ ...r.claw, apiKey: r.apiKey } as ClawRegistration)),
+};
+
+/** Tenant default claw (for workforce "Set as default"). */
+export const tenantDefaultClaw = {
+  get: (tenantId: number) =>
+    request<{ defaultClawId: number | null }>(`/api/tenants/${tenantId}/default-claw`).then((r) => r.defaultClawId),
+  set: (tenantId: number, clawId: number | null) =>
+    request<{ defaultClawId: number | null }>(`/api/tenants/${tenantId}/default-claw`, {
+      method: 'PUT',
+      body: JSON.stringify({ clawId }),
+    }).then((r) => r.defaultClawId),
 };
 
 // ---------------------------------------------------------------------------

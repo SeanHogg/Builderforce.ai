@@ -229,6 +229,33 @@ export interface AdminSecurityDetails {
   }>;
 }
 
+export interface AdminPlatformPersona {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  voice: string | null;
+  perspective: string | null;
+  decisionStyle: string | null;
+  outputPrefix: string | null;
+  capabilities: string[];
+  tags: string[];
+  source: string;
+  author: string | null;
+  active: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface AdminProjectGovernance {
+  id: number;
+  name: string;
+  tenantId: number;
+  tenantName: string | null;
+  governance: string | null;
+  updatedAt: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Request helper — uses Web token only
 // ---------------------------------------------------------------------------
@@ -475,5 +502,61 @@ export const adminApi = {
       `/api/admin/security/users/${encodeURIComponent(userId)}/tokens/${encodeURIComponent(jti)}/revoke?tenantId=${tenantId}`,
       { method: 'POST', body: JSON.stringify({}) }
     );
+  },
+
+  // Platform personas (admin CRUD)
+  async personas(): Promise<AdminPlatformPersona[]> {
+    const res = await adminRequest<{ personas: AdminPlatformPersona[] }>('/api/admin/personas');
+    return res.personas;
+  },
+  async createPersona(data: {
+    name: string;
+    slug?: string;
+    description?: string | null;
+    voice?: string | null;
+    perspective?: string | null;
+    decisionStyle?: string | null;
+    outputPrefix?: string | null;
+    capabilities?: string[];
+    tags?: string[];
+    source?: string;
+    author?: string | null;
+    active?: boolean;
+  }): Promise<{ persona: AdminPlatformPersona }> {
+    return adminRequest('/api/admin/personas', { method: 'POST', body: JSON.stringify(data) });
+  },
+  async updatePersona(
+    id: number,
+    data: Partial<{
+      name: string;
+      slug: string;
+      description: string | null;
+      voice: string | null;
+      perspective: string | null;
+      decisionStyle: string | null;
+      outputPrefix: string | null;
+      capabilities: string[];
+      tags: string[];
+      source: string;
+      author: string | null;
+      active: boolean;
+    }>
+  ): Promise<{ persona: AdminPlatformPersona }> {
+    return adminRequest(`/api/admin/personas/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+  },
+  async deletePersona(id: number): Promise<void> {
+    await adminRequest(`/api/admin/personas/${id}`, { method: 'DELETE' });
+  },
+
+  // Admin projects (Governance tab — list all, update governance)
+  async adminProjects(): Promise<AdminProjectGovernance[]> {
+    const res = await adminRequest<{ projects: AdminProjectGovernance[] }>('/api/admin/projects');
+    return res.projects;
+  },
+  async updateProjectGovernance(projectId: number, governance: string | null): Promise<{ project: { id: number; name: string; governance: string | null } }> {
+    return adminRequest(`/api/admin/projects/${projectId}/governance`, {
+      method: 'PATCH',
+      body: JSON.stringify({ governance }),
+    });
   },
 };

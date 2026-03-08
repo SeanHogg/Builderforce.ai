@@ -385,7 +385,32 @@ export default defineConfig({
         background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)',
         flexShrink: 0, minHeight: 40,
       }}>
-        {/* Left: editable project title */}
+        {/* Left: hamburger (projects panel) */}
+        <button
+          type="button"
+          onClick={() => setProjectsPanelOpen(true)}
+          aria-label="Open projects"
+          style={{
+            background: 'var(--bg-elevated)',
+            color: 'var(--text-secondary)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 8,
+            padding: '6px 10px',
+            cursor: 'pointer',
+            flexShrink: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 3,
+          }}
+          title="All projects"
+        >
+          <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 1 }} />
+          <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 1 }} />
+          <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 1 }} />
+        </button>
+        {/* Editable project title */}
         <input
           type="text"
           value={projectTitle}
@@ -434,7 +459,7 @@ export default defineConfig({
           </span>
         )}
 
-        {/* Next to title: Details + Hamburger (projects panel) */}
+        {/* Next to title: Details */}
         {onOpenProjectDetails && (
           <button
             type="button"
@@ -459,30 +484,6 @@ export default defineConfig({
             Details
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => setProjectsPanelOpen(true)}
-          aria-label="Open projects"
-          style={{
-            background: 'var(--bg-elevated)',
-            color: 'var(--text-secondary)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
-            padding: '6px 10px',
-            cursor: 'pointer',
-            flexShrink: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 3,
-          }}
-          title="All projects"
-        >
-          <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 1 }} />
-          <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 1 }} />
-          <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 1 }} />
-        </button>
 
         {/* Spacer */}
         <div style={{ flex: 1 }} />

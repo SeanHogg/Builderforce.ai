@@ -29,6 +29,8 @@ import {
   apiErrorLog,
   llmUsageLog,
   userMfaRecoveryCodes,
+  projects,
+  platformPersonas,
 } from '../../infrastructure/database/schema';
 import { signJwt } from '../../infrastructure/auth/JwtService';
 import { LlmProxyService, FREE_MODEL_POOL, PRO_PAID_MODEL_POOL, PREFERRED_POOL_SIZE } from '../../application/llm/LlmProxyService';
@@ -1326,6 +1328,209 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       daily:      daily.rows,
       failovers:  failovers.rows,
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/personas   — list platform personas (admin CRUD)
+  // -------------------------------------------------------------------------
+  router.get('/personas', async (c) => {
+    const db = buildDatabase(c.env);
+    const rows = await db.select().from(platformPersonas).orderBy(platformPersonas.name);
+    const list = rows.map((r) => ({
+      id:         r.id,
+      name:       r.name,
+      slug:       r.slug,
+      description: r.description ?? null,
+      voice:      r.voice ?? null,
+      perspective: r.perspective ?? null,
+      decisionStyle: r.decisionStyle ?? null,
+      outputPrefix: r.outputPrefix ?? null,
+      capabilities: r.capabilities ? (JSON.parse(r.capabilities) as string[]) : [],
+      tags:       r.tags ? (JSON.parse(r.tags) as string[]) : [],
+      source:     r.source ?? 'builtin',
+      author:     r.author ?? null,
+      active:     r.active,
+      createdAt:  r.createdAt?.toISOString() ?? null,
+      updatedAt:  r.updatedAt?.toISOString() ?? null,
+    }));
+    return c.json({ personas: list });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/admin/personas   — create platform persona
+  // -------------------------------------------------------------------------
+  router.post('/personas', async (c) => {
+    const db = buildDatabase(c.env);
+    const body = await c.req.json<{
+      name: string;
+      slug?: string;
+      description?: string | null;
+      voice?: string | null;
+      perspective?: string | null;
+      decisionStyle?: string | null;
+      outputPrefix?: string | null;
+      capabilities?: string[];
+      tags?: string[];
+      source?: string;
+      author?: string | null;
+      active?: boolean;
+    }>();
+    const name = body.name?.trim();
+    if (!name) return c.json({ error: 'name is required' }, 400);
+    const slug = (body.slug ?? name).trim().toLowerCase().replace(/\s+/g, '-');
+    const [inserted] = await db
+      .insert(platformPersonas)
+      .values({
+        name,
+        slug,
+        description: body.description ?? null,
+        voice: body.voice ?? null,
+        perspective: body.perspective ?? null,
+        decisionStyle: body.decisionStyle ?? null,
+        outputPrefix: body.outputPrefix ?? null,
+        capabilities: body.capabilities?.length ? JSON.stringify(body.capabilities) : null,
+        tags: body.tags?.length ? JSON.stringify(body.tags) : null,
+        source: body.source ?? 'builtin',
+        author: body.author ?? null,
+        active: body.active ?? true,
+      })
+      .returning();
+    if (!inserted) return c.json({ error: 'Insert failed' }, 500);
+    return c.json({
+      persona: {
+        id:         inserted.id,
+        name:       inserted.name,
+        slug:       inserted.slug,
+        description: inserted.description ?? null,
+        voice:      inserted.voice ?? null,
+        perspective: inserted.perspective ?? null,
+        decisionStyle: inserted.decisionStyle ?? null,
+        outputPrefix: inserted.outputPrefix ?? null,
+        capabilities: inserted.capabilities ? (JSON.parse(inserted.capabilities) as string[]) : [],
+        tags:        inserted.tags ? (JSON.parse(inserted.tags) as string[]) : [],
+        source:      inserted.source ?? 'builtin',
+        author:      inserted.author ?? null,
+        active:      inserted.active,
+        createdAt:   inserted.createdAt?.toISOString() ?? null,
+        updatedAt:   inserted.updatedAt?.toISOString() ?? null,
+      },
+    }, 201);
+  });
+
+  // -------------------------------------------------------------------------
+  // PATCH /api/admin/personas/:id   — update platform persona
+  // -------------------------------------------------------------------------
+  router.patch('/personas/:id', async (c) => {
+    const db = buildDatabase(c.env);
+    const id = Number(c.req.param('id'));
+    if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
+    const body = await c.req.json<{
+      name?: string;
+      slug?: string;
+      description?: string | null;
+      voice?: string | null;
+      perspective?: string | null;
+      decisionStyle?: string | null;
+      outputPrefix?: string | null;
+      capabilities?: string[];
+      tags?: string[];
+      source?: string;
+      author?: string | null;
+      active?: boolean;
+    }>();
+    const [existing] = await db.select().from(platformPersonas).where(eq(platformPersonas.id, id)).limit(1);
+    if (!existing) return c.json({ error: 'Persona not found' }, 404);
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.name !== undefined) updates.name = body.name.trim();
+    if (body.slug !== undefined) updates.slug = body.slug.trim().toLowerCase().replace(/\s+/g, '-');
+    if (body.description !== undefined) updates.description = body.description;
+    if (body.voice !== undefined) updates.voice = body.voice;
+    if (body.perspective !== undefined) updates.perspective = body.perspective;
+    if (body.decisionStyle !== undefined) updates.decisionStyle = body.decisionStyle;
+    if (body.outputPrefix !== undefined) updates.outputPrefix = body.outputPrefix;
+    if (body.capabilities !== undefined) updates.capabilities = body.capabilities?.length ? JSON.stringify(body.capabilities) : null;
+    if (body.tags !== undefined) updates.tags = body.tags?.length ? JSON.stringify(body.tags) : null;
+    if (body.source !== undefined) updates.source = body.source;
+    if (body.author !== undefined) updates.author = body.author;
+    if (body.active !== undefined) updates.active = body.active;
+    const [updated] = await db.update(platformPersonas).set(updates as Record<string, unknown>).where(eq(platformPersonas.id, id)).returning();
+    if (!updated) return c.json({ error: 'Update failed' }, 500);
+    return c.json({
+      persona: {
+        id:         updated.id,
+        name:       updated.name,
+        slug:       updated.slug,
+        description: updated.description ?? null,
+        voice:      updated.voice ?? null,
+        perspective: updated.perspective ?? null,
+        decisionStyle: updated.decisionStyle ?? null,
+        outputPrefix: updated.outputPrefix ?? null,
+        capabilities: updated.capabilities ? (JSON.parse(updated.capabilities) as string[]) : [],
+        tags:        updated.tags ? (JSON.parse(updated.tags) as string[]) : [],
+        source:      updated.source ?? 'builtin',
+        author:      updated.author ?? null,
+        active:      updated.active,
+        createdAt:   updated.createdAt?.toISOString() ?? null,
+        updatedAt:   updated.updatedAt?.toISOString() ?? null,
+      },
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // DELETE /api/admin/personas/:id
+  // -------------------------------------------------------------------------
+  router.delete('/personas/:id', async (c) => {
+    const db = buildDatabase(c.env);
+    const id = Number(c.req.param('id'));
+    if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
+    const result = await db.delete(platformPersonas).where(eq(platformPersonas.id, id)).returning({ id: platformPersonas.id });
+    if (result.length === 0) return c.json({ error: 'Persona not found' }, 404);
+    return c.json({ ok: true });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/projects   — list all projects (for Governance tab)
+  // -------------------------------------------------------------------------
+  router.get('/projects', async (c) => {
+    const db = buildDatabase(c.env);
+    const rows = await db
+      .select({
+        id:         projects.id,
+        name:       projects.name,
+        tenantId:   projects.tenantId,
+        governance: projects.governance,
+        updatedAt:  projects.updatedAt,
+        tenantName: tenants.name,
+      })
+      .from(projects)
+      .leftJoin(tenants, eq(projects.tenantId, tenants.id))
+      .orderBy(desc(projects.updatedAt));
+    const list = rows.map((r) => ({
+      id:         r.id,
+      name:       r.name,
+      tenantId:   r.tenantId,
+      tenantName: r.tenantName ?? null,
+      governance: r.governance ?? null,
+      updatedAt:  r.updatedAt?.toISOString() ?? null,
+    }));
+    return c.json({ projects: list });
+  });
+
+  // -------------------------------------------------------------------------
+  // PATCH /api/admin/projects/:id/governance   — update project governance (superadmin only)
+  // -------------------------------------------------------------------------
+  router.patch('/projects/:id/governance', async (c) => {
+    const db = buildDatabase(c.env);
+    const id = Number(c.req.param('id'));
+    if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
+    const body = await c.req.json<{ governance?: string | null }>();
+    const [updated] = await db
+      .update(projects)
+      .set({ governance: body.governance ?? null, updatedAt: new Date() })
+      .where(eq(projects.id, id))
+      .returning({ id: projects.id, name: projects.name, governance: projects.governance });
+    if (!updated) return c.json({ error: 'Project not found' }, 404);
+    return c.json({ project: { id: updated.id, name: updated.name, governance: updated.governance ?? null } });
   });
 
   return router;

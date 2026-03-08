@@ -59,6 +59,7 @@ export class ProjectRepository implements IProjectRepository {
         githubRepoUrl:   plain.githubRepoUrl ?? undefined,
         githubRepoOwner: plain.githubRepoOwner ?? undefined,
         githubRepoName:  plain.githubRepoName ?? undefined,
+        governance:     plain.governance ?? undefined,
       })
       .returning();
     if (!inserted) throw new Error('Insert returned no rows');
@@ -82,6 +83,7 @@ export class ProjectRepository implements IProjectRepository {
         githubRepoUrl:   plain.githubRepoUrl ?? undefined,
         githubRepoOwner: plain.githubRepoOwner ?? undefined,
         githubRepoName:  plain.githubRepoName ?? undefined,
+        governance:     plain.governance ?? undefined,
         updatedAt:       plain.updatedAt,
       })
       .where(eq(projectsTable.id, plain.id))

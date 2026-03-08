@@ -18,6 +18,8 @@ import {
   type AdminPrivacyRequest,
   type AdminSecurityUser,
   type AdminSecurityDetails,
+  type AdminPlatformPersona,
+  type AdminProjectGovernance,
 } from '@/lib/adminApi';
 import { BUILTIN_PERSONAS, type Persona } from '@/lib/marketplaceData';
 
@@ -124,6 +126,15 @@ export default function AdminPage() {
   const [securityMfaManualKey, setSecurityMfaManualKey] = useState('');
   const [securityRecoveryCodes, setSecurityRecoveryCodes] = useState<string[]>([]);
 
+  const [platformPersonas, setPlatformPersonas] = useState<AdminPlatformPersona[]>([]);
+  const [governanceProjects, setGovernanceProjects] = useState<AdminProjectGovernance[]>([]);
+  const [personaForm, setPersonaForm] = useState<Partial<AdminPlatformPersona> & { name: string } | null>(null);
+  const [personaSaving, setPersonaSaving] = useState(false);
+  const [personaSeedBusy, setPersonaSeedBusy] = useState(false);
+  const [governanceEditId, setGovernanceEditId] = useState<number | null>(null);
+  const [governanceEditContent, setGovernanceEditContent] = useState('');
+  const [governanceSaving, setGovernanceSaving] = useState(false);
+
   const isSuperadmin = Boolean(user?.isSuperadmin);
 
   useEffect(() => {
@@ -185,7 +196,9 @@ export default function AdminPage() {
           });
           setPrivacyRequests(reqs);
         } else if (t === 'errors') setErrors(await adminApi.errors());
-        else if (t === 'token' || t === 'personas' || t === 'governance') {
+        else if (t === 'personas') setPlatformPersonas(await adminApi.personas());
+        else if (t === 'governance') setGovernanceProjects(await adminApi.adminProjects());
+        else if (t === 'token') {
           /* no fetch */
         }
       } catch (e) {
@@ -1747,13 +1760,152 @@ export default function AdminPage() {
 
             {tab === 'personas' && (
               <div>
-                <div style={{ marginBottom: 16 }}>
-                  <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px' }}>System Personas</h2>
-                  <p className="text-muted" style={{ fontSize: 12 }}>
-                    Manage built-in and marketplace personas available across all tenants.
-                  </p>
-                  <span className="text-muted" style={{ fontSize: 13 }}>{BUILTIN_PERSONAS.length} personas registered</span>
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+                  <div>
+                    <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px' }}>Platform Personas</h2>
+                    <p className="text-muted" style={{ fontSize: 12 }}>
+                      Create, edit, and delete personas available in the marketplace. Seed from built-in to copy defaults into the database.
+                    </p>
+                    <span className="text-muted" style={{ fontSize: 13 }}>{platformPersonas.length} platform personas</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="admin-tab active"
+                      onClick={() => setPersonaForm({ name: '', slug: '', description: '', voice: '', perspective: '', decisionStyle: '', outputPrefix: '', capabilities: [], tags: [], source: 'builtin', author: 'Builderforce', active: true })}
+                    >
+                      Add persona
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      disabled={personaSeedBusy}
+                      onClick={async () => {
+                        setPersonaSeedBusy(true);
+                        setErrorMsg('');
+                        try {
+                          for (const p of BUILTIN_PERSONAS as Persona[]) {
+                            await adminApi.createPersona({
+                              name: p.name,
+                              slug: p.name,
+                              description: p.description ?? null,
+                              voice: p.voice ?? null,
+                              perspective: p.perspective ?? null,
+                              decisionStyle: p.decisionStyle ?? null,
+                              outputPrefix: p.outputPrefix ?? null,
+                              capabilities: p.capabilities ?? [],
+                              tags: p.tags ?? [],
+                              source: 'builtin',
+                              author: p.author ?? 'Builderforce',
+                              active: true,
+                            });
+                          }
+                          await loadTab('personas');
+                        } catch (e) {
+                          setErrorMsg(e instanceof Error ? e.message : String(e));
+                        } finally {
+                          setPersonaSeedBusy(false);
+                        }
+                      }}
+                    >
+                      {personaSeedBusy ? 'Seeding…' : 'Seed from built-in'}
+                    </button>
+                    <button type="button" className="btn-ghost" onClick={() => loadTab('personas')}>↻ Refresh</button>
+                  </div>
                 </div>
+                {personaForm && (
+                  <div className="health-card" style={{ padding: 16, marginBottom: 16 }}>
+                    <div className="health-label" style={{ marginBottom: 8 }}>{personaForm.id ? 'Edit persona' : 'New persona'}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                      <input
+                        placeholder="Name"
+                        value={personaForm.name}
+                        onChange={(e) => setPersonaForm((f) => f && { ...f, name: e.target.value, slug: f.slug || e.target.value.toLowerCase().replace(/\s+/g, '-') })}
+                        className="admin-select"
+                      />
+                      <input
+                        placeholder="Slug"
+                        value={personaForm.slug ?? ''}
+                        onChange={(e) => setPersonaForm((f) => f && { ...f, slug: e.target.value })}
+                        className="admin-select"
+                      />
+                    </div>
+                    <input
+                      placeholder="Output prefix (e.g. CODE:)"
+                      value={personaForm.outputPrefix ?? ''}
+                      onChange={(e) => setPersonaForm((f) => f && { ...f, outputPrefix: e.target.value })}
+                      className="admin-select"
+                      style={{ width: '100%', marginBottom: 8 }}
+                    />
+                    <input
+                      placeholder="Voice"
+                      value={personaForm.voice ?? ''}
+                      onChange={(e) => setPersonaForm((f) => f && { ...f, voice: e.target.value })}
+                      className="admin-select"
+                      style={{ width: '100%', marginBottom: 8 }}
+                    />
+                    <textarea
+                      placeholder="Description"
+                      value={personaForm.description ?? ''}
+                      onChange={(e) => setPersonaForm((f) => f && { ...f, description: e.target.value })}
+                      className="admin-token-textarea"
+                      style={{ minHeight: 60, marginBottom: 8 }}
+                    />
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="admin-tab active"
+                        disabled={personaSaving || !personaForm.name?.trim()}
+                        onClick={async () => {
+                          if (!personaForm?.name?.trim()) return;
+                          setPersonaSaving(true);
+                          setErrorMsg('');
+                          try {
+                            if (personaForm.id) {
+                              await adminApi.updatePersona(personaForm.id, {
+                                name: personaForm.name.trim(),
+                                slug: (personaForm.slug || personaForm.name).trim().toLowerCase().replace(/\s+/g, '-'),
+                                description: personaForm.description?.trim() || null,
+                                voice: personaForm.voice?.trim() || null,
+                                perspective: personaForm.perspective?.trim() || null,
+                                decisionStyle: personaForm.decisionStyle?.trim() || null,
+                                outputPrefix: personaForm.outputPrefix?.trim() || null,
+                                capabilities: personaForm.capabilities ?? [],
+                                tags: personaForm.tags ?? [],
+                                author: personaForm.author ?? null,
+                                active: personaForm.active ?? true,
+                              });
+                            } else {
+                              await adminApi.createPersona({
+                                name: personaForm.name.trim(),
+                                slug: (personaForm.slug || personaForm.name).trim().toLowerCase().replace(/\s+/g, '-'),
+                                description: personaForm.description?.trim() || null,
+                                voice: personaForm.voice?.trim() || null,
+                                perspective: personaForm.perspective?.trim() || null,
+                                decisionStyle: personaForm.decisionStyle?.trim() || null,
+                                outputPrefix: personaForm.outputPrefix?.trim() || null,
+                                capabilities: personaForm.capabilities ?? [],
+                                tags: personaForm.tags ?? [],
+                                source: 'builtin',
+                                author: personaForm.author ?? 'Builderforce',
+                                active: personaForm.active ?? true,
+                              });
+                            }
+                            setPersonaForm(null);
+                            await loadTab('personas');
+                          } catch (e) {
+                            setErrorMsg(e instanceof Error ? e.message : String(e));
+                          } finally {
+                            setPersonaSaving(false);
+                          }
+                        }}
+                      >
+                        {personaSaving ? 'Saving…' : personaForm.id ? 'Update' : 'Create'}
+                      </button>
+                      <button type="button" className="btn-ghost" onClick={() => setPersonaForm(null)}>Cancel</button>
+                    </div>
+                  </div>
+                )}
                 <div className="table-wrap">
                   <table className="data-table">
                     <thead>
@@ -1763,30 +1915,44 @@ export default function AdminPage() {
                         <th>Source</th>
                         <th>Prefix</th>
                         <th>Tags</th>
+                        <th></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {(BUILTIN_PERSONAS as Persona[]).map((p, i) => (
-                        <tr key={p.name}>
-                          <td style={{ fontWeight: 600 }}>🎭 {p.name}</td>
-                          <td>{p.voice}</td>
-                          <td>
-                            <span
-                              className="badge"
-                              style={{
-                                background: p.source === 'builtin' ? 'var(--accent-subtle)' : 'var(--success-bg)',
-                                color: p.source === 'builtin' ? 'var(--accent)' : 'var(--success-text)',
-                                fontSize: 10,
-                                textTransform: 'uppercase',
-                              }}
-                            >
-                              {p.source}
-                            </span>
-                          </td>
-                          <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{p.outputPrefix}</td>
-                          <td>{(p.tags ?? []).join(', ')}</td>
-                        </tr>
-                      ))}
+                      {platformPersonas.length === 0 ? (
+                        <tr><td colSpan={6} className="text-muted" style={{ padding: 24 }}>No platform personas yet. Click &quot;Seed from built-in&quot; or &quot;Add persona&quot;.</td></tr>
+                      ) : (
+                        platformPersonas.map((p) => (
+                          <tr key={p.id}>
+                            <td style={{ fontWeight: 600 }}>🎭 {p.name}</td>
+                            <td>{p.voice ?? '—'}</td>
+                            <td>
+                              <span className="badge" style={{ background: 'var(--accent-subtle)', color: 'var(--accent)', fontSize: 10, textTransform: 'uppercase' }}>{p.source}</span>
+                            </td>
+                            <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{p.outputPrefix ?? '—'}</td>
+                            <td>{(p.tags ?? []).join(', ') || '—'}</td>
+                            <td>
+                              <button type="button" className="btn-ghost" onClick={() => setPersonaForm({ ...p, name: p.name })}>Edit</button>
+                              <button
+                                type="button"
+                                className="btn-ghost"
+                                onClick={async () => {
+                                  if (!confirm(`Delete persona "${p.name}"?`)) return;
+                                  setErrorMsg('');
+                                  try {
+                                    await adminApi.deletePersona(p.id);
+                                    await loadTab('personas');
+                                  } catch (e) {
+                                    setErrorMsg(e instanceof Error ? e.message : String(e));
+                                  }
+                                }}
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -1794,11 +1960,105 @@ export default function AdminPage() {
             )}
 
             {tab === 'governance' && (
-              <div style={{ padding: 24 }}>
-                <div className="page-title" style={{ marginBottom: 8 }}>Governance</div>
-                <p className="page-sub">
-                  Project governance rules are managed per-tenant in the workspace view.
-                </p>
+              <div>
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  <div>
+                    <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px' }}>Governance</h2>
+                    <p className="text-muted" style={{ fontSize: 12 }}>
+                      View and edit project governance rules (markdown) across all workspaces.
+                    </p>
+                    <span className="text-muted" style={{ fontSize: 13 }}>{governanceProjects.length} projects</span>
+                  </div>
+                  <button type="button" className="btn-ghost" onClick={() => loadTab('governance')}>↻ Refresh</button>
+                </div>
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Workspace</th>
+                        <th>Project</th>
+                        <th>Governance (preview)</th>
+                        <th>Updated</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {governanceProjects.length === 0 ? (
+                        <tr><td colSpan={5} className="text-muted" style={{ padding: 24 }}>No projects yet.</td></tr>
+                      ) : (
+                        governanceProjects.map((proj) => (
+                          <tr key={proj.id}>
+                            <td>{proj.tenantName ?? proj.tenantId}</td>
+                            <td style={{ fontWeight: 600 }}>{proj.name}</td>
+                            <td className="text-muted" style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={proj.governance ?? undefined}>
+                              {proj.governance ? (proj.governance.slice(0, 80) + (proj.governance.length > 80 ? '…' : '')) : '—'}
+                            </td>
+                            <td className="text-muted">{proj.updatedAt ? fmtDateTime(proj.updatedAt) : '—'}</td>
+                            <td>
+                              <button
+                                type="button"
+                                className="btn-ghost"
+                                onClick={() => {
+                                  setGovernanceEditId(proj.id);
+                                  setGovernanceEditContent(proj.governance ?? '');
+                                }}
+                              >
+                                Edit
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {governanceEditId !== null && (
+                  <div
+                    className="admin-modal-overlay"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    role="dialog"
+                    aria-modal="true"
+                    onClick={() => { setGovernanceEditId(null); setGovernanceEditContent(''); }}
+                  >
+                    <div className="health-card" style={{ padding: 24, maxWidth: 640, width: '100%', maxHeight: '90vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
+                      <div className="page-title" style={{ marginBottom: 12 }}>Edit governance</div>
+                      <p className="text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
+                        Project: {governanceProjects.find((p) => p.id === governanceEditId)?.name ?? governanceEditId}
+                      </p>
+                      <textarea
+                        className="admin-token-textarea"
+                        value={governanceEditContent}
+                        onChange={(e) => setGovernanceEditContent(e.target.value)}
+                        style={{ minHeight: 280, width: '100%', marginBottom: 16 }}
+                        placeholder="Governance rules (markdown)"
+                      />
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          type="button"
+                          className="admin-tab active"
+                          disabled={governanceSaving}
+                          onClick={async () => {
+                            setGovernanceSaving(true);
+                            setErrorMsg('');
+                            try {
+                              await adminApi.updateProjectGovernance(governanceEditId, governanceEditContent.trim() || null);
+                              setGovernanceEditId(null);
+                              setGovernanceEditContent('');
+                              await loadTab('governance');
+                            } catch (e) {
+                              setErrorMsg(e instanceof Error ? e.message : String(e));
+                            } finally {
+                              setGovernanceSaving(false);
+                            }
+                          }}
+                        >
+                          {governanceSaving ? 'Saving…' : 'Save'}
+                        </button>
+                        <button type="button" className="btn-ghost" onClick={() => { setGovernanceEditId(null); setGovernanceEditContent(''); }}>Cancel</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
