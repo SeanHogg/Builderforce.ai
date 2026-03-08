@@ -32,16 +32,28 @@ export function useWebContainer() {
   const instanceRef = useRef<import('@webcontainer/api').WebContainer | null>(null);
 
   const getOrBootWebContainer = useCallback(async () => {
+    // If we already have an instance, return it
     if (webContainerInstance) {
       instanceRef.current = webContainerInstance;
       setState({ status: 'ready' });
       return webContainerInstance;
     }
+    
+    // If boot is in progress, wait for it
     if (bootPromise) {
-      const instance = await bootPromise;
-      instanceRef.current = instance;
-      return instance;
+      try {
+        const instance = await bootPromise;
+        instanceRef.current = instance;
+        setState({ status: 'ready' });
+        return instance;
+      } catch (error) {
+        // If the boot promise failed, we need to try again
+        bootPromise = null;
+        throw error;
+      }
     }
+    
+    // Start a new boot
     setState({ status: 'booting' });
     try {
       const { WebContainer } = await import('@webcontainer/api');
@@ -55,6 +67,7 @@ export function useWebContainer() {
       const msg = error instanceof Error ? error.message : 'Failed to boot WebContainer';
       setState({ status: 'error', error: msg });
       bootPromise = null;
+      webContainerInstance = null;
       throw error;
     }
   }, []);
@@ -83,7 +96,9 @@ export function useWebContainer() {
   const startDevServer = useCallback(async (onOutput?: (data: string) => void): Promise<string> => {
     const instance = await getOrBootWebContainer();
     return new Promise((resolve, reject) => {
+      let serverReady = false;
       instance.on('server-ready', (port, url) => {
+        serverReady = true;
         setState(prev => ({ ...prev, url }));
         resolve(url);
       });
@@ -94,7 +109,9 @@ export function useWebContainer() {
           }));
         }
         process.exit.then(code => {
-          if (code !== 0) reject(new Error(`Dev server exited with code ${code}`));
+          if (code !== 0 && !serverReady) {
+            reject(new Error(`Dev server exited with code ${code}. Check terminal output for details.`));
+          }
         });
       }).catch(reject);
     });

@@ -11,6 +11,7 @@ interface FileExplorerProps {
   onFileSelect: (path: string) => void;
   onFileCreate: (path: string) => void;
   onFileDelete: (path: string) => void;
+  showHeader?: boolean;
 }
 
 function fileIcon(name: string): string {
@@ -98,7 +99,7 @@ function TreeNodeComponent({
   );
 }
 
-export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, onFileDelete }: FileExplorerProps) {
+export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, onFileDelete, showHeader = true }: FileExplorerProps) {
   const [newFileName, setNewFileName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const tree = buildTree(files);
@@ -113,16 +114,28 @@ export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, on
 
   return (
     <div style={{ height: '100%', background: 'var(--bg-surface)', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-        <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--font-display)' }}>
-          Explorer
-        </span>
-        <button
-          onClick={() => setIsCreating(true)}
-          title="New file"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.1rem', lineHeight: 1, padding: '2px 4px', borderRadius: 4 }}
-        >+</button>
-      </div>
+      {showHeader && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+          <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--font-display)' }}>
+            Explorer
+          </span>
+          <button
+            onClick={() => setIsCreating(true)}
+            title="New file"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.1rem', lineHeight: 1, padding: '2px 4px', borderRadius: 4 }}
+          >+</button>
+        </div>
+      )}
+
+      {!showHeader && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+          <button
+            onClick={() => setIsCreating(true)}
+            title="New file"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.1rem', lineHeight: 1, padding: '2px 4px', borderRadius: 4 }}
+          >+</button>
+        </div>
+      )}
 
       {isCreating && (
         <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>

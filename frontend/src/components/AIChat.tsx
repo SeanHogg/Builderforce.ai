@@ -136,26 +136,21 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode }
   };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-surface)' }}>
-      {/* Header */}
-      <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>AI Assistant</span>
-        {activeFile && (
-          <span style={{ fontSize: '0.68rem', color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)', border: '1px solid var(--border-accent)', borderRadius: 999, padding: '2px 8px', fontFamily: 'var(--font-display)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>
-            {activeFile.split('/').pop()}
-          </span>
-        )}
-      </div>
-
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
       {/* Messages */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
         {messages.length === 0 && (
-          <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '32px 12px' }}>
-            <div style={{ fontSize: '2rem', marginBottom: 8 }}>🤖</div>
-            <p style={{ fontSize: '0.82rem', marginBottom: 4 }}>Ask me anything about your code!</p>
-            {activeFile && (
-              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                I can see <strong style={{ color: 'var(--coral-bright)' }}>{activeFile}</strong> — ask me to explain, refactor, or add features.
+          <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '48px 16px' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>💬</div>
+            <p style={{ fontSize: '0.9rem', marginBottom: 6, color: 'var(--text-primary)' }}>Ask me anything about your code!</p>
+            {activeFile ? (
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                I can see <strong style={{ color: 'var(--coral-bright)' }}>{activeFile}</strong><br />
+                Ask me to explain, refactor, or add features.
+              </p>
+            ) : (
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                Open a file to get context-aware suggestions.
               </p>
             )}
           </div>
@@ -188,8 +183,8 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode }
       </div>
 
       {/* Input */}
-      <div style={{ padding: '8px 10px', borderTop: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-        <div style={{ display: 'flex', gap: 6 }}>
+      <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)', flexShrink: 0, background: 'var(--bg-elevated)' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
           <textarea
             value={input}
             onChange={e => setInput(e.target.value)}
@@ -199,12 +194,13 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode }
                 sendMessage();
               }
             }}
-            placeholder={activeFile ? `Ask about ${activeFile.split('/').pop()}… (Enter to send)` : 'Ask AI… (Enter to send)'}
+            placeholder="Ask AI... (Enter to send)"
             style={{
-              flex: 1, background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-              fontSize: '0.82rem', borderRadius: 8, padding: '8px 10px',
+              flex: 1, background: 'var(--bg-base)', color: 'var(--text-primary)',
+              fontSize: '0.85rem', borderRadius: 10, padding: '10px 12px',
               resize: 'none', outline: 'none',
               border: '1px solid var(--border-subtle)', fontFamily: 'var(--font-body)',
+              lineHeight: 1.4,
             }}
             rows={2}
             disabled={isLoading}
@@ -216,14 +212,16 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode }
             disabled={isLoading || !input.trim()}
             style={{
               background: isLoading || !input.trim() ? 'var(--bg-elevated)' : 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-              color: '#fff', border: 'none', borderRadius: 8,
-              padding: '0 12px', cursor: 'pointer', fontSize: '0.82rem',
+              color: '#fff', border: 'none', borderRadius: 10,
+              padding: '10px 16px', cursor: isLoading || !input.trim() ? 'not-allowed' : 'pointer',
+              fontSize: '0.85rem',
               fontFamily: 'var(--font-display)', fontWeight: 600,
               opacity: isLoading || !input.trim() ? 0.5 : 1,
               flexShrink: 0,
+              height: 42,
             }}
           >
-            {isLoading ? '…' : 'Send'}
+            {isLoading ? '⏳' : '→'}
           </button>
         </div>
       </div>
