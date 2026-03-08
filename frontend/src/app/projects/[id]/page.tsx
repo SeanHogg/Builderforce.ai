@@ -2,9 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { IDE } from '@/components/IDE';
+import dynamic from 'next/dynamic';
 import { fetchProject, fetchFiles } from '@/lib/api';
 import type { Project, FileEntry } from '@/lib/types';
+
+/**
+ * Load IDE only on the client so @huggingface/transformers (ONNX WASM ~21MB)
+ * is not bundled into the edge function. Keeps worker under Cloudflare's 3 MiB limit.
+ */
+const IDE = dynamic(() => import('@/components/IDE').then((m) => m.IDE), { ssr: false });
 
 /**
  * ProjectPage — client component so it uses the NEXT_PUBLIC_WORKER_URL
