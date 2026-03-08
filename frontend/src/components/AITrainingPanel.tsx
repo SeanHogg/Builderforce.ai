@@ -14,10 +14,11 @@ import {
   listDatasets,
   listTrainingJobs,
 } from '@/lib/api';
+import { getApiBaseUrl } from '@/lib/apiClient';
 import { WebGPUTrainer, isWebGPUAvailable, shouldUseWebGPU, type TrainingStep } from '@/lib/webgpu-trainer';
 
 interface AITrainingPanelProps {
-  projectId: string;
+  projectId: string | number;
   onLog?: (message: string) => void;
   onJobCompleted?: (job: TrainingJob) => void;
 }
@@ -113,7 +114,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
         appendLog('🎮 Starting in-browser WebGPU LoRA training…');
         const trainer = new WebGPUTrainer({
           modelId: config.baseModel,
-          workerUrl: process.env.NEXT_PUBLIC_WORKER_URL ?? 'http://localhost:8787',
+          workerUrl: getApiBaseUrl(),
           projectId,
           jobId: job.id,
           datasetId: selectedDatasetId || undefined,

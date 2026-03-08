@@ -74,11 +74,70 @@ Builderforce.ai is a full-stack, cloud-native IDE that combines:
 
 ---
 
+## Worker vs API (api.builderforce.ai)
+
+The repo has **two** Cloudflare Workers that the frontend talks to:
+
+| | **worker** (builderforce-worker) | **api** (api.builderforce.ai) |
+|---|---|---|
+| **Purpose** | Original Builderforce backend: IDE projects, files, datasets, training, workforce registry, AI chat. | CoderClawLink port: auth, tenants, projects/tasks, claws, brain, chat, LLM, marketplace. |
+| **Auth** | None (CORS only; frontend may send Bearer but worker does not validate). | JWT + tenant isolation on protected routes. |
+| **Database** | Neon Postgres (`NEON_DATABASE_URL`) — `projects`, `datasets`, `training_jobs`, etc. | Neon Postgres (`NEON_DATABASE_URL`) — Drizzle schema (tenants, **projects**, tasks, claws, etc.). **Projects are unified:** the API’s `projects` table is the single source of truth; IDE datasets/training/agents reference `projects.id`. |
+| **Storage** | R2 `STORAGE` (builderforce-storage): project files (`projectId/path`), dataset JSONL, LoRA artifacts. | R2 `UPLOADS` (builderforce-uploads): brain uploads, claw-related assets. |
+| **Durable Objects** | **CollaborationRoom** — WebSocket at `/api/collab/:sessionId/ws` (Yjs sync, presence, terminal). | **ClawRelayDO** — claw relay only. |
+| **AI** | Workers AI binding + optional OpenRouter (`/api/ai/chat` streaming). | OpenRouter only (`/llm/v1/chat/completions`). |
+
+**Frontend usage today:**
+
+- **NEXT_PUBLIC_WORKER_URL** (worker): dashboard projects, project files (IDE), datasets, training (create/jobs/logs/artifact), AI chat in IDE, workforce list/hire/package, **collaboration WebSocket** (`useCollaboration.ts`).
+- **NEXT_PUBLIC_AUTH_API_URL** (api): login, tenants, Brain Storm (brain + chat API), Workforce claws (list/register), Terms/Privacy, marketplace-stats.
+
+So the **worker is not “just a REST API”**. It has:
+
+1. **WebSocket + Durable Object** — real-time collaboration (CollaborationRoom) that the API does not provide.
+2. **R2 project file storage** — IDE file read/write by `projectId/path`; API has no equivalent project-files API.
+3. **Datasets + training** — R2 + Neon tables for LoRA datasets and training jobs; API has no training/dataset routes.
+4. **Workers AI** — optional Cloudflare AI binding; API uses OpenRouter only.
+
+**Consolidation:** To fold the worker into the API you would need to:
+
+- Port worker REST routes (projects, files, datasets, training, agents) into the API and either unify with the existing API project/task/agent model or run both data models in one worker.
+- Add **CollaborationRoom** DO to the API worker and expose `/api/collab/:sessionId/ws` (and optionally `/api/collab/:sessionId`) there.
+- Add an R2 binding (or reuse `UPLOADS` with a prefix) for worker-style project files and dataset/artifact keys.
+- Optionally add a Workers AI binding to the API if you want to keep that provider for IDE chat.
+
+Until that consolidation is done, the worker remains the backend for IDE projects, files, training, workforce registry (list/hire), IDE AI chat, and real-time collaboration.
+
+**Single database:** Both applications use **Neon** (different DBs today). You can consolidate to one Neon database by running the migration scripts for both schemas against the same DB; worker and API can then share one `NEON_DATABASE_URL` if you later merge code paths.
+
+**How the frontend talks to data:** The frontend never connects to the database. It only calls the worker and the API over HTTP (`fetch`). Those two Workers are the only things that connect to Neon (and R2). So the flow is:
+
+```
+  Browser (Next.js)                    Cloudflare Workers                      Neon / R2
+  ┌─────────────────┐                  ┌──────────────────────────────────┐
+  │ fetch(WORKER_   │ ─── HTTP ──────► │ worker (builderforce-worker)     │ ───► Neon DB (worker schema)
+  │   URL/...)      │                  │   → projects, files, datasets,    │      R2 (builderforce-storage)
+  │                 │                  │     training, agents, ai/chat    │
+  │ fetch(AUTH_     │ ─── HTTP ──────► │ api (api.builderforce.ai)        │ ───► Neon DB (API schema)
+  │   API_URL/...)  │                  │   → auth, tenants, claws, brain,  │      R2 (builderforce-uploads)
+  └─────────────────┘                  │     chat, marketplace            │
+                                       └──────────────────────────────────┘
+```
+
+Moving the worker’s REST endpoints into the API is a valid choice: then the frontend would call only the API for all REST, and the worker would only be needed for the collaboration WebSocket (until that is moved into the API too).
+
+---
+
 ## Repository Structure
 
 ```
 builderforce.ai/
-├── frontend/                   # Next.js application (Cloudflare Pages)
+├── api/                         # api.builderforce.ai — CoderClawLink API (Hono on Cloudflare Workers)
+│   ├── src/                     # Auth, tenants, projects, tasks, claws, marketplace, brain, etc.
+│   ├── migrations/              # Drizzle/Postgres migrations
+│   └── wrangler.toml            # Routes: api.builderforce.ai
+│
+├── frontend/                    # Next.js application (Cloudflare Pages)
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── layout.tsx      # Root layout: fonts, starfield, anti-FOUC theme script
@@ -93,7 +152,11 @@ builderforce.ai/
 │   │   │   ├── tenants/        # Workspace management
 │   │   │   └── training/       # Redirect → /projects
 │   │   ├── components/
-│   │   │   ├── AppHeader.tsx   # Shared sticky nav (claw logo, theme toggle)
+│   │   │   ├── AppShell.tsx    # Sidebar (collapsible) + TopBar + Footer for authenticated app
+│   │   │   ├── Sidebar.tsx     # Main / MESH / Extensions / System nav
+│   │   │   ├── TopBar.tsx      # Logo, Marketplace, theme, sign-out
+│   │   │   ├── AppFooter.tsx  # Version, Terms of Use (api.builderforce.ai), Privacy
+│   │   │   ├── AppHeader.tsx   # Shared sticky nav (public/legacy pages)
 │   │   │   ├── IDE.tsx         # Main IDE layout orchestrator
 │   │   │   ├── CodeEditor.tsx  # Monaco + Yjs binding
 │   │   │   ├── FileExplorer.tsx
@@ -137,8 +200,7 @@ builderforce.ai/
 ├── migrations/                 # SQL migration files
 │   └── 001_create_projects.sql
 └── .github/workflows/
-    ├── deploy-frontend.yml     # CI: next build → Cloudflare Pages
-    └── deploy-worker.yml       # CI: wrangler deploy (with migrate predeploy)
+    └── deploy-frontend.yml    # CI: API (api.builderforce.ai) + Frontend (Pages)
 ```
 
 ---
@@ -348,10 +410,11 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Deployment
 
-### Worker
+### API (api.builderforce.ai)
 
 ```bash
-cd worker
+cd api
+npx wrangler secret put JWT_SECRET
 npx wrangler secret put NEON_DATABASE_URL
 npx wrangler secret put OPENROUTER_API_KEY   # optional
 npm run deploy   # runs migrate then wrangler deploy
@@ -359,12 +422,19 @@ npm run deploy   # runs migrate then wrangler deploy
 
 ### Frontend (Cloudflare Pages)
 
-Set these GitHub Actions secrets in your repo:
-- `CF_API_TOKEN`
-- `CF_ACCOUNT_ID`
-- `NEXT_PUBLIC_WORKER_URL` → your deployed worker URL
+Build uses `NEXT_PUBLIC_WORKER_URL` (e.g. `https://api.builderforce.ai` or your worker URL).
 
-Push to `main` — the `.github/workflows/deploy-frontend.yml` workflow builds and deploys automatically.
+### CI/CD (push to `main`)
+
+The `.github/workflows/deploy-frontend.yml` workflow deploys both:
+
+1. **API** — `api/`: runs migrations (requires `NEON_DATABASE_URL`) then `wrangler deploy` to api.builderforce.ai
+2. **Frontend** — `frontend/`: Next.js build → Cloudflare Pages
+
+Required GitHub Actions secrets:
+- `CF_API_TOKEN` — Cloudflare API token
+- `CF_ACCOUNT_ID` — Cloudflare account ID
+- `NEON_DATABASE_URL` — Neon Postgres URL (for API migrations in CI; set via wrangler for deployed worker)
 
 ---
 

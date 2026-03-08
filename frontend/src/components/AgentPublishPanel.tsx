@@ -7,7 +7,7 @@ import { publishAgent } from '@/lib/api';
 const INSTALL_COMMAND = 'iwr -useb https://coderclaw.ai/install.ps1 | iex';
 
 interface AgentPublishPanelProps {
-  projectId: string;
+  projectId: string | number;
   completedJobs: TrainingJob[];
 }
 

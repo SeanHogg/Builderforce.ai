@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { AuthProvider } from '@/lib/AuthContext';
 import ThemeProvider from './ThemeProvider';
+import ConditionalAppShell from '@/components/ConditionalAppShell';
 
 export const metadata: Metadata = {
   title: 'Builderforce.ai — AI Agent Training Platform',
@@ -48,7 +49,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Client island: syncs icon labels after JS hydrates */}
         <ThemeProvider />
 
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <ConditionalAppShell>{children}</ConditionalAppShell>
+        </AuthProvider>
       </body>
     </html>
   );

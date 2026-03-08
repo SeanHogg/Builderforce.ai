@@ -12,7 +12,7 @@ export default function TrainingRedirectPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/projects');
+    router.replace('/dashboard');
   }, [router]);
 
   return (

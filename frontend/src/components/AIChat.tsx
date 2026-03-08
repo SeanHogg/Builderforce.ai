@@ -5,7 +5,7 @@ import type { AIMessage } from '@/lib/types';
 import { sendAIMessage } from '@/lib/api';
 
 interface AIChatProps {
-  projectId: string;
+  projectId: string | number;
   /** Task 3: Provide the currently open file path as context */
   activeFile?: string;
   /** Task 3: Provide the currently open file content as context */
@@ -126,7 +126,7 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode }
       setMessages(prev =>
         prev.map(m =>
           m.id === assistantMessage.id
-            ? { ...m, content: '⚠️ Failed to get a response. Is the worker running? Check `NEXT_PUBLIC_WORKER_URL`.' }
+            ? { ...m, content: '⚠️ Failed to get a response. Check your connection and try again.' }
             : m
         )
       );
