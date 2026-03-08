@@ -23,17 +23,23 @@ export interface AuthState {
 }
 
 // ---------------------------------------------------------------------------
-// Projects
+// Projects (unified API: id and tenant scoping)
 // ---------------------------------------------------------------------------
 
 export interface Project {
-  id: string;
+  id: number;
   name: string;
-  description?: string;
-  owner_id: string;
-  template: string;
-  created_at: string;
-  updated_at: string;
+  description?: string | null;
+  template?: string | null;
+  key?: string;
+  tenantId?: number;
+  status?: string;
+  created_at?: string;
+  updated_at?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  /** From list endpoint */
+  taskCount?: number;
 }
 
 export interface FileEntry {
@@ -114,7 +120,7 @@ export interface TrainingConfig {
 
 export interface Dataset {
   id: string;
-  project_id: string;
+  project_id: number | string;
   name: string;
   description?: string;
   capability_prompt: string;
@@ -127,7 +133,7 @@ export interface Dataset {
 
 export interface TrainingJob {
   id: string;
-  project_id: string;
+  project_id: number | string;
   dataset_id?: string;
   base_model: string;
   lora_rank: number;
@@ -177,7 +183,7 @@ export interface AgentProfile {
 
 export interface PublishedAgent {
   id: string;
-  project_id: string;
+  project_id: number | string;
   job_id?: string;
   name: string;
   title: string;

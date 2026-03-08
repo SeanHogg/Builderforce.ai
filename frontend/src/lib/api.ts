@@ -1,104 +1,174 @@
-import { getStoredTenantToken } from './auth';
+/**
+ * REST API client. Projects and IDE files use the worker when NEXT_PUBLIC_WORKER_URL
+ * is set (so the IDE can open projects); otherwise they use the auth API (api.builderforce.ai).
+ * Auth, datasets, training, AI always use the auth API.
+ */
 
-const WORKER_URL = (() => {
-  const url = process.env.NEXT_PUBLIC_WORKER_URL;
-  if (!url) {
-    console.warn(
-      '[builderforce] NEXT_PUBLIC_WORKER_URL is not set. ' +
-      'Falling back to http://localhost:8787. ' +
-      'Set this env var during `next build` for production.'
-    );
-    return 'http://localhost:8787';
+import {
+  apiRequest,
+  apiRequestText,
+  apiRequestStream,
+  getApiBaseUrl,
+  getAuthHeaders,
+  getProjectsBaseUrl,
+  useWorkerForProjects,
+} from './apiClient';
+import type {
+  Project,
+  FileEntry,
+  Dataset,
+  TrainingJob,
+  TrainingLog,
+  EvaluationResult,
+  PublishedAgent,
+  AgentPackage,
+} from './types';
+
+const IDE = '/api/ide';
+const AI = '/api/ai';
+
+async function projectsRequest<T>(
+  path: string,
+  opts: RequestInit & { body?: string } = {}
+): Promise<T> {
+  const { body, ...init } = opts;
+  const url = `${getProjectsBaseUrl()}${path}`;
+  const res = await fetch(url, {
+    ...init,
+    headers: { ...getAuthHeaders(), ...(init.headers as Record<string, string>) },
+    ...(body !== undefined && { body }),
+  });
+  if (!res.ok) {
+    const msg = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(msg.error || res.statusText || `Request failed (${res.status})`);
   }
-  return url;
-})();
-
-function authHeaders(extra?: Record<string, string>): Record<string, string> {
-  const token = getStoredTenantToken();
-  const headers: Record<string, string> = { ...extra };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
+  if (res.status === 204) return undefined as T;
+  return res.json() as Promise<T>;
 }
 
-export async function fetchProjects(): Promise<import('./types').Project[]> {
-  const res = await fetch(`${WORKER_URL}/api/projects`, { headers: authHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch projects');
-  return res.json();
+// ---------------------------------------------------------------------------
+// Projects (worker: /api/projects array | API: /api/projects { projects })
+// ---------------------------------------------------------------------------
+
+export async function fetchProjects(): Promise<Project[]> {
+  if (useWorkerForProjects()) {
+    const arr = await projectsRequest<Project[]>('/api/projects');
+    return Array.isArray(arr) ? arr : [];
+  }
+  const res = await apiRequest<{ projects: Project[] }>('/api/projects');
+  return res?.projects ?? [];
 }
 
-export async function fetchProject(id: string): Promise<import('./types').Project> {
-  const res = await fetch(`${WORKER_URL}/api/projects/${id}`, { headers: authHeaders() });
-  if (res.status === 404) throw new Error('404 Project not found');
-  if (!res.ok) throw new Error(`Failed to fetch project (${res.status})`);
-  return res.json();
+export async function fetchProject(id: number | string): Promise<Project> {
+  const res = await projectsRequest<Project>(`/api/projects/${id}`);
+  const p = res as Project;
+  return {
+    ...p,
+    created_at: (p as { createdAt?: string }).createdAt ?? p.created_at,
+    updated_at: (p as { updatedAt?: string }).updatedAt ?? p.updated_at,
+  };
 }
 
-export async function createProject(data: { name: string; description?: string; template?: string }): Promise<import('./types').Project> {
-  const res = await fetch(`${WORKER_URL}/api/projects`, {
+export async function createProject(data: {
+  name: string;
+  description?: string;
+  template?: string;
+}): Promise<Project> {
+  const res = await projectsRequest<Project>('/api/projects', {
     method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to create project');
-  return res.json();
+  const p = res as Project;
+  return {
+    ...p,
+    created_at: (p as { createdAt?: string }).createdAt ?? p.created_at,
+    updated_at: (p as { updatedAt?: string }).updatedAt ?? p.updated_at,
+  };
 }
 
-export async function updateProject(id: string, data: Partial<import('./types').Project>): Promise<import('./types').Project> {
-  const res = await fetch(`${WORKER_URL}/api/projects/${id}`, {
-    method: 'PUT',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error('Failed to update project');
-  return res.json();
+export async function updateProject(
+  id: number | string,
+  data: Partial<Pick<Project, 'name' | 'description' | 'template'>>
+): Promise<Project> {
+  const method = useWorkerForProjects() ? 'PUT' : 'PATCH';
+  const res = useWorkerForProjects()
+    ? await projectsRequest<Project>(`/api/projects/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+    : await apiRequest<Project>(`/api/projects/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+  return res as Project;
 }
 
-export async function deleteProject(id: string): Promise<void> {
-  const res = await fetch(`${WORKER_URL}/api/projects/${id}`, {
-    method: 'DELETE',
-    headers: authHeaders(),
-  });
-  if (!res.ok) throw new Error('Failed to delete project');
+export async function deleteProject(id: number | string): Promise<void> {
+  await projectsRequest(`/api/projects/${id}`, { method: 'DELETE' });
 }
 
-export async function fetchFiles(projectId: string): Promise<import('./types').FileEntry[]> {
-  const res = await fetch(`${WORKER_URL}/api/projects/${projectId}/files`, { headers: authHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch files');
-  return res.json();
+// ---------------------------------------------------------------------------
+// IDE: Project files (worker: /api/projects/:id/files | API: /api/ide/projects/:id/files)
+// ---------------------------------------------------------------------------
+
+function filesBase(projectId: number | string): string {
+  return useWorkerForProjects()
+    ? `/api/projects/${projectId}/files`
+    : `${IDE}/projects/${projectId}/files`;
 }
 
-export async function fetchFileContent(projectId: string, filePath: string): Promise<string> {
-  const res = await fetch(`${WORKER_URL}/api/projects/${projectId}/files/${filePath}`, { headers: authHeaders() });
+export async function fetchFiles(projectId: number | string): Promise<FileEntry[]> {
+  return projectsRequest<FileEntry[]>(filesBase(projectId));
+}
+
+export async function fetchFileContent(
+  projectId: number | string,
+  filePath: string
+): Promise<string> {
+  const base = getProjectsBaseUrl();
+  const url = `${base}${filesBase(projectId)}/${encodeURIComponent(filePath)}`;
+  const res = await fetch(url, { headers: getAuthHeaders() as HeadersInit });
   if (!res.ok) throw new Error('Failed to fetch file content');
   return res.text();
 }
 
-export async function saveFile(projectId: string, filePath: string, content: string): Promise<void> {
-  const res = await fetch(`${WORKER_URL}/api/projects/${projectId}/files/${filePath}`, {
+export async function saveFile(
+  projectId: number | string,
+  filePath: string,
+  content: string
+): Promise<void> {
+  await projectsRequest(`${filesBase(projectId)}/${encodeURIComponent(filePath)}`, {
     method: 'PUT',
-    headers: { ...authHeaders(), 'Content-Type': 'text/plain' },
+    headers: { 'Content-Type': 'text/plain' },
     body: content,
   });
-  if (!res.ok) throw new Error('Failed to save file');
 }
 
-export async function deleteFile(projectId: string, filePath: string): Promise<void> {
-  const res = await fetch(`${WORKER_URL}/api/projects/${projectId}/files/${filePath}`, {
+export async function deleteFile(
+  projectId: number | string,
+  filePath: string
+): Promise<void> {
+  await projectsRequest(`${filesBase(projectId)}/${encodeURIComponent(filePath)}`, {
     method: 'DELETE',
-    headers: authHeaders(),
   });
-  if (!res.ok) throw new Error('Failed to delete file');
 }
+
+// ---------------------------------------------------------------------------
+// IDE: AI chat (streaming)
+// ---------------------------------------------------------------------------
 
 export async function sendAIMessage(
-  projectId: string,
+  _projectId: number | string,
   messages: { role: string; content: string }[],
   onChunk: (chunk: string) => void
 ): Promise<void> {
-  const res = await fetch(`${WORKER_URL}/api/ai/chat`, {
+  const res = await apiRequestStream(`${AI}/chat`, {
     method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectId, messages }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages }),
   });
   if (!res.ok) throw new Error('Failed to send AI message');
   const reader = res.body?.getReader();
@@ -108,16 +178,12 @@ export async function sendAIMessage(
     const { done, value } = await reader.read();
     if (done) break;
     const text = decoder.decode(value, { stream: true });
-    const lines = text.split('\n');
-    for (const line of lines) {
+    for (const line of text.split('\n')) {
       if (line.startsWith('data: ')) {
         const data = line.slice(6).trim();
         if (data === '[DONE]') return;
         try {
           const parsed = JSON.parse(data);
-          // Extract the text chunk from whichever SSE format the active provider uses:
-          //   choices[0].delta.content — OpenRouter / OpenAI-compatible (AI_PROVIDER=openrouter|ab)
-          //   response                 — Cloudflare Workers AI (AI_PROVIDER=cloudflare)
           const chunk =
             parsed.choices?.[0]?.delta?.content ||
             parsed.response ||
@@ -134,27 +200,26 @@ export async function sendAIMessage(
 }
 
 // ---------------------------------------------------------------------------
-// Datasets
+// IDE: Datasets
 // ---------------------------------------------------------------------------
 
 export async function generateDataset(
-  projectId: string,
+  projectId: number | string,
   capabilityPrompt: string,
   name: string,
   onChunk?: (chunk: string) => void
-): Promise<import('./types').Dataset> {
-  const res = await fetch(`${WORKER_URL}/api/datasets/generate`, {
+): Promise<Dataset> {
+  const res = await apiRequestStream(`${IDE}/datasets/generate`, {
     method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ projectId, capabilityPrompt, name }),
   });
   if (!res.ok) throw new Error('Failed to generate dataset');
-
   if (onChunk && res.headers.get('content-type')?.includes('text/event-stream')) {
     const reader = res.body?.getReader();
     if (reader) {
       const decoder = new TextDecoder();
-      let finalDataset: import('./types').Dataset | undefined;
+      let finalDataset: Dataset | undefined;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -176,67 +241,64 @@ export async function generateDataset(
       if (finalDataset) return finalDataset;
     }
   }
-
-  return res.json();
+  return res.json() as Promise<Dataset>;
 }
 
-export async function listDatasets(projectId: string): Promise<import('./types').Dataset[]> {
-  const res = await fetch(`${WORKER_URL}/api/datasets?projectId=${encodeURIComponent(projectId)}`, { headers: authHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch datasets');
-  return res.json();
+export async function listDatasets(projectId: number | string): Promise<Dataset[]> {
+  return apiRequest<Dataset[]>(
+    `${IDE}/datasets?projectId=${encodeURIComponent(String(projectId))}`
+  );
 }
 
-export async function fetchDataset(datasetId: string): Promise<import('./types').Dataset> {
-  const res = await fetch(`${WORKER_URL}/api/datasets/${datasetId}`, { headers: authHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch dataset');
-  return res.json();
+export async function fetchDataset(datasetId: string): Promise<Dataset> {
+  return apiRequest<Dataset>(`${IDE}/datasets/${datasetId}`);
+}
+
+export async function downloadDataset(datasetId: string): Promise<string> {
+  return apiRequestText(`${IDE}/datasets/${datasetId}/download`);
 }
 
 // ---------------------------------------------------------------------------
-// Training Jobs
+// IDE: Training
 // ---------------------------------------------------------------------------
 
 export async function createTrainingJob(data: {
-  projectId: string;
+  projectId: number | string;
   datasetId?: string;
   baseModel: string;
   loraRank: number;
   epochs: number;
   batchSize: number;
   learningRate: number;
-}): Promise<import('./types').TrainingJob> {
-  const res = await fetch(`${WORKER_URL}/api/training`, {
+}): Promise<TrainingJob> {
+  return apiRequest<TrainingJob>(`${IDE}/training`, {
     method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to create training job');
-  return res.json();
 }
 
-export async function listTrainingJobs(projectId: string): Promise<import('./types').TrainingJob[]> {
-  const res = await fetch(`${WORKER_URL}/api/training?projectId=${encodeURIComponent(projectId)}`, { headers: authHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch training jobs');
-  return res.json();
+export async function listTrainingJobs(
+  projectId: number | string
+): Promise<TrainingJob[]> {
+  return apiRequest<TrainingJob[]>(
+    `${IDE}/training?projectId=${encodeURIComponent(String(projectId))}`
+  );
 }
 
-export async function fetchTrainingJob(jobId: string): Promise<import('./types').TrainingJob> {
-  const res = await fetch(`${WORKER_URL}/api/training/${jobId}`, { headers: authHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch training job');
-  return res.json();
+export async function fetchTrainingJob(jobId: string): Promise<TrainingJob> {
+  return apiRequest<TrainingJob>(`${IDE}/training/${jobId}`);
 }
 
-export async function fetchTrainingLogs(jobId: string): Promise<import('./types').TrainingLog[]> {
-  const res = await fetch(`${WORKER_URL}/api/training/${jobId}/logs`, { headers: authHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch training logs');
-  return res.json();
+export async function fetchTrainingLogs(jobId: string): Promise<TrainingLog[]> {
+  return apiRequest<TrainingLog[]>(`${IDE}/training/${jobId}/logs`);
 }
 
 export async function streamTrainingLogs(
   jobId: string,
-  onLog: (log: import('./types').TrainingLog) => void
+  onLog: (log: TrainingLog) => void
 ): Promise<void> {
-  const res = await fetch(`${WORKER_URL}/api/training/${jobId}/logs/stream`, { headers: authHeaders() });
+  const res = await apiRequestStream(`${IDE}/training/${jobId}/logs/stream`);
   if (!res.ok) throw new Error('Failed to stream training logs');
   const reader = res.body?.getReader();
   if (!reader) return;
@@ -250,32 +312,62 @@ export async function streamTrainingLogs(
         const data = line.slice(6).trim();
         if (data === '[DONE]') return;
         try {
-          const log = JSON.parse(data) as import('./types').TrainingLog;
-          onLog(log);
+          onLog(JSON.parse(data) as TrainingLog);
         } catch {
-          // ignore malformed lines
+          /* ignore */
         }
       }
     }
   }
 }
 
-export async function evaluateModel(jobId: string): Promise<import('./types').EvaluationResult> {
-  const res = await fetch(`${WORKER_URL}/api/training/${jobId}/evaluate`, {
+export async function evaluateModel(jobId: string): Promise<EvaluationResult> {
+  return apiRequest<EvaluationResult>(`${IDE}/training/${jobId}/evaluate`, {
     method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({}),
   });
-  if (!res.ok) throw new Error('Failed to evaluate model');
+}
+
+export async function updateTrainingJob(
+  jobId: string,
+  data: {
+    status?: string;
+    currentEpoch?: number;
+    currentLoss?: number;
+    r2ArtifactKey?: string;
+    errorMessage?: string;
+  }
+): Promise<TrainingJob> {
+  return apiRequest<TrainingJob>(`${IDE}/training/${jobId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function uploadArtifact(
+  jobId: string,
+  data: ArrayBuffer
+): Promise<{ r2Key: string }> {
+  const res = await fetch(
+    `${getApiBaseUrl()}${IDE}/training/${jobId}/artifact`,
+    {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/octet-stream' }) as HeadersInit,
+      body: data,
+    }
+  );
+  if (!res.ok) throw new Error('Failed to upload artifact');
   return res.json();
 }
 
 // ---------------------------------------------------------------------------
-// Agent Registry (Workforce)
+// IDE: Workforce agents
 // ---------------------------------------------------------------------------
 
 export async function publishAgent(data: {
-  project_id: string;
+  project_id: number | string;
   job_id?: string;
   name: string;
   title: string;
@@ -286,78 +378,30 @@ export async function publishAgent(data: {
   r2_artifact_key?: string;
   resume_md?: string;
   eval_score?: number;
-}): Promise<import('./types').PublishedAgent> {
-  const res = await fetch(`${WORKER_URL}/api/agents`, {
+}): Promise<PublishedAgent> {
+  return apiRequest<PublishedAgent>(`${IDE}/agents`, {
     method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...data, project_id: data.project_id }),
   });
-  if (!res.ok) throw new Error('Failed to publish agent');
-  return res.json();
 }
 
-export async function listAgents(): Promise<import('./types').PublishedAgent[]> {
-  const res = await fetch(`${WORKER_URL}/api/agents`, { headers: authHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch agents');
-  return res.json();
+export async function listAgents(): Promise<PublishedAgent[]> {
+  return apiRequest<PublishedAgent[]>(`${IDE}/agents`);
 }
 
-export async function fetchAgent(agentId: string): Promise<import('./types').PublishedAgent> {
-  const res = await fetch(`${WORKER_URL}/api/agents/${agentId}`, { headers: authHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch agent');
-  return res.json();
+export async function fetchAgent(agentId: string): Promise<PublishedAgent> {
+  return apiRequest<PublishedAgent>(`${IDE}/agents/${agentId}`);
 }
 
-export async function hireAgent(agentId: string): Promise<import('./types').PublishedAgent> {
-  const res = await fetch(`${WORKER_URL}/api/agents/${agentId}/hire`, {
+export async function hireAgent(agentId: string): Promise<PublishedAgent> {
+  return apiRequest<PublishedAgent>(`${IDE}/agents/${agentId}/hire`, {
     method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({}),
   });
-  if (!res.ok) throw new Error('Failed to hire agent');
-  return res.json();
 }
 
-export async function fetchAgentPackage(agentId: string): Promise<import('./types').AgentPackage> {
-  const res = await fetch(`${WORKER_URL}/api/agents/${agentId}/package`, { headers: authHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch agent package');
-  return res.json();
-}
-
-/** Download raw JSONL text for a dataset from R2 via the worker. */
-export async function downloadDataset(datasetId: string): Promise<string> {
-  const res = await fetch(`${WORKER_URL}/api/datasets/${datasetId}/download`, { headers: authHeaders() });
-  if (!res.ok) throw new Error('Failed to download dataset');
-  return res.text();
-}
-
-/** Upload a raw LoRA adapter ArrayBuffer to R2 via the worker. */
-export async function uploadArtifact(jobId: string, data: ArrayBuffer): Promise<{ r2Key: string }> {
-  const res = await fetch(`${WORKER_URL}/api/training/${jobId}/artifact`, {
-    method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/octet-stream' },
-    body: data,
-  });
-  if (!res.ok) throw new Error('Failed to upload artifact');
-  return res.json();
-}
-
-/** Update training job status/epoch/loss from the browser. */
-export async function updateTrainingJob(
-  jobId: string,
-  data: {
-    status?: string;
-    currentEpoch?: number;
-    currentLoss?: number;
-    r2ArtifactKey?: string;
-    errorMessage?: string;
-  },
-): Promise<import('./types').TrainingJob> {
-  const res = await fetch(`${WORKER_URL}/api/training/${jobId}`, {
-    method: 'PUT',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error('Failed to update training job');
-  return res.json();
+export async function fetchAgentPackage(agentId: string): Promise<AgentPackage> {
+  return apiRequest<AgentPackage>(`${IDE}/agents/${agentId}/package`);
 }

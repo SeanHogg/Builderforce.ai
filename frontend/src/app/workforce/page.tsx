@@ -2,245 +2,271 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { claws, type Claw, type ClawRegistration } from '@/lib/builderforceApi';
 import { listAgents, hireAgent } from '@/lib/api';
 import type { PublishedAgent } from '@/lib/types';
-import AppHeader from '@/components/AppHeader';
 
-function SkillBadge({ skill }: { skill: string }) {
-  return (
-    <span className="bg-blue-900/60 text-blue-200 text-xs px-2 py-0.5 rounded-full border border-blue-800">
-      {skill}
-    </span>
-  );
-}
-
-function ScoreBar({ score }: { score: number }) {
-  const pct = Math.round(score * 100);
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 bg-gray-700 rounded-full h-1.5">
-        <div
-          className="bg-green-500 h-1.5 rounded-full transition-all"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="text-xs text-gray-400 w-8 text-right">{pct}%</span>
-    </div>
-  );
-}
-
-function AgentCard({
-  agent,
-  onHire,
-  hiring,
-}: {
-  agent: PublishedAgent;
-  onHire: (id: string) => void;
-  hiring: boolean;
-}) {
-  const skills: string[] = Array.isArray(agent.skills)
-    ? agent.skills
-    : JSON.parse(typeof agent.skills === 'string' ? agent.skills : '[]');
+function ClawCard({ claw }: { claw: Claw }) {
+  const connected = !!claw.connectedAt;
+  const lastSeen = claw.lastSeenAt ? new Date(claw.lastSeenAt).toLocaleString() : '—';
 
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 flex flex-col gap-3 hover:border-gray-500 transition-colors">
-      {/* Avatar + name */}
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shrink-0">
-          {agent.name.charAt(0).toUpperCase()}
-        </div>
-        <div className="min-w-0">
-          <h3 className="font-semibold text-white truncate">{agent.name}</h3>
-          <p className="text-sm text-blue-400 truncate">{agent.title}</p>
-        </div>
-      </div>
-
-      {/* Bio */}
-      <p className="text-sm text-gray-400 line-clamp-3">{agent.bio}</p>
-
-      {/* Skills */}
-      {skills.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {skills.slice(0, 5).map(s => <SkillBadge key={s} skill={s} />)}
-          {skills.length > 5 && (
-            <span className="text-xs text-gray-500">+{skills.length - 5} more</span>
-          )}
-        </div>
-      )}
-
-      {/* Model info */}
-      {agent.base_model && (
-        <div className="text-xs text-gray-500 flex items-center gap-1">
-          <span>🧠</span>
-          <span>{agent.base_model}</span>
-          {agent.lora_rank && <span>· rank={agent.lora_rank}</span>}
-        </div>
-      )}
-
-      {/* Eval score */}
-      {agent.eval_score != null && (
-        <div>
-          <div className="text-xs text-gray-500 mb-1">Quality score</div>
-          <ScoreBar score={agent.eval_score} />
-        </div>
-      )}
-
-      {/* Footer */}
-      <div className="flex items-center justify-between pt-1 border-t border-gray-800">
-        <span className="text-xs text-gray-500">
-          {agent.hire_count} hire{agent.hire_count !== 1 ? 's' : ''}
+    <div
+      className="card"
+      style={{
+        padding: 20,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        position: 'relative',
+      }}
+    >
+      <div style={{ position: 'absolute', top: 12, right: 12 }}>
+        <span className={connected ? 'badge-green' : ''} style={!connected ? { background: 'var(--bg-elevated)', color: 'var(--muted)', padding: '2px 8px', borderRadius: 9999, fontSize: 11 } : {}}>
+          {connected ? 'ONLINE' : 'OFFLINE'}
         </span>
-        <button
-          onClick={() => onHire(agent.id)}
-          disabled={hiring}
-          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm px-4 py-1.5 rounded-lg font-medium transition-colors"
-        >
-          {hiring ? 'Hiring…' : 'Hire Agent'}
-        </button>
       </div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-strong)' }}>{claw.name}</div>
+      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{claw.name}</div>
+      <div style={{ fontSize: 12, color: 'var(--muted)' }}>Last seen {lastSeen}</div>
     </div>
   );
 }
 
 export default function WorkforcePage() {
+  const [clawList, setClawList] = useState<Claw[]>([]);
+  const [loadingClaws, setLoadingClaws] = useState(true);
+  const [clawError, setClawError] = useState('');
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [registerName, setRegisterName] = useState('');
+  const [registering, setRegistering] = useState(false);
+  const [registerError, setRegisterError] = useState('');
+  const [newClaw, setNewClaw] = useState<ClawRegistration | null>(null);
+  const [apiKeyCopied, setApiKeyCopied] = useState(false);
+
   const [agents, setAgents] = useState<PublishedAgent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadingAgents, setLoadingAgents] = useState(true);
   const [hiringId, setHiringId] = useState<string | null>(null);
-  const [hiredId, setHiredId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
+
+  const loadClaws = useCallback(async () => {
+    setLoadingClaws(true);
+    setClawError('');
+    try {
+      const list = await claws.list();
+      setClawList(list);
+    } catch (e) {
+      setClawError(e instanceof Error ? e.message : 'Failed to load claws');
+    } finally {
+      setLoadingClaws(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadClaws();
+  }, [loadClaws]);
 
   useEffect(() => {
     listAgents()
       .then(setAgents)
-      .catch(e => setError(e instanceof Error ? e.message : 'Failed to load agents'))
-      .finally(() => setLoading(false));
+      .catch(() => {})
+      .finally(() => setLoadingAgents(false));
   }, []);
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!registerName.trim() || registering) return;
+    setRegistering(true);
+    setRegisterError('');
+    try {
+      const result = await claws.register(registerName.trim());
+      setNewClaw(result);
+      setClawList((prev) => [result, ...prev]);
+      setRegisterName('');
+    } catch (e) {
+      setRegisterError(e instanceof Error ? e.message : 'Registration failed');
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  const closeRegisterModal = () => {
+    setShowRegisterModal(false);
+    setNewClaw(null);
+    setRegisterName('');
+    setRegisterError('');
+    setApiKeyCopied(false);
+  };
+
+  const copyApiKey = async () => {
+    if (!newClaw?.apiKey) return;
+    try {
+      await navigator.clipboard.writeText(newClaw.apiKey);
+      setApiKeyCopied(true);
+      setTimeout(() => setApiKeyCopied(false), 2000);
+    } catch { /* ignore */ }
+  };
 
   const handleHire = useCallback(async (agentId: string) => {
     setHiringId(agentId);
     try {
       const updated = await hireAgent(agentId);
-      setAgents(prev => prev.map(a => a.id === agentId ? updated : a));
-      setHiredId(agentId);
-      setTimeout(() => setHiredId(null), 3000);
-    } catch {
-      // noop — keep UX clean
-    } finally {
+      setAgents((prev) => prev.map((a) => (a.id === agentId ? updated : a)));
+    } catch { /* noop */ }
+    finally {
       setHiringId(null);
     }
   }, []);
 
-  const filtered = agents.filter(a => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    const skills: string[] = Array.isArray(a.skills)
-      ? a.skills
-      : JSON.parse(typeof a.skills === 'string' ? a.skills : '[]');
-    return (
-      a.name.toLowerCase().includes(q) ||
-      a.title.toLowerCase().includes(q) ||
-      a.bio.toLowerCase().includes(q) ||
-      skills.some(s => s.toLowerCase().includes(q))
-    );
-  });
-
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>
-      <AppHeader
-        section="Workforce Registry"
-        links={[
-          { label: 'Dashboard', href: '/dashboard' },
-          { label: 'Publish Your Agent', href: '/register', variant: 'cta' },
-        ]}
-      />
-
-      {/* Hero */}
-      <section className="max-w-6xl mx-auto px-6 py-12 text-center">
-        <h1 className="text-4xl font-bold mb-3">
-          Hire an{' '}
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-            AI Agent
-          </span>
-        </h1>
-        <p className="text-gray-400 text-lg mb-8 max-w-2xl mx-auto">
-          Browse custom-trained AI agents built by our community. Hire the right agent for your
-          project and integrate their specialised LLM into your workflow.
-        </p>
-
-        {/* Search */}
-        <div className="max-w-lg mx-auto relative">
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name, skill, or specialization…"
-            className="w-full bg-gray-900 text-white rounded-xl px-4 py-3 pl-10 border border-gray-700 focus:border-blue-500 outline-none text-sm"
-          />
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">🔍</span>
+    <div style={{ maxWidth: 960, margin: '0 auto' }}>
+      <div className="page-header" style={{ marginBottom: 24 }}>
+        <div>
+          <h1 className="page-title" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-strong)', margin: 0 }}>Workforce (Claws)</h1>
+          <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
+            Register and manage your CoderClaw instances. Connect agents to your workspace.
+          </p>
         </div>
-      </section>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => setShowRegisterModal(true)}
+            style={{
+              padding: '8px 16px',
+              fontSize: 14,
+              fontWeight: 600,
+              background: 'var(--accent)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 10,
+              cursor: 'pointer',
+            }}
+          >
+            + Register claw
+          </button>
+        </div>
+      </div>
 
-      {/* Hired notification */}
-      {hiredId && (
-        <div className="fixed top-4 right-4 bg-green-800 border border-green-600 text-white text-sm px-4 py-2 rounded-lg shadow-lg z-50">
-          ✅ Agent hired successfully!
+      {clawError && (
+        <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'rgba(239,68,68,0.15)', color: '#ef4444', borderRadius: 8 }}>
+          {clawError}
         </div>
       )}
 
-      {/* Content */}
-      <section className="max-w-6xl mx-auto px-6 pb-16">
-        {loading && (
-          <div className="text-center py-20 text-gray-400">
-            <div className="text-4xl mb-4 animate-pulse">🤖</div>
-            Loading agents…
-          </div>
-        )}
+      {loadingClaws ? (
+        <div style={{ color: 'var(--muted)', fontSize: 14, padding: 24 }}>Loading claws…</div>
+      ) : clawList.length === 0 ? (
+        <div className="empty-state" style={{ padding: 48 }}>
+          <div className="empty-state-icon">📁</div>
+          <div className="empty-state-title">No claws yet</div>
+          <div className="empty-state-sub">Create your first project to start organizing work</div>
+          <button
+            type="button"
+            onClick={() => setShowRegisterModal(true)}
+            style={{ marginTop: 14, padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer' }}
+          >
+            Register claw
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+          {clawList.map((claw) => (
+            <ClawCard key={claw.id} claw={claw} />
+          ))}
+        </div>
+      )}
 
-        {!loading && error && (
-          <div className="text-center py-20">
-            <div className="text-4xl mb-4">⚠️</div>
-            <p className="text-red-400">{error}</p>
-          </div>
+      {/* Marketplace / Hire agents section */}
+      <section style={{ marginTop: 48, paddingTop: 24, borderTop: '1px solid var(--border)' }}>
+        <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-strong)', marginBottom: 8 }}>Workforce Registry</h2>
+        <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
+          Browse and hire published AI agents. <Link href="/dashboard" style={{ color: 'var(--accent)' }}>Publish your agent</Link> from a project.
+        </p>
+        {loadingAgents && <div style={{ color: 'var(--muted)', fontSize: 13 }}>Loading agents…</div>}
+        {!loadingAgents && agents.length === 0 && (
+          <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No agents published yet.</div>
         )}
-
-        {!loading && !error && filtered.length === 0 && (
-          <div className="text-center py-20">
-            <div className="text-4xl mb-4">🤖</div>
-            <p className="text-gray-400 mb-2">
-              {agents.length === 0
-                ? 'No agents published yet.'
-                : 'No agents match your search.'}
-            </p>
-            {agents.length === 0 && (
-              <Link
-                href="/register"
-                className="text-blue-400 hover:text-blue-300 text-sm underline"
-              >
-                Be the first to publish an agent →
-              </Link>
-            )}
+        {!loadingAgents && agents.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+            {agents.slice(0, 6).map((agent) => (
+              <div key={agent.id} className="card" style={{ padding: 16 }}>
+                <div style={{ fontWeight: 600, color: 'var(--text-strong)', marginBottom: 4 }}>{agent.name}</div>
+                <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.title}</p>
+                <button
+                  type="button"
+                  onClick={() => handleHire(agent.id)}
+                  disabled={hiringId === agent.id}
+                  style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}
+                >
+                  {hiringId === agent.id ? 'Hiring…' : 'Hire'}
+                </button>
+              </div>
+            ))}
           </div>
-        )}
-
-        {!loading && filtered.length > 0 && (
-          <>
-            <p className="text-gray-500 text-sm mb-6">
-              {filtered.length} agent{filtered.length !== 1 ? 's' : ''} available
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {filtered.map(agent => (
-                <AgentCard
-                  key={agent.id}
-                  agent={agent}
-                  onHire={handleHire}
-                  hiring={hiringId === agent.id}
-                />
-              ))}
-            </div>
-          </>
         )}
       </section>
+
+      {/* Register claw modal */}
+      {showRegisterModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          onClick={(e) => e.target === e.currentTarget && closeRegisterModal()}
+        >
+          <div
+            className="card"
+            style={{ maxWidth: 440, width: '100%', padding: 28 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {!newClaw ? (
+              <>
+                <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-strong)', marginBottom: 4 }}>Register a claw</h3>
+                <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 24 }}>Give your CoderClaw instance a name. You’ll get an API key to paste into your claw config.</p>
+                <form onSubmit={handleRegister}>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--text-strong)', marginBottom: 6 }}>Name</label>
+                    <input
+                      type="text"
+                      value={registerName}
+                      onChange={(e) => setRegisterName(e.target.value)}
+                      placeholder="e.g. openclaw-bridge-node"
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-elevated)', color: 'var(--text)', fontSize: 13 }}
+                      autoFocus
+                    />
+                  </div>
+                  {registerError && <div style={{ marginBottom: 12, fontSize: 13, color: '#ef4444' }}>{registerError}</div>}
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button type="button" onClick={closeRegisterModal} style={{ padding: '8px 16px', fontSize: 13, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' }}>Cancel</button>
+                    <button type="submit" disabled={registering || !registerName.trim()} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                      {registering ? 'Registering…' : 'Register'}
+                    </button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <>
+                <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-strong)', marginBottom: 4 }}>Claw registered</h3>
+                <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>Copy the API key and add it to your claw environment. It won’t be shown again.</p>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--text-strong)', marginBottom: 6 }}>API Key</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      type="password"
+                      readOnly
+                      value={newClaw.apiKey}
+                      style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-elevated)', color: 'var(--text)', fontSize: 12, fontFamily: 'var(--font-mono)' }}
+                    />
+                    <button type="button" onClick={copyApiKey} style={{ padding: '8px 14px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                      {apiKeyCopied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button type="button" onClick={closeRegisterModal} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Done</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

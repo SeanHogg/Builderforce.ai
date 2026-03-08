@@ -14,9 +14,9 @@ import type { NextRequest } from 'next/server';
  *   /tenants       Tenant selector
  *
  * WEB-TOKEN + TENANT-TOKEN required (fully authenticated):
- *   /dashboard/**  User dashboard
- *   /projects/**   IDE & project management
- *   /training/**   AI model training panel
+ *   /dashboard, /ide, /projects, /training, /tasks, /workforce, /chats,
+ *   /brainstorm, /content-manager, /skills, /personas, /pricing, /security,
+ *   /settings, /logs, /timeline, /debug
  */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -24,7 +24,6 @@ export function middleware(request: NextRequest) {
   const webToken = request.cookies.get('bf_web_token')?.value;
   const tenantToken = request.cookies.get('bf_tenant_token')?.value;
 
-  // Helper: redirect to login with next param
   const toLogin = () => {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
@@ -32,7 +31,6 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   };
 
-  // Helper: redirect to tenant selector with next param
   const toTenants = () => {
     const url = request.nextUrl.clone();
     url.pathname = '/tenants';
@@ -40,18 +38,33 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   };
 
-  // /tenants — requires sign-in only
   if (pathname.startsWith('/tenants')) {
     if (!webToken) return toLogin();
     return NextResponse.next();
   }
 
-  // Fully-authenticated routes: /dashboard, /projects, /training
-  if (
-    pathname.startsWith('/dashboard') ||
-    pathname.startsWith('/projects') ||
-    pathname.startsWith('/training')
-  ) {
+  const protectedPaths = [
+    '/dashboard',
+    '/ide',
+    '/projects',
+    '/training',
+    '/tasks',
+    '/workforce',
+    '/chats',
+    '/brainstorm',
+    '/content-manager',
+    '/skills',
+    '/personas',
+    '/pricing',
+    '/security',
+    '/settings',
+    '/logs',
+    '/timeline',
+    '/debug',
+  ];
+  const isProtected = protectedPaths.some((p) => pathname === p || pathname.startsWith(p + '/'));
+
+  if (isProtected) {
     if (!webToken) return toLogin();
     if (!tenantToken) return toTenants();
     return NextResponse.next();
@@ -63,8 +76,22 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     '/dashboard/:path*',
+    '/ide',
     '/tenants/:path*',
     '/projects/:path*',
     '/training/:path*',
+    '/tasks/:path*',
+    '/workforce/:path*',
+    '/chats/:path*',
+    '/brainstorm/:path*',
+    '/content-manager/:path*',
+    '/skills/:path*',
+    '/personas/:path*',
+    '/pricing/:path*',
+    '/security/:path*',
+    '/settings/:path*',
+    '/logs/:path*',
+    '/timeline/:path*',
+    '/debug/:path*',
   ],
 };

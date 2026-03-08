@@ -40,10 +40,9 @@ function mockError(status = 500) {
 }
 
 const sampleProject: Project = {
-  id: 'proj-1',
+  id: 1,
   name: 'My App',
   description: 'A test project',
-  owner_id: 'anonymous',
   template: 'vanilla',
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
@@ -76,13 +75,13 @@ afterEach(() => {
 describe('fetchProjects', () => {
   it('calls the correct endpoint and returns an array of projects', async () => {
     fetchSpy.mockResolvedValueOnce(
-      new Response(JSON.stringify([sampleProject]), { status: 200 })
+      new Response(JSON.stringify({ projects: [sampleProject] }), { status: 200 })
     );
     const result = await fetchProjects();
     expect(fetchSpy).toHaveBeenCalledOnce();
     expect(fetchSpy.mock.calls[0][0]).toMatch(/\/api\/projects$/);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('proj-1');
+    expect(result[0].id).toBe(1);
   });
 
   it('throws when the server returns a non-ok response', async () => {
@@ -100,9 +99,9 @@ describe('fetchProject', () => {
     fetchSpy.mockResolvedValueOnce(
       new Response(JSON.stringify(sampleProject), { status: 200 })
     );
-    const result = await fetchProject('proj-1');
-    expect(fetchSpy.mock.calls[0][0]).toMatch(/\/api\/projects\/proj-1$/);
-    expect(result.id).toBe('proj-1');
+    const result = await fetchProject(1);
+    expect(fetchSpy.mock.calls[0][0]).toMatch(/\/api\/projects\/1$/);
+    expect(result.id).toBe(1);
   });
 
   it('throws on non-ok response', async () => {
@@ -127,7 +126,7 @@ describe('createProject', () => {
     expect(init.method).toBe('POST');
     const body = JSON.parse(init.body as string);
     expect(body.name).toBe('My App');
-    expect(result.id).toBe('proj-1');
+    expect(result.id).toBe(1);
   });
 
   it('throws on non-ok response', async () => {
@@ -141,15 +140,15 @@ describe('createProject', () => {
 // ---------------------------------------------------------------------------
 
 describe('updateProject', () => {
-  it('PUTs to /api/projects/:id', async () => {
+  it('PATCHes /api/projects/:id', async () => {
     const updated = { ...sampleProject, name: 'Renamed' };
     fetchSpy.mockResolvedValueOnce(
       new Response(JSON.stringify(updated), { status: 200 })
     );
-    const result = await updateProject('proj-1', { name: 'Renamed' });
+    const result = await updateProject(1, { name: 'Renamed' });
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(url).toMatch(/\/api\/projects\/proj-1$/);
-    expect(init.method).toBe('PUT');
+    expect(url).toMatch(/\/api\/projects\/1$/);
+    expect(init.method).toBe('PATCH');
     expect(result.name).toBe('Renamed');
   });
 
@@ -166,11 +165,11 @@ describe('updateProject', () => {
 describe('deleteProject', () => {
   it('DELETEs /api/projects/:id', async () => {
     fetchSpy.mockResolvedValueOnce(
-      new Response(JSON.stringify({ success: true }), { status: 200 })
+      new Response(undefined, { status: 204 })
     );
-    await deleteProject('proj-1');
+    await deleteProject(1);
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(url).toMatch(/\/api\/projects\/proj-1$/);
+    expect(url).toMatch(/\/api\/projects\/1$/);
     expect(init.method).toBe('DELETE');
   });
 
@@ -185,12 +184,12 @@ describe('deleteProject', () => {
 // ---------------------------------------------------------------------------
 
 describe('fetchFiles', () => {
-  it('GETs /api/projects/:id/files and returns an array', async () => {
+  it('GETs /api/ide/projects/:id/files and returns an array', async () => {
     fetchSpy.mockResolvedValueOnce(
       new Response(JSON.stringify(sampleFiles), { status: 200 })
     );
-    const result = await fetchFiles('proj-1');
-    expect(fetchSpy.mock.calls[0][0]).toMatch(/\/api\/projects\/proj-1\/files$/);
+    const result = await fetchFiles(1);
+    expect(fetchSpy.mock.calls[0][0]).toMatch(/\/api\/ide\/projects\/1\/files$/);
     expect(result).toHaveLength(2);
   });
 
@@ -344,7 +343,7 @@ describe('sendAIMessage', () => {
     expect(url).toMatch(/\/api\/ai\/chat$/);
     expect(init.method).toBe('POST');
     const body = JSON.parse(init.body as string);
-    expect(body.projectId).toBe('proj-1');
+    expect(body.messages).toBeDefined();
     expect(body.messages[0].role).toBe('user');
   });
 
@@ -376,12 +375,12 @@ const sampleAgent: PublishedAgent = {
 };
 
 describe('publishAgent', () => {
-  it('POSTs to /api/agents and returns the published agent', async () => {
+  it('POSTs to /api/ide/agents and returns the published agent', async () => {
     fetchSpy.mockResolvedValueOnce(
       new Response(JSON.stringify(sampleAgent), { status: 201 })
     );
     const result = await publishAgent({
-      project_id: 'proj-1',
+      project_id: 1,
       name: 'Code Expert',
       title: 'Senior TypeScript Developer',
       bio: 'Specializes in Node.js and React',

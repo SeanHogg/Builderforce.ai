@@ -4,13 +4,14 @@ import { useEffect, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 
-export function useCollaboration(projectId: string, userId: string) {
+export function useCollaboration(projectId: string | number, userId: string) {
   const docRef = useRef<Y.Doc | null>(null);
   const providerRef = useRef<WebsocketProvider | null>(null);
   const [connected, setConnected] = useState(false);
+  const roomId = String(projectId);
 
   useEffect(() => {
-    if (!projectId || !userId) return;
+    if (!roomId || !userId) return;
 
     const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787';
     const wsUrl = workerUrl.replace(/^http/, 'ws');
@@ -20,7 +21,7 @@ export function useCollaboration(projectId: string, userId: string) {
 
     const provider = new WebsocketProvider(
       `${wsUrl}/api/collab`,
-      projectId,
+      roomId,
       doc,
       { connect: true }
     );
@@ -43,7 +44,7 @@ export function useCollaboration(projectId: string, userId: string) {
       providerRef.current = null;
       setConnected(false);
     };
-  }, [projectId, userId]);
+  }, [roomId, userId]);
 
   return { doc: docRef.current, provider: providerRef.current, connected };
 }

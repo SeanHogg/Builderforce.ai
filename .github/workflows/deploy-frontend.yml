@@ -1,10 +1,36 @@
-name: Deploy Frontend
+name: Deploy Builderforce
 
 on:
   push:
     branches: [ main ]
 
 jobs:
+  deploy-api:
+    name: Deploy API (api.builderforce.ai)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: api/package-lock.json
+
+      - name: Install API dependencies
+        working-directory: api
+        run: npm ci
+
+      - name: Run migrations and deploy API
+        working-directory: api
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: npm run deploy
+
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:

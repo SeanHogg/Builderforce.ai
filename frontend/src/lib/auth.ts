@@ -1,5 +1,5 @@
 /**
- * Authentication helpers for api.coderclaw.ai
+ * Authentication helpers for api.builderforce.ai
  *
  * Endpoints used:
  *   POST /api/auth/web/login         → { token: string; user: AuthUser }
@@ -11,7 +11,7 @@
 import type { AuthUser, Tenant } from './types';
 
 export const AUTH_API_URL =
-  process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.coderclaw.ai';
+  process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
 
 // ---------------------------------------------------------------------------
 // Storage helpers (localStorage)
@@ -21,6 +21,9 @@ const WEB_TOKEN_KEY = 'bf_web_token';
 const TENANT_TOKEN_KEY = 'bf_tenant_token';
 const USER_KEY = 'bf_user';
 const TENANT_KEY = 'bf_tenant';
+const LAST_PROJECT_KEY = 'bf_last_project_id';
+/** Default tenant for auto-selection when user has multiple workspaces (CoderClawLink-style). */
+const DEFAULT_TENANT_KEY = 'bf_default_tenant_id';
 
 function isBrowser(): boolean {
   return typeof window !== 'undefined';
@@ -56,6 +59,31 @@ export function getStoredTenant(): Tenant | null {
   }
 }
 
+export function getStoredLastProjectId(): string | null {
+  if (!isBrowser()) return null;
+  return localStorage.getItem(LAST_PROJECT_KEY);
+}
+
+export function persistLastProjectId(projectId: string): void {
+  if (!isBrowser()) return;
+  localStorage.setItem(LAST_PROJECT_KEY, projectId);
+}
+
+export function getDefaultTenantId(): string | null {
+  if (!isBrowser()) return null;
+  return localStorage.getItem(DEFAULT_TENANT_KEY);
+}
+
+export function setDefaultTenantId(id: string): void {
+  if (!isBrowser()) return;
+  localStorage.setItem(DEFAULT_TENANT_KEY, id);
+}
+
+export function clearDefaultTenantId(): void {
+  if (!isBrowser()) return;
+  localStorage.removeItem(DEFAULT_TENANT_KEY);
+}
+
 export function persistSession(
   webToken: string,
   user: AuthUser,
@@ -88,12 +116,14 @@ export function clearSession(): void {
   localStorage.removeItem(TENANT_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(TENANT_KEY);
+  localStorage.removeItem(LAST_PROJECT_KEY);
+  localStorage.removeItem(DEFAULT_TENANT_KEY);
   document.cookie = 'bf_web_token=; path=/; Max-Age=0';
   document.cookie = 'bf_tenant_token=; path=/; Max-Age=0';
 }
 
 // ---------------------------------------------------------------------------
-// API calls to api.coderclaw.ai
+// API calls to api.builderforce.ai
 // ---------------------------------------------------------------------------
 
 export interface LoginResponse {

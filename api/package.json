@@ -1,0 +1,24 @@
+{
+  "name": "builderforce-api",
+  "version": "2026.3.7",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "db:migrate": "node scripts/migrate.mjs",
+    "deploy": "node scripts/migrate.mjs && wrangler deploy",
+    "db:generate": "npx drizzle-kit generate",
+    "db:push": "npx drizzle-kit push",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "drizzle-orm": "^0.36.4",
+    "hono": "^4.6.17"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260305.0",
+    "drizzle-kit": "^0.30.0",
+    "typescript": "^5.7.3",
+    "wrangler": "^4.69.0"
+  }
+}

@@ -19,7 +19,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      const next = searchParams.get('next') || (hasTenant ? '/dashboard' : '/tenants');
+      const next = searchParams.get('next') || (hasTenant ? '/ide' : '/tenants');
       router.replace(next);
     }
   }, [isAuthenticated, hasTenant, router, searchParams]);
@@ -30,7 +30,7 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       await login(email, password);
-      const next = searchParams.get('next') || '/tenants';
+      const next = searchParams.get('next') || (hasTenant ? '/ide' : '/tenants');
       router.push(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');

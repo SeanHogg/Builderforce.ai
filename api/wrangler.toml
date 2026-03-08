@@ -1,0 +1,35 @@
+name = "builderforce-api"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[routes]]
+pattern = "api.builderforce.ai/*"
+zone_name = "builderforce.ai"
+
+[vars]
+# Overridden by Cloudflare dashboard secrets for production.
+CORS_ORIGINS = "*"
+ENVIRONMENT  = "production"
+# NEON_DATABASE_URL must be set via: wrangler secret put NEON_DATABASE_URL
+# JWT_SECRET must be set via: wrangler secret put JWT_SECRET
+# OPENROUTER_API_KEY must be set via: wrangler secret put OPENROUTER_API_KEY
+# OPENROUTER_API_KEY_PRO must be set via: wrangler secret put OPENROUTER_API_KEY_PRO
+# Do NOT put the real value here – use a long random string (32+ chars).
+
+# Wrangler dev overrides (local only, never committed)
+[[durable_objects.bindings]]
+name = "CLAW_RELAY"
+class_name = "ClawRelayDO"
+
+[[r2_buckets]]
+binding = "UPLOADS"
+bucket_name = "builderforce-uploads"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ClawRelayDO"]
+
+[dev]
+port = 8787
+local_protocol = "http"

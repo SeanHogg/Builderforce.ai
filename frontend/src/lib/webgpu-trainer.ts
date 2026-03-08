@@ -48,7 +48,7 @@ export interface TrainingStep {
 export interface WebGPUTrainerOptions {
   modelId: string;
   workerUrl: string;
-  projectId: string;
+  projectId: string | number;
   jobId?: string;         // If set, epoch/loss are synced to the worker DB record
   datasetId?: string;     // If set, examples are fetched from R2 via the download endpoint
   onLog: (message: string) => void;

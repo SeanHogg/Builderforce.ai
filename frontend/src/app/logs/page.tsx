@@ -1,0 +1,12 @@
+'use client';
+
+export default function LogsPage() {
+  return (
+    <div style={{ padding: 40, maxWidth: 600 }}>
+      <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 8 }}>Logs</h1>
+      <p style={{ color: 'var(--text-secondary)' }}>
+        Logs will be available here. This section uses api.builderforce.ai.
+      </p>
+    </div>
+  );
+}
