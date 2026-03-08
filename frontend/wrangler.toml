@@ -1,7 +1,15 @@
 name = "builderforce-frontend"
-main = ".vercel/output/static/_worker.js"
+main = ".vercel/output/static/_worker.js/index.js"
 compatibility_date = "2026-03-07"
 compatibility_flags = ["nodejs_compat"]
+
+# next-on-pages builds middleware/functions as separate modules under __next-on-pages-dist__.
+# They must be uploaded with the worker; use no-bundle + find_additional_modules.
+find_additional_modules = true
+base_dir = ".vercel/output/static/_worker.js"
+rules = [
+  { type = "ESModule", globs = ["**/*.js"] },
+]
 
 [assets]
 directory = ".vercel/output/static"
@@ -9,3 +17,7 @@ binding = "ASSETS"
 
 [vars]
 NEXT_PUBLIC_WORKER_URL = "https://builderforce-worker.seanhogg.workers.dev"
+
+[observability.logs]
+enabled = true
+invocation_logs = true

@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "cf-build": "npm run build && npx @cloudflare/next-on-pages && echo '_worker.js' > .vercel/output/static/.assetsignore && sed -i 's/\\br\\.fetch\\b/(r||self).fetch/g' .vercel/output/static/_worker.js/index.js",
-    "cf-deploy": "npm run cf-build && npx wrangler deploy",
+    "cf-deploy": "npm run cf-build && npx wrangler deploy --no-bundle",
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
