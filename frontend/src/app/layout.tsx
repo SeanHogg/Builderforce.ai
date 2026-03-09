@@ -61,10 +61,6 @@ export const metadata: Metadata = {
     title: 'Builderforce.ai',
     statusBarStyle: 'black-translucent',
   },
-  themeColor: [
-    { media: '(prefers-color-scheme: dark)', color: '#0f0f14' },
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-  ],
   icons: {
     icon: [{ url: '/icon.png', type: 'image/png', sizes: '32x32' }, { url: '/icon-192.png', type: 'image/png', sizes: '192x192' }],
     shortcut: '/icon.png',
@@ -73,6 +69,13 @@ export const metadata: Metadata = {
   other: {
     'color-scheme': 'dark light',
   },
+};
+
+export const viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: dark)', color: '#0f0f14' },
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

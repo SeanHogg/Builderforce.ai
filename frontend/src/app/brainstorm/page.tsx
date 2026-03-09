@@ -7,7 +7,9 @@ import { brain, llmChat, type BrainChat, type BrainMessage } from '@/lib/builder
 import { fetchProjects, createProject } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { ChatInput, type ChatInputAttachment } from '@/components/ChatInput';
-import { ChatMessageContent } from '@/components/ChatMessageContent';
+import { ChatMessageBubble } from '@/components/ChatMessageBubble';
+import { ChatMessageActions } from '@/components/ChatMessageActions';
+import { ThemeSelect } from '@/components/ThemeSelect';
 
 function formatTime(ts: string) {
   const d = new Date(ts);
@@ -373,27 +375,17 @@ export default function BrainstormPage() {
             <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
               New chats are added to the selected project.
             </span>
-            <select
+            <ThemeSelect
+              ariaLabel="Filter by project"
               value={filterProjectId ?? ''}
-              onChange={(e) => setFilterProjectId(e.target.value === '' ? null : e.target.value)}
-              style={{
-                display: 'block',
-                marginTop: 4,
-                width: '100%',
-                padding: '6px 8px',
-                fontSize: 12,
-                borderRadius: 6,
-                border: '1px solid var(--border)',
-                background: 'var(--bg)',
-                color: 'var(--text)',
-              }}
-            >
-              <option value="">All</option>
-              <option value="none">No project</option>
-              {projects.map((p) => (
-                <option key={p.id} value={String(p.id)}>{p.name}</option>
-              ))}
-            </select>
+              onChange={(v) => setFilterProjectId(v === '' ? null : v)}
+              options={[
+                { value: '', label: 'All' },
+                { value: 'none', label: 'No project' },
+                ...projects.map((p) => ({ value: String(p.id), label: p.name })),
+              ]}
+              style={{ marginTop: 4 }}
+            />
           </label>
           <input
             type="search"
@@ -456,24 +448,22 @@ export default function BrainstormPage() {
                   <button type="button" onClick={() => handleSummarize(chat.id)} disabled={summarizingId === chat.id} style={{ fontSize: 11, padding: '2px 6px', cursor: 'pointer' }}>{summarizingId === chat.id ? '…' : 'Summarize'}</button>
                   <button type="button" onClick={() => handleDelete(chat)} disabled={deletingId === chat.id} style={{ fontSize: 11, padding: '2px 6px', cursor: 'pointer', color: 'var(--coral-bright)' }}>{deletingId === chat.id ? '…' : 'Delete'}</button>
                   {chat.projectId == null && (
-                    <label style={{ fontSize: 11 }}>
+                    <label style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       Add to:
-                      <select
+                      <ThemeSelect
+                        ariaLabel="Add chat to project"
                         value=""
-                        onChange={(e) => {
-                          const val = e.target.value;
+                        onChange={(val) => {
                           if (val === '__new__') setShowNewProject(true);
                           else if (val !== '') assignChatToProject(chat.id, Number(val));
                         }}
-                        disabled={assigningTo === chat.id}
-                        style={{ marginLeft: 4, fontSize: 11, padding: '2px 4px' }}
-                      >
-                        <option value="">Add to project…</option>
-                        <option value="__new__">+ Create new project</option>
-                        {projects.map((p) => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                      </select>
+                        options={[
+                          { value: '', label: 'Add to project…' },
+                          { value: '__new__', label: '+ Create new project' },
+                          ...projects.map((p) => ({ value: String(p.id), label: p.name })),
+                        ]}
+                        style={{ marginLeft: 0, minWidth: 120, padding: '2px 6px', fontSize: 11 }}
+                      />
                     </label>
                   )}
                 </div>
@@ -517,34 +507,22 @@ export default function BrainstormPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {activeChat.projectId == null ? (
                   <>
-                    <label style={{ fontSize: 12, color: 'var(--muted)' }}>
+                    <label style={{ fontSize: 12, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                       Assign to project:
-                      <select
+                      <ThemeSelect
+                        ariaLabel="Assign chat to project"
                         value=""
-                        onChange={(e) => {
-                          const val = e.target.value;
+                        onChange={(val) => {
                           if (val === '__new__') setShowNewProject(true);
                           else if (val !== '') assignChatToProject(activeChat.id, Number(val));
                         }}
-                        disabled={assigningTo === activeChat.id}
-                        style={{
-                          marginLeft: 6,
-                          padding: '4px 8px',
-                          fontSize: 12,
-                          borderRadius: 6,
-                          border: '1px solid var(--border)',
-                          background: 'var(--bg)',
-                          color: 'var(--text)',
-                        }}
-                      >
-                        <option value="">No project</option>
-                        <option value="__new__">+ Create new project</option>
-                        {projects.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
+                        options={[
+                          { value: '', label: 'No project' },
+                          { value: '__new__', label: '+ Create new project' },
+                          ...projects.map((p) => ({ value: String(p.id), label: p.name })),
+                        ]}
+                        style={{ minWidth: 140, padding: '4px 8px', fontSize: 12 }}
+                      />
                     </label>
                     {assigningTo === activeChat.id && <span style={{ fontSize: 12, color: 'var(--muted)' }}>Assigning…</span>}
                     <button
@@ -594,56 +572,29 @@ export default function BrainstormPage() {
             <div className="bs-messages">
               {loadingMessages && <div style={{ color: 'var(--muted)', fontSize: 13 }}>Loading messages…</div>}
               {messages.map((msg) => (
-                <div key={msg.id} className={`bs-msg ${msg.role === 'user' ? 'bs-msg-user' : ''}`}>
-                  <div
-                    className="bs-avatar"
-                    style={{
-                      background: msg.role === 'user' ? 'var(--accent)' : 'var(--bg-elevated)',
-                      color: msg.role === 'user' ? '#fff' : 'var(--text)',
-                    }}
-                  >
-                    {msg.role === 'user' ? 'U' : '🧠'}
-                  </div>
-                  <div className={`bs-bubble ${msg.role === 'user' ? 'bs-bubble-user' : 'bs-bubble-ai'}`}>
-                    <ChatMessageContent content={msg.content} />
-                    {msg.role !== 'user' && (
-                      <div className="bs-msg-actions">
-                        <button
-                          type="button"
-                          className="bs-action-btn"
-                          onClick={() => copyMessage(msg)}
-                          title="Copy"
-                        >
-                          {copiedMessageId === msg.id ? '✓ Copied!' : 'Copy'}
-                        </button>
-                        <button
-                          type="button"
-                          className={`bs-action-btn ${feedbackMap[msg.id] === 'up' ? 'active' : ''}`}
-                          onClick={() => submitFeedback(msg, 'up')}
-                          title="Good response"
-                          aria-label="Thumbs up"
-                        >
-                          👍
-                        </button>
-                        <button
-                          type="button"
-                          className={`bs-action-btn ${feedbackMap[msg.id] === 'down' ? 'active' : ''}`}
-                          onClick={() => submitFeedback(msg, 'down')}
-                          title="Bad response"
-                          aria-label="Thumbs down"
-                        >
-                          👎
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <ChatMessageBubble
+                  key={msg.id}
+                  role={msg.role as 'user' | 'assistant'}
+                  content={msg.content}
+                  actions={
+                    msg.role !== 'user' ? (
+                      <ChatMessageActions
+                        onCopy={() => copyMessage(msg)}
+                        copied={copiedMessageId === msg.id}
+                        feedback={feedbackMap[msg.id]}
+                        onFeedback={(value) => submitFeedback(msg, value)}
+                        projectId={activeChat.projectId ?? undefined}
+                        assistantContent={msg.content}
+                        conversationMessages={messages.map((m) => ({ role: m.role, content: m.content }))}
+                        onPrdSaved={() => {}}
+                        onTasksAdded={() => {}}
+                      />
+                    ) : undefined
+                  }
+                />
               ))}
               {sending && (
-                <div className="bs-msg">
-                  <div className="bs-avatar" style={{ background: 'var(--bg-elevated)' }}>🧠</div>
-                  <div className="bs-bubble bs-bubble-ai" style={{ color: 'var(--muted)' }}>Thinking…</div>
-                </div>
+                <ChatMessageBubble role="assistant" content="" />
               )}
               <div ref={msgEndRef} />
             </div>

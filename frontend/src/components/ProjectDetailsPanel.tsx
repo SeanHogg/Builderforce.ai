@@ -444,7 +444,6 @@ export function ProjectDetailsPanel({
             <TaskMgmtContent
               projectId={project.id}
               projectName={project.name}
-              compact
             />
           )}
 

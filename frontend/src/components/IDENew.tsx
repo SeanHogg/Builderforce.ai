@@ -46,6 +46,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   const [projectTitle, setProjectTitle] = useState(project.name);
   const [isSavingTitle, setIsSavingTitle] = useState(false);
   const [projectsPanelOpen, setProjectsPanelOpen] = useState(false);
+  const [terminalExpanded, setTerminalExpanded] = useState(true);
   const shellStartedRef = useRef(false);
   const terminalWriteRef = useRef<((data: string) => void) | null>(null);
 
@@ -610,14 +611,52 @@ export default defineConfig({
             </div>
           </div>
 
-          {/* Terminal at bottom — shell container */}
-          <div style={{ height: 220, borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', flexShrink: 0, background: '#1a1a2e' }}>
-            <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.25)', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '2px 8px', flexShrink: 0 }}>
+          {/* Terminal at bottom — collapsible panel with tab */}
+          <div
+            style={{
+              height: terminalExpanded ? 220 : 36,
+              borderTop: '1px solid var(--border-subtle)',
+              display: 'flex',
+              flexDirection: 'column',
+              flexShrink: 0,
+              background: '#1a1a2e',
+              transition: 'height 0.2s ease',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setTerminalExpanded((e) => !e)}
+              aria-expanded={terminalExpanded}
+              aria-label={terminalExpanded ? 'Collapse terminal' : 'Expand terminal'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                width: '100%',
+                background: 'rgba(0,0,0,0.25)',
+                border: 'none',
+                borderBottom: terminalExpanded ? '1px solid rgba(255,255,255,0.08)' : 'none',
+                padding: '6px 10px',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-display)',
+                textAlign: 'left',
+              }}
+            >
               <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Terminal
               </span>
-            </div>
-            <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
+              <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>
+                {terminalExpanded ? '▼' : '▶'}
+              </span>
+            </button>
+            <div
+              style={{
+                flex: 1,
+                overflow: 'hidden',
+                minHeight: 0,
+                display: terminalExpanded ? 'flex' : 'none',
+              }}
+            >
               <Terminal
                 onReady={handleTerminalReady}
                 onInput={handleTerminalInput}

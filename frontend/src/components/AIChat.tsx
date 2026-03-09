@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import type { AIMessage } from '@/lib/types';
 import { sendAIMessage } from '@/lib/api';
 import { ChatInput } from '@/components/ChatInput';
-import { ChatMessageContent } from '@/components/ChatMessageContent';
+import { ChatMessageBubble } from '@/components/ChatMessageBubble';
+import { ChatMessageActions } from '@/components/ChatMessageActions';
 
 interface AIChatProps {
   projectId: number | string;
@@ -24,8 +25,16 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
   const [messages, setMessages] = useState<AIMessage[]>(initialMessages ?? []);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const assistantContentRef = useRef('');
+  const copyMessage = useCallback(async (content: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId((i) => (i === id ? null : i)), 2000);
+    } catch { /* ignore */ }
+  }, []);
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(scrollToBottom, [messages]);
@@ -102,7 +111,7 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
-      <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="bs-messages" style={{ flex: 1, overflowY: 'auto' }}>
         {messages.length === 0 && (
           <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '48px 16px' }}>
             <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>💬</div>
@@ -119,33 +128,26 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
             )}
           </div>
         )}
-        {messages.map(message => (
-          <div
+        {messages.map((message) => (
+          <ChatMessageBubble
             key={message.id}
-            style={{
-              borderRadius: 10,
-              padding: '8px 10px',
-              background: message.role === 'user' ? 'var(--surface-coral-soft)' : 'var(--bg-elevated)',
-              border: `1px solid ${message.role === 'user' ? 'var(--border-accent)' : 'var(--border-subtle)'}`,
-              marginLeft: message.role === 'user' ? 16 : 0,
-              marginRight: message.role === 'user' ? 0 : 16,
-            }}
-          >
-            <div style={{ fontSize: '0.68rem', fontWeight: 700, marginBottom: 4, color: message.role === 'user' ? 'var(--coral-bright)' : 'var(--text-secondary)', fontFamily: 'var(--font-display)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              {message.role === 'user' ? 'You' : '🤖 AI'}
-            </div>
-            <div>
-              {message.content ? (
-                <ChatMessageContent
-                  content={message.content}
-                  onApplyCode={message.role === 'assistant' ? onApplyCode : undefined}
-                  onCreateFile={message.role === 'assistant' ? onCreateFile : undefined}
+            role={message.role as 'user' | 'assistant'}
+            content={message.content}
+            isStreaming={message.role === 'assistant' && !message.content}
+            onApplyCode={onApplyCode}
+            onCreateFile={onCreateFile}
+            actions={
+              message.role === 'assistant' && message.content ? (
+                <ChatMessageActions
+                  onCopy={() => copyMessage(message.content, message.id)}
+                  copied={copiedId === message.id}
+                  projectId={Number(projectId)}
+                  assistantContent={message.content}
+                  conversationMessages={messages.map((m) => ({ role: m.role, content: m.content }))}
                 />
-              ) : (
-                <span style={{ color: 'var(--text-muted)', animation: 'pulse 1.2s ease-in-out infinite', fontSize: '0.82rem' }}>Thinking…</span>
-              )}
-            </div>
-          </div>
+              ) : undefined
+            }
+          />
         ))}
         <div ref={messagesEndRef} />
       </div>
