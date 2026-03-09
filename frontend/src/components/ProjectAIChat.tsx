@@ -59,6 +59,7 @@ export function ProjectAIChat({
   const [loadingChats, setLoadingChats] = useState(true);
   const [loadingChat, setLoadingChat] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [chatNotFoundError, setChatNotFoundError] = useState<string | null>(null);
   const initialChatIdAppliedRef = useRef(false);
   const lastChatAutoSelectRef = useRef(false);
@@ -187,11 +188,9 @@ export function ProjectAIChat({
     ? chats.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
     : chats;
 
-  const displayProjectName = projectName ?? (typeof projectId === 'number' ? `Project #${projectId}` : String(projectId));
-
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
-      {/* Brain-style header: title + New, project (read-only), search */}
+      {/* Header: Brain + New; condensed chat history with collapsible panel */}
       <div
         style={{
           flexShrink: 0,
@@ -222,18 +221,15 @@ export function ProjectAIChat({
             + New
           </button>
         </div>
-        <label style={{ display: 'block', marginBottom: 6, fontSize: 12, color: 'var(--text-muted)' }}>
-          Project
-          <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-            {displayProjectName}
-          </span>
-        </label>
-        <input
-          type="search"
-          placeholder="Search chats…"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+        <button
+          type="button"
+          onClick={() => setHistoryOpen((o) => !o)}
+          aria-expanded={historyOpen}
+          aria-label={historyOpen ? 'Collapse chat history' : 'Expand chat history'}
           style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
             width: '100%',
             padding: '6px 8px',
             fontSize: 12,
@@ -242,12 +238,36 @@ export function ProjectAIChat({
             background: 'var(--bg-base)',
             color: 'var(--text-primary)',
             fontFamily: 'var(--font-display)',
+            cursor: 'pointer',
+            marginBottom: historyOpen ? 8 : 0,
           }}
-        />
+        >
+          <span style={{ color: 'var(--text-muted)' }}>Chat history</span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{historyOpen ? '▼' : '▶'}</span>
+        </button>
+        {historyOpen && (
+          <input
+            type="search"
+            placeholder="Search chats…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '6px 8px',
+              fontSize: 12,
+              borderRadius: 6,
+              border: '1px solid var(--border-subtle)',
+              background: 'var(--bg-base)',
+              color: 'var(--text-primary)',
+              fontFamily: 'var(--font-display)',
+            }}
+          />
+        )}
       </div>
 
-      {/* Chat list (same style as Brain Storm sidebar) */}
-      <div style={{ flex: '0 1 35%', minHeight: 120, maxHeight: 280, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+      {/* Chat list: only visible when history expanded */}
+      {historyOpen && (
+      <div style={{ flex: '0 1 35%', minHeight: 80, maxHeight: 220, overflow: 'auto', display: 'flex', flexDirection: 'column', borderBottom: '1px solid var(--border-subtle)' }}>
         {chatNotFoundError && (
           <div style={{ padding: 12, fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 8, margin: 8 }}>
             {chatNotFoundError}
@@ -285,6 +305,7 @@ export function ProjectAIChat({
           </div>
         ))}
       </div>
+      )}
 
       {/* Conversation area */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', borderTop: '1px solid var(--border-subtle)' }}>

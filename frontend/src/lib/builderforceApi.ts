@@ -401,6 +401,25 @@ export const tasksApi = {
     request<void>(`/api/tasks/${id}`, { method: 'DELETE' }),
 };
 
+/** Specs/PRDs – POST /api/specs (project PRD storage). */
+export const specsApi = {
+  create: (body: {
+    projectId?: number | null;
+    goal: string;
+    prd?: string | null;
+    status?: 'draft' | 'reviewed' | 'approved' | 'in_progress' | 'done';
+  }) =>
+    request<{ id: string; projectId: number | null; goal: string; prd: string | null; status: string }>('/api/specs', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  list: (projectId?: number | null) => {
+    const q = projectId != null ? `?projectId=${projectId}` : '';
+    return request<{ specs: Array<{ id: string; projectId: number | null; goal: string; prd: string | null; status: string }> }>(`/api/specs${q}`).then((r) => r.specs ?? []);
+  },
+};
+
 /** @deprecated Use tasksApi.list for full Task[]; kept for ArtifactAssigner. */
 export async function listTasks(projectId?: number): Promise<TaskSummary[]> {
   const list = await tasksApi.list(projectId);

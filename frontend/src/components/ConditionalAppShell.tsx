@@ -66,7 +66,8 @@ export default function ConditionalAppShell({ children }: { children: React.Reac
           style={{
             flex: 1,
             minHeight: 0,
-            overflow: 'hidden',
+            overflowY: 'auto',
+            WebkitOverflowScrolling: 'touch',
           }}
         >
           {children}

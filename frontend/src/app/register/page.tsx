@@ -75,6 +75,9 @@ export default function RegisterPage() {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)', position: 'relative', zIndex: 1 }}>
       {/* Nav */}
       <nav style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 50,
         borderBottom: '1px solid var(--border-subtle)',
         background: 'color-mix(in srgb, var(--bg-surface) 90%, transparent)',
         backdropFilter: 'blur(16px)',
@@ -103,8 +106,9 @@ export default function RegisterPage() {
         </div>
       </nav>
 
-      {/* Centred card */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 20px' }}>
+      {/* Centred card — scrollable on small viewports */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 20px', minHeight: 'calc(100vh - 60px)' }}>
         <div style={{ width: '100%', maxWidth: 420 }}>
           {/* Heading */}
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
@@ -220,6 +224,7 @@ export default function RegisterPage() {
               Sign in
             </Link>
           </p>
+        </div>
         </div>
       </div>
     </div>

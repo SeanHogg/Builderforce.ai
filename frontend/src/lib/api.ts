@@ -289,6 +289,16 @@ export async function sendAIMessage(
   }
 }
 
+/** Call AI chat and return the full assistant response as a single string (for Generate PRD / Generate Tasks). */
+export async function sendAIMessageAndCollect(
+  projectId: number | string,
+  messages: { role: string; content: string }[]
+): Promise<string> {
+  let full = '';
+  await sendAIMessage(projectId, messages, (chunk) => { full += chunk; });
+  return full;
+}
+
 // ---------------------------------------------------------------------------
 // IDE: Datasets
 // ---------------------------------------------------------------------------

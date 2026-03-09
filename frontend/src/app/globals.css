@@ -207,18 +207,6 @@ select option {
   color: var(--text-primary) !important;
 }
 
-/* Custom dropdown list (for theme-aware selects when native option styling is ignored by the browser) */
-.theme-select-dropdown {
-  background: var(--bg-elevated) !important;
-  color: var(--text-primary) !important;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-}
-.theme-select-dropdown option {
-  background: var(--bg-elevated) !important;
-  color: var(--text-primary) !important;
-}
 
 /* ── Reset ── */
 *,
@@ -699,11 +687,24 @@ html[data-theme='light'] .nebula {
   display: none;
 }
 
-/* Terminal / shell container: dark pane, no internal padding */
+/* Terminal / shell container: dark pane, no internal padding. xterm.css from @xterm/xterm must be loaded for cursor/selection. */
 .shell-container {
   background: #1a1a2e;
   padding: 0;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Ensure xterm.js terminal and viewport fill container and scroll correctly */
+.shell-container .xterm {
+  padding: 8px;
+  height: 100%;
+}
+
+.shell-container .xterm-viewport {
+  overflow-y: auto !important;
 }
 
 /* Content area */
