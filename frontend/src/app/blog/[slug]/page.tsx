@@ -1,5 +1,7 @@
 'use client';
 
+export const runtime = 'edge';
+
 import { use } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
