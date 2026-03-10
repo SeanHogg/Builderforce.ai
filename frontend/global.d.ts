@@ -1,3 +1,9 @@
+// Raw Markdown imports via webpack asset/source
+declare module '*.md' {
+  const content: string;
+  export default content;
+}
+
 // WebGPU global type declarations for TypeScript
 // These types are available in browsers supporting WebGPU
 
