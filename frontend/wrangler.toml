@@ -3,6 +3,12 @@ main = ".vercel/output/static/_worker.js/index.js"
 compatibility_date = "2026-03-07"
 compatibility_flags = ["nodejs_compat"]
 
+# Custom domains: route builderforce.ai (and www) to this Worker on every deploy.
+routes = [
+  { pattern = "builderforce.ai", custom_domain = true },
+  { pattern = "www.builderforce.ai", custom_domain = true },
+]
+
 # next-on-pages builds middleware/functions as separate modules under __next-on-pages-dist__.
 # They must be uploaded with the worker; use no-bundle + find_additional_modules.
 find_additional_modules = true

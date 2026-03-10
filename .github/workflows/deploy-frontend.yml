@@ -69,14 +69,12 @@ jobs:
         working-directory: frontend
         run: node scripts/strip-worker-assets.js
 
-      - name: Patch r.fetch and add diagnostics
+      - name: Patch r.fetch (guard against undefined assetsFetcher)
         working-directory: frontend
         run: |
           worker_file=".vercel/output/static/_worker.js/index.js"
           if [ -f "$worker_file" ]; then
             sed -i 's/\br\.fetch\b/(r||self).fetch/g' "$worker_file" || true
-            sed -i 's/async function k(e,{request:t,assetsFetcher:r,ctx:s})/async function k(e,{request:t,assetsFetcher:r,ctx:s}){if(!r)console.log("k assetsFetcher undefined",e);/' "$worker_file" || true
-            sed -i 's/var Ts={async fetch(e,t,r){/var Ts={async fetch(e,t,r){console.log("Ts.fetch",e.url);/' "$worker_file" || true
           fi
 
       - name: Install wrangler
