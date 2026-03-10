@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
 import type { Project } from '@/lib/types';
+import { ConfirmDialog } from './ConfirmDialog';
 
 export interface ProjectCardProps {
   project: Project;
@@ -13,6 +15,10 @@ export interface ProjectCardProps {
   showDetailsButton?: boolean;
   /** When user clicks the assigned agent (Workforce), called with assignedClaw so parent can open agent panel. */
   onAssignedAgentClick?: (assignedClaw: { id: number; name: string }) => void;
+  /** Show a delete (trash) icon; called when the user confirms deletion. */
+  onDelete?: (project: Project) => void;
+  /** Show the delete icon. Defaults to true when onDelete is provided. */
+  showDeleteButton?: boolean;
 }
 
 const createdDate = (project: Project): string => {
@@ -27,12 +33,21 @@ export function ProjectCard({
   onDetailsClick,
   showDetailsButton = !!onDetailsClick,
   onAssignedAgentClick,
+  onDelete,
+  showDeleteButton = !!onDelete,
 }: ProjectCardProps) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (onCardClick && e.key === 'Enter') {
       e.preventDefault();
       onCardClick(project);
     }
+  };
+  
+  const [showConfirm, setShowConfirm] = useState(false);
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onDelete) return;
+    setShowConfirm(true);
   };
 
   return (
@@ -59,10 +74,10 @@ export function ProjectCard({
         <div>
           <h3 style={{ fontWeight: 600, marginBottom: 2, color: 'var(--text-primary)' }}>{project.name}</h3>
           {project.key != null && project.key !== '' && (
-            <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{project.key}</div>
+            <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginBottom: 2 }}>
+              {project.key}
+            </div>
           )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {project.status != null && project.status !== '' && (
             <span
               style={{
@@ -72,11 +87,14 @@ export function ProjectCard({
                 padding: '2px 6px',
                 borderRadius: 6,
                 textTransform: 'capitalize',
+                display: 'inline-block',
               }}
             >
               {project.status.replace(/_/g, ' ')}
             </span>
           )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {showDetailsButton && (
             <button
               type="button"
@@ -84,19 +102,96 @@ export function ProjectCard({
                 e.stopPropagation();
                 onDetailsClick?.(project);
               }}
+              aria-label="Details"
               style={{
-                padding: '6px 10px',
-                fontSize: 12,
-                fontWeight: 600,
-                background: 'var(--surface-interactive)',
-                color: 'var(--text-secondary)',
-                border: '1px solid var(--border-subtle)',
+                padding: 6,
+                fontSize: 0,
+                background: 'var(--bg-base)',
+                color: 'var(--coral-bright)',
+                border: '1px solid var(--coral-bright)',
                 borderRadius: 8,
                 cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 32,
+                height: 32,
               }}
             >
-              Details
+              <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+                <path d="M9 2h6l6 6v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h4z" />
+                <circle cx="15" cy="15" r="3" />
+                <line x1="17.5" y1="17.5" x2="21" y2="21" />
+              </svg>
             </button>
+          )}
+          {/* IDE button */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.location.href = `/ide/${project.id}`;
+            }}
+            aria-label="Open in IDE"
+            style={{
+              padding: 6,
+              fontSize: 0,
+              background: 'var(--bg-base)',
+              color: 'var(--coral-bright)',
+              border: '1px solid var(--coral-bright)',
+              borderRadius: 8,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 32,
+              height: 32,
+            }}
+          >
+            <span style={{ fontSize: 18 }} aria-hidden>💻</span>
+          </button>
+          {showDeleteButton && onDelete && (
+            <>
+              <button
+                type="button"
+                onClick={handleDeleteClick}
+                aria-label="Delete project"
+                style={{
+                  padding: 6,
+                  fontSize: 0,
+                  background: 'var(--bg-base)',
+                  color: 'var(--coral-bright)',
+                  border: '1px solid var(--coral-bright)',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 32,
+                  height: 32,
+                }}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  style={{ width: 16, height: 16, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}
+                >
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14H6L5 6" />
+                  <path d="M10 11v6" />
+                  <path d="M14 11v6" />
+                  <path d="M9 6V4h6v2" />
+                </svg>
+              </button>
+              <ConfirmDialog
+                open={showConfirm}
+                message={`Delete project "${project.name}"? This cannot be undone.`}
+                onCancel={() => setShowConfirm(false)}
+                onConfirm={() => {
+                  setShowConfirm(false);
+                  onDelete(project);
+                }}
+              />
+            </>
           )}
         </div>
       </div>
@@ -148,22 +243,7 @@ export function ProjectCard({
           </span>
         )}
         <div style={{ flex: 1, minWidth: 0 }} />
-        <Link
-          href={`/ide/${project.id}`}
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            fontSize: 12,
-            fontWeight: 600,
-            color: 'var(--coral-bright)',
-            textDecoration: 'none',
-            padding: '6px 12px',
-            borderRadius: 8,
-            border: '1px solid var(--coral-bright)',
-            background: 'var(--bg-base)',
-          }}
-        >
-          Open in IDE →
-        </Link>
+        {/* moved to header */}
       </div>
       <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{createdDate(project)}</p>
     </div>

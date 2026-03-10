@@ -93,7 +93,7 @@ export async function createProject(data: {
 
 export async function updateProject(
   id: number | string,
-  data: Partial<Pick<Project, 'name' | 'description' | 'template'>>
+  data: Partial<Pick<Project, 'name' | 'description' | 'template' | 'key' | 'status'>>
 ): Promise<Project> {
   const method = useWorkerForProjects() ? 'PUT' : 'PATCH';
   const res = useWorkerForProjects()

@@ -25,7 +25,6 @@ export interface SlideOutPanelProps {
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
-  background: 'rgba(0,0,0,0.4)',
   zIndex: 9998,
 };
 
@@ -45,12 +44,14 @@ export function SlideOutPanel({
   return (
     <>
       <div
+        className="slide-panel-overlay"
         role="presentation"
         onClick={onClose}
         style={overlayStyle}
         aria-hidden
       />
       <div
+        className="slide-panel-drawer"
         role="dialog"
         aria-modal="true"
         aria-label={typeof title === 'string' ? title : 'Panel'}
@@ -61,7 +62,6 @@ export function SlideOutPanel({
           bottom: 0,
           width,
           maxWidth: '100%',
-          background: 'var(--bg-deep)',
           borderLeft: '1px solid var(--border-subtle)',
           boxShadow: '-8px 0 24px rgba(0,0,0,0.2)',
           zIndex: 9999,

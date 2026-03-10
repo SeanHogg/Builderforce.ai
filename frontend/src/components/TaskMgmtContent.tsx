@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   tasksApi,
   claws,
+  runtimeApi,
   type Task,
   type TaskStatus,
   type TaskPriority,
@@ -12,7 +13,7 @@ import {
 import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
 
-const BOARD_STATUSES: TaskStatus[] = ['todo', 'in_progress', 'in_review', 'done'];
+const BOARD_STATUSES: TaskStatus[] = ['backlog', 'todo', 'ready', 'in_progress', 'in_review', 'done'];
 const STATUS_LABELS: Record<TaskStatus, string> = {
   backlog: 'Backlog',
   todo: 'To Do',
@@ -78,8 +79,12 @@ export function TaskMgmtContent({
     priority: 'medium',
   });
   const [saving, setSaving] = useState(false);
+  const [sendingToClaw, setSendingToClaw] = useState(false);
   const [drawerTask, setDrawerTask] = useState<Task | null>(null);
   const [dragTaskId, setDragTaskId] = useState<string>('');
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [bulkStatus, setBulkStatus] = useState<TaskStatus | ''>('');
+  const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -107,6 +112,13 @@ export function TaskMgmtContent({
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (view === 'board') {
+      setSelectedIds([]);
+      setBulkStatus('');
+    }
+  }, [view]);
 
   const filtered = tasks.filter((t) => {
     if (filterStatus && t.status !== filterStatus) return false;
@@ -196,17 +208,74 @@ export function TaskMgmtContent({
     }
   };
 
-  const patchStatus = async (id: number, status: TaskStatus) => {
+  const handleSendToClaw = async (t: Task, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (!t?.id) return;
+    setSendingToClaw(true);
+    setError(null);
+    try {
+      await runtimeApi.submitExecution({
+        taskId: t.id,
+        clawId: t.assignedClawId ?? undefined,
+      });
+      setError(null);
+      await patchStatus(t.id, 'in_progress', { skipAutoSubmit: true });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to send to claw');
+    } finally {
+      setSendingToClaw(false);
+    }
+  };
+
+  const patchStatus = async (
+    id: number,
+    status: TaskStatus,
+    opts?: { skipAutoSubmit?: boolean }
+  ) => {
     try {
       const updated = await tasksApi.update(id, { status });
       setTasks((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
       if (drawerTask?.id === id) setDrawerTask(updated);
+
+      // Auto-send to claw when moving to To Do or In Progress (user expects execution to start)
+      if (!opts?.skipAutoSubmit && (status === 'todo' || status === 'in_progress')) {
+        try {
+          await runtimeApi.submitExecution({
+            taskId: id,
+            clawId: updated.assignedClawId ?? undefined,
+          });
+        } catch {
+          // Non-blocking: status was updated; execution may fail if no claw connected
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Update failed');
     }
   };
 
   const onDragOver = (e: React.DragEvent) => e.preventDefault();
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+  const toggleAll = () => {
+    if (selectedIds.length === filtered.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filtered.map((t) => t.id));
+    }
+  };
+
+  const applyBulkStatus = async (status: TaskStatus) => {
+    const toUpdate = selectedIds.slice();
+    setSelectedIds([]);
+    setBulkStatus('');
+    for (const id of toUpdate) {
+      await patchStatus(id, status);
+    }
+  };
   const onDrop = (e: React.DragEvent, status: TaskStatus) => {
     e.preventDefault();
     if (dragTaskId) {
@@ -437,8 +506,46 @@ export function TaskMgmtContent({
                         ...cardStyle,
                         padding: 12,
                         cursor: 'grab',
+                        position: 'relative',
                       }}
                     >
+                      <div style={{ position: 'absolute', top: 8, right: 8 }}>
+                        {editingStatusId === task.id ? (
+                          <select
+                            value={task.status}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              const s = e.target.value as TaskStatus;
+                              patchStatus(task.id, s);
+                              setEditingStatusId(null);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {BOARD_STATUSES.map((s) => (
+                              <option key={s} value={s}>
+                                {STATUS_LABELS[s]}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span
+                            className={STATUS_BADGE_CLASS[task.status]}
+                            style={{
+                              fontSize: 10,
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                              textTransform: 'capitalize',
+                              cursor: 'pointer',
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingStatusId(task.id);
+                            }}
+                          >
+                            {STATUS_LABELS[task.status]}
+                          </span>
+                        )}
+                      </div>
                       <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--text-primary)' }}>
                         {task.title}
                       </div>
@@ -508,13 +615,43 @@ export function TaskMgmtContent({
               No tasks found
             </div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                    <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                      Task
-                    </th>
+            <>
+              {selectedIds.length > 0 && (
+                <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                    {selectedIds.length} selected
+                  </span>
+                  <select
+                    value={bulkStatus}
+                    onChange={(e) => {
+                      const s = e.target.value as TaskStatus;
+                      if (s) applyBulkStatus(s);
+                    }}
+                    style={{ padding: '4px 8px', fontSize: 13 }}
+                  >
+                    <option value="">Bulk change status…</option>
+                    {BOARD_STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {STATUS_LABELS[s]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                      <th style={{ padding: '8px 12px' }}>
+                        <input
+                          type="checkbox"
+                          checked={filtered.length > 0 && selectedIds.length === filtered.length}
+                          onChange={toggleAll}
+                        />
+                      </th>
+                      <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                        Task
+                      </th>
                     <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
                       Status
                     </th>
@@ -546,23 +683,54 @@ export function TaskMgmtContent({
                       }}
                     >
                       <td style={{ padding: '10px 12px' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(task.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            toggleSelect(task.id);
+                          }}
+                        />
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>
                         <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{task.title}</div>
                         <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
                           {task.key}
                         </div>
                       </td>
-                      <td style={{ padding: '10px 12px' }}>
-                        <span
-                          className={STATUS_BADGE_CLASS[task.status]}
-                          style={{
-                            fontSize: 10,
-                            padding: '2px 8px',
-                            borderRadius: 4,
-                            textTransform: 'capitalize',
-                          }}
-                        >
-                          {STATUS_LABELS[task.status]}
-                        </span>
+                      <td style={{ padding: '10px 12px' }} onClick={(e) => e.stopPropagation()}>
+                        {editingStatusId === task.id ? (
+                          <select
+                            value={task.status}
+                            onChange={(e) => {
+                              const s = e.target.value as TaskStatus;
+                              patchStatus(task.id, s);
+                              setEditingStatusId(null);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {BOARD_STATUSES.map((s) => (
+                              <option key={s} value={s}>
+                                {STATUS_LABELS[s]}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span
+                            className={STATUS_BADGE_CLASS[task.status]}
+                            style={{
+                              fontSize: 10,
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                              textTransform: 'capitalize',
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => setEditingStatusId(task.id)}
+                          >
+                            {STATUS_LABELS[task.status]}
+                          </span>
+                        )}
                       </td>
                       <td style={{ padding: '10px 12px' }}>
                         <span
@@ -624,17 +792,18 @@ export function TaskMgmtContent({
                 </tbody>
               </table>
             </div>
+          </>  
           )}
         </div>
       )}
 
       {showModal && (
         <div
+          className="modal-overlay"
           role="presentation"
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.5)',
             zIndex: 10000,
             display: 'flex',
             alignItems: 'center',
@@ -645,7 +814,6 @@ export function TaskMgmtContent({
         >
           <div
             style={{
-              background: 'var(--bg-elevated)',
               border: '1px solid var(--border-subtle)',
               borderRadius: 12,
               padding: 24,
@@ -847,26 +1015,26 @@ export function TaskMgmtContent({
       {drawerTask && (
         <>
           <div
+            className="slide-panel-overlay"
             role="presentation"
             style={{
               position: 'fixed',
               inset: 0,
-              background: 'rgba(0,0,0,0.25)',
-              zIndex: 9998,
+              zIndex: 10002,
             }}
             onClick={() => setDrawerTask(null)}
           />
           <div
+            className="slide-panel-drawer"
             style={{
               position: 'fixed',
               top: 0,
               right: 0,
               bottom: 0,
               width: 'min(480px, 96vw)',
-              background: 'var(--bg-elevated)',
               borderLeft: '1px solid var(--border-subtle)',
               boxShadow: '-8px 0 24px rgba(0,0,0,0.2)',
-              zIndex: 9999,
+              zIndex: 10003,
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
@@ -973,7 +1141,18 @@ export function TaskMgmtContent({
                     ))}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  disabled={sendingToClaw}
+                  style={{
+                    ...buttonPrimary,
+                    opacity: sendingToClaw ? 0.7 : 1,
+                  }}
+                  onClick={(e) => handleSendToClaw(drawerTask, e)}
+                >
+                  {sendingToClaw ? 'Sending…' : 'Send to Claw'}
+                </button>
                 <button type="button" style={buttonTertiary} onClick={(e) => openEdit(drawerTask, e)}>
                   Edit
                 </button>

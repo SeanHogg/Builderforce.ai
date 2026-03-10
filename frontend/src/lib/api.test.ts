@@ -149,7 +149,23 @@ describe('updateProject', () => {
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     expect(url).toMatch(/\/api\/projects\/1$/);
     expect(init.method).toBe('PATCH');
+    const body = JSON.parse(init.body as string);
+    expect(body.name).toBe('Renamed');
     expect(result.name).toBe('Renamed');
+  });
+
+  it('sends status and key when provided', async () => {
+    const updated = { ...sampleProject, status: 'archived', key: 'NEWKEY' };
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify(updated), { status: 200 })
+    );
+    const result = await updateProject(1, { status: 'archived', key: 'NEWKEY' });
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body.status).toBe('archived');
+    expect(body.key).toBe('NEWKEY');
+    expect(result.status).toBe('archived');
+    expect(result.key).toBe('NEWKEY');
   });
 
   it('throws on non-ok response', async () => {

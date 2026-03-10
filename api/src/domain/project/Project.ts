@@ -96,11 +96,30 @@ export class Project {
     updates: Partial<
       Pick<
         ProjectProps,
-        'name' | 'description' | 'template' | 'rootWorkingDirectory' | 'status' | 'sourceControlIntegrationId' | 'sourceControlProvider' | 'sourceControlRepoFullName' | 'sourceControlRepoUrl' | 'githubRepoUrl' | 'githubRepoOwner' | 'githubRepoName' | 'governance'
+        | 'key'
+        | 'name'
+        | 'description'
+        | 'template'
+        | 'rootWorkingDirectory'
+        | 'status'
+        | 'sourceControlIntegrationId'
+        | 'sourceControlProvider'
+        | 'sourceControlRepoFullName'
+        | 'sourceControlRepoUrl'
+        | 'githubRepoUrl'
+        | 'githubRepoOwner'
+        | 'githubRepoName'
+        | 'governance'
       >
     >,
   ): Project {
-    return new Project({ ...this.props, ...updates, updatedAt: new Date() });
+    const merged = { ...this.props, ...updates } as ProjectProps;
+    // normalize key to uppercase and trim if provided
+    if (updates.key !== undefined) {
+      if (!updates.key.trim()) throw new ValidationError('Project key is required');
+      merged.key = updates.key.trim().toUpperCase();
+    }
+    return new Project({ ...merged, updatedAt: new Date() });
   }
 
   archive(): Project {

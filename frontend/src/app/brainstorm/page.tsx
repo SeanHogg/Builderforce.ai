@@ -135,6 +135,18 @@ export default function BrainstormPage() {
   }, [feedbackMap]);
 
   const chatIdFromUrl = searchParams.get('chat');
+  const projectIdFromUrl = searchParams.get('projectId');
+
+  // When opening Brain with ?projectId=, pre-select that project so new chats are associated.
+  useEffect(() => {
+    if (projectIdFromUrl && projects.length > 0) {
+      const id = projectIdFromUrl;
+      if (projects.some((p) => String(p.id) === id)) {
+        setFilterProjectId(id);
+      }
+    }
+  }, [projectIdFromUrl, projects]);
+
   useEffect(() => {
     if (!chatIdFromUrl) return;
     const id = Number(chatIdFromUrl);

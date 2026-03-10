@@ -5,10 +5,11 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
-import { getStoredWebToken, getMyTenants, getTenantToken, persistTenantSession } from '@/lib/auth';
+import { getStoredWebToken, getMyTenants, getTenantToken, persistTenantSession, getDefaultTenantId } from '@/lib/auth';
 import type { Tenant } from '@/lib/types';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 
+/** getMyTenants now returns Tenant[] directly; kept for backward compat if raw API used. */
 function tenantsFromResponse(data: unknown): Tenant[] {
   if (Array.isArray(data)) {
     return data.map((t: { id?: unknown; name?: string; slug?: string }) => ({
@@ -37,12 +38,14 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Redirect when already authenticated (e.g. landed on /login with valid session).
+  // Do NOT redirect during form submission — handleSubmit does tenant resolution and redirect.
   useEffect(() => {
-    if (isAuthenticated) {
-      const next = searchParams.get('next') || (hasTenant ? '/ide' : '/tenants');
+    if (isAuthenticated && !isLoading) {
+      const next = searchParams.get('next') || (hasTenant ? '/dashboard' : '/tenants');
       router.replace(next);
     }
-  }, [isAuthenticated, hasTenant, router, searchParams]);
+  }, [isAuthenticated, hasTenant, isLoading, router, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,6 +69,15 @@ export default function LoginPage() {
       }
       if (tenants.length === 0) {
         router.push('/tenants' + (next !== '/dashboard' ? `?next=${encodeURIComponent(next)}` : ''));
+        return;
+      }
+      // 2+ tenants: check for default tenant and auto-select if it matches
+      const defaultId = getDefaultTenantId();
+      const defaultTenant = defaultId ? tenants.find((t) => String(t.id) === defaultId) : null;
+      if (defaultTenant) {
+        const res = await getTenantToken(token, defaultTenant.id);
+        persistTenantSession(res.token, defaultTenant);
+        window.location.href = next;
         return;
       }
       router.push('/tenants' + (next !== '/dashboard' ? `?next=${encodeURIComponent(next)}` : ''));

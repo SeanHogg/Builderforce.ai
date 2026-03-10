@@ -5,7 +5,7 @@ export const runtime = 'edge';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { fetchProject, fetchFiles, updateProject } from '@/lib/api';
+import { fetchProject, fetchFiles, updateProject, deleteProject } from '@/lib/api';
 import { persistLastProjectId } from '@/lib/auth';
 import type { Project, FileEntry } from '@/lib/types';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
@@ -182,6 +182,15 @@ export default function IDEPage() {
           onClose={() => setProjectDetailsOpen(false)}
           onProjectUpdate={setProject}
           projectHref={`/ide/${project.id}`}
+          onDelete={async (p) => {
+            try {
+              await deleteProject(p.id);
+              router.push('/dashboard');
+            } catch (err) {
+              console.error(err);
+              alert('Failed to delete project');
+            }
+          }}
         />
       )}
       {openFirstTimeModal && (

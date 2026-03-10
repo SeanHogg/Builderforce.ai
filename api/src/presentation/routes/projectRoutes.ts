@@ -648,6 +648,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     const id = Number(c.req.param('id'));
     const tenantId = c.get('tenantId');
     const body = await c.req.json<{
+      key?: string;
       name?: string;
       description?: string | null;
       template?: string | null;

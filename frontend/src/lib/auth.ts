@@ -208,6 +208,7 @@ export async function register(
   return res.json() as Promise<RegisterResponse>;
 }
 
+/** API returns { tenants: [...] }; normalizes to Tenant[]. */
 export async function getMyTenants(webToken: string): Promise<Tenant[]> {
   const res = await fetch(`${AUTH_API_URL}/api/auth/my-tenants`, {
     headers: { Authorization: `Bearer ${webToken}` },
@@ -217,7 +218,14 @@ export async function getMyTenants(webToken: string): Promise<Tenant[]> {
     const body = await res.json().catch(() => ({})) as { message?: string };
     throw new Error(body.message ?? 'Failed to fetch tenants');
   }
-  return res.json() as Promise<Tenant[]>;
+  const data = await res.json() as { tenants?: Array<{ id?: unknown; name?: string; slug?: string }> };
+  const arr = Array.isArray(data) ? data : data?.tenants;
+  if (!Array.isArray(arr)) return [];
+  return arr.map((t) => ({
+    id: String(t.id ?? ''),
+    name: t.name ?? '',
+    slug: t.slug,
+  }));
 }
 
 export async function getTenantToken(

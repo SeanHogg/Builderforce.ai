@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
@@ -7,7 +8,7 @@ import { useAuth } from '@/lib/AuthContext';
 interface NavItem {
   href: string;
   label: string;
-  icon: string;
+  icon: React.ReactNode;
   activePaths?: string[];
   /** When true, only href exact match is active (no prefix match) */
   exactMatch?: boolean;
@@ -19,7 +20,12 @@ const mainNav: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
   { href: '/brainstorm', label: 'Brain Storm', icon: '💡' },
   { href: '/projects', label: 'Projects', icon: '▦', exactMatch: true },
-  { href: '/ide', label: 'IDE', icon: '</>', activePaths: ['/ide'] },
+  {
+    href: '/ide',
+    label: 'IDE',
+    icon: '💻',
+    activePaths: ['/ide'],
+  },
   { href: '/tasks', label: 'Task Mgmt', icon: '☑' },
   { href: '/training', label: 'Training', icon: '🎓' },
 ];
@@ -41,7 +47,6 @@ const systemNav: NavItem[] = [
   { href: '/settings', label: 'Settings', icon: '⚙' },
   { href: '/tenants', label: 'Tenant & Workspace', icon: '🏢' },
   { href: '/observability', label: 'Observability', icon: '📊' },
-  { href: '/debug', label: 'Debug', icon: '🐛' },
 ];
 
 const adminNavItem: NavItem = { href: '/admin', label: 'Platform Admin', icon: '⚙', highlight: true };

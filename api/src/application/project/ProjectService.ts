@@ -22,6 +22,7 @@ export interface CreateProjectDto {
 }
 
 export interface UpdateProjectDto {
+  key?: string;
   name?: string;
   description?: string | null;
   template?: string | null;
@@ -87,11 +88,23 @@ export class ProjectService {
   async updateProject(id: number, dto: UpdateProjectDto, callerTenantId: number): Promise<Project> {
     const project = await this.getProject(id, callerTenantId);
 
+    // if key is changing, make sure new key isn't already taken
+    if (dto.key !== undefined) {
+      const trimmed = dto.key.trim().toUpperCase();
+      if (trimmed && trimmed !== project.key) {
+        const existing = await this.projects.findByKey(trimmed as any);
+        if (existing && existing.id !== project.id) {
+          throw new ConflictError(`Project key '${trimmed}' is already taken`);
+        }
+      }
+    }
+
     const { githubRepoOwner, githubRepoName } = dto.githubRepoUrl !== undefined
       ? parseGithubUrl(dto.githubRepoUrl)
       : { githubRepoOwner: project.githubRepoOwner, githubRepoName: project.githubRepoName };
 
     const updated = project.update({
+      key: dto.key,
       name: dto.name,
       description: dto.description,
       template: dto.template,
