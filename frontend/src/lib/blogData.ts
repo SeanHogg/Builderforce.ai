@@ -15,6 +15,9 @@ import gettingStarted from '@/content/blog/getting-started-with-ai-agents.md';
 import webgpuLora from '@/content/blog/webgpu-lora-explained.md';
 import multiAgent from '@/content/blog/multi-agent-orchestration.md';
 import datasetBestPractices from '@/content/blog/ai-dataset-generation-best-practices.md';
+import introductionAndOverview from '@/content/blog/introduction-and-overview.md';
+import coderclawIntegration from '@/content/blog/coderclaw-and-agent-integration.md';
+import productIdeation from '@/content/blog/product-ideation-with-builderforce.md';
 
 export interface BlogPost {
   slug: string;
@@ -81,6 +84,9 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('webgpu-lora-explained', webgpuLora),
   buildPost('multi-agent-orchestration', multiAgent),
   buildPost('ai-dataset-generation-best-practices', datasetBestPractices),
+  buildPost('introduction-and-overview', introductionAndOverview),
+  buildPost('coderclaw-and-agent-integration', coderclawIntegration),
+  buildPost('product-ideation-with-builderforce', productIdeation),
 ].sort((a, b) => (a.date < b.date ? 1 : -1));
 
 export function getPostBySlug(slug: string): BlogPost | undefined {
