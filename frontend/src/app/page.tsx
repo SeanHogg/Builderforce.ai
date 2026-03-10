@@ -450,6 +450,7 @@ export default function LandingPage() {
             </Link>
             <div className="lp-nav-right">
               <Link href="/workforce" className="lp-nav-link">Workforce</Link>
+              <Link href="/blog" className="lp-nav-link">Blog</Link>
               <Link href="/login" className="lp-nav-link">Sign In</Link>
               <ThemeToggleButton />
               <Link href="/register" className="lp-nav-cta">
@@ -557,6 +558,7 @@ export default function LandingPage() {
           <div className="lp-footer-inner">
             <ul className="lp-footer-links">
               <li><Link href="/workforce">Workforce Registry</Link></li>
+              <li><Link href="/blog">Blog</Link></li>
               <li><Link href="/login">Sign In</Link></li>
               <li><Link href="/register">Get Started</Link></li>
               <li><a href="https://coderclaw.ai" target="_blank" rel="noopener">CoderClaw</a></li>
