@@ -687,20 +687,30 @@ html[data-theme='light'] .nebula {
   display: none;
 }
 
-/* Terminal / shell container: dark pane, no internal padding. xterm.css from @xterm/xterm must be loaded for cursor/selection. */
+/* Terminal / shell container: dark pane, full width so xterm fit() gets correct dimensions. */
 .shell-container {
   background: #1a1a2e;
   padding: 0;
   min-height: 0;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.shell-container > div {
+  min-width: 0;
+  width: 100%;
+  height: 100%;
 }
 
 /* Ensure xterm.js terminal and viewport fill container and scroll correctly */
 .shell-container .xterm {
   padding: 8px;
   height: 100%;
+  width: 100%;
 }
 
 .shell-container .xterm-viewport {
@@ -1181,9 +1191,11 @@ html[data-theme='light'] .nebula {
   font-weight: 600;
 }
 
-/* Slide-out panels: standard overlay (blur) + drawer (background) */
+/* Slide-out panels: standard overlay (blur) + drawer (background)
+   Use theme variables so dark/light both get opaque, correct backgrounds. */
 .project-panel-overlay,
-.slide-panel-overlay {
+.slide-panel-overlay,
+.projects-panel-overlay {
   background: var(--panel-overlay-bg) !important;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -1194,7 +1206,8 @@ html[data-theme='light'] .nebula {
   to { opacity: 1; }
 }
 .project-panel-drawer,
-.slide-panel-drawer {
+.slide-panel-drawer,
+.projects-panel-drawer {
   background: var(--panel-drawer-bg) !important;
   color: var(--text-primary);
   animation: projectPanelSlideIn 0.2s ease-out;

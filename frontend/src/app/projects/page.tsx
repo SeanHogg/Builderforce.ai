@@ -5,11 +5,12 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Project } from '@/lib/types';
 import type { Claw } from '@/lib/builderforceApi';
-import { fetchProjects, createProject } from '@/lib/api';
+import { fetchProjects, createProject, deleteProject } from '@/lib/api';
 import { claws } from '@/lib/builderforceApi';
 import { useAuth } from '@/lib/AuthContext';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
 import { ProjectCard } from '@/components/ProjectCard';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ClawSlideOutPanel } from '@/components/ClawSlideOutPanel';
 
 /**
@@ -32,6 +33,7 @@ export default function ProjectsPage() {
   const [detailsProject, setDetailsProject] = useState<Project | null>(null);
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const [selectedClaw, setSelectedClaw] = useState<Claw | null>(null);
+  const [confirmProject, setConfirmProject] = useState<Project | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -283,6 +285,15 @@ export default function ProjectsPage() {
                   const claw = clawList.find((c) => c.id === ac.id);
                   if (claw) setSelectedClaw(claw);
                 }}
+                onDelete={async (p) => {
+                  try {
+                    await deleteProject(p.id);
+                    setProjects((prev) => prev.filter((x) => x.id !== p.id));
+                  } catch (err) {
+                    console.error(err);
+                    alert('Failed to delete project');
+                  }
+                }}
               />
             ))}
           </div>
@@ -334,34 +345,65 @@ export default function ProjectsPage() {
                         <button
                           type="button"
                           onClick={() => setDetailsProject(project)}
+                          aria-label="Details"
+                          style={{
+                            padding: 6,
+                            fontSize: 0,
+                            background: 'var(--bg-base)',
+                            color: 'var(--coral-bright)',
+                            border: '1px solid var(--coral-bright)',
+                            borderRadius: 8,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 32,
+                            height: 32,
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+                            <path d="M9 2h6l6 6v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h4z" />
+                            <circle cx="15" cy="15" r="3" />
+                            <line x1="17.5" y1="17.5" x2="21" y2="21" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => (window.location.href = `/ide/${project.id}`)}
+                          aria-label="Open in IDE"
+                          style={{
+                            padding: 6,
+                            fontSize: 0,
+                            background: 'var(--bg-base)',
+                            color: 'var(--coral-bright)',
+                            border: '1px solid var(--coral-bright)',
+                            borderRadius: 8,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 32,
+                            height: 32,
+                          }}
+                        >
+                          <span style={{ fontSize: 18 }} aria-hidden>💻</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmProject(project)}
                           style={{
                             padding: '6px 10px',
                             fontSize: 12,
                             fontWeight: 600,
-                            background: 'var(--surface-interactive)',
-                            color: 'var(--text-secondary)',
-                            border: '1px solid var(--border-subtle)',
+                            color: 'var(--coral-bright)',
+                            background: 'transparent',
+                            border: '1px solid var(--coral-bright)',
                             borderRadius: 8,
                             cursor: 'pointer',
                           }}
                         >
-                          Details
+                          Delete
                         </button>
-                        <Link
-                          href={`/ide/${project.id}`}
-                          style={{
-                            padding: '6px 12px',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color: 'var(--coral-bright)',
-                            textDecoration: 'none',
-                            border: '1px solid var(--coral-bright)',
-                            borderRadius: 8,
-                            background: 'var(--bg-base)',
-                          }}
-                        >
-                          Open in IDE
-                        </Link>
                       </div>
                     </td>
                   </tr>
@@ -380,6 +422,16 @@ export default function ProjectsPage() {
               setProjects((prev) => prev.map((p) => (p.id === updated.id ? { ...updated, assignedClaw: p.assignedClaw } : p)));
               setDetailsProject((p) => (p && p.id === updated.id ? updated : p));
             }}
+            onDelete={async (p) => {
+              try {
+                await deleteProject(p.id);
+                setProjects((prev) => prev.filter((x) => x.id !== p.id));
+                setDetailsProject(null);
+              } catch (err) {
+                console.error(err);
+                alert('Failed to delete project');
+              }
+            }}
           />
         )}
 
@@ -390,6 +442,29 @@ export default function ProjectsPage() {
             onClose={() => setSelectedClaw(null)}
           />
         )}
+        {/* confirmation dialog used by table delete */}
+        <ConfirmDialog
+          open={!!confirmProject}
+          message={
+            confirmProject ? `Delete project "${confirmProject.name}"? This cannot be undone.` : ''
+          }
+          onCancel={() => setConfirmProject(null)}
+          onConfirm={async () => {
+            if (!confirmProject) return;
+            try {
+              await deleteProject(confirmProject.id);
+              setProjects((prev) => prev.filter((x) => x.id !== confirmProject.id));
+              if (detailsProject && detailsProject.id === confirmProject.id) {
+                setDetailsProject(null);
+              }
+            } catch (err) {
+              console.error(err);
+              alert('Failed to delete project');
+            } finally {
+              setConfirmProject(null);
+            }
+          }}
+        />
       </main>
     </div>
   );

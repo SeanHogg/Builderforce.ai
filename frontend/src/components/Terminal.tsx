@@ -43,9 +43,19 @@ export function Terminal({ onReady, onInput }: TerminalProps) {
       term.loadAddon(fitAddon);
       term.loadAddon(webLinksAddon);
 
+      let fitCleanup: (() => void) | undefined;
       if (containerRef.current) {
         term.open(containerRef.current);
         fitAddon.fit();
+        // Re-fit after layout so we get correct width (avoids squished text when container width was 0 on first paint)
+        const raf = requestAnimationFrame(() => {
+          requestAnimationFrame(() => fitAddon.fit());
+        });
+        const t = setTimeout(() => fitAddon.fit(), 100);
+        fitCleanup = () => {
+          cancelAnimationFrame(raf);
+          clearTimeout(t);
+        };
       }
 
       terminalRef.current = term;
@@ -66,7 +76,22 @@ export function Terminal({ onReady, onInput }: TerminalProps) {
       const ro = new ResizeObserver(() => fitAddon.fit());
       if (containerRef.current) ro.observe(containerRef.current);
 
-      return () => ro.disconnect();
+      let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+      const onWindowResize = () => {
+        if (resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          resizeTimer = null;
+          fitAddon.fit();
+        }, 50);
+      };
+      window.addEventListener('resize', onWindowResize);
+
+      return () => {
+        ro.disconnect();
+        window.removeEventListener('resize', onWindowResize);
+        if (resizeTimer) clearTimeout(resizeTimer);
+        fitCleanup?.();
+      };
     };
 
     let cleanupFn: (() => void) | undefined;
@@ -81,8 +106,8 @@ export function Terminal({ onReady, onInput }: TerminalProps) {
   }, []);
 
   return (
-    <div className="shell-container h-full">
-      <div ref={containerRef} className="h-full w-full" />
+    <div className="shell-container h-full" style={{ minWidth: 0 }}>
+      <div ref={containerRef} style={{ width: '100%', minWidth: 0, height: '100%' }} />
     </div>
   );
 }

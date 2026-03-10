@@ -1,9 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import type { Claw } from '@/lib/builderforceApi';
+import { ObservabilityContent } from './ObservabilityContent';
+import { ClawDebugContent } from './ClawDebugContent';
 
-export type ClawPanelTab = 'details' | 'config';
+export type ClawPanelTab = 'details' | 'config' | 'prds' | 'observability' | 'debug';
 
 export interface ClawSlideOutPanelProps {
   claw: Claw;
@@ -20,6 +23,9 @@ export interface ClawSlideOutPanelProps {
 const TABS: { id: ClawPanelTab; label: string }[] = [
   { id: 'details', label: 'Details' },
   { id: 'config', label: 'Config' },
+  { id: 'prds', label: 'PRDs' },
+  { id: 'observability', label: 'Observability' },
+  { id: 'debug', label: 'Debug' },
 ];
 
 const panelOverlayStyle: React.CSSProperties = {
@@ -305,6 +311,60 @@ export function ClawSlideOutPanel({
                 Claw-specific configuration (e.g. env, capabilities) can be managed from the CoderClaw instance or via API.
               </p>
             </div>
+          )}
+          {activeTab === 'prds' && (
+            <div style={cardStyle}>
+              <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>PRDs</div>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
+                Product Requirements Documents are created and managed at the project level. Use Brain to draft PRDs and executable task plans, or open a project to view and edit its PRD.
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <Link
+                  href="/brainstorm"
+                  style={{
+                    padding: '8px 14px',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    background: 'var(--surface-interactive)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 8,
+                    textDecoration: 'none',
+                  }}
+                >
+                  Brainstorm / Brain
+                </Link>
+                <Link
+                  href="/projects"
+                  style={{
+                    padding: '8px 14px',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    background: 'var(--surface-interactive)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 8,
+                    textDecoration: 'none',
+                  }}
+                >
+                  Projects
+                </Link>
+              </div>
+            </div>
+          )}
+          {activeTab === 'observability' && (
+            <ObservabilityContent
+              clawId={claw.id}
+              clawName={claw.name}
+              style={{ padding: 0 }}
+            />
+          )}
+          {activeTab === 'debug' && (
+            <ClawDebugContent
+              clawId={claw.id}
+              clawName={claw.name}
+              compact
+            />
           )}
         </div>
       </div>

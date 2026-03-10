@@ -107,6 +107,11 @@ export default function TenantsPage() {
     setDefaultTenantIdState(getDefaultTenantId());
   }, [tenants.length]);
 
+  // Prevent default-action clicks from triggering the parent select button
+  const preventSelectBubble = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
   const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!webToken || !createName.trim()) return;
@@ -114,9 +119,16 @@ export default function TenantsPage() {
     setIsCreating(true);
     try {
       const newTenant = await apiCreateTenant(webToken, createName);
+      const hadNoTenants = tenants.length === 0;
       setTenants((prev) => [...prev, newTenant]);
       setCreateName('');
       setShowCreate(false);
+      // If user had no tenants, auto-select the new one and redirect to dashboard
+      if (hadNoTenants) {
+        await selectTenant(newTenant);
+        const next = searchParams.get('next') || '/dashboard';
+        router.replace(next);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create workspace');
     } finally {
@@ -254,25 +266,31 @@ export default function TenantsPage() {
                         </svg>
                       )}
                     </button>
-                    {isDefault ? (
-                      <button
-                        type="button"
-                        onClick={handleClearDefault}
-                        className="flex-shrink-0 px-2 py-1 text-xs text-gray-500 hover:text-gray-300 border border-gray-600 hover:border-gray-500 rounded transition-opacity"
-                        title="Clear default tenant"
-                      >
-                        Clear default
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={(e) => handleSetDefault(e, t)}
-                        className="flex-shrink-0 px-2 py-1 text-xs text-gray-500 hover:text-gray-300 border border-gray-600 hover:border-gray-500 rounded transition-opacity"
-                        title="Set as default tenant"
-                      >
-                        Set default
-                      </button>
-                    )}
+                    <div
+                      className="flex-shrink-0"
+                      onClick={preventSelectBubble}
+                      onMouseDown={preventSelectBubble}
+                    >
+                      {isDefault ? (
+                        <button
+                          type="button"
+                          onClick={handleClearDefault}
+                          className="px-2 py-1 text-xs text-gray-500 hover:text-gray-300 border border-gray-600 hover:border-gray-500 rounded transition-opacity"
+                          title="Clear default tenant"
+                        >
+                          Clear default
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => handleSetDefault(e, t)}
+                          className="px-2 py-1 text-xs text-gray-500 hover:text-gray-300 border border-gray-600 hover:border-gray-500 rounded transition-opacity"
+                          title="Set as default tenant"
+                        >
+                          Set default
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}

@@ -4,13 +4,14 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Project } from '@/lib/types';
-import { fetchProjects } from '@/lib/api';
+import { fetchProjects, deleteProject } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 import { ChatInput } from '@/components/ChatInput';
 import { ProjectCard } from '@/components/ProjectCard';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ClawSlideOutPanel } from '@/components/ClawSlideOutPanel';
-import { claws, type Claw } from '@/lib/builderforceApi';
+import { claws, tasksApi, runtimeApi, type Claw } from '@/lib/builderforceApi';
 
 /**
  * Dashboard (home) — CoderClawLink-style: "What should we build?" chat input,
@@ -26,6 +27,10 @@ export default function DashboardPage() {
   const [prompt, setPrompt] = useState('');
   const [detailsProject, setDetailsProject] = useState<Project | null>(null);
   const [selectedClaw, setSelectedClaw] = useState<Claw | null>(null);
+  const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
+  const [confirmProject, setConfirmProject] = useState<Project | null>(null);
+  const [sendingToClaw, setSendingToClaw] = useState(false);
+  const [promptError, setPromptError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -48,11 +53,35 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, [isAuthenticated, hasTenant]);
 
-  const handlePromptSubmit = () => {
+  const handlePromptSubmit = async () => {
     const p = prompt.trim();
     if (!p) return;
-    // TODO: wire to scaffold / "Send to Claw" (api.builderforce.ai)
-    setPrompt('');
+    // Need a project to create a task
+    const project = projects[0];
+    if (!project) {
+      setPromptError('Create a project first');
+      return;
+    }
+    setPromptError(null);
+    setSendingToClaw(true);
+    try {
+      const task = await tasksApi.create({
+        projectId: project.id,
+        title: p.slice(0, 200) || p,
+        description: p.length > 200 ? p : undefined,
+        assignedClawId: connectedClaws[0]?.id ?? undefined,
+      });
+      await runtimeApi.submitExecution({
+        taskId: task.id,
+        clawId: task.assignedClawId ?? undefined,
+      });
+      setPrompt('');
+      router.push('/tasks');
+    } catch (e) {
+      setPromptError(e instanceof Error ? e.message : 'Failed to send to claw');
+    } finally {
+      setSendingToClaw(false);
+    }
   };
 
   const connectedClaws = clawList.filter((c) => c.connectedAt);
@@ -78,13 +107,17 @@ export default function DashboardPage() {
               onChange={setPrompt}
               onSubmit={handlePromptSubmit}
               placeholder="Build a budget tracker with Material UI components…"
-              submitLabel="Send to Claw"
+              submitLabel={sendingToClaw ? 'Sending…' : 'Send to Claw'}
+              disabled={sendingToClaw}
               rows={1}
               submitOnEnter={false}
               showBrainIcon={true}
               showVoice={true}
               secondaryLink={{ label: 'Manage workforce', href: '/workforce' }}
             />
+            {promptError && (
+              <div style={{ marginTop: 8, fontSize: 13, color: 'var(--error-text)' }}>{promptError}</div>
+            )}
           </div>
           <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
             {connectedClaws.length > 0
@@ -106,10 +139,46 @@ export default function DashboardPage() {
               alignItems: 'center',
               justifyContent: 'space-between',
               marginBottom: 16,
+              flexWrap: 'wrap',
+              gap: 12,
             }}
           >
             <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Projects</h2>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ display: 'flex', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 2 }}>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('card')}
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    border: 'none',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    background: viewMode === 'card' ? 'var(--coral-bright)' : 'transparent',
+                    color: viewMode === 'card' ? '#fff' : 'var(--text-secondary)',
+                  }}
+                >
+                  Card
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('table')}
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    border: 'none',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    background: viewMode === 'table' ? 'var(--coral-bright)' : 'transparent',
+                    color: viewMode === 'table' ? '#fff' : 'var(--text-secondary)',
+                  }}
+                >
+                  List
+                </button>
+              </div>
               <Link
                 href="/projects"
                 style={{
@@ -178,7 +247,7 @@ export default function DashboardPage() {
                 Create project
               </Link>
             </div>
-          ) : (
+          ) : viewMode === 'card' ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
               {projectPreview.map((p) => (
                 <ProjectCard
@@ -191,8 +260,138 @@ export default function DashboardPage() {
                     const claw = clawList.find((c) => c.id === ac.id);
                     if (claw) setSelectedClaw(claw);
                   }}
+                  onDelete={async (proj) => {
+                    try {
+                      await deleteProject(proj.id);
+                      setProjects((prev) => prev.filter((x) => x.id !== proj.id));
+                      setDetailsProject((d) => (d && d.id === proj.id ? null : d));
+                    } catch (err) {
+                      console.error(err);
+                      alert('Failed to delete project');
+                    }
+                  }}
                 />
               ))}
+            </div>
+          ) : (
+            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
+                    <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Name</th>
+                    <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Description</th>
+                    <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Agent</th>
+                    <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {projectPreview.map((project) => (
+                    <tr key={project.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                      <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--text-primary)' }}>{project.name}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--text-secondary)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {project.description ?? '—'}
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        {project.assignedClaw ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const claw = clawList.find((c) => c.id === project.assignedClaw!.id);
+                              if (claw) setSelectedClaw(claw);
+                            }}
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: 'var(--coral-bright)',
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              padding: 0,
+                              textDecoration: 'underline',
+                            }}
+                          >
+                            {project.assignedClaw.name}
+                          </button>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={() => setDetailsProject(project)}
+                            aria-label="Details"
+                            style={{
+                              padding: 6,
+                              fontSize: 0,
+                              background: 'var(--bg-base)',
+                              color: 'var(--coral-bright)',
+                              border: '1px solid var(--coral-bright)',
+                              borderRadius: 8,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: 32,
+                              height: 32,
+                            }}
+                          >
+                            <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+                              <path d="M9 2h6l6 6v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h4z" />
+                              <circle cx="15" cy="15" r="3" />
+                              <line x1="17.5" y1="17.5" x2="21" y2="21" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => (window.location.href = `/ide/${project.id}`)}
+                            aria-label="Open in IDE"
+                            style={{
+                              padding: 6,
+                              fontSize: 0,
+                              background: 'var(--bg-base)',
+                              color: 'var(--coral-bright)',
+                              border: '1px solid var(--coral-bright)',
+                              borderRadius: 8,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: 32,
+                              height: 32,
+                            }}
+                          >
+                            <span style={{ fontSize: 18 }} aria-hidden>💻</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmProject(project)}
+                            style={{
+                              padding: '6px 10px',
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: 'var(--coral-bright)',
+                              background: 'transparent',
+                              border: '1px solid var(--coral-bright)',
+                              borderRadius: 8,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6l-1 14H6L5 6" />
+                              <path d="M10 11v6" />
+                              <path d="M14 11v6" />
+                              <path d="M9 6V4h6v2" />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </section>
@@ -206,6 +405,16 @@ export default function DashboardPage() {
               setProjects((prev) => prev.map((p) => (p.id === updated.id ? { ...updated, assignedClaw: p.assignedClaw } : p)));
               setDetailsProject((p) => (p && p.id === updated.id ? updated : p));
             }}
+            onDelete={async (p) => {
+              try {
+                await deleteProject(p.id);
+                setProjects((prev) => prev.filter((x) => x.id !== p.id));
+                setDetailsProject(null);
+              } catch (err) {
+                console.error(err);
+                alert('Failed to delete project');
+              }
+            }}
           />
         )}
 
@@ -216,6 +425,28 @@ export default function DashboardPage() {
             onClose={() => setSelectedClaw(null)}
           />
         )}
+        <ConfirmDialog
+          open={!!confirmProject}
+          message={
+            confirmProject ? `Delete project "${confirmProject.name}"? This cannot be undone.` : ''
+          }
+          onCancel={() => setConfirmProject(null)}
+          onConfirm={async () => {
+            if (!confirmProject) return;
+            try {
+              await deleteProject(confirmProject.id);
+              setProjects((prev) => prev.filter((x) => x.id !== confirmProject.id));
+              if (detailsProject && detailsProject.id === confirmProject.id) {
+                setDetailsProject(null);
+              }
+            } catch (err) {
+              console.error(err);
+              alert('Failed to delete project');
+            } finally {
+              setConfirmProject(null);
+            }
+          }}
+        />
 
         {/* Workforce section */}
         <section>

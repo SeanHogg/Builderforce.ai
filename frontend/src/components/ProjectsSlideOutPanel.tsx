@@ -46,7 +46,6 @@ export function ProjectsSlideOutPanel({ open, onClose, currentProjectId }: Proje
           left: 0,
           right: 0,
           bottom: 'var(--footer-height, 44px)',
-          background: 'rgba(0,0,0,0.4)',
           zIndex: 9998,
         }}
       />
@@ -58,7 +57,6 @@ export function ProjectsSlideOutPanel({ open, onClose, currentProjectId }: Proje
           right: 0,
           bottom: 'var(--footer-height, 44px)',
           width: 'min(420px, 90vw)',
-          background: 'var(--bg-deep)',
           borderLeft: '1px solid var(--border-subtle)',
           boxShadow: '-4px 0 24px rgba(0,0,0,0.2)',
           zIndex: 9999,

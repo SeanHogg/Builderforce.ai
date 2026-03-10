@@ -181,6 +181,84 @@ export const claws = {
       method: 'POST',
       body: JSON.stringify({ name: name.trim() }),
     }).then((r) => ({ ...r.claw, apiKey: r.apiKey } as ClawRegistration)),
+
+  /** WebSocket URL for claw relay (gateway). Pass tenant token via ?token=. */
+  wsUrl: (clawId: number): string => {
+    const base = (AUTH_API_URL || '').replace(/^http/, 'ws');
+    const token = getStoredTenantToken();
+    return `${base}/api/claws/${clawId}/ws?token=${encodeURIComponent(token || '')}`;
+  },
+
+  /** Tool audit events for timeline/observability. */
+  toolAuditEvents: (
+    clawId: number,
+    params?: { runId?: string; sessionKey?: string; limit?: number }
+  ) => {
+    const q = new URLSearchParams();
+    if (params?.runId) q.set('runId', params.runId);
+    if (params?.sessionKey) q.set('sessionKey', params.sessionKey);
+    if (params?.limit != null) q.set('limit', String(params.limit));
+    const query = q.toString();
+    return request<{ events: ToolAuditEvent[] }>(
+      `/api/claws/${clawId}/tool-audit${query ? `?${query}` : ''}`
+    ).then((r) => r.events);
+  },
+};
+
+export interface ToolAuditEvent {
+  id: number;
+  runId?: string | null;
+  sessionKey?: string | null;
+  toolCallId?: string | null;
+  toolName: string;
+  category?: string | null;
+  args?: string | null;
+  result?: string | null;
+  durationMs?: number | null;
+  ts: string;
+}
+
+export interface Workflow {
+  id: string;
+  clawId: number;
+  specId?: string | null;
+  workflowType: string;
+  status: string;
+  description?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+  updatedAt: string;
+  tasks?: WorkflowTask[];
+}
+
+export interface WorkflowTask {
+  id: string;
+  workflowId: string;
+  agentRole: string;
+  description: string;
+  status: string;
+  input?: string | null;
+  output?: string | null;
+  error?: string | null;
+  dependsOn?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const workflows = {
+  list: (params?: { status?: string; workflowType?: string; clawId?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set('status', params.status);
+    if (params?.workflowType) q.set('workflowType', params.workflowType);
+    if (params?.clawId != null) q.set('clawId', String(params.clawId));
+    const query = q.toString();
+    return request<{ workflows: Workflow[] }>(
+      `/api/workflows${query ? `?${query}` : ''}`
+    ).then((r) => r.workflows);
+  },
+  get: (id: string) => request<Workflow>(`/api/workflows/${id}`),
 };
 
 /** Tenant default claw (for workforce "Set as default"). */
@@ -401,7 +479,43 @@ export const tasksApi = {
     request<void>(`/api/tasks/${id}`, { method: 'DELETE' }),
 };
 
-/** Specs/PRDs – POST /api/specs (project PRD storage). */
+/** Runtime executions – submit tasks to claws for agent execution. */
+export interface Execution {
+  id: number;
+  taskId: number;
+  status: string;
+  submittedBy?: string;
+  submittedAt?: string;
+  [key: string]: unknown;
+}
+
+export const runtimeApi = {
+  /** Submit a task for execution. Dispatches to assigned claw or all connected claws. */
+  submitExecution: (body: {
+    taskId: number;
+    clawId?: number | null;
+    sessionId?: string;
+    payload?: string;
+  }): Promise<Execution> =>
+    request<Execution>('/api/runtime/executions', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+};
+
+/** Specs/PRDs – project PRD storage. */
+export interface Spec {
+  id: string;
+  projectId: number | null;
+  goal: string;
+  prd: string | null;
+  status: string;
+  archSpec?: string | null;
+  taskList?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export const specsApi = {
   create: (body: {
     projectId?: number | null;
@@ -409,15 +523,22 @@ export const specsApi = {
     prd?: string | null;
     status?: 'draft' | 'reviewed' | 'approved' | 'in_progress' | 'done';
   }) =>
-    request<{ id: string; projectId: number | null; goal: string; prd: string | null; status: string }>('/api/specs', {
+    request<Spec>('/api/specs', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
 
   list: (projectId?: number | null) => {
     const q = projectId != null ? `?projectId=${projectId}` : '';
-    return request<{ specs: Array<{ id: string; projectId: number | null; goal: string; prd: string | null; status: string }> }>(`/api/specs${q}`).then((r) => r.specs ?? []);
+    return request<{ specs: Spec[] }>(`/api/specs${q}`).then((r) => r.specs ?? []);
   },
+
+  get: (id: string) => request<Spec>(`/api/specs/${id}`),
+
+  patch: (id: string, body: { goal?: string; status?: string; prd?: string | null }) =>
+    request<Spec>(`/api/specs/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  delete: (id: string) => request<void>(`/api/specs/${id}`, { method: 'DELETE' }),
 };
 
 /** @deprecated Use tasksApi.list for full Task[]; kept for ArtifactAssigner. */

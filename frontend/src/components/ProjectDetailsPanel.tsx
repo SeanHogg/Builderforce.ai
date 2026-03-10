@@ -6,6 +6,8 @@ import type { Project } from '@/lib/types';
 import { updateProject } from '@/lib/api';
 import { ObservabilityContent } from './ObservabilityContent';
 import { TaskMgmtContent } from './TaskMgmtContent';
+import { PRDsContent } from './PRDsContent';
+import { ConfirmDialog } from './ConfirmDialog';
 
 export type ProjectPanelTab =
   | 'details'
@@ -25,6 +27,8 @@ export interface ProjectDetailsPanelProps {
   initialTab?: ProjectPanelTab;
   /** Called when project is updated (e.g. name, description). */
   onProjectUpdate?: (project: Project) => void;
+  /** Called when the user deletes the project. Component will prompt for confirmation. */
+  onDelete?: (project: Project) => void;
   /** Optional: project base path for links (e.g. /ide/123). */
   projectHref?: string;
 }
@@ -51,7 +55,7 @@ const panelDrawerStyle: React.CSSProperties = {
   top: 0,
   right: 0,
   bottom: 0,
-  width: 'min(1100px, 96vw)',
+  width: '75%',
   maxWidth: '100%',
   borderLeft: '1px solid var(--border-subtle)',
   boxShadow: '-8px 0 24px rgba(0,0,0,0.2)',
@@ -73,22 +77,34 @@ export function ProjectDetailsPanel({
   onClose,
   initialTab = 'details',
   onProjectUpdate,
+  onDelete,
   projectHref,
 }: ProjectDetailsPanelProps) {
   const [activeTab, setActiveTab] = useState<ProjectPanelTab>(initialTab);
   const [editingProject, setEditingProject] = useState(false);
   const [editName, setEditName] = useState(project.name);
   const [editDescription, setEditDescription] = useState(project.description ?? '');
+  const [editKey, setEditKey] = useState(project.key ?? '');
+  const [editStatus, setEditStatus] = useState(project.status ?? 'active');
   const [saving, setSaving] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
     if (open) setActiveTab(initialTab);
   }, [open, initialTab]);
 
   useEffect(() => {
+    if (activeTab !== 'details' && editingProject) {
+      setEditingProject(false);
+    }
+  }, [activeTab, editingProject]);
+
+  useEffect(() => {
     setEditName(project.name);
     setEditDescription(project.description ?? '');
-  }, [project.id, project.name, project.description]);
+    setEditKey(project.key ?? '');
+    setEditStatus(project.status ?? 'active');
+  }, [project.id, project.name, project.description, project.key, project.status]);
 
   if (!open) return null;
 
@@ -102,6 +118,8 @@ export function ProjectDetailsPanel({
       const updated = await updateProject(project.id, {
         name: editName.trim() || project.name,
         description: editDescription.trim() || undefined,
+        key: editKey.trim() || undefined,
+        status: editStatus,
       });
       onProjectUpdate?.(updated);
       setEditingProject(false);
@@ -148,6 +166,44 @@ export function ProjectDetailsPanel({
               >
                 {project.status.replace('_', ' ')}
               </span>
+            )}
+            {onDelete && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm(true)}
+                  aria-label="Delete project"
+                  style={{
+                    width: 36,
+                    height: 36,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 8,
+                    background: 'var(--bg-base)',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14H6L5 6" />
+                    <path d="M10 11v6" />
+                    <path d="M14 11v6" />
+                    <path d="M9 6V4h6v2" />
+                  </svg>
+                </button>
+                <ConfirmDialog
+                  open={showConfirm}
+                  message={`Delete project "${project.name}"? This cannot be undone.`}
+                  onCancel={() => setShowConfirm(false)}
+                  onConfirm={() => {
+                    setShowConfirm(false);
+                    onDelete?.(project);
+                  }}
+                />
+              </>
             )}
             <button
               type="button"
@@ -213,19 +269,170 @@ export function ProjectDetailsPanel({
           {activeTab === 'details' && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
               <div style={cardStyle}>
+                <div style={{ position: 'relative' }}>
                 <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>Overview</div>
-                <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-secondary)', marginBottom: 14 }}>
-                  {project.description || 'No project description yet.'}
-                </div>
-                <div style={{ display: 'grid', gap: 8 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Project key</span>
-                    <span>{project.key ?? `#${project.id}`}</span>
+                {!editingProject && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingProject(true);
+                      setEditName(project.name);
+                      setEditDescription(project.description ?? '');
+                      setEditKey(project.key ?? '');
+                      setEditStatus(project.status ?? 'active');
+                    }}
+                    aria-label="Edit project"
+                    style={{
+                      position: 'absolute',
+                      top: 4,
+                      right: 4,
+                      width: 28,
+                      height: 28,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 6,
+                      background: 'var(--bg-base)',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              {editingProject ? (
+                <form onSubmit={handleSaveProject} style={{ marginBottom: 14 }}>
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Name</label>
+                    <input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        fontSize: 13,
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 8,
+                        background: 'var(--bg-deep)',
+                        color: 'var(--text-primary)',
+                      }}
+                    />
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Status</span>
-                    <span>{project.status ?? 'active'}</span>
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Project key</label>
+                    <input
+                      value={editKey}
+                      onChange={(e) => setEditKey(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        fontSize: 13,
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 8,
+                        background: 'var(--bg-deep)',
+                        color: 'var(--text-primary)',
+                      }}
+                    />
                   </div>
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Status</label>
+                    <select
+                      value={editStatus}
+                      onChange={(e) => setEditStatus(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        fontSize: 13,
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 8,
+                        background: 'var(--bg-deep)',
+                        color: 'var(--text-primary)',
+                      }}
+                    >
+                      <option value="active">Active</option>
+                      <option value="completed">Completed</option>
+                      <option value="archived">Archived</option>
+                      <option value="on_hold">On hold</option>
+                    </select>
+                  </div>
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Description</label>
+                    <textarea
+                      value={editDescription}
+                      onChange={(e) => setEditDescription(e.target.value)}
+                      rows={3}
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        fontSize: 13,
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 8,
+                        background: 'var(--bg-deep)',
+                        color: 'var(--text-primary)',
+                        resize: 'vertical',
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      type="submit"
+                      disabled={saving}
+                      style={{
+                        padding: '8px 14px',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 8,
+                        cursor: saving ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {saving ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingProject(false)}
+                      style={{
+                        padding: '8px 14px',
+                        fontSize: 13,
+                        background: 'var(--bg-deep)',
+                        color: 'var(--text-secondary)',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 8,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{project.name}</div>
+                  <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-secondary)', marginBottom: 14 }}>
+                    {project.description || 'No project description yet.'}
+                  </div>
+                </>
+              )}
+              <div style={{ display: 'grid', gap: 8 }}>
+                  {!editingProject && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Project key</span>
+                        <span>{project.key ?? `#${project.id}`}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Status</span>
+                        <span>{project.status ?? 'active'}</span>
+                      </div>
+                    </>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                     <span style={{ color: 'var(--text-muted)' }}>Tasks</span>
                     <span>{taskCount}</span>
@@ -288,99 +495,7 @@ export function ProjectDetailsPanel({
                   >
                     Draft PRD
                   </button>
-                  {!editingProject ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingProject(true);
-                        setEditName(project.name);
-                        setEditDescription(project.description ?? '');
-                      }}
-                      style={{
-                        padding: '8px 14px',
-                        fontSize: 13,
-                        background: 'transparent',
-                        color: 'var(--text-secondary)',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 8,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Edit project
-                    </button>
-                  ) : null}
-                </div>
-                {editingProject && (
-                  <form onSubmit={handleSaveProject} style={{ marginTop: 14 }}>
-                    <div style={{ marginBottom: 10 }}>
-                      <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Name</label>
-                      <input
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '8px 10px',
-                          fontSize: 13,
-                          border: '1px solid var(--border-subtle)',
-                          borderRadius: 8,
-                          background: 'var(--bg-deep)',
-                          color: 'var(--text-primary)',
-                        }}
-                      />
-                    </div>
-                    <div style={{ marginBottom: 10 }}>
-                      <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Description</label>
-                      <textarea
-                        value={editDescription}
-                        onChange={(e) => setEditDescription(e.target.value)}
-                        rows={3}
-                        style={{
-                          width: '100%',
-                          padding: '8px 10px',
-                          fontSize: 13,
-                          border: '1px solid var(--border-subtle)',
-                          borderRadius: 8,
-                          background: 'var(--bg-deep)',
-                          color: 'var(--text-primary)',
-                          resize: 'vertical',
-                        }}
-                      />
-                    </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button
-                        type="submit"
-                        disabled={saving}
-                        style={{
-                          padding: '8px 14px',
-                          fontSize: 13,
-                          fontWeight: 600,
-                          background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: 8,
-                          cursor: saving ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        {saving ? 'Saving…' : 'Save'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditingProject(false)}
-                        style={{
-                          padding: '8px 14px',
-                          fontSize: 13,
-                          background: 'var(--bg-deep)',
-                          color: 'var(--text-secondary)',
-                          border: '1px solid var(--border-subtle)',
-                          borderRadius: 8,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </form>
-                )}
+                </div> {/* end workspace actions button row */}
                 <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
                   Use Brain to generate PRDs and executable task actions for this project.
                 </div>
@@ -448,28 +563,7 @@ export function ProjectDetailsPanel({
           )}
 
           {activeTab === 'prds' && (
-            <div style={cardStyle}>
-              <div style={{ fontWeight: 600, marginBottom: 10 }}>PRDs</div>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Product requirements documents. Use Brain to draft a PRD, then save it here.
-              </p>
-              <Link
-                href="/brainstorm"
-                style={{
-                  display: 'inline-block',
-                  marginTop: 12,
-                  padding: '8px 14px',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: 'var(--coral-bright)',
-                  border: '1px solid var(--coral-bright)',
-                  borderRadius: 8,
-                  textDecoration: 'none',
-                }}
-              >
-                Generate with Brain →
-              </Link>
-            </div>
+            <PRDsContent projectId={project.id} projectName={project.name} />
           )}
 
           {activeTab === 'brain' && (

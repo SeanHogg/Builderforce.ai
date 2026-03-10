@@ -654,6 +654,8 @@ export default defineConfig({
                 flex: 1,
                 overflow: 'hidden',
                 minHeight: 0,
+                minWidth: 0,
+                width: '100%',
                 display: terminalExpanded ? 'flex' : 'none',
               }}
             >
