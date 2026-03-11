@@ -91,6 +91,7 @@ Versions are simple date‑based strings (e.g. `2026.3.7`). Before deploying bum
 4. Build & deploy the frontend as SSR (Cloudflare Workers):
      - **SSR Next.js requires Cloudflare Workers, not Pages.**
      - **Next.js version must be <= 15.5.2 for Cloudflare compatibility.**
+    - Production domains should be assigned explicitly: `builderforce.ai` and `www.builderforce.ai` → frontend, `api.builderforce.ai` → API, `worker.builderforce.ai` → worker.
      - Use the provided Dockerfile to build and deploy from a Linux container:
          ```bash
          docker build -t builderforce-frontend .
@@ -115,7 +116,7 @@ Versions are simple date‑based strings (e.g. `2026.3.7`). Before deploying bum
          }
          ```
      - Make sure your `src/app/` directory exists and contains your main app files.
-     - After building, deploy the output to your hosting provider (Cloudflare Pages, Vercel, etc.).
+    - After building, deploy the output with Wrangler so the custom domain stays attached to the frontend worker.
 
      **Troubleshooting:**
      - If Next.js reports missing `pages` or `app` directory, check that you are in the correct directory and that `src/app/` exists.

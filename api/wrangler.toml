@@ -4,8 +4,8 @@ compatibility_date = "2026-01-01"
 compatibility_flags = ["nodejs_compat"]
 
 [[routes]]
-pattern = "api.builderforce.ai/*"
-zone_name = "builderforce.ai"
+pattern = "api.builderforce.ai"
+custom_domain = true
 
 [vars]
 # Overridden by Cloudflare dashboard secrets for production.

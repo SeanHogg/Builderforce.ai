@@ -41,10 +41,10 @@ class_name = "CollaborationRoom"
 tag = "v1"
 new_sqlite_classes = ["CollaborationRoom"]
 
-# expose on our custom domain
+# explicit custom domain for the legacy IDE/data worker
 [[routes]]
-pattern = "builderforce.ai/*"
-zone_name = "builderforce.ai"
+pattern = "worker.builderforce.ai"
+custom_domain = true
 
 # observability settings
 [observability]

@@ -1,6 +1,6 @@
 {
   "name": "builderforce-worker",
-  "version": "0.1.0",
+  "version": "2025.3.8",
   "private": true,
   "scripts": {
     "dev": "npx wrangler dev",
