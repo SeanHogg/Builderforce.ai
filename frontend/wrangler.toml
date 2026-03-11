@@ -15,8 +15,16 @@ rules = [
 directory = ".vercel/output/static"
 binding = "ASSETS"
 
+[[routes]]
+pattern = "builderforce.ai"
+custom_domain = true
+
+[[routes]]
+pattern = "www.builderforce.ai"
+custom_domain = true
+
 [vars]
-NEXT_PUBLIC_WORKER_URL = "https://builderforce-worker.seanhogg.workers.dev"
+NEXT_PUBLIC_WORKER_URL = "https://worker.builderforce.ai"
 
 [observability.logs]
 enabled = true

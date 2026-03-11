@@ -176,7 +176,7 @@ builderforce.ai/
 │   ├── migrations/              # Drizzle/Postgres migrations
 │   └── wrangler.toml            # Routes: api.builderforce.ai
 │
-├── frontend/                    # Next.js application (Cloudflare Pages)
+├── frontend/                    # Next.js application (Cloudflare Worker + static assets)
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── layout.tsx      # Root layout: fonts, starfield, anti-FOUC theme script
@@ -216,7 +216,7 @@ builderforce.ai/
 │   │       └── webgpu-trainer.ts # In-browser LoRA training engine
 │   ├── next.config.js          # COOP/COEP headers (credentialless for SharedArrayBuffer)
 │   ├── tailwind.config.js      # CSS variable–backed gray scale for theme
-│   └── wrangler.toml           # Pages deployment config
+│   └── wrangler.toml           # Worker config for builderforce.ai
 │
 ├── worker/                     # Cloudflare Worker API (Hono)
 │   ├── src/
@@ -472,16 +472,22 @@ Project chat endpoints (`GET/POST /api/projects/:id/chats`, etc.) and IDE AI wit
 
 For CoderClawLink-style API concepts (auth, tenants, claws, runtime, marketplace), see [docs.coderclaw.ai/link/](https://docs.coderclaw.ai/link/) (getting started, architecture, API reference, multi-agent orchestration, pricing).
 
-### Frontend (Cloudflare Pages)
+### Frontend (Cloudflare Worker)
 
-Build uses `NEXT_PUBLIC_WORKER_URL` (e.g. `https://api.builderforce.ai` or your worker URL).
+Build uses `NEXT_PUBLIC_WORKER_URL` (production: `https://worker.builderforce.ai`).
+
+Production host ownership is explicit:
+- `builderforce.ai` → frontend worker
+- `www.builderforce.ai` → frontend worker
+- `api.builderforce.ai` → API worker
+- `worker.builderforce.ai` → legacy IDE/data worker
 
 ### CI/CD (push to `main`)
 
 The `.github/workflows/deploy-frontend.yml` workflow deploys both:
 
 1. **API** — `api/`: runs migrations (requires `NEON_DATABASE_URL`) then `wrangler deploy` to api.builderforce.ai
-2. **Frontend** — `frontend/`: Next.js build → Cloudflare Pages
+2. **Frontend** — `frontend/`: Next.js build → `@cloudflare/next-on-pages` → `wrangler deploy`
 
 Required GitHub Actions secrets:
 - `CF_API_TOKEN` — Cloudflare API token

@@ -1,6 +1,6 @@
 {
   "name": "builderforce-frontend",
-  "version": "0.1.0",
+  "version": "2025.3.8",
   "private": true,
   "scripts": {
     "clean": "node -e \"const fs=require('fs');const p='.next';if(fs.existsSync(p)){fs.rmSync(p,{recursive:true});console.log('Removed .next');}else{console.log('.next not found');}\"",
