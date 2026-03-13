@@ -541,6 +541,61 @@ export const specsApi = {
   delete: (id: string) => request<void>(`/api/specs/${id}`, { method: 'DELETE' }),
 };
 
+// ---------------------------------------------------------------------------
+// Cron Jobs (claw-scoped, optionally project-associated)
+// ---------------------------------------------------------------------------
+
+export interface CronJob {
+  id: string;
+  tenantId: number;
+  clawId: number;
+  projectId: number | null;
+  name: string;
+  schedule: string;
+  taskId: number | null;
+  enabled: boolean;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  lastStatus: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const cronApi = {
+  list: (clawId: number, projectId?: number): Promise<CronJob[]> => {
+    const q = projectId != null ? `?projectId=${projectId}` : '';
+    return request<{ jobs: CronJob[] }>(`/api/claws/${clawId}/cron${q}`).then((r) => r.jobs ?? []);
+  },
+
+  create: (clawId: number, body: {
+    id?: string;
+    name: string;
+    schedule: string;
+    taskId?: number | null;
+    projectId?: number | null;
+    enabled?: boolean;
+  }): Promise<CronJob> =>
+    request<CronJob>(`/api/claws/${clawId}/cron`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  update: (clawId: number, jobId: string, body: Partial<{
+    name: string;
+    schedule: string;
+    taskId: number | null;
+    projectId: number | null;
+    enabled: boolean;
+  }>): Promise<CronJob> =>
+    request<CronJob>(`/api/claws/${clawId}/cron/${jobId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  delete: (clawId: number, jobId: string): Promise<void> =>
+    request<void>(`/api/claws/${clawId}/cron/${jobId}`, { method: 'DELETE' }),
+};
+
 /** @deprecated Use tasksApi.list for full Task[]; kept for ArtifactAssigner. */
 export async function listTasks(projectId?: number): Promise<TaskSummary[]> {
   const list = await tasksApi.list(projectId);

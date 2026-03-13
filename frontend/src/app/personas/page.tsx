@@ -12,6 +12,7 @@ import {
 } from '@/lib/builderforceApi';
 import { BUILTIN_PERSONAS, userPersonasKey, type Persona, type UserPersona } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
+import { PersonaAssignmentsContent } from '@/components/PersonaAssignmentsContent';
 
 function loadUserPersonas(tenantId: string): UserPersona[] {
   if (typeof window === 'undefined') return [];
@@ -214,52 +215,15 @@ export default function PersonasPage() {
         </button>
       </div>
 
-      {loading ? (
+      {loading && tab !== 'assigned' ? (
         <div style={{ color: 'var(--muted)', fontSize: 13 }}>Loading…</div>
       ) : tab === 'assigned' ? (
-        !hasClaws ? (
+        tenantNum ? (
+          <PersonaAssignmentsContent scope="tenant" scopeId={tenantNum} />
+        ) : (
           <div className="empty-state">
             <div className="empty-state-icon">🔗</div>
-            <div className="empty-state-title">No claws registered</div>
-            <div className="empty-state-sub">Register a claw (workforce) to start assigning personas</div>
-          </div>
-        ) : assigned.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state-icon">🎭</div>
-            <div className="empty-state-title">No personas assigned</div>
-            <div className="empty-state-sub">Browse the marketplace to assign personas to your workspace</div>
-            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setTab('marketplace')}>Browse marketplace</button>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-            {assigned.map((a) => {
-              const builtin = BUILTIN_PERSONAS.find((b) => b.name === a.artifactSlug);
-              return (
-                <div key={a.artifactSlug} className="card">
-                  <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 20 }}>🎭</span>
-                      <div>
-                        <div className="card-title">{builtin?.name ?? a.artifactSlug}</div>
-                        {builtin && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{builtin.description}</div>}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <ArtifactAssigner artifactType="persona" artifactSlug={a.artifactSlug} artifactName={a.artifactSlug} />
-                      <button type="button" className="btn btn-danger btn-sm" onClick={() => unassignPersona(a.artifactSlug)}>Remove</button>
-                    </div>
-                  </div>
-                  {builtin && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
-                      {builtin.capabilities.map((c) => (
-                        <span key={c} className="badge badge-gray">{c}</span>
-                      ))}
-                    </div>
-                  )}
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>Assigned {new Date(a.assignedAt).toLocaleDateString()}</div>
-                </div>
-              );
-            })}
+            <div className="empty-state-title">No tenant selected</div>
           </div>
         )
       ) : tab === 'my-personas' ? (

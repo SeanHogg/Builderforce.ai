@@ -17,6 +17,7 @@ import {
   clawDirectoryFiles,
   clawSyncHistory,
   chatSessions,
+  cronJobs,
   projects,
   tenants,
   usageSnapshots,
@@ -639,9 +640,95 @@ export function createClawRoutes(db: Db): Hono<ClawHonoEnv> {
     return c.json({ sessions: rows });
   });
 
-  // GET /api/claws/:id/cron – list cron jobs for this claw (stub)
+  // GET /api/claws/:id/cron – list cron jobs for this claw
   router.get('/:id/cron', authMiddleware as never, async (c) => {
-    return c.json({ jobs: [] });
+    const tenantId = c.get('tenantId') as number;
+    const clawId   = Number(c.req.param('id'));
+    const projectIdParam = c.req.query('projectId');
+
+    const conditions = [eq(cronJobs.tenantId, tenantId), eq(cronJobs.clawId, clawId)];
+    if (projectIdParam) conditions.push(eq(cronJobs.projectId, Number(projectIdParam)));
+
+    const rows = await db
+      .select()
+      .from(cronJobs)
+      .where(and(...conditions))
+      .orderBy(desc(cronJobs.createdAt));
+    return c.json({ jobs: rows });
+  });
+
+  // POST /api/claws/:id/cron – create a cron job
+  router.post('/:id/cron', authMiddleware as never, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const clawId   = Number(c.req.param('id'));
+    const body = await c.req.json<{
+      id?: string;
+      name: string;
+      schedule: string;
+      taskId?: number | null;
+      projectId?: number | null;
+      enabled?: boolean;
+    }>();
+    if (!body.name?.trim() || !body.schedule?.trim()) {
+      return c.json({ error: 'name and schedule are required' }, 400);
+    }
+    const insertData = {
+      tenantId,
+      clawId,
+      name: body.name.trim(),
+      schedule: body.schedule.trim(),
+      taskId: body.taskId ?? null,
+      projectId: body.projectId ?? null,
+      enabled: body.enabled ?? true,
+      ...(body.id ? { id: body.id } : {}),
+    };
+
+    const [inserted] = await db.insert(cronJobs).values(insertData).returning();
+    return c.json(inserted, 201);
+  });
+
+  // PATCH /api/claws/:id/cron/:jobId – update a cron job
+  router.patch('/:id/cron/:jobId', authMiddleware as never, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const clawId   = Number(c.req.param('id'));
+    const jobId    = c.req.param('jobId');
+    const body = await c.req.json<{
+      name?: string;
+      schedule?: string;
+      taskId?: number | null;
+      projectId?: number | null;
+      enabled?: boolean;
+      lastRunAt?: string;
+      nextRunAt?: string;
+      lastStatus?: string;
+    }>();
+
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.name != null)       updates.name = body.name.trim();
+    if (body.schedule != null)   updates.schedule = body.schedule.trim();
+    if (body.taskId !== undefined)   updates.taskId = body.taskId;
+    if (body.projectId !== undefined) updates.projectId = body.projectId;
+    if (body.enabled !== undefined) updates.enabled = body.enabled;
+    if (body.lastRunAt != null)  updates.lastRunAt = new Date(body.lastRunAt);
+    if (body.nextRunAt != null)  updates.nextRunAt = new Date(body.nextRunAt);
+    if (body.lastStatus != null) updates.lastStatus = body.lastStatus;
+
+    const [updated] = await db
+      .update(cronJobs)
+      .set(updates)
+      .where(and(eq(cronJobs.id, jobId), eq(cronJobs.tenantId, tenantId), eq(cronJobs.clawId, clawId)))
+      .returning();
+    if (!updated) return c.json({ error: 'Not found' }, 404);
+    return c.json(updated);
+  });
+
+  // DELETE /api/claws/:id/cron/:jobId – delete a cron job
+  router.delete('/:id/cron/:jobId', authMiddleware as never, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const clawId   = Number(c.req.param('id'));
+    const jobId    = c.req.param('jobId');
+    await db.delete(cronJobs).where(and(eq(cronJobs.id, jobId), eq(cronJobs.tenantId, tenantId), eq(cronJobs.clawId, clawId)));
+    return c.body(null, 204);
   });
 
   // GET /api/claws/:id/channels – list connected channels for this claw (stub)

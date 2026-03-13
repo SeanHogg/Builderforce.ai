@@ -12,6 +12,7 @@ import {
 } from '@/lib/builderforceApi';
 import { BUILTIN_SKILLS, userSkillsKey, type BuiltinSkill, type UserSkill } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
+import { SkillAssignmentsContent } from '@/components/SkillAssignmentsContent';
 
 function loadUserSkills(tenantId: string): UserSkill[] {
   if (typeof window === 'undefined') return [];
@@ -198,36 +199,15 @@ export default function SkillsPage() {
         <button type="button" className={`btn ${tab === 'my-skills' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('my-skills')}>My Skills ({userSkills.length})</button>
       </div>
 
-      {loading ? (
+      {loading && tab !== 'assigned' ? (
         <div style={{ color: 'var(--muted)', fontSize: 13 }}>Loading…</div>
       ) : tab === 'assigned' ? (
-        !hasClaws ? (
+        tenantNum ? (
+          <SkillAssignmentsContent scope="tenant" scopeId={tenantNum} />
+        ) : (
           <div className="empty-state">
             <div className="empty-state-icon">🔗</div>
-            <div className="empty-state-title">No claws registered</div>
-            <div className="empty-state-sub">Register a claw (workforce) to start assigning skills</div>
-          </div>
-        ) : assigned.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state-icon">✨</div>
-            <div className="empty-state-title">No skills assigned</div>
-            <div className="empty-state-sub">Browse the marketplace to add skills to your workspace</div>
-            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setTab('marketplace')}>Browse marketplace</button>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-            {assigned.map((a) => (
-              <div key={a.slug} className="card">
-                <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div className="card-title">{a.name}</div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <ArtifactAssigner artifactType="skill" artifactSlug={a.slug} artifactName={a.name} />
-                    <button type="button" className="btn btn-danger btn-sm" onClick={() => unassign(a.slug)}>Remove</button>
-                  </div>
-                </div>
-                <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{a.slug}</div>
-              </div>
-            ))}
+            <div className="empty-state-title">No tenant selected</div>
           </div>
         )
       ) : tab === 'my-skills' ? (

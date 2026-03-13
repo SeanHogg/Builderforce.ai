@@ -3,8 +3,32 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { ThemeToggleButton } from './ThemeProvider';
+import { useState } from 'react';
+
+// register CoderClaw quickstart web component
+import '../components/ccl-quickstart';
 
 export default function LandingPage() {
+  const [nlEmail, setNlEmail] = useState('');
+  const [nlStatus, setNlStatus] = useState<'idle'|'sending'|'ok'|'error'>('idle');
+
+  async function handleNewsletterSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!nlEmail.trim()) return;
+    setNlStatus('sending');
+    try {
+      const res = await fetch('/api/auth/newsletter/subscribers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: nlEmail.trim(), action: 'subscribe', source: 'builderforce-landing' }),
+      });
+      if (!res.ok) throw new Error('subscribe failed');
+      setNlStatus('ok');
+    } catch {
+      setNlStatus('error');
+    }
+  }
+
   return (
     <>
       <style>{`
@@ -451,6 +475,8 @@ export default function LandingPage() {
             <div className="lp-nav-right">
               <Link href="/workforce" className="lp-nav-link">Workforce</Link>
               <Link href="/blog" className="lp-nav-link">Blog</Link>
+              <a href="#features" className="lp-nav-link">Features</a>
+              <a href="#pricing" className="lp-nav-link">Pricing</a>
               <Link href="/login" className="lp-nav-link">Sign In</Link>
               <ThemeToggleButton />
               <Link href="/register" className="lp-nav-cta">
@@ -498,6 +524,10 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* ── Quickstart install block ── */}
+        {/* @ts-ignore */}
+        <ccl-quickstart></ccl-quickstart>
+
         {/* ── Stats ── */}
         <div className="lp-stats">
           {[
@@ -513,8 +543,71 @@ export default function LandingPage() {
           ))}
         </div>
 
+        {/* ── Comparison vs conventional platforms ── */}
+        <section className="lp-section" style={{ background: 'var(--surface-card-strong)' }}>
+          <div className="lp-features">
+            <h2 className="section-title">
+              <span className="claw-accent">⟩</span> Builderforce vs. Conventional Workflows
+            </h2>
+            <p style={{maxWidth: '800px',margin:'0 auto 32px',color:'var(--text-secondary)'}}>
+              Purpose‑built for AI agents from the ground up — not another cloud notebook or plugin.
+            </p>
+            <div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:'13px',minWidth:'560px'}}>
+                <thead>
+                  <tr>
+                    <th style={{textAlign:'left',padding:'10px 14px',color:'var(--muted)',fontWeight:600,borderBottom:'2px solid var(--border)'}}>Feature</th>
+                    <th style={{textAlign:'center',padding:'10px 14px',color:'var(--accent)',fontWeight:700,borderBottom:'2px solid var(--accent)'}}>Builderforce</th>
+                    <th style={{textAlign:'center',padding:'10px 14px',color:'var(--muted)',fontWeight:600,borderBottom:'2px solid var(--border)'}}>Generic notebooks</th>
+                    <th style={{textAlign:'center',padding:'10px 14px',color:'var(--muted)',fontWeight:600,borderBottom:'2px solid var(--border)'}}>Cloud training</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    ['In‑browser LoRA training', '✅','❌','⚠️'],
+                    ['Dataset generation wizard', '✅','⚠️','❌'],
+                    ['AI evaluation engine', '✅','❌','❌'],
+                    ['Agent registry & skills', '✅','❌','❌'],
+                    ['Global Workforce marketplace', '✅','❌','❌'],
+                    ['Zero GPU bills', '✅','❌','⚠️'],
+                  ].map((row,i)=>(
+                    <tr key={i} style={{background:i%2===0?'transparent':'var(--surface-2)'}}>
+                      <td style={{padding:'9px 14px',borderBottom:'1px solid var(--border)'}}>{row[0]}</td>
+                      <td style={{textAlign:'center',padding:'9px 14px',borderBottom:'1px solid var(--border)',fontWeight:600,color:'var(--accent)'}}>{row[1]}</td>
+                      <td style={{textAlign:'center',padding:'9px 14px',borderBottom:'1px solid var(--border)',color:'var(--muted)'}}>{row[2]}</td>
+                      <td style={{textAlign:'center',padding:'9px 14px',borderBottom:'1px solid var(--border)',color:'var(--muted)'}}>{row[3]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Getting started steps ── */}
+        <section className="lp-section">
+          <div className="lp-features">
+            <h2 className="section-title">
+              <span className="claw-accent">⟩</span> Up and running in three steps
+            </h2>
+            <div className="lp-grid" style={{gap:'24px'}}>
+              {[
+                { num:'01', title:'Create an account', desc:'Sign up with your email and start a free workspace. 14‑day Pro trial, no credit card required.' },
+                { num:'02', title:'Generate a dataset', desc:'Use the wizard to author an instruction‑tuning dataset from a single capability prompt.' },
+                { num:'03', title:'Train & publish', desc:'Run LoRA training in your browser, evaluate results, and publish your agent to the Workforce Registry.' },
+              ].map(s=>(
+                <div key={s.num} className="lp-card" style={{textAlign:'center'}}>
+                  <div style={{fontSize:'2rem',fontWeight:700,color:'var(--accent)',marginBottom:'8px'}}>{s.num}</div>
+                  <h3 className="lp-card-title">{s.title}</h3>
+                  <p className="lp-card-desc">{s.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* ── Features ── */}
-        <section className="lp-features">
+        <section className="lp-features" id="features">
           <h2 className="section-title">
             <span className="claw-accent">⟩</span> What You Can Build
           </h2>
@@ -535,6 +628,80 @@ export default function LandingPage() {
                 <p className="lp-card-desc">{f.desc}</p>
               </div>
             ))}
+          </div>
+        </section>
+
+        {/* ── Pricing section ── */}
+        <section className="lp-section" id="pricing" style={{background:'var(--surface-2)'}}>
+          <div className="lp-features">
+            <h2 className="section-title">
+              <span className="claw-accent">⟩</span> Pricing
+            </h2>
+            <div className="lp-grid" style={{gap:'18px',marginTop:'24px'}}>
+              {[
+                { name:'Free', price:'$0', perks:['WebGPU training','Workforce browse','Community support'] },
+                { name:'Pro', price:'$29/seat', perks:['Unlimited agents','Private models','Priority support'] },
+              ].map(p=>(
+                <div key={p.name} className="lp-card">
+                  <h3 className="lp-card-title">{p.name}</h3>
+                  <div style={{fontSize:'1.6rem',fontWeight:700,margin:'12px 0'}}>{p.price}</div>
+                  <ul style={{paddingLeft:'16px',fontSize:'0.85rem',color:'var(--text-secondary)'}}>
+                    {p.perks.map(perk=><li key={perk}>{perk}</li>)}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Newsletter ── */}
+        <section className="lp-section">
+          <div className="lp-features" style={{maxWidth:'700px',margin:'0 auto'}}>
+            <h2 className="section-title">
+              <span className="claw-accent">⟩</span> Stay in the loop
+            </h2>
+            <p style={{color:'var(--text-secondary)',marginBottom:'24px'}}>Get updates on new features, agents, and platform improvements. No spam, unsubscribe anytime.</p>
+            <form onSubmit={handleNewsletterSubmit} style={{display:'flex',gap:'6px',flexWrap:'wrap',justifyContent:'center'}}>
+              <input
+                type="email"
+                placeholder="your@email.com"
+                required
+                value={nlEmail}
+                onChange={e=>setNlEmail(e.target.value)}
+                disabled={nlStatus==='sending' || nlStatus==='ok'}
+                style={{padding:'10px 14px',borderRadius:'8px',border:'1px solid var(--border)',width:'250px'}}
+              />
+              <button
+                type="submit"
+                disabled={nlStatus==='sending' || nlStatus==='ok'}
+                className="lp-btn-primary"
+              >
+                {nlStatus==='sending'? 'Subscribing…' : nlStatus==='ok'? 'Subscribed' : 'Subscribe'}
+              </button>
+            </form>
+            {nlStatus==='ok' && <p style={{color:'var(--accent)',marginTop:'12px'}}>Subscribed ✓</p>}
+            {nlStatus==='error' && <p style={{color:'var(--error)',marginTop:'12px'}}>Unable to subscribe. Try again.</p>}
+          </div>
+        </section>
+
+        {/* ── FAQ ── */}
+        <section className="lp-section" style={{background:'var(--surface-card-strong)'}}>
+          <div className="lp-features" style={{maxWidth:'800px',margin:'0 auto'}}>
+            <h2 className="section-title">
+              <span className="claw-accent">⟩</span> Frequently asked questions
+            </h2>
+            <details><summary>What is Builderforce.ai?</summary>
+              <p>Builderforce.ai is an end-to-end platform for building, training, and deploying custom AI agents entirely in the browser. Generate datasets, run LoRA training with WebGPU, evaluate with AI judges, and publish agents to the Workforce Registry.</p>
+            </details>
+            <details><summary>Is Builderforce free?</summary>
+              <p>Yes – the Free tier includes WebGPU training, dataset tools, and public Workforce browsing. The Pro plan ($29/seat) unlocks private agents, unlimited training, and priority support.</p>
+            </details>
+            <details><summary>How do I train a model in my browser?</summary>
+              <p>Start a project, generate or upload a dataset, then launch the in‑browser LoRA training wizard. No cloud GPUs are required; everything runs on your local WebGPU device.</p>
+            </details>
+            <details><summary>What is the Workforce Registry?</summary>
+              <p>The Workforce Registry is a public marketplace where trained agents can be listed, discovered, and hired by other teams or applications.</p>
+            </details>
           </div>
         </section>
 

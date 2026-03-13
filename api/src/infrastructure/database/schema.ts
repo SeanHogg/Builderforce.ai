@@ -856,6 +856,26 @@ export const ideProjectChats = pgTable('ide_project_chats', {
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 });
 
+// ---------------------------------------------------------------------------
+// Cron jobs (claw-scoped, optionally project-associated, synced via GUID)
+// ---------------------------------------------------------------------------
+
+export const cronJobs = pgTable('cron_jobs', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  clawId:      integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
+  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  name:        varchar('name', { length: 255 }).notNull(),
+  schedule:    varchar('schedule', { length: 255 }).notNull(),
+  taskId:      integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  enabled:     boolean('enabled').notNull().default(true),
+  lastRunAt:   timestamp('last_run_at'),
+  nextRunAt:   timestamp('next_run_at'),
+  lastStatus:  varchar('last_status', { length: 50 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
 export const ideProjectChatMessages = pgTable('ide_project_chat_messages', {
   id:        serial('id').primaryKey(),
   chatId:    integer('chat_id').notNull().references(() => ideProjectChats.id, { onDelete: 'cascade' }),

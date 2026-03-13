@@ -5,8 +5,10 @@ import Link from 'next/link';
 import type { Claw } from '@/lib/builderforceApi';
 import { ObservabilityContent } from './ObservabilityContent';
 import { ClawDebugContent } from './ClawDebugContent';
+import { CronJobsContent } from './CronJobsContent';
+import { CapabilitiesContent } from './CapabilitiesContent';
 
-export type ClawPanelTab = 'details' | 'config' | 'prds' | 'observability' | 'debug';
+export type ClawPanelTab = 'details' | 'config' | 'cron' | 'capabilities' | 'prds' | 'observability' | 'debug';
 
 export interface ClawSlideOutPanelProps {
   claw: Claw;
@@ -23,6 +25,8 @@ export interface ClawSlideOutPanelProps {
 const TABS: { id: ClawPanelTab; label: string }[] = [
   { id: 'details', label: 'Details' },
   { id: 'config', label: 'Config' },
+  { id: 'cron', label: 'Cron' },
+  { id: 'capabilities', label: 'Capabilities' },
   { id: 'prds', label: 'PRDs' },
   { id: 'observability', label: 'Observability' },
   { id: 'debug', label: 'Debug' },
@@ -311,6 +315,16 @@ export function ClawSlideOutPanel({
                 Claw-specific configuration (e.g. env, capabilities) can be managed from the CoderClaw instance or via API.
               </p>
             </div>
+          )}
+          {activeTab === 'cron' && (
+            <CronJobsContent clawId={claw.id} />
+          )}
+          {activeTab === 'capabilities' && (
+            <CapabilitiesContent
+              scope="claw"
+              scopeId={claw.id}
+              tenantId={tenantId != null ? String(tenantId) : undefined}
+            />
           )}
           {activeTab === 'prds' && (
             <div style={cardStyle}>

@@ -7,12 +7,16 @@ import { updateProject } from '@/lib/api';
 import { ObservabilityContent } from './ObservabilityContent';
 import { TaskMgmtContent } from './TaskMgmtContent';
 import { PRDsContent } from './PRDsContent';
+import { CronJobsContent } from './CronJobsContent';
+import { CapabilitiesContent } from './CapabilitiesContent';
 import { ConfirmDialog } from './ConfirmDialog';
 
 export type ProjectPanelTab =
   | 'details'
   | 'taskMgmt'
   | 'prds'
+  | 'cron'
+  | 'capabilities'
   | 'brain'
   | 'chat'
   | 'instances'
@@ -37,6 +41,8 @@ const TABS: { id: ProjectPanelTab; label: string }[] = [
   { id: 'details', label: 'Project details' },
   { id: 'taskMgmt', label: 'Task Mgmt' },
   { id: 'prds', label: 'PRDs' },
+  { id: 'cron', label: 'Cron' },
+  { id: 'capabilities', label: 'Capabilities' },
   { id: 'brain', label: 'Brain' },
   { id: 'chat', label: 'Chat' },
   { id: 'instances', label: 'Instances' },
@@ -643,6 +649,18 @@ export function ProjectDetailsPanel({
             </div>
           )}
 
+          {activeTab === 'cron' && (
+            project.assignedClaw?.id
+              ? <CronJobsContent clawId={project.assignedClaw.id} projectId={project.id} hideProjectColumn />
+              : <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 24, textAlign: 'center' }}>No claw assigned to this project. Assign a claw from the Workforce page to manage cron jobs.</div>
+          )}
+          {activeTab === 'capabilities' && (
+            <CapabilitiesContent
+              scope="project"
+              scopeId={project.id}
+              projectId={project.id}
+            />
+          )}
           {activeTab === 'observability' && <ObservabilityContent />}
         </div>
       </div>
