@@ -299,6 +299,170 @@ html[data-theme='light'] .stars {
   z-index: 0;
 }
 
+/* ============================================================
+   QuickStart interactive install block (copied from coderClawLink)
+   ============================================================ */
+.quickstart-skin {
+  --bg-deep: #050810;
+  --bg-elevated: #111827;
+  --coral-bright: #4d9eff;
+  --coral-dark: #1e40af;
+  --cyan-bright: #00e5cc;
+  --text-primary: #f0f4ff;
+  --text-secondary: #8892b0;
+  --text-muted: #5a6480;
+  --border-subtle: rgba(136, 146, 176, 0.15);
+  --surface-overlay: rgba(0, 0, 0, 0.3);
+  --surface-interactive: rgba(255, 255, 255, 0.1);
+  --surface-interactive-hover: rgba(255, 255, 255, 0.2);
+  --surface-cyan-soft: rgba(0, 229, 204, 0.15);
+  --surface-coral-soft: rgba(77, 158, 255, 0.15);
+  --shadow-coral-mid: rgba(77, 158, 255, 0.25);
+  --shadow-coral-strong: rgba(77, 158, 255, 0.35);
+  --font-display: 'Clash Display', system-ui, sans-serif;
+  --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+}
+
+:root[data-theme="light"] .quickstart-skin {
+  --bg-deep: #fcfeff;
+  --bg-elevated: #f5f9ff;
+  --coral-bright: #3b82f6;
+  --coral-dark: #1e40af;
+  --cyan-bright: #008f87;
+  --text-primary: #0b1220;
+  --text-secondary: #2e405c;
+  --text-muted: #5f7290;
+  --border-subtle: rgba(15, 23, 42, 0.16);
+  --surface-overlay: rgba(160, 174, 194, 0.26);
+  --surface-interactive: rgba(15, 23, 42, 0.1);
+  --surface-interactive-hover: rgba(15, 23, 42, 0.16);
+  --surface-cyan-soft: rgba(0, 143, 135, 0.16);
+  --surface-coral-soft: rgba(59, 130, 246, 0.16);
+  --shadow-coral-mid: rgba(59, 130, 246, 0.27);
+  --shadow-coral-strong: rgba(59, 130, 246, 0.33);
+}
+
+.quickstart-skin {
+  margin-bottom: 56px;
+  animation: quickstart-fadeInUp 0.8s ease-out 0.6s both;
+}
+
+.quickstart-skin .claw-accent {
+  color: var(--coral-bright);
+  font-weight: 700;
+}
+
+.quickstart-skin .section-title {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  color: var(--text-primary);
+}
+
+.quickstart-skin .code-block {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.quickstart-skin .code-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--surface-overlay);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.quickstart-skin .code-content {
+  padding: 16px 20px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.quickstart-skin .code-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.quickstart-skin .code-line.comment {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.quickstart-skin .code-line.cmd {
+  color: var(--text-primary);
+}
+
+.quickstart-skin .copy-line-btn {
+  opacity: 0.6;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: var(--surface-interactive);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.quickstart-skin .code-line:hover .copy-line-btn {
+  opacity: 1;
+}
+
+.quickstart-skin .copy-line-btn:hover {
+  background: var(--surface-interactive-hover);
+  color: var(--text-primary);
+}
+
+.quickstart-skin .copy-line-btn.copied {
+  opacity: 1;
+  background: var(--surface-cyan-soft);
+  color: var(--cyan-bright);
+}
+
+.quickstart-skin .copy-line-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.quickstart-skin .code-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.quickstart-skin .code-dot:nth-child(1) { background: #ff5f57; }
+.quickstart-skin .code-dot:nth-child(2) { background: #febc2e; }
+.quickstart-skin .code-dot:nth-child(3) { background: #28c840; }
+
+.quickstart-skin .mode-switch,
+.quickstart-skin .pm-switch,
+.quickstart-skin .hackable-switch,
+.quickstart-skin .os-switch,
+.quickstart-skin .win-shell-switch {
+  display: flex;
+  gap: 4px;
+  background: var(--surface-overlay);
+  padding: 3px;
+  border-radius: 6px;
+}
+
 html[data-theme='light'] .nebula {
   opacity: 0.4;
 }

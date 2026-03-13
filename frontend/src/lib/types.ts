@@ -36,6 +36,7 @@ export interface Project {
   key?: string;
   tenantId?: number;
   status?: string;
+  governance?: string | null;
   created_at?: string;
   updated_at?: string;
   createdAt?: string;

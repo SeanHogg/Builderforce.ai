@@ -145,6 +145,57 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   name: 'Builderforce.ai',
                   publisher: { '@id': `${BASE_URL}/#organization` },
                 },
+                {
+                  '@type': 'SoftwareApplication',
+                  '@id': `${BASE_URL}/#pricing`,
+                  offers: [
+                    {
+                      '@type': 'Offer',
+                      name: 'Free',
+                      price: '0',
+                      priceCurrency: 'USD',
+                      description: 'WebGPU training, public Workforce browsing, community support',
+                    },
+                    {
+                      '@type': 'Offer',
+                      name: 'Pro',
+                      price: '29',
+                      priceCurrency: 'USD',
+                      priceSpecification: {
+                        '@type': 'UnitPriceSpecification',
+                        price: '29',
+                        priceCurrency: 'USD',
+                        unitText: 'seat/month',
+                      },
+                      description: 'Unlimited agents, private models, priority support',
+                    },
+                  ],
+                },
+                {
+                  '@type': 'FAQPage',
+                  'mainEntity': [
+                    {
+                      '@type': 'Question',
+                      name: 'What is Builderforce.ai?',
+                      acceptedAnswer: { '@type': 'Answer', text: 'Builderforce.ai is an end-to-end platform for building, training, and deploying custom AI agents entirely in the browser.' },
+                    },
+                    {
+                      '@type': 'Question',
+                      name: 'Is Builderforce free?',
+                      acceptedAnswer: { '@type': 'Answer', text: 'Yes – the Free tier includes WebGPU training, dataset tools, and public Workforce browsing. The Pro plan ($29/seat) unlocks private agents, unlimited training, and priority support.' },
+                    },
+                    {
+                      '@type': 'Question',
+                      name: 'How do I train a model in my browser?',
+                      acceptedAnswer: { '@type': 'Answer', text: 'Start a project, generate or upload a dataset, then launch the in‑browser LoRA training wizard. No cloud GPUs are required.' },
+                    },
+                    {
+                      '@type': 'Question',
+                      name: 'What is the Workforce Registry?',
+                      acceptedAnswer: { '@type': 'Answer', text: 'The Workforce Registry is a public marketplace where trained agents can be listed, discovered, and hired by other teams or applications.' },
+                    },
+                  ],
+                },
               ],
             }),
           }}
