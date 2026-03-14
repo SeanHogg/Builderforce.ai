@@ -195,27 +195,22 @@ export default function IDEPage() {
       )}
       {openFirstTimeModal && (
         <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-            fontFamily: 'var(--font-display)',
-          }}
+          role="dialog"
+          aria-modal="true"
+          className="modal-overlay"
+          onClick={() => setShowFirstTimeModal(false)}
         >
           <div
             style={{
+              maxWidth: 420,
+              width: '90%',
               background: 'var(--bg-elevated)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 16,
+              borderRadius: 12,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
               padding: 24,
-              maxWidth: 400,
-              width: '90%',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
             }}
+            onClick={(e) => e.stopPropagation()}
           >
             <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: 8, color: 'var(--text-primary)' }}>
               Name your project
@@ -250,7 +245,7 @@ export default function IDEPage() {
                     padding: '8px 16px',
                     fontSize: '0.9rem',
                     color: 'var(--text-secondary)',
-                    background: 'transparent',
+                    background: 'var(--bg-base)',
                     border: '1px solid var(--border-subtle)',
                     borderRadius: 10,
                     cursor: 'pointer',
