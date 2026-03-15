@@ -42,6 +42,7 @@ const extensionsNav: NavItem[] = [
 ];
 
 const systemNav: NavItem[] = [
+  { href: '/approvals', label: 'Approvals', icon: '✅' },
   { href: '/pricing', label: 'Pricing & Billing', icon: '💳' },
   { href: '/security', label: 'Security', icon: '🔒' },
   { href: '/settings', label: 'Settings', icon: '⚙' },

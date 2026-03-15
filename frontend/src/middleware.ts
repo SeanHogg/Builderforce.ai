@@ -15,8 +15,8 @@ import type { NextRequest } from 'next/server';
  *
  * WEB-TOKEN + TENANT-TOKEN required (fully authenticated):
  *   /dashboard, /ide, /projects, /training, /tasks, /workforce, /chats,
- *   /brainstorm, /content-manager, /skills, /personas, /pricing, /security,
- *   /settings, /observability, /debug
+ *   /brainstorm, /content-manager, /skills, /personas, /approvals,
+ *   /pricing, /security, /settings, /observability, /debug
  */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -67,6 +67,7 @@ export function middleware(request: NextRequest) {
     '/content-manager',
     '/skills',
     '/personas',
+    '/approvals',
     '/pricing',
     '/security',
     '/settings',
@@ -100,6 +101,7 @@ export const config = {
     '/content-manager/:path*',
     '/skills/:path*',
     '/personas/:path*',
+    '/approvals/:path*',
     '/pricing/:path*',
     '/security/:path*',
     '/settings/:path*',

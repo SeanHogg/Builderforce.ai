@@ -503,6 +503,49 @@ export const runtimeApi = {
     }),
 };
 
+// ---------------------------------------------------------------------------
+// Approvals (human-in-the-loop decisions)
+// ---------------------------------------------------------------------------
+
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired';
+
+export interface Approval {
+  id: string;
+  tenantId: number;
+  clawId: number | null;
+  requestedBy: string | null;
+  actionType: string;
+  description: string;
+  metadata: string | null;
+  status: ApprovalStatus;
+  reviewedBy: string | null;
+  reviewNote: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const approvalsApi = {
+  list: (params?: { status?: ApprovalStatus; clawId?: number | null }): Promise<Approval[]> => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set('status', params.status);
+    if (params?.clawId != null) q.set('clawId', String(params.clawId));
+    const query = q.toString();
+    return request<{ approvals: Approval[] }>(`/api/approvals${query ? `?${query}` : ''}`).then((r) => r.approvals ?? []);
+  },
+
+  get: (id: string): Promise<Approval> => request<Approval>(`/api/approvals/${id}`),
+
+  decide: (
+    id: string,
+    body: { status: 'approved' | 'rejected'; reviewNote?: string }
+  ): Promise<Approval> =>
+    request<Approval>(`/api/approvals/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+};
+
 /** Specs/PRDs – project PRD storage. */
 export interface Spec {
   id: string;

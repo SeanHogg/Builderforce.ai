@@ -29,6 +29,7 @@ function useShowAppShell(): boolean {
   if (pathname.startsWith('/skills')) return true;
   if (pathname.startsWith('/personas')) return true;
   if (pathname.startsWith('/pricing')) return true;
+  if (pathname.startsWith('/approvals')) return true;
   if (pathname.startsWith('/security')) return true;
   if (pathname.startsWith('/settings')) return true;
   if (pathname.startsWith('/admin')) return true;
