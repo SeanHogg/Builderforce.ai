@@ -34,6 +34,7 @@ import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { ClawRelayDO } from '../../infrastructure/relay/ClawRelayDO';
 import type { ClawService } from '../../application/claw/ClawService';
+import { classifyContextFiles, normalizeMachineProfile, type ClawMachineProfileInput } from './clawAssignmentContext';
 import { TenantRole } from '../../domain/shared/types';
 
 // Extend HonoEnv bindings type to include the Durable Object
@@ -45,6 +46,131 @@ type ClawHonoEnv = HonoEnv & {
 
 export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHonoEnv> {
   const router = new Hono<ClawHonoEnv>();
+
+  const buildAssignmentContext = async (clawId: number, tenantId: number, projectId?: number) => {
+    const [clawRow] = await db
+      .select({
+        id: coderclawInstances.id,
+        name: coderclawInstances.name,
+        slug: coderclawInstances.slug,
+        tenantId: coderclawInstances.tenantId,
+        machineName: coderclawInstances.machineName,
+        machineIp: coderclawInstances.machineIp,
+        rootInstallDirectory: coderclawInstances.rootInstallDirectory,
+        workspaceDirectory: coderclawInstances.workspaceDirectory,
+        gatewayPort: coderclawInstances.gatewayPort,
+        relayPort: coderclawInstances.relayPort,
+        tunnelUrl: coderclawInstances.tunnelUrl,
+        tunnelStatus: coderclawInstances.tunnelStatus,
+        networkMetadata: coderclawInstances.networkMetadata,
+        lastSeenAt: coderclawInstances.lastSeenAt,
+        connectedAt: coderclawInstances.connectedAt,
+        updatedAt: coderclawInstances.updatedAt,
+      })
+      .from(coderclawInstances)
+      .where(and(eq(coderclawInstances.id, clawId), eq(coderclawInstances.tenantId, tenantId)))
+      .limit(1);
+
+    if (!clawRow) return null;
+
+    const assignedProjects = await db
+      .select({
+        id: projects.id,
+        key: projects.key,
+        name: projects.name,
+        description: projects.description,
+        status: projects.status,
+        rootWorkingDirectory: projects.rootWorkingDirectory,
+        updatedAt: projects.updatedAt,
+      })
+      .from(clawProjects)
+      .innerJoin(projects, eq(projects.id, clawProjects.projectId))
+      .where(and(eq(clawProjects.tenantId, tenantId), eq(clawProjects.clawId, clawId)))
+      .orderBy(desc(projects.updatedAt));
+
+    const primaryProject = projectId != null
+      ? assignedProjects.find((project) => project.id === projectId) ?? assignedProjects[0] ?? null
+      : assignedProjects[0] ?? null;
+
+    let contextHints = {
+      manifestFiles: [] as string[],
+      prdFiles: [] as string[],
+      taskFiles: [] as string[],
+      memoryFiles: [] as string[],
+    };
+    let directoryPath: string | null = null;
+
+    if (primaryProject) {
+      const [latestDirectory] = await db
+        .select({ id: clawDirectories.id, absPath: clawDirectories.absPath })
+        .from(clawDirectories)
+        .where(
+          and(
+            eq(clawDirectories.tenantId, tenantId),
+            eq(clawDirectories.clawId, clawId),
+            eq(clawDirectories.projectId, primaryProject.id),
+          ),
+        )
+        .orderBy(desc(clawDirectories.updatedAt))
+        .limit(1);
+
+      if (latestDirectory) {
+        directoryPath = latestDirectory.absPath;
+        const files = await db
+          .select({ relPath: clawDirectoryFiles.relPath })
+          .from(clawDirectoryFiles)
+          .where(
+            and(
+              eq(clawDirectoryFiles.tenantId, tenantId),
+              eq(clawDirectoryFiles.clawId, clawId),
+              eq(clawDirectoryFiles.directoryId, latestDirectory.id),
+            ),
+          );
+        contextHints = classifyContextFiles(files.map((file) => file.relPath));
+      }
+    }
+
+    let parsedNetworkMetadata: Record<string, unknown> | null = null;
+    if (clawRow.networkMetadata) {
+      try {
+        parsedNetworkMetadata = JSON.parse(clawRow.networkMetadata) as Record<string, unknown>;
+      } catch {
+        parsedNetworkMetadata = null;
+      }
+    }
+
+    return {
+      claw: {
+        id: clawRow.id,
+        slug: clawRow.slug,
+        name: clawRow.name,
+        tenantId: clawRow.tenantId,
+        lastSeenAt: clawRow.lastSeenAt,
+        connectedAt: clawRow.connectedAt,
+        updatedAt: clawRow.updatedAt,
+        machineProfile: {
+          machineName: clawRow.machineName,
+          machineIp: clawRow.machineIp,
+          rootInstallDirectory: clawRow.rootInstallDirectory,
+          workspaceDirectory: clawRow.workspaceDirectory,
+          gatewayPort: clawRow.gatewayPort,
+          relayPort: clawRow.relayPort,
+          tunnelUrl: clawRow.tunnelUrl,
+          tunnelStatus: clawRow.tunnelStatus,
+          networkMetadata: parsedNetworkMetadata,
+        },
+      },
+      projects: assignedProjects,
+      primaryProject: primaryProject
+        ? {
+            ...primaryProject,
+            directoryPath,
+            contextHints,
+          }
+        : null,
+      syncedAt: new Date().toISOString(),
+    };
+  };
 
   const hashPath = async (value: string): Promise<string> => {
     const bytes = new TextEncoder().encode(value.trim().toLowerCase());
@@ -150,7 +276,7 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
   router.post('/', authMiddleware as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId   = c.get('userId') as string;
-    const body     = await c.req.json<{ name: string }>();
+    const body     = await c.req.json<{ name: string; machineProfile?: ClawMachineProfileInput }>();
 
     if (!body.name?.trim()) {
       return c.json({ error: 'name is required' }, 400);
@@ -159,6 +285,7 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
     const slug    = body.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const rawKey  = generateApiKey();
     const keyHash = await hashSecret(rawKey);
+    const machineProfile = normalizeMachineProfile(body.machineProfile);
 
     const [inserted] = await db
       .insert(coderclawInstances)
@@ -168,6 +295,15 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
         slug,
         apiKeyHash:   keyHash,
         registeredBy: userId,
+        ...(machineProfile?.machineName ? { machineName: machineProfile.machineName } : {}),
+        ...(machineProfile?.machineIp ? { machineIp: machineProfile.machineIp } : {}),
+        ...(machineProfile?.rootInstallDirectory ? { rootInstallDirectory: machineProfile.rootInstallDirectory } : {}),
+        ...(machineProfile?.workspaceDirectory ? { workspaceDirectory: machineProfile.workspaceDirectory } : {}),
+        ...(machineProfile?.gatewayPort != null ? { gatewayPort: machineProfile.gatewayPort } : {}),
+        ...(machineProfile?.relayPort != null ? { relayPort: machineProfile.relayPort } : {}),
+        ...(machineProfile?.tunnelUrl ? { tunnelUrl: machineProfile.tunnelUrl } : {}),
+        ...(machineProfile?.tunnelStatus ? { tunnelStatus: machineProfile.tunnelStatus } : {}),
+        ...(machineProfile?.networkMetadata ? { networkMetadata: JSON.stringify(machineProfile.networkMetadata) } : {}),
       })
       .returning({
         id:        coderclawInstances.id,
@@ -354,7 +490,23 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
         set: { updatedAt: new Date() },
       });
 
-    return c.json({ ok: true });
+    const assignmentContext = await buildAssignmentContext(clawId, tenantId, projectId);
+    return c.json({ ok: true, assignmentContext });
+  });
+
+  // GET /api/claws/:id/assignment-context – claw-authenticated assignment and context handshake payload
+  router.get('/:id/assignment-context', async (c) => {
+    const clawId = Number(c.req.param('id'));
+    const key = c.req.query('key');
+    const claw = await verifyClawApiKey(clawId, key);
+    if (!claw) return c.text('Unauthorized', 401);
+
+    const assignmentContext = await buildAssignmentContext(clawId, Number(claw.tenantId));
+    if (!assignmentContext) {
+      return c.json({ error: 'Claw not found' }, 404);
+    }
+
+    return c.json(assignmentContext);
   });
 
   // DELETE /api/claws/:id/projects/:projectId – unassociate project from claw
@@ -877,12 +1029,14 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
 
     // Accept optional capabilities array from request body
     let capabilitiesJson: string | undefined;
+    let machineProfile: ClawMachineProfileInput | null = null;
     try {
-      const body = await c.req.json<{ capabilities?: string[] }>();
+      const body = await c.req.json<{ capabilities?: string[]; machineProfile?: ClawMachineProfileInput }>();
       if (Array.isArray(body.capabilities)) {
         const caps = body.capabilities.filter((v) => typeof v === 'string');
         capabilitiesJson = JSON.stringify(caps);
       }
+      machineProfile = normalizeMachineProfile(body.machineProfile);
     } catch { /* body may be empty — fine */ }
 
     await db
@@ -890,6 +1044,16 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
       .set({
         lastSeenAt:   new Date(),
         ...(capabilitiesJson !== undefined ? { capabilities: capabilitiesJson } : {}),
+        ...(machineProfile?.machineName ? { machineName: machineProfile.machineName } : {}),
+        ...(machineProfile?.machineIp ? { machineIp: machineProfile.machineIp } : {}),
+        ...(machineProfile?.rootInstallDirectory ? { rootInstallDirectory: machineProfile.rootInstallDirectory } : {}),
+        ...(machineProfile?.workspaceDirectory ? { workspaceDirectory: machineProfile.workspaceDirectory } : {}),
+        ...(machineProfile?.gatewayPort != null ? { gatewayPort: machineProfile.gatewayPort } : {}),
+        ...(machineProfile?.relayPort != null ? { relayPort: machineProfile.relayPort } : {}),
+        ...(machineProfile?.tunnelUrl ? { tunnelUrl: machineProfile.tunnelUrl } : {}),
+        ...(machineProfile?.tunnelStatus ? { tunnelStatus: machineProfile.tunnelStatus } : {}),
+        ...(machineProfile?.networkMetadata ? { networkMetadata: JSON.stringify(machineProfile.networkMetadata) } : {}),
+        updatedAt: new Date(),
       })
       .where(eq(coderclawInstances.id, id));
 
