@@ -465,11 +465,21 @@ export const coderclawInstances = pgTable('coderclaw_instances', {
   apiKeyHash:   varchar('api_key_hash', { length: 64 }).notNull(),
   status:       clawStatusEnum('status').notNull().default('active'),
   registeredBy: varchar('registered_by', { length: 36 }).references(() => users.id),
+  machineName:  varchar('machine_name', { length: 255 }),
+  machineIp:    varchar('machine_ip', { length: 64 }),
+  rootInstallDirectory: text('root_install_directory'),
+  workspaceDirectory: text('workspace_directory'),
+  gatewayPort:  integer('gateway_port'),
+  relayPort:    integer('relay_port'),
+  tunnelUrl:    varchar('tunnel_url', { length: 500 }),
+  tunnelStatus: varchar('tunnel_status', { length: 64 }),
+  networkMetadata: text('network_metadata'),
   lastSeenAt:   timestamp('last_seen_at'),
   connectedAt:  timestamp('connected_at'),   // set when claw's upstream WS connects; null = offline
   capabilities:         text('capabilities'),         // JSON array reported via heartbeat, e.g. '["chat","tasks","relay"]'
   declaredCapabilities: text('declared_capabilities'), // JSON array configured by user in the portal
   createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 });
 
 export const executions = pgTable('executions', {

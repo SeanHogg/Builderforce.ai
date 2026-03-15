@@ -9,7 +9,8 @@
     "secrets:from-env": "node scripts/set-secrets-from-env.mjs",
     "db:generate": "npx drizzle-kit generate",
     "db:push": "npx drizzle-kit push",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
@@ -20,6 +21,7 @@
     "@cloudflare/workers-types": "^4.20260305.0",
     "drizzle-kit": "^0.30.0",
     "typescript": "^5.7.3",
+    "vitest": "^4.0.18",
     "wrangler": "^4.69.0"
   }
 }

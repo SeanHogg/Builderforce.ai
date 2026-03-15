@@ -61,10 +61,21 @@ The schema and API are structured to match the product flow above.
 | **Same chat in IDE** | Same `ide_project_chats` row (projectId set), `origin` unchanged | `GET /api/projects/:id/chats` (lists all chats for project), `GET /api/projects/:id/chats/:chatId` (messages + origin), `POST /api/ai/chat` (projectId → inject file tree + package.json context) |
 | **IDE tools** | R2 project files, project chats | `GET/PUT/DELETE /api/ide/projects/:id/files/*`, project chats as above |
 | **Tasks** (assign work) | `tasks` (projectId, assignedClawId, status, priority), `executions` | `GET/POST/PATCH/DELETE /api/tasks`, `POST /api/tasks/next`, `POST/GET /api/runtime/executions` |
-| **Workforce / Claws** | `coderclaw_instances`, `claw_projects`, `agents`, `skills` | `GET/POST /api/claws`, `GET/PUT/DELETE /api/claws/:id/projects/:projectId`, `GET/POST /api/agents`, `GET/POST /api/skill-assignments/...` |
+| **Workforce / Claws** | `coderclaw_instances`, `claw_projects`, `agents`, `skills` | `GET/POST /api/claws`, `GET/PUT/DELETE /api/claws/:id/projects/:projectId`, `GET /api/claws/:id/assignment-context`, `PATCH /api/claws/:id/heartbeat`, `GET/POST /api/agents`, `GET/POST /api/skill-assignments/...` |
 
 - **Unified chats:** One conversation can start in Brain (no project), be assigned to a project, then be opened in the IDE or anywhere else; **origin** tells the UI which tools to load.
 - **Tasks and Claws:** Tasks belong to a project; they can be assigned to a Claw (`assignedClawId`). Executions track runs. Claws are registered per tenant and linked to projects via `claw_projects`.
+
+### Claw assignment handshake
+
+- `POST /api/claws` now accepts optional `machineProfile` metadata (machine name/IP, workspace/install dirs, ports, tunnel details).
+- `PATCH /api/claws/:id/heartbeat` persists capability and machine profile updates.
+- `GET /api/claws/:id/assignment-context` is claw-authenticated (API key) and returns:
+  - claw runtime metadata,
+  - assigned projects,
+  - primary project context hints derived from synced `.coderclaw` files (manifest/PRD/tasks/memory paths).
+
+This payload is consumed by coderClaw relay to keep local `.coderClaw/context.yaml` aligned with project assignment and execution context.
 
 ---
 
