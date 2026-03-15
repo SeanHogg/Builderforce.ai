@@ -8,6 +8,7 @@ import type { HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import { coderclawInstances, executions, projectInsightEvents, projects, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
+import { approvals } from '../../infrastructure/database/schema';
 import type { ClawRelayDO } from '../../infrastructure/relay/ClawRelayDO';
 
 /**
@@ -38,6 +39,23 @@ type DispatchMessage = {
   };
   artifacts?: ResolvedArtifacts;
 };
+
+type ExecutionTaskRow = {
+  id: number;
+  title: string;
+  description: string | null;
+  assignedClawId: number | null;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+};
+
+type ExecutionApprovalGateResult =
+  | { allowed: true }
+  | {
+      allowed: false;
+      approvalId: string;
+      status: 'pending';
+      reason: string;
+    };
 
 type ExecutionTelemetryBody = {
   inputTokens?: number;
@@ -90,6 +108,95 @@ function parseOptionalNumber(value: string | undefined | null): number | null {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return null;
   return parsed;
+}
+
+function parseApprovalTaskId(metadata: string | null): number | null {
+  if (!metadata) return null;
+  try {
+    const parsed = JSON.parse(metadata) as { taskId?: unknown };
+    const value = parsed.taskId;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const n = Number(value);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function requiresTaskExecutionApproval(task: ExecutionTaskRow): boolean {
+  return task.priority === 'high' || task.priority === 'urgent';
+}
+
+async function evaluateExecutionApprovalGate(
+  db: Db,
+  tenantId: number,
+  requestedBy: string,
+  task: ExecutionTaskRow,
+  requestedClawId: number | null,
+): Promise<ExecutionApprovalGateResult> {
+  if (!requiresTaskExecutionApproval(task)) {
+    return { allowed: true };
+  }
+
+  const now = new Date();
+  const recentApprovals = await db
+    .select({
+      id: approvals.id,
+      status: approvals.status,
+      metadata: approvals.metadata,
+      expiresAt: approvals.expiresAt,
+      createdAt: approvals.createdAt,
+    })
+    .from(approvals)
+    .where(
+      and(
+        eq(approvals.tenantId, tenantId),
+        eq(approvals.actionType, 'task.execution'),
+      ),
+    )
+    .orderBy(desc(approvals.createdAt))
+    .limit(100);
+
+  const latestForTask = recentApprovals.find((row) => parseApprovalTaskId(row.metadata) === task.id);
+  if (latestForTask) {
+    if (latestForTask.status === 'approved' && (!latestForTask.expiresAt || latestForTask.expiresAt > now)) {
+      return { allowed: true };
+    }
+    if (latestForTask.status === 'pending' && (!latestForTask.expiresAt || latestForTask.expiresAt > now)) {
+      return {
+        allowed: false,
+        approvalId: latestForTask.id,
+        status: 'pending',
+        reason: 'Task execution is waiting for manager approval.',
+      };
+    }
+  }
+
+  const approvalId = crypto.randomUUID();
+  await db.insert(approvals).values({
+    id: approvalId,
+    tenantId,
+    clawId: task.assignedClawId ?? requestedClawId,
+    requestedBy,
+    actionType: 'task.execution',
+    description: `Approve execution of task #${task.id}: ${task.title}`,
+    metadata: JSON.stringify({
+      taskId: task.id,
+      priority: task.priority,
+    }),
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return {
+    allowed: false,
+    approvalId,
+    status: 'pending',
+    reason: 'Task priority requires manager approval before execution.',
+  };
 }
 
 function normalizeCodeChanges(value: unknown): number | null {
@@ -214,22 +321,13 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
     const clawIdFromHeader = parseOptionalNumber(c.req.header('X-Claw-Id'));
 
-    const execution = await runtimeService.submit({
-      taskId:      body.taskId,
-      agentId:     body.agentId,
-      clawId:      clawIdFromHeader ?? body.clawId,
-      tenantId:    c.get('tenantId'),
-      submittedBy: c.get('userId'),
-      sessionId:   body.sessionId,
-      payload:     body.payload,
-    });
-
     const [taskRow] = await db
       .select({
         id: tasks.id,
         title: tasks.title,
         description: tasks.description,
         assignedClawId: tasks.assignedClawId,
+        priority: tasks.priority,
       })
       .from(tasks)
       .innerJoin(projects, eq(projects.id, tasks.projectId))
@@ -239,6 +337,39 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
           eq(projects.tenantId, c.get('tenantId')),
         ),
       );
+
+    if (!taskRow) {
+      return c.json({ error: 'Task not found' }, 404);
+    }
+
+    const gate = await evaluateExecutionApprovalGate(
+      db,
+      c.get('tenantId'),
+      c.get('userId'),
+      taskRow,
+      clawIdFromHeader ?? body.clawId ?? null,
+    );
+    if (!gate.allowed) {
+      return c.json(
+        {
+          status: 'awaiting_approval',
+          approvalId: gate.approvalId,
+          taskId: taskRow.id,
+          reason: gate.reason,
+        },
+        202,
+      );
+    }
+
+    const execution = await runtimeService.submit({
+      taskId:      body.taskId,
+      agentId:     body.agentId,
+      clawId:      clawIdFromHeader ?? body.clawId,
+      tenantId:    c.get('tenantId'),
+      submittedBy: c.get('userId'),
+      sessionId:   body.sessionId,
+      payload:     body.payload,
+    });
 
     if (taskRow) {
       const targets = await getDispatchTargets(db, c.get('tenantId'), taskRow.assignedClawId);
@@ -299,22 +430,13 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     }>();
     const clawIdFromHeader = parseOptionalNumber(c.req.header('X-Claw-Id'));
 
-    const execution = await runtimeService.submit({
-      taskId:      body.taskId,
-      agentId:     body.agentId,
-      clawId:      clawIdFromHeader ?? body.clawId,
-      tenantId:    c.get('tenantId'),
-      submittedBy: c.get('userId'),
-      sessionId:   body.sessionId,
-      payload:     body.payload,
-    });
-
     const [taskRow] = await db
       .select({
         id: tasks.id,
         title: tasks.title,
         description: tasks.description,
         assignedClawId: tasks.assignedClawId,
+        priority: tasks.priority,
       })
       .from(tasks)
       .innerJoin(projects, eq(projects.id, tasks.projectId))
@@ -324,6 +446,39 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
           eq(projects.tenantId, c.get('tenantId')),
         ),
       );
+
+    if (!taskRow) {
+      return c.json({ error: 'Task not found' }, 404);
+    }
+
+    const gate = await evaluateExecutionApprovalGate(
+      db,
+      c.get('tenantId'),
+      c.get('userId'),
+      taskRow,
+      clawIdFromHeader ?? body.clawId ?? null,
+    );
+    if (!gate.allowed) {
+      return c.json(
+        {
+          status: 'awaiting_approval',
+          approvalId: gate.approvalId,
+          taskId: taskRow.id,
+          reason: gate.reason,
+        },
+        202,
+      );
+    }
+
+    const execution = await runtimeService.submit({
+      taskId:      body.taskId,
+      agentId:     body.agentId,
+      clawId:      clawIdFromHeader ?? body.clawId,
+      tenantId:    c.get('tenantId'),
+      submittedBy: c.get('userId'),
+      sessionId:   body.sessionId,
+      payload:     body.payload,
+    });
 
     if (taskRow) {
       const targets = await getDispatchTargets(db, c.get('tenantId'), taskRow.assignedClawId);
