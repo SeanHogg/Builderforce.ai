@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "db:migrate": "node scripts/migrate.mjs",
-    "deploy": "node scripts/migrate.mjs && wrangler deploy",
+    "deploy": "node scripts/migrate.mjs && npm run deploy:worker",
+    "deploy:worker": "wrangler deploy",
     "secrets:from-env": "node scripts/set-secrets-from-env.mjs",
     "db:generate": "npx drizzle-kit generate",
     "db:push": "npx drizzle-kit push",
