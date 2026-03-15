@@ -11,7 +11,7 @@ import { ProjectCard } from '@/components/ProjectCard';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ClawSlideOutPanel } from '@/components/ClawSlideOutPanel';
-import { claws, tasksApi, runtimeApi, type Claw } from '@/lib/builderforceApi';
+import { claws, tasksApi, runtimeApi, approvalsApi, isAwaitingApprovalExecution, type Claw } from '@/lib/builderforceApi';
 
 /**
  * Dashboard (home) — CoderClawLink-style: "What should we build?" chat input,
@@ -31,6 +31,7 @@ export default function DashboardPage() {
   const [confirmProject, setConfirmProject] = useState<Project | null>(null);
   const [sendingToClaw, setSendingToClaw] = useState(false);
   const [promptError, setPromptError] = useState<string | null>(null);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -45,10 +46,12 @@ export default function DashboardPage() {
     Promise.all([
       fetchProjects().catch(() => [] as Project[]),
       claws.list().catch(() => [] as Claw[]),
+      approvalsApi.list({ status: 'pending' }).catch(() => []),
     ])
-      .then(([projs, clawsData]) => {
+      .then(([projs, clawsData, approvalsData]) => {
         setProjects(Array.isArray(projs) ? projs : []);
         setClawList(Array.isArray(clawsData) ? clawsData : []);
+        setPendingApprovalsCount(Array.isArray(approvalsData) ? approvalsData.length : 0);
       })
       .finally(() => setLoading(false));
   }, [isAuthenticated, hasTenant]);
@@ -71,10 +74,17 @@ export default function DashboardPage() {
         description: p.length > 200 ? p : undefined,
         assignedClawId: connectedClaws[0]?.id ?? undefined,
       });
-      await runtimeApi.submitExecution({
+      const execution = await runtimeApi.submitExecution({
         taskId: task.id,
         clawId: task.assignedClawId ?? undefined,
       });
+
+      if (isAwaitingApprovalExecution(execution)) {
+        setPrompt('');
+        router.push('/approvals');
+        return;
+      }
+
       setPrompt('');
       router.push('/tasks');
     } catch (e) {
@@ -129,6 +139,14 @@ export default function DashboardPage() {
               </Link>
             )}
           </div>
+          {pendingApprovalsCount > 0 && (
+            <div style={{ marginTop: 8, fontSize: 12, color: 'var(--warning-text)' }}>
+              {pendingApprovalsCount} pending approval{pendingApprovalsCount !== 1 ? 's' : ''} ·{' '}
+              <Link href="/approvals" style={{ color: 'var(--coral-bright)', textDecoration: 'none', fontWeight: 600 }}>
+                review now
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* Projects section (preview) */}
