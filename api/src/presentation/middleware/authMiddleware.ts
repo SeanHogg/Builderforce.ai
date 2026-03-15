@@ -17,12 +17,16 @@ import { checkTermsAcceptance } from './termsEnforcement';
  * Apply to any route that requires a logged-in user.
  */
 export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
-  const authHeader = c.req.header('Authorization') ?? '';
-  if (!authHeader.startsWith('Bearer ')) {
+  // WebSocket endpoints (and some clients) may send auth via ?token= rather
+  // than via Authorization header. Support both for compatibility.
+  const header = c.req.header('Authorization') ?? '';
+  const tokenParam = c.req.query('token');
+  const token = header.startsWith('Bearer ') ? header.slice(7) : tokenParam;
+
+  if (!token) {
     throw new UnauthorizedError('Missing or malformed Authorization header');
   }
 
-  const token = authHeader.slice(7);
   let payload;
   try {
     payload = await verifyJwt(token, c.env.JWT_SECRET);

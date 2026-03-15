@@ -6,7 +6,7 @@ import { Execution } from '../../domain/execution/Execution';
 import { AuditEvent } from '../../domain/audit/AuditEvent';
 import {
   AuditEventType, ExecutionStatus,
-  asExecutionId, asTaskId, asAgentId, asClawId, asTenantId,
+  asExecutionId, asTaskId, asAgentId, asClawId, asTenantId, TaskStatus,
 } from '../../domain/shared/types';
 import { NotFoundError, ForbiddenError } from '../../domain/shared/errors';
 

@@ -160,7 +160,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
           const service = new LlmProxyService(c.env.OPENROUTER_API_KEY, {
             modelPool: FREE_MODEL_POOL,
             preferredPoolSize: 2,
-            productName: 'builderforce-dataset',
+            productName: 'coderClawLLM',
           });
           const systemPrompt = `You are an expert AI trainer. Generate instruction-tuning examples. Return ONLY a valid JSON array of objects: {"instruction":"...","input":"...","output":"..."}. No other text.`;
           const userPrompt = `Generate ${exampleCount} diverse examples for: ${body.capabilityPrompt}. Return ONLY the JSON array.`;
@@ -291,7 +291,9 @@ export function createIdeRoutes(): Hono<HonoEnv> {
         while (!complete) {
           const jobRows = await getSql(c)`SELECT status FROM ide_training_jobs WHERE id = ${jobId}`;
           if (jobRows.length === 0) break;
-          complete = (jobRows[0].status as string) === 'completed' || (jobRows[0].status as string) === 'failed';
+          const currentJob = jobRows[0];
+          if (!currentJob) break;
+          complete = (currentJob.status as string) === 'completed' || (currentJob.status as string) === 'failed';
           const logRows = await getSql(c)`
             SELECT * FROM ide_training_logs WHERE job_id = ${jobId} AND created_at > ${afterTimestamp} ORDER BY created_at ASC
           `;
@@ -322,7 +324,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
     await bucket.put(IDE_PREFIX + r2Key, body, {
       httpMetadata: { contentType: 'application/octet-stream' },
-      customMetadata: { jobId, projectId, uploadedAt: new Date().toISOString() },
+      customMetadata: { jobId, projectId: String(projectId), uploadedAt: new Date().toISOString() },
     });
     await getSql(c)`UPDATE ide_training_jobs SET r2_artifact_key = ${r2Key}, updated_at = NOW() WHERE id = ${jobId}`;
     await getSql(c)`INSERT INTO ide_training_logs (id, job_id, message) VALUES (${generateId()}, ${jobId}, ${'LoRA adapter uploaded: ' + r2Key})`;
@@ -353,7 +355,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       const service = new LlmProxyService(c.env.OPENROUTER_API_KEY, {
         modelPool: FREE_MODEL_POOL,
         preferredPoolSize: 2,
-        productName: 'builderforce-eval',
+        productName: 'coderClawLLM',
       });
       for (const ex of examples) {
         try {

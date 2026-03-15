@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { ExecutionStatus } from '../../domain/shared/types';
@@ -7,7 +7,7 @@ import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
-import { coderclawInstances, executions, projectInsightEvents, projects, tasks } from '../../infrastructure/database/schema';
+import { coderclawInstances, executions, projectInsightEvents, projects, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
 import type { ClawRelayDO } from '../../infrastructure/relay/ClawRelayDO';
 
 /**
@@ -38,6 +38,59 @@ type DispatchMessage = {
   };
   artifacts?: ResolvedArtifacts;
 };
+
+type ExecutionTelemetryBody = {
+  inputTokens?: number;
+  outputTokens?: number;
+  contextTokens?: number;
+  contextWindowMax?: number;
+  compactionCount?: number;
+  ts?: string;
+};
+
+type ExecutionSubscriberEvent = {
+  type: 'status_change' | 'done';
+  executionId: number;
+  status: string;
+  execution: unknown;
+  ts: string;
+};
+
+const executionSubscribers = new Map<number, Set<WebSocket>>();
+
+function subscribeExecution(executionId: number, socket: WebSocket): void {
+  const set = executionSubscribers.get(executionId) ?? new Set<WebSocket>();
+  set.add(socket);
+  executionSubscribers.set(executionId, set);
+}
+
+function unsubscribeExecution(executionId: number, socket: WebSocket): void {
+  const set = executionSubscribers.get(executionId);
+  if (!set) return;
+  set.delete(socket);
+  if (set.size === 0) executionSubscribers.delete(executionId);
+}
+
+function notifyExecutionSubscribers(executionId: number, event: ExecutionSubscriberEvent): void {
+  const set = executionSubscribers.get(executionId);
+  if (!set || set.size === 0) return;
+
+  const payload = JSON.stringify(event);
+  for (const socket of set) {
+    try {
+      socket.send(payload);
+    } catch {
+      // ignore broken sockets; close handlers clean up subscriptions.
+    }
+  }
+}
+
+function parseOptionalNumber(value: string | undefined | null): number | null {
+  if (!value) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return parsed;
+}
 
 function normalizeCodeChanges(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.floor(value));
@@ -140,6 +193,101 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   const router = new Hono<RuntimeHonoEnv>();
   router.use('*', authMiddleware);
 
+  // Legacy compatibility (coderClawLink) ----------------------------------------------------
+  // The original ClawLink transport adapter used /api/runtime/sessions and
+  // /api/runtime/tasks/submit. These endpoints are kept for CLI/agent compatibility.
+
+  router.post('/sessions', async (c) => {
+    const body = await c.req.json<{ sessionId?: string }>().catch(() => ({} as any));
+    const sessionId = body.sessionId ?? crypto.randomUUID();
+    return c.json({ sessionId }, 201);
+  });
+
+  router.post('/tasks/submit', async (c) => {
+    const body = await c.req.json<{
+      taskId:   number;
+      agentId?: number;
+      clawId?:  number | null;
+      sessionId?: string;
+      payload?: string;
+    }>();
+
+    const clawIdFromHeader = parseOptionalNumber(c.req.header('X-Claw-Id'));
+
+    const execution = await runtimeService.submit({
+      taskId:      body.taskId,
+      agentId:     body.agentId,
+      clawId:      clawIdFromHeader ?? body.clawId,
+      tenantId:    c.get('tenantId'),
+      submittedBy: c.get('userId'),
+      sessionId:   body.sessionId,
+      payload:     body.payload,
+    });
+
+    const [taskRow] = await db
+      .select({
+        id: tasks.id,
+        title: tasks.title,
+        description: tasks.description,
+        assignedClawId: tasks.assignedClawId,
+      })
+      .from(tasks)
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
+      .where(
+        and(
+          eq(tasks.id, body.taskId),
+          eq(projects.tenantId, c.get('tenantId')),
+        ),
+      );
+
+    if (taskRow) {
+      const targets = await getDispatchTargets(db, c.get('tenantId'), taskRow.assignedClawId);
+      const dispatchType: DispatchMessage['type'] = taskRow.assignedClawId != null ? 'task.assign' : 'task.broadcast';
+
+      const artifacts = await resolveArtifacts(db, {
+        tenantId:  c.get('tenantId'),
+        taskId:    taskRow.id,
+        clawId:    taskRow.assignedClawId ?? undefined,
+      });
+
+      const message: DispatchMessage = {
+        type: dispatchType,
+        executionId: execution.id,
+        taskId: taskRow.id,
+        payload: body.payload,
+        task: {
+          title: taskRow.title,
+          description: taskRow.description,
+        },
+        artifacts,
+      };
+
+      await Promise.all(targets.map((targetId) => dispatchToClaw(c.env, targetId, message).catch(() => false)));
+    }
+
+    notifyExecutionSubscribers(execution.id, {
+      type: 'status_change',
+      executionId: execution.id,
+      status: execution.status,
+      execution: execution.toPlain(),
+      ts: new Date().toISOString(),
+    });
+
+    return c.json(execution.toPlain(), 201);
+  });
+
+  router.get('/tasks/:id/state', async (c) => {
+    const id = Number(c.req.param('id'));
+    const execution = await runtimeService.getExecution(id);
+    return c.json(execution.toPlain());
+  });
+
+  router.post('/tasks/:id/cancel', async (c) => {
+    const id = Number(c.req.param('id'));
+    const execution = await runtimeService.cancel(id, c.get('userId'));
+    return c.json(execution.toPlain());
+  });
+
   // Submit a task for execution
   router.post('/executions', async (c) => {
     const body = await c.req.json<{
@@ -149,10 +297,12 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       sessionId?: string;
       payload?: string;
     }>();
+    const clawIdFromHeader = parseOptionalNumber(c.req.header('X-Claw-Id'));
+
     const execution = await runtimeService.submit({
       taskId:      body.taskId,
       agentId:     body.agentId,
-      clawId:      body.clawId,
+      clawId:      clawIdFromHeader ?? body.clawId,
       tenantId:    c.get('tenantId'),
       submittedBy: c.get('userId'),
       sessionId:   body.sessionId,
@@ -201,6 +351,14 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       await Promise.all(targets.map((targetId) => dispatchToClaw(c.env, targetId, message).catch(() => false)));
     }
 
+    notifyExecutionSubscribers(execution.id, {
+      type: 'status_change',
+      executionId: execution.id,
+      status: execution.status,
+      execution: execution.toPlain(),
+      ts: new Date().toISOString(),
+    });
+
     return c.json(execution.toPlain(), 201);
   });
 
@@ -212,6 +370,126 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       ? await runtimeService.listBySession(c.get('tenantId'), sessionId, limit)
       : await runtimeService.listByTenant(c.get('tenantId'), limit);
     return c.json(executions.map(e => e.toPlain()));
+  });
+
+  // Tenant-level runtime dashboard aggregates derived from recent execution history.
+  router.get('/dashboard', async (c) => {
+    const tenantId = c.get('tenantId');
+    const limit = Math.min(Number(c.req.query('limit') ?? '500'), 2_000);
+    const executionRows = await runtimeService.listByTenant(tenantId, limit);
+    const executionsPlain = executionRows.map((execution) => execution.toPlain());
+
+    const totals = {
+      totalExecutions: executionsPlain.length,
+      pending: 0,
+      submitted: 0,
+      running: 0,
+      completed: 0,
+      failed: 0,
+      cancelled: 0,
+      successRate: 0,
+      avgDurationMs: 0,
+    };
+
+    let durationSamples = 0;
+    let durationTotalMs = 0;
+
+    const clawStats = new Map<number, {
+      clawId: number;
+      totalExecutions: number;
+      completed: number;
+      failed: number;
+      running: number;
+      pending: number;
+      cancelled: number;
+      lastExecutionAt: string | null;
+    }>();
+
+    for (const execution of executionsPlain) {
+      switch (execution.status) {
+        case 'pending':
+          totals.pending += 1;
+          break;
+        case 'submitted':
+          totals.submitted += 1;
+          break;
+        case 'running':
+          totals.running += 1;
+          break;
+        case 'completed':
+          totals.completed += 1;
+          break;
+        case 'failed':
+          totals.failed += 1;
+          break;
+        case 'cancelled':
+          totals.cancelled += 1;
+          break;
+      }
+
+      if (execution.startedAt && execution.completedAt) {
+        durationSamples += 1;
+        durationTotalMs += new Date(execution.completedAt).getTime() - new Date(execution.startedAt).getTime();
+      }
+
+      if (execution.clawId != null) {
+        const current = clawStats.get(execution.clawId) ?? {
+          clawId: execution.clawId,
+          totalExecutions: 0,
+          completed: 0,
+          failed: 0,
+          running: 0,
+          pending: 0,
+          cancelled: 0,
+          lastExecutionAt: null,
+        };
+
+        current.totalExecutions += 1;
+        if (execution.status === 'completed') current.completed += 1;
+        if (execution.status === 'failed') current.failed += 1;
+        if (execution.status === 'running') current.running += 1;
+        if (execution.status === 'pending' || execution.status === 'submitted') current.pending += 1;
+        if (execution.status === 'cancelled') current.cancelled += 1;
+
+        const createdAtIso = new Date(execution.createdAt).toISOString();
+        if (!current.lastExecutionAt || createdAtIso > current.lastExecutionAt) {
+          current.lastExecutionAt = createdAtIso;
+        }
+
+        clawStats.set(execution.clawId, current);
+      }
+    }
+
+    const terminalCount = totals.completed + totals.failed + totals.cancelled;
+    totals.successRate = terminalCount > 0 ? totals.completed / terminalCount : 0;
+    totals.avgDurationMs = durationSamples > 0 ? Math.round(durationTotalMs / durationSamples) : 0;
+
+    const clawIds = Array.from(clawStats.keys());
+    const clawNames = new Map<number, string>();
+    if (clawIds.length > 0) {
+      const claws = await db
+        .select({ id: coderclawInstances.id, name: coderclawInstances.name })
+        .from(coderclawInstances)
+        .where(inArray(coderclawInstances.id, clawIds));
+      claws.forEach((claw) => clawNames.set(claw.id, claw.name));
+    }
+
+    const byClaw = Array.from(clawStats.values())
+      .map((entry) => ({
+        ...entry,
+        name: clawNames.get(entry.clawId) ?? `Claw ${entry.clawId}`,
+        successRate: entry.completed + entry.failed + entry.cancelled > 0
+          ? entry.completed / (entry.completed + entry.failed + entry.cancelled)
+          : 0,
+      }))
+      .sort((left, right) => right.totalExecutions - left.totalExecutions);
+
+    return c.json({
+      tenantId,
+      window: { sampledExecutions: executionsPlain.length, limit },
+      totals,
+      byClaw,
+    });
   });
 
   // Full execution timeline for one session (newest first)
@@ -232,12 +510,130 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     return c.json(execution.toPlain());
   });
 
+  // Legacy telemetry / trace endpoints (used by some older integrations)
+  router.post('/executions/:id/telemetry', async (c) => {
+    const id = Number(c.req.param('id'));
+    const body = await c.req
+      .json<ExecutionTelemetryBody>()
+      .catch((): ExecutionTelemetryBody => ({}));
+
+    const execution = await runtimeService.getExecution(id);
+    const plain = execution.toPlain();
+    const callerTenantId = c.get('tenantId');
+
+    // Keep telemetry endpoint tenant-safe.
+    if (plain.tenantId !== callerTenantId) {
+      return c.json({ error: 'Execution not found' }, 404);
+    }
+
+    if (plain.clawId == null || !plain.sessionId) {
+      return c.json({ id, status: 'ignored', reason: 'execution_missing_claw_or_session' });
+    }
+
+    const num = (v: unknown): number => {
+      const n = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+    };
+
+    const ts = body.ts ? new Date(body.ts) : new Date();
+    const safeTs = Number.isNaN(ts.getTime()) ? new Date() : ts;
+
+    await db.insert(usageSnapshots).values({
+      tenantId: plain.tenantId,
+      clawId: plain.clawId,
+      sessionKey: plain.sessionId,
+      inputTokens: num(body.inputTokens),
+      outputTokens: num(body.outputTokens),
+      contextTokens: num(body.contextTokens),
+      contextWindowMax: num(body.contextWindowMax),
+      compactionCount: num(body.compactionCount),
+      ts: safeTs,
+    });
+
+    return c.json({ id, status: 'stored' });
+  });
+
+  router.get('/executions/:id/trace', async (c) => {
+    const id = Number(c.req.param('id'));
+    const execution = await runtimeService.getExecution(id);
+    const plain = execution.toPlain();
+    const callerTenantId = c.get('tenantId');
+
+    if (plain.tenantId !== callerTenantId) {
+      return c.json({ error: 'Execution not found' }, 404);
+    }
+
+    if (plain.clawId == null || !plain.sessionId) {
+      return c.json({
+        execution: plain,
+        trace: {
+          source: 'runtime-fallback',
+          usageSnapshots: [],
+          toolEvents: [],
+        },
+      });
+    }
+
+    const usage = await db
+      .select({
+        id: usageSnapshots.id,
+        ts: usageSnapshots.ts,
+        inputTokens: usageSnapshots.inputTokens,
+        outputTokens: usageSnapshots.outputTokens,
+        contextTokens: usageSnapshots.contextTokens,
+        contextWindowMax: usageSnapshots.contextWindowMax,
+        compactionCount: usageSnapshots.compactionCount,
+      })
+      .from(usageSnapshots)
+      .where(
+        and(
+          eq(usageSnapshots.tenantId, plain.tenantId),
+          eq(usageSnapshots.clawId, plain.clawId),
+          eq(usageSnapshots.sessionKey, plain.sessionId),
+        ),
+      )
+      .orderBy(desc(usageSnapshots.ts))
+      .limit(500);
+
+    const toolEvents = await db
+      .select({
+        id: toolAuditEvents.id,
+        ts: toolAuditEvents.ts,
+        toolName: toolAuditEvents.toolName,
+        category: toolAuditEvents.category,
+        durationMs: toolAuditEvents.durationMs,
+        args: toolAuditEvents.args,
+        result: toolAuditEvents.result,
+        runId: toolAuditEvents.runId,
+        toolCallId: toolAuditEvents.toolCallId,
+      })
+      .from(toolAuditEvents)
+      .where(
+        and(
+          eq(toolAuditEvents.tenantId, plain.tenantId),
+          eq(toolAuditEvents.clawId, plain.clawId),
+          eq(toolAuditEvents.sessionKey, plain.sessionId),
+        ),
+      )
+      .orderBy(desc(toolAuditEvents.ts))
+      .limit(500);
+
+    return c.json({
+      execution: plain,
+      trace: {
+        source: 'runtime-fallback',
+        usageSnapshots: usage,
+        toolEvents,
+      },
+    });
+  });
+
   // P0-2: WebSocket streaming endpoint for a single execution.
   // GET /api/runtime/executions/:id/stream?token=<jwt>
-  // Upgrades to a WebSocket and streams ExecutionEvent frames until the execution
-  // reaches a terminal state (completed / failed / cancelled).
+  // Upgrades to a WebSocket and streams status_change/done events as execution
+  // transitions are written by submit/cancel/update handlers in this worker.
   // Falls back to a 426 if the client does not send an Upgrade header, so the
-  // existing polling endpoint above remains the canonical REST fallback.
+  // existing REST endpoints remain a canonical fallback.
   router.get('/executions/:id/stream', async (c) => {
     const upgrade = c.req.header('Upgrade');
     if (upgrade !== 'websocket') {
@@ -248,33 +644,28 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const { 0: client, 1: server } = new WebSocketPair();
     server.accept();
 
-    const POLL_INTERVAL_MS = 1_000;
-    const TERMINAL: ExecutionStatus[] = [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED];
+    try {
+      const execution = await runtimeService.getExecution(id);
+      const plain = execution.toPlain();
 
-    const poll = async () => {
-      try {
-        const execution = await runtimeService.getExecution(id);
-        const plain = execution.toPlain();
+      server.send(JSON.stringify({
+        type: 'status_change',
+        executionId: id,
+        status: plain.status,
+        execution: plain,
+        ts: new Date().toISOString(),
+      }));
+    } catch {
+      server.send(JSON.stringify({ type: 'error', message: 'execution_not_found' }));
+      server.close(1011, 'server_error');
+      return new Response(null, { status: 101, webSocket: client });
+    }
 
-        server.send(JSON.stringify({ type: 'status_change', status: plain.status }));
+    subscribeExecution(id, server);
 
-        if (TERMINAL.includes(plain.status as ExecutionStatus)) {
-          server.send(JSON.stringify({ type: 'done', execution: plain }));
-          server.close(1000, 'execution_terminal');
-          return;
-        }
-      } catch {
-        server.send(JSON.stringify({ type: 'error', message: 'execution_not_found' }));
-        server.close(1011, 'server_error');
-        return;
-      }
-
-      setTimeout(() => { void poll(); }, POLL_INTERVAL_MS);
-    };
-
-    server.addEventListener('close', () => { /* nothing to clean up */ });
-
-    void poll();
+    server.addEventListener('close', () => {
+      unsubscribeExecution(id, server);
+    });
 
     return new Response(null, { status: 101, webSocket: client });
   });
@@ -283,6 +674,15 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   router.post('/executions/:id/cancel', async (c) => {
     const id = Number(c.req.param('id'));
     const execution = await runtimeService.cancel(id, c.get('userId'));
+
+    notifyExecutionSubscribers(execution.id, {
+      type: 'done',
+      executionId: execution.id,
+      status: execution.status,
+      execution: execution.toPlain(),
+      ts: new Date().toISOString(),
+    });
+
     return c.json(execution.toPlain());
   });
 
@@ -296,6 +696,16 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       codeChanges?:  number;
     }>();
     const execution = await runtimeService.update(id, body);
+
+    notifyExecutionSubscribers(execution.id, {
+      type: (body.status === ExecutionStatus.COMPLETED || body.status === ExecutionStatus.FAILED || body.status === ExecutionStatus.CANCELLED)
+        ? 'done'
+        : 'status_change',
+      executionId: execution.id,
+      status: execution.status,
+      execution: execution.toPlain(),
+      ts: new Date().toISOString(),
+    });
 
     if (body.status === ExecutionStatus.COMPLETED) {
       const explicitCodeChanges = normalizeCodeChanges(body.codeChanges);
