@@ -30,6 +30,7 @@ import { AuthService }     from './application/auth/AuthService';
 import { AgentService }    from './application/agent/AgentService';
 import { RuntimeService }  from './application/runtime/RuntimeService';
 import { AuditService }    from './application/audit/AuditService';
+import { ClawService }     from './application/claw/ClawService';
 
 // Routes
 import { createProjectRoutes }     from './presentation/routes/projectRoutes';
@@ -41,6 +42,8 @@ import { createRuntimeRoutes }     from './presentation/routes/runtimeRoutes';
 import { createAuditRoutes }       from './presentation/routes/auditRoutes';
 import { createMarketplaceRoutes } from './presentation/routes/marketplaceRoutes';
 import { createClawRoutes }        from './presentation/routes/clawRoutes';
+import { ClawRepository }          from './infrastructure/repositories/ClawRepository';
+import { IClawRepository }         from './domain/claw/IClawRepository';
 import { createSkillAssignmentRoutes } from './presentation/routes/skillAssignmentRoutes';
 import { createArtifactAssignmentRoutes } from './presentation/routes/artifactAssignmentRoutes';
 import { createMarketplaceStatsRoutes } from './presentation/routes/marketplaceStatsRoutes';
@@ -79,6 +82,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   const skillRepo      = new SkillRepository(db);
   const executionRepo = new ExecutionRepository(db);
   const auditRepo     = new AuditRepository(db);
+  const clawRepo      = new ClawRepository(db);
 
   // --- Application ---
   const projectService  = new ProjectService(projectRepo);
@@ -88,6 +92,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   const agentService    = new AgentService(agentRepo, skillRepo, auditRepo);
   const runtimeService  = new RuntimeService(executionRepo, taskRepo, agentRepo, auditRepo);
   const auditService    = new AuditService(auditRepo);
+  const clawService     = new ClawService(clawRepo);
   const brainService    = new BrainService(db);
 
   // --- Presentation ---
@@ -107,7 +112,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/auth',    createAuthRoutes(authService, db));
 
   // CoderClaw instances + skill assignments (tenant JWT inside each router)
-  app.route('/api/claws',            createClawRoutes(db));
+  app.route('/api/claws',            createClawRoutes(db, clawService));
   app.route('/api/skill-assignments', createSkillAssignmentRoutes(db));
   app.route('/api/artifact-assignments', createArtifactAssignmentRoutes(db));
   app.route('/api/marketplace-stats', createMarketplaceStatsRoutes(db));
@@ -117,7 +122,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
 
   // Protected endpoints (JWT injected by authMiddleware inside each router)
   app.route('/api/projects', createProjectRoutes(projectService, db));
-  app.route('/api/tasks',    createTaskRoutes(taskService));
+  app.route('/api/tasks',    createTaskRoutes(taskService, db));
   app.route('/api/tenants',  createTenantRoutes(tenantService, db));
   app.route('/api/agents',   createAgentRoutes(agentService));
   app.route('/api/skills',   createSkillRoutes(agentService));

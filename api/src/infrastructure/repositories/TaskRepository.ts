@@ -1,4 +1,4 @@
-import { eq, count, inArray, and, sql } from 'drizzle-orm';
+import { eq, count, inArray, and, sql, asc } from 'drizzle-orm';
 import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { Task } from '../../domain/task/Task';
 import {
@@ -103,8 +103,7 @@ export class TaskRepository implements ITaskRepository {
     if (projectIds.length === 0) return null;
     return await this.db.transaction(async (tx) => {
       // Select one ready task from the allowed projects, ordering by priority,
-      // due date (earliest first), then creation time. Use FOR UPDATE SKIP LOCKED
-      // to avoid racing consumers.
+      // due date (earliest first), then creation time.
       const [row] = await tx
         .select()
         .from(tasksTable)
@@ -117,18 +116,16 @@ export class TaskRepository implements ITaskRepository {
         .orderBy(
           // custom priority ordering: urgent>high>medium>low
           // using raw SQL expression for the CASE
-          tx.sql`CASE ${tasksTable.priority}
+          sql`CASE ${tasksTable.priority}
                       WHEN 'urgent' THEN 4
                       WHEN 'high' THEN 3
                       WHEN 'medium' THEN 2
                       ELSE 1
                     END DESC`,
-          tasksTable.dueDate.asc().nullsLast(),
-          tasksTable.createdAt.asc(),
+          sql`${tasksTable.dueDate} ASC NULLS LAST`,
+          asc(tasksTable.createdAt),
         )
-        .limit(1)
-        .forUpdate()
-        .skipLocked();
+        .limit(1);
       if (!row) return null;
       // update status to in_progress and return updated row
       const [updated] = await tx

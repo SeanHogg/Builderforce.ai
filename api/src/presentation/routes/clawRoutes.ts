@@ -9,7 +9,7 @@
  */
 import { Hono } from 'hono';
 import { eq, and, isNull, desc } from 'drizzle-orm';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   coderclawInstances,
   clawProjects,
@@ -23,11 +23,18 @@ import {
   usageSnapshots,
   toolAuditEvents,
   approvals,
+  executions,
+  tenantSkillAssignments,
+  clawSkillAssignments,
+  marketplaceSkills,
 } from '../../infrastructure/database/schema';
-import { generateApiKey, hashSecret, verifySecret } from '../../infrastructure/auth/HashService';
+import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
+import { verifyJwt } from '../../infrastructure/auth/JwtService';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { ClawRelayDO } from '../../infrastructure/relay/ClawRelayDO';
+import type { ClawService } from '../../application/claw/ClawService';
+import { TenantRole } from '../../domain/shared/types';
 
 // Extend HonoEnv bindings type to include the Durable Object
 type ClawHonoEnv = HonoEnv & {
@@ -36,7 +43,7 @@ type ClawHonoEnv = HonoEnv & {
   };
 };
 
-export function createClawRoutes(db: Db): Hono<ClawHonoEnv> {
+export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHonoEnv> {
   const router = new Hono<ClawHonoEnv>();
 
   const hashPath = async (value: string): Promise<string> => {
@@ -47,17 +54,7 @@ export function createClawRoutes(db: Db): Hono<ClawHonoEnv> {
 
   const verifyClawApiKey = async (id: number, key?: string) => {
     if (!key) return null;
-    const [claw] = await db
-      .select({
-        id: coderclawInstances.id,
-        tenantId: coderclawInstances.tenantId,
-        apiKeyHash: coderclawInstances.apiKeyHash,
-      })
-      .from(coderclawInstances)
-      .where(eq(coderclawInstances.id, id));
-    if (!claw) return null;
-    const valid = await verifySecret(key, claw.apiKeyHash);
-    return valid ? claw : null;
+    return clawService.verifyApiKey(id, key);
   };
 
   // GET /api/claws/fleet?from=<clawId>&key=<apiKey>
@@ -75,28 +72,16 @@ export function createClawRoutes(db: Db): Hono<ClawHonoEnv> {
     const sourceClaw = await verifyClawApiKey(fromId, key);
     if (!sourceClaw) return c.text('Unauthorized', 401);
 
-    const rows = await db
-      .select({
-        id:                   coderclawInstances.id,
-        name:                 coderclawInstances.name,
-        slug:                 coderclawInstances.slug,
-        connectedAt:          coderclawInstances.connectedAt,
-        lastSeenAt:           coderclawInstances.lastSeenAt,
-        capabilities:         coderclawInstances.capabilities,
-        declaredCapabilities: coderclawInstances.declaredCapabilities,
-      })
-      .from(coderclawInstances)
-      .where(eq(coderclawInstances.tenantId, sourceClaw.tenantId));
-
-    const fleet = rows.map((row) => ({
-      id:                   row.id,
-      name:                 row.name,
-      slug:                 row.slug,
-      online:               row.connectedAt !== null,
-      connectedAt:          row.connectedAt,
-      lastSeenAt:           row.lastSeenAt,
-      capabilities:         row.capabilities ? (JSON.parse(row.capabilities) as string[]) : [],
-      declaredCapabilities: row.declaredCapabilities ? (JSON.parse(row.declaredCapabilities) as string[]) : [],
+    const claws = await clawService.listClawsForTenant(Number(sourceClaw.tenantId));
+    const fleet = claws.map((claw) => ({
+      id:                   claw.id,
+      name:                 claw.name,
+      slug:                 claw.slug,
+      online:               claw.connectedAt !== null,
+      connectedAt:          claw.connectedAt,
+      lastSeenAt:           claw.lastSeenAt,
+      capabilities:         claw.capabilities ?? [],
+      declaredCapabilities: claw.declaredCapabilities ?? [],
     }));
 
     return c.json({ fleet });
@@ -110,59 +95,53 @@ export function createClawRoutes(db: Db): Hono<ClawHonoEnv> {
     const requires = (c.req.query('requires') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
     const tenantId = (c as unknown as { get: (k: string) => unknown }).get('tenantId') as number;
 
-    const rows = await db
-      .select({
-        id:                   coderclawInstances.id,
-        name:                 coderclawInstances.name,
-        connectedAt:          coderclawInstances.connectedAt,
-        capabilities:         coderclawInstances.capabilities,
-        declaredCapabilities: coderclawInstances.declaredCapabilities,
-      })
-      .from(coderclawInstances)
-      .where(eq(coderclawInstances.tenantId, tenantId));
+    const claws = await clawService.listClawsForTenant(tenantId);
 
-    type ClawRow = { id: number; name: string; connectedAt: Date | null; capabilities: string | null; declaredCapabilities: string | null };
-
-    const score = (row: ClawRow): number => {
+    const score = (claw: (typeof claws)[number]): number => {
       const caps = new Set([
-        ...(row.capabilities ? (JSON.parse(row.capabilities) as string[]) : []),
-        ...(row.declaredCapabilities ? (JSON.parse(row.declaredCapabilities) as string[]) : []),
+        ...(claw.capabilities ?? []),
+        ...(claw.declaredCapabilities ?? []),
       ]);
-      const online = row.connectedAt !== null ? 1 : 0;
+      const online = claw.connectedAt !== null ? 1 : 0;
       const matched = requires.filter((r) => caps.has(r)).length;
       const total = requires.length || 1;
       return online * 0.5 + (matched / total) * 0.5;
     };
 
-    const scored = rows.map((row) => ({ ...row, score: score(row) })).sort((a, b) => b.score - a.score);
+    const scored = claws.map((claw) => ({ claw, score: score(claw) })).sort((a, b) => b.score - a.score);
 
     if (scored.length === 0) return c.json({ error: 'No claws available' }, 404);
 
-    const best = scored[0]!;
+    const best = scored[0]!.claw;
     return c.json({
       clawId: best.id,
       name:   best.name,
-      score:  Math.round(best.score * 100) / 100,
+      score:  Math.round(score(best) * 100) / 100,
       online: best.connectedAt !== null,
     });
   });
 
   // GET /api/claws – list all claws for the current tenant
+  // Optional query params:
+  //  - status=online  (only claws with connectedAt NOT NULL)
+  //  - status=offline (only claws with connectedAt NULL)
   router.get('/', authMiddleware as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const rows = await db
-      .select({
-        id:           coderclawInstances.id,
-        name:         coderclawInstances.name,
-        slug:         coderclawInstances.slug,
-        status:       coderclawInstances.status,
-        registeredBy: coderclawInstances.registeredBy,
-        connectedAt:  coderclawInstances.connectedAt,
-        lastSeenAt:   coderclawInstances.lastSeenAt,
-        createdAt:    coderclawInstances.createdAt,
-      })
-      .from(coderclawInstances)
-      .where(eq(coderclawInstances.tenantId, tenantId));
+    const status = (c.req.query('status') ?? '').toString().trim().toLowerCase();
+
+    const filterStatus = status === 'online' || status === 'offline' ? status : null;
+    const claws = await clawService.listClawsForTenant(tenantId, filterStatus);
+
+    const rows = claws.map((claw) => ({
+      id: claw.id,
+      name: claw.name,
+      slug: claw.slug,
+      status: claw.status,
+      connectedAt: claw.connectedAt,
+      lastSeenAt: claw.lastSeenAt,
+      createdAt: claw.createdAt,
+    }));
+
     return c.json({ claws: rows });
   });
 
@@ -230,6 +209,41 @@ export function createClawRoutes(db: Db): Hono<ClawHonoEnv> {
       .delete(coderclawInstances)
       .where(and(eq(coderclawInstances.id, id), eq(coderclawInstances.tenantId, tenantId)));
     return c.body(null, 204);
+  });
+
+  // PATCH /api/claws/:id/status – lifecycle status transition (manager+)
+  router.patch('/:id/status', authMiddleware as never, requireRole(TenantRole.MANAGER) as never, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const clawId = Number(c.req.param('id'));
+    const body = await c.req.json<{ status?: 'active' | 'inactive' | 'suspended' }>();
+
+    if (!body.status || !['active', 'inactive', 'suspended'].includes(body.status)) {
+      return c.json({ error: 'status must be one of: active, inactive, suspended' }, 400);
+    }
+
+    const updated = await clawService.setStatus(clawId, tenantId, body.status);
+    if (!updated) return c.json({ error: 'Claw not found' }, 404);
+
+    // Non-active claws should not appear as connected.
+    if (body.status !== 'active') {
+      await db
+        .update(coderclawInstances)
+        .set({ connectedAt: null })
+        .where(and(eq(coderclawInstances.id, clawId), eq(coderclawInstances.tenantId, tenantId)));
+    }
+
+    return c.json({
+      claw: {
+        id: updated.id,
+        tenantId: updated.tenantId,
+        name: updated.name,
+        slug: updated.slug,
+        status: body.status,
+        connectedAt: body.status === 'active' ? updated.connectedAt : null,
+        lastSeenAt: updated.lastSeenAt,
+        createdAt: updated.createdAt,
+      },
+    });
   });
 
   // GET /api/claws/:id/projects – list projects associated with this claw
@@ -304,10 +318,10 @@ export function createClawRoutes(db: Db): Hono<ClawHonoEnv> {
       return c.json({ error: 'Node not found' }, 404);
     }
 
+    await clawService.deactivate(clawId, tenantId);
     await db
       .update(coderclawInstances)
       .set({
-        status: 'inactive',
         connectedAt: null,
       })
       .where(
@@ -614,6 +628,97 @@ export function createClawRoutes(db: Db): Hono<ClawHonoEnv> {
     return c.json({ history: rows });
   });
 
+  // GET /api/claws/:id/executions – history of executions run by this claw
+  router.get('/:id/executions', authMiddleware as never, async (c) => {
+    const clawId = Number(c.req.param('id'));
+    const tenantId = c.get('tenantId') as number;
+    const limit = Math.min(Number(c.req.query('limit') ?? 50), 200);
+
+    // Ensure the claw belongs to this tenant
+    const claw = await clawService.getClawForTenant(clawId, tenantId);
+    if (!claw) return c.json({ error: 'Claw not found' }, 404);
+
+    const rows = await db
+      .select({
+        id:          executions.id,
+        taskId:      executions.taskId,
+        agentId:     executions.agentId,
+        clawId:      executions.clawId,
+        tenantId:    executions.tenantId,
+        submittedBy: executions.submittedBy,
+        sessionId:   executions.sessionId,
+        status:      executions.status,
+        payload:     executions.payload,
+        result:      executions.result,
+        errorMessage: executions.errorMessage,
+        startedAt:   executions.startedAt,
+        completedAt: executions.completedAt,
+        createdAt:   executions.createdAt,
+        updatedAt:   executions.updatedAt,
+      })
+      .from(executions)
+      .where(and(eq(executions.clawId, clawId), eq(executions.tenantId, tenantId)))
+      .orderBy(desc(executions.createdAt))
+      .limit(limit);
+
+    return c.json({ clawId, executions: rows });
+  });
+
+  // GET /api/claws/:id/skills – merged skill assignments (tenant + claw)
+  router.get('/:id/skills', authMiddleware as never, async (c) => {
+    const clawId = Number(c.req.param('id'));
+    const tenantId = c.get('tenantId') as number;
+
+    // Ensure claw belongs to this tenant
+    const claw = await clawService.getClawForTenant(clawId, tenantId);
+    if (!claw) return c.json({ error: 'Claw not found' }, 404);
+
+    const tenantSkills = await db
+      .select({
+        skillSlug:  tenantSkillAssignments.skillSlug,
+        assignedBy: tenantSkillAssignments.assignedBy,
+        assignedAt: tenantSkillAssignments.assignedAt,
+        skillName:  marketplaceSkills.name,
+        skillDesc:  marketplaceSkills.description,
+        skillIcon:  marketplaceSkills.iconUrl,
+        skillVer:   marketplaceSkills.version,
+      })
+      .from(tenantSkillAssignments)
+      .leftJoin(marketplaceSkills, eq(tenantSkillAssignments.skillSlug, marketplaceSkills.slug))
+      .where(eq(tenantSkillAssignments.tenantId, tenantId));
+
+    const clawSkills = await db
+      .select({
+        skillSlug:  clawSkillAssignments.skillSlug,
+        assignedBy: clawSkillAssignments.assignedBy,
+        assignedAt: clawSkillAssignments.assignedAt,
+        skillName:  marketplaceSkills.name,
+        skillDesc:  marketplaceSkills.description,
+        skillIcon:  marketplaceSkills.iconUrl,
+        skillVer:   marketplaceSkills.version,
+      })
+      .from(clawSkillAssignments)
+      .leftJoin(marketplaceSkills, eq(clawSkillAssignments.skillSlug, marketplaceSkills.slug))
+      .where(eq(clawSkillAssignments.clawId, clawId));
+
+    const merged = new Map<string, Record<string, unknown>>();
+    tenantSkills.forEach((row) => merged.set(row.skillSlug, { ...row, source: 'tenant' }));
+    clawSkills.forEach((row) => merged.set(row.skillSlug, { ...row, source: 'claw' }));
+
+    const skills = Array.from(merged.values()).map((row) => ({
+      skill_id: row.skillSlug,
+      name: row.skillName ?? row.skillSlug,
+      description: row.skillDesc ?? null,
+      metadata: {
+        iconUrl: row.skillIcon ?? null,
+        version: row.skillVer ?? null,
+        source: row.source,
+      },
+    }));
+
+    return c.json({ clawId, skills });
+  });
+
   // GET /api/claws/:id/sessions – list chat sessions for this claw
   router.get('/:id/sessions', authMiddleware as never, async (c) => {
     const clawId  = Number(c.req.param('id'));
@@ -815,16 +920,27 @@ export function createClawRoutes(db: Db): Hono<ClawHonoEnv> {
 
     if (!env.CLAW_RELAY) return c.text('CLAW_RELAY binding not configured', 503);
 
-    // Verify tenant JWT from query param
-    const token = c.req.query('token');
+    // The browser connects via WebSocket and cannot reliably set Authorization headers,
+    // so we accept the JWT via ?token= as used by the UI.
+    const token = c.req.header('Authorization')?.startsWith('Bearer ')
+      ? c.req.header('Authorization')?.slice(7)
+      : c.req.query('token');
     if (!token) return c.text('Unauthorized', 401);
 
-    // Look up the claw
+    // Verify tenant JWT and ensure it matches the claw's tenant.
+    let payload;
+    try {
+      payload = await verifyJwt(token, c.env.JWT_SECRET);
+    } catch {
+      return c.text('Unauthorized', 401);
+    }
+
     const [claw] = await db
       .select({ id: coderclawInstances.id, tenantId: coderclawInstances.tenantId })
       .from(coderclawInstances)
       .where(eq(coderclawInstances.id, id));
     if (!claw) return c.text('Not found', 404);
+    if (payload.tid !== claw.tenantId) return c.text('Unauthorized', 401);
 
     const stub = env.CLAW_RELAY.get(env.CLAW_RELAY.idFromName(String(id)));
     const url  = new URL(c.req.url);

@@ -3,11 +3,11 @@ import { TaskService } from '../../application/task/TaskService';
 import { TaskPriority, AgentType, TaskStatus } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
-// import { db } from '../../infrastructure/database/connection';
 import { auditEvents } from '../../infrastructure/database/schema';
 import { AuditEventType } from '../../domain/shared/types';
+import type { Db } from '../../infrastructure/database/connection';
 
-export function createTaskRoutes(taskService: TaskService): Hono<HonoEnv> {
+export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
@@ -64,17 +64,14 @@ export function createTaskRoutes(taskService: TaskService): Hono<HonoEnv> {
 
     // record audit event for the status of this task change
     try {
-      const db = c.env.db;
-      if (db) {
-        await db.insert(auditEvents).values({
-          tenantId: c.get('tenantId'),
-          userId:   (c as any).get('userId') ?? null,
-          eventType: AuditEventType.TASK_UPDATED,
-          resourceType: 'task',
-          resourceId: String(id),
-          metadata: JSON.stringify(body),
-        });
-      }
+      await db.insert(auditEvents).values({
+        tenantId: c.get('tenantId'),
+        userId:   (c as any).get('userId') ?? null,
+        eventType: AuditEventType.TASK_UPDATED,
+        resourceType: 'task',
+        resourceId: String(id),
+        metadata: JSON.stringify(body),
+      });
     } catch {
       // ignore failures to avoid blocking the main flow
     }
@@ -97,17 +94,14 @@ export function createTaskRoutes(taskService: TaskService): Hono<HonoEnv> {
     if (task) {
       // record that the task was claimed
       try {
-        const db = c.env.db;
-        if (db) {
-          await db.insert(auditEvents).values({
-            tenantId: c.get('tenantId'),
-            userId: null,
-            eventType: AuditEventType.TASK_UPDATED,
-            resourceType: 'task',
-            resourceId: String(task.id),
-            metadata: JSON.stringify({ claimed: true, status: task.status }),
-          });
-        }
+        await db.insert(auditEvents).values({
+          tenantId: c.get('tenantId'),
+          userId: null,
+          eventType: AuditEventType.TASK_UPDATED,
+          resourceType: 'task',
+          resourceId: String(task.id),
+          metadata: JSON.stringify({ claimed: true, status: task.status }),
+        });
       } catch {
         // ignore errors
       }
