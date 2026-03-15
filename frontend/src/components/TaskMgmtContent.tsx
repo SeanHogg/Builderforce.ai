@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import {
   tasksApi,
   claws,
   runtimeApi,
+  isAwaitingApprovalExecution,
   type Task,
   type TaskStatus,
   type TaskPriority,
@@ -67,6 +69,7 @@ export function TaskMgmtContent({
   const [clawsList, setClawsList] = useState<Claw[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [approvalGate, setApprovalGate] = useState<{ approvalId: string; taskId: number; reason: string } | null>(null);
   const [view, setView] = useState<'board' | 'list'>('board');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterProject, setFilterProject] = useState<string>(projectId != null ? String(projectId) : '');
@@ -213,11 +216,22 @@ export function TaskMgmtContent({
     if (!t?.id) return;
     setSendingToClaw(true);
     setError(null);
+    setApprovalGate(null);
     try {
-      await runtimeApi.submitExecution({
+      const result = await runtimeApi.submitExecution({
         taskId: t.id,
         clawId: t.assignedClawId ?? undefined,
       });
+
+      if (isAwaitingApprovalExecution(result)) {
+        setApprovalGate({
+          approvalId: result.approvalId,
+          taskId: result.taskId,
+          reason: result.reason,
+        });
+        return;
+      }
+
       setError(null);
       await patchStatus(t.id, 'in_progress', { skipAutoSubmit: true });
     } catch (e) {
@@ -240,10 +254,18 @@ export function TaskMgmtContent({
       // Auto-send to claw when moving to To Do or In Progress (user expects execution to start)
       if (!opts?.skipAutoSubmit && (status === 'todo' || status === 'in_progress')) {
         try {
-          await runtimeApi.submitExecution({
+          const result = await runtimeApi.submitExecution({
             taskId: id,
             clawId: updated.assignedClawId ?? undefined,
           });
+
+          if (isAwaitingApprovalExecution(result)) {
+            setApprovalGate({
+              approvalId: result.approvalId,
+              taskId: result.taskId,
+              reason: result.reason,
+            });
+          }
         } catch {
           // Non-blocking: status was updated; execution may fail if no claw connected
         }
@@ -322,6 +344,40 @@ export function TaskMgmtContent({
           }}
         >
           {error}
+        </div>
+      )}
+
+      {approvalGate && (
+        <div
+          style={{
+            padding: '10px 14px',
+            borderRadius: 8,
+            background: 'var(--warning-bg)',
+            border: '1px solid var(--warning-border)',
+            color: 'var(--warning-text)',
+            fontSize: 13,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
+          <span>
+            {approvalGate.reason}
+            {' '}
+            (Task #{approvalGate.taskId}, approval {approvalGate.approvalId.slice(0, 8)}...)
+          </span>
+          <Link
+            href="/approvals"
+            style={{
+              fontWeight: 700,
+              color: 'var(--coral-bright)',
+              textDecoration: 'none',
+            }}
+          >
+            Open approvals
+          </Link>
         </div>
       )}
 

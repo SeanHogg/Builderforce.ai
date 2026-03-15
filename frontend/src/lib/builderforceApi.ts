@@ -489,6 +489,21 @@ export interface Execution {
   [key: string]: unknown;
 }
 
+export interface AwaitingApprovalExecution {
+  status: 'awaiting_approval';
+  approvalId: string;
+  taskId: number;
+  reason: string;
+}
+
+export type SubmitExecutionResponse = Execution | AwaitingApprovalExecution;
+
+export function isAwaitingApprovalExecution(
+  value: SubmitExecutionResponse
+): value is AwaitingApprovalExecution {
+  return value.status === 'awaiting_approval';
+}
+
 export const runtimeApi = {
   /** Submit a task for execution. Dispatches to assigned claw or all connected claws. */
   submitExecution: (body: {
@@ -496,8 +511,8 @@ export const runtimeApi = {
     clawId?: number | null;
     sessionId?: string;
     payload?: string;
-  }): Promise<Execution> =>
-    request<Execution>('/api/runtime/executions', {
+  }): Promise<SubmitExecutionResponse> =>
+    request<SubmitExecutionResponse>('/api/runtime/executions', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

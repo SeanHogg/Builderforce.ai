@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/react';
 import { TaskMgmtContent } from './TaskMgmtContent';
-import type { Task } from '@/lib/builderforceApi';
+import { tasksApi } from '@/lib/builderforceApi';
 
 // mock APIs used by component
 vi.mock('@/lib/builderforceApi', () => {
@@ -31,12 +31,11 @@ describe('TaskMgmtContent', () => {
 
   it('shows checkboxes and allows bulk status in list view', async () => {
     // mock tasks API to return two tasks
-    const tasksApi = require('@/lib/builderforceApi').tasksApi;
-    tasksApi.list.mockResolvedValueOnce([
+    vi.mocked(tasksApi.list).mockResolvedValueOnce([
       { id: 1, title: 'A', status: 'todo' },
       { id: 2, title: 'B', status: 'todo' },
-    ]);
-    const { getByText, getAllByRole } = render(<TaskMgmtContent projects={[]} />);
+    ] as any);
+    const { getByText, getAllByRole, getAllByText } = render(<TaskMgmtContent projects={[]} />);
     // switch to list view
     const listBtn = getByText(/list/i);
     fireEvent.click(listBtn);
@@ -49,7 +48,7 @@ describe('TaskMgmtContent', () => {
     const headerCb = getAllByRole('checkbox')[0];
     fireEvent.click(headerCb);
     // select first row status dropdown appears when clicking status cell
-    const statusSpan = getByText('To Do');
+    const statusSpan = getAllByText('To Do')[0];
     fireEvent.click(statusSpan);
     // should transform into select element
     await waitFor(() => {
