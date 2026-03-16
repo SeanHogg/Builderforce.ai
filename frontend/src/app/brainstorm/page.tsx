@@ -549,6 +549,20 @@ export default function BrainstormPage() {
                   <>
                     <span style={{ fontSize: 12, color: 'var(--muted)' }}>{projectName(activeChat.projectId)}</span>
                     <Link
+                      href={`/workflows?projectId=${activeChat.projectId}`}
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: 'var(--text-secondary)',
+                        textDecoration: 'none',
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        border: '1px solid var(--border-subtle)',
+                      }}
+                    >
+                      Workflows →
+                    </Link>
+                    <Link
                       href={`/ide/${activeChat.projectId}?chat=${activeChat.id}`}
                       style={{
                         fontSize: 12,

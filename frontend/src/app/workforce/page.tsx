@@ -6,6 +6,7 @@ import { claws, tenantDefaultClaw, type Claw, type ClawRegistration } from '@/li
 import { listAgents, hireAgent } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 import { ClawSlideOutPanel } from '@/components/ClawSlideOutPanel';
+import { FleetMeshContent } from '@/components/FleetMeshContent';
 import type { PublishedAgent } from '@/lib/types';
 
 function ClawCard({
@@ -237,6 +238,13 @@ export default function WorkforcePage() {
           defaultClawId={defaultClawId}
           onSetDefaultClaw={tenantId != null ? handleSetDefaultClaw : undefined}
         />
+      )}
+
+      {/* Fleet mesh visualization */}
+      {clawList.length > 1 && (
+        <section style={{ marginTop: 36 }}>
+          <FleetMeshContent claws={clawList} />
+        </section>
       )}
 
       {/* Marketplace / Hire agents section */}
