@@ -7,8 +7,32 @@ import { ObservabilityContent } from './ObservabilityContent';
 import { ClawDebugContent } from './ClawDebugContent';
 import { CronJobsContent } from './CronJobsContent';
 import { CapabilitiesContent } from './CapabilitiesContent';
+import { ClawChatContent } from './ClawChatContent';
+import { ClawSessionsContent } from './ClawSessionsContent';
+import { ClawUsageContent } from './ClawUsageContent';
+import { ClawWorkspaceContent } from './ClawWorkspaceContent';
+import { ClawProjectsContent } from './ClawProjectsContent';
+import { ClawChannelsContent } from './ClawChannelsContent';
+import { ClawSkillsContent } from './ClawSkillsContent';
+import { ClawConfigContent } from './ClawConfigContent';
+import { ClawNodesContent } from './ClawNodesContent';
 
-export type ClawPanelTab = 'details' | 'config' | 'cron' | 'capabilities' | 'prds' | 'observability' | 'debug';
+export type ClawPanelTab =
+  | 'details'
+  | 'chat'
+  | 'sessions'
+  | 'usage'
+  | 'workspace'
+  | 'projects'
+  | 'config'
+  | 'cron'
+  | 'channels'
+  | 'skills'
+  | 'capabilities'
+  | 'prds'
+  | 'observability'
+  | 'debug'
+  | 'nodes';
 
 export interface ClawSlideOutPanelProps {
   claw: Claw;
@@ -24,10 +48,18 @@ export interface ClawSlideOutPanelProps {
 
 const TABS: { id: ClawPanelTab; label: string }[] = [
   { id: 'details', label: 'Details' },
+  { id: 'chat', label: 'Chat' },
+  { id: 'sessions', label: 'Sessions' },
+  { id: 'usage', label: 'Usage' },
+  { id: 'workspace', label: 'Workspace' },
+  { id: 'projects', label: 'Projects' },
   { id: 'config', label: 'Config' },
   { id: 'cron', label: 'Cron' },
+  { id: 'channels', label: 'Channels' },
+  { id: 'skills', label: 'Skills' },
   { id: 'capabilities', label: 'Capabilities' },
   { id: 'prds', label: 'PRDs' },
+  { id: 'nodes', label: 'Nodes' },
   { id: 'observability', label: 'Observability' },
   { id: 'debug', label: 'Debug' },
 ];
@@ -43,7 +75,7 @@ const panelDrawerStyle: React.CSSProperties = {
   top: 0,
   right: 0,
   bottom: 0,
-  width: 'min(560px, 96vw)',
+  width: 'min(620px, 96vw)',
   maxWidth: '100%',
   borderLeft: '1px solid var(--border-subtle)',
   boxShadow: '-8px 0 24px rgba(0,0,0,0.2)',
@@ -112,6 +144,12 @@ export function ClawSlideOutPanel({
       : statusLabel === 'suspended'
         ? 'var(--surface-danger-soft, rgba(239,68,68,0.15))'
         : 'var(--bg-elevated)';
+
+  // Chat tab needs full height; other tabs scroll naturally
+  const bodyStyle: React.CSSProperties =
+    activeTab === 'chat'
+      ? { flex: 1, overflow: 'hidden', padding: 20, display: 'flex', flexDirection: 'column', minHeight: 0 }
+      : { flex: 1, overflow: 'auto', padding: 20 };
 
   return (
     <>
@@ -272,53 +310,66 @@ export function ClawSlideOutPanel({
         </div>
 
         {/* Body */}
-        <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
+        <div style={bodyStyle}>
           {activeTab === 'details' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={cardStyle}>
                 <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>Overview</div>
                 <div style={{ display: 'grid', gap: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Name</span>
-                    <span>{claw.name}</span>
-                  </div>
-                  {slug && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                      <span style={{ color: 'var(--text-muted)' }}>Slug</span>
-                      <span style={{ fontFamily: 'var(--font-mono)' }}>{slug}</span>
+                  {[
+                    { label: 'Name', value: claw.name },
+                    { label: 'Slug', value: slug, mono: true },
+                    { label: 'Status', value: statusLabel },
+                    { label: 'Last seen', value: claw.lastSeenAt ? new Date(claw.lastSeenAt).toLocaleString() : '—' },
+                    { label: 'Connected at', value: claw.connectedAt ? new Date(claw.connectedAt).toLocaleString() : '—' },
+                    { label: 'Created', value: claw.createdAt ? new Date(claw.createdAt).toLocaleString() : '—' },
+                  ].filter(r => r.value).map(({ label, value, mono }) => (
+                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>{label}</span>
+                      <span style={mono ? { fontFamily: 'var(--font-mono)' } : {}}>{value}</span>
                     </div>
-                  )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Status</span>
-                    <span>{statusLabel}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Last seen</span>
-                    <span>{claw.lastSeenAt ? new Date(claw.lastSeenAt).toLocaleString() : '—'}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Connected at</span>
-                    <span>{claw.connectedAt ? new Date(claw.connectedAt).toLocaleString() : '—'}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Created</span>
-                    <span>{claw.createdAt ? new Date(claw.createdAt).toLocaleString() : '—'}</span>
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
           )}
-          {activeTab === 'config' && (
-            <div style={cardStyle}>
-              <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Config</div>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Claw-specific configuration (e.g. env, capabilities) can be managed from the CoderClaw instance or via API.
-              </p>
-            </div>
+
+          {activeTab === 'chat' && (
+            <ClawChatContent clawId={claw.id} clawName={claw.name} />
           )}
+
+          {activeTab === 'sessions' && (
+            <ClawSessionsContent clawId={claw.id} />
+          )}
+
+          {activeTab === 'usage' && (
+            <ClawUsageContent clawId={claw.id} />
+          )}
+
+          {activeTab === 'workspace' && (
+            <ClawWorkspaceContent clawId={claw.id} />
+          )}
+
+          {activeTab === 'projects' && (
+            <ClawProjectsContent clawId={claw.id} />
+          )}
+
+          {activeTab === 'config' && (
+            <ClawConfigContent clawId={claw.id} />
+          )}
+
           {activeTab === 'cron' && (
             <CronJobsContent clawId={claw.id} />
           )}
+
+          {activeTab === 'channels' && (
+            <ClawChannelsContent clawId={claw.id} />
+          )}
+
+          {activeTab === 'skills' && (
+            <ClawSkillsContent clawId={claw.id} tenantId={tenantId} />
+          )}
+
           {activeTab === 'capabilities' && (
             <CapabilitiesContent
               scope="claw"
@@ -326,6 +377,7 @@ export function ClawSlideOutPanel({
               tenantId={tenantId != null ? String(tenantId) : undefined}
             />
           )}
+
           {activeTab === 'prds' && (
             <div style={cardStyle}>
               <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>PRDs</div>
@@ -366,6 +418,11 @@ export function ClawSlideOutPanel({
               </div>
             </div>
           )}
+
+          {activeTab === 'nodes' && (
+            <ClawNodesContent clawId={claw.id} />
+          )}
+
           {activeTab === 'observability' && (
             <ObservabilityContent
               clawId={claw.id}
@@ -373,6 +430,7 @@ export function ClawSlideOutPanel({
               style={{ padding: 0 }}
             />
           )}
+
           {activeTab === 'debug' && (
             <ClawDebugContent
               clawId={claw.id}

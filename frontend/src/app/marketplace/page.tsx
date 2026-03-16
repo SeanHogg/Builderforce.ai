@@ -7,7 +7,11 @@ import {
   artifactAssignments,
   marketplaceStats,
   listMarketplaceSkills,
+  marketplacePublisherApi,
+  getMarketplaceToken,
+  setMarketplaceToken,
   type ArtifactStats,
+  type MarketplaceUser,
 } from '@/lib/builderforceApi';
 import {
   BUILTIN_PERSONAS,
@@ -21,7 +25,7 @@ import { listAgents, hireAgent } from '@/lib/api';
 import type { PublishedAgent } from '@/lib/types';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
 
-type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'content' | 'workforce';
+type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'content' | 'workforce' | 'publish';
 
 interface ContentBlock {
   id: string;
@@ -160,6 +164,68 @@ export default function MarketplacePage() {
   const [agents, setAgents] = useState<PublishedAgent[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
   const [hiringId, setHiringId] = useState<string | null>(null);
+
+  // Publisher auth state
+  const [mpUser, setMpUser] = useState<MarketplaceUser | null>(null);
+  const [mpAuthMode, setMpAuthMode] = useState<'login' | 'register'>('login');
+  const [mpEmail, setMpEmail] = useState('');
+  const [mpPassword, setMpPassword] = useState('');
+  const [mpUsername, setMpUsername] = useState('');
+  const [mpAuthError, setMpAuthError] = useState<string | null>(null);
+  const [mpAuthLoading, setMpAuthLoading] = useState(false);
+  // Publish skill form
+  const [skillForm, setSkillForm] = useState({ name: '', slug: '', description: '', category: '', version: '1.0.0', repoUrl: '' });
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishSuccess, setPublishSuccess] = useState(false);
+
+  // Check for persisted marketplace token on mount
+  useEffect(() => {
+    const token = getMarketplaceToken();
+    if (!token) return;
+    marketplacePublisherApi.me().then(({ user }) => setMpUser(user)).catch(() => setMarketplaceToken(null));
+  }, []);
+
+  const handleMpAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMpAuthLoading(true);
+    setMpAuthError(null);
+    try {
+      const result = mpAuthMode === 'register'
+        ? await marketplacePublisherApi.register({ email: mpEmail, password: mpPassword, username: mpUsername || undefined })
+        : await marketplacePublisherApi.login({ email: mpEmail, password: mpPassword });
+      setMarketplaceToken(result.token);
+      setMpUser(result.user);
+    } catch (e) {
+      setMpAuthError(e instanceof Error ? e.message : 'Auth failed');
+    } finally {
+      setMpAuthLoading(false);
+    }
+  };
+
+  const handlePublishSkill = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!skillForm.name.trim() || !skillForm.slug.trim()) return;
+    setPublishing(true);
+    setPublishError(null);
+    setPublishSuccess(false);
+    try {
+      await marketplacePublisherApi.publishSkill({
+        name: skillForm.name.trim(),
+        slug: skillForm.slug.trim().toLowerCase().replace(/\s+/g, '-'),
+        description: skillForm.description.trim() || undefined,
+        category: skillForm.category.trim() || undefined,
+        version: skillForm.version.trim() || '1.0.0',
+        repoUrl: skillForm.repoUrl.trim() || undefined,
+      });
+      setPublishSuccess(true);
+      setSkillForm({ name: '', slug: '', description: '', category: '', version: '1.0.0', repoUrl: '' });
+    } catch (e) {
+      setPublishError(e instanceof Error ? e.message : 'Publish failed');
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   const key = (type: MarketplaceListing['type'], slug: string) => `${type}:${slug}`;
 
@@ -317,9 +383,10 @@ export default function MarketplacePage() {
     { id: 'skills', label: 'Skills' },
     { id: 'content', label: 'Content' },
     { id: 'workforce', label: 'Workforce Agents' },
+    { id: 'publish', label: mpUser ? `Publish (${mpUser.username})` : 'Publish' },
   ];
 
-  const loadingPage = loading || (category === 'workforce' && loadingAgents);
+  const loadingPage = category !== 'publish' && (loading || (category === 'workforce' && loadingAgents));
   if (loadingPage) {
     return (
       <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
@@ -401,7 +468,134 @@ export default function MarketplacePage() {
         </div>
       </div>
 
-      {category === 'workforce' ? (
+      {category === 'publish' ? (
+        <div style={{ maxWidth: 560, margin: '0 auto' }}>
+          {!mpUser ? (
+            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: 24 }}>
+              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Publisher Account</div>
+              <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>
+                Create a free publisher account to share skills with the community. This is separate from your workspace login.
+              </p>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+                {(['login', 'register'] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={mpAuthMode === m ? 'btn btn-primary' : 'btn btn-secondary'}
+                    onClick={() => { setMpAuthMode(m); setMpAuthError(null); }}
+                    style={{ textTransform: 'capitalize' }}
+                  >
+                    {m === 'login' ? 'Sign In' : 'Register'}
+                  </button>
+                ))}
+              </div>
+              <form onSubmit={handleMpAuth} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {mpAuthMode === 'register' && (
+                  <input
+                    type="text"
+                    placeholder="Username (optional)"
+                    value={mpUsername}
+                    onChange={(e) => setMpUsername(e.target.value)}
+                    style={{ padding: '8px 12px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)' }}
+                  />
+                )}
+                <input
+                  type="email"
+                  required
+                  placeholder="Email"
+                  value={mpEmail}
+                  onChange={(e) => setMpEmail(e.target.value)}
+                  style={{ padding: '8px 12px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)' }}
+                />
+                <input
+                  type="password"
+                  required
+                  placeholder="Password"
+                  value={mpPassword}
+                  onChange={(e) => setMpPassword(e.target.value)}
+                  style={{ padding: '8px 12px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)' }}
+                />
+                {mpAuthError && <div style={{ fontSize: 12, color: 'var(--error-text)' }}>{mpAuthError}</div>}
+                <button type="submit" disabled={mpAuthLoading} className="btn btn-primary">
+                  {mpAuthLoading ? '…' : mpAuthMode === 'login' ? 'Sign In' : 'Create Account'}
+                </button>
+              </form>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>Signed in as <strong>{mpUser.username}</strong></div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>{mpUser.email}</div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => { setMarketplaceToken(null); setMpUser(null); }}
+                >
+                  Sign out
+                </button>
+              </div>
+              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: 24 }}>
+                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Publish a Skill</div>
+                {publishSuccess && (
+                  <div style={{ marginBottom: 12, padding: '10px 14px', fontSize: 13, color: 'var(--success, #22c55e)', background: 'rgba(34,197,94,0.08)', borderRadius: 8, border: '1px solid rgba(34,197,94,0.2)' }}>
+                    Skill published! It will appear in the marketplace after review.
+                  </div>
+                )}
+                <form onSubmit={handlePublishSkill} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Name *</label>
+                      <input required type="text" placeholder="My Skill" value={skillForm.name}
+                        onChange={(e) => setSkillForm((f) => ({ ...f, name: e.target.value, slug: f.slug || e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') }))}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Slug * (unique ID)</label>
+                      <input required type="text" placeholder="my-skill" value={skillForm.slug}
+                        onChange={(e) => setSkillForm((f) => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', fontFamily: 'var(--font-mono)', boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Description</label>
+                    <textarea rows={3} placeholder="What does this skill do?" value={skillForm.description}
+                      onChange={(e) => setSkillForm((f) => ({ ...f, description: e.target.value }))}
+                      style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Category</label>
+                      <input type="text" placeholder="coding" value={skillForm.category}
+                        onChange={(e) => setSkillForm((f) => ({ ...f, category: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Version</label>
+                      <input type="text" value={skillForm.version}
+                        onChange={(e) => setSkillForm((f) => ({ ...f, version: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Repo URL</label>
+                      <input type="url" placeholder="https://github.com/…" value={skillForm.repoUrl}
+                        onChange={(e) => setSkillForm((f) => ({ ...f, repoUrl: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+                  {publishError && <div style={{ fontSize: 12, color: 'var(--error-text)' }}>{publishError}</div>}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button type="submit" disabled={publishing || !skillForm.name.trim() || !skillForm.slug.trim()} className="btn btn-primary">
+                      {publishing ? 'Publishing…' : 'Publish Skill'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : category === 'workforce' ? (
         filteredAgents.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--muted)' }}>
             {agents.length === 0

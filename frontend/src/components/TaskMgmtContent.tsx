@@ -15,7 +15,7 @@ import {
 import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
 
-const BOARD_STATUSES: TaskStatus[] = ['backlog', 'todo', 'ready', 'in_progress', 'in_review', 'done'];
+const BOARD_STATUSES: TaskStatus[] = ['backlog', 'todo', 'ready', 'in_progress', 'in_review', 'blocked', 'done'];
 const STATUS_LABELS: Record<TaskStatus, string> = {
   backlog: 'Backlog',
   todo: 'To Do',
@@ -631,6 +631,17 @@ export function TaskMgmtContent({
                         {task.assignedClawId && (
                           <span>{clawNameById(task.assignedClawId)}</span>
                         )}
+                        {task.githubPrUrl && (
+                          <a
+                            href={task.githubPrUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ color: 'var(--text-muted)', textDecoration: 'none', fontWeight: 600 }}
+                          >
+                            PR#{task.githubPrNumber ?? '—'}
+                          </a>
+                        )}
                         {task.dueDate && (
                           <span style={{ marginLeft: 'auto' }}>{formatDate(task.dueDate)}</span>
                         )}
@@ -1055,6 +1066,27 @@ export function TaskMgmtContent({
                   />
                 </div>
               </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
+                  GitHub PR URL (optional)
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://github.com/org/repo/pull/123"
+                  value={(form as Record<string, unknown>).githubPrUrl as string ?? ''}
+                  onChange={(e) => setForm((f) => ({ ...f, githubPrUrl: e.target.value || null } as typeof f))}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    fontSize: 13,
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 8,
+                    background: 'var(--bg-deep)',
+                    color: 'var(--text-primary)',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
                 <button type="button" style={buttonTertiary} onClick={() => setShowModal(false)}>
                   Cancel
@@ -1172,7 +1204,7 @@ export function TaskMgmtContent({
                     ['Assignee', clawNameById(drawerTask.assignedClawId)],
                     ['Due date', formatDate(drawerTask.dueDate) || 'None'],
                     ['Created', formatDate(drawerTask.createdAt)],
-                  ].map(([label, val]) => (
+                  ].filter(([, v]) => !!v).map(([label, val]) => (
                     <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
                       <span style={{ color: 'var(--text-muted)' }}>{label}</span>
                       <span style={{ color: 'var(--text-primary)' }}>{val}</span>
@@ -1180,6 +1212,25 @@ export function TaskMgmtContent({
                   ))}
                 </div>
               </div>
+              {drawerTask.githubPrUrl && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>GitHub PR</div>
+                  <a
+                    href={drawerTask.githubPrUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      fontSize: 13,
+                      color: 'var(--coral-bright, #f4726e)',
+                      textDecoration: 'none',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    {drawerTask.githubPrUrl}
+                    {drawerTask.githubPrNumber ? ` (#${drawerTask.githubPrNumber})` : ''}
+                  </a>
+                </div>
+              )}
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>Move to</div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>

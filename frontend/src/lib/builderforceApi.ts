@@ -665,3 +665,411 @@ export async function listTasks(projectId?: number): Promise<TaskSummary[]> {
     status: t.status,
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Chat Sessions (claw chat history)
+// ---------------------------------------------------------------------------
+
+export interface ChatSession {
+  id: string;
+  clawId: number;
+  sessionKey: string;
+  projectId: number | null;
+  startedAt: string;
+  endedAt: string | null;
+  msgCount: number;
+}
+
+export interface ChatMessage {
+  id: number;
+  sessionId: string;
+  role: string;
+  content: string;
+  metadata: string | null;
+  seq: number;
+  createdAt: string;
+}
+
+export const chatSessionsApi = {
+  list: (clawId: number): Promise<ChatSession[]> => {
+    return request<{ sessions: ChatSession[] }>(`/api/chats?clawId=${clawId}`).then((r) => r.sessions ?? []);
+  },
+
+  getMessages: (sessionId: string, limit = 100): Promise<ChatMessage[]> => {
+    return request<{ messages: ChatMessage[] }>(`/api/chats/${sessionId}/messages?limit=${limit}`).then(
+      (r) => r.messages ?? []
+    );
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Usage Snapshots (token telemetry from claws)
+// ---------------------------------------------------------------------------
+
+export interface UsageSnapshot {
+  id: number;
+  clawId: number;
+  sessionKey: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  contextTokens: number;
+  contextWindowMax: number | null;
+  compactionCount: number;
+  ts: string;
+}
+
+export const usageApi = {
+  list: (clawId: number, limit = 50): Promise<UsageSnapshot[]> =>
+    request<{ snapshots: UsageSnapshot[] }>(`/api/claws/${clawId}/usage?limit=${limit}`).then(
+      (r) => r.snapshots ?? []
+    ),
+};
+
+// ---------------------------------------------------------------------------
+// Claw Workspace (synced directories + files)
+// ---------------------------------------------------------------------------
+
+export interface ClawDirectory {
+  id: number;
+  clawId: number;
+  projectId: number | null;
+  absPath: string;
+  pathHash: string;
+  status: 'pending' | 'synced' | 'error';
+  lastSyncedAt: string | null;
+  fileCount?: number;
+}
+
+export interface ClawDirectoryFile {
+  id: number;
+  directoryId: number;
+  relPath: string;
+  contentHash: string;
+  sizeBytes: number;
+  updatedAt: string;
+}
+
+export const workspaceApi = {
+  listDirectories: (clawId: number): Promise<ClawDirectory[]> =>
+    request<{ directories: ClawDirectory[] }>(`/api/claws/${clawId}/directories`).then(
+      (r) => r.directories ?? []
+    ),
+
+  listFiles: (clawId: number, directoryId: number): Promise<ClawDirectoryFile[]> =>
+    request<{ files: ClawDirectoryFile[] }>(
+      `/api/claws/${clawId}/directories/${directoryId}/files`
+    ).then((r) => r.files ?? []),
+
+  getFileContent: (clawId: number, directoryId: number, fileId: number): Promise<{ content: string }> =>
+    request<{ content: string }>(`/api/claws/${clawId}/directories/${directoryId}/files/${fileId}/content`),
+
+  triggerSync: (clawId: number, directoryId: number): Promise<void> =>
+    request<void>(`/api/claws/${clawId}/directories/${directoryId}/sync`, { method: 'POST' }),
+};
+
+// ---------------------------------------------------------------------------
+// Claw Projects (project ↔ claw associations)
+// ---------------------------------------------------------------------------
+
+export interface ClawProject {
+  clawId: number;
+  projectId: number;
+  role: string | null;
+  project?: {
+    id: number;
+    name: string;
+    description: string | null;
+    status: string;
+  };
+}
+
+export const clawProjectsApi = {
+  list: (clawId: number): Promise<ClawProject[]> =>
+    request<{ projects: ClawProject[] }>(`/api/claws/${clawId}/projects`).then((r) => r.projects ?? []),
+
+  assign: (clawId: number, projectId: number, role?: string): Promise<void> =>
+    request<void>(`/api/claws/${clawId}/projects/${projectId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ role }),
+    }),
+
+  unassign: (clawId: number, projectId: number): Promise<void> =>
+    request<void>(`/api/claws/${clawId}/projects/${projectId}`, { method: 'DELETE' }),
+};
+
+// ---------------------------------------------------------------------------
+// Claw Channels (multi-channel messaging integrations)
+// ---------------------------------------------------------------------------
+
+export type ChannelPlatform =
+  | 'whatsapp'
+  | 'telegram'
+  | 'slack'
+  | 'discord'
+  | 'google_chat'
+  | 'signal'
+  | 'teams'
+  | 'webhook';
+
+export interface ClawChannel {
+  id: string;
+  clawId: number;
+  platform: ChannelPlatform;
+  name: string;
+  config: string | null; // JSON config (webhook URL, token, etc.)
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const channelsApi = {
+  list: (clawId: number): Promise<ClawChannel[]> =>
+    request<{ channels: ClawChannel[] }>(`/api/claws/${clawId}/channels`).then((r) => r.channels ?? []),
+
+  create: (
+    clawId: number,
+    body: { platform: ChannelPlatform; name: string; config?: string; enabled?: boolean }
+  ): Promise<ClawChannel> =>
+    request<ClawChannel>(`/api/claws/${clawId}/channels`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  update: (
+    clawId: number,
+    channelId: string,
+    body: Partial<{ name: string; config: string; enabled: boolean }>
+  ): Promise<ClawChannel> =>
+    request<ClawChannel>(`/api/claws/${clawId}/channels/${channelId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  delete: (clawId: number, channelId: string): Promise<void> =>
+    request<void>(`/api/claws/${clawId}/channels/${channelId}`, { method: 'DELETE' }),
+};
+
+// ---------------------------------------------------------------------------
+// Claw Skills (tenant + claw-scoped skill assignments)
+// ---------------------------------------------------------------------------
+
+export interface ClawSkillAssignment {
+  id: number;
+  clawId: number | null;
+  tenantId: number;
+  skillSlug: string;
+  scope: 'tenant' | 'claw';
+  assignedBy: string | null;
+  assignedAt: string;
+  skill?: {
+    name: string;
+    description: string | null;
+    category: string | null;
+    version: string | null;
+    icon_url: string | null;
+  };
+}
+
+export const clawSkillsApi = {
+  list: (clawId: number): Promise<ClawSkillAssignment[]> => {
+    const q = new URLSearchParams({ clawId: String(clawId) });
+    return request<{ assignments: ClawSkillAssignment[] }>(`/api/skill-assignments?${q}`).then(
+      (r) => r.assignments ?? []
+    );
+  },
+
+  assignToClaw: (clawId: number, skillSlug: string): Promise<void> =>
+    request<void>(`/api/skill-assignments/claw/${clawId}`, {
+      method: 'POST',
+      body: JSON.stringify({ skillSlug }),
+    }),
+
+  revoke: (assignmentId: number): Promise<void> =>
+    request<void>(`/api/skill-assignments/${assignmentId}`, { method: 'DELETE' }),
+};
+
+// ---------------------------------------------------------------------------
+// LLM Proxy: usage + health (GAP-04)
+// ---------------------------------------------------------------------------
+
+export interface LlmUsageStats {
+  totalRequests: number;
+  totalTokens: number;
+  promptTokens: number;
+  completionTokens: number;
+  byModel: Array<{ model: string; requests: number; tokens: number }>;
+  period: string;
+}
+
+export const llmApi = {
+  usage: (): Promise<LlmUsageStats> =>
+    request<LlmUsageStats>('/llm/v1/usage'),
+
+  health: (): Promise<{ status: string; free: unknown[]; pro: unknown[]; timestamp: string }> =>
+    request<{ status: string; free: unknown[]; pro: unknown[]; timestamp: string }>('/llm/v1/health'),
+
+  models: (): Promise<{ data: Array<{ id: string; object: string }> }> =>
+    request<{ data: Array<{ id: string; object: string }> }>('/llm/v1/models'),
+};
+
+// ---------------------------------------------------------------------------
+// Dispatch (send command to claw via relay)
+// ---------------------------------------------------------------------------
+
+export const dispatchApi = {
+  send: (clawId: number, payload: unknown): Promise<{ ok: boolean }> =>
+    request<{ ok: boolean }>(`/api/claws/${clawId}/dispatch`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+};
+
+// ---------------------------------------------------------------------------
+// Claw Config (runtime configuration JSON)
+// ---------------------------------------------------------------------------
+
+export const clawConfigApi = {
+  get: (clawId: number): Promise<{ config: Record<string, unknown> | null }> =>
+    request<{ config: Record<string, unknown> | null }>(`/api/claws/${clawId}/config`),
+
+  update: (clawId: number, config: Record<string, unknown>): Promise<{ config: Record<string, unknown> }> =>
+    request<{ config: Record<string, unknown> }>(`/api/claws/${clawId}/config`, {
+      method: 'PUT',
+      body: JSON.stringify({ config }),
+    }),
+};
+
+// ---------------------------------------------------------------------------
+// Audit Events
+// ---------------------------------------------------------------------------
+
+export interface AuditEvent {
+  id: number;
+  tenantId: number;
+  userId: string | null;
+  eventType: string;
+  resourceType: string | null;
+  resourceId: string | null;
+  metadata: string | null;
+  createdAt: string;
+}
+
+export const auditApi = {
+  list: (params?: { limit?: number; offset?: number; eventType?: string; resourceType?: string }): Promise<AuditEvent[]> => {
+    const q = new URLSearchParams();
+    if (params?.limit != null) q.set('limit', String(params.limit));
+    if (params?.offset != null) q.set('offset', String(params.offset));
+    if (params?.eventType) q.set('eventType', params.eventType);
+    if (params?.resourceType) q.set('resourceType', params.resourceType);
+    const query = q.toString();
+    return request<{ events: AuditEvent[] }>(`/api/audit/events${query ? `?${query}` : ''}`).then(
+      (r) => r.events ?? []
+    );
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Marketplace publisher auth (separate from tenant JWT — tid: 0 publisher identity)
+// ---------------------------------------------------------------------------
+
+const MP_TOKEN_KEY = 'bf_marketplace_token';
+
+export function getMarketplaceToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(MP_TOKEN_KEY);
+}
+
+export function setMarketplaceToken(token: string | null): void {
+  if (typeof window === 'undefined') return;
+  if (token) localStorage.setItem(MP_TOKEN_KEY, token);
+  else localStorage.removeItem(MP_TOKEN_KEY);
+}
+
+function mpHeaders(): Record<string, string> {
+  const token = getMarketplaceToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function mpRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${AUTH_API_URL}${path}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...mpHeaders(), ...(init?.headers as Record<string, string> ?? {}) },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? res.statusText ?? 'Request failed');
+  }
+  return res.json() as Promise<T>;
+}
+
+export interface MarketplaceUser {
+  id: string;
+  email: string;
+  username: string;
+  displayName?: string;
+  avatarUrl?: string;
+}
+
+export interface MarketplaceSkillDraft {
+  name: string;
+  slug: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+  version?: string;
+  repoUrl?: string;
+  iconUrl?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Claw nodes (cluster node management)
+// ---------------------------------------------------------------------------
+
+export interface ClawNode {
+  id: string;
+  name: string;
+  capabilities: string[];
+  connectedAt: string | null;
+  lastSeenAt: string | null;
+  status: 'connected' | 'disconnected';
+}
+
+export const clawNodesApi = {
+  list: (clawId: number): Promise<ClawNode[]> =>
+    request<ClawNode[]>(`/api/claws/${clawId}/nodes`),
+
+  unpair: (clawId: number, nodeId: string): Promise<void> =>
+    request<void>(`/api/claws/${clawId}/nodes/${nodeId}`, { method: 'DELETE' }),
+};
+
+export const marketplacePublisherApi = {
+  register: (body: { email: string; password: string; username?: string; display_name?: string }) =>
+    mpRequest<{ token: string; user: MarketplaceUser }>('/marketplace/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  login: (body: { email: string; password: string }) =>
+    mpRequest<{ token: string; user: MarketplaceUser }>('/marketplace/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  me: () => mpRequest<{ user: MarketplaceUser }>('/marketplace/auth/me'),
+
+  publishSkill: (skill: MarketplaceSkillDraft) =>
+    mpRequest<{ skill: MarketplaceSkill }>('/marketplace/skills', {
+      method: 'POST',
+      body: JSON.stringify(skill),
+    }),
+
+  updateSkill: (slug: string, updates: Partial<MarketplaceSkillDraft>) =>
+    mpRequest<{ skill: MarketplaceSkill }>(`/marketplace/skills/${slug}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    }),
+
+  likeSkill: (slug: string) =>
+    mpRequest<{ liked: boolean; likes: number }>(`/marketplace/skills/${slug}/like`, { method: 'POST' }),
+};
+

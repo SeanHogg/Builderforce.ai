@@ -11,7 +11,7 @@ import { ProjectCard } from '@/components/ProjectCard';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ClawSlideOutPanel } from '@/components/ClawSlideOutPanel';
-import { claws, tasksApi, runtimeApi, approvalsApi, isAwaitingApprovalExecution, type Claw } from '@/lib/builderforceApi';
+import { claws, tasksApi, runtimeApi, approvalsApi, isAwaitingApprovalExecution, type Claw, type Task } from '@/lib/builderforceApi';
 
 /**
  * Dashboard (home) — CoderClawLink-style: "What should we build?" chat input,
@@ -32,6 +32,7 @@ export default function DashboardPage() {
   const [sendingToClaw, setSendingToClaw] = useState(false);
   const [promptError, setPromptError] = useState<string | null>(null);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+  const [taskStats, setTaskStats] = useState<{ total: number; inProgress: number; done: number } | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -47,11 +48,19 @@ export default function DashboardPage() {
       fetchProjects().catch(() => [] as Project[]),
       claws.list().catch(() => [] as Claw[]),
       approvalsApi.list({ status: 'pending' }).catch(() => []),
+      tasksApi.list().catch(() => [] as Task[]),
     ])
-      .then(([projs, clawsData, approvalsData]) => {
+      .then(([projs, clawsData, approvalsData, tasksData]) => {
         setProjects(Array.isArray(projs) ? projs : []);
         setClawList(Array.isArray(clawsData) ? clawsData : []);
         setPendingApprovalsCount(Array.isArray(approvalsData) ? approvalsData.length : 0);
+        if (Array.isArray(tasksData)) {
+          setTaskStats({
+            total: tasksData.length,
+            inProgress: tasksData.filter((t) => t.status === 'in_progress').length,
+            done: tasksData.filter((t) => t.status === 'done').length,
+          });
+        }
       })
       .finally(() => setLoading(false));
   }, [isAuthenticated, hasTenant]);
@@ -148,6 +157,75 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+
+        {/* Stats strip */}
+        {!loading && (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: 12,
+              marginBottom: 32,
+            }}
+          >
+            {[
+              {
+                label: 'Projects',
+                value: projects.length,
+                sub: `${projects.filter((p) => (p as { status?: string }).status === 'active').length} active`,
+                href: '/projects',
+                color: 'var(--coral-bright, #f4726e)',
+              },
+              {
+                label: 'Tasks',
+                value: taskStats?.total ?? '—',
+                sub: taskStats ? `${taskStats.inProgress} in progress` : '',
+                href: '/tasks',
+                color: 'var(--cyan-bright, #00e5cc)',
+              },
+              {
+                label: 'Agents online',
+                value: connectedClaws.length,
+                sub: `${clawList.length} registered`,
+                href: '/workforce',
+                color: connectedClaws.length > 0 ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)',
+              },
+              {
+                label: 'Pending approvals',
+                value: pendingApprovalsCount,
+                sub: pendingApprovalsCount > 0 ? 'requires review' : 'all clear',
+                href: '/approvals',
+                color: pendingApprovalsCount > 0 ? 'rgba(245,158,11,0.9)' : 'var(--text-muted)',
+              },
+            ].map(({ label, value, sub, href, color }) => (
+              <Link
+                key={label}
+                href={href}
+                style={{
+                  background: 'var(--bg-base, #0a0f1a)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 12,
+                  padding: '14px 16px',
+                  textDecoration: 'none',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                  transition: 'border-color 0.15s',
+                }}
+              >
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  {label}
+                </div>
+                <div style={{ fontSize: 28, fontWeight: 700, color, lineHeight: 1.1 }}>
+                  {value}
+                </div>
+                {sub && (
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{sub}</div>
+                )}
+              </Link>
+            ))}
+          </div>
+        )}
 
         {/* Projects section (preview) */}
         <section style={{ marginBottom: 40 }}>
