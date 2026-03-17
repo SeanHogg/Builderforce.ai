@@ -58,6 +58,16 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
 }
 
 // ---------------------------------------------------------------------------
+// Projects — key availability check
+// ---------------------------------------------------------------------------
+
+export async function checkProjectKeyAvailable(key: string, excludeProjectId?: number): Promise<{ available: boolean; key: string }> {
+  const params = new URLSearchParams({ key: key.trim().toUpperCase() });
+  if (excludeProjectId != null) params.set('excludeId', String(excludeProjectId));
+  return request<{ available: boolean; key: string }>(`/api/projects/check-key?${params}`);
+}
+
+// ---------------------------------------------------------------------------
 // Brain (Brain Storm)
 // ---------------------------------------------------------------------------
 

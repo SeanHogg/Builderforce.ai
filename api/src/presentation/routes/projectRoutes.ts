@@ -371,18 +371,27 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     });
   });
 
-  // GET /api/projects/:id
+  // GET /api/projects/check-key?key=SOMEKEY[&excludeId=123] — returns { available: boolean }
+  router.get('/check-key', async (c) => {
+    const key = (c.req.query('key') ?? '').trim().toUpperCase();
+    const excludeId = c.req.query('excludeId') ? Number(c.req.query('excludeId')) : null;
+    if (!key) return c.json({ available: false, error: 'key is required' }, 400);
+    const existing = await projectService.findByKey(key);
+    const available = !existing || (excludeId !== null && existing.id === excludeId);
+    return c.json({ available, key });
+  });
+
+  // GET /api/projects/:id (accepts integer id or public UUID)
   router.get('/:id', async (c) => {
-    const id = Number(c.req.param('id'));
-    const project = await projectService.getProject(id, c.get('tenantId'));
+    const project = await projectService.getProject(c.req.param('id'), c.get('tenantId'));
     return c.json(project.toPlain());
   });
 
   // GET /api/projects/:id/chats — list all chats for this project (any origin: ide, brainstorm assigned here, etc.)
   router.get('/:id/chats', async (c) => {
-    const projectId = Number(c.req.param('id'));
     const tenantId = c.get('tenantId');
-    await projectService.getProject(projectId, tenantId);
+    const project = await projectService.getProject(c.req.param('id'), tenantId);
+    const projectId = project.id;
     const list = await db
       .select({
         id: ideProjectChats.id,
@@ -399,9 +408,9 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
 
   // POST /api/projects/:id/chats — create a new chat in this project (origin=ide)
   router.post('/:id/chats', async (c) => {
-    const projectId = Number(c.req.param('id'));
     const tenantId = c.get('tenantId');
-    await projectService.getProject(projectId, tenantId);
+    const project = await projectService.getProject(c.req.param('id'), tenantId);
+    const projectId = project.id;
     const body = await c.req.json<{ title?: string }>().catch((): { title?: string } => ({}));
     const title = (body.title ?? 'New chat').trim().slice(0, 500) || 'New chat';
     const [chat] = await db
@@ -424,10 +433,10 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
 
   // GET /api/projects/:id/chats/:chatId — get one chat with messages (origin included so UI can load right tools)
   router.get('/:id/chats/:chatId', async (c) => {
-    const projectId = Number(c.req.param('id'));
     const chatId = Number(c.req.param('chatId'));
     const tenantId = c.get('tenantId');
-    await projectService.getProject(projectId, tenantId);
+    const project = await projectService.getProject(c.req.param('id'), tenantId);
+    const projectId = project.id;
     const [chat] = await db
       .select()
       .from(ideProjectChats)
@@ -444,10 +453,10 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
 
   // PATCH /api/projects/:id/chats/:chatId — append messages and optionally update title
   router.patch('/:id/chats/:chatId', async (c) => {
-    const projectId = Number(c.req.param('id'));
     const chatId = Number(c.req.param('chatId'));
     const tenantId = c.get('tenantId');
-    await projectService.getProject(projectId, tenantId);
+    const project = await projectService.getProject(c.req.param('id'), tenantId);
+    const projectId = project.id;
     const [chat] = await db
       .select()
       .from(ideProjectChats)
@@ -492,7 +501,6 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   // POST /api/projects/:id/insights/code-changes
   // Record code-change deltas for project interactions (Insights is available on all plans)
   router.post('/:id/insights/code-changes', async (c) => {
-    const projectId = Number(c.req.param('id'));
     const tenantId = c.get('tenantId');
     const userId = c.get('userId') as string;
     const body = await c.req.json<{ codeChanges?: number; executionId?: number | null }>();
@@ -501,19 +509,9 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       return c.json({ error: 'codeChanges is required' }, 400);
     }
 
+    const projectObj = await projectService.getProject(c.req.param('id'), tenantId);
+    const projectId = projectObj.id;
     const codeChanges = Math.max(0, Math.floor(Number(body.codeChanges)));
-    const [projectRow] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(
-        and(
-          eq(projects.id, projectId),
-          eq(projects.tenantId, tenantId),
-        ),
-      )
-      .limit(1);
-
-    if (!projectRow) return c.json({ error: 'Project not found' }, 404);
 
     await db.insert(projectInsightEvents).values({
       tenantId,
@@ -645,7 +643,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
 
   // PATCH /api/projects/:id
   router.patch('/:id', async (c) => {
-    const id = Number(c.req.param('id'));
+    const rawId = c.req.param('id');
     const tenantId = c.get('tenantId');
     const body = await c.req.json<{
       key?: string;
@@ -660,7 +658,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       githubRepoUrl?: string | null;
     }>();
 
-    const existing = await projectService.getProject(id, tenantId);
+    const existing = await projectService.getProject(rawId, tenantId);
     const assignment = await resolveSourceControlAssignment(
       tenantId,
       {
@@ -679,7 +677,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     );
     if (!assignment.ok) return c.json({ error: assignment.message }, assignment.status);
 
-    const project = await projectService.updateProject(id, {
+    const project = await projectService.updateProject(existing.id, {
       ...body,
       sourceControlIntegrationId: assignment.value.sourceControlIntegrationId,
       sourceControlProvider: assignment.value.sourceControlProvider,
@@ -785,15 +783,17 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
 
   // DELETE /api/projects/:id
   router.delete('/:id', async (c) => {
-    const id = Number(c.req.param('id'));
-    await projectService.deleteProject(id, c.get('tenantId'));
+    const tenantId = c.get('tenantId');
+    const project = await projectService.getProject(c.req.param('id'), tenantId);
+    await projectService.deleteProject(project.id, tenantId);
     return c.body(null, 204);
   });
 
   // GET /api/projects/:id/claws — list claws associated with a project
   router.get('/:id/claws', async (c) => {
-    const projectId = Number(c.req.param('id'));
     const tenantId = c.get('tenantId');
+    const proj = await projectService.getProject(c.req.param('id'), tenantId);
+    const projectId = proj.id;
 
     const rows = await db
       .select({

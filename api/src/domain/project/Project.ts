@@ -5,6 +5,7 @@ export type SourceControlProvider = 'github' | 'bitbucket';
 
 export interface ProjectProps {
   id:              ProjectId;
+  publicId:        string;
   tenantId:        TenantId;
   key:             string;
   name:            string;
@@ -54,6 +55,7 @@ export class Project {
       ...props,
       template: props.template ?? null,
       id: 0 as ProjectId,
+      publicId: props.publicId ?? '',
       key: props.key.trim().toUpperCase(),
       createdAt: now,
       updatedAt: now,
@@ -70,6 +72,7 @@ export class Project {
   // ------------------------------------------------------------------
 
   get id():              ProjectId  { return this.props.id; }
+  get publicId():        string     { return this.props.publicId; }
   get tenantId():        TenantId   { return this.props.tenantId; }
   get key():             string     { return this.props.key; }
   get name(): string { return this.props.name; }

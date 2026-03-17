@@ -18,10 +18,22 @@ function generateId(): string {
   return crypto.randomUUID();
 }
 
-function parseProjectId(param: string): number {
+function parseProjectIdInt(param: string): number {
   const n = Number(param);
   if (!Number.isInteger(n) || n < 1) throw new Error('Invalid project id');
   return n;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function resolveProjectId(env: HonoEnv['Bindings'], param: string): Promise<number> {
+  if (UUID_RE.test(param)) {
+    const rows = await neon(env.NEON_DATABASE_URL)`SELECT id FROM projects WHERE public_id = ${param} LIMIT 1`;
+    const row = rows[0] as { id: number } | undefined;
+    if (!row) throw new Error('Project not found');
+    return row.id;
+  }
+  return parseProjectIdInt(param);
 }
 
 /** Parse AI response for dataset JSON array. */
@@ -50,9 +62,9 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   const r2 = (c: { env: HonoEnv['Bindings'] }) => storage(c.env);
   const getSql = (c: { env: HonoEnv['Bindings'] }) => sql(c.env);
 
-  // ---------- Project files (R2) — projectId is API project id (integer) ----------
+  // ---------- Project files (R2) — projectId accepts integer or public UUID ----------
   router.get('/projects/:projectId/files', async (c) => {
-    const projectId = parseProjectId(c.req.param('projectId'));
+    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
     const prefix = `${IDE_PREFIX}projects/${String(projectId)}/`;
@@ -66,7 +78,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.get('/projects/:projectId/files/*', async (c) => {
-    const projectId = parseProjectId(c.req.param('projectId'));
+    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
     const path = c.req.param('*') || '';
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
@@ -77,7 +89,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.put('/projects/:projectId/files/*', async (c) => {
-    const projectId = parseProjectId(c.req.param('projectId'));
+    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
     const path = c.req.param('*') || '';
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
@@ -87,7 +99,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.delete('/projects/:projectId/files/*', async (c) => {
-    const projectId = parseProjectId(c.req.param('projectId'));
+    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
     const path = c.req.param('*') || '';
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
@@ -100,7 +112,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   router.get('/datasets', async (c) => {
     const raw = c.req.query('projectId');
     if (!raw) return c.json({ error: 'projectId query parameter is required' }, 400);
-    const projectId = parseProjectId(raw);
+    const projectId = parseProjectIdInt(raw);
     const rows = await getSql(c)`
       SELECT * FROM ide_datasets WHERE project_id = ${projectId} ORDER BY created_at DESC
     `;
@@ -137,7 +149,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     if (body.projectId == null || !body.capabilityPrompt || !body.name) {
       return c.json({ error: 'projectId, capabilityPrompt, and name are required' }, 400);
     }
-    const projectId = typeof body.projectId === 'number' ? body.projectId : parseProjectId(String(body.projectId));
+    const projectId = typeof body.projectId === 'number' ? body.projectId : parseProjectIdInt(String(body.projectId));
     const id = generateId();
     const exampleCount = Math.min(body.exampleCount ?? 50, 200);
     await getSql(c)`
@@ -202,7 +214,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   router.get('/training', async (c) => {
     const raw = c.req.query('projectId');
     if (!raw) return c.json({ error: 'projectId query parameter is required' }, 400);
-    const projectId = parseProjectId(raw);
+    const projectId = parseProjectIdInt(raw);
     const rows = await getSql(c)`
       SELECT * FROM ide_training_jobs WHERE project_id = ${projectId} ORDER BY created_at DESC
     `;
@@ -220,7 +232,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       learningRate?: number;
     }>();
     if (body.projectId == null || !body.baseModel) return c.json({ error: 'projectId and baseModel are required' }, 400);
-    const projectId = typeof body.projectId === 'number' ? body.projectId : parseProjectId(String(body.projectId));
+    const projectId = typeof body.projectId === 'number' ? body.projectId : parseProjectIdInt(String(body.projectId));
     const id = generateId();
     await getSql(c)`
       INSERT INTO ide_training_jobs (id, project_id, dataset_id, base_model, lora_rank, epochs, batch_size, learning_rate)
@@ -400,7 +412,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       resume_md?: string;
       eval_score?: number;
     }>();
-    const projectId = typeof body.project_id === 'number' ? body.project_id : parseProjectId(String(body.project_id));
+    const projectId = typeof body.project_id === 'number' ? body.project_id : parseProjectIdInt(String(body.project_id));
     const id = generateId();
     const skillsJson = JSON.stringify(body.skills ?? []);
     await getSql(c)`

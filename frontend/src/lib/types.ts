@@ -30,6 +30,7 @@ export interface AuthState {
 
 export interface Project {
   id: number;
+  publicId?: string;
   name: string;
   description?: string | null;
   template?: string | null;

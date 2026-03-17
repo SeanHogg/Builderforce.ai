@@ -133,7 +133,7 @@ export async function fetchFileContent(
   filePath: string
 ): Promise<string> {
   const base = getProjectsBaseUrl();
-  const url = `${base}${filesBase(projectId)}/${encodeURIComponent(filePath)}`;
+  const url = `${base}${filesBase(projectId)}/${filePath.split('/').map(encodeURIComponent).join('/')}`;
   const authHeaders = getAuthHeaders();
   const hadToken = !!authHeaders.Authorization;
   const res = await fetch(url, { headers: authHeaders as HeadersInit });
@@ -147,7 +147,7 @@ export async function saveFile(
   filePath: string,
   content: string
 ): Promise<void> {
-  await projectsRequest(`${filesBase(projectId)}/${encodeURIComponent(filePath)}`, {
+  await projectsRequest(`${filesBase(projectId)}/${filePath.split('/').map(encodeURIComponent).join('/')}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'text/plain' },
     body: content,
@@ -158,7 +158,7 @@ export async function deleteFile(
   projectId: number | string,
   filePath: string
 ): Promise<void> {
-  await projectsRequest(`${filesBase(projectId)}/${encodeURIComponent(filePath)}`, {
+  await projectsRequest(`${filesBase(projectId)}/${filePath.split('/').map(encodeURIComponent).join('/')}`, {
     method: 'DELETE',
   });
 }

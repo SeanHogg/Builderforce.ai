@@ -29,7 +29,7 @@ export function ProjectsSlideOutPanel({ open, onClose, currentProjectId }: Proje
 
   const handleSelect = (project: Project) => {
     onClose();
-    router.push(`/ide/${project.id}`);
+    router.push(`/ide/${project.publicId ?? project.id}`);
   };
 
   if (!open) return null;

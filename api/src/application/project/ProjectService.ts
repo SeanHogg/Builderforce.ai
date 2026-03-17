@@ -49,8 +49,15 @@ export class ProjectService {
     return this.projects.findByTenant(asTenantId(tenantId));
   }
 
-  async getProject(id: number, callerTenantId: number): Promise<Project> {
-    const project = await this.projects.findById(asProjectId(id));
+  async findByKey(key: string): Promise<Project | null> {
+    return this.projects.findByKey(key);
+  }
+
+  async getProject(id: number | string, callerTenantId: number): Promise<Project> {
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const project = typeof id === 'string' && UUID_RE.test(id)
+      ? await this.projects.findByPublicId(id)
+      : await this.projects.findById(asProjectId(Number(id)));
     if (!project) throw new NotFoundError('Project', id);
     if (project.tenantId !== callerTenantId) throw new ForbiddenError('Project belongs to a different workspace');
     return project;

@@ -31,6 +31,15 @@ export class ProjectRepository implements IProjectRepository {
     return row ? toDomain(row) : null;
   }
 
+  async findByPublicId(publicId: string): Promise<Project | null> {
+    const [row] = await this.db
+      .select()
+      .from(projectsTable)
+      .where(eq(projectsTable.publicId, publicId))
+      .limit(1);
+    return row ? toDomain(row) : null;
+  }
+
   async findByKey(key: string): Promise<Project | null> {
     const [row] = await this.db
       .select()
@@ -106,6 +115,7 @@ type Row = typeof projectsTable.$inferSelect;
 function toDomain(row: Row): Project {
   return Project.reconstitute({
     id:              asProjectId(row.id),
+    publicId:        row.publicId,
     tenantId:        asTenantId(row.tenantId),
     key:             row.key,
     name:            row.name,
