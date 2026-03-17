@@ -57,7 +57,7 @@ export default function IDEEntryPage() {
         });
         if (cancelled) return;
         persistLastProjectId(String(project.id));
-        router.replace(`/ide/${project.id}`);
+        router.replace(`/ide/${project.publicId ?? project.id}`);
       } catch (e) {
         if (!cancelled) {
           setErrorMsg(e instanceof Error ? e.message : 'Failed to open IDE');

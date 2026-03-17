@@ -99,6 +99,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   }, []);
 
   const openFile = useCallback(async (path: string) => {
+    setCenterView('code');
     if (fileContents[path] !== undefined) {
       setActiveFile(path);
       if (!openFiles.includes(path)) {
@@ -549,7 +550,7 @@ export default defineConfig({
             onStartBrainStormSession={handleStartBrainStormSession}
             initialChatId={initialChatId}
             onChatSelect={(chatId) => {
-              const path = `/ide/${project.id}`;
+              const path = `/ide/${project.publicId ?? project.id}`;
               router.replace(chatId != null ? `${path}?chat=${chatId}` : path, { scroll: false });
             }}
           />

@@ -130,7 +130,7 @@ export function ProjectCard({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              window.location.href = `/ide/${project.id}`;
+              window.location.href = `/ide/${project.publicId ?? project.id}`;
             }}
             aria-label="Open in IDE"
             style={{

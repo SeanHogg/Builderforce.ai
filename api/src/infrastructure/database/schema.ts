@@ -389,6 +389,7 @@ export const sourceControlIntegrations = pgTable('source_control_integrations', 
 
 export const projects = pgTable('projects', {
   id:              serial('id').primaryKey(),
+  publicId:        uuid('public_id').notNull().defaultRandom(),
   tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   key:             varchar('key', { length: 50 }).notNull().unique(),
   name:            varchar('name', { length: 255 }).notNull(),

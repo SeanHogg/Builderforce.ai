@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import type { Project } from '@/lib/types';
 import { updateProject } from '@/lib/api';
+import { checkProjectKeyAvailable } from '@/lib/builderforceApi';
 import { ObservabilityContent } from './ObservabilityContent';
 import { TaskMgmtContent } from './TaskMgmtContent';
 import { PRDsContent } from './PRDsContent';
@@ -93,6 +94,9 @@ export function ProjectDetailsPanel({
   const [editKey, setEditKey] = useState(project.key ?? '');
   const [editStatus, setEditStatus] = useState(project.status ?? 'active');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [keyStatus, setKeyStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+  const keyCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
@@ -114,14 +118,16 @@ export function ProjectDetailsPanel({
 
   if (!open) return null;
 
-  const href = projectHref ?? `/ide/${project.id}`;
+  const href = projectHref ?? `/ide/${project.publicId ?? project.id}`;
   const taskCount = project.taskCount ?? 0;
 
   const handleSaveProject = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (keyStatus === 'taken') return;
+    setSaveError(null);
     setSaving(true);
     try {
-      const updated = await updateProject(project.id, {
+      const updated = await updateProject(project.publicId ?? project.id, {
         name: editName.trim() || project.name,
         description: editDescription.trim() || undefined,
         key: editKey.trim() || undefined,
@@ -129,9 +135,32 @@ export function ProjectDetailsPanel({
       });
       onProjectUpdate?.(updated);
       setEditingProject(false);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleKeyChange = (value: string) => {
+    setEditKey(value);
+    setSaveError(null);
+    const trimmed = value.trim().toUpperCase();
+    if (!trimmed || trimmed === (project.key ?? '').toUpperCase()) {
+      setKeyStatus('idle');
+      if (keyCheckTimer.current) clearTimeout(keyCheckTimer.current);
+      return;
+    }
+    setKeyStatus('checking');
+    if (keyCheckTimer.current) clearTimeout(keyCheckTimer.current);
+    keyCheckTimer.current = setTimeout(async () => {
+      try {
+        const result = await checkProjectKeyAvailable(trimmed, project.id);
+        setKeyStatus(result.available ? 'available' : 'taken');
+      } catch {
+        setKeyStatus('idle');
+      }
+    }, 500);
   };
 
   return (
@@ -333,17 +362,26 @@ export function ProjectDetailsPanel({
                     <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Project key</label>
                     <input
                       value={editKey}
-                      onChange={(e) => setEditKey(e.target.value)}
+                      onChange={(e) => handleKeyChange(e.target.value)}
                       style={{
                         width: '100%',
                         padding: '8px 10px',
                         fontSize: 13,
-                        border: '1px solid var(--border-subtle)',
+                        border: `1px solid ${keyStatus === 'taken' ? 'var(--error-text, #e55)' : keyStatus === 'available' ? 'var(--success, #4c4)' : 'var(--border-subtle)'}`,
                         borderRadius: 8,
                         background: 'var(--bg-deep)',
                         color: 'var(--text-primary)',
                       }}
                     />
+                    {keyStatus === 'checking' && (
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Checking availability…</div>
+                    )}
+                    {keyStatus === 'available' && (
+                      <div style={{ fontSize: 11, color: 'var(--success, #4c4)', marginTop: 4 }}>Key is available</div>
+                    )}
+                    {keyStatus === 'taken' && (
+                      <div style={{ fontSize: 11, color: 'var(--error-text, #e55)', marginTop: 4 }}>Key is already taken</div>
+                    )}
                   </div>
                   <div style={{ marginBottom: 10 }}>
                     <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Status</label>
@@ -384,10 +422,15 @@ export function ProjectDetailsPanel({
                       }}
                     />
                   </div>
+                  {saveError && (
+                    <div style={{ fontSize: 12, color: 'var(--error-text, #e55)', marginBottom: 8, padding: '6px 10px', background: 'rgba(230,80,80,0.08)', borderRadius: 6, border: '1px solid rgba(230,80,80,0.2)' }}>
+                      {saveError}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button
                       type="submit"
-                      disabled={saving}
+                      disabled={saving || keyStatus === 'taken' || keyStatus === 'checking'}
                       style={{
                         padding: '8px 14px',
                         fontSize: 13,
@@ -396,7 +439,8 @@ export function ProjectDetailsPanel({
                         color: '#fff',
                         border: 'none',
                         borderRadius: 8,
-                        cursor: saving ? 'not-allowed' : 'pointer',
+                        cursor: (saving || keyStatus === 'taken' || keyStatus === 'checking') ? 'not-allowed' : 'pointer',
+                        opacity: (saving || keyStatus === 'taken' || keyStatus === 'checking') ? 0.6 : 1,
                       }}
                     >
                       {saving ? 'Saving…' : 'Save'}
@@ -605,7 +649,7 @@ export function ProjectDetailsPanel({
                 Project-scoped AI chat. Open the IDE to use the in-editor chat.
               </p>
               <Link
-                href={`/ide/${project.id}`}
+                href={`/ide/${project.publicId ?? project.id}`}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -643,7 +687,7 @@ export function ProjectDetailsPanel({
               <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
                 Workspace and file system for this project. Open the IDE to edit files.
               </p>
-              <Link href={`/ide/${project.id}`} style={{ fontSize: 13, color: 'var(--coral-bright)', marginTop: 8, display: 'inline-block' }}>
+              <Link href={`/ide/${project.publicId ?? project.id}`} style={{ fontSize: 13, color: 'var(--coral-bright)', marginTop: 8, display: 'inline-block' }}>
                 Open in IDE →
               </Link>
             </div>

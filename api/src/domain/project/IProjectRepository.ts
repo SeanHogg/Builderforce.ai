@@ -8,6 +8,7 @@ import { ProjectId, TenantId } from '../shared/types';
 export interface IProjectRepository {
   findByTenant(tenantId: TenantId): Promise<Project[]>;
   findById(id: ProjectId): Promise<Project | null>;
+  findByPublicId(publicId: string): Promise<Project | null>;
   findByKey(key: string): Promise<Project | null>;
   save(project: Project): Promise<Project>;
   update(project: Project): Promise<Project>;

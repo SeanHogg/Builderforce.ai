@@ -21,7 +21,7 @@ export default function IDEPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const idRaw = params?.id ?? '';
-  const id = idRaw ? (Number(idRaw) || idRaw) : '';
+  const id = idRaw;
   const chatIdParam = searchParams.get('chat');
   const initialChatId = chatIdParam ? (Number(chatIdParam) || null) : null;
 
@@ -37,7 +37,7 @@ export default function IDEPage() {
   useEffect(() => {
     if (!idRaw) return;
     let cancelled = false;
-    const projectId = Number(idRaw) || idRaw;
+    const projectId = idRaw;
 
     Promise.all([
       fetchProject(projectId),
@@ -48,7 +48,7 @@ export default function IDEPage() {
         setProject(proj);
         setFiles(fileList);
         setStatus('ready');
-        persistLastProjectId(String(proj.id));
+        persistLastProjectId(proj.publicId ?? String(proj.id));
         const isUntitled = proj.name === 'Untitled' || proj.name.startsWith('Untitled-');
         if (isUntitled && typeof sessionStorage !== 'undefined') {
           const key = 'builderforce-first-time-modal-shown';
@@ -181,7 +181,7 @@ export default function IDEPage() {
           open={projectDetailsOpen}
           onClose={() => setProjectDetailsOpen(false)}
           onProjectUpdate={setProject}
-          projectHref={`/ide/${project.id}`}
+          projectHref={`/ide/${project.publicId ?? project.id}`}
           onDelete={async (p) => {
             try {
               await deleteProject(p.id);

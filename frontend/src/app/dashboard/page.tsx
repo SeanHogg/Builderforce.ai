@@ -441,7 +441,7 @@ export default function DashboardPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => (window.location.href = `/ide/${project.id}`)}
+                            onClick={() => (window.location.href = `/ide/${project.publicId ?? project.id}`)}
                             aria-label="Open in IDE"
                             style={{
                               padding: 6,
