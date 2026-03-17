@@ -1,12 +1,209 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { mySessionsApi, type MySession } from '@/lib/builderforceApi';
+import { getStoredUser, getStoredTenant } from '@/lib/auth';
+
+const cardStyle: React.CSSProperties = {
+  background: 'var(--bg-base)',
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 12,
+  padding: 20,
+};
+
+const sectionTitle: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 700,
+  color: 'var(--text-primary)',
+  marginBottom: 14,
+};
+
 export default function SettingsPage() {
+  const user = getStoredUser();
+  const tenant = getStoredTenant();
+
+  const [sessions, setSessions] = useState<MySession[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(true);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null);
+
+  useEffect(() => {
+    mySessionsApi.list()
+      .then(setSessions)
+      .catch((e: Error) => setSessionError(e.message))
+      .finally(() => setLoadingSessions(false));
+  }, []);
+
+  const revokeSession = async (id: string) => {
+    setRevoking(id);
+    try {
+      await mySessionsApi.revoke(id);
+      setSessions((prev) => prev.map((s) => s.id === id ? { ...s, isActive: false, revokedAt: new Date().toISOString() } : s));
+    } catch (e) {
+      setSessionError(e instanceof Error ? e.message : 'Revoke failed');
+    } finally {
+      setRevoking(null);
+    }
+  };
+
+  const revokeOthers = async () => {
+    if (!confirm('Sign out of all other sessions?')) return;
+    setRevoking('others');
+    try {
+      await mySessionsApi.revokeOthers();
+      setSessions((prev) => prev.map((s) => s.isCurrent ? s : { ...s, isActive: false, revokedAt: new Date().toISOString() }));
+    } catch (e) {
+      setSessionError(e instanceof Error ? e.message : 'Revoke failed');
+    } finally {
+      setRevoking(null);
+    }
+  };
+
+  const activeSessions = sessions.filter((s) => s.isActive);
+
   return (
-    <div style={{ padding: 40, maxWidth: 600 }}>
-      <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 8 }}>Settings</h1>
-      <p style={{ color: 'var(--text-secondary)' }}>
-        Settings will be available here. This section uses api.builderforce.ai.
-      </p>
+    <div style={{ padding: '32px 40px', maxWidth: 720, margin: '0 auto' }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 24 }}>Settings</h1>
+
+      {/* Profile */}
+      <div style={{ ...cardStyle, marginBottom: 20 }}>
+        <div style={sectionTitle}>Profile</div>
+        <div style={{ display: 'grid', gap: 10 }}>
+          {[
+            { label: 'Email', value: user?.email },
+            { label: 'Display name', value: user?.name },
+            { label: 'User ID', value: user?.id, mono: true },
+          ].filter((r) => r.value).map(({ label, value, mono }) => (
+            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+              <span style={{ color: 'var(--text-muted)' }}>{label}</span>
+              <span style={mono ? { fontFamily: 'var(--font-mono)', fontSize: 11 } : {}}>{value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Workspace */}
+      {tenant && (
+        <div style={{ ...cardStyle, marginBottom: 20 }}>
+          <div style={sectionTitle}>Workspace</div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {[
+              { label: 'Name', value: tenant.name },
+              { label: 'Slug', value: tenant.slug, mono: true },
+              { label: 'ID', value: tenant.id, mono: true },
+            ].filter((r) => r.value).map(({ label, value, mono }) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                <span style={{ color: 'var(--text-muted)' }}>{label}</span>
+                <span style={mono ? { fontFamily: 'var(--font-mono)', fontSize: 11 } : {}}>{value}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 10 }}>
+            <Link
+              href="/tenants"
+              style={{
+                padding: '6px 12px', fontSize: 12, fontWeight: 600,
+                background: 'var(--surface-interactive)', color: 'var(--text-primary)',
+                border: '1px solid var(--border-subtle)', borderRadius: 8, textDecoration: 'none',
+              }}
+            >
+              Switch workspace
+            </Link>
+            <Link
+              href="/security"
+              style={{
+                padding: '6px 12px', fontSize: 12, fontWeight: 600,
+                background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+                border: '1px solid var(--border-subtle)', borderRadius: 8, textDecoration: 'none',
+              }}
+            >
+              Manage member sessions →
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Sessions */}
+      <div style={cardStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div style={sectionTitle}>Active Sessions</div>
+          {activeSessions.filter((s) => !s.isCurrent).length > 0 && (
+            <button
+              type="button"
+              onClick={revokeOthers}
+              disabled={revoking === 'others'}
+              style={{
+                padding: '5px 10px', fontSize: 11, fontWeight: 600,
+                background: 'none', color: 'var(--coral-bright, #f4726e)',
+                border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 6, cursor: 'pointer',
+              }}
+            >
+              {revoking === 'others' ? '…' : 'Sign out others'}
+            </button>
+          )}
+        </div>
+
+        {sessionError && (
+          <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>Error: {sessionError}</div>
+        )}
+
+        {loadingSessions ? (
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading sessions…</div>
+        ) : sessions.length === 0 ? (
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No sessions found.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {sessions.map((s) => (
+              <div key={s.id} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 12px', borderRadius: 8,
+                background: 'var(--bg-elevated)',
+                border: `1px solid ${s.isCurrent ? 'var(--coral-bright, #f4726e)' : 'var(--border-subtle)'}`,
+                opacity: s.isActive ? 1 : 0.45,
+              }}>
+                <div
+                  style={{
+                    width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                    background: s.isActive ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)',
+                  }}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', display: 'flex', gap: 8, alignItems: 'center' }}>
+                    {s.sessionName ?? s.userAgent ?? 'Session'}
+                    {s.isCurrent && (
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--surface-coral-soft, rgba(244,114,94,0.15))', color: 'var(--coral-bright, #f4726e)' }}>
+                        Current
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                    {s.ipAddress && `${s.ipAddress} · `}
+                    {s.lastSeenAt
+                      ? `Last active ${new Date(s.lastSeenAt).toLocaleString()}`
+                      : `Created ${new Date(s.createdAt).toLocaleString()}`}
+                    {!s.isActive && s.revokedAt && ` · Revoked`}
+                  </div>
+                </div>
+                {s.isActive && !s.isCurrent && (
+                  <button
+                    type="button"
+                    onClick={() => void revokeSession(s.id)}
+                    disabled={revoking === s.id}
+                    style={{
+                      padding: '4px 8px', fontSize: 11, fontWeight: 600, flexShrink: 0,
+                      background: 'none', color: 'var(--coral-bright, #f4726e)',
+                      border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 6, cursor: 'pointer',
+                    }}
+                  >
+                    {revoking === s.id ? '…' : 'Sign out'}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
