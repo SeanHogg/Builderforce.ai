@@ -8,6 +8,7 @@ import {
   AUTH_API_URL,
   checkUnauthorizedAndRedirect,
   getStoredTenantToken,
+  getStoredWebToken,
 } from './auth';
 
 function authHeaders(): Record<string, string> {
@@ -15,6 +16,29 @@ function authHeaders(): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
   return headers;
+}
+
+function webAuthHeaders(): Record<string, string> {
+  const token = getStoredWebToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+}
+
+async function webRequest<T>(path: string, opts: RequestInit = {}): Promise<T> {
+  const headers = webAuthHeaders();
+  const hadToken = !!headers.Authorization;
+  const res = await fetch(`${AUTH_API_URL}${path}`, {
+    ...opts,
+    headers: { ...headers, ...(opts.headers as Record<string, string>) },
+  });
+  checkUnauthorizedAndRedirect(res, hadToken);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error || res.statusText || 'Request failed');
+  }
+  if (res.status === 204) return undefined as T;
+  return res.json() as Promise<T>;
 }
 
 async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
@@ -678,6 +702,7 @@ export interface ChatSession {
   startedAt: string;
   endedAt: string | null;
   msgCount: number;
+  lastMsgAt: string | null;
 }
 
 export interface ChatMessage {
@@ -695,11 +720,55 @@ export const chatSessionsApi = {
     return request<{ sessions: ChatSession[] }>(`/api/chats?clawId=${clawId}`).then((r) => r.sessions ?? []);
   },
 
+  listAll: (limit = 100): Promise<(ChatSession & { clawName?: string })[]> => {
+    return request<{ sessions: (ChatSession & { clawName?: string })[] }>(`/api/chats?limit=${limit}`).then((r) => r.sessions ?? []);
+  },
+
   getMessages: (sessionId: string, limit = 100): Promise<ChatMessage[]> => {
     return request<{ messages: ChatMessage[] }>(`/api/chats/${sessionId}/messages?limit=${limit}`).then(
       (r) => r.messages ?? []
     );
   },
+};
+
+// ---------------------------------------------------------------------------
+// Security (tenant member sessions / tokens)
+// ---------------------------------------------------------------------------
+
+export interface SecurityUser {
+  id: string;
+  email: string;
+  username: string;
+  displayName: string | null;
+  mfaEnabled: boolean;
+  activeSessions: number;
+  activeTokens: number;
+}
+
+export interface SecuritySession {
+  id: string;
+  sessionName: string | null;
+  userAgent: string | null;
+  ipAddress: string | null;
+  isActive: boolean;
+  revokedAt: string | null;
+  createdAt: string;
+  lastSeenAt: string | null;
+  activeTokens: number;
+}
+
+export const securityApi = {
+  listUsers: (tenantId: number): Promise<SecurityUser[]> =>
+    request<{ users: SecurityUser[] }>(`/api/tenants/${tenantId}/security/users`).then((r) => r.users ?? []),
+
+  getUser: (tenantId: number, userId: string): Promise<{ sessions: SecuritySession[] }> =>
+    request<{ sessions: SecuritySession[] }>(`/api/tenants/${tenantId}/security/users/${userId}`),
+
+  revokeSession: (tenantId: number, userId: string, sessionId: string): Promise<void> =>
+    request(`/api/tenants/${tenantId}/security/users/${userId}/sessions/${sessionId}/revoke`, { method: 'POST' }).then(() => undefined),
+
+  revokeAllSessions: (tenantId: number, userId: string): Promise<void> =>
+    request(`/api/tenants/${tenantId}/security/users/${userId}/sessions/revoke-all`, { method: 'POST' }).then(() => undefined),
 };
 
 // ---------------------------------------------------------------------------
@@ -1071,5 +1140,32 @@ export const marketplacePublisherApi = {
 
   likeSkill: (slug: string) =>
     mpRequest<{ liked: boolean; likes: number }>(`/marketplace/skills/${slug}/like`, { method: 'POST' }),
+};
+
+// ---------------------------------------------------------------------------
+// Self-service session management (uses web JWT)
+// ---------------------------------------------------------------------------
+
+export interface MySession {
+  id: string;
+  sessionName: string | null;
+  userAgent: string | null;
+  ipAddress: string | null;
+  isActive: boolean;
+  isCurrent: boolean;
+  createdAt: string;
+  lastSeenAt: string | null;
+  revokedAt: string | null;
+}
+
+export const mySessionsApi = {
+  list: (): Promise<MySession[]> =>
+    webRequest<{ sessions: MySession[] }>('/api/auth/sessions').then((r) => r.sessions ?? []),
+
+  revoke: (sessionId: string): Promise<void> =>
+    webRequest(`/api/auth/sessions/${sessionId}/revoke`, { method: 'POST' }).then(() => undefined),
+
+  revokeOthers: (): Promise<void> =>
+    webRequest('/api/auth/sessions/revoke-others', { method: 'POST' }).then(() => undefined),
 };
 
