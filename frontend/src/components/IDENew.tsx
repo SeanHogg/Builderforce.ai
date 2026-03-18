@@ -9,6 +9,7 @@ import { Terminal } from './Terminal';
 import { ProjectAIChat } from './ProjectAIChat';
 import { AITrainingPanel } from './AITrainingPanel';
 import { AgentPublishPanel } from './AgentPublishPanel';
+import { AgentStateViewer } from './AgentStateViewer';
 import { PreviewFrame } from './PreviewFrame';
 import { ProjectsSlideOutPanel } from './ProjectsSlideOutPanel';
 import { useWebContainer } from '@/hooks/useWebContainer';
@@ -28,7 +29,7 @@ interface IDEProps {
 }
 
 type CenterView = 'preview' | 'code';
-type RightTab = 'files' | 'train' | 'publish';
+type RightTab = 'files' | 'train' | 'publish' | 'state';
 
 export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId }: IDEProps) {
   const router = useRouter();
@@ -671,7 +672,7 @@ export default defineConfig({
         {/* Right panel: Files / Train / Publish */}
         <div style={{ width: 300, flexShrink: 0, borderLeft: '1px solid var(--border-subtle)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-            {([['files', '📁 Files'], ['train', '🧠 Train'], ['publish', '🚀 Publish']] as [RightTab, string][]).map(([tab, label]) => (
+            {([['files', '📁 Files'], ['train', '🧠 Train'], ['publish', '🚀 Publish'], ['state', '🔬 State']] as [RightTab, string][]).map(([tab, label]) => (
               <button
                 key={tab}
                 onClick={() => setRightTab(tab)}
@@ -709,6 +710,9 @@ export default defineConfig({
             </div>
             <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'publish' ? 'visible' : 'hidden', pointerEvents: rightTab === 'publish' ? 'auto' : 'none' }}>
               <AgentPublishPanel projectId={project.id} completedJobs={completedJobs} />
+            </div>
+            <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'state' ? 'visible' : 'hidden', pointerEvents: rightTab === 'state' ? 'auto' : 'none' }}>
+              <AgentStateViewer projectId={project.id} />
             </div>
           </div>
         </div>
