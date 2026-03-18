@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import type { AIMessage } from '@/lib/types';
+import type { AIMessage, InferenceMode } from '@/lib/types';
 import { sendAIMessage } from '@/lib/api';
 import { ChatInput } from '@/components/ChatInput';
 import { ChatMessageBubble } from '@/components/ChatMessageBubble';
 import { ChatMessageActions } from '@/components/ChatMessageActions';
+import { MambaEngine } from '@/lib/mamba-engine';
 
 interface AIChatProps {
   projectId: number | string;
@@ -26,8 +27,12 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [memoryEnabled, setMemoryEnabled] = useState(false);
+  const [inferenceMode, setInferenceMode] = useState<InferenceMode>('local');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const assistantContentRef = useRef('');
+  const mambaRef = useRef<MambaEngine | null>(null);
+
   const copyMessage = useCallback(async (content: string, id: string) => {
     try {
       await navigator.clipboard.writeText(content);
@@ -42,6 +47,16 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
   useEffect(() => {
     if (initialMessages) setMessages(initialMessages);
   }, [initialMessages]);
+
+  // Lazily initialise Mamba engine when memory is enabled
+  useEffect(() => {
+    if (!memoryEnabled) return;
+    const agentId = `chat-${projectId}`;
+    const engine = new MambaEngine(agentId, projectId);
+    void engine.init().then(() => engine.loadFromIndexedDB());
+    mambaRef.current = engine;
+    return () => { mambaRef.current = null; };
+  }, [memoryEnabled, projectId]);
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
@@ -71,14 +86,28 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
     setMessages(prev => [...prev, assistantMessage]);
 
     try {
-      const systemContent = [
+      // 1. Advance Mamba state and get memory context (if enabled)
+      let memoryContext = '';
+      if (memoryEnabled && mambaRef.current) {
+        memoryContext = await mambaRef.current.step(userContent);
+        void mambaRef.current.save();
+      }
+
+      const systemParts: string[] = [
         'You are an expert AI coding assistant built into Builderforce.ai, a browser-based IDE. Help users generate and build apps.',
         'Use markdown for your response: headings, lists, bold, and fenced code blocks.',
         'When suggesting new or existing files, use a code block with the file path as the language tag so the user can create the file in one click. Examples: ```package.json (then JSON content), ```src/index.js (then JS content), ```.gitignore (then content).',
         'When you write code for the currently open file, use a normal code block (e.g. ```javascript) so the user can apply it.',
         activeFile ? `The user currently has the file \`${activeFile}\` open.` : '',
         activeFileContent ? `\n\nCurrent content of that file:\n\`\`\`\n${activeFileContent.slice(0, 4000)}\n\`\`\`` : '',
-      ].filter(Boolean).join('\n');
+      ];
+
+      // 3. Inject memory context if enabled
+      if (memoryContext) {
+        systemParts.push(`\n\nAgent memory context: ${memoryContext}`);
+      }
+
+      const systemContent = systemParts.filter(Boolean).join('\n');
 
       const apiMessages = [
         { role: 'system' as const, content: systemContent },
@@ -86,6 +115,8 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
         { role: 'user' as const, content: input.trim() },
       ];
 
+      // 4. Run inference — local always goes through sendAIMessage (Workers AI proxy)
+      //    cloud mode signals intent (same proxy but could be extended to use OpenRouter)
       await sendAIMessage(projectId, apiMessages, chunk => {
         assistantContentRef.current += chunk;
         setMessages(prev =>
@@ -111,6 +142,47 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
+      {/* Memory + Inference mode toolbar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
+        borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-surface)',
+        flexShrink: 0,
+      }}>
+        {/* Memory toggle */}
+        <button
+          onClick={() => setMemoryEnabled(m => !m)}
+          title={memoryEnabled ? 'Memory ON — click to disable' : 'Memory OFF — click to enable'}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.7rem', fontWeight: 600,
+            background: memoryEnabled ? 'rgba(139,92,246,0.2)' : 'transparent',
+            color: memoryEnabled ? '#a78bfa' : 'var(--text-muted)',
+            border: `1px solid ${memoryEnabled ? '#7c3aed' : 'var(--border-subtle)'}`,
+            borderRadius: 6, padding: '2px 7px', cursor: 'pointer',
+          }}
+        >
+          <span>🧬</span> Memory {memoryEnabled ? 'ON' : 'OFF'}
+        </button>
+
+        {/* Inference mode */}
+        <div style={{ display: 'flex', gap: 2, marginLeft: 'auto' }}>
+          {(['local', 'hybrid', 'cloud'] as InferenceMode[]).map(mode => (
+            <button
+              key={mode}
+              onClick={() => setInferenceMode(mode)}
+              title={mode === 'local' ? 'Local inference' : mode === 'hybrid' ? 'Local + cloud fallback' : 'Cloud only'}
+              style={{
+                fontSize: '0.65rem', fontWeight: 600, textTransform: 'capitalize',
+                padding: '2px 7px', borderRadius: 5, cursor: 'pointer', border: 'none',
+                background: inferenceMode === mode ? 'var(--bg-elevated)' : 'transparent',
+                color: inferenceMode === mode ? 'var(--text-primary)' : 'var(--text-muted)',
+              }}
+            >
+              {mode === 'local' ? '💻' : mode === 'hybrid' ? '⚡' : '☁️'} {mode}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="bs-messages" style={{ flex: 1, overflowY: 'auto' }}>
         {messages.length === 0 && (
           <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '48px 16px' }}>

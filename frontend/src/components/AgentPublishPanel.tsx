@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
-import type { TrainingJob, AgentProfile, AgentPackage } from '@/lib/types';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import type { TrainingJob, AgentProfile, AgentPackage, MambaStateSnapshot } from '@/lib/types';
 import { publishAgent } from '@/lib/api';
+import { MambaEngine } from '@/lib/mamba-engine';
 
 const INSTALL_COMMAND = 'iwr -useb https://coderclaw.ai/install.ps1 | iex';
 
@@ -23,10 +24,11 @@ const DEFAULT_PROFILE: AgentProfile = {
 
 function buildPackage(
   profile: AgentProfile,
-  job: TrainingJob | undefined
+  job: TrainingJob | undefined,
+  mambaSnapshot?: MambaStateSnapshot | null
 ): AgentPackage {
-  return {
-    version: '1.0',
+  const base: AgentPackage = {
+    version: mambaSnapshot ? '2.0' : '1.0',
     platform: 'builderforce.ai',
     name: profile.name,
     title: profile.title,
@@ -43,6 +45,10 @@ function buildPackage(
     resume_md: profile.resumeMarkdown || undefined,
     created_at: new Date().toISOString(),
   };
+  if (mambaSnapshot) {
+    base.mamba_state = mambaSnapshot;
+  }
+  return base;
 }
 
 export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPanelProps) {
@@ -54,10 +60,22 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
   const [publishedId, setPublishedId] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [copiedInstall, setCopiedInstall] = useState(false);
+  const [includeMamba, setIncludeMamba] = useState(false);
+  const [mambaSnapshot, setMambaSnapshot] = useState<MambaStateSnapshot | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Load Mamba snapshot from IndexedDB when toggled on
+  useEffect(() => {
+    if (!includeMamba) { setMambaSnapshot(null); return; }
+    const engine = new MambaEngine(`project-${projectId}`, projectId);
+    engine.init()
+      .then(() => engine.loadFromIndexedDB())
+      .then(() => { setMambaSnapshot(engine.getSnapshot()); })
+      .catch(() => setMambaSnapshot(null));
+  }, [includeMamba, projectId]);
+
   const selectedJob = completedJobs.find(j => j.id === selectedJobId);
-  const pkg = buildPackage(profile, selectedJob);
+  const pkg = buildPackage(profile, selectedJob, includeMamba ? mambaSnapshot : null);
   const isProfileValid = profile.name.trim() && profile.title.trim() && profile.bio.trim();
 
   const handleAddSkill = useCallback(() => {
@@ -291,6 +309,26 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
               Download your agent as a portable package. Install it in CoderClaw or any
               Builderforce-compatible platform to use your custom-trained LLM.
             </p>
+            {/* Mamba memory toggle */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIncludeMamba(m => !m)}
+                className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded border transition-colors ${
+                  includeMamba
+                    ? 'bg-purple-900/40 border-purple-600 text-purple-300'
+                    : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
+                }`}
+              >
+                <span>🧬</span>
+                {includeMamba ? 'Memory included (v2.0)' : 'Include Mamba memory'}
+              </button>
+              {includeMamba && mambaSnapshot && (
+                <span className="text-xs text-gray-500">step {mambaSnapshot.step}</span>
+              )}
+              {includeMamba && !mambaSnapshot && (
+                <span className="text-xs text-gray-500">no state found</span>
+              )}
+            </div>
             {!isProfileValid ? (
               <div className="bg-yellow-900/30 border border-yellow-700 rounded p-2 text-xs text-yellow-300">
                 ⚠ Fill in the Profile tab (name, title, bio) before downloading.
