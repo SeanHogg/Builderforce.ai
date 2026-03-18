@@ -258,6 +258,12 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
     }
   }, [appendLog]);
 
+  /** Hybrid Training — memory pass first, then LoRA behavior pass */
+  const handleHybridTraining = useCallback(async () => {
+    await handleMemoryTraining();
+    await handleStartTraining();
+  }, [handleMemoryTraining, handleStartTraining]);
+
   const maxLoss = lossHistory.length > 0 ? Math.max(...lossHistory.map(s => s.loss)) : 3;
 
   return (
@@ -476,11 +482,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                 </button>
               ) : trainingMode === 'hybrid' ? (
                 <button
-                  onClick={async () => {
-                    // Run memory pass first, then behavior
-                    await handleMemoryTraining();
-                    await handleStartTraining();
-                  }}
+                  onClick={handleHybridTraining}
                   disabled={isTraining || isGenerating}
                   className="flex-1 bg-gradient-to-r from-purple-700 to-green-700 hover:from-purple-600 hover:to-green-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
                 >

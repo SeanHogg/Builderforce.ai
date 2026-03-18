@@ -64,13 +64,21 @@ export interface AgentRuntimeOptions {
 }
 
 // ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/** Maximum characters of file context to include in the system prompt */
+const MAX_FILE_CONTEXT_LENGTH = 3000;
+
+// ---------------------------------------------------------------------------
 // Confidence scoring (heuristic — no external model needed)
 // ---------------------------------------------------------------------------
 
 function scoreConfidence(response: string): number {
   if (!response || response.length < 20) return 0.2;
-  const hedges = ['I think', 'maybe', 'perhaps', 'not sure', 'I believe', 'might be', 'could be', 'unsure'];
-  const hedgeCount = hedges.filter(h => response.toLowerCase().includes(h.toLowerCase())).length;
+  const lower = response.toLowerCase();
+  const hedges = ['i think', 'maybe', 'perhaps', 'not sure', 'i believe', 'might be', 'could be', 'unsure'];
+  const hedgeCount = hedges.filter(h => lower.includes(h)).length;
   const base = Math.min(1, response.length / 500);
   return Math.max(0.1, base - hedgeCount * 0.1);
 }
@@ -129,7 +137,7 @@ export class AgentRuntime {
       'Use markdown for your response.',
     ];
     if (memoryContext) systemParts.push(`Agent memory: ${memoryContext}`);
-    if (input.fileContext) systemParts.push(`Active file content:\n\`\`\`\n${input.fileContext.slice(0, 3000)}\n\`\`\``);
+    if (input.fileContext) systemParts.push(`Active file content:\n\`\`\`\n${input.fileContext.slice(0, MAX_FILE_CONTEXT_LENGTH)}\n\`\`\``);
     if (input.projectContext) systemParts.push(`Project context: ${input.projectContext}`);
 
     const messages = [
