@@ -1,8 +1,8 @@
 # Builderforce.ai IDE — Architecture Document
 
-> **Version:** 1.0  
+> **Version:** 2.0  
 > **Last updated:** March 2026  
-> **Scope:** Full-stack deep-dive covering layout, data flow, API design, data model, technology stack, state management, collaboration, AI training pipeline, agent publishing, and use cases.
+> **Scope:** Full-stack deep-dive covering layout, data flow, API design, data model, technology stack, state management, collaboration, AI training pipeline, agent publishing, and the new Hybrid Local Brain / Mamba State Engine.
 
 ---
 
@@ -26,6 +26,10 @@
 16. [End-to-End Data Flows](#16-end-to-end-data-flows)
 17. [Security Considerations](#17-security-considerations)
 18. [Use Cases](#18-use-cases)
+19. [Hybrid Local Brain — Mamba State Engine](#19-hybrid-local-brain--mamba-state-engine)
+20. [Agent Runtime SDK](#20-agent-runtime-sdk)
+21. [WebGPU Runtime Layer](#21-webgpu-runtime-layer)
+22. [Storage Integration](#22-storage-integration)
 
 ---
 
@@ -40,10 +44,13 @@ The Builderforce.ai IDE is a **browser-native, full-stack development environmen
 | **Code Editor** | Monaco Editor with Yjs CRDT for multi-user editing |
 | **Live Preview** | Vite dev server running inside a WebContainer in-browser sandbox |
 | **Interactive Terminal** | xterm.js shell connected to a persistent WebContainer process |
-| **AI Assistant** | Project-scoped chat that can apply code directly to open files |
-| **Model Training** | In-browser WebGPU LoRA fine-tuning with 14 pre-configured models (20 M – 2 B params) |
+| **AI Assistant** | Stateful project-scoped chat with Memory toggle and inference-mode selector |
+| **Model Training** | In-browser WebGPU LoRA fine-tuning + Memory Training + Hybrid Training |
 | **Agent Publishing** | Package and publish trained LLM agents to the Builderforce Workforce Registry |
 | **Real-time Collaboration** | Presence-aware multi-user editing via Cloudflare Durable Objects + Yjs |
+| **Mamba State Engine** | Persistent SSM memory layer per agent — runs in-browser via WebGPU (WGSL) or JS fallback |
+| **Agent State Viewer** | Visualise Mamba memory evolution, replay sequences, debug reasoning drift |
+| **Hybrid Inference** | Local-first → confidence check → optional cloud escalation (Workers AI / OpenRouter) |
 
 ---
 
@@ -1278,6 +1285,247 @@ interface AgentPackage {
 2. View all projects, agents, and training jobs across tenants.
 3. Check `logs/global-errors.txt` in R2 for unhandled worker errors.
 4. Use the Observability page (`/observability`) to inspect LLM usage metrics.
+
+---
+
+*End of Architecture Document*
+
+---
+
+## 19. Hybrid Local Brain — Mamba State Engine
+
+### Overview
+
+The **Mamba State Engine** (`frontend/src/lib/mamba-engine.ts`) is a new in-browser persistent memory layer that extends the existing Transformers.js + LoRA system into a **Hybrid Local Brain**.
+
+It implements a simplified State Space Model (SSM) inspired by the Mamba architecture. Unlike transformer attention (O(n²)), the Mamba SSM runs in O(n) — making it efficient for continuous, low-latency state updates in the browser.
+
+```
+Hybrid Local Brain
+  ├── Transformers.js          (existing — WebGPU inference)
+  ├── LoRA adapters            (existing — fine-tuned weights)
+  └── Mamba State Engine       (new — persistent memory)
+```
+
+### State Representation
+
+Each agent maintains a compact state vector:
+
+```typescript
+interface MambaStateSnapshot {
+  data: number[];    // Packed Float32 values (channels × order)
+  dim: number;       // Input embedding dimension
+  order: number;     // SSM hidden states per channel
+  channels: number;  // Parallel channels
+  step: number;      // Monotonic interaction counter
+}
+```
+
+Default configuration: `dim=64, order=4, channels=16` — producing a 64-float state vector (256 bytes).
+
+### SSM Recurrence
+
+The state evolves via the discretised recurrence:
+
+```
+h_{t+1} = A_disc · h_t + B_disc · x_t
+y_t = C · h_t
+```
+
+Where `A` is a stable diagonal matrix (eigenvalues < 1), `x_t` is the projected input embedding, and `y_t` is the channel output used to build a memory context string.
+
+### WebGPU Kernels (WGSL)
+
+The selective scan is implemented as a WGSL compute shader dispatched via a `@compute @workgroup_size(64)` kernel:
+
+```
+WebGPU Runtime
+ ├── Transformers.js pipeline   (existing)
+ ├── LoRA training kernels      (existing)
+ └── mamba_scan.wgsl            (new — selective scan kernel)
+```
+
+**Buffers:**
+
+| Buffer | Usage | Size |
+|---|---|---|
+| `paramsBuffer` | UNIFORM | 16 bytes (dim, order, channels, dt) |
+| `stateBuffer` | STORAGE (read) | channels × order × 4 bytes |
+| `inputBuffer` | STORAGE (read) | dim × 4 bytes |
+| `stateOutBuffer` | STORAGE (write) | channels × order × 4 bytes |
+| `outputBuffer` | STORAGE (write) | channels × 4 bytes |
+
+### Fallback Chain
+
+1. **WebGPU WGSL** (preferred) — GPU-accelerated via `GPUComputePipeline`
+2. **Pure JavaScript** — identical arithmetic, runs on any device via `jsSelectiveScan()`
+
+### Persistence
+
+| Layer | What is stored | Key |
+|---|---|---|
+| **IndexedDB** | Active `MambaAgentState` (live state + history ring-buffer) | `mamba_state_<agentId>` |
+| **R2** (via agent package download) | `MambaStateSnapshot` embedded in `agent-package.json` | inside `mamba_state` field |
+
+The engine auto-saves after every `step()` call when memory is enabled in AI Chat.
+
+### Text Embedding
+
+Input text is converted to a `dim`-dimensional float vector using a character-level positional hash (no external model required):
+
+```
+vec[i % dim] += sin(charCode × 0.01 + i × 0.1)
+vec[(i+1) % dim] += cos(charCode × 0.007 + i × 0.07)
+// then L2-normalised
+```
+
+### Memory Context Injection
+
+After each `step()`, the engine produces a context string:
+
+```
+[Memory: step=42 signal=0.731 channels=ch0,ch3,ch7 context="previous turn → last turn"]
+```
+
+This string is prepended to the system prompt before Transformer inference.
+
+---
+
+## 20. Agent Runtime SDK
+
+### Overview
+
+`frontend/src/lib/agent-runtime.ts` provides the unified agent execution contract:
+
+```typescript
+const runtime = await createAgentRuntime({ agentId, projectId });
+
+// Advance state + run inference
+const result = await runtime.step({ userMessage, useMemory: true });
+
+// Train memory (no gradient descent)
+await runtime.train({ mode: 'memory', sequences: [...] });
+
+// Train behavior (signals LoRA pipeline)
+await runtime.train({ mode: 'behavior' });
+
+// Full hybrid pass
+await runtime.train({ mode: 'hybrid', sequences: [...] });
+
+// State management
+const snap = runtime.getSnapshot();   // for agent package embedding
+await runtime.saveState();             // persist to IndexedDB
+
+// Cloud escalation
+const result = await runtime.offload({ type: 'inference', payload: { messages } });
+```
+
+### Execution Flow (per step)
+
+```
+1. engine.step(userMessage)      → advances Mamba state, returns memoryContext
+2. assemble system prompt         → file context + project context + memoryContext
+3. sendAIMessage()                → local inference via Workers AI proxy
+4. scoreConfidence(response)      → heuristic confidence score (0–1)
+5. if confidence < threshold      → escalate to cloud via offload()
+6. engine.save()                  → persist updated state to IndexedDB
+```
+
+### Training Modes
+
+| Mode | What happens |
+|---|---|
+| `behavior` | Signals caller to run the existing LoRA fine-tuning pipeline |
+| `memory` | Runs `engine.trainMemory(sequences)` — advances state over historical data, no gradients |
+| `hybrid` | Memory pass first, then behavior signal |
+
+### Confidence Scoring
+
+A lightweight heuristic scores response quality:
+
+- Base score = `min(1, response.length / 500)`
+- Penalty of 0.1 per hedge phrase (`"I think"`, `"maybe"`, `"not sure"`, etc.)
+- Threshold (default `0.4`) — responses below this trigger cloud escalation
+
+---
+
+## 21. WebGPU Runtime Layer
+
+The unified WebGPU runtime now hosts three subsystems:
+
+```
+WebGPU Runtime
+ ├── Transformers.js    (existing — ONNX model inference)
+ ├── LoRA training      (existing — gradient accumulation kernels)
+ └── Mamba engine       (new — selective scan WGSL kernel)
+```
+
+All three subsystems share the same `GPUDevice` obtained via `navigator.gpu.requestAdapter()`. If WebGPU is unavailable, each subsystem degrades gracefully:
+
+| Subsystem | Fallback |
+|---|---|
+| Transformers.js | ONNX WASM (CPU) |
+| LoRA training | Cloud GPU offload via Workers AI |
+| Mamba engine | Pure JavaScript SSM (`jsSelectiveScan`) |
+
+---
+
+## 22. Storage Integration
+
+### Extended Storage Map
+
+| Store | Technology | Contents |
+|---|---|---|
+| **R2** | Cloudflare R2 | Project files, datasets, LoRA artifacts, agent packages |
+| **Postgres** | Neon Postgres | Projects, training jobs, datasets, published agents |
+| **IndexedDB** (new) | Browser IndexedDB | Active Mamba agent state, training checkpoints |
+
+### IndexedDB Schema
+
+```
+Database: builderforce_mamba  (version 1)
+└── Object store: agent_states  (keyPath: agentId)
+    └── MambaAgentState {
+          agentId, projectId, version,
+          snapshot: MambaStateSnapshot,
+          history: string[],
+          updatedAt
+        }
+```
+
+### Agent Package Format (v2.0)
+
+Agents trained with Memory or Hybrid mode are published as **v2.0 packages**:
+
+```jsonc
+{
+  "version": "2.0",
+  "platform": "builderforce.ai",
+  "name": "MyAgent",
+  "base_model": "gpt-neox-20m",
+  "lora_config": { "rank": 8, "alpha": 16, "target_modules": ["q_proj", "v_proj"] },
+  "mamba_state": {
+    "data": [0.12, -0.05, ...],   // Float32 packed state
+    "dim": 64,
+    "order": 4,
+    "channels": 16,
+    "step": 142
+  },
+  "created_at": "2026-03-18T07:00:00.000Z"
+}
+```
+
+Agents without a Mamba snapshot remain **v1.0** packages (backward compatible).
+
+### Agent State Viewer Panel
+
+A new right-panel tab **🔬 State** renders the `AgentStateViewer` component:
+
+- **State summary cards** — step counter, channels, order, dim
+- **Heatmap visualisation** — colour-coded channel activation (blue = positive, red = negative)
+- **Interaction history** — last 10 entries from the history ring-buffer
+- **Sequence replay** — replay arbitrary sequences against a copy of the current state and observe memory evolution in real-time
+- **Reset** — zero the state and persist
 
 ---
 

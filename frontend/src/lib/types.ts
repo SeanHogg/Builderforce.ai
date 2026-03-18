@@ -208,7 +208,7 @@ export interface PublishedAgent {
 
 /** Portable agent package that can be downloaded and used to deploy the agent. */
 export interface AgentPackage {
-  version: '1.0';
+  version: '1.0' | '2.0';
   platform: 'builderforce.ai';
   name: string;
   title: string;
@@ -224,4 +224,53 @@ export interface AgentPackage {
   r2_artifact_key?: string;
   resume_md?: string;
   created_at: string;
+  /** Mamba persistent memory snapshot (v2.0+ agents only) */
+  mamba_state?: MambaStateSnapshot;
+  /** Mamba engine configuration (v2.0+ agents only) */
+  mamba_config?: MambaConfig;
+}
+
+// ---------------------------------------------------------------------------
+// Mamba State Engine (Hybrid Local Brain)
+// ---------------------------------------------------------------------------
+
+/** Training mode for the AI training pipeline */
+export type TrainingMode = 'behavior' | 'memory' | 'hybrid';
+
+/** Inference execution target */
+export type InferenceMode = 'local' | 'hybrid' | 'cloud';
+
+/** Compact snapshot of a Mamba SSM state vector, serialisable to IndexedDB / R2 */
+export interface MambaStateSnapshot {
+  /** Packed Float32 values encoded as a plain number array for JSON portability */
+  data: number[];
+  /** Dimensionality of each state channel */
+  dim: number;
+  /** SSM order (hidden states per channel) */
+  order: number;
+  /** Number of parallel channels */
+  channels: number;
+  /** Monotonically increasing sequence counter */
+  step: number;
+}
+
+/** Configuration for the Mamba state engine */
+export interface MambaConfig {
+  dim: number;
+  order: number;
+  channels: number;
+  /** Maximum interaction history to keep before compression */
+  maxHistory: number;
+}
+
+/** Full persisted Mamba agent state (stored in IndexedDB + synced to R2) */
+export interface MambaAgentState {
+  agentId: string;
+  projectId: string | number;
+  /** Increment on each save for version history */
+  version: number;
+  snapshot: MambaStateSnapshot;
+  /** Ring-buffer of recent interaction strings */
+  history: string[];
+  updatedAt: string;
 }

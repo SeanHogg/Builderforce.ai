@@ -6,6 +6,7 @@ import {
   type TrainingConfig,
   type TrainingJob,
   type Dataset,
+  type TrainingMode,
 } from '@/lib/types';
 import {
   generateDataset,
@@ -16,6 +17,7 @@ import {
 } from '@/lib/api';
 import { getApiBaseUrl } from '@/lib/apiClient';
 import { WebGPUTrainer, isWebGPUAvailable, shouldUseWebGPU, type TrainingStep } from '@/lib/webgpu-trainer';
+import { MambaEngine, isMambaWebGPUAvailable } from '@/lib/mamba-engine';
 
 interface AITrainingPanelProps {
   projectId: string | number;
@@ -36,6 +38,7 @@ const DEFAULT_CONFIG: TrainingConfig = {
 
 export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITrainingPanelProps) {
   const [tab, setTab] = useState<PanelTab>('configure');
+  const [trainingMode, setTrainingMode] = useState<TrainingMode>('behavior');
   const [config, setConfig] = useState<TrainingConfig>(DEFAULT_CONFIG);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [jobs, setJobs] = useState<TrainingJob[]>([]);
@@ -46,7 +49,10 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
   const [isTraining, setIsTraining] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [webgpuAvailable] = useState(isWebGPUAvailable);
+  const [mambaWebGPU] = useState(isMambaWebGPUAvailable);
+  const [memorySequences, setMemorySequences] = useState('');
   const trainerRef = useRef<WebGPUTrainer | null>(null);
+  const mambaRef = useRef<MambaEngine | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   const selectedModel = SUPPORTED_MODELS.find(m => m.id === config.baseModel);
@@ -203,6 +209,40 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
     appendLog('⏹  Training stopped.');
   }, [appendLog]);
 
+  /** Memory Training — advance Mamba state through provided sequences */
+  const handleMemoryTraining = useCallback(async () => {
+    const sequences = memorySequences
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (sequences.length === 0) {
+      appendLog('⚠️ No sequences provided for memory training.');
+      return;
+    }
+    setIsTraining(true);
+    appendLog(`🧬 Starting Memory Training — ${sequences.length} sequence(s)…`);
+
+    try {
+      const { MambaEngine } = await import('@/lib/mamba-engine');
+      const engine = new MambaEngine(`project-${projectId}`, projectId);
+      await engine.init();
+      await engine.loadFromIndexedDB();
+      mambaRef.current = engine;
+
+      await engine.trainMemory(sequences, (i, total) => {
+        appendLog(`  🔄 Processed ${i}/${total}: ${sequences[i - 1]?.slice(0, 60)}…`);
+      });
+
+      await engine.save();
+      const snap = engine.getSnapshot();
+      appendLog(`✅ Memory training complete — state step: ${snap.step}, channels: ${snap.channels}`);
+    } catch (e) {
+      appendLog(`❌ Memory training failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    } finally {
+      setIsTraining(false);
+    }
+  }, [memorySequences, projectId, appendLog]);
+
   const handleEvaluate = useCallback(async (jobId: string) => {
     appendLog(`🧪 Evaluating model for job ${jobId}…`);
     try {
@@ -218,6 +258,12 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
     }
   }, [appendLog]);
 
+  /** Hybrid Training — memory pass first, then LoRA behavior pass */
+  const handleHybridTraining = useCallback(async () => {
+    await handleMemoryTraining();
+    await handleStartTraining();
+  }, [handleMemoryTraining, handleStartTraining]);
+
   const maxLoss = lossHistory.length > 0 ? Math.max(...lossHistory.map(s => s.loss)) : 3;
 
   return (
@@ -227,9 +273,15 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
         <h2 className="font-semibold flex items-center gap-1" style={{ color: 'var(--text-primary)' }}>
           <span>🧠</span> AI Model Training
         </h2>
-        <div className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+        <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
           <span className={`w-2 h-2 rounded-full ${webgpuAvailable ? 'bg-green-400' : 'bg-yellow-400'}`} />
           <span>{webgpuAvailable ? 'WebGPU' : 'CPU'}</span>
+          {mambaWebGPU && (
+            <>
+              <span className="w-2 h-2 rounded-full bg-purple-400" />
+              <span>Mamba</span>
+            </>
+          )}
         </div>
       </div>
 
@@ -260,124 +312,191 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
         {/* Configure Tab */}
         {tab === 'configure' && (
           <div className="p-3 space-y-3">
-            {/* Model selection */}
+            {/* Training Mode Selector */}
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Base Model</label>
-              <select
-                value={config.baseModel}
-                onChange={e => setConfig(c => ({ ...c, baseModel: e.target.value }))}
-                className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
-              >
-                {SUPPORTED_MODELS.map(m => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.parameters}) — {m.task}
-                  </option>
+              <label className="block text-xs text-gray-400 mb-1">Training Mode</label>
+              <div className="flex rounded overflow-hidden border border-gray-700">
+                {(['behavior', 'memory', 'hybrid'] as TrainingMode[]).map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => setTrainingMode(mode)}
+                    className={`flex-1 py-1.5 text-xs font-semibold capitalize transition-colors ${
+                      trainingMode === mode
+                        ? 'bg-indigo-700 text-white'
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    }`}
+                  >
+                    {mode === 'behavior' ? '⚙️ Behavior' : mode === 'memory' ? '🧬 Memory' : '🔮 Hybrid'}
+                  </button>
                 ))}
-              </select>
-              {selectedModel && (
-                <div className="mt-1 text-xs text-gray-500 flex items-center gap-1">
-                  <span className={`w-1.5 h-1.5 rounded-full ${canUseWebGPU ? 'bg-green-400' : 'bg-orange-400'}`} />
-                  {canUseWebGPU ? 'In-browser WebGPU' : 'Cloud GPU offload required'}
+              </div>
+              <div className="mt-1 text-xs text-gray-500">
+                {trainingMode === 'behavior' && 'LoRA fine-tuning — adjusts model weights (existing pipeline)'}
+                {trainingMode === 'memory' && 'Mamba state evolution — no gradient descent required'}
+                {trainingMode === 'hybrid' && 'Combines LoRA weight updates + Mamba memory evolution'}
+              </div>
+            </div>
+
+            {/* Memory Training UI */}
+            {(trainingMode === 'memory' || trainingMode === 'hybrid') && (
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Memory Sequences (one per line)</label>
+                <textarea
+                  value={memorySequences}
+                  onChange={e => setMemorySequences(e.target.value)}
+                  placeholder="Enter interaction sequences, chat logs, or workflows — one per line…"
+                  className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-none"
+                  rows={4}
+                />
+                <div className="text-xs text-gray-500 mt-0.5">
+                  These sequences evolve the Mamba state without retraining weights.
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
-            {/* Capability prompt */}
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Capability Prompt</label>
-              <textarea
-                value={config.capabilityPrompt}
-                onChange={e => setConfig(c => ({ ...c, capabilityPrompt: e.target.value }))}
-                placeholder="Describe the target capability, e.g. 'Python debugging and error explanation'"
-                className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-none"
-                rows={3}
-              />
-            </div>
-
-            {/* Dataset */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs text-gray-400">Training Dataset</label>
-                <button
-                  onClick={handleGenerateDataset}
-                  disabled={isGenerating || !config.capabilityPrompt.trim()}
-                  className="text-xs bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 text-white px-2 py-0.5 rounded"
+            {/* Model selection — shown for behavior + hybrid */}
+            {(trainingMode === 'behavior' || trainingMode === 'hybrid') && (
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Base Model</label>
+                <select
+                  value={config.baseModel}
+                  onChange={e => setConfig(c => ({ ...c, baseModel: e.target.value }))}
+                  className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
                 >
-                  {isGenerating ? '⏳ Generating…' : '✨ Generate'}
-                </button>
+                  {SUPPORTED_MODELS.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.parameters}) — {m.task}
+                    </option>
+                  ))}
+                </select>
+                {selectedModel && (
+                  <div className="mt-1 text-xs text-gray-500 flex items-center gap-1">
+                    <span className={`w-1.5 h-1.5 rounded-full ${canUseWebGPU ? 'bg-green-400' : 'bg-orange-400'}`} />
+                    {canUseWebGPU ? 'In-browser WebGPU' : 'Cloud GPU offload required'}
+                  </div>
+                )}
               </div>
-              <select
-                value={selectedDatasetId}
-                onChange={e => setSelectedDatasetId(e.target.value)}
-                className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
-              >
-                <option value="">— no dataset (use capability prompt only) —</option>
-                {datasets.map(d => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} ({d.example_count} examples)
-                  </option>
-                ))}
-              </select>
-            </div>
+            )}
+            {/* Capability prompt — shown for behavior + hybrid */}
+            {(trainingMode === 'behavior' || trainingMode === 'hybrid') && (
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Capability Prompt</label>
+                <textarea
+                  value={config.capabilityPrompt}
+                  onChange={e => setConfig(c => ({ ...c, capabilityPrompt: e.target.value }))}
+                  placeholder="Describe the target capability, e.g. 'Python debugging and error explanation'"
+                  className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-none"
+                  rows={3}
+                />
+              </div>
+            )}
 
-            {/* Training parameters */}
-            <div className="grid grid-cols-2 gap-2">
+            {/* Dataset — shown for behavior + hybrid */}
+            {(trainingMode === 'behavior' || trainingMode === 'hybrid') && (
               <div>
-                <label className="block text-xs text-gray-400 mb-1">LoRA Rank</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={64}
-                  value={config.loraRank}
-                  onChange={e => setConfig(c => ({ ...c, loraRank: parseInt(e.target.value) || 8 }))}
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs text-gray-400">Training Dataset</label>
+                  <button
+                    onClick={handleGenerateDataset}
+                    disabled={isGenerating || !config.capabilityPrompt.trim()}
+                    className="text-xs bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 text-white px-2 py-0.5 rounded"
+                  >
+                    {isGenerating ? '⏳ Generating…' : '✨ Generate'}
+                  </button>
+                </div>
+                <select
+                  value={selectedDatasetId}
+                  onChange={e => setSelectedDatasetId(e.target.value)}
                   className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
-                />
+                >
+                  <option value="">— no dataset (use capability prompt only) —</option>
+                  {datasets.map(d => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.example_count} examples)
+                    </option>
+                  ))}
+                </select>
               </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Epochs</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={config.epochs}
-                  onChange={e => setConfig(c => ({ ...c, epochs: parseInt(e.target.value) || 3 }))}
-                  className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
-                />
+            )}
+
+            {/* Training parameters — shown for behavior + hybrid */}
+            {(trainingMode === 'behavior' || trainingMode === 'hybrid') && (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">LoRA Rank</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={64}
+                    value={config.loraRank}
+                    onChange={e => setConfig(c => ({ ...c, loraRank: parseInt(e.target.value) || 8 }))}
+                    className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Epochs</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={config.epochs}
+                    onChange={e => setConfig(c => ({ ...c, epochs: parseInt(e.target.value) || 3 }))}
+                    className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Batch Size</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={32}
+                    value={config.batchSize}
+                    onChange={e => setConfig(c => ({ ...c, batchSize: parseInt(e.target.value) || 4 }))}
+                    className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Learning Rate</label>
+                  <input
+                    type="number"
+                    step={0.00001}
+                    min={0.000001}
+                    max={0.01}
+                    value={config.learningRate}
+                    onChange={e => setConfig(c => ({ ...c, learningRate: parseFloat(e.target.value) || 0.0002 }))}
+                    className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Batch Size</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={32}
-                  value={config.batchSize}
-                  onChange={e => setConfig(c => ({ ...c, batchSize: parseInt(e.target.value) || 4 }))}
-                  className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Learning Rate</label>
-                <input
-                  type="number"
-                  step={0.00001}
-                  min={0.000001}
-                  max={0.01}
-                  value={config.learningRate}
-                  onChange={e => setConfig(c => ({ ...c, learningRate: parseFloat(e.target.value) || 0.0002 }))}
-                  className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
-                />
-              </div>
-            </div>
+            )}
 
             {/* Train button */}
             <div className="flex gap-2">
-              <button
-                onClick={handleStartTraining}
-                disabled={isTraining || isGenerating}
-                className="flex-1 bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
-              >
-                {isTraining ? '⏳ Training…' : '▶ Start Training'}
-              </button>
+              {trainingMode === 'memory' ? (
+                <button
+                  onClick={handleMemoryTraining}
+                  disabled={isTraining || !memorySequences.trim()}
+                  className="flex-1 bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
+                >
+                  {isTraining ? '⏳ Training…' : '🧬 Train Memory'}
+                </button>
+              ) : trainingMode === 'hybrid' ? (
+                <button
+                  onClick={handleHybridTraining}
+                  disabled={isTraining || isGenerating}
+                  className="flex-1 bg-gradient-to-r from-purple-700 to-green-700 hover:from-purple-600 hover:to-green-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
+                >
+                  {isTraining ? '⏳ Training…' : '🔮 Start Hybrid Training'}
+                </button>
+              ) : (
+                <button
+                  onClick={handleStartTraining}
+                  disabled={isTraining || isGenerating}
+                  className="flex-1 bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
+                >
+                  {isTraining ? '⏳ Training…' : '▶ Start Training'}
+                </button>
+              )}
               {isTraining && (
                 <button
                   onClick={handleStopTraining}
