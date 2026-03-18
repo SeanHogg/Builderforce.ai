@@ -68,6 +68,9 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
     setIsReplaying(true);
     setReplayLog([]);
 
+    // A prefixed ID is used for the replay engine so it operates on an isolated
+    // copy of the state without overwriting the live agent state in IndexedDB.
+    // The replay is purely exploratory and should never persist back.
     const engine = new MambaEngine(`replay-${effectiveAgentId}`, projectId);
     await engine.init();
     // Load base state to replay from

@@ -67,11 +67,15 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
   // Load Mamba snapshot from IndexedDB when toggled on
   useEffect(() => {
     if (!includeMamba) { setMambaSnapshot(null); return; }
+    let cancelled = false;
     const engine = new MambaEngine(`project-${projectId}`, projectId);
     engine.init()
       .then(() => engine.loadFromIndexedDB())
-      .then(() => { setMambaSnapshot(engine.getSnapshot()); })
-      .catch(() => setMambaSnapshot(null));
+      .then(() => {
+        if (!cancelled) setMambaSnapshot(engine.getSnapshot());
+      })
+      .catch(() => { if (!cancelled) setMambaSnapshot(null); });
+    return () => { cancelled = true; };
   }, [includeMamba, projectId]);
 
   const selectedJob = completedJobs.find(j => j.id === selectedJobId);

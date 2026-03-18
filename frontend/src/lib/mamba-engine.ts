@@ -208,17 +208,25 @@ function jsSelectiveScan(
 
 function textToEmbedding(text: string, dim: number): Float32Array {
   const vec = new Float32Array(dim);
+  // Single pass: accumulate and compute sum of squares simultaneously
+  let sumSq = 0;
   for (let i = 0; i < text.length; i++) {
     const code = text.charCodeAt(i);
     const pos = i % dim;
-    // Accumulate with positional weighting
-    vec[pos] += Math.sin(code * 0.01 + i * 0.1);
-    vec[(pos + 1) % dim] += Math.cos(code * 0.007 + i * 0.07);
+    const pos1 = (pos + 1) % dim;
+    const sinVal = Math.sin(code * 0.01 + i * 0.1);
+    const cosVal = Math.cos(code * 0.007 + i * 0.07);
+    // Remove old squared contributions before update
+    sumSq -= vec[pos] * vec[pos];
+    sumSq -= vec[pos1] * vec[pos1];
+    vec[pos] += sinVal;
+    vec[pos1] += cosVal;
+    // Add new squared contributions
+    sumSq += vec[pos] * vec[pos];
+    sumSq += vec[pos1] * vec[pos1];
   }
-  // Normalise
-  let norm = 0;
-  for (let i = 0; i < dim; i++) norm += vec[i] * vec[i];
-  norm = Math.sqrt(norm) + 1e-8;
+  // Normalise in a single pass using the already-computed sumSq
+  const norm = Math.sqrt(sumSq) + 1e-8;
   for (let i = 0; i < dim; i++) vec[i] /= norm;
   return vec;
 }
@@ -413,14 +421,22 @@ export class MambaEngine {
   }
 
   private buildContextString(outputVec: Float32Array): string {
-    // Summarise the memory signal as a short context hint
-    const magnitude = Math.sqrt(outputVec.reduce((s, v) => s + v * v, 0));
-    const dominant = Array.from(outputVec)
-      .map((v, i) => ({ v, i }))
-      .sort((a, b) => Math.abs(b.v) - Math.abs(a.v))
-      .slice(0, 3)
-      .map(({ i }) => `ch${i}`)
-      .join(',');
+    // Summarise the memory signal as a short context hint.
+    // Use a single pass to compute magnitude and find the top-3 dominant channels.
+    let sumSq = 0;
+    const top3: { abs: number; idx: number }[] = [];
+    for (let i = 0; i < outputVec.length; i++) {
+      const v = outputVec[i];
+      sumSq += v * v;
+      const abs = Math.abs(v);
+      if (top3.length < 3 || abs > top3[2].abs) {
+        top3.push({ abs, idx: i });
+        top3.sort((a, b) => b.abs - a.abs);
+        if (top3.length > 3) top3.pop();
+      }
+    }
+    const magnitude = Math.sqrt(sumSq);
+    const dominant = top3.map(({ idx }) => `ch${idx}`).join(',');
 
     const recent = this.state.history.slice(-3).join(' → ');
     return `[Memory: step=${this.state.snapshot.step} signal=${magnitude.toFixed(3)} channels=${dominant}${recent ? ` context="${recent}"` : ''}]`;
