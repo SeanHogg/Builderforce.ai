@@ -18,6 +18,8 @@
  */
 
 import { MambaEngine, createMambaEngine } from './mamba-engine';
+import type { ModelProvider } from './model-provider';
+import { ExternalLLMProvider } from './model-provider';
 import type { MambaAgentState, MambaStateSnapshot, MambaConfig, TrainingMode, InferenceMode } from './types';
 import { sendAIMessage } from './api';
 
@@ -61,6 +63,11 @@ export interface AgentRuntimeOptions {
   confidenceThreshold?: number;
   /** Worker base URL for cloud escalation */
   workerUrl?: string;
+  /**
+   * Pluggable model provider for inference.
+   * Defaults to ExternalLLMProvider (Workers AI) when not supplied.
+   */
+  modelProvider?: ModelProvider;
 }
 
 // ---------------------------------------------------------------------------
@@ -97,6 +104,10 @@ export class AgentRuntime {
       confidenceThreshold: 0.4,
       workerUrl: '',
       mambaConfig: {},
+      modelProvider: new ExternalLLMProvider({
+        projectId: options.projectId,
+        label: 'Workers AI',
+      }),
       ...options,
     };
   }
@@ -119,7 +130,7 @@ export class AgentRuntime {
    * Execute one agent turn:
    *   1. Update Mamba state
    *   2. Assemble context
-   *   3. Run inference (local or cloud)
+   *   3. Run inference via the configured ModelProvider
    *   4. Return structured result
    */
   async step(
@@ -132,44 +143,62 @@ export class AgentRuntime {
       ? await this.engine.step(input.userMessage)
       : '';
 
-    const systemParts: string[] = [
+    const systemPrompt = [
       'You are an expert AI coding assistant built into Builderforce.ai.',
       'Use markdown for your response.',
-    ];
-    if (memoryContext) systemParts.push(`Agent memory: ${memoryContext}`);
-    if (input.fileContext) systemParts.push(`Active file content:\n\`\`\`\n${input.fileContext.slice(0, MAX_FILE_CONTEXT_LENGTH)}\n\`\`\``);
-    if (input.projectContext) systemParts.push(`Project context: ${input.projectContext}`);
+      input.projectContext ? `Project context: ${input.projectContext}` : '',
+    ].filter(Boolean).join('\n\n');
 
-    const messages = [
-      { role: 'system' as const, content: systemParts.join('\n\n') },
-      { role: 'user' as const, content: input.userMessage },
-    ];
+    const fileContext = input.fileContext
+      ? input.fileContext.slice(0, MAX_FILE_CONTEXT_LENGTH)
+      : undefined;
+
+    const modelContext = {
+      systemPrompt,
+      memoryContext: memoryContext || undefined,
+      fileContext,
+      messages: [{ role: 'user' as const, content: input.userMessage }],
+    };
 
     let response = '';
-
-    // Attempt local inference first (via existing sendAIMessage which proxies Workers AI)
+    const provider = this.options.modelProvider;
     const mode = input.inferenceMode ?? 'local';
-    const escalate = mode === 'cloud';
+    const forceCloud = mode === 'cloud';
 
-    if (!escalate) {
+    if (!forceCloud) {
       try {
-        await sendAIMessage(this.options.projectId, messages, (chunk) => {
-          response += chunk;
-          onChunk?.(chunk);
-        });
+        if (provider.isReady()) {
+          response = await provider.stream(input.userMessage, modelContext, (chunk) => {
+            onChunk?.(chunk);
+          });
+        } else {
+          // Provider not ready — fall back to direct sendAIMessage
+          const messages = [
+            { role: 'system' as const, content: systemPrompt },
+            ...(memoryContext ? [{ role: 'system' as const, content: `Agent memory: ${memoryContext}` }] : []),
+            { role: 'user' as const, content: input.userMessage },
+          ];
+          await sendAIMessage(this.options.projectId, messages, (chunk) => {
+            response += chunk;
+            onChunk?.(chunk);
+          });
+        }
       } catch {
-        // Fall through to cloud
+        // Fall through to cloud escalation
       }
     }
 
     const confidence = scoreConfidence(response);
-    let escalatedToCloud = escalate;
+    let escalatedToCloud = forceCloud;
 
-    if (!escalate && confidence < this.options.confidenceThreshold && this.options.workerUrl) {
-      // Escalate
+    if (!forceCloud && confidence < this.options.confidenceThreshold && this.options.workerUrl) {
       escalatedToCloud = true;
       response = '';
       try {
+        const messages = [
+          { role: 'system' as const, content: systemPrompt },
+          { role: 'user' as const, content: input.userMessage },
+        ];
         await sendAIMessage(this.options.projectId, messages, (chunk) => {
           response += chunk;
           onChunk?.(chunk);
@@ -230,6 +259,17 @@ export class AgentRuntime {
   /** Load state from a snapshot (e.g. from a downloaded agent package). */
   loadSnapshot(snapshot: MambaStateSnapshot): void {
     this.engine?.loadFromSnapshot(snapshot);
+  }
+
+  /** Return the active ModelProvider for this runtime. */
+  getModelProvider(): ModelProvider {
+    // modelProvider is always set in the constructor with a default ExternalLLMProvider
+    return this.options.modelProvider!;
+  }
+
+  /** Replace the active ModelProvider at runtime. */
+  setModelProvider(provider: ModelProvider): void {
+    this.options.modelProvider = provider;
   }
 
   // -- Cloud offload ---------------------------------------------------------

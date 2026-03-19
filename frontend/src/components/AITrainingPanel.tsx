@@ -18,6 +18,7 @@ import {
 import { getApiBaseUrl } from '@/lib/apiClient';
 import { WebGPUTrainer, isWebGPUAvailable, shouldUseWebGPU, type TrainingStep } from '@/lib/webgpu-trainer';
 import { MambaEngine, isMambaWebGPUAvailable } from '@/lib/mamba-engine';
+import { MambaModelProvider, type MambaProviderConfig } from '@/lib/model-provider';
 
 interface AITrainingPanelProps {
   projectId: string | number;
@@ -36,10 +37,22 @@ const DEFAULT_CONFIG: TrainingConfig = {
   learningRate: 0.0002,
 };
 
+/** Default Mamba full-model training config */
+const DEFAULT_MAMBA_PROVIDER_CONFIG: MambaProviderConfig = {
+  dModel: 512,
+  numLayers: 8,
+  dState: 16,
+  dConv: 4,
+  expand: 2,
+  wsla: false,
+};
+
 export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITrainingPanelProps) {
   const [tab, setTab] = useState<PanelTab>('configure');
   const [trainingMode, setTrainingMode] = useState<TrainingMode>('behavior');
   const [config, setConfig] = useState<TrainingConfig>(DEFAULT_CONFIG);
+  const [mambaProviderConfig, setMambaProviderConfig] = useState<MambaProviderConfig>(DEFAULT_MAMBA_PROVIDER_CONFIG);
+  const [mambaTrainCode, setMambaTrainCode] = useState('');
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [jobs, setJobs] = useState<TrainingJob[]>([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
@@ -53,6 +66,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
   const [memorySequences, setMemorySequences] = useState('');
   const trainerRef = useRef<WebGPUTrainer | null>(null);
   const mambaRef = useRef<MambaEngine | null>(null);
+  const mambaProviderRef = useRef<MambaModelProvider | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   const selectedModel = SUPPORTED_MODELS.find(m => m.id === config.baseModel);
@@ -258,6 +272,42 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
     }
   }, [appendLog]);
 
+  /** Mamba Full-Model Training — trains the actual Mamba model weights via mambacode.js */
+  const handleMambaModelTraining = useCallback(async () => {
+    if (!mambaTrainCode.trim()) {
+      appendLog('⚠️ No training code provided for Mamba model training.');
+      return;
+    }
+    setIsTraining(true);
+    appendLog('🐍 Initialising Mamba model (mambacode.js)…');
+    try {
+      const provider = new MambaModelProvider(mambaProviderConfig);
+      mambaProviderRef.current = provider;
+      await provider.init();
+
+      if (!provider.isReady()) {
+        appendLog('❌ Mamba model failed to initialise — WebGPU may not be available in this browser.');
+        return;
+      }
+
+      appendLog(`✅ Mamba model ready. Starting training (${config.epochs} epoch(s)${mambaProviderConfig.wsla ? ', WSLA mode' : ''})…`);
+      const losses = await provider.train(mambaTrainCode, {
+        learningRate: 1e-4,
+        epochs: config.epochs,
+        wsla: mambaProviderConfig.wsla,
+        onEpochEnd: (epoch, loss) => {
+          appendLog(`  📊 Epoch ${epoch}: loss=${loss.toFixed(4)}`);
+          setLossHistory(prev => [...prev, { epoch, step: epoch, loss, learningRate: 1e-4 }]);
+        },
+      });
+      appendLog(`✅ Mamba training complete — final loss: ${(losses[losses.length - 1] ?? 0).toFixed(4)}`);
+    } catch (e) {
+      appendLog(`❌ Mamba training failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    } finally {
+      setIsTraining(false);
+    }
+  }, [mambaTrainCode, mambaProviderConfig, config.epochs, appendLog]);
+
   /** Hybrid Training — memory pass first, then LoRA behavior pass */
   const handleHybridTraining = useCallback(async () => {
     await handleMemoryTraining();
@@ -316,7 +366,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
             <div>
               <label className="block text-xs text-gray-400 mb-1">Training Mode</label>
               <div className="flex rounded overflow-hidden border border-gray-700">
-                {(['behavior', 'memory', 'hybrid'] as TrainingMode[]).map(mode => (
+                {(['behavior', 'memory', 'hybrid', 'mamba'] as TrainingMode[]).map(mode => (
                   <button
                     key={mode}
                     onClick={() => setTrainingMode(mode)}
@@ -326,7 +376,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                         : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
                     }`}
                   >
-                    {mode === 'behavior' ? '⚙️ Behavior' : mode === 'memory' ? '🧬 Memory' : '🔮 Hybrid'}
+                    {mode === 'behavior' ? '⚙️ Behavior' : mode === 'memory' ? '🧬 Memory' : mode === 'hybrid' ? '🔮 Hybrid' : '🐍 Mamba'}
                   </button>
                 ))}
               </div>
@@ -334,8 +384,77 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                 {trainingMode === 'behavior' && 'LoRA fine-tuning — adjusts model weights (existing pipeline)'}
                 {trainingMode === 'memory' && 'Mamba state evolution — no gradient descent required'}
                 {trainingMode === 'hybrid' && 'Combines LoRA weight updates + Mamba memory evolution'}
+                {trainingMode === 'mamba' && 'Full Mamba model training via mambacode.js (WebGPU on-device)'}
               </div>
             </div>
+
+            {/* Mamba Full-Model Training UI */}
+            {trainingMode === 'mamba' && (
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Training Code (paste your codebase or examples)</label>
+                  <textarea
+                    value={mambaTrainCode}
+                    onChange={e => setMambaTrainCode(e.target.value)}
+                    placeholder="// Paste code or text to fine-tune the Mamba model on…"
+                    className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-none font-mono"
+                    rows={5}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Model Dim</label>
+                    <input
+                      type="number"
+                      min={64}
+                      max={2048}
+                      step={64}
+                      value={mambaProviderConfig.dModel ?? 512}
+                      onChange={e => setMambaProviderConfig(c => ({ ...c, dModel: parseInt(e.target.value) || 512 }))}
+                      className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Layers</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={32}
+                      value={mambaProviderConfig.numLayers ?? 8}
+                      onChange={e => setMambaProviderConfig(c => ({ ...c, numLayers: parseInt(e.target.value) || 8 }))}
+                      className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Epochs</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={config.epochs}
+                      onChange={e => setConfig(c => ({ ...c, epochs: parseInt(e.target.value) || 3 }))}
+                      className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                  <div className="flex items-end pb-1.5">
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={mambaProviderConfig.wsla ?? false}
+                        onChange={e => setMambaProviderConfig(c => ({ ...c, wsla: e.target.checked }))}
+                        className="accent-purple-500"
+                      />
+                      WSLA mode
+                    </label>
+                  </div>
+                </div>
+                <div className="text-xs text-gray-500">
+                  {mambaProviderConfig.wsla
+                    ? 'WSLA: only B and C matrices are updated — rapid local adaptation'
+                    : 'Full weight update — updates all model parameters'}
+                </div>
+              </div>
+            )}
 
             {/* Memory Training UI */}
             {(trainingMode === 'memory' || trainingMode === 'hybrid') && (
@@ -472,7 +591,15 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
 
             {/* Train button */}
             <div className="flex gap-2">
-              {trainingMode === 'memory' ? (
+              {trainingMode === 'mamba' ? (
+                <button
+                  onClick={handleMambaModelTraining}
+                  disabled={isTraining || !mambaTrainCode.trim()}
+                  className="flex-1 bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
+                >
+                  {isTraining ? '⏳ Training…' : '🐍 Train Mamba Model'}
+                </button>
+              ) : trainingMode === 'memory' ? (
                 <button
                   onClick={handleMemoryTraining}
                   disabled={isTraining || !memorySequences.trim()}
