@@ -231,11 +231,36 @@ export interface AgentPackage {
 }
 
 // ---------------------------------------------------------------------------
+// CoderClaw Agent
+// ---------------------------------------------------------------------------
+
+/** Which model backend a CoderClaw agent uses for inference */
+export type ModelBackend = 'mamba' | 'external-llm' | string;
+
+/** Top-level configuration for a CoderClaw agent */
+export interface CoderClawAgentConfig {
+  /** Unique agent identifier */
+  agentId: string;
+  /** Display name shown in the IDE and workforce registry */
+  name: string;
+  /** Short description of what this agent does */
+  description?: string;
+  /** The model backend to use for inference */
+  modelBackend: ModelBackend;
+  /** Mamba provider config (required when modelBackend === 'mamba') */
+  mambaProvider?: import('./model-provider').MambaProviderConfig;
+  /** Mamba SSM state engine config */
+  mambaConfig?: MambaConfig;
+  /** Confidence threshold below which the agent escalates to cloud (0–1) */
+  confidenceThreshold?: number;
+}
+
+// ---------------------------------------------------------------------------
 // Mamba State Engine (Hybrid Local Brain)
 // ---------------------------------------------------------------------------
 
 /** Training mode for the AI training pipeline */
-export type TrainingMode = 'behavior' | 'memory' | 'hybrid';
+export type TrainingMode = 'behavior' | 'memory' | 'hybrid' | 'mamba';
 
 /** Inference execution target */
 export type InferenceMode = 'local' | 'hybrid' | 'cloud';
