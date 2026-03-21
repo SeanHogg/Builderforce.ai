@@ -183,16 +183,58 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
     return clawService.verifyApiKey(id, key);
   };
 
+  /**
+   * Extract the claw API key from the request.
+   * Prefers the Authorization: Bearer header; falls back to the legacy ?key= query
+   * parameter so existing claws continue working during the migration window.
+   */
+  const extractClawKey = (c: Parameters<typeof router.get>[1] extends (c: infer C) => unknown ? C : never): string | undefined =>
+    c.req.header('Authorization')?.replace(/^Bearer\s+/i, '') ??
+    c.req.query('key');
+
+  /**
+   * Extract the source claw ID for endpoints that identify the caller.
+   * Prefers the X-Claw-From header; falls back to the legacy ?from= query param.
+   */
+  const extractFromId = (c: Parameters<typeof router.get>[1] extends (c: infer C) => unknown ? C : never): number => {
+    const raw = c.req.header('X-Claw-From') ?? c.req.query('from') ?? '';
+    return Number(raw);
+  };
+
+  /**
+   * Verify an HMAC-SHA256 payload signature sent as X-Claw-Signature: sha256=<hex>.
+   * Uses the Web Crypto API (available in Cloudflare Workers).
+   * Returns true if the signature is absent (backward compat) or matches.
+   * Returns false only when a signature is present but invalid.
+   */
+  const verifyClawSignature = async (
+    rawKey: string,
+    body: string,
+    sigHeader: string | undefined,
+  ): Promise<boolean> => {
+    if (!sigHeader) return true; // no signature sent — skip verification (backward compat)
+    if (!sigHeader.startsWith('sha256=')) return false;
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw', enc.encode(rawKey),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false, ['sign'],
+    );
+    const sig = await crypto.subtle.sign('HMAC', key, enc.encode(body));
+    const hex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+    return `sha256=${hex}` === sigHeader;
+  };
+
   // GET /api/claws/fleet?from=<clawId>&key=<apiKey>
   // Claw-authenticated endpoint: returns all claws in the same tenant.
   // Used by the claw_fleet agent tool for peer discovery without a user JWT.
   // NOTE: registered before /:id routes so "/fleet" is not captured by the param.
   router.get('/fleet', async (c) => {
-    const fromId = Number(c.req.query('from') ?? '');
-    const key    = c.req.query('key');
+    const fromId = extractFromId(c);
+    const key    = extractClawKey(c);
 
     if (Number.isNaN(fromId) || fromId <= 0) {
-      return c.json({ error: 'from parameter (source claw id) is required' }, 400);
+      return c.json({ error: 'from parameter or X-Claw-From header (source claw id) is required' }, 400);
     }
 
     const sourceClaw = await verifyClawApiKey(fromId, key);
@@ -497,7 +539,7 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
   // GET /api/claws/:id/assignment-context – claw-authenticated assignment and context handshake payload
   router.get('/:id/assignment-context', async (c) => {
     const clawId = Number(c.req.param('id'));
-    const key = c.req.query('key');
+    const key = extractClawKey(c);
     const claw = await verifyClawApiKey(clawId, key);
     if (!claw) return c.text('Unauthorized', 401);
 
@@ -614,7 +656,7 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
   // Authentication: API key via ?key= query param.
   router.put('/:id/directories/sync', async (c) => {
     const clawId = Number(c.req.param('id'));
-    const key = c.req.query('key');
+    const key = extractClawKey(c);
     const claw = await verifyClawApiKey(clawId, key);
     if (!claw) return c.text('Unauthorized', 401);
 
@@ -817,9 +859,20 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
   });
 
   // GET /api/claws/:id/skills – merged skill assignments (tenant + claw)
-  router.get('/:id/skills', authMiddleware as never, async (c) => {
+  // Accepts claw API key (Bearer or ?key=) OR tenant JWT.
+  router.get('/:id/skills', async (c) => {
     const clawId = Number(c.req.param('id'));
-    const tenantId = c.get('tenantId') as number;
+    let tenantId: number;
+
+    const clawFromKey = await verifyClawApiKey(clawId, extractClawKey(c));
+    if (clawFromKey) {
+      tenantId = clawFromKey.tenantId;
+    } else {
+      await authMiddleware(c as Parameters<typeof authMiddleware>[0], async () => {});
+      const tid = (c as unknown as { get: (k: string) => unknown }).get('tenantId');
+      if (!tid) return c.text('Unauthorized', 401);
+      tenantId = tid as number;
+    }
 
     // Ensure claw belongs to this tenant
     const claw = await clawService.getClawForTenant(clawId, tenantId);
@@ -898,9 +951,21 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
   });
 
   // GET /api/claws/:id/cron – list cron jobs for this claw
-  router.get('/:id/cron', authMiddleware as never, async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    const clawId   = Number(c.req.param('id'));
+  // Accepts claw API key (Bearer or ?key=) OR tenant JWT.
+  router.get('/:id/cron', async (c) => {
+    const clawId = Number(c.req.param('id'));
+    let tenantId: number;
+
+    const clawFromKey = await verifyClawApiKey(clawId, extractClawKey(c));
+    if (clawFromKey) {
+      tenantId = clawFromKey.tenantId;
+    } else {
+      await authMiddleware(c as Parameters<typeof authMiddleware>[0], async () => {});
+      const tid = (c as unknown as { get: (k: string) => unknown }).get('tenantId');
+      if (!tid) return c.text('Unauthorized', 401);
+      tenantId = tid as number;
+    }
+
     const projectIdParam = c.req.query('projectId');
 
     const conditions = [eq(cronJobs.tenantId, tenantId), eq(cronJobs.clawId, clawId)];
@@ -945,9 +1010,21 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
   });
 
   // PATCH /api/claws/:id/cron/:jobId – update a cron job
-  router.patch('/:id/cron/:jobId', authMiddleware as never, async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    const clawId   = Number(c.req.param('id'));
+  // Accepts claw API key (Bearer or ?key=) OR tenant JWT so the cron poller
+  // can patch lastRunAt / lastStatus after each job fires.
+  router.patch('/:id/cron/:jobId', async (c) => {
+    const clawId = Number(c.req.param('id'));
+    let tenantId: number;
+
+    const clawFromKey = await verifyClawApiKey(clawId, extractClawKey(c));
+    if (clawFromKey) {
+      tenantId = clawFromKey.tenantId;
+    } else {
+      await authMiddleware(c as Parameters<typeof authMiddleware>[0], async () => {});
+      const tid = (c as unknown as { get: (k: string) => unknown }).get('tenantId');
+      if (!tid) return c.text('Unauthorized', 401);
+      tenantId = tid as number;
+    }
     const jobId    = c.req.param('jobId');
     const body = await c.req.json<{
       name?: string;
@@ -1022,7 +1099,7 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
   // -------------------------------------------------------------------------
   router.patch('/:id/heartbeat', async (c) => {
     const id  = Number(c.req.param('id'));
-    const key = c.req.query('key');
+    const key = extractClawKey(c);
 
     const claw = await verifyClawApiKey(id, key);
     if (!claw) return c.text('Unauthorized', 401);
@@ -1114,12 +1191,12 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
 
   // -------------------------------------------------------------------------
   // GET /api/claws/:id/upstream – CoderClaw instance connects (API key auth)
-  // The claw passes its API key via ?key= query param
+  // Accepts Authorization: Bearer <key> header (preferred) or legacy ?key= param.
   // -------------------------------------------------------------------------
   router.get('/:id/upstream', async (c) => {
     const id  = Number(c.req.param('id'));
     const env = c.env;
-    const key = c.req.query('key');
+    const key = extractClawKey(c);
 
     if (!env.CLAW_RELAY) return c.text('CLAW_RELAY binding not configured', 503);
     if (!key) return c.text('Unauthorized', 401);
@@ -1136,7 +1213,12 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
     const stub = env.CLAW_RELAY.get(env.CLAW_RELAY.idFromName(String(id)));
     const url  = new URL(c.req.url);
     url.searchParams.set('role', 'upstream');
-    const response = await stub.fetch(new Request(url.toString(), c.req.raw));
+    // Strip the legacy ?key= from the DO URL and pass auth via header so the
+    // API key is never logged in relay access logs.
+    url.searchParams.delete('key');
+    const doHeaders = new Headers(c.req.raw.headers);
+    doHeaders.set('Authorization', `Bearer ${key}`);
+    const response = await stub.fetch(new Request(url.toString(), { ...c.req.raw, headers: doHeaders }));
 
     // When the WS closes, mark as disconnected (best-effort)
     response.webSocket?.addEventListener('close', async () => {
@@ -1159,14 +1241,14 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
   // -------------------------------------------------------------------------
   router.post('/:id/forward', async (c) => {
     const targetId = Number(c.req.param('id'));
-    const fromId   = Number(c.req.query('from') ?? '');
-    const key      = c.req.query('key');
+    const fromId   = extractFromId(c);
+    const key      = extractClawKey(c);
     const env      = c.env;
 
     if (!env.CLAW_RELAY) return c.text('CLAW_RELAY binding not configured', 503);
 
     if (Number.isNaN(fromId) || fromId <= 0) {
-      return c.json({ error: 'from parameter (source claw id) is required' }, 400);
+      return c.json({ error: 'from parameter or X-Claw-From header (source claw id) is required' }, 400);
     }
 
     // Authenticate the calling (source) claw
@@ -1184,9 +1266,22 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
 
     if (!targetClaw) return c.json({ error: 'Target claw not found in tenant' }, 404);
 
+    // Read body as text so we can verify the HMAC signature before parsing.
+    // X-Claw-Signature: sha256=<hex> — signed by the source claw using its raw API key.
+    // If absent (older claws), we skip verification for backward compat.
+    let rawBody: string;
+    try {
+      rawBody = await c.req.text();
+    } catch {
+      return c.json({ error: 'invalid_body' }, 400);
+    }
+
+    const sigOk = await verifyClawSignature(key ?? '', rawBody, c.req.header('X-Claw-Signature'));
+    if (!sigOk) return c.json({ error: 'signature_mismatch' }, 401);
+
     let payload: Record<string, unknown>;
     try {
-      payload = await c.req.json<Record<string, unknown>>();
+      payload = JSON.parse(rawBody) as Record<string, unknown>;
     } catch {
       return c.json({ error: 'invalid_json' }, 400);
     }
@@ -1224,7 +1319,7 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
   // -------------------------------------------------------------------------
   router.post('/:id/relay-result', async (c) => {
     const clawId = Number(c.req.param('id'));
-    const key    = c.req.query('key');
+    const key    = extractClawKey(c);
     const env    = c.env;
 
     if (!env.CLAW_RELAY) return c.text('CLAW_RELAY binding not configured', 503);
@@ -1256,7 +1351,7 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
   // -------------------------------------------------------------------------
   router.post('/:id/usage-snapshot', async (c) => {
     const clawId = Number(c.req.param('id'));
-    const key    = c.req.query('key');
+    const key    = extractClawKey(c);
 
     const claw = await verifyClawApiKey(clawId, key);
     if (!claw) return c.text('Unauthorized', 401);
@@ -1331,7 +1426,7 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
   // -------------------------------------------------------------------------
   router.post('/:id/tool-audit', async (c) => {
     const clawId = Number(c.req.param('id'));
-    const key    = c.req.query('key');
+    const key    = extractClawKey(c);
 
     const claw = await verifyClawApiKey(clawId, key);
     if (!claw) return c.text('Unauthorized', 401);
@@ -1373,7 +1468,7 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
   // -------------------------------------------------------------------------
   router.post('/:id/approval-request', async (c) => {
     const clawId = Number(c.req.param('id'));
-    const key    = c.req.query('key');
+    const key    = extractClawKey(c);
     const env    = c.env;
 
     const claw = await verifyClawApiKey(clawId, key);
@@ -1420,6 +1515,54 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
     }
 
     return c.json({ ok: true, approvalId }, 201);
+  });
+
+  // -------------------------------------------------------------------------
+  // PATCH /api/claws/:id/executions/:eid/state
+  // Claw callback: update execution lifecycle state after task.assign dispatch.
+  // Reports running → completed / failed back to the executions table so the
+  // portal reflects live task status without requiring a tenant JWT.
+  // -------------------------------------------------------------------------
+  router.patch('/:id/executions/:eid/state', async (c) => {
+    const clawId      = Number(c.req.param('id'));
+    const executionId = Number(c.req.param('eid'));
+    const key         = extractClawKey(c);
+
+    const claw = await verifyClawApiKey(clawId, key);
+    if (!claw) return c.text('Unauthorized', 401);
+
+    const body = await c.req.json<{
+      status:        'running' | 'completed' | 'failed' | 'cancelled';
+      result?:       string;
+      errorMessage?: string;
+    }>();
+
+    const valid = ['running', 'completed', 'failed', 'cancelled'];
+    if (!valid.includes(body.status)) {
+      return c.json({ error: `status must be one of: ${valid.join(', ')}` }, 400);
+    }
+
+    const now = new Date();
+    await db
+      .update(executions)
+      .set({
+        status: body.status as 'running' | 'completed' | 'failed' | 'cancelled',
+        ...(body.result       !== undefined ? { result: body.result }             : {}),
+        ...(body.errorMessage !== undefined ? { errorMessage: body.errorMessage } : {}),
+        ...(body.status === 'running'   ? { startedAt: now }   : {}),
+        ...(body.status === 'completed' || body.status === 'failed' || body.status === 'cancelled'
+          ? { completedAt: now }
+          : {}),
+        updatedAt: now,
+      })
+      .where(and(eq(executions.id, executionId), eq(executions.clawId, clawId)));
+
+    const [row] = await db
+      .select()
+      .from(executions)
+      .where(and(eq(executions.id, executionId), eq(executions.clawId, clawId)));
+    if (!row) return c.json({ error: 'Execution not found' }, 404);
+    return c.json(row);
   });
 
   return router;

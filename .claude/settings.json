@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install:*)",
+      "Read(//tmp/**)",
+      "Bash(dir:*)",
+      "Bash(cmd /c \"dir E:\\\\code\\\\agentic\\\\coderClaw\\\\node_modules\\\\typescript 2>&1\")",
+      "Bash(cmd /c \"dir /AL E:\\\\code\\\\agentic\\\\coderClaw\\\\node_modules 2>&1\")",
+      "Bash(cmd /c \"node -e \"\"console.log\\(require\\(''E:\\\\\\\\code\\\\\\\\agentic\\\\\\\\coderClaw\\\\\\\\node_modules\\\\\\\\.pnpm\\\\\\\\typescript@5.9.3\\\\\\\\node_modules\\\\\\\\typescript''\\).version\\)\"\"\")",
+      "Bash(cmd /c \"dir E:\\\\code\\\\agentic\\\\coderClaw\\\\node_modules\\\\.pnpm\\\\typescript@5.9.3\\\\node_modules\\\\typescript\\\\bin\")",
+      "Bash(cmd /c:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:registry.npmjs.org)",
+      "Bash(PNPM_IGNORE_MIN_AGE=1 pnpm install:*)"
+    ]
+  }
+}

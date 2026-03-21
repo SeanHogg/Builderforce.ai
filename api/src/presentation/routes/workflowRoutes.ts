@@ -34,27 +34,43 @@ async function verifyClawApiKey(db: Db, id: number, key?: string | null): Promis
   return valid ? claw : null;
 }
 
+/** Resolve a claw from Bearer token + X-Claw-Id header (used by workflow-telemetry forwarding). */
+async function verifyBearerClaw(db: Db, authHeader: string | undefined, clawIdHeader: string | undefined): Promise<{ id: number; tenantId: number } | null> {
+  if (!authHeader?.startsWith('Bearer ') || !clawIdHeader) return null;
+  const key = authHeader.slice(7);
+  const id = Number(clawIdHeader);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  return verifyClawApiKey(db, id, key);
+}
+
 export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
   const router = new Hono<WorkflowHonoEnv>();
 
   // POST /api/workflows – register a workflow
-  // Accepts claw API key (?clawId=&key=) or tenant JWT.
+  // Accepts Bearer token + X-Claw-Id header (preferred, used by workflow-telemetry),
+  // claw API key (?clawId=&key=), or tenant JWT.
   router.post('/', async (c) => {
     let tenantId: number;
     let resolvedClawId: number | null = null;
 
-    const clawIdParam = Number(c.req.query('clawId') ?? '');
-    const apiKey = c.req.query('key');
-    if (!Number.isNaN(clawIdParam) && clawIdParam > 0 && apiKey) {
-      const claw = await verifyClawApiKey(db, clawIdParam, apiKey);
-      if (!claw) return c.text('Unauthorized', 401);
-      tenantId = claw.tenantId;
-      resolvedClawId = claw.id;
+    const bearerClaw = await verifyBearerClaw(db, c.req.header('Authorization'), c.req.header('X-Claw-Id'));
+    if (bearerClaw) {
+      tenantId = bearerClaw.tenantId;
+      resolvedClawId = bearerClaw.id;
     } else {
-      await authMiddleware(c, async () => {});
-      const tid = (c as unknown as { get: (k: string) => unknown }).get('tenantId');
-      if (!tid) return c.text('Unauthorized', 401);
-      tenantId = tid as number;
+      const clawIdParam = Number(c.req.query('clawId') ?? '');
+      const apiKey = c.req.query('key');
+      if (!Number.isNaN(clawIdParam) && clawIdParam > 0 && apiKey) {
+        const claw = await verifyClawApiKey(db, clawIdParam, apiKey);
+        if (!claw) return c.text('Unauthorized', 401);
+        tenantId = claw.tenantId;
+        resolvedClawId = claw.id;
+      } else {
+        await authMiddleware(c, async () => {});
+        const tid = (c as unknown as { get: (k: string) => unknown }).get('tenantId');
+        if (!tid) return c.text('Unauthorized', 401);
+        tenantId = tid as number;
+      }
     }
 
     const body = await c.req.json<{
@@ -179,11 +195,13 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
     if (!wf) return c.json({ error: 'Workflow not found' }, 404);
 
     const body = await c.req.json<{
-      id?:         string;
-      agentRole:   string;
-      description: string;
-      input?:      string;
-      dependsOn?:  string[];
+      id?:          string;
+      agentRole:    string;
+      description:  string;
+      input?:       string;
+      dependsOn?:   string[];
+      status?:      'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+      startedAt?:   string;
     }>();
 
     if (!body.agentRole || !body.description) {
@@ -200,6 +218,8 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
       description: body.description,
       input:       body.input ?? null,
       dependsOn:   body.dependsOn ? JSON.stringify(body.dependsOn) : null,
+      status:      body.status ?? 'pending',
+      ...(body.startedAt !== undefined ? { startedAt: new Date(body.startedAt) } : {}),
       createdAt:   now,
       updatedAt:   now,
     });

@@ -31,20 +31,24 @@ agents.post('/', async (c) => {
       r2_artifact_key?: string;
       resume_md?: string;
       eval_score?: number;
+      /** 'lora' (default) = LoRA adapter .bin; 'mbjs' = MBJS checkpoint .bin */
+      artifact_type?: 'lora' | 'mbjs';
     }>();
     const sql = neon(c.env.NEON_DATABASE_URL);
     const id = generateId();
     const skillsJson = JSON.stringify(body.skills ?? []);
+    const artifactType = body.artifact_type ?? 'lora';
     const rows = await sql`
       INSERT INTO agents (
         id, project_id, job_id, name, title, bio, skills,
         base_model, lora_rank, r2_artifact_key, resume_md,
-        status, hire_count, eval_score
+        status, hire_count, eval_score, artifact_type
       ) VALUES (
         ${id}, ${body.project_id}, ${body.job_id ?? null},
         ${body.name}, ${body.title}, ${body.bio}, ${skillsJson},
         ${body.base_model}, ${body.lora_rank ?? null}, ${body.r2_artifact_key ?? null},
-        ${body.resume_md ?? null}, 'active', 0, ${body.eval_score ?? null}
+        ${body.resume_md ?? null}, 'active', 0, ${body.eval_score ?? null},
+        ${artifactType}
       )
       RETURNING *
     `;
@@ -74,6 +78,7 @@ agents.get('/:id/package', async (c) => {
     const skills: string[] = Array.isArray(agent.skills)
       ? agent.skills
       : JSON.parse(typeof agent.skills === 'string' ? agent.skills : '[]');
+    const artifactType = (agent.artifact_type as string | undefined) ?? 'lora';
     const pkg = {
       version: '1.0' as const,
       platform: 'builderforce.ai' as const,
@@ -82,11 +87,12 @@ agents.get('/:id/package', async (c) => {
       bio: agent.bio as string,
       skills,
       base_model: agent.base_model as string,
-      lora_config: {
+      artifact_type: artifactType,
+      lora_config: artifactType === 'lora' ? {
         rank: (agent.lora_rank as number) ?? 8,
         alpha: ((agent.lora_rank as number) ?? 8) * 2,
         target_modules: ['q_proj', 'v_proj'],
-      },
+      } : undefined,
       training_job_id: agent.job_id as string | undefined,
       r2_artifact_key: agent.r2_artifact_key as string | undefined,
       resume_md: agent.resume_md as string | undefined,

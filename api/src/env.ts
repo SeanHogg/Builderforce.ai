@@ -16,6 +16,25 @@ export interface Env {
   OPENROUTER_API_KEY_PRO?: string;
   /** R2 bucket for file uploads. */
   UPLOADS?: R2Bucket;
+
+  // ---------------------------------------------------------------------------
+  // Payment provider (optional — defaults to "manual" if unset)
+  // ---------------------------------------------------------------------------
+
+  /** Which payment provider to use: "manual" | "stripe" | "helcim"  Default: "manual" */
+  PAYMENT_PROVIDER?: string;
+  /** App URL used to build checkout success/cancel redirect URLs (e.g. "https://builderforce.ai") */
+  APP_URL?: string;
+
+  // Stripe (required when PAYMENT_PROVIDER=stripe)
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
+  STRIPE_PRICE_MONTHLY?: string;   // price_... for $29/mo
+  STRIPE_PRICE_YEARLY?: string;    // price_... for $290/yr
+
+  // Helcim (required when PAYMENT_PROVIDER=helcim)
+  HELCIM_API_TOKEN?: string;
+  HELCIM_WEBHOOK_SECRET?: string;
 }
 
 /** Variables injected into Hono context by the auth middleware. */
