@@ -24,7 +24,7 @@ const tsvector = customType<{ data: string }>({
 });
 
 // ---------------------------------------------------------------------------
-// Enum columns (coderClawLink orchestration)
+// Enum columns (Builderforce orchestration)
 // ---------------------------------------------------------------------------
 
 export const projectStatusEnum = pgEnum('project_status', [
@@ -362,6 +362,8 @@ export const tenants = pgTable('tenants', {
   billingPaymentBrand:    varchar('billing_payment_brand', { length: 50 }),
   billingPaymentLast4:    varchar('billing_payment_last4', { length: 4 }),
   billingUpdatedAt:       timestamp('billing_updated_at'),
+  externalCustomerId:     varchar('external_customer_id', { length: 255 }),
+  externalSubscriptionId: varchar('external_subscription_id', { length: 255 }),
   createdAt:              timestamp('created_at').notNull().defaultNow(),
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),
 });

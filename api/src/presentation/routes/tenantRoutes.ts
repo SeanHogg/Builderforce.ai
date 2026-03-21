@@ -117,7 +117,60 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     return c.json(subscription);
   });
 
-  // POST /api/tenants/:id/subscription/pro
+  /**
+   * POST /api/tenants/:id/subscription/checkout
+   *
+   * Initiate a Pro upgrade checkout session.
+   *
+   * For ManualProvider: activates immediately; returns { checkoutUrl: null }.
+   * For hosted providers (Stripe, Helcim): returns { checkoutUrl: "https://..." }
+   *   — the frontend should redirect the user to this URL.
+   *   The subscription becomes active once the provider fires a webhook.
+   *
+   * Body:
+   *   billingCycle        "monthly" | "yearly"  required
+   *   billingEmail        string                 required
+   *   billingPaymentBrand string                 optional (manual provider only)
+   *   billingPaymentLast4 string (4 digits)      optional (manual provider only)
+   *   successUrl          string                 optional (defaults to /pricing?success=1)
+   *   cancelUrl           string                 optional (defaults to /pricing?cancelled=1)
+   */
+  router.post('/:id/subscription/checkout', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    const callerTenantId = c.get('tenantId') as number;
+    if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
+
+    const body = await c.req.json<{
+      billingCycle: TenantBillingCycle;
+      billingEmail: string;
+      billingPaymentBrand?: string;
+      billingPaymentLast4?: string;
+      successUrl?: string;
+      cancelUrl?: string;
+    }>();
+
+    if (!body.billingCycle || !body.billingEmail) {
+      return c.json({ error: 'billingCycle and billingEmail are required' }, 400);
+    }
+
+    const appUrl = (c.env as Record<string, string>)['APP_URL'] ?? 'https://builderforce.ai';
+    const result = await tenantService.createCheckoutSession(tenantId, {
+      billingCycle: body.billingCycle,
+      billingEmail: body.billingEmail,
+      billingPaymentBrand: body.billingPaymentBrand,
+      billingPaymentLast4: body.billingPaymentLast4,
+      successUrl: body.successUrl ?? `${appUrl}/pricing?success=1`,
+      cancelUrl: body.cancelUrl ?? `${appUrl}/pricing?cancelled=1`,
+    });
+
+    return c.json(result);
+  });
+
+  /**
+   * POST /api/tenants/:id/subscription/pro  (kept for backward compatibility)
+   * Delegates to the checkout endpoint using ManualProvider semantics.
+   * New integrations should call /subscription/checkout instead.
+   */
   router.post('/:id/subscription/pro', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
@@ -130,23 +183,26 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       billingPaymentLast4: string;
     }>();
 
-    if (
-      !body.billingCycle ||
-      !body.billingEmail ||
-      !body.billingPaymentBrand ||
-      !body.billingPaymentLast4
-    ) {
-      return c.json({ error: 'billingCycle, billingEmail, billingPaymentBrand and billingPaymentLast4 are required' }, 400);
+    if (!body.billingCycle || !body.billingEmail) {
+      return c.json({ error: 'billingCycle and billingEmail are required' }, 400);
     }
 
-    const updated = await tenantService.activateProSubscription(tenantId, {
+    const appUrl = (c.env as Record<string, string>)['APP_URL'] ?? 'https://builderforce.ai';
+    const result = await tenantService.createCheckoutSession(tenantId, {
       billingCycle: body.billingCycle,
       billingEmail: body.billingEmail,
       billingPaymentBrand: body.billingPaymentBrand,
       billingPaymentLast4: body.billingPaymentLast4,
+      successUrl: `${appUrl}/pricing?success=1`,
+      cancelUrl: `${appUrl}/pricing?cancelled=1`,
     });
 
-    return c.json({ tenant: updated.toPlain() });
+    // Legacy response shape: return updated tenant for in-place subscription activation
+    if (result.checkoutUrl === null) {
+      const sub = await tenantService.getSubscription(tenantId);
+      return c.json({ tenant: sub });
+    }
+    return c.json(result);
   });
 
   // POST /api/tenants/:id/subscription/free

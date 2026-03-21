@@ -101,7 +101,7 @@ export class ClawRelayDO implements DurableObject {
     server.accept();
 
     if (role === "upstream") {
-      this.extractClawMeta(url);
+      this.extractClawMeta(url, request);
       this.attachUpstream(server);
     } else {
       this.attachClient(server);
@@ -114,11 +114,16 @@ export class ClawRelayDO implements DurableObject {
   // Upstream (CoderClaw instance)
   // ---------------------------------------------------------------------------
 
-  /** Extract claw ID and API key from the upstream connect URL. */
-  private extractClawMeta(url: URL) {
+  /**
+   * Extract claw ID and API key from the upstream connect request.
+   * Prefers the Authorization: Bearer header (secure); falls back to ?key=
+   * query param for backward compat with older CoderClaw versions.
+   */
+  private extractClawMeta(url: URL, request?: Request) {
     const match = url.pathname.match(/\/api\/claws\/(\d+)\//);
     if (match) this.clawId = Number(match[1]);
-    const key = url.searchParams.get("key");
+    const headerKey = request?.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
+    const key = headerKey ?? url.searchParams.get("key");
     if (key) this.clawApiKey = key;
   }
 
@@ -386,10 +391,10 @@ export class ClawRelayDO implements DurableObject {
 
     try {
       await fetch(
-        `${baseUrl}/api/claws/${this.clawId}/messages?key=${encodeURIComponent(this.clawApiKey)}`,
+        `${baseUrl}/api/claws/${this.clawId}/messages`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.clawApiKey}` },
           body: JSON.stringify({
             sessionKey: this.currentSessionKey,
             messages: [msg],
@@ -421,10 +426,10 @@ export class ClawRelayDO implements DurableObject {
     // ClawLinkRelayService can resolve the pending dispatchToRemoteClaw() call.
     try {
       await fetch(
-        `${baseUrl}/api/claws/${fromId}/relay-result?key=${encodeURIComponent(this.clawApiKey)}`,
+        `${baseUrl}/api/claws/${fromId}/relay-result`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.clawApiKey}` },
           body: JSON.stringify({
             type: "remote.result",
             taskCorrelationId: msg.taskCorrelationId,
@@ -457,10 +462,10 @@ export class ClawRelayDO implements DurableObject {
 
     try {
       await fetch(
-        `${baseUrl}/api/claws/${this.clawId}/usage-snapshot?key=${encodeURIComponent(this.clawApiKey)}`,
+        `${baseUrl}/api/claws/${this.clawId}/usage-snapshot`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.clawApiKey}` },
           body: JSON.stringify(msg),
         },
       );
@@ -488,10 +493,10 @@ export class ClawRelayDO implements DurableObject {
 
     try {
       await fetch(
-        `${baseUrl}/api/claws/${this.clawId}/tool-audit?key=${encodeURIComponent(this.clawApiKey)}`,
+        `${baseUrl}/api/claws/${this.clawId}/tool-audit`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.clawApiKey}` },
           body: JSON.stringify(msg),
         },
       );
@@ -515,10 +520,10 @@ export class ClawRelayDO implements DurableObject {
 
     try {
       await fetch(
-        `${baseUrl}/api/claws/${this.clawId}/approval-request?key=${encodeURIComponent(this.clawApiKey)}`,
+        `${baseUrl}/api/claws/${this.clawId}/approval-request`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.clawApiKey}` },
           body: JSON.stringify(msg),
         },
       );

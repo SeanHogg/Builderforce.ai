@@ -28,6 +28,10 @@ export interface TenantProps {
   billingPaymentBrand: string | null;
   billingPaymentLast4: string | null;
   billingUpdatedAt: Date | null;
+  /** Provider-assigned customer ID (e.g. Stripe cus_... or Helcim customerCode) */
+  externalCustomerId: string | null;
+  /** Provider-assigned subscription ID (e.g. Stripe sub_... or Helcim transactionId) */
+  externalSubscriptionId: string | null;
   members: TenantMemberProps[];
   createdAt: Date;
   updatedAt: Date;
@@ -68,6 +72,8 @@ export class Tenant {
       billingPaymentBrand: null,
       billingPaymentLast4: null,
       billingUpdatedAt: null,
+      externalCustomerId: null,
+      externalSubscriptionId: null,
       members: [
         { userId: ownerUserId, role: TenantRole.OWNER, isActive: true, joinedAt: now },
       ],
@@ -96,6 +102,8 @@ export class Tenant {
   get billingPaymentBrand(): string | null { return this.props.billingPaymentBrand; }
   get billingPaymentLast4(): string | null { return this.props.billingPaymentLast4; }
   get billingUpdatedAt(): Date | null { return this.props.billingUpdatedAt; }
+  get externalCustomerId(): string | null { return this.props.externalCustomerId; }
+  get externalSubscriptionId(): string | null { return this.props.externalSubscriptionId; }
   get members(): readonly TenantMemberProps[] { return this.props.members; }
   get createdAt(): Date { return this.props.createdAt; }
   get updatedAt(): Date { return this.props.updatedAt; }
@@ -171,11 +179,15 @@ export class Tenant {
     billingEmail: string;
     billingPaymentBrand: string;
     billingPaymentLast4: string;
+    externalCustomerId?: string | null;
+    externalSubscriptionId?: string | null;
   }): Tenant {
     if (!input.billingEmail.trim()) {
       throw new ValidationError('billingEmail is required for Pro plan');
     }
-    if (!/^[0-9]{4}$/.test(input.billingPaymentLast4)) {
+    // For manual provider the last4 is entered by the user (must be 4 digits).
+    // For hosted providers it arrives from the webhook (may be empty string initially).
+    if (input.billingPaymentLast4 && !/^[0-9]{4}$/.test(input.billingPaymentLast4)) {
       throw new ValidationError('billingPaymentLast4 must be 4 digits');
     }
 
@@ -188,6 +200,21 @@ export class Tenant {
       billingPaymentBrand: input.billingPaymentBrand.trim() || 'card',
       billingPaymentLast4: input.billingPaymentLast4,
       billingUpdatedAt: new Date(),
+      externalCustomerId: input.externalCustomerId ?? this.props.externalCustomerId,
+      externalSubscriptionId: input.externalSubscriptionId ?? this.props.externalSubscriptionId,
+      updatedAt: new Date(),
+    });
+  }
+
+  /**
+   * Update external provider IDs without changing subscription status.
+   * Called when a checkout session is created before the webhook arrives.
+   */
+  setExternalIds(externalCustomerId: string | null, externalSubscriptionId: string | null): Tenant {
+    return new Tenant({
+      ...this.props,
+      externalCustomerId: externalCustomerId ?? this.props.externalCustomerId,
+      externalSubscriptionId: externalSubscriptionId ?? this.props.externalSubscriptionId,
       updatedAt: new Date(),
     });
   }

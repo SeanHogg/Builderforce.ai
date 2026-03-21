@@ -39,6 +39,15 @@ export class TenantRepository implements ITenantRepository {
     return row ? this.hydrateMembers(row) : null;
   }
 
+  async findByExternalCustomerId(externalCustomerId: string): Promise<Tenant | null> {
+    const [row] = await this.db
+      .select()
+      .from(tenantsTable)
+      .where(eq(tenantsTable.externalCustomerId, externalCustomerId))
+      .limit(1);
+    return row ? this.hydrateMembers(row) : null;
+  }
+
   async findByUserId(userId: string): Promise<Tenant[]> {
     const memberRows = await this.db
       .select({ tenantId: membersTable.tenantId })
@@ -69,6 +78,8 @@ export class TenantRepository implements ITenantRepository {
         billingPaymentBrand: plain.billingPaymentBrand,
         billingPaymentLast4: plain.billingPaymentLast4,
         billingUpdatedAt: plain.billingUpdatedAt,
+        externalCustomerId: plain.externalCustomerId,
+        externalSubscriptionId: plain.externalSubscriptionId,
       })
       .returning();
     if (!inserted) throw new Error('Insert returned no rows');
@@ -105,6 +116,8 @@ export class TenantRepository implements ITenantRepository {
         billingPaymentBrand: plain.billingPaymentBrand,
         billingPaymentLast4: plain.billingPaymentLast4,
         billingUpdatedAt: plain.billingUpdatedAt,
+        externalCustomerId: plain.externalCustomerId,
+        externalSubscriptionId: plain.externalSubscriptionId,
         updatedAt: plain.updatedAt,
       })
       .where(eq(tenantsTable.id, plain.id));
@@ -163,6 +176,8 @@ export class TenantRepository implements ITenantRepository {
       billingPaymentBrand: row.billingPaymentBrand,
       billingPaymentLast4: row.billingPaymentLast4,
       billingUpdatedAt: row.billingUpdatedAt,
+      externalCustomerId: row.externalCustomerId ?? null,
+      externalSubscriptionId: row.externalSubscriptionId ?? null,
       members,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,

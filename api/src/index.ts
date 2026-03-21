@@ -57,6 +57,8 @@ import { createBrainRoutes }       from './presentation/routes/brainRoutes';
 import { createIdeRoutes }         from './presentation/routes/ideRoutes';
 import { createIdeAiRoutes }       from './presentation/routes/ideAiRoutes';
 import { BrainService }            from './application/brain/BrainService';
+import { buildPaymentProvider }    from './infrastructure/payment';
+import { createWebhookRoutes }     from './presentation/routes/webhookRoutes';
 
 // Middleware
 import { addCorsToResponse, corsMiddleware } from './presentation/middleware/cors';
@@ -84,10 +86,13 @@ function buildApp(env: Env): Hono<HonoEnv> {
   const auditRepo     = new AuditRepository(db);
   const clawRepo      = new ClawRepository(db);
 
+  // --- Payment provider (selected by PAYMENT_PROVIDER env var, defaults to "manual") ---
+  const paymentProvider = buildPaymentProvider(env);
+
   // --- Application ---
   const projectService  = new ProjectService(projectRepo);
   const taskService     = new TaskService(taskRepo, projectRepo);
-  const tenantService   = new TenantService(tenantRepo);
+  const tenantService   = new TenantService(tenantRepo, paymentProvider);
   const authService     = new AuthService(userRepo, tenantRepo, auditRepo, env.JWT_SECRET);
   const agentService    = new AgentService(agentRepo, skillRepo, auditRepo);
   const runtimeService  = new RuntimeService(executionRepo, taskRepo, agentRepo, auditRepo);
@@ -107,6 +112,9 @@ function buildApp(env: Env): Hono<HonoEnv> {
 
   // Marketplace (no JWT required for read, required for write)
   app.route('/marketplace', createMarketplaceRoutes(db));
+
+  // Payment webhooks — raw body required, no JWT, mounted before any body parsers
+  app.route('/api/webhooks', createWebhookRoutes(tenantService, paymentProvider));
 
   // Public endpoints (no JWT required)
   app.route('/api/auth',    createAuthRoutes(authService, db));

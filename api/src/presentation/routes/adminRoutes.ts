@@ -1110,6 +1110,8 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         t.billing_status AS "billingStatus",
         t.billing_email AS "billingEmail",
         t.billing_updated_at AS "billingUpdatedAt",
+        t.external_customer_id AS "externalCustomerId",
+        t.external_subscription_id AS "externalSubscriptionId",
         CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' THEN true ELSE false END AS "isPaid",
         CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' THEN 'pro' ELSE 'free' END AS "effectivePlan",
         t.created_at AS "createdAt",
@@ -1118,7 +1120,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       FROM tenants t
       LEFT JOIN tenant_members tm ON tm.tenant_id = t.id AND tm.is_active = true
       LEFT JOIN coderclaw_instances ci ON ci.tenant_id = t.id
-      GROUP BY t.id, t.name, t.slug, t.status, t.plan, t.billing_status, t.billing_email, t.billing_updated_at, t.created_at
+      GROUP BY t.id, t.name, t.slug, t.status, t.plan, t.billing_status, t.billing_email, t.billing_updated_at, t.external_customer_id, t.external_subscription_id, t.created_at
       ORDER BY t.created_at DESC
       LIMIT 500
     `);

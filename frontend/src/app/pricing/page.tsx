@@ -8,11 +8,12 @@ interface Subscription {
   plan: 'free' | 'pro';
   effectivePlan: 'free' | 'pro';
   billingStatus: string;
-  billingCycle: 'monthly' | 'annual' | null;
+  billingCycle: 'monthly' | 'yearly' | null;
   billingEmail: string | null;
   billingPaymentBrand: string | null;
   billingPaymentLast4: string | null;
   billingUpdatedAt: string | null;
+  paymentProvider: string;
 }
 
 const cardStyle: React.CSSProperties = {
@@ -65,8 +66,9 @@ export default function PricingPage() {
 
   // Upgrade form state
   const [showUpgrade, setShowUpgrade] = useState(false);
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [billingEmail, setBillingEmail] = useState('');
+  // Manual provider only — card details entered directly
   const [cardBrand, setCardBrand] = useState('visa');
   const [cardLast4, setCardLast4] = useState('');
   const [upgrading, setUpgrading] = useState(false);
@@ -95,22 +97,31 @@ export default function PricingPage() {
 
   useEffect(() => { fetchSub(); }, [tenantId]);
 
+  const isManualProvider = !sub || sub.paymentProvider === 'manual';
+
   const handleUpgrade = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tenantId || upgrading) return;
-    if (!billingEmail.trim() || !cardLast4.trim()) {
-      setUpgradeError('All fields are required.');
+    if (!billingEmail.trim()) {
+      setUpgradeError('Billing email is required.');
       return;
     }
-    if (!/^\d{4}$/.test(cardLast4)) {
-      setUpgradeError('Card last 4 must be exactly 4 digits.');
-      return;
+    // Only validate card fields for the manual provider
+    if (isManualProvider) {
+      if (!cardLast4.trim()) {
+        setUpgradeError('All fields are required.');
+        return;
+      }
+      if (!/^\d{4}$/.test(cardLast4)) {
+        setUpgradeError('Card last 4 must be exactly 4 digits.');
+        return;
+      }
     }
     setUpgrading(true);
     setUpgradeError(null);
     try {
       const token = getStoredTenantToken();
-      const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/subscription/pro`, {
+      const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/subscription/checkout`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -119,14 +130,26 @@ export default function PricingPage() {
         body: JSON.stringify({
           billingCycle,
           billingEmail: billingEmail.trim(),
-          billingPaymentBrand: cardBrand,
-          billingPaymentLast4: cardLast4.trim(),
+          // Include card details for manual provider only
+          ...(isManualProvider && {
+            billingPaymentBrand: cardBrand,
+            billingPaymentLast4: cardLast4.trim(),
+          }),
         }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string };
         throw new Error(body.error ?? `${res.status}`);
       }
+      const result = await res.json() as { checkoutUrl: string | null };
+
+      if (result.checkoutUrl) {
+        // Hosted provider — redirect to payment page
+        window.location.href = result.checkoutUrl;
+        return; // don't reset form state; user is navigating away
+      }
+
+      // Manual provider — subscription activated immediately
       setShowUpgrade(false);
       await fetchSub();
     } catch (e) {
@@ -260,7 +283,7 @@ export default function PricingPage() {
                     Billing Cycle
                   </label>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    {(['monthly', 'annual'] as const).map((c) => (
+                    {(['monthly', 'yearly'] as const).map((c) => (
                       <button
                         key={c}
                         type="button"
@@ -277,7 +300,7 @@ export default function PricingPage() {
                           textTransform: 'capitalize',
                         }}
                       >
-                        {c}{c === 'annual' ? ' (save 20%)' : ''}
+                        {c}{c === 'yearly' ? ' (save 17%)' : ''}
                       </button>
                     ))}
                   </div>
@@ -306,54 +329,64 @@ export default function PricingPage() {
                   />
                 </div>
 
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                      Card Brand
-                    </label>
-                    <select
-                      value={cardBrand}
-                      onChange={(e) => setCardBrand(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '8px 10px',
-                        fontSize: 13,
-                        background: 'var(--bg-elevated)',
-                        color: 'var(--text-primary)',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 8,
-                      }}
-                    >
-                      {['visa', 'mastercard', 'amex', 'discover', 'other'].map((b) => (
-                        <option key={b} value={b} style={{ textTransform: 'capitalize' }}>{b.charAt(0).toUpperCase() + b.slice(1)}</option>
-                      ))}
-                    </select>
+                {/* Card fields: only shown for the manual provider */}
+                {isManualProvider && (
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                        Card Brand
+                      </label>
+                      <select
+                        value={cardBrand}
+                        onChange={(e) => setCardBrand(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '8px 10px',
+                          fontSize: 13,
+                          background: 'var(--bg-elevated)',
+                          color: 'var(--text-primary)',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: 8,
+                        }}
+                      >
+                        {['visa', 'mastercard', 'amex', 'discover', 'other'].map((b) => (
+                          <option key={b} value={b} style={{ textTransform: 'capitalize' }}>{b.charAt(0).toUpperCase() + b.slice(1)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                        Card Last 4 Digits
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={cardLast4}
+                        onChange={(e) => setCardLast4(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                        placeholder="4242"
+                        maxLength={4}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          fontSize: 13,
+                          background: 'var(--bg-elevated)',
+                          color: 'var(--text-primary)',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: 8,
+                          boxSizing: 'border-box',
+                          fontFamily: 'var(--font-mono)',
+                        }}
+                      />
+                    </div>
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                      Card Last 4 Digits
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={cardLast4}
-                      onChange={(e) => setCardLast4(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                      placeholder="4242"
-                      maxLength={4}
-                      style={{
-                        width: '100%',
-                        padding: '8px 12px',
-                        fontSize: 13,
-                        background: 'var(--bg-elevated)',
-                        color: 'var(--text-primary)',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 8,
-                        boxSizing: 'border-box',
-                        fontFamily: 'var(--font-mono)',
-                      }}
-                    />
+                )}
+
+                {/* Hosted provider notice */}
+                {!isManualProvider && (
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 12px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
+                    You will be redirected to {sub?.paymentProvider === 'helcim' ? 'Helcim' : 'our payment provider'} to securely enter your card details.
                   </div>
-                </div>
+                )}
 
                 {upgradeError && (
                   <div style={{ fontSize: 12, color: 'var(--coral-bright, #f4726e)' }}>{upgradeError}</div>
@@ -388,7 +421,9 @@ export default function PricingPage() {
                       cursor: upgrading ? 'wait' : 'pointer',
                     }}
                   >
-                    {upgrading ? 'Activating…' : 'Activate Pro'}
+                    {upgrading
+                      ? (isManualProvider ? 'Activating…' : 'Redirecting…')
+                      : (isManualProvider ? 'Activate Pro' : 'Continue to Payment')}
                   </button>
                 </div>
               </form>

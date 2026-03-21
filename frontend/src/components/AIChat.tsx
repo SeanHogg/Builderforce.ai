@@ -7,6 +7,7 @@ import { ChatInput } from '@/components/ChatInput';
 import { ChatMessageBubble } from '@/components/ChatMessageBubble';
 import { ChatMessageActions } from '@/components/ChatMessageActions';
 import { MambaEngine } from '@/lib/mamba-engine';
+import { MambaModelProvider } from '@/lib/model-provider';
 
 interface AIChatProps {
   projectId: number | string;
@@ -32,6 +33,7 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const assistantContentRef = useRef('');
   const mambaRef = useRef<MambaEngine | null>(null);
+  const mambaProviderRef = useRef<MambaModelProvider | null>(null);
 
   const copyMessage = useCallback(async (content: string, id: string) => {
     try {
@@ -57,6 +59,19 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
     mambaRef.current = engine;
     return () => { mambaRef.current = null; };
   }, [memoryEnabled, projectId]);
+
+  // Lazily initialise MambaModelProvider for local/hybrid inference
+  useEffect(() => {
+    if (inferenceMode === 'cloud') {
+      mambaProviderRef.current?.dispose?.();
+      mambaProviderRef.current = null;
+      return;
+    }
+    if (mambaProviderRef.current) return;
+    const provider = new MambaModelProvider();
+    void provider.init();
+    mambaProviderRef.current = provider;
+  }, [inferenceMode]);
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
@@ -115,14 +130,40 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
         { role: 'user' as const, content: input.trim() },
       ];
 
-      // 4. Run inference — local always goes through sendAIMessage (Workers AI proxy)
-      //    cloud mode signals intent (same proxy but could be extended to use OpenRouter)
-      await sendAIMessage(projectId, apiMessages, chunk => {
-        assistantContentRef.current += chunk;
-        setMessages(prev =>
-          prev.map(m => (m.id === assistantMessage.id ? { ...m, content: m.content + chunk } : m))
+      // 4. Run inference:
+      //    local  → MambaModelProvider (on-device WebGPU); falls back to cloud if not ready
+      //    hybrid → MambaModelProvider first; cloud fallback if Mamba not ready
+      //    cloud  → sendAIMessage (Workers AI proxy) always
+      const mambaProvider = mambaProviderRef.current;
+      const useMamba =
+        inferenceMode !== 'cloud' && mambaProvider?.isReady();
+
+      if (useMamba && mambaProvider) {
+        const result = await mambaProvider.stream(
+          userContent,
+          {
+            systemPrompt: systemContent,
+            messages: apiMessages,
+            memoryContext: memoryContext || undefined,
+            fileContext: activeFileContent?.slice(0, 4000),
+          },
+          chunk => {
+            assistantContentRef.current += chunk;
+            setMessages(prev =>
+              prev.map(m => (m.id === assistantMessage.id ? { ...m, content: m.content + chunk } : m))
+            );
+          }
         );
-      });
+        assistantContentRef.current = result;
+      } else {
+        // Cloud path (or hybrid fallback when Mamba not ready)
+        await sendAIMessage(projectId, apiMessages, chunk => {
+          assistantContentRef.current += chunk;
+          setMessages(prev =>
+            prev.map(m => (m.id === assistantMessage.id ? { ...m, content: m.content + chunk } : m))
+          );
+        });
+      }
       onMessagesPersisted?.(
         { role: 'user', content: userContent },
         { role: 'assistant', content: assistantContentRef.current }
