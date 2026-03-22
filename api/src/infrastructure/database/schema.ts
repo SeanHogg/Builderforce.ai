@@ -481,6 +481,7 @@ export const coderclawInstances = pgTable('coderclaw_instances', {
   connectedAt:  timestamp('connected_at'),   // set when claw's upstream WS connects; null = offline
   capabilities:         text('capabilities'),         // JSON array reported via heartbeat, e.g. '["chat","tasks","relay"]'
   declaredCapabilities: text('declared_capabilities'), // JSON array configured by user in the portal
+  localPersonas:        text('local_personas'),         // JSON array of custom role definitions reported by the claw
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 });
