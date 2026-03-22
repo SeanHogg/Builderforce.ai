@@ -8,17 +8,16 @@ import type { AuthUser } from '@/lib/types';
 
 export default function MagicLinkVerifyPage() {
   const searchParams = useSearchParams();
-  const [status, setStatus] = useState<'loading' | 'error'>('loading');
-  const [errorMsg, setErrorMsg] = useState<string>('');
+  const token = searchParams.get('token');
+
+  // Derive initial state from URL so no synchronous setState inside the effect
+  const [status, setStatus] = useState<'loading' | 'error'>(!token ? 'error' : 'loading');
+  const [errorMsg, setErrorMsg] = useState<string>(
+    !token ? 'No token found in the link. Please request a new one.' : ''
+  );
 
   useEffect(() => {
-    const token = searchParams.get('token');
-
-    if (!token) {
-      setErrorMsg('No token found in the link. Please request a new one.');
-      setStatus('error');
-      return;
-    }
+    if (!token) return;
 
     fetch(`${AUTH_API_URL}/api/auth/magic-link/verify?token=${encodeURIComponent(token)}`)
       .then((res) => res.json() as Promise<{ token?: string; user?: AuthUser; redirect?: string; error?: string }>)

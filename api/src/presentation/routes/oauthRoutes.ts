@@ -74,9 +74,10 @@ const PROVIDER_DEFS: Record<
       id: String(d.sub ?? ''),
       email: String(d.email ?? ''),
       name: String(
-        d.name ??
-          (`${d.given_name ?? ''} ${d.family_name ?? ''}`.trim() || d.email) ??
-          '',
+        d.name ||
+        `${d.given_name || ''} ${d.family_name || ''}`.trim() ||
+        d.email ||
+        ''
       ),
       avatar: d.picture ? String(d.picture) : undefined,
     }),
