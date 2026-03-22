@@ -7,7 +7,7 @@
  *
  * All routes require a tenant-scoped JWT (authMiddleware).
  */
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { eq, and, isNull, desc } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
@@ -188,7 +188,7 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
    * Prefers the Authorization: Bearer header; falls back to the legacy ?key= query
    * parameter so existing claws continue working during the migration window.
    */
-  const extractClawKey = (c: Parameters<typeof router.get>[1] extends (c: infer C) => unknown ? C : never): string | undefined =>
+  const extractClawKey = (c: Context<ClawHonoEnv>): string | undefined =>
     c.req.header('Authorization')?.replace(/^Bearer\s+/i, '') ??
     c.req.query('key');
 
@@ -196,7 +196,7 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
    * Extract the source claw ID for endpoints that identify the caller.
    * Prefers the X-Claw-From header; falls back to the legacy ?from= query param.
    */
-  const extractFromId = (c: Parameters<typeof router.get>[1] extends (c: infer C) => unknown ? C : never): number => {
+  const extractFromId = (c: Context<ClawHonoEnv>): number => {
     const raw = c.req.header('X-Claw-From') ?? c.req.query('from') ?? '';
     return Number(raw);
   };
@@ -868,7 +868,7 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
     if (clawFromKey) {
       tenantId = clawFromKey.tenantId;
     } else {
-      await authMiddleware(c as Parameters<typeof authMiddleware>[0], async () => {});
+      await authMiddleware(c as unknown as Parameters<typeof authMiddleware>[0], async () => {});
       const tid = (c as unknown as { get: (k: string) => unknown }).get('tenantId');
       if (!tid) return c.text('Unauthorized', 401);
       tenantId = tid as number;
@@ -960,7 +960,7 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
     if (clawFromKey) {
       tenantId = clawFromKey.tenantId;
     } else {
-      await authMiddleware(c as Parameters<typeof authMiddleware>[0], async () => {});
+      await authMiddleware(c as unknown as Parameters<typeof authMiddleware>[0], async () => {});
       const tid = (c as unknown as { get: (k: string) => unknown }).get('tenantId');
       if (!tid) return c.text('Unauthorized', 401);
       tenantId = tid as number;
@@ -1020,7 +1020,7 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
     if (clawFromKey) {
       tenantId = clawFromKey.tenantId;
     } else {
-      await authMiddleware(c as Parameters<typeof authMiddleware>[0], async () => {});
+      await authMiddleware(c as unknown as Parameters<typeof authMiddleware>[0], async () => {});
       const tid = (c as unknown as { get: (k: string) => unknown }).get('tenantId');
       if (!tid) return c.text('Unauthorized', 401);
       tenantId = tid as number;

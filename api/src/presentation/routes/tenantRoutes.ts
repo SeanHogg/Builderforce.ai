@@ -153,7 +153,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       return c.json({ error: 'billingCycle and billingEmail are required' }, 400);
     }
 
-    const appUrl = (c.env as Record<string, string>)['APP_URL'] ?? 'https://builderforce.ai';
+    const appUrl = c.env.APP_URL ?? 'https://builderforce.ai';
     const result = await tenantService.createCheckoutSession(tenantId, {
       billingCycle: body.billingCycle,
       billingEmail: body.billingEmail,
@@ -187,7 +187,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       return c.json({ error: 'billingCycle and billingEmail are required' }, 400);
     }
 
-    const appUrl = (c.env as Record<string, string>)['APP_URL'] ?? 'https://builderforce.ai';
+    const appUrl = c.env.APP_URL ?? 'https://builderforce.ai';
     const result = await tenantService.createCheckoutSession(tenantId, {
       billingCycle: body.billingCycle,
       billingEmail: body.billingEmail,
