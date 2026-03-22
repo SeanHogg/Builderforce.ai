@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
+const { version } = require('./package.json');
+
 const nextConfig = {
+  env: {
+    NEXT_PUBLIC_APP_VERSION: version,
+  },
   transpilePackages: ['@monaco-editor/react', 'monaco-editor'],
   webpack(config) {
     config.module.rules.push({

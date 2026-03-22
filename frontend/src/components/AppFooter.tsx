@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || '0.1.0';
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || '—';
 const AUTH_API_URL = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
 
 interface LegalDocument {
@@ -20,6 +20,7 @@ interface LegalCurrent {
 export default function AppFooter() {
   const [legal, setLegal] = useState<LegalCurrent | null>(null);
   const [modalType, setModalType] = useState<'terms' | 'privacy' | null>(null);
+  const [apiVersion, setApiVersion] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -27,6 +28,12 @@ export default function AppFooter() {
       .then((r) => (r.ok ? r.json() : null))
       .then((data: LegalCurrent | null) => {
         if (!cancelled && data?.terms && data?.privacy) setLegal(data);
+      })
+      .catch(() => {});
+    fetch(`${AUTH_API_URL}/health`, { credentials: 'omit' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { version?: string } | null) => {
+        if (!cancelled && data?.version) setApiVersion(data.version);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -41,7 +48,7 @@ export default function AppFooter() {
       <footer className="global-footer">
         <div className="global-footer-inner">
           <span>
-            App v{APP_VERSION} · Terms v{termsVersion}
+            UI {APP_VERSION} · API {apiVersion ?? '…'} · Terms v{termsVersion}
           </span>
           <div className="global-footer-links">
             <button
