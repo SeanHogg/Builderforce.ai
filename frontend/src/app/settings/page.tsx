@@ -3,7 +3,14 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { mySessionsApi, type MySession } from '@/lib/builderforceApi';
-import { getStoredUser, getStoredTenant } from '@/lib/auth';
+import {
+  getStoredUser,
+  getStoredTenant,
+  getStoredWebToken,
+  getLinkedAccounts,
+  unlinkProvider,
+  getOAuthUrl,
+} from '@/lib/auth';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -19,6 +26,13 @@ const sectionTitle: React.CSSProperties = {
   marginBottom: 14,
 };
 
+const OAUTH_PROVIDERS = [
+  { id: 'google',    label: 'Google',    icon: 'G' },
+  { id: 'github',    label: 'GitHub',    icon: '⌥' },
+  { id: 'linkedin',  label: 'LinkedIn',  icon: 'in' },
+  { id: 'microsoft', label: 'Microsoft', icon: 'M' },
+];
+
 export default function SettingsPage() {
   const user = getStoredUser();
   const tenant = getStoredTenant();
@@ -28,12 +42,56 @@ export default function SettingsPage() {
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
 
+  type LinkedAccount = { provider: string; email: string | null; displayName: string | null };
+  const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccount[]>([]);
+  const [hasPassword, setHasPassword] = useState(false);
+  const [loadingAccounts, setLoadingAccounts] = useState(true);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
+  const [unlinking, setUnlinking] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<string | null>(null);
+
   useEffect(() => {
     mySessionsApi.list()
       .then(setSessions)
       .catch((e: Error) => setSessionError(e.message))
       .finally(() => setLoadingSessions(false));
   }, []);
+
+  useEffect(() => {
+    const token = getStoredWebToken();
+    if (!token) { setLoadingAccounts(false); return; }
+    getLinkedAccounts(token)
+      .then(({ accounts, hasPassword: hp }) => { setLinkedAccounts(accounts); setHasPassword(hp); })
+      .catch((e: Error) => setAccountsError(e.message))
+      .finally(() => setLoadingAccounts(false));
+
+    // Show connect error from redirect if present
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get('error');
+    if (err === 'already_linked_other') {
+      setConnectError('That provider account is already connected to a different Builderforce account.');
+    }
+  }, []);
+
+  const handleConnect = (providerId: string) => {
+    const token = getStoredWebToken();
+    if (!token) return;
+    window.location.href = getOAuthUrl(providerId, '/settings', token);
+  };
+
+  const handleUnlink = async (provider: string) => {
+    const token = getStoredWebToken();
+    if (!token) return;
+    setUnlinking(provider);
+    try {
+      await unlinkProvider(token, provider);
+      setLinkedAccounts((prev) => prev.filter((a) => a.provider !== provider));
+    } catch (e) {
+      setAccountsError(e instanceof Error ? e.message : 'Failed to disconnect');
+    } finally {
+      setUnlinking(null);
+    }
+  };
 
   const revokeSession = async (id: string) => {
     setRevoking(id);
@@ -123,6 +181,88 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* Connected Accounts */}
+      <div style={{ ...cardStyle, marginBottom: 20 }}>
+        <div style={sectionTitle}>Connected Accounts</div>
+
+        {connectError && (
+          <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 12 }}>{connectError}</div>
+        )}
+        {accountsError && (
+          <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 12 }}>Error: {accountsError}</div>
+        )}
+
+        {loadingAccounts ? (
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {OAUTH_PROVIDERS.map(({ id, label, icon }) => {
+              const linked = linkedAccounts.find((a) => a.provider === id);
+              return (
+                <div
+                  key={id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    background: 'var(--bg-elevated)',
+                    border: `1px solid ${linked ? 'var(--border-subtle)' : 'var(--border-subtle)'}`,
+                  }}
+                >
+                  <span style={{
+                    width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontWeight: 700, fontSize: '0.75rem', background: 'var(--bg-surface)',
+                    borderRadius: 6, flexShrink: 0,
+                  }}>{icon}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{label}</div>
+                    {linked && (
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                        {linked.email ?? linked.displayName ?? 'Connected'}
+                      </div>
+                    )}
+                  </div>
+                  {linked ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleUnlink(id)}
+                      disabled={unlinking === id}
+                      style={{
+                        padding: '4px 10px', fontSize: 11, fontWeight: 600, flexShrink: 0,
+                        background: 'none', color: 'var(--text-muted)',
+                        border: '1px solid var(--border-subtle)', borderRadius: 6, cursor: 'pointer',
+                      }}
+                    >
+                      {unlinking === id ? '…' : 'Disconnect'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleConnect(id)}
+                      style={{
+                        padding: '4px 10px', fontSize: 11, fontWeight: 600, flexShrink: 0,
+                        background: 'var(--surface-interactive)', color: 'var(--text-primary)',
+                        border: '1px solid var(--border-subtle)', borderRadius: 6, cursor: 'pointer',
+                      }}
+                    >
+                      Connect
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {!hasPassword && linkedAccounts.length <= 1 && (
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12 }}>
+            Add a password or connect another provider before disconnecting your only sign-in method.
+          </p>
+        )}
+      </div>
 
       {/* Sessions */}
       <div style={cardStyle}>

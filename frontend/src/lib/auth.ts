@@ -256,8 +256,10 @@ export async function getTenantToken(
  * Returns the OAuth initiate URL for a given provider.
  * Redirect the browser to this URL to start the OAuth flow.
  */
-export function getOAuthUrl(provider: string, redirect = '/dashboard'): string {
-  return `${AUTH_API_URL}/api/auth/oauth/${provider}?redirect=${encodeURIComponent(redirect)}`;
+export function getOAuthUrl(provider: string, redirect = '/dashboard', linkToken?: string): string {
+  const params = new URLSearchParams({ redirect });
+  if (linkToken) params.set('link_token', linkToken);
+  return `${AUTH_API_URL}/api/auth/oauth/${provider}?${params.toString()}`;
 }
 
 /**

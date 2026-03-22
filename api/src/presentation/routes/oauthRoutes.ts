@@ -9,7 +9,7 @@ import {
   authUserSessions,
   authTokens,
 } from '../../infrastructure/database/schema';
-import { signWebJwt } from '../../infrastructure/auth/JwtService';
+import { signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { hashPassword } from '../../infrastructure/auth/HashService';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -75,8 +75,7 @@ const PROVIDER_DEFS: Record<
       email: String(d.email ?? ''),
       name: String(
         d.name ??
-          `${d.given_name ?? ''} ${d.family_name ?? ''}`.trim() ||
-          d.email ??
+          (`${d.given_name ?? ''} ${d.family_name ?? ''}`.trim() || d.email) ??
           '',
       ),
       avatar: d.picture ? String(d.picture) : undefined,
@@ -124,11 +123,16 @@ function getProviderCfg(name: string, env: Env): ProviderCfg | null {
 // HMAC-signed OAuth state — CSRF protection without DB storage
 // ---------------------------------------------------------------------------
 
-async function createOAuthState(jwtSecret: string, redirect: string): Promise<string> {
+async function createOAuthState(jwtSecret: string, redirect: string, linkUserId?: string): Promise<string> {
   const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
-  const payload = JSON.stringify({ nonce, redirect: redirect || '/dashboard', ts: Date.now() });
+  const payload = JSON.stringify({
+    nonce,
+    redirect: redirect || '/dashboard',
+    ts: Date.now(),
+    ...(linkUserId ? { linkUserId } : {}),
+  });
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(jwtSecret),
@@ -146,7 +150,7 @@ async function createOAuthState(jwtSecret: string, redirect: string): Promise<st
 async function verifyOAuthState(
   jwtSecret: string,
   state: string,
-): Promise<{ redirect: string } | null> {
+): Promise<{ redirect: string; linkUserId?: string } | null> {
   try {
     const decoded = atob(state);
     const sepIdx = decoded.lastIndexOf('|');
@@ -167,9 +171,13 @@ async function verifyOAuthState(
       new TextEncoder().encode(payload),
     );
     if (!valid) return null;
-    const { redirect, ts } = JSON.parse(payload) as { redirect: string; ts: number };
+    const { redirect, ts, linkUserId } = JSON.parse(payload) as {
+      redirect: string;
+      ts: number;
+      linkUserId?: string;
+    };
     if (Date.now() - ts > 10 * 60 * 1000) return null; // 10-minute window
-    return { redirect };
+    return { redirect, linkUserId };
   } catch {
     return null;
   }
@@ -360,7 +368,20 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
     if (!cfg) return c.json({ error: 'Provider not available' }, 503);
 
     const redirect = c.req.query('redirect') || '/dashboard';
-    const state = await createOAuthState(c.env.JWT_SECRET, redirect);
+
+    // Optional: if the user is already logged in (connecting from Settings),
+    // verify their JWT and embed the userId in state so the callback can link
+    // to the existing account without relying on email matching.
+    let linkUserId: string | undefined;
+    const linkToken = c.req.query('link_token');
+    if (linkToken) {
+      try {
+        const linkPayload = await verifyWebJwt(linkToken, c.env.JWT_SECRET);
+        linkUserId = linkPayload.sub;
+      } catch { /* invalid token — fall through to normal login flow */ }
+    }
+
+    const state = await createOAuthState(c.env.JWT_SECRET, redirect, linkUserId);
 
     // Build callback URL from the incoming request's origin so it works in
     // both local dev and production without an extra env var.
@@ -418,7 +439,10 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
       return c.redirect(`${frontendBase}/login?error=auth_failed`);
     }
 
-    if (!providerUser.email) return c.redirect(`${frontendBase}/login?error=no_email`);
+    // Email is required for new login/signup; the connect flow (linkUserId) can proceed without it
+    if (!providerUser.email && !stateData.linkUserId) {
+      return c.redirect(`${frontendBase}/login?error=no_email`);
+    }
 
     // 1. Check if this provider account is already linked
     const [existingOAuth] = await db
@@ -435,13 +459,34 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
     let userId: string;
 
     if (existingOAuth) {
+      // Provider already linked — guard against linking to a different account
+      if (stateData.linkUserId && existingOAuth.userId !== stateData.linkUserId) {
+        return c.redirect(`${frontendBase}/settings?error=already_linked_other`);
+      }
       userId = existingOAuth.userId;
       await db
         .update(oauthAccounts)
         .set({ accessToken, refreshToken: refreshToken ?? null, updatedAt: sql`now()` })
         .where(eq(oauthAccounts.id, existingOAuth.id));
+
+    } else if (stateData.linkUserId) {
+      // Connect flow: user is logged in and adding a new provider.
+      // Use their existing userId directly — do NOT do email lookup.
+      // This handles multi-provider linking when provider email differs from account email.
+      userId = stateData.linkUserId;
+      await db.insert(oauthAccounts).values({
+        userId,
+        provider: name,
+        providerAccountId: providerUser.id,
+        email: providerUser.email ? normalizeEmail(providerUser.email) : null,
+        displayName: providerUser.name,
+        avatarUrl: providerUser.avatar ?? null,
+        accessToken,
+        refreshToken: refreshToken ?? null,
+      });
+
     } else {
-      const normalizedEmail = normalizeEmail(providerUser.email);
+      const normalizedEmail = normalizeEmail(providerUser.email!);
 
       // 2. Check if a user with the same email already exists (account linking)
       const [existingUser] = await db
@@ -455,7 +500,7 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
       } else {
         // 3. Create a new user — email is pre-verified via OAuth
         const newId = crypto.randomUUID();
-        const username = await generateUsername(db, providerUser.email);
+        const username = await generateUsername(db, providerUser.email!);
         await db.insert(users).values({
           id: newId,
           email: normalizedEmail,
@@ -473,7 +518,7 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
         userId,
         provider: name,
         providerAccountId: providerUser.id,
-        email: normalizeEmail(providerUser.email),
+        email: normalizedEmail,
         displayName: providerUser.name,
         avatarUrl: providerUser.avatar ?? null,
         accessToken,

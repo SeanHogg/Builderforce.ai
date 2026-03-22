@@ -13,6 +13,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   no_email: 'Your provider account has no verified email address.',
   account_not_found: 'Account not found or has been disabled.',
   provider_unavailable: 'This sign-in provider is not currently available.',
+  already_linked_other: 'This provider account is already connected to a different Builderforce account.',
 };
 
 export default function OAuthCallbackPage() {
