@@ -60,6 +60,8 @@ import { BrainService }            from './application/brain/BrainService';
 import { buildPaymentProvider }    from './infrastructure/payment';
 import { createWebhookRoutes }     from './presentation/routes/webhookRoutes';
 
+import { API_VERSION } from './version';
+
 // Middleware
 import { addCorsToResponse, corsMiddleware } from './presentation/middleware/cors';
 import { errorHandler }   from './presentation/middleware/errorHandler';
@@ -105,7 +107,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
 
   app.use('*', corsMiddleware);
 
-  app.get('/health', (c) => c.json({ status: 'ok', worker: 'api.builderforce.ai' }));
+  app.get('/health', (c) => c.json({ status: 'ok', worker: 'api.builderforce.ai', version: API_VERSION }));
 
   // coderClawLLM — OpenAI-compatible LLM proxy (no JWT, keyed by OPENROUTER_API_KEY)
   app.route('/llm', createLlmRoutes());
