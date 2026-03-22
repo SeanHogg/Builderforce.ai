@@ -154,6 +154,7 @@ export function ChatInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const valueRef = useRef(value);
+  // eslint-disable-next-line react-hooks/refs
   valueRef.current = value;
   const [recording, setRecording] = useState(false);
   const canSubmit = value.trim().length > 0 && !disabled;

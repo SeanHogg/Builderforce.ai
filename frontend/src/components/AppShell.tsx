@@ -23,10 +23,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!pathname) return;
     if (isProjectIdPage(pathname) || isIdePage(pathname)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setNavCollapsed(true);
       if (typeof window !== 'undefined') localStorage.setItem(SIDEBAR_COLLAPSED_KEY, '1');
     } else {
       const stored = typeof window !== 'undefined' ? localStorage.getItem(SIDEBAR_COLLAPSED_KEY) : null;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setNavCollapsed(stored === '1');
     }
   }, [pathname]);

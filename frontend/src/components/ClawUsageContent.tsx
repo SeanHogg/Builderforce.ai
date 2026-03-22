@@ -42,6 +42,7 @@ export function ClawUsageContent({ clawId }: ClawUsageContentProps) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
     usageApi
