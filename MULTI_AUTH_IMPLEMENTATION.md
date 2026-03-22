@@ -28,12 +28,18 @@ Browser
   ├─ Email/Password ──────────────────────────────▶ POST /api/auth/login
   │                                                  Returns JWT in JSON body
   │
-  ├─ OAuth (click button) ────────────────────────▶ GET /api/auth/oauth/:provider
+  ├─ OAuth (login/signup) ────────────────────────▶ GET /api/auth/oauth/:provider?redirect=/dashboard
   │                                                  302 → provider consent screen
   │                                                  Provider → GET /api/auth/oauth/:provider/callback
-  │                                                  API issues JWT
+  │                                                  API finds/creates user by email, issues JWT
   │                                                  302 → /auth/callback?token=JWT
   │                                                  Frontend page writes token to localStorage
+  │
+  ├─ OAuth (connect from Settings) ───────────────▶ GET /api/auth/oauth/:provider?redirect=/settings&link_token=JWT
+  │                                                  JWT is verified, userId embedded in HMAC state
+  │                                                  Provider → GET /api/auth/oauth/:provider/callback
+  │                                                  API links provider to existing user (no email lookup)
+  │                                                  302 → /auth/callback?token=NEW_JWT
   │
   └─ Magic Link ──────────────────────────────────▶ POST /api/auth/magic-link
                                                      Email sent with /auth/magic-link?token=...
@@ -48,6 +54,7 @@ Browser
 - `passwordHash` is nullable — users who sign up via OAuth have no password
 - Magic link tokens are single-use and invalidated immediately on verify
 - All "not found" paths return the same generic message to prevent email enumeration
+- Connect flow (adding a provider to an existing account) uses `link_token` to bypass email matching — critical when the provider email differs from the account email
 
 ---
 
@@ -367,6 +374,53 @@ const PROVIDERS: Record<string, ProviderCfg> = {
 > }
 > ```
 
+### HMAC state — including userId for the connect flow
+
+The state payload carries an optional `linkUserId`. When present in the callback, it tells the API to link the new provider to that specific user rather than doing email-based lookup. This is critical when the provider uses a different email address than the user's account.
+
+```typescript
+async function createOAuthState(redirect: string, linkUserId?: string): Promise<string> {
+  const secret = getEnv("JWT_SECRET");
+  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    .map(b => b.toString(16).padStart(2, "0")).join("");
+  const payload = JSON.stringify({
+    nonce,
+    redirect: redirect || "/dashboard",
+    ts: Date.now(),
+    ...(linkUserId ? { linkUserId } : {}),
+  });
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+  const sigHex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return btoa(payload + "|" + sigHex);
+}
+
+async function verifyOAuthState(state: string): Promise<{ redirect: string; linkUserId?: string } | null> {
+  try {
+    const secret = getEnv("JWT_SECRET");
+    const decoded = atob(state);
+    const sepIdx = decoded.lastIndexOf("|");
+    const payload = decoded.slice(0, sepIdx);
+    const sigHex = decoded.slice(sepIdx + 1);
+    const key = await crypto.subtle.importKey(
+      "raw", new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" }, false, ["verify"]
+    );
+    const sigBytes = new Uint8Array(sigHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+    const valid = await crypto.subtle.verify("HMAC", key, sigBytes, new TextEncoder().encode(payload));
+    if (!valid) return null;
+    const { redirect, ts, linkUserId } = JSON.parse(payload);
+    if (Date.now() - ts > 10 * 60 * 1000) return null;
+    return { redirect, linkUserId };
+  } catch {
+    return null;
+  }
+}
+```
+
 ### Initiate route
 
 ```typescript
@@ -377,7 +431,25 @@ app.get("/:provider", async (c) => {
   if (!cfg || !cfg.clientId()) return c.json({ error: "Provider not available" }, 503);
 
   const redirect = c.req.query("redirect") || "/dashboard";
-  const state = await createOAuthState(redirect);
+
+  // Optional: if the user is already logged in (connecting from Settings),
+  // verify their JWT and embed the userId in state so the callback can link
+  // to the existing account without relying on email matching.
+  let linkUserId: string | undefined;
+  const linkToken = c.req.query("link_token");
+  if (linkToken) {
+    try {
+      const { jwtVerify } = await import("jose");
+      const { payload } = await jwtVerify(
+        linkToken,
+        new TextEncoder().encode(getEnv("JWT_SECRET")),
+        { algorithms: ["HS256"] }
+      );
+      linkUserId = payload.sub as string;
+    } catch { /* invalid token — fall through to normal login flow */ }
+  }
+
+  const state = await createOAuthState(redirect, linkUserId);
   const callbackUrl = `${getEnv("API_URL")}/api/auth/oauth/${name}/callback`;
 
   const params = new URLSearchParams({
@@ -394,6 +466,15 @@ app.get("/:provider", async (c) => {
 ```
 
 ### Callback route — upsert user, issue JWT
+
+Three distinct paths depending on context:
+
+| Situation | How userId is resolved |
+|-----------|----------------------|
+| Provider account already in `oauth_accounts` | Use the `userId` from that row |
+| Connect flow (`linkUserId` in state) | Use `linkUserId` directly — skip email lookup |
+| New login, email exists in `users` | Link new provider to existing user |
+| New login, email not seen before | Create new user, link provider |
 
 ```typescript
 // GET /api/auth/oauth/:provider/callback
@@ -423,9 +504,12 @@ app.get("/:provider/callback", async (c) => {
     return c.redirect(`${frontendBase}/login?error=auth_failed`);
   }
 
-  if (!providerUser.email) return c.redirect(`${frontendBase}/login?error=no_email`);
+  // Email is required for new login/signup; the connect flow (linkUserId) can proceed without it
+  if (!providerUser.email && !stateData.linkUserId) {
+    return c.redirect(`${frontendBase}/login?error=no_email`);
+  }
 
-  // 1. Check if this provider account is already linked
+  // 1. Check if this provider account is already linked to any user
   const [existingOAuth] = await db.select().from(oauthAccounts)
     .where(and(
       eq(oauthAccounts.provider, name),
@@ -435,38 +519,57 @@ app.get("/:provider/callback", async (c) => {
   let userId: string;
 
   if (existingOAuth) {
-    // Known provider account — update tokens, get userId
+    // Provider already linked — guard against linking to a different account
+    if (stateData.linkUserId && existingOAuth.userId !== stateData.linkUserId) {
+      return c.redirect(`${frontendBase}/settings?error=already_linked_other`);
+    }
     userId = existingOAuth.userId;
     await db.update(oauthAccounts).set({
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token ?? null,
       updatedAt: new Date(),
     }).where(eq(oauthAccounts.id, existingOAuth.id));
+
+  } else if (stateData.linkUserId) {
+    // Connect flow: user is logged in and adding a new provider.
+    // Use their existing userId directly — do NOT do email lookup.
+    // This is the key fix for multi-provider linking when emails differ.
+    userId = stateData.linkUserId;
+    await db.insert(oauthAccounts).values({
+      userId,
+      provider: name,
+      providerAccountId: providerUser.id,
+      email: providerUser.email?.toLowerCase() ?? null,
+      displayName: providerUser.name,
+      avatarUrl: providerUser.avatar ?? null,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token ?? null,
+    });
+
   } else {
-    // 2. Check if user exists with same email (account linking)
+    // Login/signup flow: find or create user by email
     const [existing] = await db.select({ id: users.id }).from(users)
-      .where(eq(users.email, providerUser.email.toLowerCase())).limit(1);
+      .where(eq(users.email, providerUser.email!.toLowerCase())).limit(1);
 
     if (existing) {
       userId = existing.id;
     } else {
-      // 3. Create new user — email is pre-verified via OAuth
+      // New user — email pre-verified via OAuth
       const [newUser] = await db.insert(users).values({
-        email: providerUser.email.toLowerCase(),
+        email: providerUser.email!.toLowerCase(),
         name: providerUser.name,
-        passwordHash: null,   // no password for OAuth-only users
+        passwordHash: null,
         emailVerified: true,
         role: "job_seeker",
       }).returning({ id: users.id });
       userId = newUser.id;
     }
 
-    // 4. Link the OAuth account
     await db.insert(oauthAccounts).values({
       userId,
       provider: name,
       providerAccountId: providerUser.id,
-      email: providerUser.email.toLowerCase(),
+      email: providerUser.email!.toLowerCase(),
       displayName: providerUser.name,
       avatarUrl: providerUser.avatar ?? null,
       accessToken: tokens.access_token,
@@ -696,6 +799,10 @@ export default function MagicLinkVerify() {
 
 ### OAuth buttons (React)
 
+Two different button implementations depending on context:
+
+**Login / Signup page** — no existing session:
+
 ```typescript
 const API_BASE = import.meta.env.VITE_API_URL;   // e.g. https://api.example.com (no trailing /api)
 
@@ -711,6 +818,24 @@ function OAuthButton({ provider, redirect }: { provider: string; redirect: strin
 }
 ```
 
+**Settings page (Connect)** — user is already logged in, pass `link_token`:
+
+```typescript
+function ConnectProviderButton({ provider }: { provider: string }) {
+  return (
+    <button onClick={() => {
+      const token = localStorage.getItem("auth_token") ?? "";
+      window.location.href =
+        `${API_BASE}/api/auth/oauth/${provider}?redirect=/settings&link_token=${encodeURIComponent(token)}`;
+    }}>
+      Connect
+    </button>
+  );
+}
+```
+
+> **Why `link_token` matters:** Without it, the callback resolves the user by email. If your Google account uses a different email than your LinkedIn account, it creates a second user instead of linking to the existing one. Passing the JWT lets the API skip email lookup entirely and link directly to the authenticated user.
+
 > **Common mistake:** `VITE_API_URL` is the base domain without `/api`. The `/api` prefix is part of every endpoint path — include it in the path, not the base.
 
 ### Routes to add
@@ -724,6 +849,26 @@ function OAuthButton({ provider, redirect }: { provider: string; redirect: strin
 ---
 
 ## Account Management
+
+### How 1-to-many linking works
+
+A user can connect multiple providers. Each provider is a separate row in `oauth_accounts` — all pointing to the same `user_id`. The flows are:
+
+```
+User signs up via LinkedIn
+  → users row created (passwordHash = null)
+  → oauth_accounts row: { provider: "linkedin", userId: X }
+
+User clicks Connect → Google in Settings (different email)
+  → GET /api/auth/oauth/google?link_token=JWT
+  → API verifies JWT, puts userId=X in HMAC state
+  → callback: linkUserId=X found in state → inserts oauth_accounts { provider: "google", userId: X }
+  → Both providers now linked to the same user
+
+User signs in with either provider → same account, same JWT
+```
+
+> **The bug without `link_token`:** If email matching is used for the connect flow, a user whose Google account has a different email than their primary account gets a brand new user created instead of linking — silently losing their existing session data.
 
 ### List linked providers + whether account has a password
 
@@ -801,10 +946,13 @@ app.post("/add-password", async (c) => {
 | Token reuse (magic links) | Marked `used = true` immediately on first verify |
 | Stale magic links | Previous unused tokens invalidated when a new one is issued |
 | Last auth method | Block unlink if it would leave the account with no login method |
-| Account takeover via email match | Email-matched linking is intentional — if someone controls the email, they can link |
+| Multi-provider linking (different emails) | Connect flow passes `link_token` JWT so callback uses `linkUserId` from state, not email |
+| Provider stolen by another account | If `existingOAuth.userId !== linkUserId`, reject with error instead of silently overwriting |
+| Account takeover via email match | Email matching only used in the login/signup flow, never the connect flow |
 | Suspended/inactive accounts | Checked on every OAuth callback and magic link verify |
 | JWT secret strength | Minimum 32 random bytes; never commit to source control |
 | Token storage | `localStorage` — acceptable if no XSS vectors; use HttpOnly cookies if you can |
+| Microsoft client secret vs secret ID | Azure shows both a Secret ID (GUID) and a Value — use the **Value** as `MICROSOFT_CLIENT_SECRET` |
 
 ---
 
