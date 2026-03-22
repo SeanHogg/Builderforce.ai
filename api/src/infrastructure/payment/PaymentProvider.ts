@@ -16,9 +16,11 @@
  *   3b. If null (ManualProvider): subscription is immediately active, no redirect
  */
 
+import { TenantBillingCycle } from '../../domain/shared/types';
+
 export interface CheckoutSessionOpts {
   tenantId: number;
-  billingCycle: 'monthly' | 'yearly';
+  billingCycle: TenantBillingCycle;
   billingEmail: string;
   /** Absolute URL provider redirects to on success */
   successUrl: string;
@@ -55,7 +57,7 @@ export interface WebhookEvent {
   externalSubscriptionId: string;
 
   /** Present on activation/renewal events */
-  billingCycle?: 'monthly' | 'yearly';
+  billingCycle?: TenantBillingCycle;
   billingEmail?: string;
   /** Card details returned by the provider after payment (not entered by user) */
   paymentBrand?: string;

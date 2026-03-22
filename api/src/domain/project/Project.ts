@@ -45,7 +45,7 @@ export class Project {
    * Enforces domain invariants before the object can exist.
    */
   static create(
-    props: Omit<ProjectProps, 'id' | 'createdAt' | 'updatedAt'>,
+    props: Omit<ProjectProps, 'id' | 'createdAt' | 'updatedAt' | 'publicId'> & { publicId?: string },
   ): Project {
     if (!props.key.trim()) throw new ValidationError('Project key is required');
     if (!props.name.trim()) throw new ValidationError('Project name is required');

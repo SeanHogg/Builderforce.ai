@@ -25,6 +25,7 @@
  */
 
 import type { PaymentProvider, CheckoutSessionOpts, CheckoutSessionResult, WebhookEvent } from './PaymentProvider';
+import { TenantBillingCycle } from '../../domain/shared/types';
 
 interface StripeConfig {
   secretKey: string;
@@ -118,7 +119,7 @@ export class StripeProvider implements PaymentProvider {
           type: 'subscription.activated',
           externalCustomerId: customer,
           externalSubscriptionId: sub ?? '',
-          billingCycle: (meta['billingCycle'] as 'monthly' | 'yearly') ?? 'monthly',
+          billingCycle: (meta['billingCycle'] as TenantBillingCycle) ?? TenantBillingCycle.MONTHLY,
           billingEmail: (obj['customer_email'] as string | undefined) ?? meta['billingEmail'],
           paymentBrand: card?.['brand'],
           paymentLast4: card?.['last4'],
@@ -134,7 +135,7 @@ export class StripeProvider implements PaymentProvider {
           type: status === 'past_due' ? 'subscription.past_due' : 'subscription.renewed',
           externalCustomerId: customer,
           externalSubscriptionId: obj['id'] as string,
-          billingCycle: (meta['billingCycle'] as 'monthly' | 'yearly' | undefined),
+          billingCycle: (meta['billingCycle'] as TenantBillingCycle | undefined),
           raw: event,
         };
       }
