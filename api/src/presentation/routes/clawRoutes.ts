@@ -8,7 +8,7 @@
  * All routes require a tenant-scoped JWT (authMiddleware).
  */
 import { Hono, type Context } from 'hono';
-import { eq, and, isNull, desc } from 'drizzle-orm';
+import { eq, and, isNull, desc, inArray, gte } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   coderclawInstances,
@@ -27,9 +27,12 @@ import {
   tenantSkillAssignments,
   clawSkillAssignments,
   marketplaceSkills,
+  specs,
+  platformPersonas,
 } from '../../infrastructure/database/schema';
 import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
 import { verifyJwt } from '../../infrastructure/auth/JwtService';
+import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { ClawRelayDO } from '../../infrastructure/relay/ClawRelayDO';
@@ -1563,6 +1566,182 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
       .where(and(eq(executions.id, executionId), eq(executions.clawId, clawId)));
     if (!row) return c.json({ error: 'Execution not found' }, 404);
     return c.json(row);
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/claws/:id/spec
+  // Claw-auth: returns the active (approved or in_progress) spec for this
+  // claw's primary project. Used by CoderClaw to pull planning context.
+  // -------------------------------------------------------------------------
+  router.get('/:id/spec', async (c) => {
+    const clawId = Number(c.req.param('id'));
+    const key    = extractClawKey(c);
+    const claw   = await verifyClawApiKey(clawId, key);
+    if (!claw) return c.text('Unauthorized', 401);
+
+    const [assignment] = await db
+      .select({ projectId: clawProjects.projectId })
+      .from(clawProjects)
+      .where(and(eq(clawProjects.clawId, clawId), eq(clawProjects.tenantId, Number(claw.tenantId))))
+      .limit(1);
+
+    if (!assignment) return c.json({ spec: null });
+
+    const [spec] = await db
+      .select()
+      .from(specs)
+      .where(
+        and(
+          eq(specs.projectId, assignment.projectId),
+          eq(specs.tenantId, Number(claw.tenantId)),
+          inArray(specs.status, ['approved', 'in_progress']),
+        ),
+      )
+      .orderBy(desc(specs.updatedAt))
+      .limit(1);
+
+    return c.json({ spec: spec ?? null });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/claws/:id/platform-personas
+  // Claw-auth: returns all active admin-managed platform personas.
+  // -------------------------------------------------------------------------
+  router.get('/:id/platform-personas', async (c) => {
+    const clawId = Number(c.req.param('id'));
+    const key    = extractClawKey(c);
+    const claw   = await verifyClawApiKey(clawId, key);
+    if (!claw) return c.text('Unauthorized', 401);
+
+    const rows = await db
+      .select()
+      .from(platformPersonas)
+      .where(eq(platformPersonas.active, true))
+      .orderBy(platformPersonas.name);
+
+    return c.json({ personas: rows });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/claws/:id/quota
+  // Claw-auth: returns token usage totals for this claw over the last 30 days.
+  // -------------------------------------------------------------------------
+  router.get('/:id/quota', async (c) => {
+    const clawId = Number(c.req.param('id'));
+    const key    = extractClawKey(c);
+    const claw   = await verifyClawApiKey(clawId, key);
+    if (!claw) return c.text('Unauthorized', 401);
+
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const rows = await db
+      .select({
+        inputTokens:  usageSnapshots.inputTokens,
+        outputTokens: usageSnapshots.outputTokens,
+      })
+      .from(usageSnapshots)
+      .where(and(eq(usageSnapshots.clawId, clawId), gte(usageSnapshots.ts, since)));
+
+    const totalInput  = rows.reduce((s, r) => s + r.inputTokens, 0);
+    const totalOutput = rows.reduce((s, r) => s + r.outputTokens, 0);
+    return c.json({
+      period:            '30d',
+      since:             since.toISOString(),
+      totalInputTokens:  totalInput,
+      totalOutputTokens: totalOutput,
+      totalTokens:       totalInput + totalOutput,
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // PATCH /api/claws/:id/project-context
+  // Claw-auth: push local project governance/architecture context to the
+  // project record in Builderforce so the portal and other claws can read it.
+  // -------------------------------------------------------------------------
+  router.patch('/:id/project-context', async (c) => {
+    const clawId = Number(c.req.param('id'));
+    const key    = extractClawKey(c);
+    const claw   = await verifyClawApiKey(clawId, key);
+    if (!claw) return c.text('Unauthorized', 401);
+
+    const body = await c.req.json<{ projectId?: number; governance?: string }>();
+
+    let projectId = body.projectId;
+    if (!projectId) {
+      const [assignment] = await db
+        .select({ projectId: clawProjects.projectId })
+        .from(clawProjects)
+        .where(and(eq(clawProjects.clawId, clawId), eq(clawProjects.tenantId, Number(claw.tenantId))))
+        .limit(1);
+      projectId = assignment?.projectId;
+    }
+
+    if (!projectId) return c.json({ error: 'No project assigned to this claw' }, 404);
+    if (!body.governance) return c.json({ error: 'governance field is required' }, 400);
+
+    await db
+      .update(projects)
+      .set({ governance: body.governance, updatedAt: new Date() })
+      .where(and(eq(projects.id, projectId), eq(projects.tenantId, Number(claw.tenantId))));
+
+    return c.json({ ok: true, projectId });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/claws/:id/artifacts/resolve
+  // Claw-auth: resolve effective artifact set for this claw's context.
+  // Query params: taskId?, projectId?
+  // -------------------------------------------------------------------------
+  router.get('/:id/artifacts/resolve', async (c) => {
+    const clawId = Number(c.req.param('id'));
+    const key    = extractClawKey(c);
+    const claw   = await verifyClawApiKey(clawId, key);
+    if (!claw) return c.text('Unauthorized', 401);
+
+    const taskIdP    = c.req.query('taskId');
+    const projectIdP = c.req.query('projectId');
+
+    // Default to claw's primary project if no projectId given
+    let projectId = projectIdP ? Number(projectIdP) : undefined;
+    if (!projectId) {
+      const [assignment] = await db
+        .select({ projectId: clawProjects.projectId })
+        .from(clawProjects)
+        .where(and(eq(clawProjects.clawId, clawId), eq(clawProjects.tenantId, Number(claw.tenantId))))
+        .limit(1);
+      projectId = assignment?.projectId;
+    }
+
+    const resolved = await resolveArtifacts(db, {
+      tenantId:  Number(claw.tenantId),
+      taskId:    taskIdP ? Number(taskIdP) : undefined,
+      clawId,
+      projectId,
+    });
+    return c.json(resolved);
+  });
+
+  // -------------------------------------------------------------------------
+  // PUT /api/claws/:id/personas
+  // Claw-auth: register this claw's local custom role definitions so the
+  // portal can display what agent personas are available.
+  // -------------------------------------------------------------------------
+  router.put('/:id/personas', async (c) => {
+    const clawId = Number(c.req.param('id'));
+    const key    = extractClawKey(c);
+    const claw   = await verifyClawApiKey(clawId, key);
+    if (!claw) return c.text('Unauthorized', 401);
+
+    const body = await c.req.json<{ personas: unknown[] }>();
+    if (!Array.isArray(body.personas)) {
+      return c.json({ error: 'personas must be an array' }, 400);
+    }
+
+    await db
+      .update(coderclawInstances)
+      .set({ localPersonas: JSON.stringify(body.personas), updatedAt: new Date() })
+      .where(eq(coderclawInstances.id, clawId));
+
+    return c.json({ ok: true, count: body.personas.length });
   });
 
   return router;
