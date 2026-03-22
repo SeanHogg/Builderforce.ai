@@ -19,6 +19,7 @@ export function ProjectsSlideOutPanel({ open, onClose, currentProjectId }: Proje
 
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(true);
       fetchProjects()
         .then(setProjects)
