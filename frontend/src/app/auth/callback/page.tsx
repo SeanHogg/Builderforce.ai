@@ -19,22 +19,20 @@ const ERROR_MESSAGES: Record<string, string> = {
 export default function OAuthCallbackPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
+
+  const errorParam = searchParams.get('error');
+  const token = searchParams.get('token');
+
+  // Derive initial error from URL params so no synchronous setState inside effects
+  const [error, setError] = useState<string | null>(() => {
+    if (errorParam) return ERROR_MESSAGES[errorParam] ?? 'An unexpected error occurred. Please try again.';
+    if (!token) return 'No token received from provider.';
+    return null;
+  });
 
   useEffect(() => {
-    const token = searchParams.get('token');
+    if (error) return;
     const redirect = searchParams.get('redirect') || '/dashboard';
-    const errorParam = searchParams.get('error');
-
-    if (errorParam) {
-      setError(ERROR_MESSAGES[errorParam] ?? 'An unexpected error occurred. Please try again.');
-      return;
-    }
-
-    if (!token) {
-      setError('No token received from provider.');
-      return;
-    }
 
     // Fetch the user profile using the new token, then persist session
     fetch(`${AUTH_API_URL}/api/auth/me`, {
