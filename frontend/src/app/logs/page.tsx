@@ -71,6 +71,7 @@ export default function LogsPage() {
       .finally(() => setLoading(false));
   }, [eventTypeFilter, resourceTypeFilter]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   return (

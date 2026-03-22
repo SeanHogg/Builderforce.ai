@@ -12,7 +12,7 @@ import {
   getApiBaseUrl,
   getAuthHeaders,
   getProjectsBaseUrl,
-  useWorkerForProjects,
+  isWorkerForProjects,
 } from './apiClient';
 import type {
   Project,
@@ -55,7 +55,7 @@ async function projectsRequest<T>(
 // ---------------------------------------------------------------------------
 
 export async function fetchProjects(): Promise<Project[]> {
-  if (useWorkerForProjects()) {
+  if (isWorkerForProjects()) {
     const arr = await projectsRequest<Project[]>('/api/projects');
     return Array.isArray(arr) ? arr : [];
   }
@@ -95,8 +95,7 @@ export async function updateProject(
   id: number | string,
   data: Partial<Pick<Project, 'name' | 'description' | 'template' | 'key' | 'status' | 'governance'>>
 ): Promise<Project> {
-  const method = useWorkerForProjects() ? 'PUT' : 'PATCH';
-  const res = useWorkerForProjects()
+  const res = isWorkerForProjects()
     ? await projectsRequest<Project>(`/api/projects/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -119,7 +118,7 @@ export async function deleteProject(id: number | string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 function filesBase(projectId: number | string): string {
-  return useWorkerForProjects()
+  return isWorkerForProjects()
     ? `/api/projects/${projectId}/files`
     : `${IDE}/projects/${projectId}/files`;
 }

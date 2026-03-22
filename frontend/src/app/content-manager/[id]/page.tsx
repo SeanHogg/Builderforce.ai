@@ -49,6 +49,7 @@ export default function ContentDetailPage() {
   useEffect(() => {
     const blocks = loadBlocks(tenantId);
     const b = blocks.find((x) => x.id === id) ?? null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setBlock(b);
     if (b?.sharedToMarketplace) {
       marketplaceStats.getStats('content', [b.id]).then((r) => setStats(r[b.id] ?? { likes: 0, installs: 0, liked: false })).catch(() => setStats({ likes: 0, installs: 0, liked: false }));

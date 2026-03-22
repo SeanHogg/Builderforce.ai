@@ -27,7 +27,7 @@ export function getProjectsBaseUrl(): string {
 }
 
 /** True if project/file requests should go to the worker (different path shape). */
-export function useWorkerForProjects(): boolean {
+export function isWorkerForProjects(): boolean {
   return !!getWorkerUrl();
 }
 
