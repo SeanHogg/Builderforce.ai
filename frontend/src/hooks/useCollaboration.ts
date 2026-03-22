@@ -46,5 +46,6 @@ export function useCollaboration(projectId: string | number, userId: string) {
     };
   }, [roomId, userId]);
 
+  // eslint-disable-next-line react-hooks/refs
   return { doc: docRef.current, provider: providerRef.current, connected };
 }

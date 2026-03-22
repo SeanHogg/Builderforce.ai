@@ -55,6 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [initialized, setInitialized] = useState(false);
 
   // Rehydrate from localStorage on mount
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     setWebToken(getStoredWebToken());
     setTenantToken(getStoredTenantToken());
