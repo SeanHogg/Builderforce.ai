@@ -148,7 +148,7 @@ describe('getMyTenants', () => {
 
   it('throws on non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(401, 'Unauthorized'));
-    await expect(getMyTenants('bad-token')).rejects.toThrow('Unauthorized');
+    await expect(getMyTenants('bad-token')).rejects.toThrow('Session expired');
   });
 });
 
@@ -159,12 +159,12 @@ describe('getMyTenants', () => {
 describe('getTenantToken', () => {
   it('POSTs to /api/auth/tenant-token with tenantId', async () => {
     fetchSpy.mockResolvedValueOnce(mockOk({ token: 'tenant-token-xyz' }));
-    const result = await getTenantToken('web-token-123', 'tenant-1');
+    const result = await getTenantToken('web-token-123', '42');
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     expect(url).toMatch(/\/api\/auth\/tenant-token$/);
     expect(init.method).toBe('POST');
     const body = JSON.parse(init.body as string);
-    expect(body.tenantId).toBe('tenant-1');
+    expect(body.tenantId).toBe(42);
     expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer web-token-123');
     expect(result.token).toBe('tenant-token-xyz');
   });

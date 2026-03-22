@@ -343,8 +343,9 @@ export function ProjectDetailsPanel({
               {editingProject ? (
                 <form onSubmit={handleSaveProject} style={{ marginBottom: 14 }}>
                   <div style={{ marginBottom: 10 }}>
-                    <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Name</label>
+                    <label htmlFor="edit-name" style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Name</label>
                     <input
+                      id="edit-name"
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
                       style={{
@@ -359,8 +360,9 @@ export function ProjectDetailsPanel({
                     />
                   </div>
                   <div style={{ marginBottom: 10 }}>
-                    <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Project key</label>
+                    <label htmlFor="edit-key" style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Project key</label>
                     <input
+                      id="edit-key"
                       value={editKey}
                       onChange={(e) => handleKeyChange(e.target.value)}
                       style={{
@@ -384,8 +386,9 @@ export function ProjectDetailsPanel({
                     )}
                   </div>
                   <div style={{ marginBottom: 10 }}>
-                    <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Status</label>
+                    <label htmlFor="edit-status" style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Status</label>
                     <select
+                      id="edit-status"
                       value={editStatus}
                       onChange={(e) => setEditStatus(e.target.value)}
                       style={{
@@ -405,8 +408,9 @@ export function ProjectDetailsPanel({
                     </select>
                   </div>
                   <div style={{ marginBottom: 14 }}>
-                    <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Description</label>
+                    <label htmlFor="edit-description" style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Description</label>
                     <textarea
+                      id="edit-description"
                       value={editDescription}
                       onChange={(e) => setEditDescription(e.target.value)}
                       rows={3}

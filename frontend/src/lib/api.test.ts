@@ -86,7 +86,7 @@ describe('fetchProjects', () => {
 
   it('throws when the server returns a non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(500));
-    await expect(fetchProjects()).rejects.toThrow('Failed to fetch projects');
+    await expect(fetchProjects()).rejects.toThrow('Request failed');
   });
 });
 
@@ -106,7 +106,7 @@ describe('fetchProject', () => {
 
   it('throws on non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(404));
-    await expect(fetchProject('missing')).rejects.toThrow('Failed to fetch project');
+    await expect(fetchProject('missing')).rejects.toThrow('Request failed');
   });
 });
 
@@ -131,7 +131,7 @@ describe('createProject', () => {
 
   it('throws on non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(500));
-    await expect(createProject({ name: 'Bad' })).rejects.toThrow('Failed to create project');
+    await expect(createProject({ name: 'Bad' })).rejects.toThrow('Request failed');
   });
 });
 
@@ -170,7 +170,7 @@ describe('updateProject', () => {
 
   it('throws on non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(404));
-    await expect(updateProject('gone', { name: 'x' })).rejects.toThrow('Failed to update project');
+    await expect(updateProject('gone', { name: 'x' })).rejects.toThrow('Request failed');
   });
 });
 
@@ -191,7 +191,7 @@ describe('deleteProject', () => {
 
   it('throws on non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(404));
-    await expect(deleteProject('missing')).rejects.toThrow('Failed to delete project');
+    await expect(deleteProject('missing')).rejects.toThrow('Request failed');
   });
 });
 
@@ -211,7 +211,7 @@ describe('fetchFiles', () => {
 
   it('throws on non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(500));
-    await expect(fetchFiles('proj-1')).rejects.toThrow('Failed to fetch files');
+    await expect(fetchFiles('proj-1')).rejects.toThrow('Request failed');
   });
 });
 
@@ -225,7 +225,7 @@ describe('fetchFileContent', () => {
       new Response('console.log("hi")', { status: 200 })
     );
     const content = await fetchFileContent('proj-1', 'src/main.js');
-    expect(fetchSpy.mock.calls[0][0]).toMatch(/\/api\/projects\/proj-1\/files\/src\/main\.js$/);
+    expect(fetchSpy.mock.calls[0][0]).toMatch(/\/api\/ide\/projects\/proj-1\/files\/src\/main\.js$/);
     expect(content).toBe('console.log("hi")');
   });
 
@@ -246,7 +246,7 @@ describe('saveFile', () => {
     );
     await saveFile('proj-1', 'src/main.js', 'const x = 1;');
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(url).toMatch(/\/api\/projects\/proj-1\/files\/src\/main\.js$/);
+    expect(url).toMatch(/\/api\/ide\/projects\/proj-1\/files\/src\/main\.js$/);
     expect(init.method).toBe('PUT');
     expect((init.headers as Record<string, string>)['Content-Type']).toBe('text/plain');
     expect(init.body).toBe('const x = 1;');
@@ -254,7 +254,7 @@ describe('saveFile', () => {
 
   it('throws on non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(500));
-    await expect(saveFile('proj-1', 'f.js', '')).rejects.toThrow('Failed to save file');
+    await expect(saveFile('proj-1', 'f.js', '')).rejects.toThrow('Request failed');
   });
 });
 
@@ -269,13 +269,13 @@ describe('deleteFile', () => {
     );
     await deleteFile('proj-1', 'src/old.js');
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(url).toMatch(/\/api\/projects\/proj-1\/files\/src\/old\.js$/);
+    expect(url).toMatch(/\/api\/ide\/projects\/proj-1\/files\/src\/old\.js$/);
     expect(init.method).toBe('DELETE');
   });
 
   it('throws on non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(500));
-    await expect(deleteFile('proj-1', 'f.js')).rejects.toThrow('Failed to delete file');
+    await expect(deleteFile('proj-1', 'f.js')).rejects.toThrow('Request failed');
   });
 });
 
@@ -404,7 +404,7 @@ describe('publishAgent', () => {
       base_model: 'gpt-neox-20m',
     });
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(url).toMatch(/\/api\/agents$/);
+    expect(url).toMatch(/\/api\/ide\/agents$/);
     expect(init.method).toBe('POST');
     const body = JSON.parse(init.body as string);
     expect(body.name).toBe('Code Expert');
@@ -415,7 +415,7 @@ describe('publishAgent', () => {
     fetchSpy.mockResolvedValueOnce(mockError(500));
     await expect(
       publishAgent({ project_id: 'p', name: 'x', title: 't', bio: 'b', skills: [], base_model: 'm' })
-    ).rejects.toThrow('Failed to publish agent');
+    ).rejects.toThrow('Request failed');
   });
 });
 
@@ -425,14 +425,14 @@ describe('listAgents', () => {
       new Response(JSON.stringify([sampleAgent]), { status: 200 })
     );
     const result = await listAgents();
-    expect(fetchSpy.mock.calls[0][0]).toMatch(/\/api\/agents$/);
+    expect(fetchSpy.mock.calls[0][0]).toMatch(/\/api\/ide\/agents$/);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('agent-1');
   });
 
   it('throws on non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(500));
-    await expect(listAgents()).rejects.toThrow('Failed to fetch agents');
+    await expect(listAgents()).rejects.toThrow('Request failed');
   });
 });
 
@@ -444,14 +444,14 @@ describe('hireAgent', () => {
     );
     const result = await hireAgent('agent-1');
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(url).toMatch(/\/api\/agents\/agent-1\/hire$/);
+    expect(url).toMatch(/\/api\/ide\/agents\/agent-1\/hire$/);
     expect(init.method).toBe('POST');
     expect(result.hire_count).toBe(1);
   });
 
   it('throws on non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(404));
-    await expect(hireAgent('missing')).rejects.toThrow('Failed to hire agent');
+    await expect(hireAgent('missing')).rejects.toThrow('Request failed');
   });
 });
 
@@ -479,7 +479,7 @@ describe('fetchAgentPackage', () => {
       new Response(JSON.stringify(samplePackage), { status: 200 })
     );
     const result = await fetchAgentPackage('agent-1');
-    expect(fetchSpy.mock.calls[0][0]).toMatch(/\/api\/agents\/agent-1\/package$/);
+    expect(fetchSpy.mock.calls[0][0]).toMatch(/\/api\/ide\/agents\/agent-1\/package$/);
     expect(result.version).toBe('1.0');
     expect(result.platform).toBe('builderforce.ai');
     expect(result.name).toBe('Code Expert');
@@ -489,6 +489,6 @@ describe('fetchAgentPackage', () => {
 
   it('throws on non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(404));
-    await expect(fetchAgentPackage('missing')).rejects.toThrow('Failed to fetch agent package');
+    await expect(fetchAgentPackage('missing')).rejects.toThrow('Request failed');
   });
 });
