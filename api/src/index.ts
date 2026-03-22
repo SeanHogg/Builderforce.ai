@@ -37,6 +37,7 @@ import { createProjectRoutes }     from './presentation/routes/projectRoutes';
 import { createTaskRoutes }        from './presentation/routes/taskRoutes';
 import { createTenantRoutes }      from './presentation/routes/tenantRoutes';
 import { createAuthRoutes }        from './presentation/routes/authRoutes';
+import { createOAuthRoutes }       from './presentation/routes/oauthRoutes';
 import { createAgentRoutes, createSkillRoutes } from './presentation/routes/agentRoutes';
 import { createRuntimeRoutes }     from './presentation/routes/runtimeRoutes';
 import { createAuditRoutes }       from './presentation/routes/auditRoutes';
@@ -120,6 +121,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
 
   // Public endpoints (no JWT required)
   app.route('/api/auth',    createAuthRoutes(authService, db));
+  app.route('/api/auth',    createOAuthRoutes(db));
 
   // CoderClaw instances + skill assignments (tenant JWT inside each router)
   app.route('/api/claws',            createClawRoutes(db, clawService));

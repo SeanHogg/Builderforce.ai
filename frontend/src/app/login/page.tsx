@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
-import { getStoredWebToken, getMyTenants, getTenantToken, persistTenantSession, getDefaultTenantId } from '@/lib/auth';
+import { getStoredWebToken, getMyTenants, getTenantToken, persistTenantSession, getDefaultTenantId, getOAuthUrl, requestMagicLink } from '@/lib/auth';
 import type { Tenant } from '@/lib/types';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 
@@ -37,6 +37,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [magicLinkLoading, setMagicLinkLoading] = useState(false);
 
   // Redirect when already authenticated (e.g. landed on /login with valid session).
   // Do NOT redirect during form submission — handleSubmit does tenant resolution and redirect.
@@ -85,6 +87,21 @@ export default function LoginPage() {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleMagicLink = async () => {
+    if (!email) { setError('Enter your email address above first.'); return; }
+    setError(null);
+    setMagicLinkLoading(true);
+    try {
+      const next = searchParams.get('next') || '/dashboard';
+      await requestMagicLink(email, next);
+      setMagicLinkSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send magic link');
+    } finally {
+      setMagicLinkLoading(false);
     }
   };
 
@@ -231,6 +248,76 @@ export default function LoginPage() {
                 {isLoading ? 'Signing in…' : 'Sign In →'}
               </button>
             </form>
+
+            {/* Divider */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0 0' }}>
+              <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.06em' }}>OR</span>
+              <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
+            </div>
+
+            {/* OAuth buttons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 16 }}>
+              {[
+                { provider: 'google',    label: 'Continue with Google',    icon: 'G' },
+                { provider: 'github',    label: 'Continue with GitHub',    icon: '⌥' },
+                { provider: 'linkedin',  label: 'Continue with LinkedIn',  icon: 'in' },
+                { provider: 'microsoft', label: 'Continue with Microsoft', icon: 'M' },
+              ].map(({ provider, label, icon }) => (
+                <button
+                  key={provider}
+                  type="button"
+                  onClick={() => { window.location.href = getOAuthUrl(provider, searchParams.get('next') || '/dashboard'); }}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    background: 'var(--bg-elevated)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 10,
+                    padding: '10px 14px',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: '0.875rem',
+                    transition: 'border-color 0.2s',
+                  }}
+                  onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--coral-bright)'; }}
+                  onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-subtle)'; }}
+                >
+                  <span style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.75rem', background: 'var(--bg-surface)', borderRadius: 4, flexShrink: 0 }}>{icon}</span>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Magic link */}
+            <div style={{ marginTop: 16, textAlign: 'center' }}>
+              {magicLinkSent ? (
+                <p style={{ fontSize: '0.875rem', color: 'var(--coral-bright)', fontWeight: 600 }}>
+                  Check your email — a sign-in link is on its way.
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleMagicLink}
+                  disabled={magicLinkLoading}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-secondary)',
+                    fontSize: '0.875rem',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    opacity: magicLinkLoading ? 0.5 : 1,
+                    fontFamily: 'var(--font-body)',
+                  }}
+                >
+                  {magicLinkLoading ? 'Sending…' : 'Email me a magic link instead'}
+                </button>
+              )}
+            </div>
           </div>
 
           <p style={{ textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: 20 }}>

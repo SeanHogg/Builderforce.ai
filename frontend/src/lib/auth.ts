@@ -248,6 +248,79 @@ export async function getTenantToken(
   return res.json() as Promise<TenantTokenResponse>;
 }
 
+// ---------------------------------------------------------------------------
+// OAuth + magic link helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the OAuth initiate URL for a given provider.
+ * Redirect the browser to this URL to start the OAuth flow.
+ */
+export function getOAuthUrl(provider: string, redirect = '/dashboard'): string {
+  return `${AUTH_API_URL}/api/auth/oauth/${provider}?redirect=${encodeURIComponent(redirect)}`;
+}
+
+/**
+ * Request a magic link sign-in email.
+ * Always returns successfully — does not reveal whether the email exists.
+ */
+export async function requestMagicLink(email: string, redirect = '/dashboard'): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/auth/magic-link`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, redirect }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(body.message ?? 'Failed to send magic link');
+  }
+}
+
+/**
+ * List OAuth providers linked to the current account.
+ */
+export async function getLinkedAccounts(
+  webToken: string,
+): Promise<{ accounts: Array<{ provider: string; email: string | null; displayName: string | null }>; hasPassword: boolean }> {
+  const res = await fetch(`${AUTH_API_URL}/api/auth/linked-accounts`, {
+    headers: { Authorization: `Bearer ${webToken}` },
+  });
+  checkUnauthorizedAndRedirect(res, !!webToken);
+  if (!res.ok) throw new Error('Failed to load linked accounts');
+  return res.json() as ReturnType<typeof getLinkedAccounts>;
+}
+
+/**
+ * Unlink an OAuth provider from the current account.
+ */
+export async function unlinkProvider(webToken: string, provider: string): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/auth/unlink/${provider}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${webToken}` },
+  });
+  checkUnauthorizedAndRedirect(res, !!webToken);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? 'Failed to unlink provider');
+  }
+}
+
+/**
+ * Add a password to an OAuth-only account.
+ */
+export async function addPassword(webToken: string, password: string): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/auth/add-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
+    body: JSON.stringify({ password }),
+  });
+  checkUnauthorizedAndRedirect(res, !!webToken);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? 'Failed to add password');
+  }
+}
+
 /** Create a new workspace (tenant). Requires WebJWT; caller becomes owner. */
 export async function createTenant(webToken: string, name: string): Promise<Tenant> {
   const res = await fetch(`${AUTH_API_URL}/api/tenants/create`, {
