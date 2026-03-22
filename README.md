@@ -56,6 +56,7 @@ Builderforce.ai is the cloud-side control plane for [CoderClaw](https://codercla
 
 ### Multi-Tenant Platform
 - **JWT auth** with web token (global) + tenant token (workspace-scoped) dual-token model
+- **Multi-auth** — email/password, OAuth social login (Google, GitHub, LinkedIn, Microsoft), and magic link sign-in all coexist on the same account
 - **Tenant isolation** — all resources (projects, claws, agents, training jobs) are scoped to a tenant; no cross-tenant data access
 - **Multi-workspace** — users belong to multiple tenants; `bf_default_tenant_id` auto-selects on login
 - **Admin observability** — `/admin` surface for platform admins (superadmin flag); `logs/global-errors.txt` in R2; `/observability` LLM usage metrics
@@ -68,6 +69,219 @@ Builderforce.ai is the cloud-side control plane for [CoderClaw](https://codercla
 - **Checkout flow** — `POST /api/tenants/:id/subscription/checkout` returns either a redirect URL (hosted providers) or `null` (manual, activates immediately)
 - **Webhook handler** — `POST /api/webhooks/payment` receives provider events; HMAC-verified; activates/cancels subscriptions via normalised `WebhookEvent`
 - **Switching providers** — set `PAYMENT_PROVIDER=stripe|helcim|manual` + provider credentials; no application code changes required
+
+---
+
+## Authentication
+
+Builderforce.ai supports three sign-in methods that coexist on the same account. A single user can link multiple OAuth providers, set a password, and use magic links interchangeably.
+
+### Sign-in methods
+
+| Method | How it works |
+|---|---|
+| **Email + password** | `POST /api/auth/web/login` — PBKDF2 (100k iterations, SHA-256); same generic error for wrong email or wrong password |
+| **OAuth social login** | `GET /api/auth/oauth/:provider` → provider consent → `GET /api/auth/oauth/:provider/callback` → JWT issued; browser redirected to `/auth/callback?token=…` |
+| **Magic link** | `POST /api/auth/magic-link` sends a 15-minute single-use token by email; `GET /api/auth/magic-link/verify?token=…` issues JWT; always returns 200 (no email enumeration) |
+
+Supported OAuth providers: `google`, `github`, `linkedin`, `microsoft`.
+
+### Auth flow diagram
+
+```
+Browser
+  │
+  ├─ Email/password ──────────────────────────► POST /api/auth/web/login
+  │                                              Returns JWT in JSON body
+  │
+  ├─ OAuth (click button) ────────────────────► GET /api/auth/oauth/:provider
+  │                                              302 → provider consent screen
+  │                                              Provider → GET /api/auth/oauth/:provider/callback
+  │                                              API issues JWT
+  │                                              302 → /auth/callback?token=JWT
+  │                                              Frontend page writes token to localStorage
+  │
+  └─ Magic link ──────────────────────────────► POST /api/auth/magic-link
+                                                 Email sent with /auth/magic-link?token=…
+                                                 Frontend page calls GET /api/auth/magic-link/verify
+                                                 Returns JWT in JSON body
+```
+
+### JWT strategy
+
+- **Web token** (`localStorage key: bf_web_token`) — 24-hour HMAC-SHA-256 JWT; payload: `{ sub, email, username, amr?, sa?, jti, sid }`
+- **Tenant token** (`localStorage key: bf_tenant_token`) — 1-hour workspace-scoped JWT; issued by `POST /api/auth/tenant-token`
+- Every issued token is tracked in the `auth_tokens` table (JTI + session ID); `webAuthMiddleware` validates against this table on every request, enabling instant revocation
+
+### Account management endpoints
+
+| Endpoint | Auth | Description |
+|---|---|---|
+| `GET /api/auth/linked-accounts` | Web JWT | List linked OAuth providers + whether account has a password |
+| `DELETE /api/auth/unlink/:provider` | Web JWT | Unlink a provider; blocked if it would remove the last sign-in method |
+| `POST /api/auth/add-password` | Web JWT | Add a password to an OAuth-only account |
+
+### OAuth security
+
+- **CSRF protection** — OAuth `state` parameter is HMAC-SHA-256 signed (using `JWT_SECRET`) with a nonce and 10-minute expiry; no database required
+- **Account linking** — if an OAuth email matches an existing account, the provider is linked automatically; the user controls their email so this is safe
+- **Email-only users** — OAuth users who haven't set a password are protected from the unlink endpoint; they must `POST /api/auth/add-password` first
+
+### Enabling OAuth providers
+
+Each provider is activated by supplying its client credentials as Cloudflare Worker secrets. Providers with missing credentials silently return `503` — you only need to configure the providers you want.
+
+```bash
+# Google
+wrangler secret put GOOGLE_CLIENT_ID
+wrangler secret put GOOGLE_CLIENT_SECRET
+
+# GitHub
+wrangler secret put GITHUB_CLIENT_ID
+wrangler secret put GITHUB_CLIENT_SECRET
+
+# LinkedIn
+wrangler secret put LINKEDIN_CLIENT_ID
+wrangler secret put LINKEDIN_CLIENT_SECRET
+
+# Microsoft
+wrangler secret put MICROSOFT_CLIENT_ID
+wrangler secret put MICROSOFT_CLIENT_SECRET
+```
+
+Register the OAuth callback URL in each provider's dashboard:
+
+```
+https://api.builderforce.ai/api/auth/oauth/{provider}/callback
+```
+
+Replace `{provider}` with the lowercase provider name: `google`, `github`, `linkedin`, `microsoft`.
+
+#### Provider setup
+
+| Provider | Setup time | Manual review? | Key gotcha |
+|---|---|---|---|
+| Google | ~10 min | No (for `email profile openid`) | Must publish the consent screen before non-test users can sign in |
+| LinkedIn | ~10 min | No (auto-approved) | Must add the **"Sign In with LinkedIn using OpenID Connect"** product — without it the `/v2/userinfo` endpoint won't return the email address |
+| GitHub | ~5 min | No | Only one callback URL per app — create a second OAuth App for local dev |
+| Microsoft | ~10 min | No | Use "Accounts in any organizational directory and personal Microsoft accounts" for broadest coverage |
+
+---
+
+#### Google
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com), create or select a project
+2. **APIs & Services → OAuth consent screen**
+   - User Type: **External**
+   - App name, support email, add scopes: `email`, `profile`, `openid` (non-sensitive, no review required)
+   - Add your email as a test user while in development
+3. **APIs & Services → Credentials → Create Credentials → OAuth 2.0 Client ID**
+   - Application type: **Web application**
+   - Authorized redirect URIs — add both:
+     ```
+     https://api.builderforce.ai/api/auth/oauth/google/callback
+     http://localhost:8787/api/auth/oauth/google/callback
+     ```
+4. Copy Client ID and Client Secret:
+   ```bash
+   wrangler secret put GOOGLE_CLIENT_ID
+   wrangler secret put GOOGLE_CLIENT_SECRET
+   ```
+
+> **Publishing:** While in "Testing" mode only test users can sign in. Click **Publish App** on the consent screen when ready for production — `email/profile/openid` are standard scopes and are typically approved immediately with no manual review.
+
+---
+
+#### LinkedIn
+
+1. Go to [linkedin.com/developers](https://www.linkedin.com/developers) → **Create App**
+   - App name, LinkedIn Company Page (required — create one if needed), logo
+2. **Auth tab** → Authorized redirect URLs — add both:
+   ```
+   https://api.builderforce.ai/api/auth/oauth/linkedin/callback
+   http://localhost:8787/api/auth/oauth/linkedin/callback
+   ```
+3. **Products tab** → request **"Sign In with LinkedIn using OpenID Connect"** — click Request access (auto-approved instantly). This unlocks the `openid profile email` scopes used by the code. Without it the `/v2/userinfo` endpoint will not return the email address.
+4. Back on the **Auth tab**, copy Client ID and Client Secret:
+   ```bash
+   wrangler secret put LINKEDIN_CLIENT_ID
+   wrangler secret put LINKEDIN_CLIENT_SECRET
+   ```
+
+---
+
+#### GitHub
+
+1. GitHub → **Settings → Developer settings → OAuth Apps → New OAuth App**
+   - Homepage URL: `https://builderforce.ai`
+   - Authorization callback URL:
+     ```
+     https://api.builderforce.ai/api/auth/oauth/github/callback
+     ```
+2. Click **Register application**, then **Generate a new client secret**
+3. Set secrets:
+   ```bash
+   wrangler secret put GITHUB_CLIENT_ID
+   wrangler secret put GITHUB_CLIENT_SECRET
+   ```
+
+> **Local dev:** GitHub allows only one callback URL per app. Create a separate OAuth App (e.g. "builderforce-dev") pointing to `http://localhost:8787/api/auth/oauth/github/callback` and use its credentials in `api/.dev.vars`.
+
+---
+
+#### Microsoft
+
+1. [Azure Portal](https://portal.azure.com/) → **Microsoft Entra ID → App registrations → New registration**
+   - Supported account types: **"Accounts in any organizational directory and personal Microsoft accounts"**
+   - Redirect URI (Web):
+     ```
+     https://api.builderforce.ai/api/auth/oauth/microsoft/callback
+     ```
+2. **Certificates & secrets → New client secret** — copy the value immediately (it's only shown once)
+3. Copy the **Application (client) ID** from the Overview page
+4. Set secrets:
+   ```bash
+   wrangler secret put MICROSOFT_CLIENT_ID
+   wrangler secret put MICROSOFT_CLIENT_SECRET
+   ```
+
+---
+
+#### Local development
+
+For local development, use `api/.dev.vars` — Wrangler loads this file automatically for `wrangler dev`, and it is gitignored:
+
+```ini
+# api/.dev.vars
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+LINKEDIN_CLIENT_ID=your_linkedin_client_id
+LINKEDIN_CLIENT_SECRET=your_linkedin_client_secret
+GITHUB_CLIENT_ID=your_github_dev_app_client_id
+GITHUB_CLIENT_SECRET=your_github_dev_app_client_secret
+APP_URL=http://localhost:3000
+```
+
+The OAuth callback URL is derived from the incoming request's `Origin` header at runtime, so no extra `API_URL` variable is needed — it resolves to `http://localhost:8787` locally and `https://api.builderforce.ai` in production automatically.
+
+### Magic link email
+
+The `sendMagicLinkEmail` function in `api/src/presentation/routes/oauthRoutes.ts` is a placeholder that logs the link to the console. Wire it to your email provider (Resend, SendGrid, Mailgun, etc.) before using magic links in production:
+
+```typescript
+// api/src/presentation/routes/oauthRoutes.ts  ~line 253
+async function sendMagicLinkEmail(to, name, token, frontendUrl) {
+  const magicUrl = `${frontendUrl}/auth/magic-link?token=${encodeURIComponent(token)}`;
+  // TODO: call your email provider here
+}
+```
+
+### Frontend routes added
+
+| Route | File | Purpose |
+|---|---|---|
+| `/auth/callback` | `frontend/src/app/auth/callback/page.tsx` | Receives `?token=JWT` from OAuth redirect, persists session, navigates |
+| `/auth/magic-link` | `frontend/src/app/auth/magic-link/page.tsx` | Calls `/api/auth/magic-link/verify`, persists session, navigates |
 
 ---
 
@@ -224,6 +438,9 @@ cd api && npm run secrets:from-env && npm run deploy
 
 **Required secrets:** `CF_API_TOKEN`, `CF_ACCOUNT_ID`, `NEON_DATABASE_URL`, `JWT_SECRET`, `OPENROUTER_API_KEY`
 
+**Optional OAuth secrets** (add only the providers you want):
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`
+
 ---
 
 ## Browser Requirements
@@ -263,7 +480,7 @@ See the [platform roadmap](../README.md#roadmap) for the full picture. Builderfo
 - **Telemetry domain** — `POST /api/runtime/executions/:id/telemetry` callback; `GET /api/runtime/dashboard` aggregate per tenant; true OTel trace proxy
 - **Approval workflow** — full approval gate UI with policy rules (model cost threshold, file scope, role); mobile-ready
 - **Worker → API consolidation** — fold IDE project/file/training/collaboration routes into the API worker; single deployment target
-- **Auth hardening** — OAuth (GitHub / Google) alongside existing JWT; SSO for enterprise tenants
+- ~~**Auth hardening** — OAuth (GitHub / Google) alongside existing JWT~~ ✅ Done — Google, GitHub, LinkedIn, and Microsoft OAuth + magic links implemented; account linking, provider management, and add-password for OAuth-only accounts. SSO for enterprise tenants remains future work.
 - **Billing** — usage-based credits for AI inference, storage, and training GPU-time
 - **Template gallery** — React, Vue, Express, Python starters for new projects
 - **Self-hosted deployment** — Docker + Compose path for Builderforce.ai itself; abstract Cloudflare-specific primitives for on-premises installations

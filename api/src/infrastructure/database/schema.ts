@@ -10,6 +10,7 @@ import {
   primaryKey,
   serial,
   varchar,
+  unique,
 } from 'drizzle-orm/pg-core';
 
 /**
@@ -897,5 +898,41 @@ export const ideProjectChatMessages = pgTable('ide_project_chat_messages', {
   content:   text('content').notNull().default(''),
   metadata:  text('metadata'),
   seq:       integer('seq').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// OAuth accounts — one user → many providers (added by migration 0034)
+// ---------------------------------------------------------------------------
+
+export const oauthAccounts = pgTable('oauth_accounts', {
+  id:                uuid('id').primaryKey().defaultRandom(),
+  userId:            varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  provider:          varchar('provider', { length: 50 }).notNull(),
+  providerAccountId: varchar('provider_account_id', { length: 255 }).notNull(),
+  email:             varchar('email', { length: 255 }),
+  displayName:       varchar('display_name', { length: 255 }),
+  avatarUrl:         text('avatar_url'),
+  accessToken:       text('access_token'),
+  refreshToken:      text('refresh_token'),
+  tokenExpiresAt:    timestamp('token_expires_at'),
+  scope:             text('scope'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_oauth_provider_account').on(t.provider, t.providerAccountId),
+]);
+
+// ---------------------------------------------------------------------------
+// Magic link tokens — single-use, 15-minute expiry (added by migration 0034)
+// ---------------------------------------------------------------------------
+
+export const magicLinkTokens = pgTable('magic_link_tokens', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  email:     varchar('email', { length: 255 }).notNull(),
+  token:     text('token').notNull().unique(),
+  expiresAt: timestamp('expires_at').notNull(),
+  used:      boolean('used').notNull().default(false),
+  redirect:  varchar('redirect', { length: 500 }).notNull().default('/dashboard'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });

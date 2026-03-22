@@ -35,6 +35,23 @@ export interface Env {
   // Helcim (required when PAYMENT_PROVIDER=helcim)
   HELCIM_API_TOKEN?: string;
   HELCIM_WEBHOOK_SECRET?: string;
+
+  // ---------------------------------------------------------------------------
+  // OAuth providers (optional — only required for the providers you enable)
+  // Set via: wrangler secret put GOOGLE_CLIENT_ID  (etc.)
+  // ---------------------------------------------------------------------------
+
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+
+  LINKEDIN_CLIENT_ID?: string;
+  LINKEDIN_CLIENT_SECRET?: string;
+
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
+
+  MICROSOFT_CLIENT_ID?: string;
+  MICROSOFT_CLIENT_SECRET?: string;
 }
 
 /** Variables injected into Hono context by the auth middleware. */
