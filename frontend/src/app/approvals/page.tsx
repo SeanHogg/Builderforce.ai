@@ -106,7 +106,7 @@ export default function ApprovalsPage() {
   };
 
   return (
-    <div style={{ flex: 1, background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>
+    <div style={{ flex: 1, color: 'var(--text-primary)' }}>
       <main className="max-w-6xl mx-auto px-4 py-5">
         <div style={{ marginBottom: 20 }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 4 }}>Approvals</h1>

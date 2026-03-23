@@ -22,7 +22,7 @@ export default function TaskMgmtPage() {
   }
 
   return (
-    <div style={{ flex: 1, background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>
+    <div style={{ flex: 1, color: 'var(--text-primary)' }}>
       <main className="max-w-6xl mx-auto px-4 py-5">
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 4 }}>Task Mgmt</h1>

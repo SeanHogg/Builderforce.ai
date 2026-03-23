@@ -87,7 +87,7 @@ export default function ProjectsPage() {
   if (!isAuthenticated || !hasTenant) return null;
 
   return (
-    <div style={{ flex: 1, background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>
+    <div style={{ flex: 1, color: 'var(--text-primary)' }}>
       <main className="max-w-6xl mx-auto px-4 py-5">
         {/* New Project Modal */}
         {showForm && (
