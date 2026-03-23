@@ -14,6 +14,8 @@ interface NavItem {
   exactMatch?: boolean;
   /** When true, use warning (yellow) color for this nav item */
   highlight?: boolean;
+  /** When true, only show on mobile (hidden on desktop via CSS) */
+  mobileOnly?: boolean;
 }
 
 const mainNav: NavItem[] = [
@@ -28,6 +30,7 @@ const mainNav: NavItem[] = [
   },
   { href: '/tasks', label: 'Task Mgmt', icon: '☑' },
   { href: '/training', label: 'Training', icon: '🎓' },
+  { href: '/marketplace', label: 'Marketplace', icon: '🛒', mobileOnly: true },
 ];
 
 const meshNav: NavItem[] = [
@@ -77,7 +80,7 @@ function NavSection({
           <Link
             key={item.href + item.label}
             href={item.href}
-            className={`nav-item ${active ? 'active' : ''} ${item.highlight ? 'nav-item-highlight' : ''}`}
+            className={`nav-item ${active ? 'active' : ''} ${item.highlight ? 'nav-item-highlight' : ''} ${item.mobileOnly ? 'nav-item-mobile-only' : ''}`}
           >
             <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{item.icon}</span>
             {!collapsed && <span className="nav-item-label">{item.label}</span>}

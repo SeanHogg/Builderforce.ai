@@ -1380,3 +1380,96 @@ html[data-theme='light'] .nebula {
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
 }
+
+/* ── Page inner wrapper: responsive centered content ── */
+.page-inner {
+  padding: 24px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* ── Scrollable overflow for tables and wide list views ── */
+.scroll-x {
+  overflow-x: auto;
+}
+
+/* ── Mobile / responsive ── */
+@media (max-width: 767px) {
+  /* Hide Marketplace chip from topbar — it lives in the sidebar on mobile */
+  .topbar-center {
+    display: none;
+  }
+
+  /* Show sidebar Marketplace item only on mobile */
+  .nav-item-mobile-only {
+    display: flex;
+  }
+
+  /* Force icon-only sidebar on mobile to maximise content area */
+  :root {
+    --shell-nav-width: var(--shell-nav-width-collapsed);
+  }
+
+  .nav {
+    padding: 16px 8px;
+  }
+
+  .nav-section-label {
+    opacity: 0;
+    pointer-events: none;
+    height: 0;
+    margin: 0;
+    padding: 0;
+  }
+
+  .nav-section {
+    margin-bottom: 8px;
+  }
+
+  .nav-item {
+    padding: 8px;
+    justify-content: center;
+    gap: 0;
+  }
+
+  .nav-item-label {
+    display: none;
+  }
+
+  /* Tighter content padding on small screens */
+  .content {
+    padding: 8px 6px;
+  }
+
+  /* Page inner wrapper: remove max-width constraint, use smaller padding */
+  .page-inner {
+    padding: 12px 8px;
+    max-width: 100%;
+    margin: 0;
+  }
+
+  /* BrainStorm: stack sidebar and main vertically on mobile */
+  .bs-shell {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+
+  .bs-sidebar {
+    max-height: 200px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Topbar: tighten brand on very small screens */
+  .brand-name {
+    font-size: 14px;
+  }
+}
+
+/* On desktop: hide the mobile-only sidebar items (Marketplace is in topbar) */
+@media (min-width: 768px) {
+  .nav-item-mobile-only {
+    display: none;
+  }
+}

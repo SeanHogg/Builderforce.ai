@@ -110,8 +110,8 @@ export default function DashboardPage() {
   const projectPreview = projects.slice(0, 6);
 
   return (
-    <div style={{ flex: 1, background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>
-      <main style={{ maxWidth: 960, margin: '0 auto', padding: '24px 16px' }}>
+    <div style={{ flex: 1, color: 'var(--text-primary)' }}>
+      <main style={{ padding: '24px 16px' }}>
         {/* Prompt — What should we build? */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <h1 style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>

@@ -389,7 +389,7 @@ export default function MarketplacePage() {
   const loadingPage = category !== 'publish' && (loading || (category === 'workforce' && loadingAgents));
   if (loadingPage) {
     return (
-      <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
+      <div className="page-inner">
         <div style={{ color: 'var(--muted)', fontSize: 14 }}>
           {category === 'workforce' ? 'Loading workforce agents…' : 'Loading marketplace…'}
         </div>
@@ -398,7 +398,7 @@ export default function MarketplacePage() {
   }
 
   return (
-    <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
+    <div className="page-inner">
       <div style={{ textAlign: 'center', marginBottom: 32 }}>
         <h1 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 800, color: 'var(--text-strong)', margin: '0 0 8px' }}>
           Marketplace
