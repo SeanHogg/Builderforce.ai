@@ -76,6 +76,7 @@ export function ThemeSelect({
         aria-label={ariaLabel}
         aria-expanded={open}
         aria-haspopup="listbox"
+        aria-controls="theme-select-listbox"
         role="combobox"
         onClick={() => setOpen((o) => !o)}
         style={baseStyle}
@@ -84,6 +85,7 @@ export function ThemeSelect({
       </button>
       {open && (
         <div
+          id="theme-select-listbox"
           role="listbox"
           style={{
             position: 'absolute',

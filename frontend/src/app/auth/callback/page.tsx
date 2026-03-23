@@ -31,7 +31,7 @@ export default function OAuthCallbackPage() {
   });
 
   useEffect(() => {
-    if (error) return;
+    if (error || !token) return;
     const redirect = searchParams.get('redirect') || '/dashboard';
 
     // Fetch the user profile using the new token, then persist session

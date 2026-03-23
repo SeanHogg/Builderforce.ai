@@ -3,6 +3,7 @@ import './globals.css';
 import { AuthProvider } from '@/lib/AuthContext';
 import ThemeProvider from './ThemeProvider';
 import ConditionalAppShell from '@/components/ConditionalAppShell';
+import { PwaUpdateBanner } from '@/components/PwaUpdateBanner';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://builderforce.ai';
 
@@ -55,6 +56,7 @@ export const metadata: Metadata = {
       'Build, train, and deploy custom AI agents. WebGPU LoRA, skills marketplace, personas. Publish to the Workforce Registry.',
     images: ['/og-image.png'],
   },
+  manifest: '/manifest.json',
   applicationName: 'Builderforce.ai',
   appleWebApp: {
     capable: true,
@@ -212,6 +214,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           <ConditionalAppShell>{children}</ConditionalAppShell>
         </AuthProvider>
+
+        <PwaUpdateBanner />
       </body>
     </html>
   );
