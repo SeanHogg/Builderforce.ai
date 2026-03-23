@@ -341,7 +341,7 @@ export default defineConfig({
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, startDevServer, mountFiles, runCommand, runCommandAndWait, terminalWriter, files, fileContents, project.id]);
+  }, [isRunning, startDevServer, mountFiles, runCommandAndWait, terminalWriter, files, fileContents, project.id]);
 
   const handleTerminalInput = useCallback((data: string) => {
     shellWriter?.write(data);

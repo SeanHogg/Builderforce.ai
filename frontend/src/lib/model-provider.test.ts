@@ -69,7 +69,6 @@ describe('MambaModelProvider', () => {
   it('dispose() marks the provider as not ready', () => {
     const provider = new MambaModelProvider();
     // Simulate readiness by forcing the internal flag (white-box test)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (provider as any)._ready = true;
     expect(provider.isReady()).toBe(true);
     provider.dispose();
@@ -78,7 +77,6 @@ describe('MambaModelProvider', () => {
 
   it('accepts custom config', () => {
     const provider = new MambaModelProvider({ dModel: 256, numLayers: 4, wsla: true });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cfg = (provider as any).config;
     expect(cfg.dModel).toBe(256);
     expect(cfg.numLayers).toBe(4);

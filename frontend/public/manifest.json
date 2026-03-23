@@ -1,0 +1,43 @@
+{
+  "name": "Builderforce.ai",
+  "short_name": "Builderforce",
+  "description": "Build, train, and deploy custom AI agents. WebGPU LoRA fine-tuning in the browser.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f0f14",
+  "theme_color": "#f4726e",
+  "categories": ["productivity", "developer-tools"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "url": "/dashboard",
+      "description": "Go to your dashboard"
+    },
+    {
+      "name": "Workforce",
+      "url": "/workforce",
+      "description": "Manage your AI workforce"
+    }
+  ]
+}

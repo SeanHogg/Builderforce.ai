@@ -92,6 +92,7 @@ export function ObservabilityContent({
     propClawId != null ? new Set([propClawId]) : new Set()
   );
   const selectedIds = propClawId != null ? [propClawId] : Array.from(selectedClawIds);
+  const selectedIdsKey = selectedIds.join(',');
 
   // Log streaming state
   const [logLines, setLogLines] = useState<LogLine[]>([]);
@@ -212,7 +213,7 @@ export function ObservabilityContent({
       gateways.forEach((gw) => gw.destroy());
       gatewaysRef.current.clear();
     };
-  }, [selectedIds.join(',')]);
+  }, [selectedIdsKey]);
 
   // Auto-scroll logs
   useEffect(() => {
@@ -247,13 +248,13 @@ export function ObservabilityContent({
     } finally {
       setTimelineLoading(false);
     }
-  }, [selectedIds.join(',')]);
+  }, [selectedIdsKey]);
 
   useEffect(() => {
     if (view === 'timeline' && selectedIds.length > 0) {
       void loadTimeline();
     }
-  }, [view, selectedIds.join(','), loadTimeline]);
+  }, [view, selectedIdsKey, loadTimeline]);
 
   const filteredLogs =
     logLevel === 'all' ? logLines : logLines.filter((l) => l.level === logLevel);

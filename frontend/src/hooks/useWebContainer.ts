@@ -9,13 +9,10 @@ let bootPromise: Promise<import('@webcontainer/api').WebContainer> | null = null
 // Task 1: Build a proper nested FileSystemTree from flat path→content map.
 // WebContainers expects: { src: { directory: { 'main.js': { file: { contents } } } } }
 // A plain flat map { 'src/main.js': { file: ... } } silently fails to mount subdirs.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildFileSystemTree(files: Record<string, string>): Record<string, any> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tree: Record<string, any> = {};
   for (const [rawPath, contents] of Object.entries(files)) {
     const parts = rawPath.split('/').filter(Boolean);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let node: Record<string, any> = tree;
     for (let i = 0; i < parts.length - 1; i++) {
       const dir = parts[i];
