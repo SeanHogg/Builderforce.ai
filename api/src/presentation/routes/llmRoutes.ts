@@ -6,7 +6,7 @@
  * GET   /v1/health             – health check
  */
 import { Hono, type Context } from 'hono';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, gte, sql, sum } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
 import {
   LlmProxyService,
@@ -74,6 +74,10 @@ function logUsage(
 type TenantAccess = {
   userId: string | null;
   tenantId: number;
+  /** Numeric claw ID, set when request authenticates via claw API key. */
+  clawId: number | null;
+  /** Per-claw daily token budget (null = no per-claw cap). */
+  clawTokenDailyLimit: number | null;
   role: TenantRole;
   plan: 'free' | 'pro';
   billingStatus: 'none' | 'pending' | 'active' | 'past_due' | 'cancelled';
@@ -95,9 +99,10 @@ async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAccess> {
     const keyHash = await hashSecret(token);
     const [claw] = await db
       .select({
-        id:       coderclawInstances.id,
-        tenantId: coderclawInstances.tenantId,
-        status:   coderclawInstances.status,
+        id:               coderclawInstances.id,
+        tenantId:         coderclawInstances.tenantId,
+        status:           coderclawInstances.status,
+        tokenDailyLimit:  coderclawInstances.tokenDailyLimit,
       })
       .from(coderclawInstances)
       .where(eq(coderclawInstances.apiKeyHash, keyHash))
@@ -123,6 +128,8 @@ async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAccess> {
     return {
       userId: null,
       tenantId: claw.tenantId,
+      clawId: claw.id,
+      clawTokenDailyLimit: claw.tokenDailyLimit ?? null,
       role: TenantRole.DEVELOPER,
       plan,
       billingStatus,
@@ -173,6 +180,8 @@ async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAccess> {
   return {
     userId: isClawToken ? null : payload.sub,
     tenantId: payload.tid,
+    clawId: null,
+    clawTokenDailyLimit: null,
     role: payload.role,
     plan,
     billingStatus,
@@ -246,6 +255,29 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const body = await c.req.json<ChatCompletionRequest>();
     if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
       return c.json({ error: 'messages array is required' }, 400);
+    }
+
+    // ── Per-claw spend limit check ──────────────────────────────────────────
+    if (access.clawId !== null && access.clawTokenDailyLimit !== null) {
+      const todayStart = new Date();
+      todayStart.setUTCHours(0, 0, 0, 0);
+      const db = buildDatabase(c.env);
+      const [usageRow] = await db
+        .select({ used: sum(llmUsageLog.totalTokens) })
+        .from(llmUsageLog)
+        .where(
+          and(
+            eq(llmUsageLog.tenantId, access.tenantId),
+            gte(llmUsageLog.createdAt, todayStart),
+          ),
+        );
+      const clawUsageToday = Number(usageRow?.used ?? 0);
+      if (clawUsageToday >= access.clawTokenDailyLimit) {
+        return c.json({
+          error: `Per-claw daily token limit reached (${access.clawTokenDailyLimit.toLocaleString()} tokens). Increase the limit in the Builderforce portal under Claws → Settings.`,
+          code: 'claw_token_limit_exceeded',
+        }, 429);
+      }
     }
 
     const isPro = access.effectivePlan === 'pro';

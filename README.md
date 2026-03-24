@@ -473,17 +473,6 @@ Theme persists to `localStorage('bf-theme')` with an anti-FOUC inline script app
 
 ---
 
-## Roadmap
-
-See the [platform roadmap](../README.md#roadmap) for the full picture. Builderforce.ai-specific priorities:
-
-- **Telemetry domain** — `POST /api/runtime/executions/:id/telemetry` callback; `GET /api/runtime/dashboard` aggregate per tenant; true OTel trace proxy
-- **Approval workflow** — full approval gate UI with policy rules (model cost threshold, file scope, role); mobile-ready
-- **Worker → API consolidation** — fold IDE project/file/training/collaboration routes into the API worker; single deployment target
-- ~~**Auth hardening** — OAuth (GitHub / Google) alongside existing JWT~~ ✅ Done — Google, GitHub, LinkedIn, and Microsoft OAuth + magic links implemented; account linking, provider management, and add-password for OAuth-only accounts. SSO for enterprise tenants remains future work.
-- **Billing** — usage-based credits for AI inference, storage, and training GPU-time
-- **Template gallery** — React, Vue, Express, Python starters for new projects
-- **Self-hosted deployment** — Docker + Compose path for Builderforce.ai itself; abstract Cloudflare-specific primitives for on-premises installations
 
 ---
 

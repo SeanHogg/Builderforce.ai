@@ -4,6 +4,7 @@ import { TenantService } from '../../application/tenant/TenantService';
 import { TenantRole, TenantBillingCycle } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import {
@@ -486,6 +487,11 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const id   = Number(c.req.param('id'));
     const body = await c.req.json<{ newUserId: string; role: TenantRole }>();
     const actorUserId = c.get('userId') as string;
+
+    const guard = buildPlanLimitsGuard(db);
+    const limitErr = await guard.checkSeatLimit(id);
+    if (limitErr) return c.json(limitErr, 402);
+
     const tenant = await tenantService.addMember(id, actorUserId, body.newUserId, body.role);
     return c.json(tenant.toPlain());
   });

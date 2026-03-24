@@ -7,7 +7,7 @@ import {
   TenantBillingStatus,
   asTenantId,
 } from '../../domain/shared/types';
-import { NotFoundError, ConflictError } from '../../domain/shared/errors';
+import { NotFoundError, ConflictError, ValidationError } from '../../domain/shared/errors';
 import type { PaymentProvider, WebhookEvent } from '../../infrastructure/payment/PaymentProvider';
 
 export interface CreateTenantDto {
@@ -30,6 +30,15 @@ export class TenantService {
       monthly: 29,
       yearly: 290,
       yearlySavingsPercent: 17,
+    },
+    teams: {
+      perSeatMonthly: 20,
+      perSeatYearly: 192,   // $16/seat/mo billed yearly — 20% off
+      yearlySavingsPercent: 20,
+      minimumSeats: 1,
+    },
+    managedClaw: {
+      perClawMonthly: 49,
     },
   } as const;
 
@@ -124,6 +133,7 @@ export class TenantService {
     billingUpdatedAt: Date | null;
     externalCustomerId: string | null;
     externalSubscriptionId: string | null;
+    seatCount: number | null;
     pricing: typeof TenantService.PRICING;
     paymentProvider: string;
   }> {
@@ -139,23 +149,27 @@ export class TenantService {
       billingUpdatedAt: tenant.billingUpdatedAt,
       externalCustomerId: tenant.externalCustomerId,
       externalSubscriptionId: tenant.externalSubscriptionId,
+      seatCount: tenant.seatCount,
       pricing: TenantService.PRICING,
       paymentProvider: this.payment.name,
     };
   }
 
   /**
-   * Initiate checkout for the Pro plan.
+   * Initiate checkout for Pro or Teams plan.
    *
    * For the ManualProvider: activates immediately and returns checkoutUrl=null.
-   * For hosted providers (Stripe, Helcim): returns a URL to redirect the user to.
+   * For hosted providers (Stripe): returns a URL to redirect the user to.
    * The subscription is finalised when the provider fires a webhook.
    */
   async createCheckoutSession(
     tenantId: number,
     input: {
+      targetPlan?: TenantPlan.PRO | TenantPlan.TEAMS;
       billingCycle: TenantBillingCycle;
       billingEmail: string;
+      /** Required for Teams plan */
+      seats?: number;
       /** For manual provider only — optional card details entered by user */
       billingPaymentBrand?: string;
       billingPaymentLast4?: string;
@@ -163,26 +177,46 @@ export class TenantService {
       cancelUrl: string;
     },
   ): Promise<{ checkoutUrl: string | null; sessionId: string }> {
+    const targetPlan = input.targetPlan ?? TenantPlan.PRO;
+
+    if (targetPlan === TenantPlan.TEAMS) {
+      const seats = input.seats ?? 1;
+      if (seats < 1) throw new ValidationError('Teams plan requires at least 1 seat');
+    }
+
     const tenant = await this.getTenant(tenantId);
+    const seats = input.seats ?? 1;
 
     const result = await this.payment.createCheckoutSession({
       tenantId,
+      targetPlan,
       billingCycle: input.billingCycle,
       billingEmail: input.billingEmail,
+      seats: targetPlan === TenantPlan.TEAMS ? seats : 1,
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,
     });
 
     if (result.checkoutUrl === null) {
       // ManualProvider — activate immediately with the user-supplied card details
-      const activated = tenant.activateProSubscription({
-        billingCycle: input.billingCycle,
-        billingEmail: input.billingEmail,
-        billingPaymentBrand: input.billingPaymentBrand ?? 'card',
-        billingPaymentLast4: input.billingPaymentLast4 ?? '',
-        externalCustomerId: result.externalCustomerId,
-        externalSubscriptionId: result.externalSubscriptionId,
-      });
+      const activated = targetPlan === TenantPlan.TEAMS
+        ? tenant.activateTeamsSubscription({
+            seats,
+            billingCycle: input.billingCycle,
+            billingEmail: input.billingEmail,
+            billingPaymentBrand: input.billingPaymentBrand ?? 'card',
+            billingPaymentLast4: input.billingPaymentLast4 ?? '',
+            externalCustomerId: result.externalCustomerId,
+            externalSubscriptionId: result.externalSubscriptionId,
+          })
+        : tenant.activateProSubscription({
+            billingCycle: input.billingCycle,
+            billingEmail: input.billingEmail,
+            billingPaymentBrand: input.billingPaymentBrand ?? 'card',
+            billingPaymentLast4: input.billingPaymentLast4 ?? '',
+            externalCustomerId: result.externalCustomerId,
+            externalSubscriptionId: result.externalSubscriptionId,
+          });
       await this.tenants.update(activated);
     } else if (result.externalCustomerId) {
       // Hosted provider — store external IDs now; subscription activates via webhook
@@ -209,14 +243,29 @@ export class TenantService {
       case 'subscription.activated':
       case 'subscription.renewed':
       case 'payment.succeeded': {
-        const updated = tenant.activateProSubscription({
-          billingCycle: event.billingCycle ?? (tenant.billingCycle ?? TenantBillingCycle.MONTHLY),
-          billingEmail: event.billingEmail ?? tenant.billingEmail ?? '',
-          billingPaymentBrand: event.paymentBrand ?? tenant.billingPaymentBrand ?? 'card',
-          billingPaymentLast4: event.paymentLast4 ?? tenant.billingPaymentLast4 ?? '',
-          externalCustomerId: event.externalCustomerId,
-          externalSubscriptionId: event.externalSubscriptionId,
-        });
+        const billingCycle = event.billingCycle ?? (tenant.billingCycle ?? TenantBillingCycle.MONTHLY);
+        const billingEmail = event.billingEmail ?? tenant.billingEmail ?? '';
+        const paymentBrand = event.paymentBrand ?? tenant.billingPaymentBrand ?? 'card';
+        const paymentLast4 = event.paymentLast4 ?? tenant.billingPaymentLast4 ?? '';
+
+        const updated = event.targetPlan === TenantPlan.TEAMS
+          ? tenant.activateTeamsSubscription({
+              seats: event.seats ?? tenant.seatCount ?? 1,
+              billingCycle,
+              billingEmail,
+              billingPaymentBrand: paymentBrand,
+              billingPaymentLast4: paymentLast4,
+              externalCustomerId: event.externalCustomerId,
+              externalSubscriptionId: event.externalSubscriptionId,
+            })
+          : tenant.activateProSubscription({
+              billingCycle,
+              billingEmail,
+              billingPaymentBrand: paymentBrand,
+              billingPaymentLast4: paymentLast4,
+              externalCustomerId: event.externalCustomerId,
+              externalSubscriptionId: event.externalSubscriptionId,
+            });
         await this.tenants.update(updated);
         break;
       }

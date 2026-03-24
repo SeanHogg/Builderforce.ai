@@ -6,6 +6,7 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { ProjectStatus, TenantRole } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import { clawProjects, coderclawInstances, ideProjectChatMessages, ideProjectChats, projectInsightEvents, projects, sourceControlIntegrations, tasks, tenants } from '../../infrastructure/database/schema';
+import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 
 const IDE_PREFIX = 'ide/';
 
@@ -542,6 +543,10 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     const tenantId = c.get('tenantId');
     const name = body.name?.trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
+
+    const guard = buildPlanLimitsGuard(db);
+    const limitErr = await guard.checkProjectLimit(tenantId);
+    if (limitErr) return c.json(limitErr, 402);
 
     const assignment = await resolveSourceControlAssignment(tenantId, {
       sourceControlIntegrationId: body.sourceControlIntegrationId,

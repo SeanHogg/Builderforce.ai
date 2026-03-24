@@ -60,6 +60,10 @@ import { createIdeAiRoutes }       from './presentation/routes/ideAiRoutes';
 import { BrainService }            from './application/brain/BrainService';
 import { buildPaymentProvider }    from './infrastructure/payment';
 import { createWebhookRoutes }     from './presentation/routes/webhookRoutes';
+import { createManagedClawRoutes }     from './presentation/routes/managedClawRoutes';
+import { createGitHubWebhookRoutes }   from './presentation/routes/githubWebhookRoutes';
+import { createCostForecastRoutes }    from './presentation/routes/costForecastRoutes';
+import { createDashboardRoutes }       from './presentation/routes/dashboardRoutes';
 
 import { API_VERSION } from './version';
 
@@ -119,6 +123,9 @@ function buildApp(env: Env): Hono<HonoEnv> {
   // Payment webhooks — raw body required, no JWT, mounted before any body parsers
   app.route('/api/webhooks', createWebhookRoutes(tenantService, paymentProvider));
 
+  // GitHub webhook — raw body required for HMAC verification, no JWT
+  app.route('/api/webhooks', createGitHubWebhookRoutes(db));
+
   // Public endpoints (no JWT required)
   app.route('/api/auth',    createAuthRoutes(authService, db));
   app.route('/api/auth',    createOAuthRoutes(db));
@@ -143,7 +150,10 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/admin',    createAdminRoutes());
   app.route('/api/specs',    createSpecRoutes(db));
   app.route('/api/workflows', createWorkflowRoutes(db));
-  app.route('/api/approvals', createApprovalRoutes(db));
+  app.route('/api/approvals',     createApprovalRoutes(db));
+  app.route('/api/managed-claws',   createManagedClawRoutes(db));
+  app.route('/api/cost-forecast',   createCostForecastRoutes(db));
+  app.route('/api/dashboard',       createDashboardRoutes(db));
   app.route('/api/brain',     createBrainRoutes(brainService, db));
   app.route('/api/ide',       createIdeRoutes());
   app.route('/api/ai',        createIdeAiRoutes(projectService));

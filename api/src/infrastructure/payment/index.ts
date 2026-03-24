@@ -7,7 +7,8 @@
  * PAYMENT_PROVIDER values:
  *   "manual"  — no external processor; subscribe/cancel are local state changes (default)
  *   "stripe"  — Stripe Checkout + Billing (requires STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
- *               STRIPE_PRICE_MONTHLY, STRIPE_PRICE_YEARLY)
+ *               STRIPE_PRICE_PRO_MONTHLY, STRIPE_PRICE_PRO_YEARLY,
+ *               STRIPE_PRICE_TEAMS_MONTHLY, STRIPE_PRICE_TEAMS_YEARLY)
  *   "helcim"  — Helcim HelcimPay.js (requires HELCIM_API_TOKEN, HELCIM_WEBHOOK_SECRET)
  */
 
@@ -31,8 +32,10 @@ export function buildPaymentProvider(env: Env): PaymentProvider {
       return new StripeProvider({
         secretKey: env.STRIPE_SECRET_KEY,
         webhookSecret: env.STRIPE_WEBHOOK_SECRET,
-        priceMonthly: env.STRIPE_PRICE_MONTHLY ?? '',
-        priceYearly: env.STRIPE_PRICE_YEARLY ?? '',
+        priceProMonthly: env.STRIPE_PRICE_PRO_MONTHLY ?? env.STRIPE_PRICE_MONTHLY ?? '',
+        priceProYearly: env.STRIPE_PRICE_PRO_YEARLY ?? env.STRIPE_PRICE_YEARLY ?? '',
+        priceTeamsMonthly: env.STRIPE_PRICE_TEAMS_MONTHLY ?? '',
+        priceTeamsYearly: env.STRIPE_PRICE_TEAMS_YEARLY ?? '',
       });
 
     case 'helcim':
