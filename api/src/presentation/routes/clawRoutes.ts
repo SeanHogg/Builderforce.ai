@@ -39,6 +39,7 @@ import type { ClawRelayDO } from '../../infrastructure/relay/ClawRelayDO';
 import type { ClawService } from '../../application/claw/ClawService';
 import { classifyContextFiles, normalizeMachineProfile, type ClawMachineProfileInput } from './clawAssignmentContext';
 import { TenantRole } from '../../domain/shared/types';
+import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 
 // Extend HonoEnv bindings type to include the Durable Object
 type ClawHonoEnv = HonoEnv & {
@@ -327,6 +328,10 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
       return c.json({ error: 'name is required' }, 400);
     }
 
+    const guard = buildPlanLimitsGuard(db);
+    const limitErr = await guard.checkClawLimit(tenantId);
+    if (limitErr) return c.json(limitErr, 402);
+
     const slug    = body.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const rawKey  = generateApiKey();
     const keyHash = await hashSecret(rawKey);
@@ -425,6 +430,33 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
         createdAt: updated.createdAt,
       },
     });
+  });
+
+  // PATCH /api/claws/:id/limits – set per-claw token budget (manager+)
+  // Allows managers to cap individual Claw token spend per day.
+  // Set tokenDailyLimit to null to remove the per-claw cap (plan-level limit applies).
+  router.patch('/:id/limits', authMiddleware as never, requireRole(TenantRole.MANAGER) as never, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const clawId = Number(c.req.param('id'));
+    const body = await c.req.json<{ tokenDailyLimit?: number | null }>();
+
+    const limit = body.tokenDailyLimit === undefined ? undefined : body.tokenDailyLimit;
+    if (limit !== null && limit !== undefined && (typeof limit !== 'number' || limit < 0 || !Number.isInteger(limit))) {
+      return c.json({ error: 'tokenDailyLimit must be a non-negative integer or null' }, 400);
+    }
+
+    const [updated] = await db
+      .update(coderclawInstances)
+      .set({
+        tokenDailyLimit: limit === undefined ? undefined : limit,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(coderclawInstances.id, clawId), eq(coderclawInstances.tenantId, tenantId)))
+      .returning({ id: coderclawInstances.id, tokenDailyLimit: coderclawInstances.tokenDailyLimit });
+
+    if (!updated) return c.json({ error: 'Claw not found' }, 404);
+
+    return c.json({ clawId: updated.id, tokenDailyLimit: updated.tokenDailyLimit });
   });
 
   // GET /api/claws/:id/projects – list projects associated with this claw

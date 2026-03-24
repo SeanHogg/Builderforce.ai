@@ -29,8 +29,15 @@ export interface Env {
   // Stripe (required when PAYMENT_PROVIDER=stripe)
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
-  STRIPE_PRICE_MONTHLY?: string;   // price_... for $29/mo
-  STRIPE_PRICE_YEARLY?: string;    // price_... for $290/yr
+  /** Pro plan flat-rate prices */
+  STRIPE_PRICE_PRO_MONTHLY?: string;    // price_... for $29/mo
+  STRIPE_PRICE_PRO_YEARLY?: string;     // price_... for $290/yr
+  /** Teams plan per-seat prices */
+  STRIPE_PRICE_TEAMS_MONTHLY?: string;  // price_... for $20/seat/mo
+  STRIPE_PRICE_TEAMS_YEARLY?: string;   // price_... for $192/seat/yr
+  /** Legacy aliases (still accepted for backwards compatibility) */
+  STRIPE_PRICE_MONTHLY?: string;
+  STRIPE_PRICE_YEARLY?: string;
 
   // Helcim (required when PAYMENT_PROVIDER=helcim)
   HELCIM_API_TOKEN?: string;
@@ -40,6 +47,14 @@ export interface Env {
   // OAuth providers (optional — only required for the providers you enable)
   // Set via: wrangler secret put GOOGLE_CLIENT_ID  (etc.)
   // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
+  // GitHub App (optional — required for /api/webhooks/github)
+  // ---------------------------------------------------------------------------
+
+  /** Webhook secret configured in the GitHub App or repository webhook settings.
+   *  Set via: wrangler secret put GITHUB_WEBHOOK_SECRET */
+  GITHUB_WEBHOOK_SECRET?: string;
 
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;

@@ -32,6 +32,8 @@ export interface TenantProps {
   externalCustomerId: string | null;
   /** Provider-assigned subscription ID (e.g. Stripe sub_... or Helcim transactionId) */
   externalSubscriptionId: string | null;
+  /** Number of paid seats for Teams plan; null for Free/Pro */
+  seatCount: number | null;
   members: TenantMemberProps[];
   createdAt: Date;
   updatedAt: Date;
@@ -74,6 +76,7 @@ export class Tenant {
       billingUpdatedAt: null,
       externalCustomerId: null,
       externalSubscriptionId: null,
+      seatCount: null,
       members: [
         { userId: ownerUserId, role: TenantRole.OWNER, isActive: true, joinedAt: now },
       ],
@@ -104,6 +107,7 @@ export class Tenant {
   get billingUpdatedAt(): Date | null { return this.props.billingUpdatedAt; }
   get externalCustomerId(): string | null { return this.props.externalCustomerId; }
   get externalSubscriptionId(): string | null { return this.props.externalSubscriptionId; }
+  get seatCount(): number | null { return this.props.seatCount; }
   get members(): readonly TenantMemberProps[] { return this.props.members; }
   get createdAt(): Date { return this.props.createdAt; }
   get updatedAt(): Date { return this.props.updatedAt; }
@@ -168,9 +172,9 @@ export class Tenant {
   }
 
   effectivePlan(): TenantPlan {
-    if (this.props.plan === TenantPlan.PRO && this.hasActiveBilling()) {
-      return TenantPlan.PRO;
-    }
+    if (!this.hasActiveBilling()) return TenantPlan.FREE;
+    if (this.props.plan === TenantPlan.TEAMS) return TenantPlan.TEAMS;
+    if (this.props.plan === TenantPlan.PRO) return TenantPlan.PRO;
     return TenantPlan.FREE;
   }
 
@@ -206,6 +210,46 @@ export class Tenant {
     });
   }
 
+  activateTeamsSubscription(input: {
+    seats: number;
+    billingCycle: TenantBillingCycle;
+    billingEmail: string;
+    billingPaymentBrand: string;
+    billingPaymentLast4: string;
+    externalCustomerId?: string | null;
+    externalSubscriptionId?: string | null;
+  }): Tenant {
+    if (!input.billingEmail.trim()) {
+      throw new ValidationError('billingEmail is required for Teams plan');
+    }
+    if (input.seats < 1) {
+      throw new ValidationError('Teams plan requires at least 1 seat');
+    }
+
+    return new Tenant({
+      ...this.props,
+      plan: TenantPlan.TEAMS,
+      billingCycle: input.billingCycle,
+      billingStatus: TenantBillingStatus.ACTIVE,
+      billingEmail: input.billingEmail.trim().toLowerCase(),
+      billingPaymentBrand: input.billingPaymentBrand.trim() || 'card',
+      billingPaymentLast4: input.billingPaymentLast4,
+      billingUpdatedAt: new Date(),
+      seatCount: input.seats,
+      externalCustomerId: input.externalCustomerId ?? this.props.externalCustomerId,
+      externalSubscriptionId: input.externalSubscriptionId ?? this.props.externalSubscriptionId,
+      updatedAt: new Date(),
+    });
+  }
+
+  updateSeatCount(seats: number): Tenant {
+    if (this.props.plan !== TenantPlan.TEAMS) {
+      throw new ValidationError('Seat count can only be changed on a Teams plan');
+    }
+    if (seats < 1) throw new ValidationError('Seat count must be at least 1');
+    return new Tenant({ ...this.props, seatCount: seats, updatedAt: new Date() });
+  }
+
   /**
    * Update external provider IDs without changing subscription status.
    * Called when a checkout session is created before the webhook arrives.
@@ -226,6 +270,7 @@ export class Tenant {
       billingCycle: null,
       billingStatus: TenantBillingStatus.NONE,
       billingUpdatedAt: new Date(),
+      seatCount: null,
       updatedAt: new Date(),
     });
   }

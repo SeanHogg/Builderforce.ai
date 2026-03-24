@@ -16,12 +16,16 @@
  *   3b. If null (ManualProvider): subscription is immediately active, no redirect
  */
 
-import { TenantBillingCycle } from '../../domain/shared/types';
+import { TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
 
 export interface CheckoutSessionOpts {
   tenantId: number;
+  /** Which plan to activate; defaults to PRO if omitted */
+  targetPlan?: TenantPlan.PRO | TenantPlan.TEAMS;
   billingCycle: TenantBillingCycle;
   billingEmail: string;
+  /** Number of seats — only meaningful for Teams plan */
+  seats?: number;
   /** Absolute URL provider redirects to on success */
   successUrl: string;
   /** Absolute URL provider redirects to on cancel */
@@ -59,6 +63,10 @@ export interface WebhookEvent {
   /** Present on activation/renewal events */
   billingCycle?: TenantBillingCycle;
   billingEmail?: string;
+  /** Which plan is being activated (Teams vs Pro); defaults to Pro if absent */
+  targetPlan?: TenantPlan.PRO | TenantPlan.TEAMS;
+  /** Number of seats — present on Teams activations */
+  seats?: number;
   /** Card details returned by the provider after payment (not entered by user) */
   paymentBrand?: string;
   paymentLast4?: string;

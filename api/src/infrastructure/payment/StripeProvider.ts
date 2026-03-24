@@ -2,36 +2,37 @@
  * StripeProvider — Stripe Checkout + Billing integration.
  *
  * SETUP:
- *   1. Install: pnpm add stripe  (in api/)
- *   2. Set env vars in wrangler.toml secrets:
- *        STRIPE_SECRET_KEY      — sk_live_... or sk_test_...
- *        STRIPE_WEBHOOK_SECRET  — whsec_... (from Stripe dashboard webhook config)
- *        PAYMENT_PROVIDER       — "stripe"
- *   3. Configure Stripe webhook to send to:
- *        https://api.builderforce.ai/api/webhooks/payment
- *      Events to listen for:
- *        checkout.session.completed
- *        customer.subscription.updated
- *        customer.subscription.deleted
- *        invoice.payment_failed
+ *   1. Set env vars in wrangler.toml secrets:
+ *        STRIPE_SECRET_KEY           — sk_live_... or sk_test_...
+ *        STRIPE_WEBHOOK_SECRET       — whsec_... (from Stripe dashboard webhook config)
+ *        PAYMENT_PROVIDER            — "stripe"
+ *   2. Configure Stripe webhook → https://api.builderforce.ai/api/webhooks/payment
+ *      Events: checkout.session.completed, customer.subscription.updated,
+ *              customer.subscription.deleted, invoice.payment_failed
  *
- * PRICE IDs:
- *   Create two recurring prices in the Stripe dashboard (or CLI), then set:
- *        STRIPE_PRICE_MONTHLY  — price_...
- *        STRIPE_PRICE_YEARLY   — price_...
+ * PRICE IDs — create recurring prices in Stripe dashboard, then set:
+ *   Pro plan (flat rate):
+ *        STRIPE_PRICE_PRO_MONTHLY    — price_...  ($29/mo)
+ *        STRIPE_PRICE_PRO_YEARLY     — price_...  ($290/yr)
+ *   Teams plan (per-seat):
+ *        STRIPE_PRICE_TEAMS_MONTHLY  — price_...  ($20/seat/mo)
+ *        STRIPE_PRICE_TEAMS_YEARLY   — price_...  ($192/seat/yr)
  *
- * NOTE: This implementation uses Stripe's fetch-based client pattern compatible
- *       with Cloudflare Workers (no Node.js crypto dependency).
+ * NOTE: Uses fetch-based Stripe client — compatible with Cloudflare Workers.
  */
 
 import type { PaymentProvider, CheckoutSessionOpts, CheckoutSessionResult, WebhookEvent } from './PaymentProvider';
-import { TenantBillingCycle } from '../../domain/shared/types';
+import { TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
 
 interface StripeConfig {
   secretKey: string;
   webhookSecret: string;
-  priceMonthly: string;
-  priceYearly: string;
+  /** Pro plan flat-rate price IDs */
+  priceProMonthly: string;
+  priceProYearly: string;
+  /** Teams plan per-seat price IDs */
+  priceTeamsMonthly: string;
+  priceTeamsYearly: string;
 }
 
 export class StripeProvider implements PaymentProvider {
@@ -40,20 +41,27 @@ export class StripeProvider implements PaymentProvider {
   constructor(private readonly config: StripeConfig) {}
 
   async createCheckoutSession(opts: CheckoutSessionOpts): Promise<CheckoutSessionResult> {
-    const priceId = opts.billingCycle === 'yearly'
-      ? this.config.priceYearly
-      : this.config.priceMonthly;
+    const isTeams = opts.targetPlan === TenantPlan.TEAMS;
+    const seats = isTeams ? (opts.seats ?? 1) : 1;
+
+    const priceId = isTeams
+      ? (opts.billingCycle === 'yearly' ? this.config.priceTeamsYearly : this.config.priceTeamsMonthly)
+      : (opts.billingCycle === 'yearly' ? this.config.priceProYearly : this.config.priceProMonthly);
 
     const params = new URLSearchParams({
       mode: 'subscription',
       'line_items[0][price]': priceId,
-      'line_items[0][quantity]': '1',
+      'line_items[0][quantity]': String(seats),
       customer_email: opts.billingEmail,
       success_url: opts.successUrl,
       cancel_url: opts.cancelUrl,
       'metadata[tenantId]': String(opts.tenantId),
       'metadata[billingCycle]': opts.billingCycle,
+      'metadata[targetPlan]': opts.targetPlan ?? TenantPlan.PRO,
+      'metadata[seats]': String(seats),
       'subscription_data[metadata][tenantId]': String(opts.tenantId),
+      'subscription_data[metadata][targetPlan]': opts.targetPlan ?? TenantPlan.PRO,
+      'subscription_data[metadata][seats]': String(seats),
     });
 
     const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
@@ -114,6 +122,7 @@ export class StripeProvider implements PaymentProvider {
         const customer = obj['customer'] as string;
         const paymentMethodDetails = (obj['payment_method_details'] as Record<string, unknown> | undefined);
         const card = paymentMethodDetails?.['card'] as Record<string, string> | undefined;
+        const rawSeats = parseInt(meta['seats'] ?? '1', 10);
 
         return {
           type: 'subscription.activated',
@@ -121,6 +130,8 @@ export class StripeProvider implements PaymentProvider {
           externalSubscriptionId: sub ?? '',
           billingCycle: (meta['billingCycle'] as TenantBillingCycle) ?? TenantBillingCycle.MONTHLY,
           billingEmail: (obj['customer_email'] as string | undefined) ?? meta['billingEmail'],
+          targetPlan: (meta['targetPlan'] as TenantPlan.PRO | TenantPlan.TEAMS | undefined) ?? TenantPlan.PRO,
+          seats: isNaN(rawSeats) ? 1 : rawSeats,
           paymentBrand: card?.['brand'],
           paymentLast4: card?.['last4'],
           raw: event,

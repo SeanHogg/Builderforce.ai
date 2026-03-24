@@ -10,6 +10,8 @@ export interface TaskProps {
   status: TaskStatus;
   priority: TaskPriority;
   assignedAgentType: AgentType | null;
+  githubIssueNumber: number | null;
+  githubIssueUrl: string | null;
   githubPrUrl: string | null;
   githubPrNumber: number | null;
   assignedClawId: ClawId | null;
@@ -37,7 +39,7 @@ export class Task {
   static create(
     props: Omit<
       TaskProps,
-      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubPrUrl' | 'githubPrNumber' | 'archived'
+      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived'
     > & {
       projectKey: string;
       projectTaskCount: number;
@@ -58,6 +60,8 @@ export class Task {
       status: props.status ?? TaskStatus.BACKLOG,
       priority: props.priority ?? TaskPriority.MEDIUM,
       assignedAgentType: props.assignedAgentType,
+      githubIssueNumber: null,
+      githubIssueUrl: null,
       githubPrUrl: null,
       githubPrNumber: null,
       assignedClawId: null,
@@ -86,6 +90,8 @@ export class Task {
   get status(): TaskStatus { return this.props.status; }
   get priority(): TaskPriority { return this.props.priority; }
   get assignedAgentType(): AgentType | null { return this.props.assignedAgentType; }
+  get githubIssueNumber(): number | null { return this.props.githubIssueNumber; }
+  get githubIssueUrl(): string | null { return this.props.githubIssueUrl; }
   get githubPrUrl(): string | null { return this.props.githubPrUrl; }
   get githubPrNumber(): number | null { return this.props.githubPrNumber; }
   get assignedClawId(): ClawId | null { return this.props.assignedClawId; }

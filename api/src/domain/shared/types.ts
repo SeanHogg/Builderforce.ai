@@ -69,6 +69,7 @@ export enum TenantRole {
 export enum TenantPlan {
   FREE = 'free',
   PRO = 'pro',
+  TEAMS = 'teams',
 }
 
 export enum TenantBillingCycle {

@@ -59,7 +59,7 @@ export const tenantRoleEnum = pgEnum('tenant_role', [
 ]);
 
 export const tenantPlanEnum = pgEnum('tenant_plan', [
-  'free', 'pro',
+  'free', 'pro', 'teams',
 ]);
 
 export const tenantBillingCycleEnum = pgEnum('tenant_billing_cycle', [
@@ -365,6 +365,7 @@ export const tenants = pgTable('tenants', {
   billingUpdatedAt:       timestamp('billing_updated_at'),
   externalCustomerId:     varchar('external_customer_id', { length: 255 }),
   externalSubscriptionId: varchar('external_subscription_id', { length: 255 }),
+  seatCount:              integer('seat_count'),
   createdAt:              timestamp('created_at').notNull().defaultNow(),
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),
 });
@@ -376,6 +377,27 @@ export const tenantMembers = pgTable('tenant_members', {
   role:      tenantRoleEnum('role').notNull().default('developer'),
   isActive:  boolean('is_active').notNull().default(true),
   joinedAt:  timestamp('joined_at').notNull().defaultNow(),
+});
+
+export const managedClawRequestStatusEnum = pgEnum('managed_claw_request_status', [
+  'pending', 'provisioning', 'active', 'cancelled', 'failed',
+]);
+
+/**
+ * Managed Claw hosting requests — tenants who want Builderforce to host their CoderClaw instance.
+ * $49/mo per hosted Claw add-on.
+ */
+export const managedClawRequests = pgTable('managed_claw_requests', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  status:       managedClawRequestStatusEnum('status').notNull().default('pending'),
+  clawName:     varchar('claw_name', { length: 255 }).notNull(),
+  region:       varchar('region', { length: 100 }).notNull().default('us-east'),
+  notes:        text('notes'),
+  provisionedAt: timestamp('provisioned_at'),
+  clawId:       integer('claw_id'),   // set once provisioned and linked to a Claw record
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 });
 
 export const sourceControlIntegrations = pgTable('source_control_integrations', {
@@ -422,6 +444,8 @@ export const tasks = pgTable('tasks', {
   status:            taskStatusEnum('status').notNull().default('backlog'),
   priority:          taskPriorityEnum('priority').notNull().default('medium'),
   assignedAgentType: agentTypeEnum('assigned_agent_type'),
+  githubIssueNumber: integer('github_issue_number'),
+  githubIssueUrl:    varchar('github_issue_url', { length: 500 }),
   githubPrUrl:       varchar('github_pr_url', { length: 500 }),
   githubPrNumber:    integer('github_pr_number'),
   assignedClawId:    integer('assigned_claw_id').references(() => coderclawInstances.id, { onDelete: 'set null' }),
@@ -483,6 +507,8 @@ export const coderclawInstances = pgTable('coderclaw_instances', {
   capabilities:         text('capabilities'),         // JSON array reported via heartbeat, e.g. '["chat","tasks","relay"]'
   declaredCapabilities: text('declared_capabilities'), // JSON array configured by user in the portal
   localPersonas:        text('local_personas'),         // JSON array of custom role definitions reported by the claw
+  /** Per-claw token budget per calendar day. NULL = no per-claw limit (only plan-level limit applies). */
+  tokenDailyLimit:      integer('token_daily_limit'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 });
@@ -797,6 +823,25 @@ export const approvals = pgTable('approvals', {
   expiresAt:   timestamp('expires_at'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Approval rules — configurable auto-approval based on action type and thresholds
+// ---------------------------------------------------------------------------
+
+export const approvalRules = pgTable('approval_rules', {
+  id:                 uuid('id').primaryKey().defaultRandom(),
+  tenantId:           integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  name:               varchar('name', { length: 255 }).notNull(),
+  /** Null = matches all action types */
+  actionType:         varchar('action_type', { length: 255 }),
+  /** Auto-approve when estimated_cost in metadata ≤ this value (USD). Null = ignore. */
+  maxEstimatedCost:   integer('max_estimated_cost'),
+  /** Auto-approve when files_changed in metadata ≤ this value. Null = ignore. */
+  maxFilesChanged:    integer('max_files_changed'),
+  isEnabled:          boolean('is_enabled').notNull().default(true),
+  createdAt:          timestamp('created_at').notNull().defaultNow(),
+  updatedAt:          timestamp('updated_at').notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
