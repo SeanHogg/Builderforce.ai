@@ -1239,3 +1239,21 @@ export const reportSubscriptions = pgTable('report_subscriptions', {
 }, (t) => [
   unique('uq_subscription_user_type').on(t.tenantId, t.userId, t.reportType),
 ]);
+
+// ---------------------------------------------------------------------------
+// Team memory — cross-claw memory sharing mesh (P4-5)
+// ---------------------------------------------------------------------------
+
+export const teamMemory = pgTable('team_memory', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** Numeric claw ID stored as string for flexibility. */
+  clawId:    varchar('claw_id', { length: 64 }).notNull(),
+  runId:     varchar('run_id', { length: 64 }).notNull(),
+  summary:   text('summary').notNull(),
+  /** JSON array of tag strings, stored as text. */
+  tags:      text('tags').notNull().default('[]'),
+  /** ISO-8601 timestamp provided by the claw. */
+  timestamp: varchar('timestamp', { length: 32 }).notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});

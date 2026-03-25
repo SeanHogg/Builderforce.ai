@@ -70,8 +70,14 @@ import { createManagedClawRoutes }     from './presentation/routes/managedClawRo
 import { createGitHubWebhookRoutes }   from './presentation/routes/githubWebhookRoutes';
 import { createCostForecastRoutes }    from './presentation/routes/costForecastRoutes';
 import { createDashboardRoutes }       from './presentation/routes/dashboardRoutes';
+import { createTeamMemoryRoutes }      from './presentation/routes/teamMemoryRoutes';
 
 import { API_VERSION } from './version';
+import {
+  OPENAPI_VERSION,
+  OPENAPI_TITLE,
+  OPENAPI_DESCRIPTION,
+} from './openapi/schema';
 
 // Middleware
 import { addCorsToResponse, corsMiddleware } from './presentation/middleware/cors';
@@ -124,6 +130,48 @@ function buildApp(env: Env): Hono<HonoEnv> {
 
   app.get('/health', (c) => c.json({ status: 'ok', worker: 'api.builderforce.ai', version: API_VERSION }));
 
+  // OpenAPI 3.1 document — CoderClaw-facing endpoints (P4-4)
+  app.get('/api/openapi.json', (c) => {
+    const doc = {
+      openapi: OPENAPI_VERSION,
+      info: { title: OPENAPI_TITLE, description: OPENAPI_DESCRIPTION, version: API_VERSION },
+      servers: [{ url: 'https://api.builderforce.ai', description: 'Production' }],
+      paths: {
+        '/api/claws': {
+          post: { summary: 'Register a CoderClaw instance', operationId: 'registerClaw', tags: ['Claws'] },
+        },
+        '/api/claws/{id}/heartbeat': {
+          patch: { summary: 'Send heartbeat', operationId: 'heartbeat', tags: ['Claws'] },
+        },
+        '/api/claws/{id}/forward': {
+          post: { summary: 'Forward a remote task to a claw', operationId: 'forwardTask', tags: ['Claws'] },
+        },
+        '/api/claws/{id}/context-bundle': {
+          get: { summary: 'Get last-synced .coderClaw/ context bundle', operationId: 'getContextBundle', tags: ['Claws'] },
+        },
+        '/api/claws/fleet': {
+          get: { summary: 'List online claws in the fleet', operationId: 'getFleet', tags: ['Claws'] },
+        },
+        '/api/telemetry/spans': {
+          post: { summary: 'Ingest telemetry spans', operationId: 'ingestSpans', tags: ['Telemetry'] },
+          get:  { summary: 'Query telemetry spans', operationId: 'querySpans', tags: ['Telemetry'] },
+        },
+        '/api/workflows': {
+          post: { summary: 'Register a workflow', operationId: 'registerWorkflow', tags: ['Workflows'] },
+          get:  { summary: 'List workflows', operationId: 'listWorkflows', tags: ['Workflows'] },
+        },
+        '/api/workflows/{id}/graph': {
+          get: { summary: 'Get workflow dependency graph', operationId: 'getWorkflowGraph', tags: ['Workflows'] },
+        },
+        '/api/teams/memory': {
+          post: { summary: 'Store a team memory entry', operationId: 'postTeamMemory', tags: ['Teams'] },
+          get:  { summary: 'Get recent team memory entries', operationId: 'getTeamMemory', tags: ['Teams'] },
+        },
+      },
+    };
+    return c.json(doc);
+  });
+
   // coderClawLLM — OpenAI-compatible LLM proxy (no JWT, keyed by OPENROUTER_API_KEY)
   app.route('/llm', createLlmRoutes());
 
@@ -173,6 +221,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/cost-forecast',   createCostForecastRoutes(db));
   app.route('/api/dashboard',       createDashboardRoutes(db));
   app.route('/api/brain',     createBrainRoutes(brainService, db));
+  app.route('/api/teams/memory', createTeamMemoryRoutes(db));
   app.route('/api/ide',       createIdeRoutes());
   app.route('/api/ai',        createIdeAiRoutes(projectService));
 

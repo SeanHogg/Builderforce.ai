@@ -1776,5 +1776,75 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
     return c.json({ ok: true, count: body.personas.length });
   });
 
+  // -------------------------------------------------------------------------
+  // GET /api/claws/:id/context-bundle (P4-2)
+  // Returns the last-synced .coderClaw/ files for the specified claw so peer
+  // claws can hydrate remote context before dispatching tasks.
+  // Auth: claw API key (Authorization: Bearer <key>) or tenant JWT.
+  // -------------------------------------------------------------------------
+  router.get('/:id/context-bundle', async (c) => {
+    const clawId = Number(c.req.param('id'));
+
+    // Allow claw-auth or tenant JWT
+    let tenantId: number | null = null;
+    const key = extractClawKey(c);
+    const clawAuth = await verifyClawApiKey(clawId, key);
+    if (clawAuth) {
+      tenantId = Number(clawAuth.tenantId);
+    } else {
+      // Fall through to tenant JWT check
+      const tid = (c as unknown as { get: (k: string) => unknown }).get('tenantId');
+      if (typeof tid === 'number') tenantId = tid;
+    }
+    if (!tenantId) return c.text('Unauthorized', 401);
+
+    // Look up the claw and verify tenant ownership
+    const [claw] = await db
+      .select({ id: coderclawInstances.id, tenantId: coderclawInstances.tenantId, updatedAt: coderclawInstances.updatedAt })
+      .from(coderclawInstances)
+      .where(and(eq(coderclawInstances.id, clawId), eq(coderclawInstances.tenantId, tenantId)));
+    if (!claw) return c.json({ error: 'Claw not found' }, 404);
+
+    // Find the latest directory sync for this claw
+    const [latestDir] = await db
+      .select({ id: clawDirectories.id, lastSyncedAt: clawDirectories.lastSyncedAt })
+      .from(clawDirectories)
+      .where(and(eq(clawDirectories.clawId, clawId), eq(clawDirectories.tenantId, tenantId)))
+      .orderBy(desc(clawDirectories.updatedAt))
+      .limit(1);
+
+    if (!latestDir) {
+      return c.json({ clawId, files: [], syncedAt: null });
+    }
+
+    // Fetch all files from the latest directory sync
+    const files = await db
+      .select({
+        relPath:     clawDirectoryFiles.relPath,
+        content:     clawDirectoryFiles.content,
+        contentHash: clawDirectoryFiles.contentHash,
+      })
+      .from(clawDirectoryFiles)
+      .where(
+        and(
+          eq(clawDirectoryFiles.directoryId, latestDir.id),
+          eq(clawDirectoryFiles.tenantId, tenantId),
+          eq(clawDirectoryFiles.clawId, clawId),
+        ),
+      );
+
+    const bundle = files.map((f) => ({
+      path:    f.relPath,
+      content: f.content ?? '',
+      sha256:  f.contentHash,
+    }));
+
+    return c.json({
+      clawId,
+      files: bundle,
+      syncedAt: latestDir.lastSyncedAt?.toISOString() ?? null,
+    });
+  });
+
   return router;
 }

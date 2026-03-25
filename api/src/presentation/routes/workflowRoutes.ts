@@ -16,7 +16,7 @@
 import { Hono } from 'hono';
 import { eq, and } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { workflows, workflowTasks, coderclawInstances } from '../../infrastructure/database/schema';
+import { workflows, workflowTasks, coderclawInstances, telemetrySpans } from '../../infrastructure/database/schema';
 import { verifySecret } from '../../infrastructure/auth/HashService';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -226,6 +226,149 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
 
     const [row] = await db.select().from(workflowTasks).where(eq(workflowTasks.id, taskId));
     return c.json(row, 201);
+  });
+
+  // GET /api/workflows/:id/graph – task dependency graph (P4-1)
+  // Builds a DAG from telemetry spans stored by CoderClaw workflow-telemetry module.
+  router.get('/:id/graph', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const workflowId = c.req.param('id');
+
+    // Verify ownership
+    const [wf] = await db
+      .select({ id: workflows.id, status: workflows.status })
+      .from(workflows)
+      .where(and(eq(workflows.id, workflowId), eq(workflows.tenantId, tenantId)));
+    if (!wf) return c.json({ error: 'Workflow not found' }, 404);
+
+    // Load all telemetry spans for this workflow
+    const spans = await db
+      .select()
+      .from(telemetrySpans)
+      .where(and(eq(telemetrySpans.tenantId, tenantId), eq(telemetrySpans.workflowId, workflowId)));
+
+    // Group spans by taskId; build one node per task
+    const taskMap = new Map<string, {
+      id: string;
+      description: string | null;
+      agentRole: string | null;
+      status: 'pending' | 'running' | 'completed' | 'failed';
+      durationMs?: number;
+      model?: string;
+      estimatedCostUsd?: number;
+      startedAt?: string;
+      completedAt?: string;
+      startTs?: Date;
+      endTs?: Date;
+    }>();
+
+    for (const span of spans) {
+      if (!span.taskId) continue;
+      const existing = taskMap.get(span.taskId);
+
+      // Determine status from span kind
+      let statusFromSpan: 'pending' | 'running' | 'completed' | 'failed' = 'pending';
+      if (span.kind === 'task.start') statusFromSpan = 'running';
+      else if (span.kind === 'task.end') statusFromSpan = 'completed';
+      else if (span.kind === 'task.error') statusFromSpan = 'failed';
+
+      const estimatedCostUsd = span.estimatedCostUsd != null
+        ? span.estimatedCostUsd / 100_000
+        : undefined;
+
+      if (!existing) {
+        taskMap.set(span.taskId, {
+          id: span.taskId,
+          description: span.description ?? null,
+          agentRole: span.agentRole ?? null,
+          status: statusFromSpan,
+          durationMs: span.durationMs ?? undefined,
+          model: span.model ?? undefined,
+          estimatedCostUsd,
+          startTs: span.kind === 'task.start' ? span.ts : undefined,
+          endTs: (span.kind === 'task.end' || span.kind === 'task.error') ? span.ts : undefined,
+        });
+      } else {
+        // Merge: later spans (task.end/error) override status
+        if (statusFromSpan === 'completed' || statusFromSpan === 'failed') {
+          existing.status = statusFromSpan;
+        } else if (statusFromSpan === 'running' && existing.status === 'pending') {
+          existing.status = statusFromSpan;
+        }
+        if (span.durationMs != null) existing.durationMs = span.durationMs;
+        if (span.model) existing.model = span.model;
+        if (estimatedCostUsd != null) {
+          existing.estimatedCostUsd = (existing.estimatedCostUsd ?? 0) + estimatedCostUsd;
+        }
+        if (span.kind === 'task.start' && !existing.startTs) existing.startTs = span.ts;
+        if ((span.kind === 'task.end' || span.kind === 'task.error') && !existing.endTs) existing.endTs = span.ts;
+      }
+    }
+
+    // Also load workflow tasks from the tasks table for dependency edges
+    const dbTasks = await db
+      .select()
+      .from(workflowTasks)
+      .where(eq(workflowTasks.workflowId, workflowId));
+
+    // Merge db task metadata into the span-derived nodes
+    for (const t of dbTasks) {
+      const existing = taskMap.get(t.id);
+      if (existing) {
+        if (!existing.description && t.description) existing.description = t.description;
+        if (!existing.agentRole && t.agentRole) existing.agentRole = t.agentRole;
+        // DB status takes precedence when set
+        if (t.status) existing.status = t.status as 'pending' | 'running' | 'completed' | 'failed';
+        if (t.startedAt && !existing.startTs) existing.startTs = t.startedAt;
+        if (t.completedAt && !existing.endTs) existing.endTs = t.completedAt;
+      } else {
+        taskMap.set(t.id, {
+          id: t.id,
+          description: t.description,
+          agentRole: t.agentRole,
+          status: (t.status ?? 'pending') as 'pending' | 'running' | 'completed' | 'failed',
+          startTs: t.startedAt ?? undefined,
+          endTs: t.completedAt ?? undefined,
+        });
+      }
+    }
+
+    // Build nodes
+    const nodes = Array.from(taskMap.values()).map((n) => ({
+      id: n.id,
+      label: (n.description ?? n.id).slice(0, 80),
+      role: n.agentRole ?? 'unknown',
+      status: n.status,
+      durationMs: n.durationMs,
+      model: n.model,
+      estimatedCostUsd: n.estimatedCostUsd,
+      startedAt: n.startTs?.toISOString(),
+      completedAt: n.endTs?.toISOString(),
+    }));
+
+    // Build edges from dependency info in workflow_tasks
+    const edges: Array<{ from: string; to: string }> = [];
+    for (const t of dbTasks) {
+      if (!t.dependsOn) continue;
+      let deps: string[];
+      try {
+        deps = JSON.parse(t.dependsOn) as string[];
+      } catch {
+        continue;
+      }
+      for (const dep of deps) {
+        if (typeof dep === 'string' && dep) {
+          edges.push({ from: dep, to: t.id });
+        }
+      }
+    }
+
+    return c.json({
+      workflowId,
+      status: wf.status,
+      nodes,
+      edges,
+    });
   });
 
   // PATCH /api/workflows/:id/tasks/:tid – update individual task state
