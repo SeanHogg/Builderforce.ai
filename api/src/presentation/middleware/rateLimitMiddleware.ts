@@ -24,7 +24,6 @@ import { TenantPlan } from '../../domain/shared/types';
 import { tenants } from '../../infrastructure/database/schema';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { verifyJwt } from '../../infrastructure/auth/JwtService';
-import type { TenantRateLimiterDO } from '../../infrastructure/ratelimit/TenantRateLimiterDO';
 
 /** Requests-per-minute limits by plan. */
 const RPM_LIMITS: Record<TenantPlan, number> = {
@@ -35,7 +34,7 @@ const RPM_LIMITS: Record<TenantPlan, number> = {
 
 type RateLimitHonoEnv = HonoEnv & {
   Bindings: HonoEnv['Bindings'] & {
-    TENANT_RATE_LIMITER?: DurableObjectNamespace<TenantRateLimiterDO>;
+    TENANT_RATE_LIMITER?: DurableObjectNamespace;
   };
 };
 
