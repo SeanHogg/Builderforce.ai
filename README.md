@@ -70,6 +70,26 @@ Builderforce.ai is the cloud-side control plane for [CoderClaw](https://codercla
 - **Webhook handler** — `POST /api/webhooks/payment` receives provider events; HMAC-verified; activates/cancels subscriptions via normalised `WebhookEvent`
 - **Switching providers** — set `PAYMENT_PROVIDER=stripe|helcim|manual` + provider credentials; no application code changes required
 
+### Dev Analytics & Team Intelligence (Phase 6)
+- **Contributor profiles** — cross-platform developer identity reconciliation (GitHub, Jira, Bitbucket); `GET /api/contributors`
+- **Activity ingestion** — `POST /api/contributors/activity` receives PR opened/merged/reviewed, commit, issue events with automatic daily metric aggregation
+- **Weighted activity score** — per-contributor daily score (commits×1 + PRs×3 + reviews×2 + issues×1.5); active dev day = ≥1 commit or PR action
+- **PR cycle time** — end-to-end hours from `pr_opened` to `pr_merged` events tracked on each activity record
+- **Integration credential manager** — AES-256-GCM encrypted platform credentials stored per-tenant; `GET/POST/PUT/DELETE /api/integrations`; per-provider connectivity tests (`POST /api/integrations/:id/test`)
+- **Team hierarchy** — nested dev teams with manager–member relationships; `GET/POST/PATCH/DELETE /api/dev-teams`; member add/remove endpoints
+- **Standup report** — `GET /api/reports/standup` — daily summary: active contributors, commits, PRs merged, issues resolved; recent PRs and resolved issues
+- **Code review report** — `GET /api/reports/code-review` — 14-day window; stale PRs (>7 days old), average cycle time, reviewer activity
+- **Executive summary** — `GET /api/reports/executive` — KPIs over configurable date range: contributor counts, total commits, PRs merged, lines added, average activity score, top contributors
+- **Report schedules** — `GET/POST/PATCH/DELETE /api/reports/schedules`; cron-style delivery config (daily/weekly) with hour-of-day and recipient list
+- **Report subscriptions** — `GET/POST /api/reports/subscriptions`; per-user opt-in/opt-out per report type
+
+### Platform Infrastructure
+- **Per-tenant rate limiting** — `TenantRateLimiterDO` Cloudflare Durable Object; sliding window (60 RPM FREE, 300 RPM PRO, 1000 RPM TEAMS); `X-RateLimit-Limit/Remaining/Reset` + `Retry-After` headers
+- **Auto-approval rules** — `GET/POST/PATCH/DELETE /api/approval-rules`; rule evaluation on `POST /api/approvals` by actionType, max cost, max files changed; bypasses human gate when conditions match
+- **Approval notifications** — Slack webhook + Resend email alerts on new approval requests and decisions; configurable via `SLACK_APPROVAL_WEBHOOK_URL` + `RESEND_API_KEY`
+- **Escalation cron** — `GET /api/approvals/escalate?secret=` expires timed-out pending approvals and fires Slack alert; suitable for Cloudflare Cron Triggers
+- **OTel telemetry proxy** — `POST /api/telemetry/spans` ingest; `GET /api/telemetry/spans` query; `GET /api/telemetry/traces` list; costs stored as millicent integers; W3C `X-Trace-Id` header forwarded from CoderClaw
+
 ---
 
 ## Authentication
@@ -389,6 +409,9 @@ The on-device AI layer runs in O(n) time (vs O(n²) for attention), making it su
 │  │ users · tenants · projects │      │ agent packages       │   │
 │  │ claws · tasks · executions │      └──────────────────────┘   │
 │  │ agents · training_jobs     │                                   │
+│  │ contributors · dev_teams   │                                   │
+│  │ activity_events · metrics  │                                   │
+│  │ integrations · telemetry   │                                   │
 │  └────────────────────────────┘                                   │
 └───────────────────────────────────────────────────────────────────┘
 ```
@@ -397,7 +420,7 @@ The on-device AI layer runs in O(n) time (vs O(n²) for attention), making it su
 
 | | `api` (api.builderforce.ai) | `worker` (worker.builderforce.ai) |
 |---|---|---|
-| **Purpose** | Auth, tenants, claws, tasks, brain, marketplace | IDE projects, files, datasets, training, collaboration |
+| **Purpose** | Auth, tenants, claws, tasks, brain, marketplace, dev analytics | IDE projects, files, datasets, training, collaboration |
 | **Auth** | JWT + tenant isolation | CORS (no auth currently) |
 | **Durable Objects** | ClawRelayDO (claw mesh relay) | CollaborationRoom (Yjs sync) |
 | **Storage** | R2 `UPLOADS` (brain files, claw assets) | R2 `STORAGE` (project files, artifacts, datasets) |

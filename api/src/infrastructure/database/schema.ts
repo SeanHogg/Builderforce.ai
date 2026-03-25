@@ -806,6 +806,30 @@ export const toolAuditEvents = pgTable('tool_audit_events', {
 });
 
 // ---------------------------------------------------------------------------
+// OTel spans — W3C-compatible workflow trace spans forwarded from CoderClaw
+// ---------------------------------------------------------------------------
+
+export const telemetrySpans = pgTable('telemetry_spans', {
+  id:               serial('id').primaryKey(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  clawId:           integer('claw_id').references(() => coderclawInstances.id, { onDelete: 'set null' }),
+  traceId:          varchar('trace_id', { length: 32 }).notNull(),
+  workflowId:       varchar('workflow_id', { length: 36 }),
+  taskId:           varchar('task_id', { length: 36 }),
+  kind:             varchar('kind', { length: 64 }).notNull(),     // SpanKind from CoderClaw
+  agentRole:        varchar('agent_role', { length: 255 }),
+  description:      text('description'),
+  durationMs:       integer('duration_ms'),
+  model:            varchar('model', { length: 255 }),
+  inputTokens:      integer('input_tokens'),
+  outputTokens:     integer('output_tokens'),
+  estimatedCostUsd: integer('estimated_cost_usd_millicents'),       // stored as millicents to avoid floats
+  error:            text('error'),
+  ts:               timestamp('ts').notNull(),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
 // Approvals — human-in-the-loop gate for destructive / high-risk agent actions
 // ---------------------------------------------------------------------------
 
@@ -981,3 +1005,237 @@ export const magicLinkTokens = pgTable('magic_link_tokens', {
   redirect:  varchar('redirect', { length: 500 }).notNull().default('/dashboard'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
+
+// ===========================================================================
+// PHASE 6 — Dev Analytics & Team Intelligence (DevDynamics)
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// 6a — Integration providers + credentials
+// ---------------------------------------------------------------------------
+
+export const integrationProviderEnum = pgEnum('integration_provider', [
+  'github', 'bitbucket', 'jira', 'confluence', 'freshservice',
+]);
+
+export const integrationSyncStatusEnum = pgEnum('integration_sync_status', [
+  'idle', 'syncing', 'success', 'error',
+]);
+
+/**
+ * Per-tenant integration credentials.
+ * Token is stored AES-256-GCM encrypted (handled by application layer).
+ */
+export const integrationCredentials = pgTable('integration_credentials', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  provider:       integrationProviderEnum('provider').notNull(),
+  /** Display label, e.g. "Production Jira" */
+  name:           varchar('name', { length: 255 }).notNull(),
+  baseUrl:        varchar('base_url', { length: 500 }),
+  /** AES-GCM encrypted JSON: { accessToken, refreshToken?, apiToken? } */
+  credentialsEnc: text('credentials_enc').notNull(),
+  /** Ephemeral IV used for this credential's encryption (hex). */
+  iv:             varchar('iv', { length: 64 }).notNull(),
+  isEnabled:      boolean('is_enabled').notNull().default(true),
+  lastTestedAt:   timestamp('last_tested_at'),
+  lastTestOk:     boolean('last_test_ok'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_integration_tenant_provider_name').on(t.tenantId, t.provider, t.name),
+]);
+
+/**
+ * Sync run log — one row per integration sync attempt.
+ */
+export const integrationSyncLogs = pgTable('integration_sync_logs', {
+  id:              serial('id').primaryKey(),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  credentialId:    uuid('credential_id').notNull().references(() => integrationCredentials.id, { onDelete: 'cascade' }),
+  status:          integrationSyncStatusEnum('status').notNull().default('syncing'),
+  itemsProcessed:  integer('items_processed').notNull().default(0),
+  itemsErrored:    integer('items_errored').notNull().default(0),
+  errorMessage:    text('error_message'),
+  durationMs:      integer('duration_ms'),
+  cursorAfter:     text('cursor_after'),   // opaque cursor for next incremental sync
+  startedAt:       timestamp('started_at').notNull().defaultNow(),
+  completedAt:     timestamp('completed_at'),
+});
+
+// ---------------------------------------------------------------------------
+// 6b — Contributors (cross-platform unified profile)
+// ---------------------------------------------------------------------------
+
+/**
+ * Unified contributor profile.  One row per unique person per tenant.
+ * Multiple platform identities (GitHub login, Jira account ID, etc.) are
+ * stored in contributor_identities.
+ */
+export const contributors = pgTable('contributors', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  displayName:   varchar('display_name', { length: 255 }).notNull(),
+  email:         varchar('email', { length: 255 }),
+  avatarUrl:     varchar('avatar_url', { length: 500 }),
+  jobTitle:      varchar('job_title', { length: 255 }),
+  /** Role classification: 'developer' | 'manager' | 'qa' | 'devops' | 'other' */
+  roleType:      varchar('role_type', { length: 50 }).notNull().default('developer'),
+  /** Exclude from productivity calculations (QA, PM, etc.). */
+  excludeFromMetrics: boolean('exclude_from_metrics').notNull().default(false),
+  /** userId if this contributor is also a Builderforce user. */
+  userId:        varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  isActive:      boolean('is_active').notNull().default(true),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+});
+
+/**
+ * Cross-platform identity reconciliation.
+ * e.g. contributor 42 is "johndoe" on GitHub AND "john.doe@example.com" on Jira.
+ */
+export const contributorIdentities = pgTable('contributor_identities', {
+  id:            serial('id').primaryKey(),
+  contributorId: integer('contributor_id').notNull().references(() => contributors.id, { onDelete: 'cascade' }),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  provider:      integrationProviderEnum('provider').notNull(),
+  externalId:    varchar('external_id', { length: 255 }).notNull(), // GitHub login, Jira account ID, etc.
+  externalEmail: varchar('external_email', { length: 255 }),
+  displayName:   varchar('display_name', { length: 255 }),
+  avatarUrl:     varchar('avatar_url', { length: 500 }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_identity_provider_external').on(t.tenantId, t.provider, t.externalId),
+]);
+
+// ---------------------------------------------------------------------------
+// 6c — Activity events (commits, PRs, reviews, issues)
+// ---------------------------------------------------------------------------
+
+export const activityEventTypeEnum = pgEnum('activity_event_type', [
+  'commit', 'pr_opened', 'pr_merged', 'pr_closed', 'pr_reviewed',
+  'issue_created', 'issue_resolved', 'issue_commented',
+]);
+
+/**
+ * Raw activity events ingested from integrations.
+ * One row per discrete event (commit, PR action, issue action).
+ */
+export const activityEvents = pgTable('activity_events', {
+  id:             serial('id').primaryKey(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  contributorId:  integer('contributor_id').references(() => contributors.id, { onDelete: 'set null' }),
+  credentialId:   uuid('credential_id').references(() => integrationCredentials.id, { onDelete: 'set null' }),
+  provider:       integrationProviderEnum('provider').notNull(),
+  eventType:      activityEventTypeEnum('event_type').notNull(),
+  externalId:     varchar('external_id', { length: 255 }),  // commit SHA, PR number, issue ID
+  repositoryName: varchar('repository_name', { length: 255 }),
+  repositoryFullName: varchar('repository_full_name', { length: 500 }),
+  title:          text('title'),
+  url:            varchar('url', { length: 500 }),
+  /** For commits: lines added */
+  linesAdded:     integer('lines_added'),
+  /** For commits: lines removed */
+  linesRemoved:   integer('lines_removed'),
+  /** For commits: files changed */
+  filesChanged:   integer('files_changed'),
+  /** For PRs: time from open to merge/close in hours */
+  cycleTimeHours: integer('cycle_time_hours'),
+  occurredAt:     timestamp('occurred_at').notNull(),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_activity_provider_external').on(t.tenantId, t.provider, t.eventType, t.externalId),
+]);
+
+// ---------------------------------------------------------------------------
+// 6d — Daily aggregated metrics per contributor
+// ---------------------------------------------------------------------------
+
+export const contributorDailyMetrics = pgTable('contributor_daily_metrics', {
+  id:              serial('id').primaryKey(),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  contributorId:   integer('contributor_id').notNull().references(() => contributors.id, { onDelete: 'cascade' }),
+  date:            timestamp('date').notNull(),   // date truncated to day (UTC midnight)
+  commits:         integer('commits').notNull().default(0),
+  prsOpened:       integer('prs_opened').notNull().default(0),
+  prsMerged:       integer('prs_merged').notNull().default(0),
+  prsReviewed:     integer('prs_reviewed').notNull().default(0),
+  issuesCreated:   integer('issues_created').notNull().default(0),
+  issuesResolved:  integer('issues_resolved').notNull().default(0),
+  linesAdded:      integer('lines_added').notNull().default(0),
+  linesRemoved:    integer('lines_removed').notNull().default(0),
+  filesChanged:    integer('files_changed').notNull().default(0),
+  /** Weighted activity score: commits×1 + PRs×3 + reviews×2 + issues×1.5 */
+  activityScore:   integer('activity_score').notNull().default(0),
+  /** Whether this was an active dev day (≥1 commit or PR action) */
+  isActiveDay:     boolean('is_active_day').notNull().default(false),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_contributor_daily').on(t.tenantId, t.contributorId, t.date),
+]);
+
+// ---------------------------------------------------------------------------
+// 6e — Team hierarchy
+// ---------------------------------------------------------------------------
+
+export const devTeams = pgTable('dev_teams', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  name:          varchar('name', { length: 255 }).notNull(),
+  description:   text('description'),
+  parentTeamId:  integer('parent_team_id'), // self-reference: child → parent
+  managerId:     integer('manager_id').references(() => contributors.id, { onDelete: 'set null' }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const devTeamMembers = pgTable('dev_team_members', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => devTeams.id, { onDelete: 'cascade' }),
+  contributorId: integer('contributor_id').notNull().references(() => contributors.id, { onDelete: 'cascade' }),
+  /** 'manager' | 'member' | 'lead' */
+  memberRole:    varchar('member_role', { length: 50 }).notNull().default('member'),
+  joinedAt:      timestamp('joined_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_team_contributor').on(t.teamId, t.contributorId),
+]);
+
+// ---------------------------------------------------------------------------
+// 6f — Scheduled reports + subscriptions
+// ---------------------------------------------------------------------------
+
+export const reportTypeEnum = pgEnum('report_type', [
+  'standup', 'code_review', 'project_status', 'executive_summary',
+]);
+
+export const reportScheduleEnum = pgEnum('report_schedule', [
+  'daily', 'weekly', 'monthly',
+]);
+
+export const reportSchedules = pgTable('report_schedules', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  reportType:   reportTypeEnum('report_type').notNull(),
+  schedule:     reportScheduleEnum('schedule').notNull(),
+  /** UTC hour to deliver (0–23) */
+  deliveryHour: integer('delivery_hour').notNull().default(8),
+  /** JSON array of email addresses */
+  recipients:   text('recipients').notNull().default('[]'),
+  isEnabled:    boolean('is_enabled').notNull().default(true),
+  lastRunAt:    timestamp('last_run_at'),
+  nextRunAt:    timestamp('next_run_at'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const reportSubscriptions = pgTable('report_subscriptions', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  userId:        varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  reportType:    reportTypeEnum('report_type').notNull(),
+  isSubscribed:  boolean('is_subscribed').notNull().default(true),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_subscription_user_type').on(t.tenantId, t.userId, t.reportType),
+]);

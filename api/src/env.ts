@@ -17,6 +17,10 @@ export interface Env {
   /** R2 bucket for file uploads. */
   UPLOADS?: R2Bucket;
 
+  /** Durable Object namespace for per-tenant sliding-window rate limiting.
+   *  Bind in wrangler.toml:  [[durable_objects.bindings]]  name = "TENANT_RATE_LIMITER" */
+  TENANT_RATE_LIMITER?: DurableObjectNamespace;
+
   // ---------------------------------------------------------------------------
   // Payment provider (optional — defaults to "manual" if unset)
   // ---------------------------------------------------------------------------
@@ -56,6 +60,18 @@ export interface Env {
    *  Set via: wrangler secret put GITHUB_WEBHOOK_SECRET */
   GITHUB_WEBHOOK_SECRET?: string;
 
+  /** Shared secret for internal cron endpoints (e.g. GET /api/approvals/escalate).
+   *  Set via: wrangler secret put CRON_SECRET */
+  CRON_SECRET?: string;
+
+  // ---------------------------------------------------------------------------
+  // DevDynamics / Phase 6 (optional — required for integrations feature)
+  // ---------------------------------------------------------------------------
+
+  /** Passphrase used to derive the AES-256-GCM key for integration credential encryption.
+   *  Set via: wrangler secret put INTEGRATION_ENCRYPTION_SECRET */
+  INTEGRATION_ENCRYPTION_SECRET?: string;
+
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
 
@@ -64,6 +80,21 @@ export interface Env {
 
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
+
+  // ---------------------------------------------------------------------------
+  // Notifications (optional — approval alerts + escalation emails)
+  // ---------------------------------------------------------------------------
+
+  /** Incoming Slack webhook URL for approval notifications.
+   *  Set via: wrangler secret put SLACK_APPROVAL_WEBHOOK_URL */
+  SLACK_APPROVAL_WEBHOOK_URL?: string;
+
+  /** Resend API key for email notifications.
+   *  Set via: wrangler secret put RESEND_API_KEY */
+  RESEND_API_KEY?: string;
+
+  /** From address for notification emails, e.g. "Builderforce <notifications@builderforce.ai>" */
+  NOTIFICATION_EMAIL_FROM?: string;
 
   MICROSOFT_CLIENT_ID?: string;
   MICROSOFT_CLIENT_SECRET?: string;
