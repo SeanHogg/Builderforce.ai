@@ -178,6 +178,7 @@ export class TenantRepository implements ITenantRepository {
       billingUpdatedAt: row.billingUpdatedAt,
       externalCustomerId: row.externalCustomerId ?? null,
       externalSubscriptionId: row.externalSubscriptionId ?? null,
+      seatCount: row.seatCount ?? null,
       members,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,

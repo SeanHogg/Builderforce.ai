@@ -132,7 +132,7 @@ export function createGitHubWebhookRoutes(db: Db): Hono<HonoEnv> {
 
     // Find the project linked to this repo
     const [project] = await db
-      .select({ id: projects.id, tenantId: projects.tenantId, defaultClawId: null as null })
+      .select({ id: projects.id, tenantId: projects.tenantId })
       .from(projects)
       .where(eq(projects.sourceControlRepoFullName, repository.full_name))
       .limit(1);
