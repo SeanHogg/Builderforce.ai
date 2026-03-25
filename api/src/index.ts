@@ -54,6 +54,12 @@ import { createChatRoutes }         from './presentation/routes/chatRoutes';
 import { createSpecRoutes }         from './presentation/routes/specRoutes';
 import { createWorkflowRoutes }     from './presentation/routes/workflowRoutes';
 import { createApprovalRoutes }     from './presentation/routes/approvalRoutes';
+import { createApprovalRuleRoutes } from './presentation/routes/approvalRuleRoutes';
+import { createTelemetryRoutes }    from './presentation/routes/telemetryRoutes';
+import { createIntegrationRoutes }  from './presentation/routes/integrationRoutes';
+import { createContributorRoutes }  from './presentation/routes/contributorRoutes';
+import { createDevTeamRoutes }      from './presentation/routes/devTeamRoutes';
+import { createReportRoutes }       from './presentation/routes/reportRoutes';
 import { createBrainRoutes }       from './presentation/routes/brainRoutes';
 import { createIdeRoutes }         from './presentation/routes/ideRoutes';
 import { createIdeAiRoutes }       from './presentation/routes/ideAiRoutes';
@@ -70,9 +76,11 @@ import { API_VERSION } from './version';
 // Middleware
 import { addCorsToResponse, corsMiddleware } from './presentation/middleware/cors';
 import { errorHandler }   from './presentation/middleware/errorHandler';
+import { rateLimitMiddleware } from './presentation/middleware/rateLimitMiddleware';
 
 // Durable Objects (must be re-exported so the Workers runtime can instantiate them)
 export { ClawRelayDO } from './infrastructure/relay/ClawRelayDO';
+export { TenantRateLimiterDO } from './infrastructure/ratelimit/TenantRateLimiterDO';
 
 // ---------------------------------------------------------------------------
 // Composition root: build the full Hono app for a single request,
@@ -111,6 +119,8 @@ function buildApp(env: Env): Hono<HonoEnv> {
   const app = new Hono<HonoEnv>();
 
   app.use('*', corsMiddleware);
+  // Rate limiting applied after auth middleware resolves tenantId
+  app.use('/api/*', rateLimitMiddleware as Parameters<typeof app.use>[1]);
 
   app.get('/health', (c) => c.json({ status: 'ok', worker: 'api.builderforce.ai', version: API_VERSION }));
 
@@ -150,7 +160,15 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/admin',    createAdminRoutes());
   app.route('/api/specs',    createSpecRoutes(db));
   app.route('/api/workflows', createWorkflowRoutes(db));
-  app.route('/api/approvals',     createApprovalRoutes(db));
+  app.route('/api/approvals',       createApprovalRoutes(db));
+  app.route('/api/approval-rules',  createApprovalRuleRoutes(db));
+  app.route('/api/telemetry',       createTelemetryRoutes(db));
+
+  // Phase 6 — Dev Analytics & Team Intelligence
+  app.route('/api/integrations',    createIntegrationRoutes(db, env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET));
+  app.route('/api/contributors',    createContributorRoutes(db));
+  app.route('/api/dev-teams',       createDevTeamRoutes(db));
+  app.route('/api/reports',         createReportRoutes(db));
   app.route('/api/managed-claws',   createManagedClawRoutes(db));
   app.route('/api/cost-forecast',   createCostForecastRoutes(db));
   app.route('/api/dashboard',       createDashboardRoutes(db));
