@@ -41,10 +41,25 @@ export function createIdeAiRoutes(projectService: ProjectService): Hono<HonoEnv>
   router.use('*', authMiddleware);
 
   router.post('/chat', async (c) => {
-    const body = await c.req.json<{ projectId?: string | number; messages: Array<{ role: string; content: string }> }>();
+    const body = await c.req.json<{ projectId?: string | number; model?: string; messages: Array<{ role: string; content: string }> }>();
     if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
       return c.json({ error: 'messages array is required' }, 400);
     }
+
+    // Route workforce agents to their dedicated inference endpoint
+    const workforceMatch = typeof body.model === 'string' ? /^coderclawllm\/workforce-([^/\s]+)$/.exec(body.model) : null;
+    if (workforceMatch) {
+      const agentId = workforceMatch[1];
+      const agentUrl = new URL(c.req.url);
+      agentUrl.pathname = agentUrl.pathname.replace('/ai/chat', `/ide/agents/${agentId}/chat`);
+      const forwarded = new Request(agentUrl.toString(), {
+        method: 'POST',
+        headers: c.req.raw.headers,
+        body: JSON.stringify({ messages: body.messages, stream: true }),
+      });
+      return fetch(forwarded);
+    }
+
     const apiKey = c.env.OPENROUTER_API_KEY;
     if (!apiKey || !apiKey.trim()) {
       return c.json(

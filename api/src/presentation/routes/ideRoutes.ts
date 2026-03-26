@@ -411,14 +411,22 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       r2_artifact_key?: string;
       resume_md?: string;
       eval_score?: number;
+      mamba_state?: unknown;
+      package_version?: string;
     }>();
     const projectId = typeof body.project_id === 'number' ? body.project_id : parseProjectIdInt(String(body.project_id));
     const id = generateId();
     const skillsJson = JSON.stringify(body.skills ?? []);
+    const hasLora = !!body.r2_artifact_key;
+    const hasMamba = !!body.mamba_state;
+    const inferenceMode = hasLora && hasMamba ? 'hybrid' : hasLora ? 'lora' : 'base';
+    const packageVersion = body.package_version ?? (hasMamba ? '2.0' : hasLora ? '1.0' : '1.0');
+    const mambaStateJson = hasMamba ? JSON.stringify(body.mamba_state) : null;
     await getSql(c)`
-      INSERT INTO ide_agents (id, project_id, job_id, name, title, bio, skills, base_model, lora_rank, r2_artifact_key, resume_md, status, hire_count, eval_score)
+      INSERT INTO ide_agents (id, project_id, job_id, name, title, bio, skills, base_model, lora_rank, r2_artifact_key, resume_md, status, hire_count, eval_score, package_version, mamba_state, inference_mode)
       VALUES (${id}, ${projectId}, ${body.job_id ?? null}, ${body.name}, ${body.title}, ${body.bio}, ${skillsJson},
-        ${body.base_model}, ${body.lora_rank ?? null}, ${body.r2_artifact_key ?? null}, ${body.resume_md ?? null}, 'active', 0, ${body.eval_score ?? null})
+        ${body.base_model}, ${body.lora_rank ?? null}, ${body.r2_artifact_key ?? null}, ${body.resume_md ?? null}, 'active', 0, ${body.eval_score ?? null},
+        ${packageVersion}, ${mambaStateJson}::jsonb, ${inferenceMode})
     `;
     const [row] = await getSql(c)`SELECT * FROM ide_agents WHERE id = ${id}`;
     return c.json(row, 201);
@@ -439,11 +447,16 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.get('/agents/:id/package', async (c) => {
-    const [agent] = await getSql(c)`SELECT * FROM ide_agents WHERE id = ${c.req.param('id')}`;
+    const agentId = c.req.param('id');
+    const [agent] = await getSql(c)`SELECT * FROM ide_agents WHERE id = ${agentId}`;
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
+    await getSql(c)`
+      UPDATE ide_agents SET request_count = request_count + 1, last_used_at = NOW() WHERE id = ${agentId}
+    `;
     const skills: string[] = Array.isArray(agent.skills) ? agent.skills : JSON.parse(typeof agent.skills === 'string' ? agent.skills : '[]');
-    const pkg = {
-      version: '1.0' as const,
+    const mambaState = agent.mamba_state ?? null;
+    const version = mambaState ? '2.0' : '1.0';
+    const basePkg = {
       platform: 'builderforce.ai' as const,
       name: agent.name as string,
       title: agent.title as string,
@@ -456,9 +469,107 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       resume_md: agent.resume_md as string | undefined,
       created_at: agent.created_at as string,
     };
+    const pkg = mambaState
+      ? { version: '2.0' as const, ...basePkg, mamba_state: mambaState }
+      : { version: '1.0' as const, ...basePkg };
     const safeName = (agent.name as string).replace(/\s+/g, '-').toLowerCase().replace(/[^\w-]/g, '').replace(/^-+|-+$/g, '') || 'agent';
     c.header('Content-Disposition', `attachment; filename="${safeName}-package.json"`);
     return c.json(pkg);
+  });
+
+  router.get('/agents/:id/mamba-state', async (c) => {
+    const [agent] = await getSql(c)`SELECT mamba_state, package_version FROM ide_agents WHERE id = ${c.req.param('id')}`;
+    if (!agent) return c.json({ error: 'Agent not found' }, 404);
+    if (!agent.mamba_state) return c.json({ error: 'No mamba state stored for this agent' }, 404);
+    return c.json(agent.mamba_state);
+  });
+
+  router.put('/agents/:id/mamba-state', async (c) => {
+    const agentId = c.req.param('id');
+    const snapshot = await c.req.json();
+    const required = ['data', 'dim', 'order', 'channels', 'step'];
+    for (const key of required) {
+      if (!(key in snapshot)) return c.json({ error: `Missing field: ${key}` }, 400);
+    }
+    const [row] = await getSql(c)`
+      UPDATE ide_agents
+      SET mamba_state = ${JSON.stringify(snapshot)}::jsonb, package_version = '2.0', inference_mode = CASE
+        WHEN r2_artifact_key IS NOT NULL THEN 'hybrid'
+        ELSE 'lora'
+      END, updated_at = NOW()
+      WHERE id = ${agentId}
+      RETURNING id, package_version, inference_mode
+    `;
+    if (!row) return c.json({ error: 'Agent not found' }, 404);
+    return c.json({ ok: true, agent_id: agentId, package_version: row.package_version, inference_mode: row.inference_mode });
+  });
+
+  router.post('/agents/:id/chat', async (c) => {
+    const agentId = c.req.param('id');
+    const body = await c.req.json<{ messages: Array<{ role: string; content: string }>; stream?: boolean }>();
+    if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
+      return c.json({ error: 'messages array is required' }, 400);
+    }
+    const apiKey = c.env.OPENROUTER_API_KEY;
+    if (!apiKey?.trim()) {
+      return c.json({ error: 'LLM not configured' }, 503);
+    }
+    const [agent] = await getSql(c)`SELECT * FROM ide_agents WHERE id = ${agentId}`;
+    if (!agent) return c.json({ error: 'Agent not found' }, 404);
+
+    const inferenceMode = (agent.inference_mode as string) ?? 'base';
+    let messages = body.messages.map((m) => ({ role: m.role as 'system' | 'user' | 'assistant', content: m.content }));
+
+    // Inject Mamba state as memory context into system prompt (v1-style: no WebGPU needed)
+    if (agent.mamba_state) {
+      const snap = agent.mamba_state as { step?: number; data?: number[] };
+      const signal = snap.data ? snap.data.slice(0, 4).map((v: number) => v.toFixed(3)).join(',') : '';
+      const memoryLine = `[Memory: step=${snap.step ?? 0} signal=${signal} context="persistent agent state"]`;
+      const agentSystem = `You are ${agent.name as string}, ${agent.title as string}. ${agent.bio as string}\n\nSkills: ${Array.isArray(agent.skills) ? (agent.skills as string[]).join(', ') : agent.skills}\n\n${memoryLine}`;
+      const existing = messages.find((m) => m.role === 'system');
+      if (existing) {
+        messages = messages.map((m) => m.role === 'system' ? { ...m, content: agentSystem + '\n\n' + m.content } : m);
+      } else {
+        messages = [{ role: 'system', content: agentSystem }, ...messages];
+      }
+    } else {
+      const agentSystem = `You are ${agent.name as string}, ${agent.title as string}. ${agent.bio as string}\n\nSkills: ${Array.isArray(agent.skills) ? (agent.skills as string[]).join(', ') : agent.skills}`;
+      const existing = messages.find((m) => m.role === 'system');
+      if (!existing) {
+        messages = [{ role: 'system', content: agentSystem }, ...messages];
+      }
+    }
+
+    const logId = generateId();
+    const startMs = Date.now();
+    const service = new LlmProxyService(apiKey, { modelPool: FREE_MODEL_POOL, preferredPoolSize: 2, productName: 'coderClawLLM' });
+    let status = 'ok';
+    let errorMessage: string | null = null;
+    try {
+      const result = await service.complete({ messages, stream: body.stream !== false });
+      const latencyMs = Date.now() - startMs;
+      await getSql(c)`
+        INSERT INTO agent_inference_logs (id, agent_id, model_ref, latency_ms, status, inference_mode, created_at)
+        VALUES (${logId}, ${agentId}, ${'coderclawllm/workforce-' + agentId}, ${latencyMs}, ${status}, ${inferenceMode}, NOW())
+      `;
+      await getSql(c)`UPDATE ide_agents SET request_count = request_count + 1, last_used_at = NOW() WHERE id = ${agentId}`;
+      if (!result.response.body) return c.json({ error: 'No stream body' }, 502);
+      return new Response(result.response.body, {
+        headers: {
+          'Content-Type': body.stream !== false ? 'text/event-stream' : 'application/json',
+          'Cache-Control': 'no-cache',
+          'X-Inference-Mode': inferenceMode,
+        },
+      });
+    } catch (err) {
+      status = 'error';
+      errorMessage = err instanceof Error ? err.message : String(err);
+      await getSql(c)`
+        INSERT INTO agent_inference_logs (id, agent_id, model_ref, latency_ms, status, error_message, inference_mode, created_at)
+        VALUES (${logId}, ${agentId}, ${'coderclawllm/workforce-' + agentId}, ${Date.now() - startMs}, ${status}, ${errorMessage}, ${inferenceMode}, NOW())
+      `;
+      return c.json({ error: errorMessage }, 502);
+    }
   });
 
   return router;
