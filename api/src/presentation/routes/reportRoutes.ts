@@ -17,12 +17,14 @@
  */
 
 import { Hono } from 'hono';
-import { and, desc, eq, gte, lte, lt } from 'drizzle-orm';
+import { and, desc, eq, gte, lte, lt, isNull, notExists } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   activityEvents,
   contributors,
   contributorDailyMetrics,
+  devTeams,
+  devTeamMembers,
   reportSchedules,
   reportSubscriptions,
 } from '../../infrastructure/database/schema';
@@ -229,6 +231,148 @@ async function generateExecutiveReport(db: Db, tenantId: number, from: Date, to:
   };
 }
 
+async function generateTeamComparisonReport(db: Db, tenantId: number, from: Date, to: Date) {
+  // Load all teams for the tenant
+  const teams = await db.select().from(devTeams).where(eq(devTeams.tenantId, tenantId));
+
+  // Load all team memberships
+  const memberships = await db.select({
+    teamId:        devTeamMembers.teamId,
+    contributorId: devTeamMembers.contributorId,
+  }).from(devTeamMembers)
+    .innerJoin(devTeams, and(eq(devTeamMembers.teamId, devTeams.id), eq(devTeams.tenantId, tenantId)));
+
+  // Load metrics for the period
+  const metrics = await db.select().from(contributorDailyMetrics)
+    .where(and(
+      eq(contributorDailyMetrics.tenantId, tenantId),
+      gte(contributorDailyMetrics.date, from),
+      lte(contributorDailyMetrics.date, to),
+    ));
+
+  // Aggregate per contributor
+  const byContributor = new Map<number, { commits: number; prsMerged: number; prsReviewed: number; issuesResolved: number; activityScore: number; activeDays: number }>();
+  for (const m of metrics) {
+    const prev = byContributor.get(m.contributorId) ?? { commits: 0, prsMerged: 0, prsReviewed: 0, issuesResolved: 0, activityScore: 0, activeDays: 0 };
+    byContributor.set(m.contributorId, {
+      commits:        prev.commits        + m.commits,
+      prsMerged:      prev.prsMerged      + m.prsMerged,
+      prsReviewed:    prev.prsReviewed    + m.prsReviewed,
+      issuesResolved: prev.issuesResolved + m.issuesResolved,
+      activityScore:  prev.activityScore  + m.activityScore,
+      activeDays:     prev.activeDays     + (m.isActiveDay ? 1 : 0),
+    });
+  }
+
+  // Aggregate per team
+  const membersByTeam = new Map<number, number[]>();
+  for (const m of memberships) {
+    const list = membersByTeam.get(m.teamId) ?? [];
+    list.push(m.contributorId);
+    membersByTeam.set(m.teamId, list);
+  }
+
+  const teamRows = teams.map((team) => {
+    const memberIds = membersByTeam.get(team.id) ?? [];
+    const memberCount = memberIds.length;
+    let totalScore = 0, totalCommits = 0, totalPrs = 0, totalReviews = 0, totalIssues = 0, totalActiveDays = 0;
+    for (const cid of memberIds) {
+      const c = byContributor.get(cid);
+      if (!c) continue;
+      totalScore       += c.activityScore;
+      totalCommits     += c.commits;
+      totalPrs         += c.prsMerged;
+      totalReviews     += c.prsReviewed;
+      totalIssues      += c.issuesResolved;
+      totalActiveDays  += c.activeDays;
+    }
+    const avgScore = memberCount > 0 ? Math.round(totalScore / memberCount) : 0;
+    return {
+      teamId:      team.id,
+      teamName:    team.name,
+      parentTeamId: team.parentTeamId,
+      memberCount,
+      totalActivityScore: totalScore,
+      avgActivityScore:   avgScore,
+      totalCommits,
+      totalPrsMerged:     totalPrs,
+      totalPrsReviewed:   totalReviews,
+      totalIssuesResolved: totalIssues,
+      totalActiveDays,
+    };
+  });
+
+  // Sort by avgActivityScore desc
+  teamRows.sort((a, b) => b.avgActivityScore - a.avgActivityScore);
+
+  return {
+    reportType:  'team_comparison',
+    from:        from.toISOString(),
+    to:          to.toISOString(),
+    generatedAt: new Date().toISOString(),
+    teams:       teamRows,
+  };
+}
+
+async function generateInactiveContributorsReport(db: Db, tenantId: number, inactiveDays: number) {
+  const threshold = new Date(Date.now() - inactiveDays * 24 * 60 * 60 * 1000);
+  threshold.setUTCHours(0, 0, 0, 0);
+
+  // All active contributors for tenant (not excluded from metrics)
+  const allContributors = await db.select({
+    id:          contributors.id,
+    displayName: contributors.displayName,
+    email:       contributors.email,
+    jobTitle:    contributors.jobTitle,
+    roleType:    contributors.roleType,
+    avatarUrl:   contributors.avatarUrl,
+  }).from(contributors)
+    .where(and(
+      eq(contributors.tenantId, tenantId),
+      eq(contributors.isActive, true),
+      eq(contributors.excludeFromMetrics, false),
+    ));
+
+  // Most recent active day per contributor
+  const recentMetrics = await db.select({
+    contributorId: contributorDailyMetrics.contributorId,
+    lastActiveDate: contributorDailyMetrics.date,
+  }).from(contributorDailyMetrics)
+    .where(and(
+      eq(contributorDailyMetrics.tenantId, tenantId),
+      eq(contributorDailyMetrics.isActiveDay, true),
+    ))
+    .orderBy(desc(contributorDailyMetrics.date));
+
+  // Keep only the latest record per contributor
+  const lastActiveByContributor = new Map<number, Date>();
+  for (const r of recentMetrics) {
+    if (!lastActiveByContributor.has(r.contributorId)) {
+      lastActiveByContributor.set(r.contributorId, r.lastActiveDate as unknown as Date);
+    }
+  }
+
+  const inactive = allContributors
+    .map((c) => {
+      const lastActive = lastActiveByContributor.get(c.id) ?? null;
+      const daysSinceActive = lastActive
+        ? Math.floor((Date.now() - lastActive.getTime()) / 86_400_000)
+        : null;
+      return { ...c, lastActiveDate: lastActive?.toISOString() ?? null, daysSinceActive };
+    })
+    .filter((c) => c.lastActiveDate === null || new Date(c.lastActiveDate) < threshold)
+    .sort((a, b) => (b.daysSinceActive ?? Infinity) - (a.daysSinceActive ?? Infinity));
+
+  return {
+    reportType:   'inactive_contributors',
+    generatedAt:  new Date().toISOString(),
+    inactiveDays,
+    threshold:    threshold.toISOString(),
+    totalInactive: inactive.length,
+    contributors:  inactive,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
@@ -258,6 +402,21 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
     const to   = c.req.query('to')   ? new Date(c.req.query('to')!)   : new Date();
     const from = c.req.query('from') ? new Date(c.req.query('from')!) : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
     return c.json(await generateExecutiveReport(db, tenantId, from, to));
+  });
+
+  // ── GET /api/reports/team-comparison ─────────────────────────────────────
+  router.get('/team-comparison', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const to   = c.req.query('to')   ? new Date(c.req.query('to')!)   : new Date();
+    const from = c.req.query('from') ? new Date(c.req.query('from')!) : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
+    return c.json(await generateTeamComparisonReport(db, tenantId, from, to));
+  });
+
+  // ── GET /api/reports/inactive-contributors ────────────────────────────────
+  router.get('/inactive-contributors', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const days = c.req.query('days') ? Math.max(1, parseInt(c.req.query('days')!, 10)) : 14;
+    return c.json(await generateInactiveContributorsReport(db, tenantId, days));
   });
 
   // ── GET /api/reports/schedules ────────────────────────────────────────────
