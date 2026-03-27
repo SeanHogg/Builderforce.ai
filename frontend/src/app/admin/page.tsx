@@ -281,6 +281,9 @@ export default function AdminPage() {
         setLoading(false);
       }
     },
+    // securityTenantId and securityUserId are intentionally omitted: including them
+    // would cause the security tab to reload whenever loading sets those values (infinite loop).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [usageDays, newsletterStatusFilter, newsletterSearch, privacyStatusFilter, privacyTypeFilter, privacySearch, impSessionsOffset, auditEventFilter, auditOffset]
   );
 

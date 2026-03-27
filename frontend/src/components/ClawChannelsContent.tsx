@@ -64,6 +64,7 @@ export function ClawChannelsContent({ clawId }: ClawChannelsContentProps) {
       .finally(() => setLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [clawId]);
 
   const handleAdd = async () => {

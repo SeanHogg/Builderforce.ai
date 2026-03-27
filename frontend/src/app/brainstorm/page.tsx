@@ -322,7 +322,7 @@ export default function BrainstormPage() {
     } finally {
       setSending(false);
     }
-  }, [activeChat, input, sending, messages, createNewChat, filterProjectId, pendingAttachments]);
+  }, [activeChat, input, sending, messages, filterProjectId, pendingAttachments]);
 
   const getAiReplyForCurrentMessages = useCallback(async () => {
     if (!activeChat || sending || messages.length === 0) return;
@@ -357,7 +357,7 @@ export default function BrainstormPage() {
     if (autoRepliedChatIdRef.current === activeChat.id) return;
     autoRepliedChatIdRef.current = activeChat.id;
     getAiReplyForCurrentMessages();
-  }, [activeChat?.id, loadingMessages, messages, sending, getAiReplyForCurrentMessages]);
+  }, [activeChat, loadingMessages, messages, sending, getAiReplyForCurrentMessages]);
 
   return (
     <div className="bs-shell" style={{ marginBottom: 0 }}>

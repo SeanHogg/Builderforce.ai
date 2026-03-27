@@ -109,6 +109,7 @@ export default function PricingPage() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchSub(); }, [tenantId]);
 
   const isManualProvider = !sub || sub.paymentProvider === 'manual';

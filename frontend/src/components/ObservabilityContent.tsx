@@ -213,6 +213,9 @@ export function ObservabilityContent({
       gateways.forEach((gw) => gw.destroy());
       gatewaysRef.current.clear();
     };
+  // selectedIds is intentionally omitted: selectedIdsKey is a stable join-derived key that
+  // tracks membership changes without array reference equality issues.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIdsKey]);
 
   // Auto-scroll logs
@@ -248,12 +251,14 @@ export function ObservabilityContent({
     } finally {
       setTimelineLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIdsKey]);
 
   useEffect(() => {
     if (view === 'timeline' && selectedIds.length > 0) {
       void loadTimeline();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, selectedIdsKey, loadTimeline]);
 
   const filteredLogs =

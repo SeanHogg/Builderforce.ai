@@ -42,6 +42,7 @@ export function ClawProjectsContent({ clawId }: ClawProjectsContentProps) {
       .finally(() => setLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     load();
     fetchProjects()

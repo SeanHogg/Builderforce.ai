@@ -49,7 +49,7 @@ export default function OAuthCallbackPage() {
       .catch(() => {
         setError('Failed to load your account profile. Please try signing in again.');
       });
-  }, [searchParams, router]);
+  }, [searchParams, router, error, token]);
 
   if (error) {
     return (

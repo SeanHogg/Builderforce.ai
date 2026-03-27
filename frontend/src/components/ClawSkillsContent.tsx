@@ -40,6 +40,7 @@ export function ClawSkillsContent({ clawId, tenantId }: ClawSkillsContentProps) 
       .finally(() => setLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [clawId]);
 
   useEffect(() => {
