@@ -31,10 +31,27 @@ export function isWorkerForProjects(): boolean {
   return !!getWorkerUrl();
 }
 
+// ---------------------------------------------------------------------------
+// Emulation token — set/cleared by EmulationContext; never written to storage.
+// When present, all API requests carry X-Emulation-Token so the backend can
+// apply the emulation identity (read-only; mutating verbs are blocked server-side).
+// ---------------------------------------------------------------------------
+
+let _emulationToken: string | null = null;
+
+export function setEmulationToken(token: string): void {
+  _emulationToken = token;
+}
+
+export function clearEmulationToken(): void {
+  _emulationToken = null;
+}
+
 export function getAuthHeaders(extra?: Record<string, string>): Record<string, string> {
   const token = getStoredTenantToken();
   const headers: Record<string, string> = { ...extra };
   if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (_emulationToken) headers['X-Emulation-Token'] = _emulationToken;
   return headers;
 }
 

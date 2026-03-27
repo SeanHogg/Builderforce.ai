@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { workflows, specsApi, claws, type Workflow, type WorkflowTask, type Spec, type Claw } from '@/lib/builderforceApi';
+import { workflows, specsApi, claws, type Workflow, type WorkflowTask, type WorkflowGraph, type Spec, type Claw } from '@/lib/builderforceApi';
+import { WorkflowDagView } from './WorkflowDagView';
 
 interface WorkflowsContentProps {
   projectId?: number | null;
@@ -166,6 +167,9 @@ export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) 
   const [selected, setSelected] = useState<Workflow | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<Workflow | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [detailTab, setDetailTab] = useState<'tasks' | 'graph'>('tasks');
+  const [graph, setGraph] = useState<WorkflowGraph | null>(null);
+  const [loadingGraph, setLoadingGraph] = useState(false);
 
   // Create workflow form
   const [showCreate, setShowCreate] = useState(false);
@@ -197,6 +201,8 @@ export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) 
 
   const openDetail = async (wf: Workflow) => {
     setSelected(wf);
+    setDetailTab('tasks');
+    setGraph(null);
     if (wf.tasks) { setSelectedDetail(wf); return; }
     setLoadingDetail(true);
     try {
@@ -208,6 +214,18 @@ export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) 
       setLoadingDetail(false);
     }
   };
+
+  const loadGraph = useCallback(async (workflowId: string) => {
+    setLoadingGraph(true);
+    try {
+      const g = await workflows.getGraph(workflowId);
+      setGraph(g);
+    } catch {
+      setGraph(null);
+    } finally {
+      setLoadingGraph(false);
+    }
+  }, []);
 
   const handleCreate = async () => {
     if (!createClawId) return;
@@ -244,6 +262,17 @@ export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) 
 
   if (selected && selectedDetail) {
     const tasks = selectedDetail.tasks ?? [];
+    const tabBtnStyle = (active: boolean): React.CSSProperties => ({
+      padding: '5px 14px',
+      fontSize: 12,
+      fontWeight: 600,
+      borderRadius: 7,
+      border: '1px solid var(--border-subtle)',
+      background: active ? 'var(--surface-interactive)' : 'transparent',
+      color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+      cursor: 'pointer',
+    });
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -271,18 +300,51 @@ export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) 
               {selectedDetail.workflowType} · {selectedDetail.status}
             </div>
           </div>
+          {/* Tab switcher */}
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button type="button" style={tabBtnStyle(detailTab === 'tasks')} onClick={() => setDetailTab('tasks')}>
+              Tasks
+            </button>
+            <button
+              type="button"
+              style={tabBtnStyle(detailTab === 'graph')}
+              onClick={() => {
+                setDetailTab('graph');
+                if (!graph && !loadingGraph) void loadGraph(selectedDetail.id);
+              }}
+            >
+              Graph
+            </button>
+          </div>
         </div>
 
         <div style={cardStyle}>
-          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>
-            Tasks ({tasks.length})
-          </div>
-          {loadingDetail ? (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading tasks…</div>
-          ) : tasks.length === 0 ? (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No tasks in this workflow yet.</div>
+          {detailTab === 'tasks' ? (
+            <>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>
+                Tasks ({tasks.length})
+              </div>
+              {loadingDetail ? (
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading tasks…</div>
+              ) : tasks.length === 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No tasks in this workflow yet.</div>
+              ) : (
+                tasks.map((t) => <WorkflowTaskRow key={t.id} task={t} />)
+              )}
+            </>
           ) : (
-            tasks.map((t) => <WorkflowTaskRow key={t.id} task={t} />)
+            <>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>
+                Dependency Graph
+              </div>
+              {loadingGraph ? (
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading graph…</div>
+              ) : graph ? (
+                <WorkflowDagView nodes={graph.nodes} edges={graph.edges} />
+              ) : (
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No graph data available.</div>
+              )}
+            </>
           )}
         </div>
       </div>

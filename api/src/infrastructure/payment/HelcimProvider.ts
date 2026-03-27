@@ -28,6 +28,7 @@
  */
 
 import type { PaymentProvider, CheckoutSessionOpts, CheckoutSessionResult, WebhookEvent } from './PaymentProvider';
+import { TenantPlan, TenantBillingCycle } from '../../domain/shared/types';
 
 interface HelcimConfig {
   apiToken: string;
@@ -42,7 +43,18 @@ export class HelcimProvider implements PaymentProvider {
   constructor(private readonly config: HelcimConfig) {}
 
   async createCheckoutSession(opts: CheckoutSessionOpts): Promise<CheckoutSessionResult> {
-    const amountCents = opts.billingCycle === 'yearly' ? 29000 : 2900; // $290/yr or $29/mo
+    const seats = opts.seats ?? 1;
+    const isTeams = opts.targetPlan === TenantPlan.TEAMS;
+    const isYearly = opts.billingCycle === TenantBillingCycle.YEARLY;
+
+    // Pricing mirrors TenantService.PRICING
+    let amountCents: number;
+    if (isTeams) {
+      // $20/seat/mo or $192/seat/yr (= $16/mo billed yearly)
+      amountCents = isYearly ? 19200 * seats : 2000 * seats;
+    } else {
+      amountCents = isYearly ? 29000 : 2900; // Pro: $290/yr or $29/mo
+    }
 
     // Initialize a Helcim payment session
     // See: https://devdocs.helcim.com/reference/post_payment-initialize
@@ -87,9 +99,27 @@ export class HelcimProvider implements PaymentProvider {
   }
 
   async cancelSubscription(externalSubscriptionId: string): Promise<void> {
-    // TODO: implement recurring billing schedule cancellation
+    // Helcim subscriptions are implemented as recurring billing schedules.
+    // DELETE /recurring/billingSchedule/:id cancels the schedule immediately.
     // See: https://devdocs.helcim.com/reference/delete_recurring-billingschedule-id
-    console.warn(`[HelcimProvider] cancelSubscription not yet implemented for ${externalSubscriptionId}`);
+    if (!externalSubscriptionId) return;
+
+    const res = await fetch(
+      `${HELCIM_API_BASE}/recurring/billingSchedule/${encodeURIComponent(externalSubscriptionId)}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'api-token': this.config.apiToken,
+          Accept: 'application/json',
+        },
+      },
+    );
+
+    // 404 = already cancelled / never existed — treat as success
+    if (!res.ok && res.status !== 404) {
+      const body = await res.text();
+      throw new Error(`Helcim cancelSubscription failed: ${res.status} ${body}`);
+    }
   }
 
   async parseWebhook(rawBody: string, signatureHeader: string): Promise<WebhookEvent | null> {

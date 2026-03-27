@@ -716,7 +716,7 @@ Each subsequent phase follows the same pattern:
 | Phase 1             | Full observability — you see cost/duration/success per task                |
 | Phase 2             | LLM proxy with budget gating + approval workflows                          |
 | Phase 3             | Local model execution for cheap drafts                                     |
-| Phase 4             | Multi-claw parallel orchestration                                          |
+| Phase 4 ✅          | Visual DAG UI, cross-claw context + memory mesh, shared OpenAPI contract   |
 | Phase 5             | Production-scale fleet with audit trail                                    |
 
 ### The Feedback Loop
@@ -789,6 +789,42 @@ the local codebase automatically.
 **`.coderClaw/architecture.md` is outdated** — Phase -1.5 isn't complete. Manually run `/knowledge update` or regenerate by re-running `coderclaw init`.
 
 **Can't delegate work to another claw** — Phase -1.6 isn't complete. Mesh is not implemented. All work happens on the local claw.
+
+---
+
+## PHASE 4 — Multi-Agent Orchestration at Scale [Q3 2026]
+
+These items completed the platform's multi-claw coordination layer. All five are shipped.
+
+### P1 — Visual Task Dependency Graph
+
+- [x] **Backend** — `GET /api/workflows/:id/graph` endpoint (`workflowRoutes.ts`): merges `workflowTasks` dependency edges with live telemetry spans into a DAG response (`nodes` + `edges`)
+- [x] **Frontend** — `WorkflowDagView.tsx`: pure-SVG topological layout (Kahn's algorithm), status-colored nodes, cubic-bezier edges, duration/cost annotations
+- [x] **Frontend** — Tasks/Graph tab switcher in `WorkflowsContent.tsx` — detail view fetches graph lazily on first tab open
+
+### P1 — Cross-Claw Context Sharing
+
+- [x] **Backend** — `GET /api/claws/:id/context-bundle` endpoint (`clawRoutes.ts`): returns the last-synced `.coderClaw/` files as a JSON bundle (`{ files: [{ path, content, sha256 }] }`)
+- [x] **Relay** — `builderforce-relay.ts` fetches the context bundle from the origin claw before forwarding a `remote.task` frame; SHA-256 deduplicates unchanged files
+- [x] **Schema** — `ContextBundleResponse` type in `openapi/schema.ts` and `api-contract.ts`
+
+### P1 — Streaming Result Aggregation
+
+- [x] **Backpressure** — `remote-result-broker.ts`: max 5 concurrent remote tasks, FIFO wait queue, 600 s default timeout
+- [x] **Retries** — `remote-subagent.ts`: 3-attempt exponential backoff (500 ms → 1 s → 2 s) on network errors and 5xx responses; emits `task.retry` telemetry spans
+- [x] **Mesh UX** — `FleetMeshContent.tsx`: SVG fleet graph (hub + claw nodes), real-time online/offline indicators, remote dispatch panel with preset payloads; rendered on the Workforce page when ≥2 claws are registered
+
+### P2 — Shared OpenAPI Contract
+
+- [x] **Builderforce** — `src/openapi/schema.ts`: TypeScript interfaces for every CoderClaw ↔ Builderforce endpoint (registration, heartbeat, forward, context-bundle, telemetry, workflows, team memory)
+- [x] **CoderClaw** — `src/infra/api-contract.ts`: mirror declarations so the claw has zero runtime dependency on the server package
+- [x] **Endpoint** — `GET /api/openapi.json` (in `index.ts`): OpenAPI 3.1 document served from production at `https://api.builderforce.ai/api/openapi.json`
+
+### P2 — Cross-Claw Memory Sharing (Team Memory Mesh)
+
+- [x] **Backend** — `POST /api/teams/memory` + `GET /api/teams/memory` (`teamMemoryRoutes.ts`): claw-key or tenant-JWT auth, `#private` tag support, newest-first pagination
+- [x] **Client** — `KnowledgeLoopService.pushMemoryToMesh()` in `knowledge-loop.ts`: fires after every completed agent run, pushes activity summary + tags to the mesh; `pullTeamMemory()` caches entries in `.coderClaw/memory/team-memory.json` (5 min TTL)
+- [x] **Schema** — `TeamMemoryEntry` type in `openapi/schema.ts` and `api-contract.ts`
 
 ---
 

@@ -149,9 +149,10 @@ export const users = pgTable('users', {
   mfaEnabledAt:  timestamp('mfa_enabled_at'),
   mfaRecoveryGeneratedAt: timestamp('mfa_recovery_generated_at'),
   mfaLastVerifiedAt: timestamp('mfa_last_verified_at'),
-  isSuperadmin:  boolean('is_superadmin').notNull().default(false),
-  createdAt:     timestamp('created_at').notNull().defaultNow(),
-  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+  isSuperadmin:   boolean('is_superadmin').notNull().default(false),
+  sessionVersion: integer('session_version').notNull().default(0),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
 });
 
 export const newsletterSubscribers = pgTable('newsletter_subscribers', {
@@ -1256,4 +1257,122 @@ export const teamMemory = pgTable('team_memory', {
   /** ISO-8601 timestamp provided by the claw. */
   timestamp: varchar('timestamp', { length: 32 }).notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Admin impersonation — Phase 2 of PRD: Super Admin Impersonation
+// ---------------------------------------------------------------------------
+
+/**
+ * One row per impersonation session started by a Super Admin.
+ * The table is effectively append-only; ended_at + end_reason are the only
+ * mutable columns and are set exactly once when the session closes.
+ */
+export const adminImpersonationSessions = pgTable('admin_impersonation_sessions', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  adminUserId:     varchar('admin_user_id', { length: 36 }).notNull().references(() => users.id),
+  targetUserId:    varchar('target_user_id', { length: 36 }).notNull().references(() => users.id),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id),
+  roleOverride:    varchar('role_override', { length: 64 }).notNull(),
+  reason:          text('reason').notNull(),
+  tokenJti:        varchar('token_jti', { length: 256 }).unique(),
+  startedAt:       timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+  endedAt:         timestamp('ended_at', { withTimezone: true }),
+  expiresAt:       timestamp('expires_at', { withTimezone: true }).notNull(),
+  endReason:       varchar('end_reason', { length: 32 }),  // MANUAL | EXPIRED | ADMIN_LOGOUT
+  pagesVisited:    text('pages_visited').notNull().default('[]'),  // JSON array
+  writeBlockCount: integer('write_block_count').notNull().default(0),
+  ipAddress:       varchar('ip_address', { length: 64 }),
+  userAgent:       text('user_agent'),
+  debuggerEnabled: boolean('debugger_enabled').notNull().default(false),
+});
+
+/**
+ * Sub-events for role switches within an impersonation session.
+ */
+export const adminImpersonationRoleSwitches = pgTable('admin_impersonation_role_switches', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  sessionId:  uuid('session_id').notNull().references(() => adminImpersonationSessions.id),
+  fromRole:   varchar('from_role', { length: 64 }).notNull(),
+  toRole:     varchar('to_role', { length: 64 }).notNull(),
+  switchedAt: timestamp('switched_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Append-only audit log for all Super Admin actions.
+ * No UPDATE or DELETE should ever be issued against this table via the app layer.
+ */
+export const adminAuditLog = pgTable('admin_audit_log', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  event:        varchar('event', { length: 64 }).notNull(),
+  actorId:      varchar('actor_id', { length: 36 }).references(() => users.id),
+  targetUserId: varchar('target_user_id', { length: 36 }).references(() => users.id),
+  tenantId:     integer('tenant_id').references(() => tenants.id),
+  metadata:     text('metadata').notNull().default('{}'),  // JSON object
+  ipAddress:    varchar('ip_address', { length: 64 }),
+  createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Granular permissions & modules (migration 0038)
+// ---------------------------------------------------------------------------
+
+/** Deviations from the hardcoded default permission matrix. */
+export const rolePermissionOverrides = pgTable('role_permission_overrides', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  role:       varchar('role', { length: 32 }).notNull(),
+  permission: varchar('permission', { length: 128 }).notNull(),
+  granted:    boolean('granted').notNull(),
+  reason:     text('reason'),
+  createdBy:  varchar('created_by', { length: 36 }).notNull().references(() => users.id),
+  createdAt:  timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Custom roles defined by tenant owners or super admins (TEAMS plan only). */
+export const tenantCustomRoles = pgTable('tenant_custom_roles', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id),
+  name:        varchar('name', { length: 64 }).notNull(),
+  description: text('description'),
+  baseRole:    varchar('base_role', { length: 32 }).notNull(),
+  permissions: text('permissions').notNull().default('[]'),  // JSON array
+  createdBy:   varchar('created_by', { length: 36 }).notNull().references(() => users.id),
+  createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Platform-wide module definitions. */
+export const platformModules = pgTable('platform_modules', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  name:        varchar('name', { length: 128 }).notNull().unique(),
+  slug:        varchar('slug', { length: 128 }).notNull().unique(),
+  description: text('description'),
+  baseRole:    varchar('base_role', { length: 64 }),
+  permissions: text('permissions').notNull().default('[]'),  // JSON array
+  isBuiltin:   boolean('is_builtin').notNull().default(false),
+  createdBy:   varchar('created_by', { length: 36 }).references(() => users.id),
+  createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Module assignments for specific users within a tenant. */
+export const tenantMemberModules = pgTable('tenant_member_modules', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id),
+  userId:    varchar('user_id', { length: 36 }).notNull().references(() => users.id),
+  moduleId:  uuid('module_id').notNull().references(() => platformModules.id),
+  grantedBy: varchar('granted_by', { length: 36 }).notNull().references(() => users.id),
+  grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Per-user per-tenant permission grants and revocations. */
+export const userPermissionOverrides = pgTable('user_permission_overrides', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id),
+  userId:     varchar('user_id', { length: 36 }).notNull().references(() => users.id),
+  permission: varchar('permission', { length: 128 }).notNull(),
+  granted:    boolean('granted').notNull(),
+  expiresAt:  timestamp('expires_at', { withTimezone: true }),
+  createdBy:  varchar('created_by', { length: 36 }).notNull().references(() => users.id),
+  createdAt:  timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

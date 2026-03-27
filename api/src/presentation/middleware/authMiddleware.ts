@@ -4,7 +4,7 @@ import { TenantRole, hasMinRole } from '../../domain/shared/types';
 import { UnauthorizedError, ForbiddenError } from '../../domain/shared/errors';
 import { verifyJwt } from '../../infrastructure/auth/JwtService';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { authTokens, authUserSessions } from '../../infrastructure/database/schema';
+import { authTokens, authUserSessions, users } from '../../infrastructure/database/schema';
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import { checkTermsAcceptance } from './termsEnforcement';
 
@@ -17,6 +17,14 @@ import { checkTermsAcceptance } from './termsEnforcement';
  * Apply to any route that requires a logged-in user.
  */
 export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
+  // If the emulation middleware already populated userId/tenantId/role (via
+  // X-Emulation-Token), skip standard JWT verification — the emulation context
+  // is already set and the write-block enforcement has already run.
+  if (c.get('isEmulation')) {
+    await next();
+    return;
+  }
+
   // WebSocket endpoints (and some clients) may send auth via ?token= rather
   // than via Authorization header. Support both for compatibility.
   const header = c.req.header('Authorization') ?? '';
@@ -32,6 +40,21 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
     payload = await verifyJwt(token, c.env.JWT_SECRET);
   } catch {
     throw new UnauthorizedError('Invalid or expired token');
+  }
+
+  // session_version check — if the JWT carries an `sv` claim, verify it matches
+  // the current value in the DB. Force-logout increments this counter, instantly
+  // invalidating all existing tokens for the user without needing a blocklist.
+  if (typeof payload.sv === 'number') {
+    const db = buildDatabase(c.env);
+    const [userRow] = await db
+      .select({ sessionVersion: users.sessionVersion })
+      .from(users)
+      .where(eq(users.id, payload.sub))
+      .limit(1);
+    if (!userRow || userRow.sessionVersion > payload.sv) {
+      throw new UnauthorizedError('Session has been invalidated — please log in again');
+    }
   }
 
   if (payload.jti) {

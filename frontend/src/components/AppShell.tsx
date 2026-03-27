@@ -5,6 +5,11 @@ import { usePathname } from 'next/navigation';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import AppFooter from './AppFooter';
+import EmulationBar from './EmulationBar';
+import RolePreviewBar from './RolePreviewBar';
+import PermissionDebuggerPanel from './PermissionDebuggerPanel';
+import { useEmulation } from '@/lib/EmulationContext';
+import { useRolePreview } from '@/lib/RolePreviewContext';
 
 const SIDEBAR_COLLAPSED_KEY = 'builderforce-sidebar-collapsed';
 
@@ -19,6 +24,8 @@ function isIdePage(pathname: string | null): boolean {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [navCollapsed, setNavCollapsed] = useState(false);
+  const { emulation } = useEmulation();
+  const { previewRole } = useRolePreview();
 
   useEffect(() => {
     if (!pathname) return;
@@ -41,7 +48,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <div className={`shell ${navCollapsed ? 'nav-collapsed' : ''}`} style={{ position: 'relative' }}>
+      <EmulationBar />
+      <RolePreviewBar />
+      <PermissionDebuggerPanel />
+      <div
+        className={`shell ${navCollapsed ? 'nav-collapsed' : ''}${emulation ? ' emulation-active' : ''}${previewRole && !emulation ? ' role-preview-active' : ''}`}
+        style={{ position: 'relative' }}
+      >
         <TopBar />
         <Sidebar collapsed={navCollapsed} onToggleCollapsed={toggleNav} />
         <main className="content">{children}</main>

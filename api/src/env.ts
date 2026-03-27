@@ -107,6 +107,8 @@ export interface Vars {
   role:     TenantRole;
   sessionId?: string;
   tokenJti?: string;
+  /** True when the request is running under an emulation token (read-only). */
+  isEmulation?: boolean;
 }
 
 /** Combined Hono environment type used across the app. */

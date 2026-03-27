@@ -83,6 +83,7 @@ import {
 import { addCorsToResponse, corsMiddleware } from './presentation/middleware/cors';
 import { errorHandler }   from './presentation/middleware/errorHandler';
 import { rateLimitMiddleware } from './presentation/middleware/rateLimitMiddleware';
+import { emulationMiddleware } from './presentation/middleware/emulationMiddleware';
 
 // Durable Objects (must be re-exported so the Workers runtime can instantiate them)
 export { ClawRelayDO } from './infrastructure/relay/ClawRelayDO';
@@ -127,6 +128,11 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.use('*', corsMiddleware);
   // Rate limiting applied after auth middleware resolves tenantId
   app.use('/api/*', rateLimitMiddleware as Parameters<typeof app.use>[1]);
+  // Emulation token interception — runs before authMiddleware in each router.
+  // When X-Emulation-Token is present, validates the emulation JWT, enforces
+  // read-only mode, and sets userId/tenantId/role from the emulation identity.
+  // Not applied to /api/admin/* (emulation tokens are already blocked there).
+  app.use('/api/*', emulationMiddleware as Parameters<typeof app.use>[1]);
 
   app.get('/health', (c) => c.json({ status: 'ok', worker: 'api.builderforce.ai', version: API_VERSION }));
 
