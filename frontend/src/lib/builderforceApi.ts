@@ -281,6 +281,30 @@ export interface WorkflowTask {
   updatedAt: string;
 }
 
+export interface WorkflowGraphNode {
+  id: string;
+  label: string;
+  role: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  durationMs?: number;
+  model?: string;
+  estimatedCostUsd?: number;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface WorkflowGraphEdge {
+  from: string;
+  to: string;
+}
+
+export interface WorkflowGraph {
+  workflowId: string;
+  status: string;
+  nodes: WorkflowGraphNode[];
+  edges: WorkflowGraphEdge[];
+}
+
 export const workflows = {
   list: (params?: { status?: string; workflowType?: string; clawId?: number }) => {
     const q = new URLSearchParams();
@@ -293,6 +317,7 @@ export const workflows = {
     ).then((r) => r.workflows);
   },
   get: (id: string) => request<Workflow>(`/api/workflows/${id}`),
+  getGraph: (id: string) => request<WorkflowGraph>(`/api/workflows/${id}/graph`),
 };
 
 /** Tenant default claw (for workforce "Set as default"). */
@@ -1177,5 +1202,28 @@ export const mySessionsApi = {
 
   revokeOthers: (): Promise<void> =>
     webRequest('/api/auth/sessions/revoke-others', { method: 'POST' }).then(() => undefined),
+};
+
+// ---------------------------------------------------------------------------
+// My admin access log (impersonation sessions targeting the current user)
+// ---------------------------------------------------------------------------
+
+export interface MyAdminAccessSession {
+  id: string;
+  adminUserId: string;
+  tenantId: number;
+  tenantName: string;
+  roleOverride: string;
+  reason: string;
+  startedAt: string;
+  endedAt: string | null;
+  endReason: string | null;
+  pagesVisited: string[];
+  writeBlockCount: number;
+}
+
+export const myAdminAccessApi = {
+  list: (): Promise<MyAdminAccessSession[]> =>
+    webRequest<{ sessions: MyAdminAccessSession[] }>('/api/auth/me/admin-access').then((r) => r.sessions ?? []),
 };
 

@@ -5,6 +5,7 @@ import type { HonoEnv } from '../../env';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { TenantRole, type UserId } from '../../domain/shared/types';
 import {
+  adminImpersonationSessions,
   authTokens,
   authUserSessions,
   coderclawInstances,
@@ -12,6 +13,7 @@ import {
   newsletterEvents,
   newsletterSubscribers,
   privacyRequests,
+  tenants,
   userLegalAcceptances,
   userMfaRecoveryCodes,
   users,
@@ -750,6 +752,38 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       .where(eq(users.id, userId))
       .limit(1);
     return c.json({ user: { ...user, mfaEnabled: full?.mfaEnabled ?? false } });
+  });
+
+  // GET /api/auth/me/admin-access — impersonation sessions targeting the current user (transparency endpoint)
+  router.get('/me/admin-access', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as UserId;
+    const rows = await db
+      .select({
+        id: adminImpersonationSessions.id,
+        adminUserId: adminImpersonationSessions.adminUserId,
+        tenantId: adminImpersonationSessions.tenantId,
+        tenantName: tenants.name,
+        roleOverride: adminImpersonationSessions.roleOverride,
+        reason: adminImpersonationSessions.reason,
+        startedAt: adminImpersonationSessions.startedAt,
+        endedAt: adminImpersonationSessions.endedAt,
+        endReason: adminImpersonationSessions.endReason,
+        pagesVisited: adminImpersonationSessions.pagesVisited,
+        writeBlockCount: adminImpersonationSessions.writeBlockCount,
+      })
+      .from(adminImpersonationSessions)
+      .innerJoin(tenants, eq(tenants.id, adminImpersonationSessions.tenantId))
+      .where(eq(adminImpersonationSessions.targetUserId, userId))
+      .orderBy(desc(adminImpersonationSessions.startedAt))
+      .limit(20);
+    return c.json({
+      sessions: rows.map((r) => ({
+        ...r,
+        pagesVisited: (() => { try { return JSON.parse(r.pagesVisited as string); } catch { return []; } })(),
+        startedAt: r.startedAt?.toISOString(),
+        endedAt: r.endedAt?.toISOString() ?? null,
+      })),
+    });
   });
 
   // POST /api/auth/claw-token – a CoderClaw instance authenticates with its API key

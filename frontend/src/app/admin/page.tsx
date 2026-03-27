@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
+import { useEmulation } from '@/lib/EmulationContext';
 import { getStoredWebToken } from '@/lib/auth';
 import {
   adminApi,
@@ -20,8 +21,14 @@ import {
   type AdminSecurityDetails,
   type AdminPlatformPersona,
   type AdminProjectGovernance,
+  type PermissionMatrix,
+  type PlatformModule,
+  type AuditLogEntry,
+  type ImpersonationSession,
+  type TenantMember,
 } from '@/lib/adminApi';
 import { BUILTIN_PERSONAS, type Persona } from '@/lib/marketplaceData';
+import UserDetailDrawer from '@/components/UserDetailDrawer';
 
 type AdminTab =
   | 'health'
@@ -35,6 +42,10 @@ type AdminTab =
   | 'privacy'
   | 'personas'
   | 'governance'
+  | 'permissions'
+  | 'modules'
+  | 'impsessions'
+  | 'auditlog'
   | 'errors'
   | 'token';
 
@@ -50,9 +61,18 @@ const TABS: AdminTab[] = [
   'privacy',
   'personas',
   'governance',
+  'permissions',
+  'modules',
+  'impsessions',
+  'auditlog',
   'errors',
   'token',
 ];
+
+const TAB_LABELS: Partial<Record<AdminTab, string>> = {
+  impsessions: 'Imp. Sessions',
+  auditlog: 'Audit Log',
+};
 
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -84,7 +104,10 @@ export default function AdminPage() {
   const [downloadedEnv, setDownloadedEnv] = useState(false);
   const [impersonateUser, setImpersonateUser] = useState<AdminUser | null>(null);
   const [impersonateTenantId, setImpersonateTenantId] = useState<number | null>(null);
-  const [impersonateResult, setImpersonateResult] = useState<{ token: string; email: string; role: string } | null>(null);
+  const [impersonateRole, setImpersonateRole] = useState<string>('viewer');
+  const [impersonateReason, setImpersonateReason] = useState('');
+  const [impersonateDebugger, setImpersonateDebugger] = useState(false);
+  const [impersonateBusy, setImpersonateBusy] = useState(false);
 
   const [legalCurrent, setLegalCurrent] = useState<AdminLegalCurrent | null>(null);
   const [newsletterSubscribers, setNewsletterSubscribers] = useState<AdminNewsletterSubscriber[]>([]);
@@ -135,7 +158,42 @@ export default function AdminPage() {
   const [governanceEditContent, setGovernanceEditContent] = useState('');
   const [governanceSaving, setGovernanceSaving] = useState(false);
 
+  // Active sessions dashboard (health tab widget)
+  const [activeSessions, setActiveSessions] = useState<ImpersonationSession[]>([]);
+  const [activeSessionsLoaded, setActiveSessionsLoaded] = useState(false);
+
+  // Permissions tab
+  const [permMatrix, setPermMatrix] = useState<PermissionMatrix | null>(null);
+  const [permEditRole, setPermEditRole] = useState<string | null>(null);
+  const [permEditOverrides, setPermEditOverrides] = useState<Record<string, boolean>>({});
+  const [permSaving, setPermSaving] = useState(false);
+
+  // Modules tab
+  const [platformModules, setPlatformModules] = useState<PlatformModule[]>([]);
+  const [moduleForm, setModuleForm] = useState<{ name: string; description: string; permissions: string } | null>(null);
+  const [moduleFormBusy, setModuleFormBusy] = useState(false);
+
+  // Impersonation sessions tab
+  const [impSessions, setImpSessions] = useState<ImpersonationSession[]>([]);
+  const [impSessionsTotal, setImpSessionsTotal] = useState(0);
+  const [impSessionsOffset, setImpSessionsOffset] = useState(0);
+
+  // User detail drawer
+  const [drawerUser, setDrawerUser] = useState<AdminUser | null>(null);
+
+  // Tenants tab: expanded tenant members
+  const [expandedTenantId, setExpandedTenantId] = useState<number | null>(null);
+  const [tenantMembersMap, setTenantMembersMap] = useState<Record<number, TenantMember[]>>({});
+
+  // Audit log tab
+  const [auditEntries, setAuditEntries] = useState<AuditLogEntry[]>([]);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditOffset, setAuditOffset] = useState(0);
+  const [auditEventFilter, setAuditEventFilter] = useState('');
+  const [auditExporting, setAuditExporting] = useState(false);
+
   const isSuperadmin = Boolean(user?.isSuperadmin);
+  const { startEmulation } = useEmulation();
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -154,7 +212,13 @@ export default function AdminPage() {
       setLoading(true);
       setErrorMsg('');
       try {
-        if (t === 'health') setHealth(await adminApi.health());
+        if (t === 'health') {
+          setHealth(await adminApi.health());
+          // Load active impersonation sessions
+          const sessions = await adminApi.impersonationList({ limit: 20 });
+          setActiveSessions(sessions.sessions.filter((s) => !s.endedAt));
+          setActiveSessionsLoaded(true);
+        }
         else if (t === 'billing') {
           const [tenantsData, errorsData] = await Promise.all([adminApi.tenants(), adminApi.errors()]);
           setTenants(tenantsData);
@@ -198,7 +262,17 @@ export default function AdminPage() {
         } else if (t === 'errors') setErrors(await adminApi.errors());
         else if (t === 'personas') setPlatformPersonas(await adminApi.personas());
         else if (t === 'governance') setGovernanceProjects(await adminApi.adminProjects());
-        else if (t === 'token') {
+        else if (t === 'permissions') setPermMatrix(await adminApi.permissionsMatrix());
+        else if (t === 'modules') setPlatformModules(await adminApi.modules());
+        else if (t === 'impsessions') {
+          const r = await adminApi.impersonationList({ limit: 50, offset: impSessionsOffset });
+          setImpSessions(r.sessions);
+          setImpSessionsTotal(r.total);
+        } else if (t === 'auditlog') {
+          const r = await adminApi.auditLog({ event: auditEventFilter || undefined, limit: 50, offset: auditOffset });
+          setAuditEntries(r.entries);
+          setAuditTotal(r.total);
+        } else if (t === 'token') {
           /* no fetch */
         }
       } catch (e) {
@@ -207,7 +281,7 @@ export default function AdminPage() {
         setLoading(false);
       }
     },
-    [usageDays, newsletterStatusFilter, newsletterSearch, privacyStatusFilter, privacyTypeFilter, privacySearch]
+    [usageDays, newsletterStatusFilter, newsletterSearch, privacyStatusFilter, privacyTypeFilter, privacySearch, impSessionsOffset, auditEventFilter, auditOffset]
   );
 
   useEffect(() => {
@@ -282,26 +356,42 @@ export default function AdminPage() {
   const startImpersonate = (u: AdminUser) => {
     setImpersonateUser(u);
     setImpersonateTenantId(null);
-    setImpersonateResult(null);
+    setImpersonateRole('viewer');
+    setImpersonateReason('');
+    setImpersonateDebugger(false);
     if (tenants.length === 0) {
       adminApi.tenants().then(setTenants).catch(() => setErrorMsg('Failed to load tenants'));
     }
   };
 
   const doImpersonate = async () => {
-    if (!impersonateUser || !impersonateTenantId) return;
+    if (!impersonateUser || !impersonateTenantId || !impersonateReason.trim()) return;
+    setImpersonateBusy(true);
+    setErrorMsg('');
     try {
-      const res = await adminApi.impersonate(impersonateUser.id, impersonateTenantId);
-      setImpersonateResult({ token: res.token, email: res.email, role: res.role });
+      const res = await adminApi.impersonationStart(
+        impersonateUser.id,
+        impersonateTenantId,
+        impersonateRole,
+        impersonateReason.trim(),
+        impersonateDebugger,
+      );
+      startEmulation(res.session, res.emulationToken);
+      setImpersonateUser(null);
+      router.push('/dashboard');
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setImpersonateBusy(false);
     }
   };
 
   const closeImpersonate = () => {
     setImpersonateUser(null);
     setImpersonateTenantId(null);
-    setImpersonateResult(null);
+    setImpersonateReason('');
+    setImpersonateRole('viewer');
+    setImpersonateDebugger(false);
   };
 
   const composeMailto = (email: string, subject: string, body: string) => {
@@ -378,7 +468,7 @@ export default function AdminPage() {
             onClick={() => loadTab(t)}
             className={`admin-tab ${tab === t ? 'active' : ''}`}
           >
-            {t.charAt(0).toUpperCase() + t.slice(1)}
+            {TAB_LABELS[t] ?? (t.charAt(0).toUpperCase() + t.slice(1))}
           </button>
         ))}
       </nav>
@@ -488,6 +578,76 @@ export default function AdminPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Active Impersonation Sessions */}
+                {activeSessionsLoaded && (
+                  <div>
+                    <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
+                        Active Emulation Sessions
+                        {activeSessions.length > 0 && (
+                          <span style={{ marginLeft: 8, background: '#f59e0b', color: '#000', borderRadius: 10, padding: '1px 8px', fontSize: 12 }}>
+                            {activeSessions.length}
+                          </span>
+                        )}
+                      </h3>
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        onClick={async () => {
+                          const sessions = await adminApi.impersonationList({ limit: 20 });
+                          setActiveSessions(sessions.sessions.filter((s) => !s.endedAt));
+                        }}
+                      >
+                        ↻
+                      </button>
+                    </div>
+                    {activeSessions.length === 0 ? (
+                      <p className="text-muted" style={{ fontSize: 13 }}>No active emulation sessions.</p>
+                    ) : (
+                      <div className="table-wrap">
+                        <table className="data-table" style={{ fontSize: 13 }}>
+                          <thead>
+                            <tr>
+                              <th>Target</th>
+                              <th>Workspace</th>
+                              <th>Role</th>
+                              <th>Started</th>
+                              <th>Pages</th>
+                              <th></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {activeSessions.map((s) => (
+                              <tr key={s.id}>
+                                <td>{s.targetEmail}</td>
+                                <td>{s.tenantName}</td>
+                                <td><span className="badge badge-neutral">{s.roleOverride}</span></td>
+                                <td className="text-muted">{fmtDateTime(s.startedAt)}</td>
+                                <td>{s.pagesVisited.length}</td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className="btn-ghost"
+                                    style={{ color: '#ef4444', fontSize: 12 }}
+                                    onClick={async () => {
+                                      try {
+                                        await adminApi.impersonationEnd(s.id);
+                                        setActiveSessions((prev) => prev.filter((x) => x.id !== s.id));
+                                      } catch (e) { setErrorMsg(e instanceof Error ? e.message : String(e)); }
+                                    }}
+                                  >
+                                    Terminate
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -525,10 +685,15 @@ export default function AdminPage() {
                               <span className="badge badge-neutral">user</span>
                             )}
                           </td>
-                          <td>
-                            <button type="button" className="btn-ghost" onClick={() => startImpersonate(u)}>
-                              Impersonate
+                          <td style={{ display: 'flex', gap: 6 }}>
+                            <button type="button" className="btn-ghost" onClick={() => setDrawerUser(u)}>
+                              Details
                             </button>
+                            {!u.isSuperadmin && (
+                              <button type="button" className="btn-ghost" onClick={() => startImpersonate(u)}>
+                                Emulate
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -550,6 +715,7 @@ export default function AdminPage() {
                   <table className="data-table">
                     <thead>
                       <tr>
+                        <th style={{ width: 24 }}></th>
                         <th>Name</th>
                         <th>Slug</th>
                         <th>Status</th>
@@ -562,24 +728,111 @@ export default function AdminPage() {
                     </thead>
                     <tbody>
                       {tenants.map((t) => (
-                        <tr key={t.id}>
-                          <td>{t.name}</td>
-                          <td style={{ fontFamily: 'var(--mono)', fontSize: 13 }}>{t.slug}</td>
-                          <td>
-                            <span className={`badge ${t.status === 'active' ? 'badge-success' : 'badge-neutral'}`}>
-                              {t.status}
-                            </span>
-                          </td>
-                          <td>
-                            <span className={`badge ${t.effectivePlan === 'pro' ? 'badge-danger' : 'badge-neutral'}`}>
-                              {t.effectivePlan}
-                            </span>
-                          </td>
-                          <td className="text-muted">{t.billingStatus}</td>
-                          <td>{t.memberCount}</td>
-                          <td>{t.clawCount}</td>
-                          <td className="text-muted">{fmtDate(t.createdAt)}</td>
-                        </tr>
+                        <React.Fragment key={t.id}>
+                          <tr
+                            role="button"
+                            tabIndex={0}
+                            style={{ cursor: 'pointer' }}
+                            onClick={async () => {
+                              if (expandedTenantId === t.id) {
+                                setExpandedTenantId(null);
+                                return;
+                              }
+                              setExpandedTenantId(t.id);
+                              if (!tenantMembersMap[t.id]) {
+                                try {
+                                  const members = await adminApi.tenantMembers(t.id);
+                                  setTenantMembersMap((prev) => ({ ...prev, [t.id]: members }));
+                                } catch (e) {
+                                  setErrorMsg(e instanceof Error ? e.message : String(e));
+                                }
+                              }
+                            }}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); } }}
+                          >
+                            <td style={{ verticalAlign: 'middle' }}>
+                              <span style={{ display: 'inline-block', transition: 'transform 0.2s', transform: expandedTenantId === t.id ? 'rotate(90deg)' : 'none' }}>▶</span>
+                            </td>
+                            <td>{t.name}</td>
+                            <td style={{ fontFamily: 'var(--mono)', fontSize: 13 }}>{t.slug}</td>
+                            <td>
+                              <span className={`badge ${t.status === 'active' ? 'badge-success' : 'badge-neutral'}`}>
+                                {t.status}
+                              </span>
+                            </td>
+                            <td>
+                              <span className={`badge ${t.effectivePlan === 'pro' ? 'badge-danger' : 'badge-neutral'}`}>
+                                {t.effectivePlan}
+                              </span>
+                            </td>
+                            <td className="text-muted">{t.billingStatus}</td>
+                            <td>{t.memberCount}</td>
+                            <td>{t.clawCount}</td>
+                            <td className="text-muted">{fmtDate(t.createdAt)}</td>
+                          </tr>
+                          {expandedTenantId === t.id && (
+                            <tr>
+                              <td colSpan={9} style={{ padding: 0, background: 'var(--bg-elevated)' }}>
+                                <div style={{ padding: '8px 16px 12px 40px' }}>
+                                  {!tenantMembersMap[t.id] ? (
+                                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading members…</span>
+                                  ) : tenantMembersMap[t.id].length === 0 ? (
+                                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No members.</span>
+                                  ) : (
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                      <thead>
+                                        <tr>
+                                          <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Email</th>
+                                          <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Role</th>
+                                          <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Joined</th>
+                                          <th style={{ padding: '4px 8px' }}></th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {tenantMembersMap[t.id].map((m) => (
+                                          <tr key={m.id}>
+                                            <td style={{ padding: '4px 8px' }}>{m.email}</td>
+                                            <td style={{ padding: '4px 8px' }}>
+                                              <span className="badge badge-neutral" style={{ fontSize: 10 }}>{m.role}</span>
+                                            </td>
+                                            <td style={{ padding: '4px 8px', color: 'var(--text-muted)' }}>{fmtDate(m.joinedAt)}</td>
+                                            <td style={{ padding: '4px 8px' }}>
+                                              <button
+                                                type="button"
+                                                className="btn-ghost"
+                                                style={{ fontSize: 11, padding: '2px 8px' }}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  // Build a minimal AdminUser from TenantMember for the modal
+                                                  const adminUser: AdminUser = {
+                                                    id: m.id,
+                                                    email: m.email,
+                                                    username: m.username,
+                                                    displayName: m.displayName,
+                                                    isSuperadmin: false,
+                                                    createdAt: m.joinedAt,
+                                                    tenantCount: 1,
+                                                  };
+                                                  setImpersonateUser(adminUser);
+                                                  setImpersonateTenantId(t.id);
+                                                  setImpersonateRole(m.role);
+                                                  setImpersonateReason('');
+                                                  setImpersonateDebugger(false);
+                                                }}
+                                              >
+                                                Emulate
+                                              </button>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       ))}
                     </tbody>
                   </table>
@@ -2062,6 +2315,393 @@ export default function AdminPage() {
               </div>
             )}
 
+            {tab === 'permissions' && permMatrix && (
+              <div>
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  <h2 className="page-title" style={{ fontSize: 18, margin: 0 }}>Roles &amp; Permissions</h2>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      className="admin-tab"
+                      onClick={async () => {
+                        try {
+                          const csv = await adminApi.permissionsMatrixExport();
+                          const blob = new Blob([csv], { type: 'text/csv' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url; a.download = 'permissions-matrix.csv'; a.click();
+                          URL.revokeObjectURL(url);
+                        } catch (e) { setErrorMsg(e instanceof Error ? e.message : String(e)); }
+                      }}
+                    >
+                      Export CSV
+                    </button>
+                    <button type="button" className="admin-tab" onClick={() => loadTab('permissions')}>↻ Refresh</button>
+                  </div>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="data-table" style={{ minWidth: 600 }}>
+                    <thead>
+                      <tr>
+                        <th>Permission</th>
+                        {permMatrix.roles.map((r) => (
+                          <th key={r} style={{ textAlign: 'center' }}>
+                            {r}
+                            {permEditRole === r ? (
+                              <button
+                                type="button"
+                                className="admin-tab active"
+                                style={{ marginLeft: 6, padding: '2px 8px', fontSize: 11 }}
+                                disabled={permSaving}
+                                onClick={async () => {
+                                  setPermSaving(true);
+                                  setErrorMsg('');
+                                  try {
+                                    const overrides = Object.entries(permEditOverrides).map(([permission, granted]) => ({ permission, granted }));
+                                    await adminApi.updateRolePermissions(r, overrides);
+                                    setPermMatrix(await adminApi.permissionsMatrix());
+                                    setPermEditRole(null);
+                                    setPermEditOverrides({});
+                                  } catch (e) { setErrorMsg(e instanceof Error ? e.message : String(e)); }
+                                  finally { setPermSaving(false); }
+                                }}
+                              >
+                                {permSaving ? 'Saving…' : 'Save'}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="admin-tab"
+                                style={{ marginLeft: 6, padding: '2px 8px', fontSize: 11 }}
+                                onClick={() => {
+                                  setPermEditRole(r);
+                                  const current: Record<string, boolean> = {};
+                                  for (const p of permMatrix.permissions) {
+                                    current[p] = (permMatrix.matrix[r] ?? []).includes(p);
+                                  }
+                                  setPermEditOverrides(current);
+                                }}
+                              >
+                                Edit
+                              </button>
+                            )}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {permMatrix.permissions.map((perm) => (
+                        <tr key={perm}>
+                          <td style={{ fontFamily: 'var(--font-mono,monospace)', fontSize: 12 }}>{perm}</td>
+                          {permMatrix.roles.map((r) => {
+                            const granted = permEditRole === r
+                              ? permEditOverrides[perm] ?? false
+                              : (permMatrix.matrix[r] ?? []).includes(perm);
+                            return (
+                              <td key={r} style={{ textAlign: 'center' }}>
+                                {permEditRole === r ? (
+                                  <input
+                                    type="checkbox"
+                                    checked={permEditOverrides[perm] ?? false}
+                                    onChange={(e) => setPermEditOverrides((prev) => ({ ...prev, [perm]: e.target.checked }))}
+                                  />
+                                ) : (
+                                  <span style={{ color: granted ? '#22c55e' : '#ef4444', fontWeight: 600 }}>
+                                    {granted ? '✓' : '✗'}
+                                  </span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {permEditRole && (
+                  <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                    <button type="button" className="admin-tab" onClick={() => { setPermEditRole(null); setPermEditOverrides({}); }}>
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tab === 'modules' && (
+              <div>
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  <h2 className="page-title" style={{ fontSize: 18, margin: 0 }}>Platform Modules</h2>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      className="admin-tab active"
+                      onClick={() => setModuleForm({ name: '', description: '', permissions: '' })}
+                    >
+                      + New Module
+                    </button>
+                    <button type="button" className="admin-tab" onClick={() => loadTab('modules')}>↻ Refresh</button>
+                  </div>
+                </div>
+                {moduleForm && (
+                  <div className="health-card" style={{ marginBottom: 16, padding: 16 }}>
+                    <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>New Module</h3>
+                    <label className="admin-label" style={{ display: 'block', marginBottom: 4 }}>Name *</label>
+                    <input
+                      className="admin-select"
+                      value={moduleForm.name}
+                      onChange={(e) => setModuleForm((f) => f ? { ...f, name: e.target.value } : f)}
+                      placeholder="e.g. Reporting Access"
+                      style={{ width: '100%', marginBottom: 10 }}
+                    />
+                    <label className="admin-label" style={{ display: 'block', marginBottom: 4 }}>Description</label>
+                    <input
+                      className="admin-select"
+                      value={moduleForm.description}
+                      onChange={(e) => setModuleForm((f) => f ? { ...f, description: e.target.value } : f)}
+                      placeholder="Optional description"
+                      style={{ width: '100%', marginBottom: 10 }}
+                    />
+                    <label className="admin-label" style={{ display: 'block', marginBottom: 4 }}>Permissions (comma-separated)</label>
+                    <input
+                      className="admin-select"
+                      value={moduleForm.permissions}
+                      onChange={(e) => setModuleForm((f) => f ? { ...f, permissions: e.target.value } : f)}
+                      placeholder="e.g. report:read,report:export"
+                      style={{ width: '100%', marginBottom: 12 }}
+                    />
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                      <button type="button" className="admin-tab" onClick={() => setModuleForm(null)}>Cancel</button>
+                      <button
+                        type="button"
+                        className="admin-tab active"
+                        disabled={!moduleForm.name.trim() || moduleFormBusy}
+                        onClick={async () => {
+                          if (!moduleForm.name.trim()) return;
+                          setModuleFormBusy(true);
+                          setErrorMsg('');
+                          try {
+                            await adminApi.createModule({
+                              name: moduleForm.name.trim(),
+                              description: moduleForm.description.trim() || null,
+                              permissions: moduleForm.permissions.split(',').map((s) => s.trim()).filter(Boolean),
+                            });
+                            setPlatformModules(await adminApi.modules());
+                            setModuleForm(null);
+                          } catch (e) { setErrorMsg(e instanceof Error ? e.message : String(e)); }
+                          finally { setModuleFormBusy(false); }
+                        }}
+                      >
+                        {moduleFormBusy ? 'Creating…' : 'Create'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Slug</th>
+                      <th>Permissions</th>
+                      <th>Default</th>
+                      <th>Created</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {platformModules.map((m) => (
+                      <tr key={m.id}>
+                        <td>{m.name}</td>
+                        <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{m.slug}</td>
+                        <td style={{ fontSize: 12, maxWidth: 280 }}>{m.permissions.join(', ') || '—'}</td>
+                        <td>{m.defaultEnabled ? 'Yes' : 'No'}</td>
+                        <td>{fmtDate(m.createdAt)}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="admin-tab"
+                            style={{ padding: '3px 10px', fontSize: 12, color: '#ef4444' }}
+                            onClick={async () => {
+                              if (!confirm(`Delete module "${m.name}"?`)) return;
+                              setErrorMsg('');
+                              try {
+                                await adminApi.deleteModule(m.id);
+                                setPlatformModules((prev) => prev.filter((x) => x.id !== m.id));
+                              } catch (e) { setErrorMsg(e instanceof Error ? e.message : String(e)); }
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {platformModules.length === 0 && (
+                      <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 20 }}>No modules configured.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {tab === 'impsessions' && (
+              <div>
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  <h2 className="page-title" style={{ fontSize: 18, margin: 0 }}>
+                    Impersonation Sessions
+                    <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 400, color: 'var(--text-muted)' }}>{impSessionsTotal} total</span>
+                  </h2>
+                  <button type="button" className="admin-tab" onClick={() => loadTab('impsessions')}>↻ Refresh</button>
+                </div>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Target</th>
+                      <th>Workspace</th>
+                      <th>Role</th>
+                      <th>Reason</th>
+                      <th>Started</th>
+                      <th>Ended</th>
+                      <th>Duration / Pages</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {impSessions.map((s) => {
+                      const dur = s.endedAt
+                        ? Math.floor((new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime()) / 1000)
+                        : null;
+                      const durStr = dur != null ? `${Math.floor(dur / 60)}m ${dur % 60}s` : 'Active';
+                      return (
+                        <tr key={s.id}>
+                          <td style={{ fontSize: 13 }}>{s.targetEmail}</td>
+                          <td style={{ fontSize: 12 }}>{s.tenantName}</td>
+                          <td><span className="badge" style={{ background: 'var(--bg-card)' }}>{s.roleOverride}</span></td>
+                          <td style={{ fontSize: 12, maxWidth: 200 }}>{s.reason}</td>
+                          <td style={{ fontSize: 12 }}>{fmtDateTime(s.startedAt)}</td>
+                          <td style={{ fontSize: 12 }}>{s.endedAt ? fmtDateTime(s.endedAt) : <span style={{ color: '#f59e0b' }}>Active</span>}</td>
+                          <td style={{ fontSize: 12 }}>{durStr} / {s.pagesVisited.length} pages {s.writeBlockCount > 0 && <span style={{ color: '#ef4444' }}>({s.writeBlockCount} blocked writes)</span>}</td>
+                        </tr>
+                      );
+                    })}
+                    {impSessions.length === 0 && (
+                      <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 20 }}>No impersonation sessions found.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+                {impSessionsTotal > 50 && (
+                  <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      className="admin-tab"
+                      disabled={impSessionsOffset === 0}
+                      onClick={() => { setImpSessionsOffset(Math.max(0, impSessionsOffset - 50)); loadTab('impsessions'); }}
+                    >
+                      ← Prev
+                    </button>
+                    <span style={{ fontSize: 13 }}>{impSessionsOffset + 1}–{Math.min(impSessionsOffset + 50, impSessionsTotal)} of {impSessionsTotal}</span>
+                    <button
+                      type="button"
+                      className="admin-tab"
+                      disabled={impSessionsOffset + 50 >= impSessionsTotal}
+                      onClick={() => { setImpSessionsOffset(impSessionsOffset + 50); loadTab('impsessions'); }}
+                    >
+                      Next →
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tab === 'auditlog' && (
+              <div>
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  <h2 className="page-title" style={{ fontSize: 18, margin: 0 }}>
+                    Audit Log
+                    <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 400, color: 'var(--text-muted)' }}>{auditTotal} total</span>
+                  </h2>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                      className="admin-select"
+                      value={auditEventFilter}
+                      onChange={(e) => setAuditEventFilter(e.target.value)}
+                      placeholder="Filter by event…"
+                      style={{ width: 200 }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { setAuditOffset(0); loadTab('auditlog'); } }}
+                    />
+                    <button type="button" className="admin-tab" onClick={() => { setAuditOffset(0); loadTab('auditlog'); }}>Filter</button>
+                    <button
+                      type="button"
+                      className="admin-tab"
+                      disabled={auditExporting}
+                      onClick={async () => {
+                        setAuditExporting(true);
+                        setErrorMsg('');
+                        try {
+                          const csv = await adminApi.auditLogExport({ event: auditEventFilter || undefined });
+                          const blob = new Blob([csv], { type: 'text/csv' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url; a.download = 'audit-log.csv'; a.click();
+                          URL.revokeObjectURL(url);
+                        } catch (e) { setErrorMsg(e instanceof Error ? e.message : String(e)); }
+                        finally { setAuditExporting(false); }
+                      }}
+                    >
+                      {auditExporting ? 'Exporting…' : 'Export CSV'}
+                    </button>
+                    <button type="button" className="admin-tab" onClick={() => { setAuditOffset(0); loadTab('auditlog'); }}>↻ Refresh</button>
+                  </div>
+                </div>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Event</th>
+                      <th>Actor</th>
+                      <th>Target</th>
+                      <th>Workspace</th>
+                      <th>IP</th>
+                      <th>Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditEntries.map((e) => (
+                      <tr key={e.id}>
+                        <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{e.event}</td>
+                        <td style={{ fontSize: 12 }}>{e.actorEmail ?? e.actorId ?? '—'}</td>
+                        <td style={{ fontSize: 12 }}>{e.targetEmail ?? e.targetUserId ?? '—'}</td>
+                        <td style={{ fontSize: 12 }}>{e.tenantName ?? (e.tenantId ? String(e.tenantId) : '—')}</td>
+                        <td style={{ fontSize: 12, fontFamily: 'monospace' }}>{e.ipAddress ?? '—'}</td>
+                        <td style={{ fontSize: 12 }}>{fmtDateTime(e.createdAt)}</td>
+                      </tr>
+                    ))}
+                    {auditEntries.length === 0 && (
+                      <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 20 }}>No audit log entries found.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+                {auditTotal > 50 && (
+                  <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      className="admin-tab"
+                      disabled={auditOffset === 0}
+                      onClick={() => { setAuditOffset(Math.max(0, auditOffset - 50)); loadTab('auditlog'); }}
+                    >
+                      ← Prev
+                    </button>
+                    <span style={{ fontSize: 13 }}>{auditOffset + 1}–{Math.min(auditOffset + 50, auditTotal)} of {auditTotal}</span>
+                    <button
+                      type="button"
+                      className="admin-tab"
+                      disabled={auditOffset + 50 >= auditTotal}
+                      onClick={() => { setAuditOffset(auditOffset + 50); loadTab('auditlog'); }}
+                    >
+                      Next →
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {tab === 'token' && (
               <div className="admin-token-card">
                 <p className="page-sub" style={{ marginBottom: 12 }}>
@@ -2130,52 +2770,90 @@ export default function AdminPage() {
             className="admin-modal"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id="impersonate-title" className="page-title" style={{ marginBottom: 8 }}>Impersonate {impersonateUser.email}</h3>
+            <h3 id="impersonate-title" className="page-title" style={{ marginBottom: 4 }}>
+              Emulate User
+            </h3>
             <p className="page-sub" style={{ marginBottom: 16 }}>
-              Select a workspace to issue a tenant-scoped JWT for this user.
+              Start a read-only emulation session as <strong>{impersonateUser.email}</strong>.
+              You will be taken to the dashboard with an amber emulation bar.
+              All write operations are blocked.
             </p>
+
+            <label className="admin-label" style={{ display: 'block', marginBottom: 4 }}>
+              Workspace
+            </label>
             <select
               value={impersonateTenantId ?? ''}
               onChange={(e) => setImpersonateTenantId(Number(e.target.value) || null)}
               className="admin-select"
-              style={{ width: '100%', marginBottom: 16 }}
+              style={{ width: '100%', marginBottom: 14 }}
             >
               <option value="">Select workspace…</option>
               {tenants.map((t) => (
                 <option key={t.id} value={t.id}>{t.name} ({t.slug})</option>
               ))}
             </select>
-            {impersonateResult ? (
-              <div style={{ marginBottom: 16 }}>
-                <p className="text-muted" style={{ fontSize: 12, marginBottom: 8 }}>Token issued for {impersonateResult.email} ({impersonateResult.role}).</p>
-                <textarea
-                  readOnly
-                  value={impersonateResult.token}
-                  className="admin-token-textarea"
-                  style={{ minHeight: 60, fontSize: 11 }}
-                />
-                <p className="text-muted" style={{ fontSize: 11, marginTop: 8 }}>
-                  Use this token as Bearer in API requests; do not store it in the app.
-                </p>
-              </div>
-            ) : null}
+
+            <label className="admin-label" style={{ display: 'block', marginBottom: 4 }}>
+              Role override
+            </label>
+            <select
+              value={impersonateRole}
+              onChange={(e) => setImpersonateRole(e.target.value)}
+              className="admin-select"
+              style={{ width: '100%', marginBottom: 14 }}
+            >
+              <option value="owner">owner</option>
+              <option value="manager">manager</option>
+              <option value="developer">developer</option>
+              <option value="viewer">viewer</option>
+            </select>
+
+            <label className="admin-label" style={{ display: 'block', marginBottom: 4 }}>
+              Reason <span style={{ color: 'var(--error-text)' }}>*</span>
+            </label>
+            <textarea
+              value={impersonateReason}
+              onChange={(e) => setImpersonateReason(e.target.value)}
+              className="admin-token-textarea"
+              placeholder="Brief reason for this emulation session (required)…"
+              style={{ minHeight: 72, marginBottom: 14 }}
+            />
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, cursor: 'pointer', fontSize: 13 }}>
+              <input
+                type="checkbox"
+                checked={impersonateDebugger}
+                onChange={(e) => setImpersonateDebugger(e.target.checked)}
+              />
+              Enable permission debugger overlay
+            </label>
+
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button type="button" className="admin-tab" onClick={closeImpersonate}>
-                Close
+              <button type="button" className="admin-tab" onClick={closeImpersonate} disabled={impersonateBusy}>
+                Cancel
               </button>
-              {!impersonateResult && (
-                <button
-                  type="button"
-                  className="admin-tab active"
-                  onClick={doImpersonate}
-                  disabled={!impersonateTenantId}
-                >
-                  Issue token
-                </button>
-              )}
+              <button
+                type="button"
+                className="admin-tab active"
+                onClick={doImpersonate}
+                disabled={!impersonateTenantId || !impersonateReason.trim() || impersonateBusy}
+              >
+                {impersonateBusy ? 'Starting…' : 'Start Emulation'}
+              </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* User Detail Drawer */}
+      {drawerUser && (
+        <UserDetailDrawer
+          user={drawerUser}
+          tenants={tenants}
+          onClose={() => setDrawerUser(null)}
+          onStartImpersonate={(u) => { setDrawerUser(null); startImpersonate(u); }}
+        />
       )}
     </div>
   );

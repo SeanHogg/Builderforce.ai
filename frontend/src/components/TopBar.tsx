@@ -4,9 +4,15 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/lib/AuthContext';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
+import { useRolePreview, type PreviewRole } from '@/lib/RolePreviewContext';
+import { useEmulation } from '@/lib/EmulationContext';
+
+const PREVIEW_ROLES: PreviewRole[] = ['owner', 'manager', 'developer', 'viewer'];
 
 export default function TopBar() {
-  const { tenant, logout } = useAuth();
+  const { tenant, logout, user } = useAuth();
+  const { previewRole, startPreview, exitPreview } = useRolePreview();
+  const { emulation } = useEmulation();
 
   const handleSignOut = () => {
     logout();
@@ -45,6 +51,40 @@ export default function TopBar() {
             </svg>
           </Link>
         )}
+
+        {/* Role preview — superadmin only, not during emulation */}
+        {user?.isSuperadmin && !emulation && (
+          <div className="topbar-role-preview">
+            {previewRole ? (
+              <>
+                <span className="topbar-role-preview__badge">
+                  Preview: {previewRole}
+                </span>
+                <button
+                  type="button"
+                  className="topbar-role-preview__exit"
+                  onClick={exitPreview}
+                  title="Exit role preview"
+                >
+                  ✕
+                </button>
+              </>
+            ) : (
+              <select
+                className="topbar-role-preview__select"
+                value=""
+                onChange={(e) => { if (e.target.value) startPreview(e.target.value as PreviewRole); }}
+                title="Preview as role (frontend-only)"
+              >
+                <option value="">Preview role…</option>
+                {PREVIEW_ROLES.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
+
         <ThemeToggleButton />
         <button
           type="button"

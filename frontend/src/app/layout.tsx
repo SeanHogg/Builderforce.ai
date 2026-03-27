@@ -1,6 +1,9 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { AuthProvider } from '@/lib/AuthContext';
+import { EmulationProvider } from '@/lib/EmulationContext';
+import { RolePreviewProvider } from '@/lib/RolePreviewContext';
+import { PermissionDebuggerProvider } from '@/lib/PermissionDebuggerContext';
 import ThemeProvider from './ThemeProvider';
 import ConditionalAppShell from '@/components/ConditionalAppShell';
 import { PwaUpdateBanner } from '@/components/PwaUpdateBanner';
@@ -231,7 +234,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider />
 
         <AuthProvider>
-          <ConditionalAppShell>{children}</ConditionalAppShell>
+          <EmulationProvider>
+            <RolePreviewProvider>
+              <PermissionDebuggerProvider>
+                <ConditionalAppShell>{children}</ConditionalAppShell>
+              </PermissionDebuggerProvider>
+            </RolePreviewProvider>
+          </EmulationProvider>
         </AuthProvider>
 
         <PwaUpdateBanner />

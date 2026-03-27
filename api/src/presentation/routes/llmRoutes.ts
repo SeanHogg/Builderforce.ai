@@ -20,7 +20,8 @@ import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, coderclawInstances
 import type { FailoverEvent } from '../../application/llm/LlmProxyService';
 import { verifyJwt } from '../../infrastructure/auth/JwtService';
 import { hashSecret } from '../../infrastructure/auth/HashService';
-import { TenantRole } from '../../domain/shared/types';
+import { TenantRole, TenantPlan } from '../../domain/shared/types';
+import { getLimits } from '../../domain/tenant/PlanLimits';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -47,7 +48,7 @@ function logUsage(
   ctx: ExecutionContext,
   tenantId: number,
   userId: string | null,
-  llmProduct: 'coderClawLLM' | 'coderClawLLMPro',
+  llmProduct: 'coderClawLLM' | 'coderClawLLMPro' | 'coderClawLLMTeams',
   model: string,
   retries: number,
   streamed: boolean,
@@ -79,10 +80,17 @@ type TenantAccess = {
   /** Per-claw daily token budget (null = no per-claw cap). */
   clawTokenDailyLimit: number | null;
   role: TenantRole;
-  plan: 'free' | 'pro';
+  plan: 'free' | 'pro' | 'teams';
   billingStatus: 'none' | 'pending' | 'active' | 'past_due' | 'cancelled';
-  effectivePlan: 'free' | 'pro';
+  effectivePlan: 'free' | 'pro' | 'teams';
 };
+
+/** Map the string effectivePlan to TenantPlan enum for plan limits lookup. */
+function toTenantPlan(ep: TenantAccess['effectivePlan']): TenantPlan {
+  if (ep === 'pro') return TenantPlan.PRO;
+  if (ep === 'teams') return TenantPlan.TEAMS;
+  return TenantPlan.FREE;
+}
 
 async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAccess> {
   const authHeader = c.req.header('Authorization') ?? '';
@@ -123,7 +131,7 @@ async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAccess> {
     const plan = (tenantRow.plan ?? 'free') as TenantAccess['plan'];
     const billingStatus = (tenantRow.billingStatus ?? 'none') as TenantAccess['billingStatus'];
     const effectivePlan: TenantAccess['effectivePlan'] =
-      plan === 'pro' && billingStatus === 'active' ? 'pro' : 'free';
+      billingStatus === 'active' && (plan === 'pro' || plan === 'teams') ? plan : 'free';
 
     return {
       userId: null,
@@ -257,8 +265,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'messages array is required' }, 400);
     }
 
-    // ── Per-claw spend limit check ──────────────────────────────────────────
-    if (access.clawId !== null && access.clawTokenDailyLimit !== null) {
+    // ── Daily token limit checks ────────────────────────────────────────────
+    const { tokenDailyLimit: planDailyLimit } = getLimits(toTenantPlan(access.effectivePlan));
+    const needsTenantUsageQuery =
+      planDailyLimit > 0 || (access.clawId !== null && access.clawTokenDailyLimit !== null);
+
+    if (needsTenantUsageQuery) {
       const todayStart = new Date();
       todayStart.setUTCHours(0, 0, 0, 0);
       const db = buildDatabase(c.env);
@@ -271,17 +283,40 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             gte(llmUsageLog.createdAt, todayStart),
           ),
         );
-      const clawUsageToday = Number(usageRow?.used ?? 0);
-      if (clawUsageToday >= access.clawTokenDailyLimit) {
+      const usageToday = Number(usageRow?.used ?? 0);
+
+      // Per-claw cap (optional, set per-claw in portal)
+      if (access.clawId !== null && access.clawTokenDailyLimit !== null) {
+        if (usageToday >= access.clawTokenDailyLimit) {
+          return c.json({
+            error: `Per-claw daily token limit reached (${access.clawTokenDailyLimit.toLocaleString()} tokens). Increase the limit in the Builderforce portal under Claws → Settings.`,
+            code: 'claw_token_limit_exceeded',
+          }, 429);
+        }
+      }
+
+      // Plan-level cap (always enforced)
+      if (planDailyLimit > 0 && usageToday >= planDailyLimit) {
+        const upgradeHint = access.effectivePlan === 'free'
+          ? ' Upgrade to Pro at builderforce.ai/pricing.'
+          : access.effectivePlan === 'pro'
+          ? ' Upgrade to Teams for a 5× higher daily budget.'
+          : '';
         return c.json({
-          error: `Per-claw daily token limit reached (${access.clawTokenDailyLimit.toLocaleString()} tokens). Increase the limit in the Builderforce portal under Claws → Settings.`,
-          code: 'claw_token_limit_exceeded',
+          error: `Plan daily token limit reached (${planDailyLimit.toLocaleString()} tokens).${upgradeHint}`,
+          code: 'plan_token_limit_exceeded',
+          plan: access.effectivePlan,
+          dailyLimit: planDailyLimit,
+          usedToday: usageToday,
         }, 429);
       }
     }
 
-    const isPro = access.effectivePlan === 'pro';
-    const llmProduct: 'coderClawLLM' | 'coderClawLLMPro' = isPro ? 'coderClawLLMPro' : 'coderClawLLM';
+    const isPro = access.effectivePlan === 'pro' || access.effectivePlan === 'teams';
+    const llmProduct: 'coderClawLLM' | 'coderClawLLMPro' | 'coderClawLLMTeams' =
+      access.effectivePlan === 'teams' ? 'coderClawLLMTeams'
+      : isPro ? 'coderClawLLMPro'
+      : 'coderClawLLM';
     const apiKey = isPro ? c.env.OPENROUTER_API_KEY_PRO : c.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return c.json({

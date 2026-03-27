@@ -192,14 +192,14 @@ export class LlmProxyService {
   private readonly apiKey: string;
   private readonly modelPool: readonly AnyPoolModel[];
   private readonly preferredPoolSize: number;
-  private readonly productName: 'coderClawLLM' | 'coderClawLLMPro';
+  private readonly productName: 'coderClawLLM' | 'coderClawLLMPro' | 'coderClawLLMTeams';
 
   constructor(
     apiKey: string,
     options?: {
       modelPool?: readonly AnyPoolModel[];
       preferredPoolSize?: number;
-      productName?: 'coderClawLLM' | 'coderClawLLMPro';
+      productName?: 'coderClawLLM' | 'coderClawLLMPro' | 'coderClawLLMTeams';
     },
   ) {
     this.apiKey = apiKey;

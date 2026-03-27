@@ -32,7 +32,23 @@ import {
   projects,
   platformPersonas,
 } from '../../infrastructure/database/schema';
-import { signJwt } from '../../infrastructure/auth/JwtService';
+import { signJwt, signEmulationJwt } from '../../infrastructure/auth/JwtService';
+import {
+  adminImpersonationSessions,
+  adminImpersonationRoleSwitches,
+  adminAuditLog,
+  rolePermissionOverrides,
+  tenantCustomRoles,
+  platformModules,
+  tenantMemberModules,
+  userPermissionOverrides,
+} from '../../infrastructure/database/schema';
+import {
+  ALL_PERMISSIONS,
+  DEFAULT_ROLE_PERMISSIONS,
+  resolveRolePermissions,
+  resolveEffectivePermissions,
+} from '../../domain/permissions/permissionRegistry';
 import { LlmProxyService, FREE_MODEL_POOL, PRO_PAID_MODEL_POOL, PREFERRED_POOL_SIZE } from '../../application/llm/LlmProxyService';
 import { llmFailoverLog } from '../../infrastructure/database/schema';
 import {
@@ -1129,6 +1145,31 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   // -------------------------------------------------------------------------
+  // GET /api/admin/tenants/:id/members
+  // -------------------------------------------------------------------------
+  router.get('/tenants/:id/members', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = Number(c.req.param('id'));
+    if (!tenantId) return c.json({ error: 'Invalid tenant id' }, 400);
+    const rows = await db.execute(sql`
+      SELECT
+        u.id,
+        u.email,
+        u.username,
+        u.display_name AS "displayName",
+        tm.role,
+        tm.is_active AS "isActive",
+        tm.joined_at AS "joinedAt"
+      FROM tenant_members tm
+      JOIN users u ON u.id = tm.user_id
+      WHERE tm.tenant_id = ${tenantId}
+      ORDER BY tm.joined_at DESC
+      LIMIT 200
+    `);
+    return c.json({ members: rows.rows });
+  });
+
+  // -------------------------------------------------------------------------
   // GET /api/admin/health
   // -------------------------------------------------------------------------
   router.get('/health', async (c) => {
@@ -1533,6 +1574,859 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .returning({ id: projects.id, name: projects.name, governance: projects.governance });
     if (!updated) return c.json({ error: 'Project not found' }, 404);
     return c.json({ project: { id: updated.id, name: updated.name, governance: updated.governance ?? null } });
+  });
+
+  // ===========================================================================
+  // IMPERSONATION SYSTEM  (PRD §4.2)
+  // ===========================================================================
+
+  // Helper: write an audit log entry
+  async function writeAudit(
+    db: Db,
+    event: string,
+    actorId: string,
+    opts: {
+      targetUserId?: string | null;
+      tenantId?: number | null;
+      metadata?: Record<string, unknown>;
+      ipAddress?: string | null;
+    } = {},
+  ) {
+    await db.insert(adminAuditLog).values({
+      event,
+      actorId,
+      targetUserId: opts.targetUserId ?? null,
+      tenantId:     opts.tenantId ?? null,
+      metadata:     JSON.stringify(opts.metadata ?? {}),
+      ipAddress:    opts.ipAddress ?? null,
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // POST /api/admin/impersonation/start
+  // Begin an impersonation session and return an emulation token.
+  // -------------------------------------------------------------------------
+  router.post('/impersonation/start', async (c) => {
+    const adminId = c.get('userId') as string;
+    const db = buildDatabase(c.env);
+    const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null;
+    const ua = c.req.header('User-Agent') ?? null;
+
+    const body = await c.req.json<{
+      userId: string;
+      tenantId: number;
+      role?: string;
+      reason: string;
+      enableDebugger?: boolean;
+    }>();
+
+    if (!body.userId || !body.tenantId || !body.reason?.trim()) {
+      return c.json({ error: 'userId, tenantId, and reason are required' }, 400);
+    }
+
+    // Reject if target is a Super Admin
+    const [targetRow] = await db
+      .select({ id: users.id, email: users.email, displayName: users.displayName, avatarUrl: users.avatarUrl, isSuperadmin: users.isSuperadmin })
+      .from(users)
+      .where(eq(users.id, body.userId))
+      .limit(1);
+
+    if (!targetRow) return c.json({ error: 'User not found' }, 404);
+    if (targetRow.isSuperadmin) {
+      return c.json({ error: 'Cannot impersonate a Super Admin account' }, 403);
+    }
+
+    // Reject if the admin already has an active session
+    const [existingSession] = await db
+      .select({ id: adminImpersonationSessions.id })
+      .from(adminImpersonationSessions)
+      .where(and(
+        eq(adminImpersonationSessions.adminUserId, adminId),
+        isNull(adminImpersonationSessions.endedAt),
+      ))
+      .limit(1);
+
+    if (existingSession) {
+      return c.json({ error: 'You already have an active impersonation session. End it before starting a new one.', sessionId: existingSession.id }, 409);
+    }
+
+    // Resolve the tenant + role
+    const [tenantRow] = await db
+      .select({ id: tenants.id, name: tenants.name, slug: tenants.slug })
+      .from(tenants)
+      .where(eq(tenants.id, body.tenantId))
+      .limit(1);
+
+    if (!tenantRow) return c.json({ error: 'Tenant not found' }, 404);
+
+    const [memberRow] = await db
+      .select({ role: tenantMembers.role })
+      .from(tenantMembers)
+      .where(and(
+        eq(tenantMembers.userId, body.userId),
+        eq(tenantMembers.tenantId, body.tenantId),
+        eq(tenantMembers.isActive, true),
+      ))
+      .limit(1);
+
+    const resolvedRole = (body.role ?? memberRow?.role ?? 'viewer') as Parameters<typeof signEmulationJwt>[0]['role'];
+    const expiresAt = new Date(Date.now() + 3600_000); // 1 hour
+
+    // Create session record
+    const [session] = await db
+      .insert(adminImpersonationSessions)
+      .values({
+        adminUserId:     adminId,
+        targetUserId:    body.userId,
+        tenantId:        body.tenantId,
+        roleOverride:    resolvedRole,
+        reason:          body.reason.trim(),
+        expiresAt,
+        ipAddress:       ip,
+        userAgent:       ua,
+        debuggerEnabled: body.enableDebugger ?? false,
+      })
+      .returning();
+
+    if (!session) return c.json({ error: 'Failed to create impersonation session' }, 500);
+
+    // Sign emulation JWT
+    const token = await signEmulationJwt(
+      { sub: body.userId, tid: body.tenantId, role: resolvedRole, emuBy: adminId, emuSid: session.id },
+      c.env.JWT_SECRET,
+    );
+
+    // Store the JTI back on the session for revocation
+    const jtiMatch = token.split('.')[1];
+    if (jtiMatch) {
+      const tokenPayload = JSON.parse(atob(jtiMatch.replace(/-/g, '+').replace(/_/g, '/'))) as { jti?: string };
+      if (tokenPayload.jti) {
+        await db
+          .update(adminImpersonationSessions)
+          .set({ tokenJti: tokenPayload.jti })
+          .where(eq(adminImpersonationSessions.id, session.id));
+      }
+    }
+
+    await writeAudit(db, 'IMPERSONATION_STARTED', adminId, {
+      targetUserId: body.userId,
+      tenantId:     body.tenantId,
+      metadata:     { sessionId: session.id, role: resolvedRole, reason: body.reason.trim(), debugger: body.enableDebugger ?? false },
+      ipAddress:    ip,
+    });
+
+    return c.json({
+      emulationSessionId: session.id,
+      token,
+      user: {
+        id:          targetRow.id,
+        email:       targetRow.email,
+        displayName: targetRow.displayName,
+        avatarUrl:   targetRow.avatarUrl,
+      },
+      tenant: { id: tenantRow.id, name: tenantRow.name, slug: tenantRow.slug },
+      role:        resolvedRole,
+      startedAt:   session.startedAt?.toISOString() ?? new Date().toISOString(),
+      expiresAt:   expiresAt.toISOString(),
+      debugger:    body.enableDebugger ?? false,
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/admin/impersonation/:id/end
+  // End an active impersonation session and invalidate the token.
+  // -------------------------------------------------------------------------
+  router.post('/impersonation/:id/end', async (c) => {
+    const adminId = c.get('userId') as string;
+    const sessionId = c.req.param('id');
+    const db = buildDatabase(c.env);
+
+    const [session] = await db
+      .select()
+      .from(adminImpersonationSessions)
+      .where(and(
+        eq(adminImpersonationSessions.id, sessionId),
+        eq(adminImpersonationSessions.adminUserId, adminId),
+      ))
+      .limit(1);
+
+    if (!session) return c.json({ error: 'Session not found' }, 404);
+    if (session.endedAt) return c.json({ error: 'Session already ended' }, 409);
+
+    const now = new Date();
+    await db
+      .update(adminImpersonationSessions)
+      .set({ endedAt: now, endReason: 'MANUAL' })
+      .where(eq(adminImpersonationSessions.id, sessionId));
+
+    // Revoke the token JTI
+    if (session.tokenJti) {
+      await db
+        .update(authTokens)
+        .set({ revokedAt: now })
+        .where(eq(authTokens.jti, session.tokenJti));
+    }
+
+    const durationMs = now.getTime() - (session.startedAt?.getTime() ?? now.getTime());
+    const durationMin = Math.round(durationMs / 60_000);
+
+    await writeAudit(db, 'IMPERSONATION_ENDED', adminId, {
+      targetUserId: session.targetUserId,
+      tenantId:     session.tenantId,
+      metadata:     { sessionId, endReason: 'MANUAL', durationMinutes: durationMin, writeBlockCount: session.writeBlockCount },
+    });
+
+    return c.json({ ok: true, sessionId, durationMinutes: durationMin });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/admin/impersonation/:id/switch-role
+  // Switch the active role mid-session, re-issue emulation token.
+  // -------------------------------------------------------------------------
+  router.post('/impersonation/:id/switch-role', async (c) => {
+    const adminId = c.get('userId') as string;
+    const sessionId = c.req.param('id');
+    const db = buildDatabase(c.env);
+    const { role } = await c.req.json<{ role: string }>();
+
+    if (!role) return c.json({ error: 'role is required' }, 400);
+
+    const [session] = await db
+      .select()
+      .from(adminImpersonationSessions)
+      .where(and(
+        eq(adminImpersonationSessions.id, sessionId),
+        eq(adminImpersonationSessions.adminUserId, adminId),
+        isNull(adminImpersonationSessions.endedAt),
+      ))
+      .limit(1);
+
+    if (!session) return c.json({ error: 'Active session not found' }, 404);
+
+    const fromRole = session.roleOverride;
+
+    // Log the role switch
+    await db.insert(adminImpersonationRoleSwitches).values({
+      sessionId,
+      fromRole,
+      toRole: role,
+    });
+
+    // Update the session's current role
+    await db
+      .update(adminImpersonationSessions)
+      .set({ roleOverride: role })
+      .where(eq(adminImpersonationSessions.id, sessionId));
+
+    // Invalidate old token JTI if present
+    if (session.tokenJti) {
+      await db
+        .update(authTokens)
+        .set({ revokedAt: new Date() })
+        .where(eq(authTokens.jti, session.tokenJti));
+    }
+
+    // Issue new emulation token with the new role
+    const newToken = await signEmulationJwt(
+      {
+        sub:    session.targetUserId,
+        tid:    session.tenantId,
+        role:   role as Parameters<typeof signEmulationJwt>[0]['role'],
+        emuBy:  adminId,
+        emuSid: sessionId,
+      },
+      c.env.JWT_SECRET,
+    );
+
+    await writeAudit(db, 'IMPERSONATION_PERSONA_SWITCHED', adminId, {
+      targetUserId: session.targetUserId,
+      tenantId:     session.tenantId,
+      metadata:     { sessionId, fromRole, toRole: role },
+    });
+
+    return c.json({ ok: true, token: newToken, role });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/impersonation/active
+  // Return the requesting admin's currently active session (if any).
+  // -------------------------------------------------------------------------
+  router.get('/impersonation/active', async (c) => {
+    const adminId = c.get('userId') as string;
+    const db = buildDatabase(c.env);
+
+    const [session] = await db
+      .select()
+      .from(adminImpersonationSessions)
+      .where(and(
+        eq(adminImpersonationSessions.adminUserId, adminId),
+        isNull(adminImpersonationSessions.endedAt),
+        gt(adminImpersonationSessions.expiresAt, new Date()),
+      ))
+      .limit(1);
+
+    if (!session) return c.json({ session: null });
+
+    const [targetUser] = await db
+      .select({ id: users.id, email: users.email, displayName: users.displayName, avatarUrl: users.avatarUrl })
+      .from(users)
+      .where(eq(users.id, session.targetUserId))
+      .limit(1);
+
+    const [tenant] = await db
+      .select({ id: tenants.id, name: tenants.name, slug: tenants.slug })
+      .from(tenants)
+      .where(eq(tenants.id, session.tenantId))
+      .limit(1);
+
+    return c.json({
+      session: {
+        id:             session.id,
+        role:           session.roleOverride,
+        startedAt:      session.startedAt?.toISOString(),
+        expiresAt:      session.expiresAt?.toISOString(),
+        debuggerEnabled: session.debuggerEnabled,
+        user:           targetUser ?? null,
+        tenant:         tenant ?? null,
+      },
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/impersonation
+  // List all impersonation sessions (paginated).
+  // -------------------------------------------------------------------------
+  router.get('/impersonation', async (c) => {
+    const db = buildDatabase(c.env);
+    const limit  = Math.min(parsePositiveInt(c.req.query('limit'), 50), 200);
+    const offset = parsePositiveInt(c.req.query('offset'), 0);
+
+    const rows = await db
+      .select({
+        id:             adminImpersonationSessions.id,
+        adminUserId:    adminImpersonationSessions.adminUserId,
+        targetUserId:   adminImpersonationSessions.targetUserId,
+        tenantId:       adminImpersonationSessions.tenantId,
+        roleOverride:   adminImpersonationSessions.roleOverride,
+        reason:         adminImpersonationSessions.reason,
+        startedAt:      adminImpersonationSessions.startedAt,
+        endedAt:        adminImpersonationSessions.endedAt,
+        expiresAt:      adminImpersonationSessions.expiresAt,
+        endReason:      adminImpersonationSessions.endReason,
+        writeBlockCount: adminImpersonationSessions.writeBlockCount,
+        debuggerEnabled: adminImpersonationSessions.debuggerEnabled,
+        ipAddress:      adminImpersonationSessions.ipAddress,
+        adminEmail:     users.email,
+      })
+      .from(adminImpersonationSessions)
+      .leftJoin(users, eq(users.id, adminImpersonationSessions.adminUserId))
+      .orderBy(desc(adminImpersonationSessions.startedAt))
+      .limit(limit)
+      .offset(offset);
+
+    return c.json({ sessions: rows.map((r) => ({
+      ...r,
+      startedAt: r.startedAt?.toISOString() ?? null,
+      endedAt:   r.endedAt?.toISOString() ?? null,
+      expiresAt: r.expiresAt?.toISOString() ?? null,
+    })) });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/impersonation/:id
+  // Get a single session detail including role switch history.
+  // -------------------------------------------------------------------------
+  router.get('/impersonation/:id', async (c) => {
+    const db = buildDatabase(c.env);
+    const sessionId = c.req.param('id');
+
+    const [session] = await db
+      .select()
+      .from(adminImpersonationSessions)
+      .where(eq(adminImpersonationSessions.id, sessionId))
+      .limit(1);
+
+    if (!session) return c.json({ error: 'Session not found' }, 404);
+
+    const roleSwitches = await db
+      .select()
+      .from(adminImpersonationRoleSwitches)
+      .where(eq(adminImpersonationRoleSwitches.sessionId, sessionId))
+      .orderBy(adminImpersonationRoleSwitches.switchedAt);
+
+    const [targetUser] = await db
+      .select({ id: users.id, email: users.email, displayName: users.displayName })
+      .from(users)
+      .where(eq(users.id, session.targetUserId))
+      .limit(1);
+
+    return c.json({
+      session: {
+        ...session,
+        startedAt: session.startedAt?.toISOString() ?? null,
+        endedAt:   session.endedAt?.toISOString() ?? null,
+        expiresAt: session.expiresAt?.toISOString() ?? null,
+        targetUser: targetUser ?? null,
+      },
+      roleSwitches: roleSwitches.map((r) => ({
+        ...r,
+        switchedAt: r.switchedAt?.toISOString() ?? null,
+      })),
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/audit-log
+  // Paginated, filterable audit log.
+  // -------------------------------------------------------------------------
+  router.get('/audit-log', async (c) => {
+    const db = buildDatabase(c.env);
+    const limit  = Math.min(parsePositiveInt(c.req.query('limit'), 50), 200);
+    const offset = parsePositiveInt(c.req.query('offset'), 0);
+    const event  = c.req.query('event') ?? null;
+    const actor  = c.req.query('actor') ?? null;
+    const target = c.req.query('target') ?? null;
+
+    const conditions = [];
+    if (event)  conditions.push(eq(adminAuditLog.event, event));
+    if (actor)  conditions.push(eq(adminAuditLog.actorId, actor));
+    if (target) conditions.push(eq(adminAuditLog.targetUserId, target));
+
+    const rows = await db
+      .select()
+      .from(adminAuditLog)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(adminAuditLog.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    return c.json({ entries: rows.map((r) => ({
+      ...r,
+      createdAt: r.createdAt?.toISOString() ?? null,
+    })) });
+  });
+
+  // =========================================================================
+  // PERMISSION MATRIX ROUTES
+  // =========================================================================
+
+  // GET /api/admin/permissions — full permission registry
+  router.get('/permissions', async (c) => {
+    return c.json({ permissions: ALL_PERMISSIONS });
+  });
+
+  // GET /api/admin/permissions/matrix — current effective role × permission matrix
+  router.get('/permissions/matrix', async (c) => {
+    const db = buildDatabase(c.env);
+    const overrides = await db.select().from(rolePermissionOverrides);
+    const roles = ['viewer', 'developer', 'manager', 'owner'] as const;
+    const matrix: Record<string, string[]> = {};
+    for (const role of roles) {
+      const roleOverrides = overrides.filter((o) => o.role === role);
+      matrix[role] = resolveRolePermissions(role, roleOverrides);
+    }
+    return c.json({ matrix, permissions: ALL_PERMISSIONS });
+  });
+
+  // PUT /api/admin/permissions/roles/:role — update permission overrides for a role
+  router.put('/permissions/roles/:role', async (c) => {
+    const db = buildDatabase(c.env);
+    const actorId = c.get('userId') as string;
+    const role = c.req.param('role');
+    const validRoles = ['viewer', 'developer', 'manager', 'owner'];
+    if (!validRoles.includes(role)) {
+      return c.json({ error: 'Invalid role' }, 400);
+    }
+    const body = await c.req.json<{ overrides: Array<{ permission: string; granted: boolean; reason?: string }> }>();
+    if (!Array.isArray(body.overrides)) return c.json({ error: 'overrides array required' }, 400);
+
+    // Upsert each override
+    for (const override of body.overrides) {
+      await db
+        .insert(rolePermissionOverrides)
+        .values({ role, permission: override.permission, granted: override.granted, reason: override.reason ?? null, createdBy: actorId })
+        .onConflictDoUpdate({
+          target: [rolePermissionOverrides.role, rolePermissionOverrides.permission],
+          set: { granted: override.granted, reason: override.reason ?? null },
+        });
+    }
+
+    await writeAudit(db, {
+      event: 'ROLE_PERMISSION_CHANGED',
+      actorId,
+      metadata: { role, overrides: body.overrides },
+      ipAddress: c.req.header('CF-Connecting-IP') ?? null,
+    });
+
+    const updated = await db.select().from(rolePermissionOverrides).where(eq(rolePermissionOverrides.role, role));
+    return c.json({ role, permissions: resolveRolePermissions(role, updated) });
+  });
+
+  // GET /api/admin/permissions/matrix/export — CSV export
+  router.get('/permissions/matrix/export', async (c) => {
+    const db = buildDatabase(c.env);
+    const overrides = await db.select().from(rolePermissionOverrides);
+    const roles = ['viewer', 'developer', 'manager', 'owner'];
+    const header = ['permission', ...roles].join(',');
+    const rows = ALL_PERMISSIONS.map((perm) => {
+      const cols = roles.map((role) => {
+        const roleOverrides = overrides.filter((o) => o.role === role);
+        const perms = resolveRolePermissions(role, roleOverrides);
+        return perms.includes(perm as string) ? '1' : '0';
+      });
+      return [perm, ...cols].join(',');
+    });
+    const csv = [header, ...rows].join('\n');
+    return new Response(csv, {
+      headers: {
+        'Content-Type': 'text/csv',
+        'Content-Disposition': 'attachment; filename="permission-matrix.csv"',
+      },
+    });
+  });
+
+  // =========================================================================
+  // MODULES ROUTES
+  // =========================================================================
+
+  // GET /api/admin/modules
+  router.get('/modules', async (c) => {
+    const db = buildDatabase(c.env);
+    const rows = await db.select().from(platformModules).orderBy(platformModules.name);
+    return c.json({
+      modules: rows.map((m) => ({
+        ...m,
+        permissions: JSON.parse(m.permissions ?? '[]') as string[],
+        createdAt: m.createdAt?.toISOString() ?? null,
+        updatedAt: m.updatedAt?.toISOString() ?? null,
+      })),
+    });
+  });
+
+  // POST /api/admin/modules
+  router.post('/modules', async (c) => {
+    const db = buildDatabase(c.env);
+    const actorId = c.get('userId') as string;
+    const body = await c.req.json<{
+      name: string;
+      slug?: string;
+      description?: string;
+      baseRole?: string;
+      permissions?: string[];
+    }>();
+    if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
+    const slug = (body.slug?.trim() || body.name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''));
+    const [mod] = await db
+      .insert(platformModules)
+      .values({
+        name: body.name.trim(),
+        slug,
+        description: body.description?.trim() ?? null,
+        baseRole: body.baseRole ?? null,
+        permissions: JSON.stringify(body.permissions ?? []),
+        isBuiltin: false,
+        createdBy: actorId,
+      })
+      .returning();
+    await writeAudit(db, { event: 'MODULE_ASSIGNED', actorId, metadata: { moduleId: mod!.id, name: mod!.name } });
+    return c.json({ module: { ...mod, permissions: JSON.parse(mod!.permissions ?? '[]') } }, 201);
+  });
+
+  // PATCH /api/admin/modules/:id
+  router.patch('/modules/:id', async (c) => {
+    const db = buildDatabase(c.env);
+    const actorId = c.get('userId') as string;
+    const id = c.req.param('id');
+    const body = await c.req.json<{ name?: string; description?: string; baseRole?: string; permissions?: string[] }>();
+    const [mod] = await db
+      .update(platformModules)
+      .set({
+        ...(body.name && { name: body.name.trim() }),
+        ...(body.description !== undefined && { description: body.description }),
+        ...(body.baseRole !== undefined && { baseRole: body.baseRole }),
+        ...(body.permissions !== undefined && { permissions: JSON.stringify(body.permissions) }),
+        updatedAt: new Date(),
+      })
+      .where(eq(platformModules.id, id))
+      .returning();
+    if (!mod) return c.json({ error: 'Module not found' }, 404);
+    return c.json({ module: { ...mod, permissions: JSON.parse(mod.permissions ?? '[]') } });
+  });
+
+  // DELETE /api/admin/modules/:id
+  router.delete('/modules/:id', async (c) => {
+    const db = buildDatabase(c.env);
+    const actorId = c.get('userId') as string;
+    const id = c.req.param('id');
+    const [mod] = await db.select({ isBuiltin: platformModules.isBuiltin, name: platformModules.name }).from(platformModules).where(eq(platformModules.id, id)).limit(1);
+    if (!mod) return c.json({ error: 'Module not found' }, 404);
+    if (mod.isBuiltin) return c.json({ error: 'Cannot delete a built-in module' }, 403);
+    await db.delete(platformModules).where(eq(platformModules.id, id));
+    await writeAudit(db, { event: 'MODULE_REMOVED', actorId, metadata: { moduleId: id, name: mod.name } });
+    return c.json({ ok: true });
+  });
+
+  // POST /api/admin/tenants/:tenantId/members/:userId/modules — assign module to user
+  router.post('/tenants/:tenantId/members/:userId/modules', async (c) => {
+    const db = buildDatabase(c.env);
+    const actorId = c.get('userId') as string;
+    const tenantId = parseInt(c.req.param('tenantId'), 10);
+    const userId = c.req.param('userId');
+    const body = await c.req.json<{ moduleId: string }>();
+    if (!body.moduleId) return c.json({ error: 'moduleId is required' }, 400);
+    await db.insert(tenantMemberModules).values({
+      tenantId, userId, moduleId: body.moduleId, grantedBy: actorId,
+    }).onConflictDoNothing();
+    await writeAudit(db, { event: 'MODULE_ASSIGNED', actorId, targetUserId: userId, tenantId, metadata: { moduleId: body.moduleId } });
+    return c.json({ ok: true });
+  });
+
+  // DELETE /api/admin/tenants/:tenantId/members/:userId/modules/:moduleId
+  router.delete('/tenants/:tenantId/members/:userId/modules/:moduleId', async (c) => {
+    const db = buildDatabase(c.env);
+    const actorId = c.get('userId') as string;
+    const tenantId = parseInt(c.req.param('tenantId'), 10);
+    const userId = c.req.param('userId');
+    const moduleId = c.req.param('moduleId');
+    await db.delete(tenantMemberModules).where(
+      and(eq(tenantMemberModules.tenantId, tenantId), eq(tenantMemberModules.userId, userId), eq(tenantMemberModules.moduleId, moduleId))
+    );
+    await writeAudit(db, { event: 'MODULE_REMOVED', actorId, targetUserId: userId, tenantId, metadata: { moduleId } });
+    return c.json({ ok: true });
+  });
+
+  // =========================================================================
+  // ENHANCED USER MANAGEMENT ROUTES
+  // =========================================================================
+
+  // POST /api/admin/users/:id/force-logout — increment session_version + revoke all tokens
+  router.post('/users/:id/force-logout', async (c) => {
+    const db = buildDatabase(c.env);
+    const actorId = c.get('userId') as string;
+    const targetId = c.req.param('id');
+    // Increment session_version (JWT-level invalidation for future tokens carrying sv)
+    await db.update(users).set({ sessionVersion: sql`${users.sessionVersion} + 1` }).where(eq(users.id, targetId));
+    // Revoke all active auth tokens
+    await db.update(authTokens).set({ revokedAt: new Date() }).where(and(eq(authTokens.userId, targetId), isNull(authTokens.revokedAt)));
+    // Deactivate all sessions
+    await db.update(authUserSessions).set({ isActive: false, revokedAt: new Date() }).where(and(eq(authUserSessions.userId, targetId), eq(authUserSessions.isActive, true)));
+    await writeAudit(db, {
+      event: 'USER_SESSIONS_REVOKED',
+      actorId,
+      targetUserId: targetId,
+      metadata: { method: 'force_logout' },
+      ipAddress: c.req.header('CF-Connecting-IP') ?? null,
+    });
+    return c.json({ ok: true });
+  });
+
+  // POST /api/admin/users/:id/reset-password — send password reset email
+  router.post('/users/:id/reset-password', async (c) => {
+    const db = buildDatabase(c.env);
+    const actorId = c.get('userId') as string;
+    const targetId = c.req.param('id');
+    const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, targetId)).limit(1);
+    if (!user) return c.json({ error: 'User not found' }, 404);
+    // TODO: integrate with email provider (Resend) — for now log the audit event
+    await writeAudit(db, {
+      event: 'USER_PASSWORD_RESET_FORCED',
+      actorId,
+      targetUserId: targetId,
+      metadata: { email: user.email },
+      ipAddress: c.req.header('CF-Connecting-IP') ?? null,
+    });
+    return c.json({ ok: true, email: user.email });
+  });
+
+  // PUT /api/admin/users/:id/status — activate / suspend
+  router.put('/users/:id/status', async (c) => {
+    const db = buildDatabase(c.env);
+    const actorId = c.get('userId') as string;
+    const targetId = c.req.param('id');
+    const body = await c.req.json<{ suspended: boolean }>();
+    // We don't have a suspended column yet — track via isSuperadmin logic for now
+    // Store status in metadata; actual suspension enforcement is via token revocation
+    if (body.suspended) {
+      await db.update(authTokens).set({ revokedAt: new Date() }).where(and(eq(authTokens.userId, targetId), isNull(authTokens.revokedAt)));
+    }
+    await writeAudit(db, {
+      event: 'USER_STATUS_CHANGED',
+      actorId,
+      targetUserId: targetId,
+      metadata: { suspended: body.suspended },
+      ipAddress: c.req.header('CF-Connecting-IP') ?? null,
+    });
+    return c.json({ ok: true });
+  });
+
+  // PUT /api/admin/users/:id/permissions — grant/revoke per-user permissions
+  router.put('/users/:id/permissions', async (c) => {
+    const db = buildDatabase(c.env);
+    const actorId = c.get('userId') as string;
+    const targetId = c.req.param('id');
+    const body = await c.req.json<{
+      tenantId: number;
+      overrides: Array<{ permission: string; granted: boolean; expiresAt?: string }>;
+    }>();
+    if (!body.tenantId || !Array.isArray(body.overrides)) {
+      return c.json({ error: 'tenantId and overrides array required' }, 400);
+    }
+    for (const o of body.overrides) {
+      await db
+        .insert(userPermissionOverrides)
+        .values({
+          tenantId: body.tenantId,
+          userId: targetId,
+          permission: o.permission,
+          granted: o.granted,
+          expiresAt: o.expiresAt ? new Date(o.expiresAt) : null,
+          createdBy: actorId,
+        })
+        .onConflictDoUpdate({
+          target: [userPermissionOverrides.tenantId, userPermissionOverrides.userId, userPermissionOverrides.permission],
+          set: { granted: o.granted, expiresAt: o.expiresAt ? new Date(o.expiresAt) : null },
+        });
+    }
+    await writeAudit(db, {
+      event: 'USER_PERMISSION_OVERRIDE',
+      actorId,
+      targetUserId: targetId,
+      tenantId: body.tenantId,
+      metadata: { overrides: body.overrides },
+      ipAddress: c.req.header('CF-Connecting-IP') ?? null,
+    });
+    return c.json({ ok: true });
+  });
+
+  // PATCH /api/admin/tenants/:tenantId/members/:userId/role — override member role
+  router.patch('/tenants/:tenantId/members/:userId/role', async (c) => {
+    const db = buildDatabase(c.env);
+    const actorId = c.get('userId') as string;
+    const tenantId = parseInt(c.req.param('tenantId'), 10);
+    const userId = c.req.param('userId');
+    const body = await c.req.json<{ role: string }>();
+    const validRoles = ['viewer', 'developer', 'manager', 'owner'];
+    if (!validRoles.includes(body.role)) return c.json({ error: 'Invalid role' }, 400);
+    const [row] = await db.select({ id: tenantMembers.id }).from(tenantMembers).where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId))).limit(1);
+    if (!row) return c.json({ error: 'Member not found in tenant' }, 404);
+    await db.update(tenantMembers).set({ role: body.role as 'viewer' | 'developer' | 'manager' | 'owner' }).where(eq(tenantMembers.id, row.id));
+    await writeAudit(db, {
+      event: 'USER_PERSONA_CHANGED',
+      actorId,
+      targetUserId: userId,
+      tenantId,
+      metadata: { newRole: body.role },
+      ipAddress: c.req.header('CF-Connecting-IP') ?? null,
+    });
+    return c.json({ ok: true });
+  });
+
+  // GET /api/admin/users/:id/effective-permissions — resolved permissions for user in tenant
+  router.get('/users/:id/effective-permissions', async (c) => {
+    const db = buildDatabase(c.env);
+    const targetId = c.req.param('id');
+    const tenantId = parseInt(c.req.query('tenantId') ?? '0', 10);
+    if (!tenantId) return c.json({ error: 'tenantId query param required' }, 400);
+
+    // Get user's role in tenant
+    const [membership] = await db
+      .select({ role: tenantMembers.role })
+      .from(tenantMembers)
+      .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, targetId)))
+      .limit(1);
+    if (!membership) return c.json({ error: 'User is not a member of this tenant' }, 404);
+
+    // Role overrides
+    const roleOverrides = await db.select().from(rolePermissionOverrides).where(eq(rolePermissionOverrides.role, membership.role));
+    const rolePerms = resolveRolePermissions(membership.role, roleOverrides);
+
+    // Module permissions
+    const assignedModules = await db
+      .select({ permissions: platformModules.permissions })
+      .from(tenantMemberModules)
+      .innerJoin(platformModules, eq(tenantMemberModules.moduleId, platformModules.id))
+      .where(and(eq(tenantMemberModules.tenantId, tenantId), eq(tenantMemberModules.userId, targetId)));
+    const modulePerms = assignedModules.flatMap((m) => JSON.parse(m.permissions ?? '[]') as string[]);
+
+    // Per-user overrides
+    const userOverrides = await db.select().from(userPermissionOverrides).where(and(eq(userPermissionOverrides.tenantId, tenantId), eq(userPermissionOverrides.userId, targetId)));
+    const userGrants    = userOverrides.filter((o) => o.granted).map((o) => o.permission);
+    const userRevokes   = userOverrides.filter((o) => !o.granted).map((o) => o.permission);
+
+    const effective = resolveEffectivePermissions({ rolePermissions: rolePerms, modulePermissions: modulePerms, userGrants, userRevocations: userRevokes });
+
+    return c.json({
+      role: membership.role,
+      rolePermissions: rolePerms,
+      modulePermissions: modulePerms,
+      userGrants,
+      userRevocations: userRevokes,
+      effectivePermissions: effective,
+    });
+  });
+
+  // GET /api/admin/audit-log/export — CSV export
+  router.get('/audit-log/export', async (c) => {
+    const db = buildDatabase(c.env);
+    const event  = c.req.query('event') ?? null;
+    const actor  = c.req.query('actor') ?? null;
+    const target = c.req.query('target') ?? null;
+    const conditions = [];
+    if (event)  conditions.push(eq(adminAuditLog.event, event));
+    if (actor)  conditions.push(eq(adminAuditLog.actorId, actor));
+    if (target) conditions.push(eq(adminAuditLog.targetUserId, target));
+
+    const rows = await db
+      .select()
+      .from(adminAuditLog)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(adminAuditLog.createdAt))
+      .limit(10000);
+
+    const header = 'id,event,actorId,targetUserId,tenantId,ipAddress,createdAt,metadata';
+    const csv = [
+      header,
+      ...rows.map((r) =>
+        [r.id, r.event, r.actorId ?? '', r.targetUserId ?? '', r.tenantId ?? '', r.ipAddress ?? '', r.createdAt?.toISOString() ?? '', JSON.stringify(r.metadata ?? {}).replace(/"/g, '""')].map((v) => `"${v}"`).join(',')
+      ),
+    ].join('\n');
+    return new Response(csv, {
+      headers: {
+        'Content-Type': 'text/csv',
+        'Content-Disposition': 'attachment; filename="audit-log.csv"',
+      },
+    });
+  });
+
+  // GET /api/admin/users/:id/admin-access — impersonation sessions targeting this user (for target transparency)
+  router.get('/users/:id/admin-access', async (c) => {
+    const db = buildDatabase(c.env);
+    const targetId = c.req.param('id');
+    const rows = await db
+      .select({
+        id: adminImpersonationSessions.id,
+        adminUserId: adminImpersonationSessions.adminUserId,
+        tenantId: adminImpersonationSessions.tenantId,
+        roleOverride: adminImpersonationSessions.roleOverride,
+        startedAt: adminImpersonationSessions.startedAt,
+        endedAt: adminImpersonationSessions.endedAt,
+        expiresAt: adminImpersonationSessions.expiresAt,
+        endReason: adminImpersonationSessions.endReason,
+      })
+      .from(adminImpersonationSessions)
+      .where(eq(adminImpersonationSessions.targetUserId, targetId))
+      .orderBy(desc(adminImpersonationSessions.startedAt))
+      .limit(50);
+    return c.json({
+      sessions: rows.map((r) => ({
+        ...r,
+        startedAt: r.startedAt?.toISOString() ?? null,
+        endedAt: r.endedAt?.toISOString() ?? null,
+        expiresAt: r.expiresAt?.toISOString() ?? null,
+        durationSeconds: r.endedAt && r.startedAt ? Math.floor((r.endedAt.getTime() - r.startedAt.getTime()) / 1000) : null,
+        // Note: adminUserId is exposed here for superadmin use; end-user transparency API filters it out
+      })),
+    });
   });
 
   return router;

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { TenantService } from '../../application/tenant/TenantService';
-import { TenantRole, TenantBillingCycle } from '../../domain/shared/types';
+import { TenantRole, TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
@@ -121,7 +121,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   /**
    * POST /api/tenants/:id/subscription/checkout
    *
-   * Initiate a Pro upgrade checkout session.
+   * Initiate a Pro or Teams upgrade checkout session.
    *
    * For ManualProvider: activates immediately; returns { checkoutUrl: null }.
    * For hosted providers (Stripe, Helcim): returns { checkoutUrl: "https://..." }
@@ -129,7 +129,9 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
    *   The subscription becomes active once the provider fires a webhook.
    *
    * Body:
-   *   billingCycle        "monthly" | "yearly"  required
+   *   targetPlan          "pro" | "teams"        optional (defaults to "pro")
+   *   seats               number                 required when targetPlan="teams"
+   *   billingCycle        "monthly" | "yearly"   required
    *   billingEmail        string                 required
    *   billingPaymentBrand string                 optional (manual provider only)
    *   billingPaymentLast4 string (4 digits)      optional (manual provider only)
@@ -142,6 +144,8 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
 
     const body = await c.req.json<{
+      targetPlan?: 'pro' | 'teams';
+      seats?: number;
       billingCycle: TenantBillingCycle;
       billingEmail: string;
       billingPaymentBrand?: string;
@@ -154,8 +158,16 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       return c.json({ error: 'billingCycle and billingEmail are required' }, 400);
     }
 
+    const targetPlan = body.targetPlan === 'teams' ? TenantPlan.TEAMS : TenantPlan.PRO;
+
+    if (targetPlan === TenantPlan.TEAMS && (!body.seats || body.seats < 1)) {
+      return c.json({ error: 'seats (≥1) is required for the Teams plan' }, 400);
+    }
+
     const appUrl = c.env.APP_URL ?? 'https://builderforce.ai';
     const result = await tenantService.createCheckoutSession(tenantId, {
+      targetPlan,
+      seats: body.seats,
       billingCycle: body.billingCycle,
       billingEmail: body.billingEmail,
       billingPaymentBrand: body.billingPaymentBrand,

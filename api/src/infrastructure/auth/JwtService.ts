@@ -8,6 +8,7 @@ export interface JwtPayload {
   sub:  string;       // userId
   tid:  number;       // tenantId
   role: TenantRole;
+  sv?:  number;       // session_version — for fast force-logout without a blocklist
   jti?: string;
   sid?: string;
   iat:  number;
@@ -177,4 +178,73 @@ export function decodeJwtPayload<T = Record<string, unknown>>(token: string): T 
   const parts = token.split('.');
   if (parts.length !== 3) throw new Error('Malformed token');
   return JSON.parse(b64urlToStr(parts[1]!)) as T;
+}
+
+// ---------------------------------------------------------------------------
+// Emulation JWT  (Super Admin impersonation)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extended payload for Super Admin impersonation tokens.
+ * Carries the standard tenant fields plus emulation metadata.
+ * `emu_readonly: true` causes API middleware to reject all mutating verbs.
+ */
+export interface EmulationJwtPayload extends JwtPayload {
+  emu:         true;
+  emu_by:      string;  // superadmin userId who started the session
+  emu_sid:     string;  // adminImpersonationSessions.id
+  emu_readonly: true;
+}
+
+/**
+ * Signs a 1-hour, read-only emulation token for a target user/tenant/role.
+ * The resulting JWT must travel via `X-Emulation-Token`; it is rejected by
+ * all `/api/admin/*` routes and all mutating verbs.
+ */
+export async function signEmulationJwt(
+  payload: {
+    sub:     string;   // target userId
+    tid:     number;   // tenantId
+    role:    TenantRole;
+    emuBy:   string;   // superadmin userId
+    emuSid:  string;   // impersonation session id
+  },
+  secret: string,
+): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const jti = crypto.randomUUID();
+  const full: EmulationJwtPayload = {
+    sub:          payload.sub,
+    tid:          payload.tid,
+    role:         payload.role,
+    emu:          true,
+    emu_by:       payload.emuBy,
+    emu_sid:      payload.emuSid,
+    emu_readonly: true,
+    jti,
+    iat:          now,
+    exp:          now + 3600,  // 1 hour, non-renewable
+  };
+
+  const header = strToB64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const body   = strToB64url(JSON.stringify(full));
+  const input  = `${header}.${body}`;
+
+  const key = await importKey(secret);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(input));
+
+  return `${input}.${b64urlEncode(sig)}`;
+}
+
+/**
+ * Verifies and decodes an emulation JWT.
+ * Throws if invalid, expired, or not an emulation token.
+ */
+export async function verifyEmulationJwt(
+  token: string,
+  secret: string,
+): Promise<EmulationJwtPayload> {
+  const payload = await verifyJwt(token, secret) as EmulationJwtPayload;
+  if (!payload.emu) throw new Error('Not an emulation token');
+  return payload;
 }

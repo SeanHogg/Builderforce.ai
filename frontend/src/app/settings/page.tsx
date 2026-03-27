@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { mySessionsApi, type MySession } from '@/lib/builderforceApi';
+import { mySessionsApi, myAdminAccessApi, type MySession, type MyAdminAccessSession } from '@/lib/builderforceApi';
 import {
   getStoredUser,
   getStoredTenant,
@@ -40,6 +40,8 @@ export default function SettingsPage() {
   const [sessions, setSessions] = useState<MySession[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(true);
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [adminAccessSessions, setAdminAccessSessions] = useState<MyAdminAccessSession[]>([]);
+  const [loadingAdminAccess, setLoadingAdminAccess] = useState(true);
   const [revoking, setRevoking] = useState<string | null>(null);
 
   type LinkedAccount = { provider: string; email: string | null; displayName: string | null };
@@ -55,6 +57,10 @@ export default function SettingsPage() {
       .then(setSessions)
       .catch((e: Error) => setSessionError(e.message))
       .finally(() => setLoadingSessions(false));
+    myAdminAccessApi.list()
+      .then(setAdminAccessSessions)
+      .catch(() => undefined) // non-critical; suppress errors
+      .finally(() => setLoadingAdminAccess(false));
   }, []);
 
   useEffect(() => {
@@ -341,6 +347,79 @@ export default function SettingsPage() {
                 )}
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Recent Admin Access */}
+      <div style={{ ...cardStyle, marginTop: 20 }}>
+        <div style={sectionTitle}>Recent Admin Access</div>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+          These are sessions in which a platform administrator viewed your account. All admin sessions are read-only.
+        </p>
+        {loadingAdminAccess ? (
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</p>
+        ) : adminAccessSessions.length === 0 ? (
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No admin access sessions found.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {adminAccessSessions.map((s) => {
+              const dur = s.endedAt
+                ? Math.floor((new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime()) / 1000)
+                : null;
+              const durStr = dur != null ? `${Math.floor(dur / 60)}m ${dur % 60}s` : 'Active';
+              return (
+                <div
+                  key={s.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    padding: '10px 14px',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 8,
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {s.tenantName}
+                      <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>
+                        as {s.roleOverride}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
+                      {new Date(s.startedAt).toLocaleString()}
+                      {' · '}Duration: {durStr}
+                      {s.writeBlockCount > 0 && (
+                        <span style={{ color: '#f59e0b', marginLeft: 6 }}>({s.writeBlockCount} write attempts blocked)</span>
+                      )}
+                    </div>
+                    {s.reason && (
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontStyle: 'italic' }}>
+                        Reason: {s.reason}
+                      </div>
+                    )}
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      padding: '2px 7px',
+                      borderRadius: 4,
+                      background: s.endedAt ? 'var(--bg-card)' : 'rgba(245,158,11,0.15)',
+                      border: '1px solid',
+                      borderColor: s.endedAt ? 'var(--border-color)' : 'rgba(245,158,11,0.5)',
+                      color: s.endedAt ? 'var(--text-muted)' : '#f59e0b',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {s.endedAt ? 'Ended' : 'Active'}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

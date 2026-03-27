@@ -256,6 +256,101 @@ export interface AdminProjectGovernance {
   updatedAt: string | null;
 }
 
+export interface ImpersonationSession {
+  id: string;
+  adminUserId: string;
+  targetUserId: string;
+  targetEmail: string;
+  targetDisplayName: string | null;
+  tenantId: number;
+  tenantName: string;
+  roleOverride: string;
+  reason: string;
+  tokenJti: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  expiresAt: string;
+  endReason: string | null;
+  pagesVisited: string[];
+  writeBlockCount: number;
+  debuggerEnabled: boolean;
+}
+
+export interface ImpersonationStartResult {
+  session: ImpersonationSession;
+  emulationToken: string;
+}
+
+export interface ImpersonationRoleSwitch {
+  id: string;
+  sessionId: string;
+  fromRole: string;
+  toRole: string;
+  switchedAt: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  event: string;
+  actorId: string | null;
+  actorEmail: string | null;
+  targetUserId: string | null;
+  targetEmail: string | null;
+  tenantId: number | null;
+  tenantName: string | null;
+  metadata: Record<string, unknown>;
+  ipAddress: string | null;
+  createdAt: string;
+}
+
+export interface PermissionRegistryEntry {
+  permission: string;
+  description?: string | null;
+}
+
+export interface PermissionMatrix {
+  roles: string[];
+  permissions: string[];
+  matrix: Record<string, string[]>;
+  overrides: Array<{
+    tenantId: number | null;
+    role: string;
+    permission: string;
+    granted: boolean;
+  }>;
+}
+
+export interface PlatformModule {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  defaultEnabled: boolean;
+  permissions: string[];
+  createdAt: string;
+}
+
+export interface TenantMember {
+  id: string;
+  email: string;
+  username: string | null;
+  displayName: string | null;
+  role: string;
+  isActive: boolean;
+  joinedAt: string;
+}
+
+export interface EffectivePermissions {
+  userId: string;
+  tenantId: number;
+  role: string;
+  permissions: string[];
+  rolePermissions: string[];
+  modulePermissions: string[];
+  userGrants: string[];
+  userRevocations: string[];
+}
+
 // ---------------------------------------------------------------------------
 // Request helper — uses Web token only
 // ---------------------------------------------------------------------------
@@ -300,6 +395,11 @@ export const adminApi = {
   async tenants(): Promise<AdminTenant[]> {
     const res = await adminRequest<{ tenants: AdminTenant[] }>('/api/admin/tenants');
     return res.tenants;
+  },
+
+  async tenantMembers(tenantId: number): Promise<TenantMember[]> {
+    const res = await adminRequest<{ members: TenantMember[] }>(`/api/admin/tenants/${tenantId}/members`);
+    return res.members;
   },
 
   async health(): Promise<AdminHealth> {
@@ -560,5 +660,221 @@ export const adminApi = {
       method: 'PATCH',
       body: JSON.stringify({ governance }),
     });
+  },
+
+  // Impersonation
+  async impersonationStart(
+    userId: string,
+    tenantId: number,
+    roleOverride: string,
+    reason: string,
+    debuggerEnabled = false,
+  ): Promise<ImpersonationStartResult> {
+    return adminRequest('/api/admin/impersonation/start', {
+      method: 'POST',
+      body: JSON.stringify({ userId, tenantId, roleOverride, reason, debuggerEnabled }),
+    });
+  },
+
+  async impersonationEnd(sessionId: string): Promise<void> {
+    return adminRequest(`/api/admin/impersonation/${encodeURIComponent(sessionId)}/end`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
+  async impersonationSwitchRole(
+    sessionId: string,
+    newRole: string,
+  ): Promise<{ emulationToken: string; session: ImpersonationSession }> {
+    return adminRequest(`/api/admin/impersonation/${encodeURIComponent(sessionId)}/switch-role`, {
+      method: 'POST',
+      body: JSON.stringify({ newRole }),
+    });
+  },
+
+  async impersonationActive(): Promise<ImpersonationSession | null> {
+    const res = await adminRequest<{ session: ImpersonationSession | null }>('/api/admin/impersonation/active');
+    return res.session;
+  },
+
+  async impersonationList(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<{ sessions: ImpersonationSession[]; total: number }> {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set('limit', String(params.limit));
+    if (params?.offset) q.set('offset', String(params.offset));
+    const suffix = q.toString();
+    return adminRequest(`/api/admin/impersonation${suffix ? `?${suffix}` : ''}`);
+  },
+
+  async impersonationDetail(sessionId: string): Promise<{
+    session: ImpersonationSession;
+    roleSwitches: ImpersonationRoleSwitch[];
+  }> {
+    return adminRequest(`/api/admin/impersonation/${encodeURIComponent(sessionId)}`);
+  },
+
+  // Permissions
+  async permissionsRegistry(): Promise<PermissionRegistryEntry[]> {
+    const res = await adminRequest<{ permissions: PermissionRegistryEntry[] }>('/api/admin/permissions');
+    return res.permissions;
+  },
+
+  async permissionsMatrix(): Promise<PermissionMatrix> {
+    return adminRequest<PermissionMatrix>('/api/admin/permissions/matrix');
+  },
+
+  async updateRolePermissions(
+    role: string,
+    overrides: Array<{ permission: string; granted: boolean }>,
+    tenantId?: number,
+  ): Promise<void> {
+    await adminRequest(`/api/admin/permissions/roles/${encodeURIComponent(role)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ overrides, tenantId }),
+    });
+  },
+
+  async permissionsMatrixExport(): Promise<string> {
+    const webToken = getStoredWebToken();
+    if (!webToken) throw new Error('Not authenticated.');
+    const res = await fetch(`${getApiBaseUrl()}/api/admin/permissions/matrix/export`, {
+      headers: { Authorization: `Bearer ${webToken}` },
+    });
+    if (!res.ok) throw new Error(`Export failed (${res.status})`);
+    return res.text();
+  },
+
+  // Modules
+  async modules(): Promise<PlatformModule[]> {
+    const res = await adminRequest<{ modules: PlatformModule[] }>('/api/admin/modules');
+    return res.modules;
+  },
+
+  async createModule(data: {
+    name: string;
+    slug?: string;
+    description?: string | null;
+    defaultEnabled?: boolean;
+    permissions?: string[];
+  }): Promise<{ module: PlatformModule }> {
+    return adminRequest('/api/admin/modules', { method: 'POST', body: JSON.stringify(data) });
+  },
+
+  async updateModule(
+    id: number,
+    data: Partial<Pick<PlatformModule, 'name' | 'description' | 'defaultEnabled' | 'permissions'>>,
+  ): Promise<{ module: PlatformModule }> {
+    return adminRequest(`/api/admin/modules/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+  },
+
+  async deleteModule(id: number): Promise<void> {
+    await adminRequest(`/api/admin/modules/${id}`, { method: 'DELETE' });
+  },
+
+  async assignMemberModule(tenantId: number, userId: string, moduleId: number): Promise<void> {
+    await adminRequest(
+      `/api/admin/tenants/${tenantId}/members/${encodeURIComponent(userId)}/modules`,
+      { method: 'POST', body: JSON.stringify({ moduleId }) },
+    );
+  },
+
+  async removeMemberModule(tenantId: number, userId: string, moduleId: number): Promise<void> {
+    await adminRequest(
+      `/api/admin/tenants/${tenantId}/members/${encodeURIComponent(userId)}/modules/${moduleId}`,
+      { method: 'DELETE' },
+    );
+  },
+
+  // User management
+  async forceLogout(userId: string): Promise<void> {
+    await adminRequest(`/api/admin/users/${encodeURIComponent(userId)}/force-logout`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
+  async resetPassword(userId: string): Promise<void> {
+    await adminRequest(`/api/admin/users/${encodeURIComponent(userId)}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
+  async setUserStatus(userId: string, suspended: boolean): Promise<void> {
+    await adminRequest(`/api/admin/users/${encodeURIComponent(userId)}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ suspended }),
+    });
+  },
+
+  async updateUserPermissions(
+    userId: string,
+    data: { grants: string[]; revocations: string[]; tenantId?: number },
+  ): Promise<void> {
+    await adminRequest(`/api/admin/users/${encodeURIComponent(userId)}/permissions`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async overrideMemberRole(tenantId: number, userId: string, role: string): Promise<void> {
+    await adminRequest(
+      `/api/admin/tenants/${tenantId}/members/${encodeURIComponent(userId)}/role`,
+      { method: 'PATCH', body: JSON.stringify({ role }) },
+    );
+  },
+
+  async effectivePermissions(userId: string, tenantId: number): Promise<EffectivePermissions> {
+    return adminRequest<EffectivePermissions>(
+      `/api/admin/users/${encodeURIComponent(userId)}/effective-permissions?tenantId=${tenantId}`,
+    );
+  },
+
+  async userAdminAccess(userId: string): Promise<{ sessions: ImpersonationSession[] }> {
+    return adminRequest(`/api/admin/users/${encodeURIComponent(userId)}/admin-access`);
+  },
+
+  async auditLog(params?: {
+    event?: string;
+    actorId?: string;
+    targetUserId?: string;
+    tenantId?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ entries: AuditLogEntry[]; total: number }> {
+    const q = new URLSearchParams();
+    if (params?.event) q.set('event', params.event);
+    if (params?.actorId) q.set('actorId', params.actorId);
+    if (params?.targetUserId) q.set('targetUserId', params.targetUserId);
+    if (params?.tenantId) q.set('tenantId', String(params.tenantId));
+    if (params?.limit) q.set('limit', String(params.limit));
+    if (params?.offset) q.set('offset', String(params.offset));
+    const suffix = q.toString();
+    return adminRequest(`/api/admin/audit-log${suffix ? `?${suffix}` : ''}`);
+  },
+
+  async auditLogExport(params?: {
+    event?: string;
+    actorId?: string;
+    targetUserId?: string;
+    tenantId?: number;
+  }): Promise<string> {
+    const webToken = getStoredWebToken();
+    if (!webToken) throw new Error('Not authenticated.');
+    const q = new URLSearchParams();
+    if (params?.event) q.set('event', params.event);
+    if (params?.actorId) q.set('actorId', params.actorId);
+    if (params?.targetUserId) q.set('targetUserId', params.targetUserId);
+    if (params?.tenantId) q.set('tenantId', String(params.tenantId));
+    const suffix = q.toString();
+    const res = await fetch(
+      `${getApiBaseUrl()}/api/admin/audit-log/export${suffix ? `?${suffix}` : ''}`,
+      { headers: { Authorization: `Bearer ${webToken}` } },
+    );
+    if (!res.ok) throw new Error(`Audit log export failed (${res.status})`);
+    return res.text();
   },
 };
