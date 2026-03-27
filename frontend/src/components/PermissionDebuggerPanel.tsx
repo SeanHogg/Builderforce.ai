@@ -13,6 +13,17 @@ export default function PermissionDebuggerPanel() {
   const { previewRole } = useRolePreview();
   const [panelTab, setPanelTab] = useState<PanelTab>('page');
 
+  // useMemo must be called unconditionally before any early return (rules-of-hooks).
+  const roleGrouped = useMemo(() => {
+    const map = new Map<string, PermissionRegistration & { count: number }>();
+    for (const g of gates) {
+      const existing = map.get(g.permission);
+      if (existing) { existing.count++; }
+      else map.set(g.permission, { ...g, count: 1 });
+    }
+    return [...map.values()].sort((a, b) => a.permission.localeCompare(b.permission));
+  }, [gates]);
+
   if (!debuggerActive) return null;
 
   const activeRole = emulation?.role ?? previewRole ?? 'viewer';
@@ -28,17 +39,6 @@ export default function PermissionDebuggerPanel() {
   };
 
   const displayed = tabGates[panelTab];
-
-  // Unique permissions for the "role" tab — grouped by permission key
-  const roleGrouped = useMemo(() => {
-    const map = new Map<string, PermissionRegistration & { count: number }>();
-    for (const g of gates) {
-      const existing = map.get(g.permission);
-      if (existing) { existing.count++; }
-      else map.set(g.permission, { ...g, count: 1 });
-    }
-    return [...map.values()].sort((a, b) => a.permission.localeCompare(b.permission));
-  }, [gates]);
 
   function copyAll() {
     const json = JSON.stringify(

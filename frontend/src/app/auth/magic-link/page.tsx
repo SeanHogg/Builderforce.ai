@@ -34,7 +34,7 @@ export default function MagicLinkVerifyPage() {
         );
         setStatus('error');
       });
-  }, [searchParams]);
+  }, [searchParams, token]);
 
   if (status === 'error') {
     return (

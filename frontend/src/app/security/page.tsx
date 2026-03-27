@@ -34,6 +34,7 @@ export default function SecurityPage() {
       .finally(() => setLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [tenantId]);
 
   const toggleUser = async (userId: string) => {

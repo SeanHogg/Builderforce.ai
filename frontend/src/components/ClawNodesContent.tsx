@@ -30,6 +30,7 @@ export function ClawNodesContent({ clawId }: ClawNodesContentProps) {
       .finally(() => setLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [clawId]);
 
   const handleUnpair = async (node: ClawNode) => {

@@ -219,7 +219,7 @@ export function ChatInput({
     };
     r.start();
     setRecording(true);
-  }, [onChange, value]);
+  }, [onChange]);
 
   const stopVoice = useCallback(() => {
     if (recognitionRef.current) {
