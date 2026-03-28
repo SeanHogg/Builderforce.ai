@@ -118,13 +118,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
 
-        {/* Fontshare — Clash Display (headings) + Satoshi (body) */}
-        <link rel="preconnect" href="https://api.fontshare.com" />
-        <link rel="preconnect" href="https://cdn.fontshare.com" crossOrigin="" />
-        <link
-          href="https://api.fontshare.com/v2/css?f[]=clash-display@700,600,500&f[]=satoshi@400,500,700&display=swap"
-          rel="stylesheet"
-        />
+        {/* Fontshare loaded via CSS @import in globals.css — no <link> needed here */}
         {/* JetBrains Mono loaded via next/font/google (see jetbrainsMono variable above) — no <link> needed */}
         {/* JSON-LD Structured Data (SEO) */}
         <script
