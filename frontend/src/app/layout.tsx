@@ -1,6 +1,15 @@
 import type { Metadata } from 'next';
+import Script from 'next/script';
+import { JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/AuthContext';
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-jetbrains-mono',
+  display: 'swap',
+});
 import { EmulationProvider } from '@/lib/EmulationContext';
 import { RolePreviewProvider } from '@/lib/RolePreviewContext';
 import { PermissionDebuggerProvider } from '@/lib/PermissionDebuggerContext';
@@ -85,10 +94,12 @@ export const viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning>
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={jetbrainsMono.variable}>
       <head>
-        {/* Google Tag Manager */}
-        <script
+        {/* Google Tag Manager — uses next/script so Next.js can manage loading strategy */}
+        <Script
+          id="gtm"
+          strategy="afterInteractive"
           dangerouslySetInnerHTML={{
             __html: `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','GTM-5Q488PKG');`,
           }}
@@ -114,13 +125,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://api.fontshare.com/v2/css?f[]=clash-display@700,600,500&f[]=satoshi@400,500,700&display=swap"
           rel="stylesheet"
         />
-        {/* Task 8: JetBrains Mono — used by Monaco editor and xterm.js terminal */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap"
-          rel="stylesheet"
-        />
+        {/* JetBrains Mono loaded via next/font/google (see jetbrainsMono variable above) — no <link> needed */}
         {/* JSON-LD Structured Data (SEO) */}
         <script
           type="application/ld+json"

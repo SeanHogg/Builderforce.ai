@@ -4,6 +4,7 @@ export const runtime = 'edge';
 
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -95,8 +96,8 @@ export default function ContentDetailPage() {
       </div>
 
       {block.image && (
-        <div style={{ width: '100%', maxHeight: 240, borderRadius: 8, overflow: 'hidden', marginBottom: 24 }}>
-          <img src={block.image} alt="" style={{ width: '100%', height: 'auto', objectFit: 'cover' }} />
+        <div style={{ width: '100%', height: 240, borderRadius: 8, overflow: 'hidden', marginBottom: 24, position: 'relative' }}>
+          <Image src={block.image} alt="" fill style={{ objectFit: 'cover' }} />
         </div>
       )}
 
