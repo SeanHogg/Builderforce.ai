@@ -149,10 +149,12 @@ export const users = pgTable('users', {
   mfaEnabledAt:  timestamp('mfa_enabled_at'),
   mfaRecoveryGeneratedAt: timestamp('mfa_recovery_generated_at'),
   mfaLastVerifiedAt: timestamp('mfa_last_verified_at'),
-  isSuperadmin:   boolean('is_superadmin').notNull().default(false),
-  sessionVersion: integer('session_version').notNull().default(0),
-  createdAt:      timestamp('created_at').notNull().defaultNow(),
-  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+  isSuperadmin:           boolean('is_superadmin').notNull().default(false),
+  sessionVersion:         integer('session_version').notNull().default(0),
+  onboardingCompletedAt:  timestamp('onboarding_completed_at'),
+  userIntent:             text('user_intent'), // JSON array of intent strings, set during onboarding
+  createdAt:              timestamp('created_at').notNull().defaultNow(),
+  updatedAt:              timestamp('updated_at').notNull().defaultNow(),
 });
 
 export const newsletterSubscribers = pgTable('newsletter_subscribers', {

@@ -2398,6 +2398,33 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     });
   });
 
+  // GET /api/admin/users/:id/workspaces — workspace memberships for a user (tenantId, name, slug, role)
+  router.get('/users/:id/workspaces', async (c) => {
+    const db = buildDatabase(c.env);
+    const targetId = c.req.param('id');
+    const rows = await db
+      .select({
+        tenantId: tenantMembers.tenantId,
+        name: tenants.name,
+        slug: tenants.slug,
+        role: tenantMembers.role,
+        joinedAt: tenantMembers.joinedAt,
+      })
+      .from(tenantMembers)
+      .innerJoin(tenants, eq(tenants.id, tenantMembers.tenantId))
+      .where(and(eq(tenantMembers.userId, targetId), eq(tenantMembers.isActive, true)))
+      .orderBy(tenantMembers.joinedAt);
+    return c.json({
+      workspaces: rows.map((r) => ({
+        tenantId: r.tenantId,
+        name: r.name,
+        slug: r.slug,
+        role: r.role,
+        joinedAt: r.joinedAt instanceof Date ? r.joinedAt.toISOString() : (r.joinedAt ?? null),
+      })),
+    });
+  });
+
   // GET /api/admin/users/:id/admin-access — impersonation sessions targeting this user (for target transparency)
   router.get('/users/:id/admin-access', async (c) => {
     const db = buildDatabase(c.env);

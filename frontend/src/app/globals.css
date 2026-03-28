@@ -686,6 +686,60 @@ html[data-theme='light'] .nebula {
   color: var(--text);
 }
 
+/* Topbar turns blue when a role preview is active */
+.topbar--role-preview {
+  background: linear-gradient(90deg, #1d4ed8 0%, #2563eb 100%);
+  border-bottom-color: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.topbar--role-preview .brand-name,
+.topbar--role-preview .brand-badge {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.topbar--role-preview .brand-badge {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.topbar--role-preview .tenant-chip {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+.topbar--role-preview .topbar-role-preview__badge {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #fff;
+}
+
+.topbar--role-preview .topbar-role-preview__select {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #fff;
+}
+
+.topbar--role-preview .topbar-role-preview__exit {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.topbar--role-preview .topbar-role-preview__exit:hover {
+  color: #fff;
+}
+
+.topbar-preview-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.92);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -1524,54 +1578,6 @@ html[data-theme='light'] .nebula {
    ========================================================================= */
 
 /* Role preview bar (blue) — shown when superadmin previews a role */
-.role-preview-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 9998; /* just below emulation bar */
-  height: 32px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 16px;
-  background: linear-gradient(90deg, #1d4ed8 0%, #2563eb 100%);
-  color: #fff;
-  font-size: 12px;
-}
-
-.role-preview-bar__icon {
-  font-size: 14px;
-  flex-shrink: 0;
-}
-
-.role-preview-bar__info {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.role-preview-bar__btn {
-  background: rgba(255, 255, 255, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  border-radius: 4px;
-  color: #fff;
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 10px;
-  flex-shrink: 0;
-}
-
-.role-preview-bar__btn:hover {
-  background: rgba(255, 255, 255, 0.28);
-}
-
-/* Shell offset when role preview bar is active */
-.shell.role-preview-active {
-  padding-top: 32px;
-}
 
 .emulation-bar {
   position: fixed;

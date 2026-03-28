@@ -330,6 +330,14 @@ export interface PlatformModule {
   createdAt: string;
 }
 
+export interface UserWorkspace {
+  tenantId: number;
+  name: string;
+  slug: string;
+  role: string;
+  joinedAt: string | null;
+}
+
 export interface TenantMember {
   id: string;
   email: string;
@@ -662,17 +670,21 @@ export const adminApi = {
     });
   },
 
+  async userWorkspaces(userId: string): Promise<UserWorkspace[]> {
+    const res = await adminRequest<{ workspaces: UserWorkspace[] }>(`/api/admin/users/${encodeURIComponent(userId)}/workspaces`);
+    return res.workspaces;
+  },
+
   // Impersonation
   async impersonationStart(
     userId: string,
     tenantId: number,
-    roleOverride: string,
     reason: string,
     debuggerEnabled = false,
   ): Promise<ImpersonationStartResult> {
     return adminRequest('/api/admin/impersonation/start', {
       method: 'POST',
-      body: JSON.stringify({ userId, tenantId, roleOverride, reason, debuggerEnabled }),
+      body: JSON.stringify({ userId, tenantId, reason, debuggerEnabled }),
     });
   },
 
