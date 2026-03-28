@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { AUTH_API_URL, persistSession } from '@/lib/auth';
+import { AUTH_API_URL, persistSession, resolveAndSelectTenant } from '@/lib/auth';
 import type { AuthUser } from '@/lib/types';
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -42,8 +42,9 @@ export default function OAuthCallbackPage() {
         if (!res.ok) throw new Error('Failed to load profile');
         return res.json() as Promise<AuthUser>;
       })
-      .then((user) => {
+      .then(async (user) => {
         persistSession(token, user);
+        await resolveAndSelectTenant(token);
         window.location.href = redirect;
       })
       .catch(() => {

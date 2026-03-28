@@ -5,28 +5,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
-import { getStoredWebToken, getMyTenants, getTenantToken, persistTenantSession, getDefaultTenantId, getOAuthUrl, requestMagicLink } from '@/lib/auth';
-import type { Tenant } from '@/lib/types';
+import { getStoredWebToken, resolveAndSelectTenant, getOAuthUrl, requestMagicLink } from '@/lib/auth';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
-
-/** getMyTenants now returns Tenant[] directly; kept for backward compat if raw API used. */
-function tenantsFromResponse(data: unknown): Tenant[] {
-  if (Array.isArray(data)) {
-    return data.map((t: { id?: unknown; name?: string; slug?: string }) => ({
-      id: String(t.id),
-      name: t.name ?? '',
-      slug: t.slug,
-    }));
-  }
-  type TenantItem = { id?: unknown; name?: string; slug?: string };
-  const arr = (data as { tenants?: TenantItem[] })?.tenants;
-  if (!Array.isArray(arr)) return [];
-  return arr.map((t: TenantItem) => ({
-    id: String(t.id),
-    name: t.name ?? '',
-    slug: t.slug,
-  }));
-}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -43,10 +23,18 @@ export default function LoginPage() {
   // Redirect when already authenticated (e.g. landed on /login with valid session).
   // Do NOT redirect during form submission — handleSubmit does tenant resolution and redirect.
   useEffect(() => {
-    if (isAuthenticated && !isLoading) {
-      const next = searchParams.get('next') || (hasTenant ? '/dashboard' : '/tenants');
+    if (!isAuthenticated || isLoading) return;
+    const next = searchParams.get('next') || '/dashboard';
+    if (hasTenant) {
       router.replace(next);
+      return;
     }
+    // No tenant selected yet — try to auto-select before sending to /tenants
+    const token = getStoredWebToken();
+    if (!token) { router.replace('/tenants'); return; }
+    resolveAndSelectTenant(token).then((selected) => {
+      router.replace(selected ? next : '/tenants');
+    });
   }, [isAuthenticated, hasTenant, isLoading, router, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -57,32 +45,13 @@ export default function LoginPage() {
       await login(email, password);
       const next = searchParams.get('next') || '/dashboard';
       const token = getStoredWebToken();
-      if (!token) {
-        router.push(hasTenant ? next : '/tenants' + (next !== '/dashboard' ? `?next=${encodeURIComponent(next)}` : ''));
-        return;
-      }
-      const raw = await getMyTenants(token);
-      const tenants = tenantsFromResponse(raw);
-      if (tenants.length === 1) {
-        const res = await getTenantToken(token, tenants[0].id);
-        persistTenantSession(res.token, tenants[0]);
+      if (!token) { router.push('/tenants'); return; }
+      const selected = await resolveAndSelectTenant(token);
+      if (selected) {
         window.location.href = next;
-        return;
-      }
-      if (tenants.length === 0) {
+      } else {
         router.push('/tenants' + (next !== '/dashboard' ? `?next=${encodeURIComponent(next)}` : ''));
-        return;
       }
-      // 2+ tenants: check for default tenant and auto-select if it matches
-      const defaultId = getDefaultTenantId();
-      const defaultTenant = defaultId ? tenants.find((t) => String(t.id) === defaultId) : null;
-      if (defaultTenant) {
-        const res = await getTenantToken(token, defaultTenant.id);
-        persistTenantSession(res.token, defaultTenant);
-        window.location.href = next;
-        return;
-      }
-      router.push('/tenants' + (next !== '/dashboard' ? `?next=${encodeURIComponent(next)}` : ''));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {

@@ -15,6 +15,8 @@ export interface Tenant {
   id: string;
   name: string;
   slug?: string;
+  /** The authenticated user's role in this workspace (from the tenant JWT claim). */
+  role?: string;
 }
 
 export interface AuthState {
