@@ -50,9 +50,17 @@ export default function DashboardPage() {
     // No redirect to /tenants here — the onboarding stepper handles workspace creation
   }, [isAuthenticated, router]);
 
-  // Check onboarding status once we have a web token
+  // Check onboarding status once we have a web token.
+  // Only owners go through onboarding — invited members skip it entirely.
   useEffect(() => {
     if (!isAuthenticated || !webToken || onboardingChecked) return;
+
+    // If the user has a workspace selected and they're not an owner in it, skip onboarding.
+    if (hasTenant && tenant?.role && tenant.role !== 'owner') {
+      setOnboardingChecked(true);
+      return;
+    }
+
     const dismissed = typeof window !== 'undefined' && localStorage.getItem(ONBOARDING_DISMISSED_KEY) === '1';
     if (dismissed) {
       setOnboardingChecked(true);
@@ -68,7 +76,7 @@ export default function DashboardPage() {
         // If the check fails, don't block the user — just skip onboarding
       })
       .finally(() => setOnboardingChecked(true));
-  }, [isAuthenticated, webToken, onboardingChecked]);
+  }, [isAuthenticated, webToken, onboardingChecked, hasTenant, tenant]);
 
   const handleOnboardingWorkspaceCreated = useCallback(
     async (newTenant: Tenant) => {

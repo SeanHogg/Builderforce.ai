@@ -218,13 +218,14 @@ export async function getMyTenants(webToken: string): Promise<Tenant[]> {
     const body = await res.json().catch(() => ({})) as { message?: string };
     throw new Error(body.message ?? 'Failed to fetch tenants');
   }
-  const data = await res.json() as { tenants?: Array<{ id?: unknown; name?: string; slug?: string }> };
+  const data = await res.json() as { tenants?: Array<{ id?: unknown; name?: string; slug?: string; role?: string }> };
   const arr = Array.isArray(data) ? data : data?.tenants;
   if (!Array.isArray(arr)) return [];
   return arr.map((t) => ({
     id: String(t.id ?? ''),
     name: t.name ?? '',
     slug: t.slug,
+    role: t.role,
   }));
 }
 
@@ -323,6 +324,40 @@ export async function addPassword(webToken: string, password: string): Promise<v
   }
 }
 
+/**
+ * Fetch the user's tenants, auto-select one if unambiguous (single workspace or default set),
+ * persist the tenant session, and return the selected tenant — or null if the user must pick.
+ *
+ * Call this after any auth event that gives you a fresh webToken (OAuth callback, magic link, etc.).
+ */
+export async function resolveAndSelectTenant(webToken: string): Promise<Tenant | null> {
+  let tenants: Tenant[];
+  try {
+    tenants = await getMyTenants(webToken);
+  } catch {
+    return null;
+  }
+
+  let target: Tenant | null = null;
+
+  if (tenants.length === 1) {
+    target = tenants[0];
+  } else if (tenants.length > 1) {
+    const defaultId = getDefaultTenantId();
+    target = defaultId ? (tenants.find((t) => String(t.id) === defaultId) ?? null) : null;
+  }
+
+  if (!target) return null;
+
+  try {
+    const res = await getTenantToken(webToken, target.id);
+    persistTenantSession(res.token, target);
+    return target;
+  } catch {
+    return null;
+  }
+}
+
 /** Fetch the current user profile, including onboarding status. */
 export async function getMe(webToken: string): Promise<{ onboardingCompletedAt: string | null }> {
   const res = await fetch(`${AUTH_API_URL}/api/auth/me`, {
@@ -378,5 +413,6 @@ export async function createTenant(webToken: string, name: string): Promise<Tena
     throw new Error(body.message ?? body.error ?? 'Failed to create workspace');
   }
   const data = await res.json() as { id: number; name: string; slug?: string };
-  return { id: String(data.id), name: data.name, slug: data.slug };
+  // Creator is always the owner of a newly created workspace
+  return { id: String(data.id), name: data.name, slug: data.slug, role: 'owner' };
 }

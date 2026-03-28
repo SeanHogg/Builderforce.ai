@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
-import { AUTH_API_URL, persistSession } from '@/lib/auth';
+import { AUTH_API_URL, persistSession, resolveAndSelectTenant } from '@/lib/auth';
 import type { AuthUser } from '@/lib/types';
 
 export default function MagicLinkVerifyPage() {
@@ -26,6 +26,7 @@ export default function MagicLinkVerifyPage() {
           throw new Error(data.error ?? 'Invalid or expired magic link.');
         }
         persistSession(data.token, data.user);
+        await resolveAndSelectTenant(data.token);
         window.location.href = data.redirect || '/dashboard';
       })
       .catch((err: unknown) => {
