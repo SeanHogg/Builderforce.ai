@@ -1,3 +1,8 @@
+/* Fontshare — Clash Display (headings) + Satoshi (body).
+   Loaded via CSS @import rather than a <link> in <head> to satisfy
+   the @next/next/no-page-custom-font rule. */
+@import url('https://api.fontshare.com/v2/css?f[]=clash-display@700,600,500&f[]=satoshi@400,500,700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -5,7 +10,6 @@
 /* ============================================================
    CoderClaw / Builderforce design tokens
    Deep space dark · Blue spectrum · Bioluminescent cyan
-   Fonts loaded via <link> in layout.tsx <head>
    ============================================================ */
 
 :root {
