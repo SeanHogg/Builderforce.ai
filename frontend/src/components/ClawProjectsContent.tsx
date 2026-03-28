@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { clawProjectsApi, type ClawProject } from '@/lib/builderforceApi';
 import { fetchProjects } from '@/lib/api';
 import Link from 'next/link';
@@ -32,7 +32,7 @@ export function ClawProjectsContent({ clawId }: ClawProjectsContentProps) {
   const [selectedProjectId, setSelectedProjectId] = useState<number | ''>('');
   const [assigning, setAssigning] = useState(false);
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     setError(null);
     clawProjectsApi
@@ -40,15 +40,14 @@ export function ClawProjectsContent({ clawId }: ClawProjectsContentProps) {
       .then(setAssociations)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-  };
+  }, [clawId]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     load();
     fetchProjects()
       .then((projects) => setAllProjects(projects.map((p) => ({ id: p.id, name: p.name }))))
       .catch(() => {});
-  }, [clawId]);
+  }, [load]);
 
   const handleAssign = async () => {
     if (!selectedProjectId) return;
