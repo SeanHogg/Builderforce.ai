@@ -3,6 +3,7 @@ import Script from 'next/script';
 import { JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/AuthContext';
+import { CartProvider } from '@/lib/CartContext';
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
@@ -233,13 +234,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider />
 
         <AuthProvider>
-          <EmulationProvider>
-            <RolePreviewProvider>
-              <PermissionDebuggerProvider>
-                <ConditionalAppShell>{children}</ConditionalAppShell>
-              </PermissionDebuggerProvider>
-            </RolePreviewProvider>
-          </EmulationProvider>
+          <CartProvider>
+            <EmulationProvider>
+              <RolePreviewProvider>
+                <PermissionDebuggerProvider>
+                  <ConditionalAppShell>{children}</ConditionalAppShell>
+                </PermissionDebuggerProvider>
+              </RolePreviewProvider>
+            </EmulationProvider>
+          </CartProvider>
         </AuthProvider>
 
         <PwaUpdateBanner />

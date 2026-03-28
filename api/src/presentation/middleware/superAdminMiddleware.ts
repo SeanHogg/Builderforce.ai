@@ -34,7 +34,7 @@ export const superAdminMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) 
   }
 
   // Reject emulation tokens — impersonation must never grant admin access
-  if ((payload as Record<string, unknown>).emu === true) {
+  if ((payload as unknown as Record<string, unknown>).emu === true) {
     throw new ForbiddenError('Emulation tokens cannot be used for superadmin routes');
   }
 

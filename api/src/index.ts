@@ -71,6 +71,7 @@ import { createGitHubWebhookRoutes }   from './presentation/routes/githubWebhook
 import { createCostForecastRoutes }    from './presentation/routes/costForecastRoutes';
 import { createDashboardRoutes }       from './presentation/routes/dashboardRoutes';
 import { createTeamMemoryRoutes }      from './presentation/routes/teamMemoryRoutes';
+import { createPublicApiRoutes }       from './presentation/routes/publicApiRoutes';
 
 import { API_VERSION } from './version';
 import {
@@ -183,6 +184,9 @@ function buildApp(env: Env): Hono<HonoEnv> {
 
   // Marketplace (no JWT required for read, required for write)
   app.route('/marketplace', createMarketplaceRoutes(db));
+
+  // Public Developer API (Bearer <developer_api_key> for read-only; tenant JWT for key management)
+  app.route('/api/v1', createPublicApiRoutes(db));
 
   // Payment webhooks — raw body required, no JWT, mounted before any body parsers
   app.route('/api/webhooks', createWebhookRoutes(tenantService, paymentProvider));

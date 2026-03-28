@@ -61,6 +61,8 @@ import {
   normalizeRecoveryCode,
   verifyTotpCode,
 } from '../../infrastructure/auth/MfaService';
+import { magicLinkTokens } from '../../infrastructure/database/schema';
+import { sendAdminPasswordResetEmail } from '../../infrastructure/email/EmailService';
 
 type LegalDocResponse = {
   documentType: 'terms' | 'privacy';
@@ -2051,9 +2053,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         });
     }
 
-    await writeAudit(db, {
-      event: 'ROLE_PERMISSION_CHANGED',
-      actorId,
+    await writeAudit(db, 'ROLE_PERMISSION_CHANGED', actorId, {
       metadata: { role, overrides: body.overrides },
       ipAddress: c.req.header('CF-Connecting-IP') ?? null,
     });
@@ -2072,7 +2072,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       const cols = roles.map((role) => {
         const roleOverrides = overrides.filter((o) => o.role === role);
         const perms = resolveRolePermissions(role, roleOverrides);
-        return perms.includes(perm as string) ? '1' : '0';
+        return (perms as string[]).includes(perm as string) ? '1' : '0';
       });
       return [perm, ...cols].join(',');
     });
@@ -2128,7 +2128,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         createdBy: actorId,
       })
       .returning();
-    await writeAudit(db, { event: 'MODULE_ASSIGNED', actorId, metadata: { moduleId: mod!.id, name: mod!.name } });
+    await writeAudit(db, 'MODULE_ASSIGNED', actorId, { metadata: { moduleId: mod!.id, name: mod!.name } });
     return c.json({ module: { ...mod, permissions: JSON.parse(mod!.permissions ?? '[]') } }, 201);
   });
 
@@ -2162,7 +2162,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (!mod) return c.json({ error: 'Module not found' }, 404);
     if (mod.isBuiltin) return c.json({ error: 'Cannot delete a built-in module' }, 403);
     await db.delete(platformModules).where(eq(platformModules.id, id));
-    await writeAudit(db, { event: 'MODULE_REMOVED', actorId, metadata: { moduleId: id, name: mod.name } });
+    await writeAudit(db, 'MODULE_REMOVED', actorId, { metadata: { moduleId: id, name: mod.name } });
     return c.json({ ok: true });
   });
 
@@ -2177,7 +2177,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await db.insert(tenantMemberModules).values({
       tenantId, userId, moduleId: body.moduleId, grantedBy: actorId,
     }).onConflictDoNothing();
-    await writeAudit(db, { event: 'MODULE_ASSIGNED', actorId, targetUserId: userId, tenantId, metadata: { moduleId: body.moduleId } });
+    await writeAudit(db, 'MODULE_ASSIGNED', actorId, { targetUserId: userId, tenantId, metadata: { moduleId: body.moduleId } });
     return c.json({ ok: true });
   });
 
@@ -2191,7 +2191,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await db.delete(tenantMemberModules).where(
       and(eq(tenantMemberModules.tenantId, tenantId), eq(tenantMemberModules.userId, userId), eq(tenantMemberModules.moduleId, moduleId))
     );
-    await writeAudit(db, { event: 'MODULE_REMOVED', actorId, targetUserId: userId, tenantId, metadata: { moduleId } });
+    await writeAudit(db, 'MODULE_REMOVED', actorId, { targetUserId: userId, tenantId, metadata: { moduleId } });
     return c.json({ ok: true });
   });
 
@@ -2210,9 +2210,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await db.update(authTokens).set({ revokedAt: new Date() }).where(and(eq(authTokens.userId, targetId), isNull(authTokens.revokedAt)));
     // Deactivate all sessions
     await db.update(authUserSessions).set({ isActive: false, revokedAt: new Date() }).where(and(eq(authUserSessions.userId, targetId), eq(authUserSessions.isActive, true)));
-    await writeAudit(db, {
-      event: 'USER_SESSIONS_REVOKED',
-      actorId,
+    await writeAudit(db, 'USER_SESSIONS_REVOKED', actorId, {
       targetUserId: targetId,
       metadata: { method: 'force_logout' },
       ipAddress: c.req.header('CF-Connecting-IP') ?? null,
@@ -2227,10 +2225,29 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const targetId = c.req.param('id');
     const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, targetId)).limit(1);
     if (!user) return c.json({ error: 'User not found' }, 404);
-    // TODO: integrate with email provider (Resend) — for now log the audit event
-    await writeAudit(db, {
-      event: 'USER_PASSWORD_RESET_FORCED',
-      actorId,
+
+    // Generate a 24-hour magic link so the user can sign in and set a new password
+    const token = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+    const frontendBase = (c.env.APP_URL ?? 'https://builderforce.ai').split(',')[0]!.trim();
+
+    await db
+      .update(magicLinkTokens)
+      .set({ used: true })
+      .where(and(eq(magicLinkTokens.email, user.email), eq(magicLinkTokens.used, false)));
+
+    await db.insert(magicLinkTokens).values({
+      email: user.email,
+      token,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+      redirect: '/settings/account',
+    });
+
+    const magicUrl = `${frontendBase}/auth/magic-link?token=${encodeURIComponent(token)}`;
+    void sendAdminPasswordResetEmail(c.env, user.email, magicUrl);
+
+    await writeAudit(db, 'USER_PASSWORD_RESET_FORCED', actorId, {
       targetUserId: targetId,
       metadata: { email: user.email },
       ipAddress: c.req.header('CF-Connecting-IP') ?? null,
@@ -2244,14 +2261,15 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const actorId = c.get('userId') as string;
     const targetId = c.req.param('id');
     const body = await c.req.json<{ suspended: boolean }>();
-    // We don't have a suspended column yet — track via isSuperadmin logic for now
-    // Store status in metadata; actual suspension enforcement is via token revocation
+    await db
+      .update(users)
+      .set({ isSuspended: body.suspended, updatedAt: sql`now()` })
+      .where(eq(users.id, targetId));
+    // Revoke all active tokens so suspended users are kicked immediately
     if (body.suspended) {
       await db.update(authTokens).set({ revokedAt: new Date() }).where(and(eq(authTokens.userId, targetId), isNull(authTokens.revokedAt)));
     }
-    await writeAudit(db, {
-      event: 'USER_STATUS_CHANGED',
-      actorId,
+    await writeAudit(db, 'USER_STATUS_CHANGED', actorId, {
       targetUserId: targetId,
       metadata: { suspended: body.suspended },
       ipAddress: c.req.header('CF-Connecting-IP') ?? null,
@@ -2287,9 +2305,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
           set: { granted: o.granted, expiresAt: o.expiresAt ? new Date(o.expiresAt) : null },
         });
     }
-    await writeAudit(db, {
-      event: 'USER_PERMISSION_OVERRIDE',
-      actorId,
+    await writeAudit(db, 'USER_PERMISSION_OVERRIDE', actorId, {
       targetUserId: targetId,
       tenantId: body.tenantId,
       metadata: { overrides: body.overrides },
@@ -2310,9 +2326,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const [row] = await db.select({ id: tenantMembers.id }).from(tenantMembers).where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId))).limit(1);
     if (!row) return c.json({ error: 'Member not found in tenant' }, 404);
     await db.update(tenantMembers).set({ role: body.role as 'viewer' | 'developer' | 'manager' | 'owner' }).where(eq(tenantMembers.id, row.id));
-    await writeAudit(db, {
-      event: 'USER_PERSONA_CHANGED',
-      actorId,
+    await writeAudit(db, 'USER_PERSONA_CHANGED', actorId, {
       targetUserId: userId,
       tenantId,
       metadata: { newRole: body.role },

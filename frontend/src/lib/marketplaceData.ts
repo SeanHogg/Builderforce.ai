@@ -3,6 +3,8 @@
  * Ported from coderClawLink; used by marketplace, personas, and skills pages.
  */
 
+export type PricingModel = 'flat_fee' | 'consumption';
+
 export interface Persona {
   name: string;
   description: string;
@@ -19,6 +21,9 @@ export interface Persona {
   image?: string;
   likes?: number;
   downloads?: number;
+  price?: number;
+  pricingModel?: PricingModel;
+  priceUnit?: string;
 }
 
 export interface UserPersona {
@@ -152,6 +157,9 @@ export interface BuiltinSkill {
   likes: number;
   downloads: number;
   image?: string;
+  price?: number;
+  pricingModel?: PricingModel;
+  priceUnit?: string;
 }
 
 export interface UserSkill {
@@ -167,6 +175,9 @@ export interface UserSkill {
   likes: number;
   downloads: number;
   createdAt: string;
+  price?: number;
+  pricingModel?: PricingModel;
+  priceUnit?: string;
 }
 
 export const BUILTIN_SKILLS: BuiltinSkill[] = [

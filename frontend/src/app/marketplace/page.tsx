@@ -2,16 +2,15 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/AuthContext';
+import { useCart, type ArtifactType } from '@/lib/CartContext';
 import {
   claws,
   artifactAssignments,
   marketplaceStats,
   listMarketplaceSkills,
   marketplacePublisherApi,
-  getMarketplaceToken,
   setMarketplaceToken,
   type ArtifactStats,
-  type MarketplaceUser,
 } from '@/lib/builderforceApi';
 import {
   BUILTIN_PERSONAS,
@@ -64,6 +63,9 @@ interface MarketplaceListing {
   likes: number;
   image?: string;
   emoji?: string;
+  price?: number;
+  pricingModel?: 'flat_fee' | 'consumption';
+  priceUnit?: string;
 }
 
 function loadSharedSkills(tenantId: string): MarketplaceListing[] {
@@ -151,7 +153,8 @@ function builtinSkillToListing(b: BuiltinSkill): MarketplaceListing {
 }
 
 export default function MarketplacePage() {
-  const { tenant } = useAuth();
+  const { tenant, user, webToken, isAuthenticated } = useAuth();
+  const { addItem, hasItem } = useCart();
   const tenantId = tenant?.id ?? '';
 
   const [search, setSearch] = useState('');
@@ -165,43 +168,17 @@ export default function MarketplacePage() {
   const [loadingAgents, setLoadingAgents] = useState(true);
   const [hiringId, setHiringId] = useState<string | null>(null);
 
-  // Publisher auth state
-  const [mpUser, setMpUser] = useState<MarketplaceUser | null>(null);
-  const [mpAuthMode, setMpAuthMode] = useState<'login' | 'register'>('login');
-  const [mpEmail, setMpEmail] = useState('');
-  const [mpPassword, setMpPassword] = useState('');
-  const [mpUsername, setMpUsername] = useState('');
-  const [mpAuthError, setMpAuthError] = useState<string | null>(null);
-  const [mpAuthLoading, setMpAuthLoading] = useState(false);
   // Publish skill form
-  const [skillForm, setSkillForm] = useState({ name: '', slug: '', description: '', category: '', version: '1.0.0', repoUrl: '' });
+  const [skillForm, setSkillForm] = useState({ name: '', slug: '', description: '', category: '', version: '1.0.0', repoUrl: '', price: '0', pricingModel: 'flat_fee' as 'flat_fee' | 'consumption', priceUnit: '' });
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [publishSuccess, setPublishSuccess] = useState(false);
 
-  // Check for persisted marketplace token on mount
+  // Bridge main web JWT → marketplace token so authenticated users can publish
+  // without a separate "publisher account" login.
   useEffect(() => {
-    const token = getMarketplaceToken();
-    if (!token) return;
-    marketplacePublisherApi.me().then(({ user }) => setMpUser(user)).catch(() => setMarketplaceToken(null));
-  }, []);
-
-  const handleMpAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setMpAuthLoading(true);
-    setMpAuthError(null);
-    try {
-      const result = mpAuthMode === 'register'
-        ? await marketplacePublisherApi.register({ email: mpEmail, password: mpPassword, username: mpUsername || undefined })
-        : await marketplacePublisherApi.login({ email: mpEmail, password: mpPassword });
-      setMarketplaceToken(result.token);
-      setMpUser(result.user);
-    } catch (e) {
-      setMpAuthError(e instanceof Error ? e.message : 'Auth failed');
-    } finally {
-      setMpAuthLoading(false);
-    }
-  };
+    if (webToken) setMarketplaceToken(webToken);
+  }, [webToken]);
 
   const handlePublishSkill = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -219,7 +196,7 @@ export default function MarketplacePage() {
         repoUrl: skillForm.repoUrl.trim() || undefined,
       });
       setPublishSuccess(true);
-      setSkillForm({ name: '', slug: '', description: '', category: '', version: '1.0.0', repoUrl: '' });
+      setSkillForm({ name: '', slug: '', description: '', category: '', version: '1.0.0', repoUrl: '', price: '0', pricingModel: 'flat_fee', priceUnit: '' });
     } catch (e) {
       setPublishError(e instanceof Error ? e.message : 'Publish failed');
     } finally {
@@ -383,7 +360,7 @@ export default function MarketplacePage() {
     { id: 'skills', label: 'Skills' },
     { id: 'content', label: 'Content' },
     { id: 'workforce', label: 'Workforce Agents' },
-    { id: 'publish', label: mpUser ? `Publish (${mpUser.username})` : 'Publish' },
+    { id: 'publish', label: 'Publish' },
   ];
 
   const loadingPage = category !== 'publish' && (loading || (category === 'workforce' && loadingAgents));
@@ -470,71 +447,25 @@ export default function MarketplacePage() {
 
       {category === 'publish' ? (
         <div style={{ maxWidth: 560, margin: '0 auto' }}>
-          {!mpUser ? (
-            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: 24 }}>
-              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Publisher Account</div>
-              <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>
-                Create a free publisher account to share skills with the community. This is separate from your workspace login.
+          {!isAuthenticated ? (
+            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: 32, textAlign: 'center' }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>🚀</div>
+              <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>Become a Publisher</div>
+              <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 24, maxWidth: 380, margin: '0 auto 24px' }}>
+                Any Builderforce.ai account can publish skills, personas, and agents to the marketplace. Create an account or sign in to get started.
               </p>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-                {(['login', 'register'] as const).map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    className={mpAuthMode === m ? 'btn btn-primary' : 'btn btn-secondary'}
-                    onClick={() => { setMpAuthMode(m); setMpAuthError(null); }}
-                    style={{ textTransform: 'capitalize' }}
-                  >
-                    {m === 'login' ? 'Sign In' : 'Register'}
-                  </button>
-                ))}
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                <a href="/register" className="btn btn-primary" style={{ textDecoration: 'none', padding: '10px 24px' }}>Create Account</a>
+                <a href="/login" className="btn btn-secondary" style={{ textDecoration: 'none', padding: '10px 24px' }}>Sign In</a>
               </div>
-              <form onSubmit={handleMpAuth} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {mpAuthMode === 'register' && (
-                  <input
-                    type="text"
-                    placeholder="Username (optional)"
-                    value={mpUsername}
-                    onChange={(e) => setMpUsername(e.target.value)}
-                    style={{ padding: '8px 12px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)' }}
-                  />
-                )}
-                <input
-                  type="email"
-                  required
-                  placeholder="Email"
-                  value={mpEmail}
-                  onChange={(e) => setMpEmail(e.target.value)}
-                  style={{ padding: '8px 12px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)' }}
-                />
-                <input
-                  type="password"
-                  required
-                  placeholder="Password"
-                  value={mpPassword}
-                  onChange={(e) => setMpPassword(e.target.value)}
-                  style={{ padding: '8px 12px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)' }}
-                />
-                {mpAuthError && <div style={{ fontSize: 12, color: 'var(--error-text)' }}>{mpAuthError}</div>}
-                <button type="submit" disabled={mpAuthLoading} className="btn btn-primary">
-                  {mpAuthLoading ? '…' : mpAuthMode === 'login' ? 'Sign In' : 'Create Account'}
-                </button>
-              </form>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>Signed in as <strong>{mpUser.username}</strong></div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>{mpUser.email}</div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>Publishing as <strong>{user?.username ?? user?.email}</strong></div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>{user?.email}</div>
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => { setMarketplaceToken(null); setMpUser(null); }}
-                >
-                  Sign out
-                </button>
               </div>
               <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: 24 }}>
                 <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Publish a Skill</div>
@@ -583,6 +514,30 @@ export default function MarketplacePage() {
                         onChange={(e) => setSkillForm((f) => ({ ...f, repoUrl: e.target.value }))}
                         style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
                     </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Price (USD)</label>
+                      <input type="number" min="0" step="0.01" placeholder="0.00" value={skillForm.price}
+                        onChange={(e) => setSkillForm((f) => ({ ...f, price: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Pricing Model</label>
+                      <select value={skillForm.pricingModel} onChange={(e) => setSkillForm((f) => ({ ...f, pricingModel: e.target.value as 'flat_fee' | 'consumption' }))}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }}>
+                        <option value="flat_fee">Flat Fee</option>
+                        <option value="consumption">Consumption</option>
+                      </select>
+                    </div>
+                    {skillForm.pricingModel === 'consumption' && (
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Price Unit</label>
+                        <input type="text" placeholder="per request" value={skillForm.priceUnit}
+                          onChange={(e) => setSkillForm((f) => ({ ...f, priceUnit: e.target.value }))}
+                          style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
+                      </div>
+                    )}
                   </div>
                   {publishError && <div style={{ fontSize: 12, color: 'var(--error-text)' }}>{publishError}</div>}
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -746,6 +701,17 @@ export default function MarketplacePage() {
                   </div>
                 )}
 
+                {/* Price badge */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {(item.price ?? 0) === 0 ? (
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#22c55e', background: 'rgba(34,197,94,0.1)', padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(34,197,94,0.3)' }}>Free</span>
+                  ) : (
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-strong)', background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: 6, border: '1px solid var(--border)' }}>
+                      ${(item.price ?? 0).toFixed(2)}{item.pricingModel === 'consumption' ? ` / ${item.priceUnit ?? 'use'}` : ''}
+                    </span>
+                  )}
+                </div>
+
                 <div
                   style={{
                     display: 'flex',
@@ -775,6 +741,26 @@ export default function MarketplacePage() {
                     {isInstalled && <span>✓ Installed</span>}
                   </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    {/* Add to Cart */}
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-secondary"
+                      title={hasItem(item.id) ? 'In cart' : 'Add to cart'}
+                      onClick={() => addItem({
+                        id: item.id,
+                        type: item.type as ArtifactType,
+                        slug: item.artifactSlug,
+                        name: item.name,
+                        price: item.price ?? 0,
+                        pricingModel: item.pricingModel ?? 'flat_fee',
+                        priceUnit: item.priceUnit,
+                        emoji: item.emoji,
+                        image: item.image,
+                      })}
+                      style={{ color: hasItem(item.id) ? '#22c55e' : undefined }}
+                    >
+                      {hasItem(item.id) ? '✓ In Cart' : '+ Cart'}
+                    </button>
                     <ArtifactAssigner
                       artifactType={item.type}
                       artifactSlug={item.artifactSlug}

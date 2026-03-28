@@ -21,7 +21,7 @@ export default function MagicLinkVerifyPage() {
 
     fetch(`${AUTH_API_URL}/api/auth/magic-link/verify?token=${encodeURIComponent(token)}`)
       .then((res) => res.json() as Promise<{ token?: string; user?: AuthUser; redirect?: string; error?: string }>)
-      .then((data) => {
+      .then(async (data) => {
         if (!data.token || !data.user) {
           throw new Error(data.error ?? 'Invalid or expired magic link.');
         }
