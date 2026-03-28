@@ -83,6 +83,7 @@ export default function EmulationBar() {
   }
 
   async function handleCopyContext() {
+    if (!emulation) return;
     const text = [
       `Emulating: ${emulation.targetEmail}`,
       `Tenant: ${emulation.tenantName} (id=${emulation.tenantId})`,
