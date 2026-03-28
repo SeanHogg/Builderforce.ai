@@ -318,6 +318,9 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
           repo_url:        schema.marketplaceSkills.repoUrl,
           downloads:       schema.marketplaceSkills.downloads,
           likes:           schema.marketplaceSkills.likes,
+          price_cents:     schema.marketplaceSkills.priceCents,
+          pricing_model:   schema.marketplaceSkills.pricingModel,
+          price_unit:      schema.marketplaceSkills.priceUnit,
           created_at:      schema.marketplaceSkills.createdAt,
           author_username: schema.users.username,
           author_display_name: schema.users.displayName,
@@ -345,6 +348,9 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
           repo_url:        schema.marketplaceSkills.repoUrl,
           downloads:       schema.marketplaceSkills.downloads,
           likes:           schema.marketplaceSkills.likes,
+          price_cents:     schema.marketplaceSkills.priceCents,
+          pricing_model:   schema.marketplaceSkills.pricingModel,
+          price_unit:      schema.marketplaceSkills.priceUnit,
           created_at:      schema.marketplaceSkills.createdAt,
           author_username: schema.users.username,
           author_display_name: schema.users.displayName,
@@ -429,6 +435,9 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
       readme?: string;
       icon_url?: string;
       repo_url?: string;
+      price?: number;
+      pricing_model?: 'flat_fee' | 'consumption';
+      price_unit?: string;
     }>();
     const { name, slug, description, category } = body;
     if (!name || !slug || !description || !category) {
@@ -444,11 +453,14 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
           description,
           authorId: userId,
           category,
-          tags:    body.tags    ? JSON.stringify(body.tags) : null,
-          version: body.version ?? '1.0.0',
-          readme:  body.readme  ?? null,
-          iconUrl: body.icon_url ?? null,
-          repoUrl: body.repo_url ?? null,
+          tags:         body.tags    ? JSON.stringify(body.tags) : null,
+          version:      body.version ?? '1.0.0',
+          readme:       body.readme  ?? null,
+          iconUrl:      body.icon_url ?? null,
+          repoUrl:      body.repo_url ?? null,
+          priceCents:   body.price != null ? Math.round(body.price * 100) : 0,
+          pricingModel: body.pricing_model ?? 'flat_fee',
+          priceUnit:    body.price_unit ?? null,
         })
         .returning();
       return c.json({ skill }, 201);
@@ -545,6 +557,66 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
       .set({ likes: sql`${schema.marketplaceSkills.likes} + 1` })
       .where(eq(schema.marketplaceSkills.slug, slug));
     return c.json({ liked: true });
+  });
+
+  /**
+   * POST /marketplace/purchase – record a marketplace purchase (auth required)
+   * Body: { artifactType, artifactSlug, stripePaymentIntentId? }
+   * For free items (priceCents = 0) the purchase is recorded immediately without payment.
+   */
+  router.post('/purchase', requireMarketplaceAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const body = await c.req.json<{
+      artifactType: 'skill' | 'persona' | 'content';
+      artifactSlug: string;
+      stripePaymentIntentId?: string;
+    }>();
+    if (!body.artifactType || !body.artifactSlug) {
+      return c.json({ error: 'artifactType and artifactSlug are required' }, 400);
+    }
+
+    // Look up price for skills (personas/content default to 0 for now)
+    let priceCents = 0;
+    let pricingModel: 'flat_fee' | 'consumption' = 'flat_fee';
+    if (body.artifactType === 'skill') {
+      const [skill] = await db
+        .select({ priceCents: schema.marketplaceSkills.priceCents, pricingModel: schema.marketplaceSkills.pricingModel })
+        .from(schema.marketplaceSkills)
+        .where(and(eq(schema.marketplaceSkills.slug, body.artifactSlug), eq(schema.marketplaceSkills.published, true)))
+        .limit(1);
+      if (!skill) return c.json({ error: 'Skill not found' }, 404);
+      priceCents   = skill.priceCents;
+      pricingModel = skill.pricingModel;
+    }
+
+    // For paid items a Stripe payment intent is required
+    if (priceCents > 0 && !body.stripePaymentIntentId) {
+      return c.json({ error: 'stripePaymentIntentId is required for paid items' }, 402);
+    }
+
+    await db.insert(schema.marketplacePurchases).values({
+      userId,
+      artifactType:          body.artifactType,
+      artifactSlug:          body.artifactSlug,
+      priceCents,
+      pricingModel,
+      stripePaymentIntentId: body.stripePaymentIntentId ?? null,
+    });
+
+    return c.json({ ok: true, priceCents, pricingModel }, 201);
+  });
+
+  /**
+   * GET /marketplace/purchases – list own purchases (auth required)
+   */
+  router.get('/purchases', requireMarketplaceAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const rows = await db
+      .select()
+      .from(schema.marketplacePurchases)
+      .where(eq(schema.marketplacePurchases.userId, userId))
+      .orderBy(desc(schema.marketplacePurchases.createdAt));
+    return c.json({ purchases: rows });
   });
 
   return router;

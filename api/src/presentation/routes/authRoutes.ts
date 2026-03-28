@@ -611,6 +611,10 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       return c.json({ error: 'Invalid email or password' }, 401);
     }
 
+    if (user.isSuspended) {
+      return c.json({ error: 'Account suspended. Contact support.' }, 403);
+    }
+
     const ok = await verifyPassword(body.password, user.passwordHash);
     if (!ok) {
       return c.json({ error: 'Invalid email or password' }, 401);
@@ -763,7 +767,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
   // POST /api/auth/me/onboarding/complete — marks onboarding as done, stores intent
   router.post('/me/onboarding/complete', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as UserId;
-    const body = await c.req.json<{ intent?: string[] }>().catch(() => ({}));
+    const body = await c.req.json<{ intent?: string[] }>().catch(() => ({} as { intent?: string[] }));
     const intentJson = Array.isArray(body.intent) ? JSON.stringify(body.intent) : null;
     await db
       .update(users)

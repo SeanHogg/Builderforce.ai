@@ -123,6 +123,7 @@ export const approvalStatusEnum = pgEnum('approval_status', ['pending', 'approve
 
 export const artifactTypeEnum = pgEnum('artifact_type', ['skill', 'persona', 'content']);
 export const assignmentScopeEnum = pgEnum('assignment_scope', ['tenant', 'claw', 'project', 'task']);
+export const pricingModelEnum = pgEnum('pricing_model', ['flat_fee', 'consumption']);
 
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
@@ -150,6 +151,7 @@ export const users = pgTable('users', {
   mfaRecoveryGeneratedAt: timestamp('mfa_recovery_generated_at'),
   mfaLastVerifiedAt: timestamp('mfa_last_verified_at'),
   isSuperadmin:           boolean('is_superadmin').notNull().default(false),
+  isSuspended:            boolean('is_suspended').notNull().default(false),
   sessionVersion:         integer('session_version').notNull().default(0),
   onboardingCompletedAt:  timestamp('onboarding_completed_at'),
   userIntent:             text('user_intent'), // JSON array of intent strings, set during onboarding
@@ -325,6 +327,10 @@ export const marketplaceSkills = pgTable('marketplace_skills', {
   downloads:    integer('downloads').notNull().default(0),
   likes:        integer('likes').notNull().default(0),
   published:    boolean('published').notNull().default(false),
+  /** Price in USD cents (0 = free). Stored as integer cents to avoid floating point. */
+  priceCents:   integer('price_cents').notNull().default(0),
+  pricingModel: pricingModelEnum('pricing_model').notNull().default('flat_fee'),
+  priceUnit:    varchar('price_unit', { length: 100 }),
   searchVector: tsvector('search_vector'),
   createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt:    timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -348,6 +354,35 @@ export const artifactLikes = pgTable('artifact_likes', {
 }, (t) => [
   primaryKey({ columns: [t.userId, t.artifactType, t.artifactSlug] }),
 ]);
+
+/**
+ * Records completed marketplace purchases.
+ * Flat-fee: one row per purchase. Consumption: one row per billing cycle summary.
+ */
+export const marketplacePurchases = pgTable('marketplace_purchases', {
+  id:                   serial('id').primaryKey(),
+  userId:               varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  artifactType:         artifactTypeEnum('artifact_type').notNull(),
+  artifactSlug:         varchar('artifact_slug', { length: 255 }).notNull(),
+  priceCents:           integer('price_cents').notNull().default(0),
+  pricingModel:         pricingModelEnum('pricing_model').notNull().default('flat_fee'),
+  stripePaymentIntentId: varchar('stripe_payment_intent_id', { length: 255 }),
+  createdAt:            timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Developer API keys — allows external sites to query the public Builderforce.ai API.
+ * The key itself is only shown once at creation; only the hash is stored.
+ */
+export const developerApiKeys = pgTable('developer_api_keys', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  userId:      varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name:        varchar('name', { length: 255 }).notNull(),
+  keyHash:     varchar('key_hash', { length: 128 }).notNull().unique(),
+  lastUsedAt:  timestamp('last_used_at', { withTimezone: true }),
+  revokedAt:   timestamp('revoked_at', { withTimezone: true }),
+  createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 // ---------------------------------------------------------------------------
 // Orchestration tables

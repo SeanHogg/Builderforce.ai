@@ -11,10 +11,13 @@ custom_domain = true
 # Overridden by Cloudflare dashboard secrets for production.
 CORS_ORIGINS = "*"
 ENVIRONMENT  = "production"
+APP_URL      = "https://builderforce.ai"
+NOTIFICATION_EMAIL_FROM = "Builderforce <notifications@builderforce.ai>"
 # NEON_DATABASE_URL must be set via: wrangler secret put NEON_DATABASE_URL
 # JWT_SECRET must be set via: wrangler secret put JWT_SECRET
 # OPENROUTER_API_KEY must be set via: wrangler secret put OPENROUTER_API_KEY
 # OPENROUTER_API_KEY_PRO must be set via: wrangler secret put OPENROUTER_API_KEY_PRO
+# RESEND_API_KEY must be set via: wrangler secret put RESEND_API_KEY
 # Do NOT put the real value here – use a long random string (32+ chars).
 
 # Wrangler dev overrides (local only, never committed)

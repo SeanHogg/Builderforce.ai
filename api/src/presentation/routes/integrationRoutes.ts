@@ -124,6 +124,46 @@ async function testBitbucket(creds: Record<string, unknown>): Promise<{ ok: bool
     : { ok: false, message: `Bitbucket API returned ${res.status}` };
 }
 
+async function testConfluence(
+  creds: Record<string, unknown>,
+  baseUrl: string | null,
+): Promise<{ ok: boolean; message: string }> {
+  const token = creds.apiToken as string;
+  const email = creds.email as string;
+  if (!token || !email || !baseUrl) return { ok: false, message: 'email, apiToken, and baseUrl are required' };
+  // Confluence Cloud REST API — list spaces (limit 1 is a lightweight auth probe)
+  const url = `${baseUrl.replace(/\/$/, '')}/wiki/rest/api/space?limit=1`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Basic ${btoa(`${email}:${token}`)}`,
+      Accept: 'application/json',
+    },
+  });
+  return res.ok
+    ? { ok: true, message: 'Connected' }
+    : { ok: false, message: `Confluence API returned ${res.status}` };
+}
+
+async function testFreshservice(
+  creds: Record<string, unknown>,
+  baseUrl: string | null,
+): Promise<{ ok: boolean; message: string }> {
+  const apiKey = creds.apiKey as string;
+  if (!apiKey || !baseUrl) return { ok: false, message: 'apiKey and baseUrl are required' };
+  // Freshservice REST API — fetch the authenticated agent profile
+  const url = `${baseUrl.replace(/\/$/, '')}/api/v2/agents/me`;
+  const res = await fetch(url, {
+    headers: {
+      // Freshservice uses HTTP Basic with apiKey as username and "X" as password
+      Authorization: `Basic ${btoa(`${apiKey}:X`)}`,
+      Accept: 'application/json',
+    },
+  });
+  return res.ok
+    ? { ok: true, message: 'Connected' }
+    : { ok: false, message: `Freshservice API returned ${res.status}` };
+}
+
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
@@ -312,8 +352,14 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       case 'bitbucket':
         result = await testBitbucket(creds);
         break;
+      case 'confluence':
+        result = await testConfluence(creds, row.baseUrl);
+        break;
+      case 'freshservice':
+        result = await testFreshservice(creds, row.baseUrl);
+        break;
       default:
-        result = { ok: true, message: `Connectivity test not implemented for ${row.provider}` };
+        result = { ok: false, message: `Connectivity test not available for provider: ${row.provider}` };
     }
 
     // Persist test result

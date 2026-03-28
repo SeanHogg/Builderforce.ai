@@ -6,8 +6,64 @@ import { useAuth } from '@/lib/AuthContext';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 import { useRolePreview, type PreviewRole } from '@/lib/RolePreviewContext';
 import { useEmulation } from '@/lib/EmulationContext';
+import { useCart } from '@/lib/CartContext';
+import ShoppingCart from './ShoppingCart';
 
 const PREVIEW_ROLES: PreviewRole[] = ['owner', 'manager', 'developer', 'viewer'];
+
+function CartButton() {
+  const { count, openCart } = useCart();
+  return (
+    <>
+      <button
+        type="button"
+        onClick={openCart}
+        title="Shopping cart"
+        style={{
+          position: 'relative',
+          background: 'none',
+          border: 'none',
+          color: 'var(--text-muted)',
+          cursor: 'pointer',
+          padding: 6,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+        aria-label={count > 0 ? `Shopping cart, ${count} item${count !== 1 ? 's' : ''}` : 'Shopping cart'}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
+          <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+        </svg>
+        {count > 0 && (
+          <span
+            style={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              minWidth: 16,
+              height: 16,
+              borderRadius: 8,
+              background: '#6366f1',
+              color: '#fff',
+              fontSize: 10,
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0 3px',
+              lineHeight: 1,
+            }}
+          >
+            {count > 99 ? '99+' : count}
+          </span>
+        )}
+      </button>
+      <ShoppingCart />
+    </>
+  );
+}
 
 export default function TopBar() {
   const { tenant, logout, user } = useAuth();
@@ -44,7 +100,10 @@ export default function TopBar() {
           </span>
         ) : (
           <Link href="/marketplace" className="tenant-chip topbar-center-link" style={{ textDecoration: 'none' }}>
-            <span style={{ fontSize: '1rem' }}>🛒</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+            </svg>
             Marketplace
           </Link>
         )}
@@ -91,6 +150,8 @@ export default function TopBar() {
             )}
           </div>
         )}
+
+        <CartButton />
 
         <ThemeToggleButton />
         <button

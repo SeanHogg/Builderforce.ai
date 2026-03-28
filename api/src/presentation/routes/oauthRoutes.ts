@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono';
 import { and, eq, sql } from 'drizzle-orm';
 import type { HonoEnv, Env } from '../../env';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
+import { sendMagicLinkEmail } from '../../infrastructure/email/EmailService';
 import {
   users,
   oauthAccounts,
@@ -338,22 +339,6 @@ async function persistWebToken(
 }
 
 // ---------------------------------------------------------------------------
-// Magic link email (wire to your email provider when ready)
-// ---------------------------------------------------------------------------
-
-async function sendMagicLinkEmail(
-  to: string,
-  name: string,
-  token: string,
-  frontendUrl: string,
-): Promise<void> {
-  // TODO: Wire to your email provider (Resend, SendGrid, Mailgun, etc.)
-  // The sign-in URL to include in the email:
-  const magicUrl = `${frontendUrl}/auth/magic-link?token=${encodeURIComponent(token)}`;
-  console.log(`[magic-link] to=${to} name=${name} url=${magicUrl}`);
-}
-
-// ---------------------------------------------------------------------------
 // Route factory
 // ---------------------------------------------------------------------------
 
@@ -529,6 +514,7 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
 
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!user) return c.redirect(`${frontendBase}/login?error=account_not_found`);
+    if (user.isSuspended) return c.redirect(`${frontendBase}/login?error=account_suspended`);
 
     const jwt = await signWebJwt(
       { sub: user.id, email: user.email, username: user.username ?? '', amr: [name] },
@@ -585,12 +571,13 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
         const frontendBase = (c.env.APP_URL ?? 'https://builderforce.ai')
           .split(',')[0]!
           .trim();
+        const magicUrl = `${frontendBase}/auth/magic-link?token=${encodeURIComponent(token)}`;
 
         void sendMagicLinkEmail(
+          c.env,
           normalizedEmail,
           user.displayName ?? user.username ?? normalizedEmail,
-          token,
-          frontendBase,
+          magicUrl,
         );
       }
     }
@@ -625,6 +612,7 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
       .limit(1);
 
     if (!user) return c.json({ error: 'Account not found' }, 401);
+    if (user.isSuspended) return c.json({ error: 'Account suspended. Contact support.' }, 403);
 
     const jwt = await signWebJwt(
       { sub: user.id, email: user.email, username: user.username ?? '', amr: ['magic_link'] },
