@@ -26,6 +26,7 @@ import {
   type AuditLogEntry,
   type ImpersonationSession,
   type TenantMember,
+  type UserWorkspace,
 } from '@/lib/adminApi';
 import { BUILTIN_PERSONAS, type Persona } from '@/lib/marketplaceData';
 import UserDetailDrawer from '@/components/UserDetailDrawer';
@@ -103,8 +104,8 @@ export default function AdminPage() {
   const [copiedEnv, setCopiedEnv] = useState(false);
   const [downloadedEnv, setDownloadedEnv] = useState(false);
   const [impersonateUser, setImpersonateUser] = useState<AdminUser | null>(null);
-  const [impersonateTenantId, setImpersonateTenantId] = useState<number | null>(null);
-  const [impersonateRole, setImpersonateRole] = useState<string>('viewer');
+  const [impersonateWorkspaces, setImpersonateWorkspaces] = useState<UserWorkspace[]>([]);
+  const [impersonateWorkspacesLoading, setImpersonateWorkspacesLoading] = useState(false);
   const [impersonateReason, setImpersonateReason] = useState('');
   const [impersonateDebugger, setImpersonateDebugger] = useState(false);
   const [impersonateBusy, setImpersonateBusy] = useState(false);
@@ -358,24 +359,25 @@ export default function AdminPage() {
 
   const startImpersonate = (u: AdminUser) => {
     setImpersonateUser(u);
-    setImpersonateTenantId(null);
-    setImpersonateRole('viewer');
+    setImpersonateWorkspaces([]);
     setImpersonateReason('');
     setImpersonateDebugger(false);
-    if (tenants.length === 0) {
-      adminApi.tenants().then(setTenants).catch(() => setErrorMsg('Failed to load tenants'));
-    }
+    setImpersonateWorkspacesLoading(true);
+    adminApi.userWorkspaces(u.id)
+      .then(setImpersonateWorkspaces)
+      .catch(() => setErrorMsg('Failed to load user workspaces'))
+      .finally(() => setImpersonateWorkspacesLoading(false));
   };
 
   const doImpersonate = async () => {
-    if (!impersonateUser || !impersonateTenantId || !impersonateReason.trim()) return;
+    const defaultWorkspace = impersonateWorkspaces[0];
+    if (!impersonateUser || !defaultWorkspace || !impersonateReason.trim()) return;
     setImpersonateBusy(true);
     setErrorMsg('');
     try {
       const res = await adminApi.impersonationStart(
         impersonateUser.id,
-        impersonateTenantId,
-        impersonateRole,
+        defaultWorkspace.tenantId,
         impersonateReason.trim(),
         impersonateDebugger,
       );
@@ -391,9 +393,8 @@ export default function AdminPage() {
 
   const closeImpersonate = () => {
     setImpersonateUser(null);
-    setImpersonateTenantId(null);
+    setImpersonateWorkspaces([]);
     setImpersonateReason('');
-    setImpersonateRole('viewer');
     setImpersonateDebugger(false);
   };
 
@@ -2777,40 +2778,25 @@ export default function AdminPage() {
               Emulate User
             </h3>
             <p className="page-sub" style={{ marginBottom: 16 }}>
-              Start a read-only emulation session as <strong>{impersonateUser.email}</strong>.
+              Start an emulation session as <strong>{impersonateUser.email}</strong> using their default workspace and assigned role.
               You will be taken to the dashboard with an amber emulation bar.
-              All write operations are blocked.
             </p>
 
-            <label className="admin-label" style={{ display: 'block', marginBottom: 4 }}>
-              Workspace
-            </label>
-            <select
-              value={impersonateTenantId ?? ''}
-              onChange={(e) => setImpersonateTenantId(Number(e.target.value) || null)}
-              className="admin-select"
-              style={{ width: '100%', marginBottom: 14 }}
-            >
-              <option value="">Select workspace…</option>
-              {tenants.map((t) => (
-                <option key={t.id} value={t.id}>{t.name} ({t.slug})</option>
-              ))}
-            </select>
-
-            <label className="admin-label" style={{ display: 'block', marginBottom: 4 }}>
-              Role override
-            </label>
-            <select
-              value={impersonateRole}
-              onChange={(e) => setImpersonateRole(e.target.value)}
-              className="admin-select"
-              style={{ width: '100%', marginBottom: 14 }}
-            >
-              <option value="owner">owner</option>
-              <option value="manager">manager</option>
-              <option value="developer">developer</option>
-              <option value="viewer">viewer</option>
-            </select>
+            {impersonateWorkspacesLoading ? (
+              <p className="text-muted" style={{ fontSize: 13, marginBottom: 14 }}>Loading workspace…</p>
+            ) : impersonateWorkspaces.length === 0 ? (
+              <p className="text-muted" style={{ fontSize: 13, marginBottom: 14, color: 'var(--error-text)' }}>
+                This user has no active workspaces.
+              </p>
+            ) : (
+              <div style={{ marginBottom: 14, padding: '8px 12px', background: 'var(--surface-alt, #1e1e2e)', borderRadius: 6, fontSize: 13 }}>
+                <span style={{ opacity: 0.6, marginRight: 8 }}>Workspace:</span>
+                <strong>{impersonateWorkspaces[0]!.name}</strong>
+                <span style={{ opacity: 0.5, margin: '0 8px' }}>·</span>
+                <span style={{ opacity: 0.6, marginRight: 8 }}>Role:</span>
+                <strong>{impersonateWorkspaces[0]!.role}</strong>
+              </div>
+            )}
 
             <label className="admin-label" style={{ display: 'block', marginBottom: 4 }}>
               Reason <span style={{ color: 'var(--error-text)' }}>*</span>
@@ -2840,7 +2826,7 @@ export default function AdminPage() {
                 type="button"
                 className="admin-tab active"
                 onClick={doImpersonate}
-                disabled={!impersonateTenantId || !impersonateReason.trim() || impersonateBusy}
+                disabled={impersonateWorkspaces.length === 0 || !impersonateReason.trim() || impersonateBusy}
               >
                 {impersonateBusy ? 'Starting…' : 'Start Emulation'}
               </button>

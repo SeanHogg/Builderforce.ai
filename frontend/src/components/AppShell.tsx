@@ -6,10 +6,8 @@ import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import AppFooter from './AppFooter';
 import EmulationBar from './EmulationBar';
-import RolePreviewBar from './RolePreviewBar';
 import PermissionDebuggerPanel from './PermissionDebuggerPanel';
 import { useEmulation } from '@/lib/EmulationContext';
-import { useRolePreview } from '@/lib/RolePreviewContext';
 
 const SIDEBAR_COLLAPSED_KEY = 'builderforce-sidebar-collapsed';
 
@@ -24,7 +22,6 @@ function isIdePage(pathname: string | null): boolean {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { emulation } = useEmulation();
-  const { previewRole } = useRolePreview();
 
   // User's manual collapse preference, initialised from localStorage at mount.
   // Route-forced collapse is computed below — never stored in state (avoids
@@ -56,10 +53,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       <EmulationBar />
-      <RolePreviewBar />
       <PermissionDebuggerPanel />
       <div
-        className={`shell ${navCollapsed ? 'nav-collapsed' : ''}${emulation ? ' emulation-active' : ''}${previewRole && !emulation ? ' role-preview-active' : ''}`}
+        className={`shell ${navCollapsed ? 'nav-collapsed' : ''}${emulation ? ' emulation-active' : ''}`}
         style={{ position: 'relative' }}
       >
         <TopBar />

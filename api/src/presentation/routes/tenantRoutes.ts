@@ -508,6 +508,39 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     return c.json(tenant.toPlain());
   });
 
+  // POST /api/tenants/:id/invite-by-email — look up user by email and add as member
+  router.post('/:id/invite-by-email', requireRole(TenantRole.MANAGER), async (c) => {
+    const id          = Number(c.req.param('id'));
+    const callerTenantId = c.get('tenantId') as number;
+    if (id !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
+
+    const body = await c.req.json<{ email: string; role?: TenantRole }>();
+    if (!body.email?.trim()) return c.json({ error: 'email is required' }, 400);
+
+    const role = body.role ?? TenantRole.DEVELOPER;
+
+    const [found] = await db
+      .select({ id: users.id, email: users.email })
+      .from(users)
+      .where(eq(users.email, body.email.toLowerCase().trim()))
+      .limit(1);
+
+    if (!found) {
+      return c.json(
+        { error: 'No account found with that email. Ask them to sign up at builderforce.ai first.' },
+        404,
+      );
+    }
+
+    const guard = buildPlanLimitsGuard(db);
+    const limitErr = await guard.checkSeatLimit(id);
+    if (limitErr) return c.json(limitErr, 402);
+
+    const actorUserId = c.get('userId') as string;
+    const tenant = await tenantService.addMember(id, actorUserId, found.id, role);
+    return c.json({ ok: true, tenant: tenant.toPlain(), addedUser: { id: found.id, email: found.email } });
+  });
+
   // DELETE /api/tenants/:id/members/:userId
   router.delete('/:id/members/:userId', requireRole(TenantRole.MANAGER), async (c) => {
     const id           = Number(c.req.param('id'));

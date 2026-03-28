@@ -1,17 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { Project } from '@/lib/types';
+import type { Project, Tenant } from '@/lib/types';
 import { fetchProjects, deleteProject } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
+import { getMe } from '@/lib/auth';
 import { ChatInput } from '@/components/ChatInput';
 import { ProjectCard } from '@/components/ProjectCard';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ClawSlideOutPanel } from '@/components/ClawSlideOutPanel';
+import { OnboardingStepper } from '@/components/OnboardingStepper';
 import { claws, tasksApi, runtimeApi, approvalsApi, isAwaitingApprovalExecution, type Claw, type Task } from '@/lib/builderforceApi';
+
+const ONBOARDING_DISMISSED_KEY = 'bf_onboarding_dismissed';
 
 /**
  * Dashboard (home) — CoderClawLink-style: "What should we build?" chat input,
@@ -19,7 +23,7 @@ import { claws, tasksApi, runtimeApi, approvalsApi, isAwaitingApprovalExecution,
  */
 export default function DashboardPage() {
   const router = useRouter();
-  const { isAuthenticated, hasTenant } = useAuth();
+  const { isAuthenticated, hasTenant, webToken, tenantToken, tenant, selectTenant } = useAuth();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [clawList, setClawList] = useState<Claw[]>([]);
@@ -34,16 +38,59 @@ export default function DashboardPage() {
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [taskStats, setTaskStats] = useState<{ total: number; inProgress: number; done: number } | null>(null);
 
+  // Onboarding stepper state
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+
+  // Auth guard — allow staying on dashboard if not yet onboarded (no tenant yet)
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace('/login?next=/dashboard');
-    } else if (!hasTenant) {
-      router.replace('/tenants?next=/dashboard');
     }
-  }, [isAuthenticated, hasTenant, router]);
+    // No redirect to /tenants here — the onboarding stepper handles workspace creation
+  }, [isAuthenticated, router]);
+
+  // Check onboarding status once we have a web token
+  useEffect(() => {
+    if (!isAuthenticated || !webToken || onboardingChecked) return;
+    const dismissed = typeof window !== 'undefined' && localStorage.getItem(ONBOARDING_DISMISSED_KEY) === '1';
+    if (dismissed) {
+      setOnboardingChecked(true);
+      return;
+    }
+    getMe(webToken)
+      .then(({ onboardingCompletedAt }) => {
+        if (!onboardingCompletedAt) {
+          setShowOnboarding(true);
+        }
+      })
+      .catch(() => {
+        // If the check fails, don't block the user — just skip onboarding
+      })
+      .finally(() => setOnboardingChecked(true));
+  }, [isAuthenticated, webToken, onboardingChecked]);
+
+  const handleOnboardingWorkspaceCreated = useCallback(
+    async (newTenant: Tenant) => {
+      await selectTenant(newTenant);
+    },
+    [selectTenant]
+  );
+
+  const handleOnboardingComplete = useCallback(() => {
+    setShowOnboarding(false);
+  }, []);
+
+  const handleOnboardingDismiss = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(ONBOARDING_DISMISSED_KEY, '1');
+    }
+    setShowOnboarding(false);
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated || !hasTenant) return;
+    setLoading(true);
     Promise.all([
       fetchProjects().catch(() => [] as Project[]),
       claws.list().catch(() => [] as Claw[]),
@@ -105,12 +152,42 @@ export default function DashboardPage() {
 
   const connectedClaws = clawList.filter((c) => c.connectedAt);
 
-  if (!isAuthenticated || !hasTenant) return null;
+  if (!isAuthenticated) return null;
+
+  // If we don't have a tenant AND we're still checking or showing onboarding, render the stepper overlay only
+  if (!hasTenant && (showOnboarding || !onboardingChecked)) {
+    return showOnboarding ? (
+      <OnboardingStepper
+        webToken={webToken!}
+        tenantToken={tenantToken}
+        tenant={tenant}
+        onWorkspaceCreated={handleOnboardingWorkspaceCreated}
+        onComplete={handleOnboardingComplete}
+        onDismiss={handleOnboardingDismiss}
+      />
+    ) : null;
+  }
+
+  // If no tenant and onboarding was dismissed/complete, send to tenant picker
+  if (!hasTenant) {
+    router.replace('/tenants?next=/dashboard');
+    return null;
+  }
 
   const projectPreview = projects.slice(0, 6);
 
   return (
     <div style={{ flex: 1, color: 'var(--text-primary)' }}>
+      {showOnboarding && webToken && (
+        <OnboardingStepper
+          webToken={webToken}
+          tenantToken={tenantToken}
+          tenant={tenant}
+          onWorkspaceCreated={handleOnboardingWorkspaceCreated}
+          onComplete={handleOnboardingComplete}
+          onDismiss={handleOnboardingDismiss}
+        />
+      )}
       <main style={{ padding: '24px 16px' }}>
         {/* Prompt — What should we build? */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>

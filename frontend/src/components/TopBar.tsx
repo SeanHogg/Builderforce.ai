@@ -21,7 +21,7 @@ export default function TopBar() {
   };
 
   return (
-    <header className="topbar">
+    <header className={`topbar${previewRole ? ' topbar--role-preview' : ''}`}>
       <div className="topbar-left">
         <Link href="/dashboard" className="brand" style={{ textDecoration: 'none' }}>
           <Image
@@ -37,10 +37,17 @@ export default function TopBar() {
         </Link>
       </div>
       <div className="topbar-center">
-        <Link href="/marketplace" className="tenant-chip topbar-center-link" style={{ textDecoration: 'none' }}>
-          <span style={{ fontSize: '1rem' }}>🛒</span>
-          Marketplace
-        </Link>
+        {previewRole ? (
+          <span className="topbar-preview-info">
+            <span aria-hidden="true">👁</span>
+            Previewing as <strong>{previewRole}</strong> — frontend-only, no API calls affected
+          </span>
+        ) : (
+          <Link href="/marketplace" className="tenant-chip topbar-center-link" style={{ textDecoration: 'none' }}>
+            <span style={{ fontSize: '1rem' }}>🛒</span>
+            Marketplace
+          </Link>
+        )}
       </div>
       <div className="topbar-right">
         {tenant && (

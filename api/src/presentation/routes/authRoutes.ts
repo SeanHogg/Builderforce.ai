@@ -747,11 +747,33 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const user = await authService.getMe(userId);
     if (!user) return c.json({ error: 'User not found' }, 404);
     const [full] = await db
-      .select({ mfaEnabled: users.mfaEnabled })
+      .select({ mfaEnabled: users.mfaEnabled, onboardingCompletedAt: users.onboardingCompletedAt })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
-    return c.json({ user: { ...user, mfaEnabled: full?.mfaEnabled ?? false } });
+    return c.json({
+      user: {
+        ...user,
+        mfaEnabled: full?.mfaEnabled ?? false,
+        onboardingCompletedAt: full?.onboardingCompletedAt ?? null,
+      },
+    });
+  });
+
+  // POST /api/auth/me/onboarding/complete — marks onboarding as done, stores intent
+  router.post('/me/onboarding/complete', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as UserId;
+    const body = await c.req.json<{ intent?: string[] }>().catch(() => ({}));
+    const intentJson = Array.isArray(body.intent) ? JSON.stringify(body.intent) : null;
+    await db
+      .update(users)
+      .set({
+        onboardingCompletedAt: sql`now()`,
+        ...(intentJson !== null && { userIntent: intentJson }),
+        updatedAt: sql`now()`,
+      })
+      .where(eq(users.id, userId));
+    return c.json({ ok: true });
   });
 
   // GET /api/auth/me/admin-access — impersonation sessions targeting the current user (transparency endpoint)

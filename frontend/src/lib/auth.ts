@@ -323,6 +323,45 @@ export async function addPassword(webToken: string, password: string): Promise<v
   }
 }
 
+/** Fetch the current user profile, including onboarding status. */
+export async function getMe(webToken: string): Promise<{ onboardingCompletedAt: string | null }> {
+  const res = await fetch(`${AUTH_API_URL}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${webToken}` },
+  });
+  checkUnauthorizedAndRedirect(res, !!webToken);
+  if (!res.ok) return { onboardingCompletedAt: null };
+  const data = await res.json() as { user?: { onboardingCompletedAt?: string | null } };
+  return { onboardingCompletedAt: data.user?.onboardingCompletedAt ?? null };
+}
+
+/** Mark onboarding as complete and optionally store user intent. */
+export async function completeOnboarding(webToken: string, intent?: string[]): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/auth/me/onboarding/complete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
+    body: JSON.stringify({ intent }),
+  });
+  checkUnauthorizedAndRedirect(res, !!webToken);
+}
+
+/** Invite a user to a workspace by email. Requires tenant token. */
+export async function inviteByEmail(
+  tenantToken: string,
+  tenantId: string,
+  email: string,
+  role: string = 'developer',
+): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/invite-by-email`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tenantToken}` },
+    body: JSON.stringify({ email, role }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? 'Failed to invite user');
+  }
+}
+
 /** Create a new workspace (tenant). Requires WebJWT; caller becomes owner. */
 export async function createTenant(webToken: string, name: string): Promise<Tenant> {
   const res = await fetch(`${AUTH_API_URL}/api/tenants/create`, {
