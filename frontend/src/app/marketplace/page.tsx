@@ -463,7 +463,7 @@ export default function MarketplacePage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>Publishing as <strong>{user?.username ?? user?.email}</strong></div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>Publishing as <strong>{user?.name ?? user?.email}</strong></div>
                   <div style={{ fontSize: 12, color: 'var(--muted)' }}>{user?.email}</div>
                 </div>
               </div>
