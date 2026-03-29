@@ -817,11 +817,7 @@ export default function AdminPage() {
                                                     createdAt: m.joinedAt,
                                                     tenantCount: 1,
                                                   };
-                                                  setImpersonateUser(adminUser);
-                                                  setImpersonateTenantId(t.id);
-                                                  setImpersonateRole(m.role);
-                                                  setImpersonateReason('');
-                                                  setImpersonateDebugger(false);
+                                                  startImpersonate(adminUser);
                                                 }}
                                               >
                                                 Emulate
