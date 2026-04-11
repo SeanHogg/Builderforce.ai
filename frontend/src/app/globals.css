@@ -347,7 +347,10 @@ html[data-theme='light'] .stars {
 }
 
 .quickstart-skin {
-  margin-bottom: 56px;
+  display: block;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 24px 72px;
   animation: quickstart-fadeInUp 0.8s ease-out 0.6s both;
 }
 
