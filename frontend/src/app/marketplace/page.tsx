@@ -240,12 +240,20 @@ export default function MarketplacePage() {
     ];
     setListings(allListings);
 
-    const [clawList, assignList] = await Promise.all([
-      claws.list().catch(() => []),
-      tenantNum ? artifactAssignments.list('tenant', tenantNum).catch(() => []) : [],
-    ]);
-    setHasClaws(clawList.length > 0);
-    setInstalled(new Set(assignList.map((a) => key(a.artifactType, a.artifactSlug))));
+    // User-specific data (owned claws + installed artifacts) is only fetched
+    // for authenticated users. Anonymous marketplace browsers see listings
+    // and stats but no install state.
+    if (isAuthenticated) {
+      const [clawList, assignList] = await Promise.all([
+        claws.list().catch(() => []),
+        tenantNum ? artifactAssignments.list('tenant', tenantNum).catch(() => []) : [],
+      ]);
+      setHasClaws(clawList.length > 0);
+      setInstalled(new Set(assignList.map((a) => key(a.artifactType, a.artifactSlug))));
+    } else {
+      setHasClaws(false);
+      setInstalled(new Set());
+    }
 
     const byType: Record<'skill' | 'persona' | 'content', string[]> = { skill: [], persona: [], content: [] };
     for (const item of allListings) byType[item.type].push(item.artifactSlug);
@@ -260,7 +268,7 @@ export default function MarketplacePage() {
     for (const slug of Object.keys(personaStats)) merged[key('persona', slug)] = personaStats[slug]!;
     for (const slug of Object.keys(contentStats)) merged[key('content', slug)] = contentStats[slug]!;
     setStats(merged);
-  }, [tenantId]);
+  }, [tenantId, isAuthenticated]);
 
   useEffect(() => {
     refreshListings().finally(() => setLoading(false));

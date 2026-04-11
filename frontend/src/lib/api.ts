@@ -492,7 +492,9 @@ export async function publishAgent(data: {
 }
 
 export async function listAgents(): Promise<PublishedAgent[]> {
-  return apiRequest<PublishedAgent[]>(`${IDE}/agents`);
+  // Public workforce registry — works for anonymous visitors on /marketplace.
+  // Management endpoints (hire, update, etc.) still live under /api/ide/agents.
+  return apiRequest<PublishedAgent[]>(`/api/workforce/agents`);
 }
 
 export async function fetchAgent(agentId: string): Promise<PublishedAgent> {
