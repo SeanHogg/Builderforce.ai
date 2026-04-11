@@ -12,6 +12,8 @@ import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
 import { ProjectCard } from '@/components/ProjectCard';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ClawSlideOutPanel } from '@/components/ClawSlideOutPanel';
+import { UpgradeModal } from '@/components/UpgradeModal';
+import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 
 /**
  * Projects page — full project list, create project modal, open project → IDE.
@@ -34,6 +36,7 @@ export default function ProjectsPage() {
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const [selectedClaw, setSelectedClaw] = useState<Claw | null>(null);
   const [confirmProject, setConfirmProject] = useState<Project | null>(null);
+  const [planError, setPlanError] = useState<PlanLimitError | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -77,8 +80,13 @@ export default function ProjectsPage() {
       setNewProjectDesc('');
       setShowForm(false);
       router.replace('/projects', { scroll: false });
-    } catch {
-      setError('Failed to create project');
+    } catch (err) {
+      if (isPlanLimitError(err)) {
+        setShowForm(false);
+        setPlanError(err);
+      } else {
+        setError('Failed to create project');
+      }
     } finally {
       setIsCreating(false);
     }
@@ -442,6 +450,8 @@ export default function ProjectsPage() {
             onClose={() => setSelectedClaw(null)}
           />
         )}
+        <UpgradeModal error={planError} onClose={() => setPlanError(null)} />
+
         {/* confirmation dialog used by table delete */}
         <ConfirmDialog
           open={!!confirmProject}

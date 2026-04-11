@@ -386,11 +386,13 @@ export async function inviteByEmail(
   email: string,
   role: string = 'developer',
 ): Promise<void> {
+  const { planLimitErrorFromResponse } = await import('./planLimitError');
   const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/invite-by-email`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tenantToken}` },
     body: JSON.stringify({ email, role }),
   });
+  if (res.status === 402) throw await planLimitErrorFromResponse(res);
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(body.error ?? 'Failed to invite user');

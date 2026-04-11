@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { AUTH_API_URL, getStoredTenantToken } from '@/lib/auth';
 
@@ -111,6 +112,13 @@ export default function PricingPage() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchSub(); }, [tenantId]);
+
+  // Deep link: /pricing?upgrade=pro|teams pre-opens the upgrade form.
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const target = searchParams?.get('upgrade');
+    if (target === 'pro' || target === 'teams') setUpgradeTarget(target);
+  }, [searchParams]);
 
   const isManualProvider = !sub || sub.paymentProvider === 'manual';
   const effectivePlan = sub?.effectivePlan ?? 'free';

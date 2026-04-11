@@ -14,6 +14,7 @@ import {
   getProjectsBaseUrl,
   isWorkerForProjects,
 } from './apiClient';
+import { planLimitErrorFromResponse } from './planLimitError';
 import type {
   Project,
   FileEntry,
@@ -42,6 +43,7 @@ async function projectsRequest<T>(
     ...(body !== undefined && { body }),
   });
   checkUnauthorizedAndRedirect(res, hadToken);
+  if (res.status === 402) throw await planLimitErrorFromResponse(res);
   if (!res.ok) {
     const msg = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(msg.error || res.statusText || `Request failed (${res.status})`);
@@ -250,6 +252,7 @@ export async function sendAIMessage(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ projectId: String(projectId), messages }),
   });
+  if (res.status === 402) throw await planLimitErrorFromResponse(res);
   if (!res.ok) throw new Error('Failed to send AI message');
   const reader = res.body?.getReader();
   if (!reader) return;
