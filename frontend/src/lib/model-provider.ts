@@ -132,9 +132,30 @@ export class MambaModelProvider implements ModelProvider {
    * Initialise the Mamba backend.
    * Dynamically imports mambacode.js so the bundle is not broken in
    * environments where the package is absent or WebGPU is unavailable.
+   * Skips silently when the browser has no WebGPU OR the tokenizer
+   * asset files aren't deployed — both are expected states today.
    */
   async init(): Promise<void> {
     if (this._ready) return;
+
+    // WebGPU gate — no point loading tokenizer assets if the device
+    // doesn't support WebGPU in the first place.
+    if (typeof navigator === 'undefined' || !('gpu' in navigator)) {
+      this._ready = false;
+      return;
+    }
+
+    // Asset gate — avoid the noisy /vocab.json 404 in deployments that
+    // haven't shipped tokenizer assets. HEAD is cheap and cached.
+    const assetsPresent = await Promise.all([
+      fetch(this.config.vocabUrl, { method: 'HEAD' }).then((r) => r.ok).catch(() => false),
+      fetch(this.config.mergesUrl, { method: 'HEAD' }).then((r) => r.ok).catch(() => false),
+    ]);
+    if (!assetsPresent[0] || !assetsPresent[1]) {
+      this._ready = false;
+      return;
+    }
+
     try {
       // Dynamic import — mambacode.js is a pure-ESM browser library
       const mamba = await import('mambacode.js');

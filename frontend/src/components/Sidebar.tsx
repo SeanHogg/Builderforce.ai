@@ -46,7 +46,8 @@ const systemNav: NavItem[] = [
   { href: '/approvals', label: 'Approvals', icon: '✅' },
   { href: '/pricing', label: 'Pricing & Billing', icon: '💳' },
   { href: '/security', label: 'Security', icon: '🔒' },
-  { href: '/settings', label: 'Settings', icon: '⚙' },
+  { href: '/settings', label: 'Settings', icon: '⚙', exactMatch: true },
+  { href: '/settings/members', label: 'Members', icon: '👥' },
   { href: '/tenants', label: 'Tenant & Workspace', icon: '🏢' },
   { href: '/observability', label: 'Observability', icon: '📊' },
 ];

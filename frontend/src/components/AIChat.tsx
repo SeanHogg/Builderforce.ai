@@ -31,7 +31,11 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [memoryEnabled, setMemoryEnabled] = useState(false);
-  const [inferenceMode, setInferenceMode] = useState<InferenceMode>('local');
+  // Local/hybrid inference requires tokenizer assets + WebGPU weights that
+  // aren't shipped yet; cloud is the only functional path today. The toggle
+  // is still rendered so the feature is discoverable, but the non-cloud
+  // buttons are disabled until the on-device stack lands.
+  const [inferenceMode, setInferenceMode] = useState<InferenceMode>('cloud');
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const assistantContentRef = useRef('');
@@ -218,23 +222,36 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
           <span>🧬</span> Memory {memoryEnabled ? 'ON' : 'OFF'}
         </button>
 
-        {/* Inference mode */}
+        {/* Inference mode — local/hybrid are gated until on-device weights ship */}
         <div style={{ display: 'flex', gap: 2, marginLeft: 'auto' }}>
-          {(['local', 'hybrid', 'cloud'] as InferenceMode[]).map(mode => (
-            <button
-              key={mode}
-              onClick={() => setInferenceMode(mode)}
-              title={mode === 'local' ? 'Local inference' : mode === 'hybrid' ? 'Local + cloud fallback' : 'Cloud only'}
-              style={{
-                fontSize: '0.65rem', fontWeight: 600, textTransform: 'capitalize',
-                padding: '2px 7px', borderRadius: 5, cursor: 'pointer', border: 'none',
-                background: inferenceMode === mode ? 'var(--bg-elevated)' : 'transparent',
-                color: inferenceMode === mode ? 'var(--text-primary)' : 'var(--text-muted)',
-              }}
-            >
-              {mode === 'local' ? '💻' : mode === 'hybrid' ? '⚡' : '☁️'} {mode}
-            </button>
-          ))}
+          {(['local', 'hybrid', 'cloud'] as InferenceMode[]).map(mode => {
+            const disabled = mode !== 'cloud';
+            const active = inferenceMode === mode;
+            return (
+              <button
+                key={mode}
+                onClick={() => { if (!disabled) setInferenceMode(mode); }}
+                disabled={disabled}
+                title={
+                  disabled
+                    ? `${mode === 'local' ? 'On-device' : 'Hybrid'} inference — coming soon`
+                    : 'Cloud inference'
+                }
+                style={{
+                  fontSize: '0.65rem', fontWeight: 600, textTransform: 'capitalize',
+                  padding: '2px 7px', borderRadius: 5,
+                  cursor: disabled ? 'not-allowed' : 'pointer',
+                  border: 'none',
+                  background: active ? 'var(--bg-elevated)' : 'transparent',
+                  color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+                  opacity: disabled ? 0.45 : 1,
+                }}
+              >
+                {mode === 'local' ? '💻' : mode === 'hybrid' ? '⚡' : '☁️'} {mode}
+                {disabled && <span style={{ fontSize: '0.55rem', marginLeft: 3, opacity: 0.8 }}>·soon</span>}
+              </button>
+            );
+          })}
         </div>
       </div>
 

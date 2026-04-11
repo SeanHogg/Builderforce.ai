@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { inviteByEmail } from '@/lib/auth';
+import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 
 const ROLES = [
   { value: 'developer', label: 'Developer' },
@@ -19,13 +20,17 @@ interface Invite {
 interface InviteTeamMembersProps {
   tenantId: string;
   tenantToken: string;
+  /** Called when a member invite succeeds — parents can refresh their member list. */
+  onInvited?: (email: string, role: string) => void;
+  /** Called when the server returns a plan limit 402 — parents can surface the upgrade modal. */
+  onPlanLimit?: (error: PlanLimitError) => void;
 }
 
 /**
  * Reusable "Invite team members" component.
  * Looks up users by email and adds them to the workspace.
  */
-export function InviteTeamMembers({ tenantId, tenantToken }: InviteTeamMembersProps) {
+export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimit }: InviteTeamMembersProps) {
   const [email, setEmail]   = useState('');
   const [role, setRole]     = useState('developer');
   const [invites, setInvites] = useState<Invite[]>([]);
@@ -50,11 +55,19 @@ export function InviteTeamMembers({ tenantId, tenantToken }: InviteTeamMembersPr
       setInvites((prev) =>
         prev.map((i) => (i.email === trimmed ? { ...i, status: 'sent' } : i))
       );
+      onInvited?.(trimmed, role);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to invite';
-      setInvites((prev) =>
-        prev.map((i) => (i.email === trimmed ? { ...i, status: 'error', errorMsg: msg } : i))
-      );
+      if (isPlanLimitError(err)) {
+        // Drop the pending row — the upgrade modal is a better surface than
+        // a red row with the raw server message.
+        setInvites((prev) => prev.filter((i) => i.email !== trimmed));
+        onPlanLimit?.(err);
+      } else {
+        const msg = err instanceof Error ? err.message : 'Failed to invite';
+        setInvites((prev) =>
+          prev.map((i) => (i.email === trimmed ? { ...i, status: 'error', errorMsg: msg } : i))
+        );
+      }
     } finally {
       setAdding(false);
     }

@@ -379,6 +379,54 @@ export async function completeOnboarding(webToken: string, intent?: string[]): P
   checkUnauthorizedAndRedirect(res, !!webToken);
 }
 
+/** Member row returned by GET /api/tenants/:id/security/users. */
+export interface TenantMember {
+  id: string;
+  email: string;
+  username: string | null;
+  displayName: string | null;
+  mfaEnabled: boolean;
+  mfaEnabledAt: string | null;
+  activeSessions: number;
+  activeTokens: number;
+}
+
+/** List all active members of a workspace. Requires manager role. */
+export async function listTenantMembers(
+  tenantToken: string,
+  tenantId: string,
+): Promise<TenantMember[]> {
+  const { planLimitErrorFromResponse } = await import('./planLimitError');
+  const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/security/users`, {
+    headers: { Authorization: `Bearer ${tenantToken}` },
+  });
+  if (res.status === 402) throw await planLimitErrorFromResponse(res);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? 'Failed to load members');
+  }
+  const data = (await res.json()) as { users: TenantMember[] };
+  return data.users ?? [];
+}
+
+/** Remove a member from the workspace. Requires manager role. */
+export async function removeTenantMember(
+  tenantToken: string,
+  tenantId: string,
+  userId: string,
+): Promise<void> {
+  const { planLimitErrorFromResponse } = await import('./planLimitError');
+  const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/members/${userId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${tenantToken}` },
+  });
+  if (res.status === 402) throw await planLimitErrorFromResponse(res);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? 'Failed to remove member');
+  }
+}
+
 /** Invite a user to a workspace by email. Requires tenant token. */
 export async function inviteByEmail(
   tenantToken: string,
