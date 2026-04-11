@@ -7,6 +7,8 @@ import { listAgents, hireAgent } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 import { ClawSlideOutPanel } from '@/components/ClawSlideOutPanel';
 import { FleetMeshContent } from '@/components/FleetMeshContent';
+import { UpgradeModal } from '@/components/UpgradeModal';
+import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import type { PublishedAgent } from '@/lib/types';
 
 function ClawCard({
@@ -77,6 +79,7 @@ export default function WorkforcePage() {
 
   const [selectedClaw, setSelectedClaw] = useState<Claw | null>(null);
   const [defaultClawId, setDefaultClawId] = useState<number | null>(null);
+  const [planError, setPlanError] = useState<PlanLimitError | null>(null);
 
   const [agents, setAgents] = useState<PublishedAgent[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
@@ -132,7 +135,12 @@ export default function WorkforcePage() {
       setClawList((prev) => [result, ...prev]);
       setRegisterName('');
     } catch (e) {
-      setRegisterError(e instanceof Error ? e.message : 'Registration failed');
+      if (isPlanLimitError(e)) {
+        setShowRegisterModal(false);
+        setPlanError(e);
+      } else {
+        setRegisterError(e instanceof Error ? e.message : 'Registration failed');
+      }
     } finally {
       setRegistering(false);
     }
@@ -339,6 +347,8 @@ export default function WorkforcePage() {
           </div>
         </div>
       )}
+
+      <UpgradeModal error={planError} onClose={() => setPlanError(null)} />
     </div>
   );
 }

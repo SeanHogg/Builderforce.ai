@@ -3,9 +3,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { AIMessage, InferenceMode } from '@/lib/types';
 import { sendAIMessage } from '@/lib/api';
+import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import { ChatInput } from '@/components/ChatInput';
 import { ChatMessageBubble } from '@/components/ChatMessageBubble';
 import { ChatMessageActions } from '@/components/ChatMessageActions';
+import { UpgradeModal } from '@/components/UpgradeModal';
 import { MambaEngine } from '@/lib/mamba-engine';
 import { MambaModelProvider } from '@/lib/model-provider';
 
@@ -30,6 +32,7 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [memoryEnabled, setMemoryEnabled] = useState(false);
   const [inferenceMode, setInferenceMode] = useState<InferenceMode>('local');
+  const [planError, setPlanError] = useState<PlanLimitError | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const assistantContentRef = useRef('');
   const mambaRef = useRef<MambaEngine | null>(null);
@@ -168,14 +171,25 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
         { role: 'user', content: userContent },
         { role: 'assistant', content: assistantContentRef.current }
       );
-    } catch {
-      setMessages(prev =>
-        prev.map(m =>
-          m.id === assistantMessage.id
-            ? { ...m, content: '⚠️ Failed to get a response. Check your connection and try again.' }
-            : m
-        )
-      );
+    } catch (e) {
+      if (isPlanLimitError(e)) {
+        setPlanError(e);
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantMessage.id
+              ? { ...m, content: `⚠️ ${e.message}` }
+              : m
+          )
+        );
+      } else {
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantMessage.id
+              ? { ...m, content: '⚠️ Failed to get a response. Check your connection and try again.' }
+              : m
+          )
+        );
+      }
     } finally {
       setIsLoading(false);
     }
@@ -278,6 +292,12 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
           showVoice={true}
         />
       </div>
+
+      <UpgradeModal
+        error={planError}
+        onClose={() => setPlanError(null)}
+        title="Daily AI limit reached"
+      />
     </div>
   );
 }

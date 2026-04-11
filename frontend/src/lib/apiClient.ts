@@ -9,6 +9,7 @@ import {
   checkUnauthorizedAndRedirect,
   getStoredTenantToken,
 } from './auth';
+import { planLimitErrorFromResponse } from './planLimitError';
 
 export function getApiBaseUrl(): string {
   return AUTH_API_URL;
@@ -77,6 +78,7 @@ export async function apiRequest<T = unknown>(
     headers: { ...authHeaders, ...optHeaders } as HeadersInit,
   });
   checkUnauthorizedAndRedirect(res, hadToken);
+  if (res.status === 402) throw await planLimitErrorFromResponse(res);
   if (!res.ok) {
     const msg = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(msg.error || res.statusText || `Request failed (${res.status})`);

@@ -10,6 +10,7 @@ import {
   getStoredTenantToken,
   getStoredWebToken,
 } from './auth';
+import { planLimitErrorFromResponse } from './planLimitError';
 
 function authHeaders(): Record<string, string> {
   const token = getStoredTenantToken();
@@ -33,6 +34,7 @@ async function webRequest<T>(path: string, opts: RequestInit = {}): Promise<T> {
     headers: { ...headers, ...(opts.headers as Record<string, string>) },
   });
   checkUnauthorizedAndRedirect(res, hadToken);
+  if (res.status === 402) throw await planLimitErrorFromResponse(res);
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(body.error || res.statusText || 'Request failed');
@@ -49,6 +51,7 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
     headers: { ...headers, ...(opts.headers as Record<string, string>) },
   });
   checkUnauthorizedAndRedirect(res, hadToken);
+  if (res.status === 402) throw await planLimitErrorFromResponse(res);
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(body.error || res.statusText || 'Request failed');
