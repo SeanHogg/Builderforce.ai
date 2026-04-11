@@ -15,6 +15,7 @@ interface OnboardingStepperProps {
   webToken: string;
   tenantToken: string | null;
   tenant: Tenant | null;
+  existingProjectsCount?: number;
   onWorkspaceCreated: (tenant: Tenant) => Promise<void>;
   onComplete: () => void;
   onDismiss: () => void;
@@ -51,16 +52,22 @@ export function OnboardingStepper({
   webToken,
   tenantToken,
   tenant,
+  existingProjectsCount = 0,
   onWorkspaceCreated,
   onComplete,
   onDismiss,
 }: OnboardingStepperProps) {
   const workspaceAlreadyExists = !!tenant;
+  const projectAlreadyExists = workspaceAlreadyExists && existingProjectsCount > 0;
 
-  const [activeStep, setActiveStep] = useState<number>(workspaceAlreadyExists ? 1 : 0);
-  const [completedSteps, setCompletedSteps] = useState<Set<number>>(
-    workspaceAlreadyExists ? new Set([0]) : new Set()
-  );
+  const initialCompleted = new Set<number>();
+  if (workspaceAlreadyExists) initialCompleted.add(0);
+  if (projectAlreadyExists) initialCompleted.add(1);
+
+  const initialActiveStep = projectAlreadyExists ? 2 : workspaceAlreadyExists ? 1 : 0;
+
+  const [activeStep, setActiveStep] = useState<number>(initialActiveStep);
+  const [completedSteps, setCompletedSteps] = useState<Set<number>>(initialCompleted);
 
   // Step 1 – Workspace
   const [workspaceName, setWorkspaceName] = useState('');
@@ -389,7 +396,17 @@ export function OnboardingStepper({
           {/* ── Step 2: Project ── */}
           {currentStepId === 'project' && (
             <div>
-              {projectCreated ? (
+              {projectAlreadyExists ? (
+                <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                  <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+                  <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)' }}>
+                    {existingProjectsCount} project{existingProjectsCount === 1 ? '' : 's'} ready
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+                    You already have projects in this workspace.
+                  </div>
+                </div>
+              ) : projectCreated ? (
                 <div style={{ textAlign: 'center', padding: '20px 0' }}>
                   <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
                   <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)' }}>
@@ -564,26 +581,32 @@ export function OnboardingStepper({
           </span>
 
           {activeStep < STEPS.length - 1 ? (
-            <button
-              type="button"
-              onClick={handleNext}
-              disabled={
+            (() => {
+              const nextDisabled =
                 (currentStepId === 'workspace' && !completedSteps.has(0) && !workspaceAlreadyExists) ||
-                (currentStepId === 'project' && !projectCreated && !completedSteps.has(1))
-              }
-              style={{
-                padding: '8px 20px',
-                fontSize: 14,
-                fontWeight: 600,
-                background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 8,
-                cursor: 'pointer',
-              }}
-            >
-              Next →
-            </button>
+                (currentStepId === 'project' && !projectCreated && !completedSteps.has(1));
+              return (
+                <button
+                  type="button"
+                  onClick={handleNext}
+                  disabled={nextDisabled}
+                  title={nextDisabled ? 'Complete this step first' : undefined}
+                  style={{
+                    padding: '8px 20px',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 8,
+                    cursor: nextDisabled ? 'not-allowed' : 'pointer',
+                    opacity: nextDisabled ? 0.5 : 1,
+                  }}
+                >
+                  Next →
+                </button>
+              );
+            })()
           ) : (
             <button
               type="button"

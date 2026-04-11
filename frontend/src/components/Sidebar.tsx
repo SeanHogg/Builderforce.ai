@@ -30,7 +30,6 @@ const mainNav: NavItem[] = [
   },
   { href: '/tasks', label: 'Task Mgmt', icon: '☑' },
   { href: '/training', label: 'Training', icon: '🎓' },
-  { href: '/marketplace', label: 'Marketplace', icon: '🛒' },
 ];
 
 const meshNav: NavItem[] = [
