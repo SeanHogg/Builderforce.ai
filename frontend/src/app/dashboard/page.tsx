@@ -169,6 +169,7 @@ export default function DashboardPage() {
         webToken={webToken!}
         tenantToken={tenantToken}
         tenant={tenant}
+        existingProjectsCount={projects.length}
         onWorkspaceCreated={handleOnboardingWorkspaceCreated}
         onComplete={handleOnboardingComplete}
         onDismiss={handleOnboardingDismiss}
@@ -191,6 +192,7 @@ export default function DashboardPage() {
           webToken={webToken}
           tenantToken={tenantToken}
           tenant={tenant}
+          existingProjectsCount={projects.length}
           onWorkspaceCreated={handleOnboardingWorkspaceCreated}
           onComplete={handleOnboardingComplete}
           onDismiss={handleOnboardingDismiss}
