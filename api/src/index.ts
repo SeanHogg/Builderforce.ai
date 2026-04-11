@@ -48,6 +48,7 @@ import { IClawRepository }         from './domain/claw/IClawRepository';
 import { createSkillAssignmentRoutes } from './presentation/routes/skillAssignmentRoutes';
 import { createArtifactAssignmentRoutes } from './presentation/routes/artifactAssignmentRoutes';
 import { createMarketplaceStatsRoutes } from './presentation/routes/marketplaceStatsRoutes';
+import { createWorkforceRoutes }        from './presentation/routes/workforceRoutes';
 import { createLlmRoutes }          from './presentation/routes/llmRoutes';
 import { createAdminRoutes }        from './presentation/routes/adminRoutes';
 import { createChatRoutes }         from './presentation/routes/chatRoutes';
@@ -184,6 +185,9 @@ function buildApp(env: Env): Hono<HonoEnv> {
 
   // Marketplace (no JWT required for read, required for write)
   app.route('/marketplace', createMarketplaceRoutes(db));
+
+  // Public workforce registry (browse published agents without login)
+  app.route('/api/workforce', createWorkforceRoutes());
 
   // Public Developer API (Bearer <developer_api_key> for read-only; tenant JWT for key management)
   app.route('/api/v1', createPublicApiRoutes(db));
