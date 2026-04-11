@@ -473,7 +473,7 @@ export default function LandingPage() {
               Builderforce.ai
             </Link>
             <div className="lp-nav-right">
-              <Link href="/workforce" className="lp-nav-link">Workforce</Link>
+              <Link href="/marketplace" className="lp-nav-link">Workforce</Link>
               <Link href="/blog" className="lp-nav-link">Blog</Link>
               <a href="#features" className="lp-nav-link">Features</a>
               <a href="#pricing" className="lp-nav-link">Pricing</a>
@@ -518,7 +518,7 @@ export default function LandingPage() {
             <Link href="/register" className="lp-btn-primary">
               🚀 Start Building Free
             </Link>
-            <Link href="/workforce" className="lp-btn-secondary">
+            <Link href="/marketplace" className="lp-btn-secondary">
               🤖 Browse Agents
             </Link>
           </div>
@@ -715,7 +715,7 @@ export default function LandingPage() {
             </p>
             <div className="lp-actions">
               <Link href="/register" className="lp-btn-primary">⚡ Get Started Free</Link>
-              <Link href="/workforce" className="lp-btn-secondary">👀 See Live Agents</Link>
+              <Link href="/marketplace" className="lp-btn-secondary">👀 See Live Agents</Link>
             </div>
           </div>
         </section>
@@ -724,7 +724,7 @@ export default function LandingPage() {
         <footer className="lp-footer">
           <div className="lp-footer-inner">
             <ul className="lp-footer-links">
-              <li><Link href="/workforce">Workforce Registry</Link></li>
+              <li><Link href="/marketplace">Workforce Registry</Link></li>
               <li><Link href="/blog">Blog</Link></li>
               <li><Link href="/login">Sign In</Link></li>
               <li><Link href="/register">Get Started</Link></li>
