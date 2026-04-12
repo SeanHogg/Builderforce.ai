@@ -17,6 +17,8 @@ import { PermissionDebuggerProvider } from '@/lib/PermissionDebuggerContext';
 import ThemeProvider from './ThemeProvider';
 import ConditionalAppShell from '@/components/ConditionalAppShell';
 import { PwaUpdateBanner } from '@/components/PwaUpdateBanner';
+import { GlobalErrorHandler } from '@/components/GlobalErrorHandler';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://builderforce.ai';
 
@@ -233,17 +235,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Client island: syncs icon labels after JS hydrates */}
         <ThemeProvider />
 
-        <AuthProvider>
-          <CartProvider>
-            <EmulationProvider>
-              <RolePreviewProvider>
-                <PermissionDebuggerProvider>
-                  <ConditionalAppShell>{children}</ConditionalAppShell>
-                </PermissionDebuggerProvider>
-              </RolePreviewProvider>
-            </EmulationProvider>
-          </CartProvider>
-        </AuthProvider>
+        <ErrorBoundary homePath="/dashboard" homeLabel="Go to Dashboard">
+          <AuthProvider>
+            <CartProvider>
+              <EmulationProvider>
+                <RolePreviewProvider>
+                  <PermissionDebuggerProvider>
+                    <ConditionalAppShell>{children}</ConditionalAppShell>
+                  </PermissionDebuggerProvider>
+                </RolePreviewProvider>
+              </EmulationProvider>
+            </CartProvider>
+          </AuthProvider>
+
+          <GlobalErrorHandler />
+        </ErrorBoundary>
 
         <PwaUpdateBanner />
       </body>
