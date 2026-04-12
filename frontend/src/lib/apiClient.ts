@@ -10,6 +10,7 @@ import {
   getStoredTenantToken,
 } from './auth';
 import { planLimitErrorFromResponse } from './planLimitError';
+import { dispatchApiError } from './errors/apiErrorEvent';
 
 export function getApiBaseUrl(): string {
   return AUTH_API_URL;
@@ -80,8 +81,18 @@ export async function apiRequest<T = unknown>(
   checkUnauthorizedAndRedirect(res, hadToken);
   if (res.status === 402) throw await planLimitErrorFromResponse(res);
   if (!res.ok) {
-    const msg = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(msg.error || res.statusText || `Request failed (${res.status})`);
+    const msg = await res.json().catch(() => ({})) as { error?: string; code?: string; details?: unknown };
+    const message = msg.error || res.statusText || `Request failed (${res.status})`;
+    dispatchApiError({
+      method: init.method?.toUpperCase() ?? 'GET',
+      url: `${getApiBaseUrl()}${path}`,
+      status: res.status,
+      code: msg.code,
+      message,
+      details: msg.details,
+      requestId: res.headers.get('x-request-id') ?? undefined,
+    });
+    throw new Error(message);
   }
   if (raw) return undefined as T;
   if (res.status === 204) return undefined as T;
@@ -97,7 +108,17 @@ export async function apiRequestText(path: string, opts: RequestInit = {}): Prom
     headers: { ...authHeaders, ...(opts.headers as Record<string, string>) },
   });
   checkUnauthorizedAndRedirect(res, hadToken);
-  if (!res.ok) throw new Error(res.statusText || 'Request failed');
+  if (!res.ok) {
+    const message = res.statusText || 'Request failed';
+    dispatchApiError({
+      method: (opts.method ?? 'GET').toUpperCase(),
+      url: `${getApiBaseUrl()}${path}`,
+      status: res.status,
+      message,
+      requestId: res.headers.get('x-request-id') ?? undefined,
+    });
+    throw new Error(message);
+  }
   return res.text();
 }
 
@@ -110,5 +131,14 @@ export async function apiRequestStream(path: string, opts: RequestInit = {}): Pr
     headers: { ...authHeaders, ...(opts.headers as Record<string, string>) },
   });
   checkUnauthorizedAndRedirect(res, hadToken);
+  if (!res.ok) {
+    dispatchApiError({
+      method: (opts.method ?? 'GET').toUpperCase(),
+      url: `${getApiBaseUrl()}${path}`,
+      status: res.status,
+      message: res.statusText || 'Stream request failed',
+      requestId: res.headers.get('x-request-id') ?? undefined,
+    });
+  }
   return res;
 }
