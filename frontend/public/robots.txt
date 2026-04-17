@@ -1,0 +1,87 @@
+# Builderforce.ai robots.txt
+# Last updated: 2026-04-17
+
+# Default: allow everything public
+User-agent: *
+Allow: /
+Allow: /blog
+Allow: /blog/
+Allow: /pricing
+Allow: /marketplace
+Allow: /login
+Allow: /register
+Disallow: /dashboard
+Disallow: /ide
+Disallow: /projects
+Disallow: /training
+Disallow: /tasks
+Disallow: /chats
+Disallow: /brainstorm
+Disallow: /content-manager
+Disallow: /skills
+Disallow: /personas
+Disallow: /workflows
+Disallow: /workforce
+Disallow: /approvals
+Disallow: /security
+Disallow: /settings
+Disallow: /observability
+Disallow: /logs
+Disallow: /timeline
+Disallow: /admin
+Disallow: /debug
+Disallow: /webcontainer
+Disallow: /tenants
+Disallow: /auth/
+Disallow: /api/
+
+# AI Search Crawlers — explicitly allowed
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: Claude-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: meta-externalagent
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+Sitemap: https://builderforce.ai/sitemap.xml
