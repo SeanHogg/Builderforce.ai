@@ -4,6 +4,9 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { ThemeToggleButton } from './ThemeProvider';
 import { useState } from 'react';
+import JsonLd from '@/components/JsonLd';
+import { homepageSchema } from '@/lib/structured-data';
+import { HOMEPAGE_FAQ } from '@/lib/content';
 
 // register CoderClaw quickstart web component
 import '../components/ccl-quickstart';
@@ -463,10 +466,12 @@ export default function LandingPage() {
         }
       `}</style>
 
+      <JsonLd data={homepageSchema()} />
+
       <div className="lp">
 
         {/* ── Nav ── */}
-        <nav className="lp-nav">
+        <nav className="lp-nav" aria-label="Main navigation">
           <div className="lp-nav-inner">
             <Link href="/" className="lp-nav-logo">
               <Image src="/claw.png" alt="" width={32} height={32} priority />
@@ -486,6 +491,7 @@ export default function LandingPage() {
           </div>
         </nav>
 
+        <main>
         {/* ── Hero ── */}
         <section className="lp-hero">
           {/* Floating claw mascot */}
@@ -690,18 +696,11 @@ export default function LandingPage() {
             <h2 className="section-title">
               <span className="claw-accent">⟩</span> Frequently asked questions
             </h2>
-            <details><summary>What is Builderforce.ai?</summary>
-              <p>Builderforce.ai is an end-to-end platform for building, training, and deploying custom AI agents entirely in the browser. Generate datasets, run LoRA training with WebGPU, evaluate with AI judges, and publish agents to the Workforce Registry.</p>
-            </details>
-            <details><summary>Is Builderforce free?</summary>
-              <p>Yes – the Free tier includes WebGPU training, dataset tools, and public Workforce browsing. The Pro plan ($29/seat) unlocks private agents, unlimited training, and priority support.</p>
-            </details>
-            <details><summary>How do I train a model in my browser?</summary>
-              <p>Start a project, generate or upload a dataset, then launch the in‑browser LoRA training wizard. No cloud GPUs are required; everything runs on your local WebGPU device.</p>
-            </details>
-            <details><summary>What is the Workforce Registry?</summary>
-              <p>The Workforce Registry is a public marketplace where trained agents can be listed, discovered, and hired by other teams or applications.</p>
-            </details>
+            {HOMEPAGE_FAQ.map((faq) => (
+              <details key={faq.question}><summary>{faq.question}</summary>
+                <p>{faq.answer}</p>
+              </details>
+            ))}
           </div>
         </section>
 
@@ -719,6 +718,7 @@ export default function LandingPage() {
             </div>
           </div>
         </section>
+        </main>
 
         {/* ── Footer ── */}
         <footer className="lp-footer">
