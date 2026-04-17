@@ -425,7 +425,7 @@ describe('listAgents', () => {
       new Response(JSON.stringify([sampleAgent]), { status: 200 })
     );
     const result = await listAgents();
-    expect(fetchSpy.mock.calls[0][0]).toMatch(/\/api\/ide\/agents$/);
+    expect(fetchSpy.mock.calls[0][0]).toMatch(/\/api\/workforce\/agents$/);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('agent-1');
   });
