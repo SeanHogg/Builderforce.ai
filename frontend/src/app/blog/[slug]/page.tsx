@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { getPostBySlug, BLOG_POSTS } from '@/lib/blogData';
+import { getPostBySlug } from '@/lib/blogData';
 import { BRAND } from '@/lib/content';
 import BlogPostClient from './BlogPostClient';
 
@@ -34,10 +34,6 @@ export async function generateMetadata({
       description: post.description,
     },
   };
-}
-
-export async function generateStaticParams() {
-  return BLOG_POSTS.map((post) => ({ slug: post.slug }));
 }
 
 export default function BlogPostPage({ params }: { params: Promise<{ slug: string }> }) {
