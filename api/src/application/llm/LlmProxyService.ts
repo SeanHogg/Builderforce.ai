@@ -26,18 +26,15 @@
 // ---------------------------------------------------------------------------
 
 export const FREE_MODEL_POOL = [
-  'qwen/qwen3-coder:free',                                   // 262k ctx  ← preferred
-  'qwen/qwen3-next-80b-a3b-instruct:free',                   // 262k ctx  ← preferred
-  'stepfun/step-3.5-flash:free',                              // 256k ctx
-  'nvidia/nemotron-3-nano-30b-a3b:free',                      // 256k ctx
-  'google/gemma-3-27b-it:free',                               // 131k ctx
-  'meta-llama/llama-3.3-70b-instruct:free',                   // 128k ctx
-  'mistralai/mistral-small-3.1-24b-instruct:free',            // 128k ctx
-  'nousresearch/hermes-3-llama-3.1-405b:free',                // 131k ctx
-  'arcee-ai/trinity-large-preview:free',                      // 131k ctx
-  'upstage/solar-pro-3:free',                                 // 128k ctx
-  'nvidia/nemotron-nano-9b-v2:free',                          // 128k ctx
-  'google/gemma-3-12b-it:free',                               // 32k ctx
+  'google/gemma-4-31b-it:free',                               // Gemma 4 31B, JSON mode, multimodal  ← preferred
+  'openrouter/elephant-alpha',                                // OpenRouter meta-router — auto-picks best available  ← preferred
+  'nousresearch/hermes-3-llama-3.1-405b:free',                // Hermes 3 on Llama 405B — top-tier reasoning
+  'openai/gpt-oss-120b:free',                                 // OpenAI open-source 120B, strong reasoning
+  'meta-llama/llama-3.3-70b-instruct:free',                   // Llama 3.3 70B — solid general-purpose, tool use
+  'z-ai/glm-4.5-air:free',                                    // GLM 4.5 Air — fast, 128K context
+  'qwen/qwen3-next-80b-a3b-instruct:free',                   // Qwen 3 80B MoE, 262K context, structured output
+  'nvidia/nemotron-nano-9b-v2:free',                          // Compact 9B, 128K context, structured output
+  'qwen/qwen3-coder:free',                                    // Qwen 3 Coder — strong for structured code/JSON
 ] as const;
 
 export const PRO_PAID_MODEL_POOL = [
