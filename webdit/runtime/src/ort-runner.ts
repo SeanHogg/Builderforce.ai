@@ -1,13 +1,14 @@
 import * as ort from "onnxruntime-web/webgpu";
+import { BUNDLE_IO } from "@webdit/shared";
 import type { LoadedBundle } from "./bundle";
 import { makeScheduler } from "./scheduler";
-import type { VideoGenerateRequest, VideoGenerateResult } from "./types";
+import {
+  applyClassifierFreeGuidance,
+  makeNoiseLatent,
+  splitFrames,
+} from "./tensor-ops";
+import type { MutableTensor, VideoGenerateRequest, VideoGenerateResult } from "./types";
 
-/**
- * One pass of the diffusion loop. The high-level structure is shared across
- * every DiT architecture; per-arch specifics live in the converter (graph
- * shapes, scheduler kind, latent shape) and surface here through the manifest.
- */
 export async function runDenoiseLoop(
   bundle: LoadedBundle,
   req: VideoGenerateRequest,
@@ -23,7 +24,7 @@ export async function runDenoiseLoop(
   const cond = await encodeText(bundle, req.prompt);
   const uncond = await encodeText(bundle, req.negativePrompt ?? "");
 
-  const latent = makeNoiseLatent(bundle, frames, height, width, req.seed);
+  const latent = makeNoiseLatent(m, frames, height, width, req.seed);
   const scheduler = makeScheduler(m.scheduler, steps);
 
   for (let i = 0; i < steps; i++) {
@@ -44,49 +45,43 @@ export async function runDenoiseLoop(
   };
 }
 
-// All helpers below are intentional stubs. They land in follow-up passes once
-// the converter starts emitting real graphs and we know the actual I/O names.
-
-async function encodeText(_b: LoadedBundle, _p: string): Promise<ort.Tensor> {
-  throw new Error("encodeText not yet implemented");
-}
-
-function makeNoiseLatent(
-  _b: LoadedBundle,
-  _frames: number,
-  _height: number,
-  _width: number,
-  _seed?: number,
-): ort.Tensor {
-  throw new Error("makeNoiseLatent not yet implemented");
+async function encodeText(bundle: LoadedBundle, prompt: string): Promise<MutableTensor> {
+  const enc = bundle.tokenizer.encode(prompt);
+  const ids = new ort.Tensor("int64", enc.inputIds, [1, enc.inputIds.length]);
+  const mask = new ort.Tensor("int64", enc.attentionMask, [1, enc.attentionMask.length]);
+  const result = await bundle.textEncoder.run({
+    [BUNDLE_IO.textEncoder.inputs.inputIds]: ids,
+    [BUNDLE_IO.textEncoder.inputs.attentionMask]: mask,
+  });
+  return fromOrt(result[BUNDLE_IO.textEncoder.outputs.embeddings] as ort.Tensor);
 }
 
 async function runDit(
-  _b: LoadedBundle,
-  _latent: ort.Tensor,
-  _t: number,
-  _cond: ort.Tensor,
-): Promise<ort.Tensor> {
-  throw new Error("runDit not yet implemented");
+  bundle: LoadedBundle,
+  latent: MutableTensor,
+  t: number,
+  textEmb: MutableTensor,
+): Promise<MutableTensor> {
+  const ts = new ort.Tensor("float32", new Float32Array([t]), [1]);
+  const result = await bundle.dit.run({
+    [BUNDLE_IO.dit.inputs.latent]: toOrt(latent),
+    [BUNDLE_IO.dit.inputs.timestep]: ts,
+    [BUNDLE_IO.dit.inputs.textEmb]: toOrt(textEmb),
+  });
+  return fromOrt(result[BUNDLE_IO.dit.outputs.velocity] as ort.Tensor);
 }
 
-function applyClassifierFreeGuidance(
-  _uncond: ort.Tensor,
-  _cond: ort.Tensor,
-  _guidance: number,
-): ort.Tensor {
-  throw new Error("applyClassifierFreeGuidance not yet implemented");
+async function runVae(bundle: LoadedBundle, latent: MutableTensor): Promise<Float32Array> {
+  const result = await bundle.vae.run({
+    [BUNDLE_IO.vae.inputs.latent]: toOrt(latent),
+  });
+  return (result[BUNDLE_IO.vae.outputs.pixels] as ort.Tensor).data as Float32Array;
 }
 
-async function runVae(_b: LoadedBundle, _latent: ort.Tensor): Promise<Float32Array> {
-  throw new Error("runVae not yet implemented");
+function toOrt(t: MutableTensor): ort.Tensor {
+  return new ort.Tensor("float32", t.data, [...t.dims]);
 }
 
-function splitFrames(
-  _pixels: Float32Array,
-  _frames: number,
-  _width: number,
-  _height: number,
-): Uint8ClampedArray[] {
-  throw new Error("splitFrames not yet implemented");
+function fromOrt(t: ort.Tensor): MutableTensor {
+  return { data: t.data as Float32Array, dims: t.dims };
 }

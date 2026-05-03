@@ -1,3 +1,5 @@
+import { assertSameLength } from "../tensor-ops";
+import type { MutableTensor } from "../types";
 import type { Scheduler } from "./index";
 
 /**
@@ -19,7 +21,11 @@ export class FlowMatchScheduler implements Scheduler {
     return this.sigmas[stepIdx]!;
   }
 
-  step(_latent: unknown, _prediction: unknown, _stepIdx: number): void {
-    throw new Error("FlowMatchScheduler.step not yet implemented");
+  step(latent: MutableTensor, prediction: MutableTensor, stepIdx: number): void {
+    assertSameLength(latent, prediction, "FlowMatchScheduler.step");
+    const dt = this.sigmas[stepIdx]! - this.sigmas[stepIdx + 1]!;
+    const x = latent.data;
+    const v = prediction.data;
+    for (let i = 0; i < x.length; i++) x[i] = x[i]! - dt * v[i]!;
   }
 }

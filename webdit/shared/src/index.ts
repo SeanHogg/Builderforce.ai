@@ -87,3 +87,29 @@ export interface WebDiTManifest {
   defaults: SamplingDefaults;
   files: BundleFiles;
 }
+
+/**
+ * ONNX graph I/O naming convention. Whoever pre-exports the upstream model
+ * (LTX/Wan/Mochi) MUST emit graphs with these input/output names; the runtime
+ * calls session.run() against them. Single source of truth — change here and
+ * both sides recompile against it.
+ *
+ * Layout convention for tensors:
+ *   latent  : float32 [B, C, T, H, W]    (B=1 in our denoise loop)
+ *   text_emb: float32 [B, L, D]
+ *   pixels  : float32 [B, C=3, T, H, W]  range [-1, 1], before splitFrames
+ */
+export const BUNDLE_IO = {
+  dit: {
+    inputs: { latent: "latent", timestep: "timestep", textEmb: "text_emb" },
+    outputs: { velocity: "velocity" },
+  },
+  textEncoder: {
+    inputs: { inputIds: "input_ids", attentionMask: "attention_mask" },
+    outputs: { embeddings: "text_emb" },
+  },
+  vae: {
+    inputs: { latent: "latent" },
+    outputs: { pixels: "pixels" },
+  },
+} as const;

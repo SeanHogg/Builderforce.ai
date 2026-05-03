@@ -1,11 +1,11 @@
-import type { SchedulerKind } from "../types";
+import type { MutableTensor, SchedulerKind } from "../types";
 import { FlowMatchScheduler } from "./flow-match";
 
 export interface Scheduler {
   /** Continuous timestep at integer step index (1.0 = pure noise, 0.0 = clean). */
   timestepAt(stepIdx: number): number;
   /** Mutates `latent` in place using the predicted velocity/noise for this step. */
-  step(latent: unknown, prediction: unknown, stepIdx: number): void;
+  step(latent: MutableTensor, prediction: MutableTensor, stepIdx: number): void;
 }
 
 export function makeScheduler(kind: SchedulerKind, steps: number): Scheduler {
