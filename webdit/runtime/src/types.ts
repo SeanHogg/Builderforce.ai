@@ -4,6 +4,16 @@
  */
 export * from "@webdit/shared";
 
+/**
+ * Minimal in-memory tensor shape used by the pure tensor-ops and scheduler
+ * helpers. ort.Tensor is structurally compatible (it has .data and .dims),
+ * so anywhere we accept MutableTensor we can also be handed an ort.Tensor.
+ */
+export interface MutableTensor {
+  data: Float32Array;
+  dims: readonly number[];
+}
+
 export interface VideoGenerateRequest {
   prompt: string;
   negativePrompt?: string;

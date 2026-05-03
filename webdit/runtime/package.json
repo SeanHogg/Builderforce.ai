@@ -17,6 +17,7 @@
     "@mlc-ai/web-llm": "^0.2.0"
   },
   "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
     "@webdit/shared": "*",
     "onnxruntime-web": "^1.18.0"
   },
