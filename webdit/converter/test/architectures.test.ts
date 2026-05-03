@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { validateManifest } from "@webdit/shared";
 import { getAdapter, listArchitectures } from "../src/architectures";
 import { ltx2Distilled } from "../src/architectures/ltx";
+import { miniTest } from "../src/architectures/mini";
 import { wan25 } from "../src/architectures/wan";
 import { mochi1 } from "../src/architectures/mochi";
 import { cogvideox2b } from "../src/architectures/cogvideox";
@@ -17,12 +18,19 @@ describe("architecture registry", () => {
     expect(getAdapter("wan2.5")).toBe(wan25);
     expect(getAdapter("mochi-1")).toBe(mochi1);
     expect(getAdapter("cogvideox-2b")).toBe(cogvideox2b);
+    expect(getAdapter("mini-test")).toBe(miniTest);
   });
 
-  it("lists all four architectures sorted", () => {
+  it("lists all registered architectures sorted", () => {
     const archs = listArchitectures();
     expect(archs).toEqual([...archs].sort());
-    expect(archs).toEqual(["cogvideox-2b", "ltx2-distilled", "mochi-1", "wan2.5"]);
+    expect(archs).toEqual([
+      "cogvideox-2b",
+      "ltx2-distilled",
+      "mini-test",
+      "mochi-1",
+      "wan2.5",
+    ]);
   });
 
   it("throws a helpful error for unknown ids that includes the known list", () => {
@@ -31,13 +39,26 @@ describe("architecture registry", () => {
 });
 
 describe("every adapter produces a manifest that passes validateManifest", () => {
-  for (const adapter of [ltx2Distilled, wan25, mochi1, cogvideox2b]) {
+  for (const adapter of [ltx2Distilled, wan25, mochi1, cogvideox2b, miniTest]) {
     it(`${adapter.id} → valid manifest`, () => {
       const m = adapter.buildManifest("q4f16_1");
       expect(() => validateManifest(m)).not.toThrow();
       expect(m.architecture).toBe(adapter.id);
     });
   }
+});
+
+describe("miniTest uses the mini backend (real bytes through pipeline, no ONNX)", () => {
+  it("declares backend === 'mini'", () => {
+    expect(miniTest.buildManifest("f16").backend).toBe("mini");
+  });
+
+  it("declares small dimensions for in-memory tests", () => {
+    const m = miniTest.buildManifest("f16");
+    expect(m.latentShape.c).toBe(4);
+    expect(m.vaeCompression).toEqual({ spatial: 2, temporal: 2 });
+    expect(m.textEncoder.embedDim).toBeLessThan(64);
+  });
 });
 
 describe("ltx2Distilled uses rectified-flow scheduler", () => {
@@ -55,7 +76,7 @@ describe("cogvideox2b uses Euler scheduler (DDIM-style training)", () => {
 describe("shared adapter helpers (DRY)", () => {
   it("diffusersSourceLayout is reused by every adapter", () => {
     const layout = diffusersSourceLayout();
-    for (const adapter of [ltx2Distilled, wan25, mochi1, cogvideox2b]) {
+    for (const adapter of [ltx2Distilled, wan25, mochi1, cogvideox2b, miniTest]) {
       expect(adapter.expectedSourceLayout()).toEqual(layout);
     }
   });

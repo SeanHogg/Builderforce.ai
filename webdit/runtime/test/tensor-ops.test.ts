@@ -81,6 +81,7 @@ describe("makeNoiseLatent", () => {
     architecture: "ltx2-distilled",
     quantization: "f16",
     scheduler: "flow-match-rect",
+    backend: "ort",
     latentShape: { c: 4, t: 1, h: 1, w: 1 },
     vaeCompression: { spatial: 32, temporal: 8 },
     patchSize: { d: 1, h: 1, w: 1 },

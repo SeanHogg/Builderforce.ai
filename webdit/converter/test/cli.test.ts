@@ -73,10 +73,23 @@ describe("cli main()", () => {
     expect(errs.join("\n")).toMatch(/<bundle-dir>/);
   });
 
-  it("usage lists verify and info subcommands", async () => {
+  it("usage lists all subcommands", async () => {
     await main([]);
     const usage = errs.join("\n");
-    expect(usage).toMatch(/verify/);
-    expect(usage).toMatch(/info/);
+    for (const sub of ["list_architectures", "build_graphs", "convert_weight", "verify", "info"]) {
+      expect(usage).toMatch(sub);
+    }
+  });
+
+  it("build_graphs without architecture returns non-zero", async () => {
+    const code = await main(["build_graphs"]);
+    expect(code).toBe(2);
+    expect(errs.join("\n")).toMatch(/architecture/);
+  });
+
+  it("build_graphs without output returns non-zero", async () => {
+    const code = await main(["build_graphs", "--architecture", "mini-test"]);
+    expect(code).toBe(2);
+    expect(errs.join("\n")).toMatch(/output/);
   });
 });
