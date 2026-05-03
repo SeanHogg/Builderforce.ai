@@ -113,3 +113,11 @@ export const BUNDLE_IO = {
     outputs: { pixels: "pixels" },
   },
 } as const;
+
+export {
+  KNOWN_ARCHITECTURES,
+  KNOWN_QUANTIZATIONS,
+  KNOWN_SCHEDULERS,
+  KNOWN_TEXT_ENCODERS,
+  validateManifest,
+} from "./validate";

@@ -4,3 +4,10 @@ export { quantize, dequantize, Q4_GROUP, type QuantizedTensor } from "./quantize
 export { readSafetensors, parseSafetensors, type SafetensorsTensor, type SafetensorsDtype } from "./safetensors";
 export { floatToHalf, halfToFloat, bfloat16ToFloat } from "./half";
 export { getAdapter, listArchitectures, type ArchitectureAdapter, type SourceLayout } from "./architectures";
+export {
+  packShard,
+  parseBundleShard,
+  type PackedShard,
+  type ShardSummary,
+} from "./shard-format";
+export { verifyBundle, summarizeBundle, type VerifyResult } from "./verify";
