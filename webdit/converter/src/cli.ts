@@ -2,6 +2,7 @@
 import { parseArgs } from "node:util";
 import { getAdapter, listArchitectures } from "./architectures";
 import { convert } from "./convert";
+import { summarizeBundle, verifyBundle } from "./verify";
 import type { WebDiTQuantization } from "@webdit/shared";
 
 const QUANTIZATIONS: WebDiTQuantization[] = ["q4f16_1", "q8f16_0", "f16"];
@@ -12,6 +13,22 @@ export async function main(argv: string[]): Promise<number> {
 
   if (cmd === "list_architectures") {
     for (const arch of listArchitectures()) console.log(arch);
+    return 0;
+  }
+
+  if (cmd === "verify") {
+    const dir = argv[1];
+    if (!dir) return usage("verify requires <bundle-dir>");
+    const r = await verifyBundle(dir);
+    const total = r.ditTensorCount + r.textEncoderTensorCount + r.vaeTensorCount;
+    console.log(`OK: ${r.manifest.architecture} ${r.manifest.quantization}, ${total} tensors, ${(r.totalWeightBytes / (1024 * 1024)).toFixed(2)} MB`);
+    return 0;
+  }
+
+  if (cmd === "info") {
+    const dir = argv[1];
+    if (!dir) return usage("info requires <bundle-dir>");
+    console.log(await summarizeBundle(dir));
     return 0;
   }
 
@@ -55,6 +72,8 @@ function usage(err: string): number {
   console.error("Usage:");
   console.error("  webdit-convert list_architectures");
   console.error("  webdit-convert convert_weight <source> --architecture <id> [--quantization q4f16_1] -o <output>");
+  console.error("  webdit-convert verify <bundle-dir>");
+  console.error("  webdit-convert info <bundle-dir>");
   return 2;
 }
 

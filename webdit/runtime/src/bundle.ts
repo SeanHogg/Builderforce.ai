@@ -1,4 +1,5 @@
 import * as ort from "onnxruntime-web/webgpu";
+import { validateManifest } from "@webdit/shared";
 import type { WebDiTManifest } from "./types";
 
 /** Minimal tokenizer surface the runtime depends on. */
@@ -24,10 +25,8 @@ export async function loadBundle(bundleUrl: string): Promise<LoadedBundle> {
   const root = bundleUrl.endsWith("/") ? bundleUrl : bundleUrl + "/";
   const resolve = (p: string) => new URL(p, root).toString();
 
-  const manifest = (await (await fetch(resolve("manifest.json"))).json()) as WebDiTManifest;
-  if (manifest.bundleVersion !== 1) {
-    throw new Error(`Unsupported WebDiT bundle version: ${manifest.bundleVersion}`);
-  }
+  const raw = await (await fetch(resolve("manifest.json"))).json();
+  const manifest = validateManifest(raw);
 
   const [dit, textEncoder, vae, tokenizer] = await Promise.all([
     ort.InferenceSession.create(resolve(manifest.files.ditGraph), SESSION_OPTS),

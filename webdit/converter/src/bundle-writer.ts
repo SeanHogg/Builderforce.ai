@@ -1,7 +1,8 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import type { WebDiTManifest } from "@webdit/shared";
+import { validateManifest, type WebDiTManifest } from "@webdit/shared";
 import type { QuantizedTensor } from "./quantize";
+import { packShard, type PackedShard } from "./shard-format";
 
 export const DEFAULT_SHARD_LIMIT_BYTES = 256 * 1024 * 1024;
 
@@ -14,11 +15,6 @@ export interface BundleInputs {
   graphs: { dit: string; textEncoder: string; vae: string };
   tokenizerDir: string;
   shardLimitBytes?: number;
-}
-
-interface PackedShard {
-  bytes: Uint8Array;
-  tensorNames: string[];
 }
 
 /**
@@ -36,10 +32,10 @@ export async function writeBundle(inputs: BundleInputs): Promise<WebDiTManifest>
   const vaeShard = packSingleShard(inputs.vaeWeights);
 
   const ditShardPaths = ditShards.map((_, i) => `weights/dit_shard_${i}.bin`);
-  const finalManifest: WebDiTManifest = {
+  const finalManifest: WebDiTManifest = validateManifest({
     ...inputs.manifest,
     files: { ...inputs.manifest.files, ditWeightShards: ditShardPaths },
-  };
+  });
 
   await Promise.all([
     fs.copyFile(inputs.graphs.dit, path.join(inputs.output, finalManifest.files.ditGraph)),
@@ -103,51 +99,4 @@ function packShards(
 
 function packSingleShard(tensors: Map<string, QuantizedTensor>): PackedShard {
   return packShard(Array.from(tensors.entries()));
-}
-
-/**
- * Shard format (safetensors-inspired):
- *   8 bytes:  little-endian uint64 header length
- *   N bytes:  JSON header { name: { dtype, shape, quantization, data: [start, end], scales: [start, end] } }
- *   M bytes:  raw concatenated data + scales
- */
-function packShard(entries: Array<[string, QuantizedTensor]>): PackedShard {
-  const header: Record<string, {
-    dtype: "uint8";
-    shape: readonly number[];
-    quantization: string;
-    data: [number, number];
-    scales: [number, number];
-  }> = {};
-
-  let offset = 0;
-  const blobs: Uint8Array[] = [];
-  for (const [name, t] of entries) {
-    const dataStart = offset;
-    const dataEnd = dataStart + t.data.byteLength;
-    const scaleStart = dataEnd;
-    const scaleEnd = scaleStart + t.scales.byteLength;
-    header[name] = {
-      dtype: "uint8",
-      shape: t.shape,
-      quantization: t.quantization,
-      data: [dataStart, dataEnd],
-      scales: [scaleStart, scaleEnd],
-    };
-    blobs.push(t.data);
-    blobs.push(new Uint8Array(t.scales.buffer, t.scales.byteOffset, t.scales.byteLength));
-    offset = scaleEnd;
-  }
-
-  const headerBytes = new TextEncoder().encode(JSON.stringify(header));
-  const totalDataLen = blobs.reduce((sum, b) => sum + b.byteLength, 0);
-  const out = new Uint8Array(8 + headerBytes.byteLength + totalDataLen);
-  new DataView(out.buffer).setBigUint64(0, BigInt(headerBytes.byteLength), true);
-  out.set(headerBytes, 8);
-  let cursor = 8 + headerBytes.byteLength;
-  for (const b of blobs) {
-    out.set(b, cursor);
-    cursor += b.byteLength;
-  }
-  return { bytes: out, tensorNames: Object.keys(header) };
 }

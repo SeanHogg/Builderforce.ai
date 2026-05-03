@@ -60,4 +60,23 @@ describe("cli main()", () => {
     expect(code).toBe(2);
     expect(errs.join("\n")).toMatch(/quantization/);
   });
+
+  it("verify without bundle dir returns non-zero with usage", async () => {
+    const code = await main(["verify"]);
+    expect(code).toBe(2);
+    expect(errs.join("\n")).toMatch(/<bundle-dir>/);
+  });
+
+  it("info without bundle dir returns non-zero with usage", async () => {
+    const code = await main(["info"]);
+    expect(code).toBe(2);
+    expect(errs.join("\n")).toMatch(/<bundle-dir>/);
+  });
+
+  it("usage lists verify and info subcommands", async () => {
+    await main([]);
+    const usage = errs.join("\n");
+    expect(usage).toMatch(/verify/);
+    expect(usage).toMatch(/info/);
+  });
 });
