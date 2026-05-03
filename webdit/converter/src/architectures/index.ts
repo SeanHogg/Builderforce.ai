@@ -4,6 +4,7 @@ import { cogvideox2b } from "./cogvideox";
 import { ltx2Distilled } from "./ltx";
 import { miniTest } from "./mini";
 import { mochi1 } from "./mochi";
+import { realMini } from "./real-mini";
 import { wan25 } from "./wan";
 
 const REGISTRY: Record<WebDiTArchitecture, ArchitectureAdapter> = {
@@ -12,6 +13,7 @@ const REGISTRY: Record<WebDiTArchitecture, ArchitectureAdapter> = {
   "mochi-1": mochi1,
   "cogvideox-2b": cogvideox2b,
   "mini-test": miniTest,
+  "real-mini": realMini,
 };
 
 export function getAdapter(id: string): ArchitectureAdapter {
