@@ -1,0 +1,28 @@
+{
+  "name": "@webdit/runtime",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Browser-side runtime for WebDiT bundles. Adds .video.generate() to a WebLLM MLCEngine.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "peerDependencies": {
+    "@mlc-ai/web-llm": "^0.2.0"
+  },
+  "dependencies": {
+    "@webdit/shared": "*",
+    "onnxruntime-web": "^1.18.0"
+  },
+  "devDependencies": {
+    "@mlc-ai/web-llm": "^0.2.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.1.0"
+  }
+}
