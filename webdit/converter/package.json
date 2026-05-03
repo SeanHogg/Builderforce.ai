@@ -1,0 +1,29 @@
+{
+  "name": "@webdit/convert",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Pack pre-exported diffusion-transformer ONNX graphs + safetensors weights into a WebDiT bundle.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "webdit-convert": "./dist/cli.js"
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "convert": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@webdit/shared": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.1.0"
+  }
+}

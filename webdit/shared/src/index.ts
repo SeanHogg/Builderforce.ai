@@ -1,0 +1,89 @@
+/**
+ * WebDiT bundle format — single source of truth for the contract between
+ * the converter (which writes bundles) and the runtime (which loads them).
+ *
+ * Bundle directory layout served over HTTP:
+ *   manifest.json               WebDiTManifest serialized
+ *   graph/dit.onnx              DiT graph (ONNX, custom ops where ORT-Web lacks them)
+ *   graph/text_encoder.onnx     CLIP-L by default; T5-base/T5-XXL opt-in
+ *   graph/vae.onnx              VAE decoder graph
+ *   weights/dit_shard_*.bin     DiT weights, sharded for streaming load
+ *   weights/text_encoder.bin
+ *   weights/vae.bin
+ *   tokenizer/tokenizer.json    HF tokenizer.json + tokenizer_config.json
+ */
+
+export type WebDiTArchitecture =
+  | "ltx2-distilled"
+  | "wan2.5"
+  | "mochi-1"
+  | "cogvideox-2b";
+
+export type WebDiTQuantization = "q4f16_1" | "q8f16_0" | "f16";
+
+export type SchedulerKind = "flow-match-rect" | "euler" | "dpm++-2m";
+
+export type TextEncoderKind = "clip-l" | "t5-base" | "t5-xxl";
+
+export interface LatentShape {
+  /** Latent channels. */
+  c: number;
+  /** Temporal length (frames in latent space). */
+  t: number;
+  /** Latent height. */
+  h: number;
+  /** Latent width. */
+  w: number;
+}
+
+export interface VaeCompression {
+  /** Pixel = latent * spatial. */
+  spatial: number;
+  /** Pixel-frames = latent-frames * temporal. */
+  temporal: number;
+}
+
+export interface PatchSize {
+  d: number;
+  h: number;
+  w: number;
+}
+
+export interface SamplingDefaults {
+  steps: number;
+  guidanceScale: number;
+  frames: number;
+  height: number;
+  width: number;
+}
+
+export interface BundleFiles {
+  ditGraph: string;
+  ditWeightShards: string[];
+  textEncoderGraph: string;
+  textEncoderWeights: string;
+  vaeGraph: string;
+  vaeWeights: string;
+  /** Directory (trailing slash) holding tokenizer.json + tokenizer_config.json. */
+  tokenizer: string;
+}
+
+export interface WebDiTManifest {
+  bundleVersion: 1;
+  architecture: WebDiTArchitecture;
+  quantization: WebDiTQuantization;
+  scheduler: SchedulerKind;
+
+  latentShape: LatentShape;
+  vaeCompression: VaeCompression;
+  patchSize: PatchSize;
+
+  textEncoder: {
+    kind: TextEncoderKind;
+    maxTokens: number;
+    embedDim: number;
+  };
+
+  defaults: SamplingDefaults;
+  files: BundleFiles;
+}
