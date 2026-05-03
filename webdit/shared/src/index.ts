@@ -17,13 +17,23 @@ export type WebDiTArchitecture =
   | "ltx2-distilled"
   | "wan2.5"
   | "mochi-1"
-  | "cogvideox-2b";
+  | "cogvideox-2b"
+  | "mini-test";
 
 export type WebDiTQuantization = "q4f16_1" | "q8f16_0" | "f16";
 
 export type SchedulerKind = "flow-match-rect" | "euler" | "dpm++-2m";
 
-export type TextEncoderKind = "clip-l" | "t5-base" | "t5-xxl";
+export type TextEncoderKind = "clip-l" | "t5-base" | "t5-xxl" | "mini-hash";
+
+/**
+ * Execution backend selected at bundle build time. ORT runs the .onnx graphs
+ * via ORT-Web/WebGPU. Mini bypasses ONNX entirely and uses pure-JS forward
+ * passes that read weights directly from our shard format — used for the
+ * built-in `mini-test` architecture and for integration tests where we need
+ * real bytes flowing without depending on a real ONNX export.
+ */
+export type Backend = "ort" | "mini";
 
 export interface LatentShape {
   /** Latent channels. */
@@ -73,6 +83,7 @@ export interface WebDiTManifest {
   architecture: WebDiTArchitecture;
   quantization: WebDiTQuantization;
   scheduler: SchedulerKind;
+  backend: Backend;
 
   latentShape: LatentShape;
   vaeCompression: VaeCompression;
@@ -119,5 +130,22 @@ export {
   KNOWN_QUANTIZATIONS,
   KNOWN_SCHEDULERS,
   KNOWN_TEXT_ENCODERS,
+  KNOWN_BACKENDS,
   validateManifest,
 } from "./validate";
+
+export {
+  Q4_GROUP,
+  floatToHalf,
+  halfToFloat,
+  bfloat16ToFloat,
+  dequantize,
+  type QuantizedTensor,
+} from "./quant";
+
+export {
+  packShard,
+  parseBundleShard,
+  type PackedShard,
+  type ShardSummary,
+} from "./shard";

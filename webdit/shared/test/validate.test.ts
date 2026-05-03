@@ -6,6 +6,7 @@ const valid: WebDiTManifest = {
   architecture: "ltx2-distilled",
   quantization: "q4f16_1",
   scheduler: "flow-match-rect",
+  backend: "ort",
   latentShape: { c: 128, t: 8, h: 32, w: 32 },
   vaeCompression: { spatial: 32, temporal: 8 },
   patchSize: { d: 1, h: 1, w: 1 },
@@ -90,5 +91,19 @@ describe("validateManifest", () => {
     const m = clone();
     (m.textEncoder as Record<string, unknown>).kind = "bert-base";
     expect(() => validateManifest(m)).toThrow(/textEncoder\.kind/);
+  });
+
+  it("rejects unknown backend", () => {
+    const m = clone();
+    m.backend = "tvm";
+    expect(() => validateManifest(m)).toThrow(/backend/);
+  });
+
+  it("accepts both 'ort' and 'mini' as backend", () => {
+    for (const b of ["ort", "mini"] as const) {
+      const m = clone();
+      m.backend = b;
+      expect(() => validateManifest(m)).not.toThrow();
+    }
   });
 });

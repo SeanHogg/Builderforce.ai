@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
 import { getAdapter, listArchitectures } from "./architectures";
+import { buildGraphs } from "./build-graphs";
 import { convert } from "./convert";
 import { summarizeBundle, verifyBundle } from "./verify";
 import type { WebDiTQuantization } from "@webdit/shared";
@@ -13,6 +14,27 @@ export async function main(argv: string[]): Promise<number> {
 
   if (cmd === "list_architectures") {
     for (const arch of listArchitectures()) console.log(arch);
+    return 0;
+  }
+
+  if (cmd === "build_graphs") {
+    const { values } = parseArgs({
+      args: argv.slice(1),
+      allowPositionals: false,
+      options: {
+        architecture: { type: "string", short: "a" },
+        output: { type: "string", short: "o" },
+        seed: { type: "string" },
+      },
+    });
+    if (!values.architecture) return usage("--architecture is required");
+    if (!values.output) return usage("--output (-o) is required");
+    const result = await buildGraphs({
+      architecture: values.architecture,
+      output: values.output,
+      seed: values.seed === undefined ? undefined : Number(values.seed),
+    });
+    console.log(`Wrote ${result.bytesWritten} bytes across 3 ONNX graphs to ${values.output}`);
     return 0;
   }
 
@@ -71,6 +93,7 @@ function usage(err: string): number {
   console.error(`webdit-convert: ${err}`);
   console.error("Usage:");
   console.error("  webdit-convert list_architectures");
+  console.error("  webdit-convert build_graphs --architecture <id> -o <output-dir>");
   console.error("  webdit-convert convert_weight <source> --architecture <id> [--quantization q4f16_1] -o <output>");
   console.error("  webdit-convert verify <bundle-dir>");
   console.error("  webdit-convert info <bundle-dir>");

@@ -1,17 +1,16 @@
-import type { WebDiTQuantization } from "@webdit/shared";
-import { floatToHalf, halfToFloat } from "./half";
+/**
+ * Write-side quantization. Read-side primitives (QuantizedTensor type,
+ * dequantize, half conversions) live in @webdit/shared so the runtime can
+ * read shards without depending on the converter.
+ */
+import {
+  Q4_GROUP,
+  floatToHalf,
+  type QuantizedTensor,
+  type WebDiTQuantization,
+} from "@webdit/shared";
 
-/** Group size for q4f16_1 — fixed by the format spec. */
-export const Q4_GROUP = 32;
-
-export interface QuantizedTensor {
-  /** Packed quantized data. */
-  data: Uint8Array;
-  /** FP16 scales. Length = 1 for q8f16_0, length = numGroups for q4f16_1, length = 0 for f16. */
-  scales: Uint16Array;
-  shape: readonly number[];
-  quantization: WebDiTQuantization;
-}
+export { dequantize, Q4_GROUP, type QuantizedTensor } from "@webdit/shared";
 
 export function quantize(
   tensor: Float32Array,
@@ -95,40 +94,4 @@ function absMaxOf(tensor: Float32Array, start: number, len: number): number {
 
 function clampInt(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
-}
-
-/** Reverse the quantization for testing / verification. */
-export function dequantize(q: QuantizedTensor): Float32Array {
-  switch (q.quantization) {
-    case "f16": {
-      const u16 = new Uint16Array(q.data.buffer, q.data.byteOffset, q.data.byteLength / 2);
-      const out = new Float32Array(u16.length);
-      for (let i = 0; i < u16.length; i++) out[i] = halfToFloat(u16[i]!);
-      return out;
-    }
-    case "q8f16_0": {
-      const i8 = new Int8Array(q.data.buffer, q.data.byteOffset, q.data.byteLength);
-      const scale = halfToFloat(q.scales[0]!);
-      const out = new Float32Array(i8.length);
-      for (let i = 0; i < i8.length; i++) out[i] = i8[i]! * scale;
-      return out;
-    }
-    case "q4f16_1": {
-      const out = new Float32Array(q.data.length * 2);
-      for (let g = 0; g < q.scales.length; g++) {
-        const scale = halfToFloat(q.scales[g]!);
-        const base = g * Q4_GROUP;
-        for (let i = 0; i < Q4_GROUP; i += 2) {
-          const byte = q.data[(base + i) / 2]!;
-          out[base + i] = signExtend4(byte & 0xf) * scale;
-          out[base + i + 1] = signExtend4((byte >>> 4) & 0xf) * scale;
-        }
-      }
-      return out;
-    }
-  }
-}
-
-function signExtend4(v: number): number {
-  return v & 0x8 ? v - 16 : v;
 }

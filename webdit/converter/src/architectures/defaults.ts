@@ -1,4 +1,4 @@
-import type { BundleFiles, WebDiTArchitecture, WebDiTManifest, WebDiTQuantization } from "@webdit/shared";
+import type { Backend, BundleFiles, WebDiTArchitecture, WebDiTManifest, WebDiTQuantization } from "@webdit/shared";
 import type { SourceLayout } from "./base";
 
 /**
@@ -38,6 +38,7 @@ export function defaultBundleFiles(): BundleFiles {
 export interface ArchitectureSpec {
   architecture: WebDiTArchitecture;
   scheduler: WebDiTManifest["scheduler"];
+  backend?: Backend;
   latentShape: WebDiTManifest["latentShape"];
   vaeCompression: WebDiTManifest["vaeCompression"];
   patchSize: WebDiTManifest["patchSize"];
@@ -55,6 +56,7 @@ export function buildManifestWith(
     architecture: spec.architecture,
     quantization,
     scheduler: spec.scheduler,
+    backend: spec.backend ?? "ort",
     latentShape: spec.latentShape,
     vaeCompression: spec.vaeCompression,
     patchSize: spec.patchSize,

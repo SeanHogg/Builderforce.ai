@@ -1,8 +1,9 @@
 /**
- * Runtime-only types. Bundle/manifest types are re-exported from
- * @webdit/shared so the converter and runtime cannot drift.
+ * Runtime-only types. Bundle/manifest types and quantization primitives are
+ * re-exported from @webdit/shared so the converter and runtime cannot drift.
  */
 export * from "@webdit/shared";
+export type { QuantizedTensor } from "@webdit/shared";
 
 /**
  * Minimal in-memory tensor shape used by the pure tensor-ops and scheduler

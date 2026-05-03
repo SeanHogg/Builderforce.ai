@@ -1,4 +1,5 @@
 import type {
+  Backend,
   SchedulerKind,
   TextEncoderKind,
   WebDiTArchitecture,
@@ -11,6 +12,7 @@ export const KNOWN_ARCHITECTURES: ReadonlyArray<WebDiTArchitecture> = [
   "wan2.5",
   "mochi-1",
   "cogvideox-2b",
+  "mini-test",
 ];
 
 export const KNOWN_QUANTIZATIONS: ReadonlyArray<WebDiTQuantization> = [
@@ -29,7 +31,10 @@ export const KNOWN_TEXT_ENCODERS: ReadonlyArray<TextEncoderKind> = [
   "clip-l",
   "t5-base",
   "t5-xxl",
+  "mini-hash",
 ];
+
+export const KNOWN_BACKENDS: ReadonlyArray<Backend> = ["ort", "mini"];
 
 /**
  * Defensive runtime validator for a parsed-but-untyped manifest. Throws
@@ -46,6 +51,7 @@ export function validateManifest(value: unknown): WebDiTManifest {
   assertOneOf(value.architecture, KNOWN_ARCHITECTURES, "manifest.architecture");
   assertOneOf(value.quantization, KNOWN_QUANTIZATIONS, "manifest.quantization");
   assertOneOf(value.scheduler, KNOWN_SCHEDULERS, "manifest.scheduler");
+  assertOneOf(value.backend, KNOWN_BACKENDS, "manifest.backend");
 
   assertObject(value.latentShape, "manifest.latentShape");
   for (const k of ["c", "t", "h", "w"] as const) {
