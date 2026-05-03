@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "description": "WebDiT — diffusion-transformer text-to-video for the browser, WebLLM-style.",
-  "workspaces": ["shared", "runtime", "converter"],
+  "workspaces": ["shared", "torch", "runtime", "converter"],
   "scripts": {
     "test": "npm test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",

@@ -9,6 +9,7 @@ export { ltx2Distilled } from "./architectures/ltx";
 export { wan25 } from "./architectures/wan";
 export { mochi1 } from "./architectures/mochi";
 export { cogvideox2b } from "./architectures/cogvideox";
+export { realMini } from "./architectures/real-mini";
 export {
   packShard,
   parseBundleShard,

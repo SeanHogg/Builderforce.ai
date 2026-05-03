@@ -13,6 +13,7 @@ export const KNOWN_ARCHITECTURES: ReadonlyArray<WebDiTArchitecture> = [
   "mochi-1",
   "cogvideox-2b",
   "mini-test",
+  "real-mini",
 ];
 
 export const KNOWN_QUANTIZATIONS: ReadonlyArray<WebDiTQuantization> = [
@@ -34,7 +35,7 @@ export const KNOWN_TEXT_ENCODERS: ReadonlyArray<TextEncoderKind> = [
   "mini-hash",
 ];
 
-export const KNOWN_BACKENDS: ReadonlyArray<Backend> = ["ort", "mini"];
+export const KNOWN_BACKENDS: ReadonlyArray<Backend> = ["ort", "mini", "torch"];
 
 /**
  * Defensive runtime validator for a parsed-but-untyped manifest. Throws

@@ -29,6 +29,7 @@ describe("architecture registry", () => {
       "ltx2-distilled",
       "mini-test",
       "mochi-1",
+      "real-mini",
       "wan2.5",
     ]);
   });

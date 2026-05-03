@@ -18,7 +18,8 @@ export type WebDiTArchitecture =
   | "wan2.5"
   | "mochi-1"
   | "cogvideox-2b"
-  | "mini-test";
+  | "mini-test"
+  | "real-mini";
 
 export type WebDiTQuantization = "q4f16_1" | "q8f16_0" | "f16";
 
@@ -33,7 +34,7 @@ export type TextEncoderKind = "clip-l" | "t5-base" | "t5-xxl" | "mini-hash";
  * built-in `mini-test` architecture and for integration tests where we need
  * real bytes flowing without depending on a real ONNX export.
  */
-export type Backend = "ort" | "mini";
+export type Backend = "ort" | "mini" | "torch";
 
 export interface LatentShape {
   /** Latent channels. */

@@ -19,6 +19,7 @@
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
     "@webdit/shared": "*",
+    "@webdit/torch": "*",
     "onnxruntime-web": "^1.18.0"
   },
   "devDependencies": {

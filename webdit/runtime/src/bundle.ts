@@ -82,8 +82,46 @@ async function buildOrtBundle(env: BundleLoadEnv): Promise<LoadedBundle> {
 }
 
 async function buildMiniBundle(env: BundleLoadEnv): Promise<LoadedBundle> {
-  const { parseBundleShard } = await import("./shard-loader");
   const { MiniDitRunner, MiniTextEncoderRunner, MiniVaeRunner } = await import("./runners-mini");
+  const { ditWeights, teWeights, vaeWeights } = await readAllShards(env);
+  return {
+    manifest: env.manifest,
+    dit: new MiniDitRunner(ditWeights),
+    textEncoder: new MiniTextEncoderRunner(teWeights, env.manifest),
+    vae: new MiniVaeRunner(vaeWeights, env.manifest),
+    tokenizer: await env.readTokenizer(),
+    async unload() {
+      ditWeights.clear();
+      teWeights.clear();
+      vaeWeights.clear();
+    },
+  };
+}
+
+async function buildTorchBundle(env: BundleLoadEnv): Promise<LoadedBundle> {
+  const { buildTorchRunners } = await import("./runners-torch");
+  const { ditWeights, teWeights, vaeWeights } = await readAllShards(env);
+  const parts = buildTorchRunners(env.manifest, ditWeights, teWeights, vaeWeights);
+  return {
+    manifest: env.manifest,
+    dit: parts.dit,
+    textEncoder: parts.textEncoder,
+    vae: parts.vae,
+    tokenizer: await env.readTokenizer(),
+    async unload() {
+      ditWeights.clear();
+      teWeights.clear();
+      vaeWeights.clear();
+    },
+  };
+}
+
+async function readAllShards(env: BundleLoadEnv): Promise<{
+  ditWeights: Map<string, QuantizedTensor>;
+  teWeights: Map<string, QuantizedTensor>;
+  vaeWeights: Map<string, QuantizedTensor>;
+}> {
+  const { parseBundleShard } = await import("./shard-loader");
   const m = env.manifest;
   const read = env.readShard!;
 
@@ -95,19 +133,7 @@ async function buildMiniBundle(env: BundleLoadEnv): Promise<LoadedBundle> {
   }
   const teWeights = parseBundleShard(await read(m.files.textEncoderWeights));
   const vaeWeights = parseBundleShard(await read(m.files.vaeWeights));
-
-  return {
-    manifest: m,
-    dit: new MiniDitRunner(ditWeights),
-    textEncoder: new MiniTextEncoderRunner(teWeights, m),
-    vae: new MiniVaeRunner(vaeWeights, m),
-    tokenizer: await env.readTokenizer(),
-    async unload() {
-      ditWeights.clear();
-      teWeights.clear();
-      vaeWeights.clear();
-    },
-  };
+  return { ditWeights, teWeights, vaeWeights };
 }
 
 /**
@@ -123,11 +149,10 @@ export async function loadBundleFromDir(bundleDir: string): Promise<LoadedBundle
   const readShard = (rel: string) => fs.readFile(path.join(bundleDir, rel)).then((b) => new Uint8Array(b));
 
   if (manifest.backend === "mini") {
-    return buildMiniBundle({
-      manifest,
-      readShard,
-      readTokenizer: () => loadMiniTokenizer(),
-    });
+    return buildMiniBundle({ manifest, readShard, readTokenizer: () => loadMiniTokenizer() });
+  }
+  if (manifest.backend === "torch") {
+    return buildTorchBundle({ manifest, readShard, readTokenizer: () => loadMiniTokenizer() });
   }
   return buildOrtBundle({
     manifest,
