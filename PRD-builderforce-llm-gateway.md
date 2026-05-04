@@ -1,6 +1,6 @@
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               # PRD — Builderforce.ai B2B LLM Gateway
 
-**Status:** Step 1 complete. **Step 2 + Step 3 cleanup landed** (DRY + dead-code violations closed; ~80 LOC removed; api/sdk/coderClaw all type-check and test clean). Remaining: optional SDK `connectTimeoutMs` / `streamTimeoutMs` split, optional `LocalAgentTransport` impl, and PRD §6 long-tail (legacy workforce-prefix deprecation, embeddings/vision wiring).
+**Status:** Step 1 complete. **Step 2 fully closed** (SDK + C1 + all H/M follow-ups + reviewer-found C1.fix.1). **Step 3 fully closed** (`LocalAgentTransport`, `CompositeAgentTransport`, single-path orchestrator dispatch, 23 transport tests). Remaining long-tail: optional SDK `connectTimeoutMs` / `streamTimeoutMs` split, legacy workforce-prefix deprecation date, embeddings/vision wiring.
 **Owner:** Sean
 **Last updated:** 2026-05-04
 
@@ -313,7 +313,7 @@ All findings from the review above are closed. Verified by `npx tsc --noEmit` cl
 | F1, F2 | ✅ Closed (different fix than proposed) | The proposed fix was to add `slug?, connectedAt?, lastSeenAt?` to `AgentTransportEntry`. Better: the `claw_fleet` tool is a **diagnostic** that wants the un-filtered fleet (including self) for `total`/`online` accuracy. Moved it back to call `fetchFleetEntries` directly — fleet data flows un-mangled through `FleetEntry` (slug/connectedAt/lastSeenAt preserved), `total`/`online` count over the full tenant view (historical semantics restored), `filtered` reflects post-filter count. Transport abstraction is left for *dispatch*, not diagnostics. |
 | C2.4 | ✅ Closed | `IAgentTransport.dispatch(payload)` — `taskId` parameter removed from interface, transport, and orchestrator call site. |
 | C2.6 | ✅ Closed | `agent-transport.ts:awaitRemoteResult` catch now `logDebug`s the correlation id + error before falling back to "result pending" envelope. |
-| C2.3 | ⚠️ Still applies | `BuilderforceAgentTransport` is remote-only — kept as-is; `LocalAgentTransport` is a separate task and isn't currently needed. No code change. |
+| C2.3 | ✅ Closed (subsequent chat) | `LocalAgentTransport` shipped in `product/src/infra/local-agent-transport.ts`; routes `local:<role>`, `local:auto`, `local:auto[caps]`, and bare role names through `spawnSubagentDirect` + `localResultBroker`. `discover()` enumerates built-in roles + persona registry. |
 | Dead-code sweep | ✅ Closed | `selectClawByCapability` (zero callers after adapter deletion) deleted from `remote-subagent.ts`; file-level docstring updated to describe its actual responsibilities. |
 
 **SDK side cleanup landed in the same chat:**
@@ -331,6 +331,47 @@ coderClaw/product  npx tsc --noEmit  ✓ (no diagnostics)
 ```
 
 Step 3 now complies with the DRY + dead-code rules. **Net diff: ~80 LOC removed, 0 LOC duplicated.**
+
+#### Step 3 completion: local transport + tests (2026-05-04, this chat)
+
+A subsequent reviewer flagged that `local:<id>` was still unimplemented — the `IAgentTransport` interface modeled `local + remote` but only the remote impl shipped, so a `local:<role>` agentRole fell through to `findAgentRole` and failed. **All three findings closed:**
+
+| Finding | Status | Resolution |
+|---|---|---|
+| **High** — `local:<id>` not implemented; orchestrator has no transport handling for it | ✅ Closed | New `LocalAgentTransport` (`product/src/infra/local-agent-transport.ts`) wraps `spawnSubagentDirect` + `localResultBroker.awaitResult` behind `IAgentTransport`. Orchestrator's dispatch is now **single-path**: pre-dispatch relay-context fetch (remote-only, non-auto) followed by one `agentTransport.dispatch(...)` for local + remote + unprefixed (defaulted to local). |
+| **Medium** — interface modeled local+remote but impl was remote-only | ✅ Closed | `LocalAgentTransport` ships alongside `BuilderforceAgentTransport`. New `CompositeAgentTransport` (`product/src/infra/composite-agent-transport.ts`) routes by prefix: `remote:` → remote, `local:` or bare → local. `transportKindForTarget` is the single source for prefix→kind resolution (DRY). |
+| **Medium** — no transport-specific tests | ✅ Closed | `product/src/infra/agent-transport.test.ts` — 23 tests across `parseAutoTarget`, `transportKindForTarget`, `BuilderforceAgentTransport` (auto-routing, no-peer-failure, pending-fallback w/ logDebug, rejection propagation), `LocalAgentTransport` (discover/built-ins/capability-filter/dispatch-success/auto/unknown-role/spawn-fail), `CompositeAgentTransport` (remote routing / local routing / bare-role-as-local / missing-kind error / merged discover). |
+
+**DRY + dead-code follow-through:**
+
+- `OrchestratorConfig` lost the now-unused `localResultBroker` key (the broker is construction-injected into `LocalAgentTransport` instead of stashed on the orchestrator). Field, deprecated `setLocalResultBroker` shim, and `ILocalResultBroker` import all swept from `orchestrator.ts`. Server-startup wires the broker straight to the transport.
+- New `currentSpawnContext()` getter on `AgentOrchestrator` exposes the active per-task spawn context to the local transport via a closure (no circular construction; serialized by the orchestrator's serial executeTask loop).
+- `AgentTransportDispatchResult` now carries an optional `childSessionKey` so the orchestrator can preserve subagent-session tracking through the unified path.
+
+**Wiring (server-startup.ts):**
+- `startOrchestrator` always wires a `LocalAgentTransport` inside a `CompositeAgentTransport({ local })`. Local dispatch works without any credentials.
+- `startBuilderforceServices` upgrades the composite to `{ local, remote }` once `BUILDERFORCE_API_KEY` + `clawId` are loaded.
+
+**Verification (post-completion):**
+```
+coderClaw/product  npx tsc --noEmit  ✓
+coderClaw/product  npx vitest run     ✓  919 files / 8000 tests passed / 25 skipped / 0 failed
+api/, sdk/         re-verified clean  ✓
+```
+
+Net Step 3 diff (vs. pre-cleanup baseline): ~110 LOC removed, ~280 LOC added (LocalAgentTransport + CompositeAgentTransport + tests), zero duplicated logic.
+
+#### Pre-existing flake fixed alongside (2026-05-04)
+
+Full-sweep `vitest run` surfaced a **pre-existing race** in `infra/remote-result-broker.test.ts` (3 failures across 2 tests). Diagnosis: `awaitRemoteResult` did `await acquireSlot()` even on the fast path — the `await` introduced a microtask boundary, so `pending.set(...)` ran *after* the function returned. Tests that called `resolveRemoteResult(...)` or `pendingRemoteCount()` synchronously after `awaitRemoteResult(...)` saw the entry not-yet-registered.
+
+Unrelated to Step 3 work, but blocking the green-build claim, so fixed in the same chat:
+
+- `awaitRemoteResult` now registers `pending` **synchronously** on the fast path. Slow-path (queue-when-full) registration runs on slot release.
+- Extracted `registerPending(...)` as the single source of timeout + entry registration (DRY — was previously inlined in the slow path implicitly via the await chain).
+- Deleted `acquireSlot()` — no callers after the inlining (dead-code rule).
+
+Result: `remote-result-broker.test.ts` 4/4 green, deterministic.
 
 ---
 
