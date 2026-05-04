@@ -7,6 +7,7 @@ export interface BuilderforceClientOptions {
   apiKey: string;
   baseUrl?: string;
   fetch?: typeof fetch;
+  timeoutMs?: number;
 }
 
 export class BuilderforceClient {
@@ -17,10 +18,16 @@ export class BuilderforceClient {
   public readonly usage: UsageApi;
 
   constructor(options: BuilderforceClientOptions) {
+    const apiKey = options.apiKey?.trim();
+    if (!apiKey) {
+      throw new Error('BuilderforceClient requires a non-empty apiKey');
+    }
+
     const http = new HttpClient({
-      apiKey: options.apiKey,
+      apiKey,
       baseUrl: options.baseUrl ?? 'https://api.builderforce.ai',
       fetchFn: options.fetch,
+      timeoutMs: options.timeoutMs,
     });
 
     this.chat = {
