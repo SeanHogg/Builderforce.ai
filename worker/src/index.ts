@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import projectsRouter from './routes/projects';
 import filesRouter from './routes/files';
-import aiRouter from './routes/ai';
 import datasetsRouter from './routes/datasets';
 import trainingRouter from './routes/training';
 import agentsRouter from './routes/agents';
@@ -13,12 +12,8 @@ export { CollaborationRoom };
 interface Env {
   NEON_DATABASE_URL: string;
   STORAGE: R2Bucket;
-  /** Cloudflare Workers AI binding — used when AI_PROVIDER is "cloudflare" (default) or "ab". */
-  AI?: Ai;
-  /** OpenRouter API key — used when AI_PROVIDER is "openrouter" or "ab". */
-  OPENROUTER_API_KEY?: string;
-  /** Selects the active AI provider: "cloudflare" | "openrouter" | "ab". Defaults to "cloudflare". */
-  AI_PROVIDER?: 'cloudflare' | 'openrouter' | 'ab';
+  /** Gateway base URL for worker -> api.builderforce.ai /llm calls. */
+  BUILDERFORCE_API_BASE_URL?: string;
   COLLABORATION_ROOM: DurableObjectNamespace;
 }
 
@@ -52,7 +47,6 @@ app.onError((err, c) => {
 
 app.route('/api/projects', projectsRouter);
 app.route('/api/projects/:projectId/files', filesRouter);
-app.route('/api/ai', aiRouter);
 app.route('/api/datasets', datasetsRouter);
 app.route('/api/training', trainingRouter);
 app.route('/api/agents', agentsRouter);

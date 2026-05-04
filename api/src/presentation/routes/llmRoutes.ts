@@ -187,7 +187,8 @@ async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAccess> {
 
   const plan = (tenantRow.plan ?? 'free') as TenantAccess['plan'];
   const billingStatus = (tenantRow.billingStatus ?? 'none') as TenantAccess['billingStatus'];
-  const effectivePlan: TenantAccess['effectivePlan'] = (plan === 'pro' && billingStatus === 'active') ? 'pro' : 'free';
+  const effectivePlan: TenantAccess['effectivePlan'] =
+    billingStatus === 'active' && (plan === 'pro' || plan === 'teams') ? plan : 'free';
 
   return {
     userId: isClawToken ? null : payload.sub,

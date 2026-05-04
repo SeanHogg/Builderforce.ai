@@ -8,30 +8,19 @@ compatibility_flags = ["nodejs_compat"]
 # NEON_DATABASE_URL = "postgresql://user:password@host.neon.tech/dbname?sslmode=require"
 
 # ---------------------------------------------------------------------------
-# AI provider configuration
+# Gateway configuration
 # ---------------------------------------------------------------------------
-# AI_PROVIDER controls which backend handles chat requests.
-#   "cloudflare" (default) — Cloudflare Workers AI (requires the [ai] binding below)
-#   "openrouter"           — OpenRouter free-model pool (requires OPENROUTER_API_KEY secret)
-#   "ab"                   — randomly routes each request 50/50 between both
-#                            providers for A/B validation (requires both configured)
+# Worker LLM-triggering routes call the centralized Builderforce gateway:
+#   POST https://api.builderforce.ai/llm/v1/chat/completions
 #
-# Set the active provider:
-#   wrangler secret put AI_PROVIDER          # or add to [vars] below
-#
-# OpenRouter API key (only required for "openrouter" or "ab" modes):
-#   wrangler secret put OPENROUTER_API_KEY
+# Keep this as a visible var (not a secret) so local/dev/prod targets are explicit.
 
 [vars]
-AI_PROVIDER = "cloudflare"
+BUILDERFORCE_API_BASE_URL = "https://api.builderforce.ai"
 
 [[r2_buckets]]
 binding = "STORAGE"
 bucket_name = "builderforce-storage"
-
-# Cloudflare Workers AI binding (used in "cloudflare" and "ab" modes)
-[ai]
-binding = "AI"
 
 [[durable_objects.bindings]]
 name = "COLLABORATION_ROOM"

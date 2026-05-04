@@ -1,4 +1,4 @@
-import { type ChatMessage, streamOpenRouter, streamCloudflareAI, type AIEnv } from './ai';
+import { requestGatewayCompletion, type GatewayChatMessage } from './gateway';
 import type { DatasetExample } from './dataset';
 
 export interface TrainingJobRecord {
@@ -39,8 +39,9 @@ export interface EvaluationResult {
   created_at: string;
 }
 
-export interface TrainingEnv extends AIEnv {
+export interface TrainingEnv {
   STORAGE: R2Bucket;
+  BUILDERFORCE_API_BASE_URL?: string;
 }
 
 /** System prompt for model output evaluation. */
@@ -59,7 +60,7 @@ Return ONLY the JSON object, no other text.`;
 
 /**
  * Evaluates fine-tuned model outputs using an AI judge.
- * Uses OpenRouter or Cloudflare AI to score the examples.
+ * Routes judge scoring through the centralized Builderforce gateway.
  *
  * @param examples - Dataset examples to evaluate (input/expected output pairs)
  * @param modelOutputs - Actual outputs produced by the fine-tuned model
@@ -70,7 +71,8 @@ export async function evaluateModelOutputs(
   examples: DatasetExample[],
   modelOutputs: string[],
   jobId: string,
-  env: TrainingEnv
+  env: TrainingEnv,
+  authToken: string
 ): Promise<EvaluationResult> {
   const sampleSize = Math.min(examples.length, 5);
   const sampleExamples = examples.slice(0, sampleSize);
@@ -87,49 +89,21 @@ Actual: ${sampleOutputs[i] ?? '(no output)'}
 
 Provide scores for: overall quality (score), code correctness, reasoning quality, and hallucination rate.`;
 
-  const messages: ChatMessage[] = [
+  const messages: GatewayChatMessage[] = [
     { role: 'system', content: EVAL_SYSTEM_PROMPT },
     { role: 'user', content: evaluationPrompt },
   ];
 
   let responseText = '';
   try {
-    const response = env.OPENROUTER_API_KEY
-      ? await streamOpenRouter(messages, env.OPENROUTER_API_KEY)
-      : env.AI
-        ? await streamCloudflareAI(messages, env.AI)
-        : null;
-
-    if (!response) {
-      return parseEvaluationResponse('', jobId);
-    }
-
-    if (response && response.body) {
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const text = decoder.decode(value, { stream: true });
-        for (const line of text.split('\n')) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6).trim();
-            if (data === '[DONE]') break;
-            try {
-              const parsed = JSON.parse(data) as {
-                choices?: Array<{ delta?: { content?: string } }>;
-                response?: string;
-              };
-              const chunk = parsed.choices?.[0]?.delta?.content ?? parsed.response ?? '';
-              if (chunk) responseText += chunk;
-            } catch {
-              // ignore parse errors
-            }
-          }
-        }
-      }
-    }
-  } catch {
+    responseText = await requestGatewayCompletion({
+      env,
+      authToken,
+      messages,
+      maxTokens: 1024,
+    });
+  } catch (error) {
+    console.error('Gateway evaluation call failed:', error);
     // Fall back to default scores on evaluation failure
   }
 

@@ -31,7 +31,14 @@ function loadDotEnv(path) {
 
 loadDotEnv(join(root, '.env'));
 
-const SECRET_KEYS = ['NEON_DATABASE_URL', 'JWT_SECRET', 'OPENROUTER_API_KEY', 'OPENROUTER_API_KEY_PRO'];
+const SECRET_KEYS = [
+  'NEON_DATABASE_URL',
+  'JWT_SECRET',
+  'OPENROUTER_API_KEY',
+  'OPENROUTER_API_KEY_PRO',
+  'CEREBRAS_API_KEY',
+  'OLLAMA_API_KEY',
+];
 
 for (const key of SECRET_KEYS) {
   const value = process.env[key];

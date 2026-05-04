@@ -1,4 +1,4 @@
-import { OPENROUTER_ENDPOINT, FREE_MODELS, getNextModelIndex, type ChatMessage } from './ai';
+import { requestGatewayCompletion, type GatewayEnv, type GatewayChatMessage } from './gateway';
 
 export interface DatasetExample {
   instruction: string;
@@ -12,10 +12,7 @@ export interface GeneratedDataset {
 }
 
 export interface DatasetEnv {
-  OPENROUTER_API_KEY?: string;
-  AI?: Ai;
-  STORAGE: R2Bucket;
-  NEON_DATABASE_URL: string;
+  BUILDERFORCE_API_BASE_URL?: string;
 }
 
 /**
@@ -37,8 +34,8 @@ Guidelines:
 - Return ONLY the JSON array, no other text`;
 
 /**
- * Generates a training dataset for the given capability prompt using OpenRouter.
- * Falls back to Cloudflare AI if OpenRouter is unavailable.
+ * Generates a training dataset for the given capability prompt through
+ * the centralized Builderforce gateway.
  *
  * @param capabilityPrompt - Describes the target capability (e.g. "Python debugging")
  * @param exampleCount - Number of examples to generate (default: 50)
@@ -48,7 +45,8 @@ Guidelines:
 export async function generateDatasetWithAI(
   capabilityPrompt: string,
   exampleCount: number,
-  env: DatasetEnv
+  env: DatasetEnv,
+  authToken: string
 ): Promise<GeneratedDataset> {
   const userPrompt = `Generate ${exampleCount} diverse instruction-tuning examples for the following AI capability:
 
@@ -63,48 +61,19 @@ Requirements:
 
 Return ONLY a valid JSON array of examples.`;
 
-  const messages: ChatMessage[] = [
+  const messages: GatewayChatMessage[] = [
     { role: 'system', content: DATASET_SYSTEM_PROMPT },
     { role: 'user', content: userPrompt },
   ];
 
-  let responseText = '';
-
-  if (env.OPENROUTER_API_KEY) {
-    const startIndex = getNextModelIndex();
-    for (let attempt = 0; attempt < FREE_MODELS.length; attempt++) {
-      const model = FREE_MODELS[(startIndex + attempt) % FREE_MODELS.length];
-      const response = await fetch(OPENROUTER_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://builderforce.ai',
-          'X-Title': 'Builderforce.ai Dataset Generator',
-        },
-        body: JSON.stringify({ model, messages, stream: false, max_tokens: 4096 }),
-      });
-
-      if (response.status === 429) continue;
-      if (!response.ok) continue;
-
-      const data = await response.json() as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-      responseText = data.choices?.[0]?.message?.content ?? '';
-      if (responseText) break;
-    }
-  } else if (env.AI) {
-    const result = await (env.AI as Ai).run('@cf/meta/llama-3.1-8b-instruct' as keyof AiModels, {
-      messages,
-      stream: false,
-      max_tokens: 4096,
-    }) as { response?: string };
-    responseText = result.response ?? '';
-  }
-
+  const responseText = await requestGatewayCompletion({
+    env: env as GatewayEnv,
+    authToken,
+    messages,
+    maxTokens: 4096,
+  });
   if (!responseText) {
-    throw new Error('AI provider unavailable for dataset generation');
+    throw new Error('Gateway returned an empty dataset generation response');
   }
 
   return parseDatasetResponse(responseText, capabilityPrompt);

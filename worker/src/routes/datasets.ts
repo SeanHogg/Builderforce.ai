@@ -6,13 +6,12 @@ import {
   storeDatasetInR2,
   type DatasetEnv,
 } from '../services/dataset';
+import { requireGatewayAuthToken } from '../services/gateway';
 
 interface Env extends DatasetEnv {
   NEON_DATABASE_URL: string;
-  OPENROUTER_API_KEY?: string;
-  AI?: Ai;
-  AI_PROVIDER?: string;
   STORAGE: R2Bucket;
+  BUILDERFORCE_API_BASE_URL?: string;
 }
 
 const datasets = new Hono<{ Bindings: Env }>();
@@ -96,6 +95,7 @@ datasets.get('/:id/download', async (c) => {
  */
 datasets.post('/generate', async (c) => {
   try {
+    const authToken = requireGatewayAuthToken(c.req.header('Authorization'));
     const body = await c.req.json<{
       projectId: string;
       capabilityPrompt: string;
@@ -132,7 +132,8 @@ datasets.post('/generate', async (c) => {
           const generated = await generateDatasetWithAI(
             body.capabilityPrompt,
             exampleCount,
-            c.env
+            c.env,
+            authToken
           );
 
           emit({ type: 'chunk', content: `Generated ${generated.examples.length} examples` });
@@ -171,6 +172,10 @@ datasets.post('/generate', async (c) => {
       },
     });
   } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Failed to start dataset generation';
+    if (msg.includes('Authorization') || msg.includes('clk_*') || msg.includes('JWT')) {
+      return c.json({ error: msg }, 401);
+    }
     console.error('Failed to start dataset generation:', e);
     return c.json({ error: 'Failed to start dataset generation' }, 500);
   }

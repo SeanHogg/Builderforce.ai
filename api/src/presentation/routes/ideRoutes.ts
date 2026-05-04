@@ -556,7 +556,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       errorMessage = err instanceof Error ? err.message : String(err);
       await getSql(c)`
         INSERT INTO agent_inference_logs (id, agent_id, model_ref, latency_ms, status, error_message, inference_mode, created_at)
-        VALUES (${logId}, ${agentId}, ${'coderclawllm/workforce-' + agentId}, ${Date.now() - startMs}, ${status}, ${errorMessage}, ${inferenceMode}, NOW())
+        VALUES (${logId}, ${agentId}, ${'builderforce/workforce-' + agentId}, ${Date.now() - startMs}, ${status}, ${errorMessage}, ${inferenceMode}, NOW())
       `;
       return c.json({ error: errorMessage }, 502);
     }
