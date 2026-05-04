@@ -2,9 +2,11 @@ import { Hono } from 'hono';
 import { neon } from '@neondatabase/serverless';
 import { evaluateModelOutputs, saveModelArtifact } from '../services/training';
 import type { TrainingEnv } from '../services/training';
+import { requestGatewayCompletion, requireGatewayAuthToken } from '../services/gateway';
 
 interface Env extends TrainingEnv {
   NEON_DATABASE_URL: string;
+  BUILDERFORCE_API_BASE_URL?: string;
 }
 
 const training = new Hono<{ Bindings: Env }>();
@@ -311,6 +313,7 @@ training.post('/:id/artifact', async (c) => {
  */
 training.post('/:id/evaluate', async (c) => {
   try {
+    const authToken = requireGatewayAuthToken(c.req.header('Authorization'));
     const jobId = c.req.param('id');
     const sql = neon(c.env.NEON_DATABASE_URL);
 
@@ -339,45 +342,27 @@ training.post('/:id/evaluate', async (c) => {
       }
     }
 
-    // Ask the AI to act as the fine-tuned model and generate realistic outputs
-    const { streamAIResponse } = await import('../services/ai');
-
+    // Ask the centralized Builderforce gateway to generate outputs for evaluation.
     const modelOutputs: string[] = [];
     for (const ex of examples) {
       try {
-        const genRes = await streamAIResponse([
+        const outText = await requestGatewayCompletion({
+          env: c.env,
+          authToken,
+          messages: [
           { role: 'system', content: `You are answering as a fine-tuned agent for: ${job.base_model}. Provide a high-quality output for the instruction.` },
-          { role: 'user', content: ex.instruction + (ex.input ? `\nContext: ${ex.input}` : '') }
-        ], c.env);
-
-        let outText = '';
-        if (genRes.body) {
-          const reader = genRes.body.getReader();
-          const decoder = new TextDecoder();
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const text = decoder.decode(value, { stream: true });
-            for (const line of text.split('\n')) {
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6).trim();
-                if (data === '[DONE]') break;
-                try {
-                  const parsed = JSON.parse(data);
-                  const chunk = parsed.choices?.[0]?.delta?.content ?? parsed.response ?? '';
-                  outText += chunk;
-                } catch { } // ignore
-              }
-            }
-          }
-        }
+          { role: 'user', content: ex.instruction + (ex.input ? `\nContext: ${ex.input}` : '') },
+          ],
+          maxTokens: 1024,
+        });
         modelOutputs.push(outText || `(Failed to generate output for: ${ex.instruction})`);
-      } catch {
+      } catch (error) {
+        console.error('Gateway generation call failed:', error);
         modelOutputs.push(`(Error generating output)`);
       }
     }
 
-    const result = await evaluateModelOutputs(examples, modelOutputs, jobId, c.env);
+    const result = await evaluateModelOutputs(examples, modelOutputs, jobId, c.env, authToken);
 
     // Store evaluation result in the artifact key
     await saveModelArtifact(c.env.STORAGE, job.project_id as string, jobId, {
@@ -416,6 +401,10 @@ training.post('/:id/evaluate', async (c) => {
 
     return c.json(result);
   } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Failed to evaluate model';
+    if (msg.includes('Authorization') || msg.includes('clk_*') || msg.includes('JWT')) {
+      return c.json({ error: msg }, 401);
+    }
     console.error('Failed to evaluate model:', e);
     return c.json({ error: 'Failed to evaluate model' }, 500);
   }
