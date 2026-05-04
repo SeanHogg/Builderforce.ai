@@ -1,19 +1,23 @@
 /**
- * coderClawLLM routes — OpenAI-compatible LLM proxy.
+ * builderforceLLM routes — OpenAI-compatible LLM proxy.
  *
- * POST  /v1/chat/completions   – proxied chat completion (429 failover)
- * GET   /v1/models             – list the free model pool + status
+ * POST  /v1/chat/completions   – proxied chat completion (multi-vendor cascade)
+ * GET   /v1/models             – list the active model pool + cooldown state
+ * GET   /v1/usage              – tenant token consumption analytics
  * GET   /v1/health             – health check
  */
 import { Hono, type Context } from 'hono';
 import { and, eq, gte, sql, sum } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
 import {
-  LlmProxyService,
+  llmProxyForPlan,
+  productNameForPlan,
+  modelPoolForPlan,
   FREE_MODEL_POOL,
   PRO_MODEL_POOL,
   type ChatCompletionRequest,
   type LlmUsage,
+  type ProductName,
 } from '../../application/llm/LlmProxyService';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, coderclawInstances } from '../../infrastructure/database/schema';
@@ -48,7 +52,7 @@ function logUsage(
   ctx: ExecutionContext,
   tenantId: number,
   userId: string | null,
-  llmProduct: 'coderClawLLM' | 'coderClawLLMPro' | 'coderClawLLMTeams',
+  llmProduct: ProductName,
   model: string,
   retries: number,
   streamed: boolean,
@@ -312,35 +316,30 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       }
     }
 
-    const isPro = access.effectivePlan === 'pro' || access.effectivePlan === 'teams';
-    const llmProduct: 'coderClawLLM' | 'coderClawLLMPro' | 'coderClawLLMTeams' =
-      access.effectivePlan === 'teams' ? 'coderClawLLMTeams'
-      : isPro ? 'coderClawLLMPro'
-      : 'coderClawLLM';
-    const apiKey = isPro ? c.env.OPENROUTER_API_KEY_PRO : c.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
+    const llmProduct = productNameForPlan(access.effectivePlan);
+    const isPro = access.effectivePlan !== 'free';
+
+    // Validate required key for the active plan up-front so callers get a clear 503.
+    const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
+    if (!requiredKey) {
       return c.json({
         error: isPro
-          ? 'LLM proxy not configured (missing OPENROUTER_API_KEY_PRO)'
+          ? 'LLM proxy not configured (missing OPENROUTER_API_KEY_PRO or OPENROUTER_API_KEY)'
           : 'LLM proxy not configured (missing OPENROUTER_API_KEY)',
       }, 503);
     }
 
-    const service = new LlmProxyService(apiKey, {
-      modelPool: isPro ? PRO_MODEL_POOL : FREE_MODEL_POOL,
-      preferredPoolSize: 2,
-      productName: llmProduct,
-    });
+    const service = llmProxyForPlan(c.env, access.effectivePlan);
     const result = await service.complete(body);
 
     // Clone upstream headers we care about
     const upstreamHeaders = new Headers();
     const contentType = result.response.headers.get('content-type');
     if (contentType) upstreamHeaders.set('content-type', contentType);
-    upstreamHeaders.set('x-coderclaw-model', result.resolvedModel);
-    upstreamHeaders.set('x-coderclaw-retries', String(result.retries));
-    upstreamHeaders.set('x-coderclaw-product', llmProduct);
-    upstreamHeaders.set('x-coderclaw-effective-plan', access.effectivePlan);
+    upstreamHeaders.set('x-builderforce-model', result.resolvedModel);
+    upstreamHeaders.set('x-builderforce-retries', String(result.retries));
+    upstreamHeaders.set('x-builderforce-product', llmProduct);
+    upstreamHeaders.set('x-builderforce-effective-plan', access.effectivePlan);
 
     // ── Streaming ────────────────────────────────────────────────────────────
     if (body.stream && result.response.body) {
@@ -382,10 +381,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     return c.json(
       {
         ...upstream,
-        _coderclaw: {
+        _builderforce: {
           resolvedModel: result.resolvedModel,
           retries:       result.retries,
-          pool:          isPro ? PRO_MODEL_POOL.length : FREE_MODEL_POOL.length,
+          pool:          modelPoolForPlan(access.effectivePlan).length,
           product:       llmProduct,
           effectivePlan: access.effectivePlan,
         },
@@ -405,27 +404,26 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       access = null;
     }
 
-    const isPro = access?.effectivePlan === 'pro';
-    const apiKey = isPro ? c.env.OPENROUTER_API_KEY_PRO : c.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
+    const effectivePlan = access?.effectivePlan ?? 'free';
+    const productName = productNameForPlan(effectivePlan);
+    const isPro = effectivePlan !== 'free';
+
+    const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
+    if (!requiredKey) {
       return c.json({
         configured: false,
-        product: isPro ? 'coderClawLLMPro' : 'coderClawLLM',
-        effectivePlan: access?.effectivePlan ?? 'free',
-        models: isPro ? PRO_MODEL_POOL : FREE_MODEL_POOL,
+        product: productName,
+        effectivePlan,
+        models: modelPoolForPlan(effectivePlan),
       });
     }
 
-    const service = new LlmProxyService(apiKey, {
-      modelPool: isPro ? PRO_MODEL_POOL : FREE_MODEL_POOL,
-      preferredPoolSize: 2,
-      productName: isPro ? 'coderClawLLMPro' : 'coderClawLLM',
-    });
+    const service = llmProxyForPlan(c.env, effectivePlan);
     return c.json({
       configured: true,
       object: 'list',
-      product: isPro ? 'coderClawLLMPro' : 'coderClawLLM',
-      effectivePlan: access?.effectivePlan ?? 'free',
+      product: productName,
+      effectivePlan,
       data: service.status(),
     });
   });
@@ -550,7 +548,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   // GET /v1/health
   // -----------------------------------------------------------------------
   router.get('/v1/health', (c) =>
-    c.json({ status: 'ok', service: 'coderClawLLM', pool: FREE_MODEL_POOL.length, proPool: PRO_MODEL_POOL.length }),
+    c.json({ status: 'ok', service: 'builderforceLLM', pool: FREE_MODEL_POOL.length, proPool: PRO_MODEL_POOL.length }),
   );
 
   return router;

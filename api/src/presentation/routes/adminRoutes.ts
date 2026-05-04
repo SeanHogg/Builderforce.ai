@@ -49,7 +49,14 @@ import {
   resolveRolePermissions,
   resolveEffectivePermissions,
 } from '../../domain/permissions/permissionRegistry';
-import { LlmProxyService, FREE_MODEL_POOL, PRO_PAID_MODEL_POOL, PREFERRED_POOL_SIZE } from '../../application/llm/LlmProxyService';
+import {
+  adminPoolProxy,
+  FREE_MODEL_POOL,
+  PRO_PAID_MODEL_POOL,
+  PREFERRED_POOL_SIZE,
+  type ProductName,
+  type ProxyEnv,
+} from '../../application/llm/LlmProxyService';
 import { llmFailoverLog } from '../../infrastructure/database/schema';
 import {
   buildOtpAuthUrl,
@@ -63,6 +70,20 @@ import {
 } from '../../infrastructure/auth/MfaService';
 import { magicLinkTokens } from '../../infrastructure/database/schema';
 import { sendAdminPasswordResetEmail } from '../../infrastructure/email/EmailService';
+
+/** Status entry for one model in the admin LLM panel — shared shape whether
+ *  the pool is live (real cooldown state) or fake (no key configured). */
+function poolStatus(
+  env: ProxyEnv,
+  hasKey: boolean,
+  pool: readonly string[],
+  productName: ProductName,
+): Array<{ model: string; preferred: boolean; available: boolean; cooldownUntil?: number }> {
+  if (!hasKey) {
+    return pool.map((model, i) => ({ model, preferred: i < PREFERRED_POOL_SIZE, available: true }));
+  }
+  return adminPoolProxy(env, pool, productName).status();
+}
 
 type LegalDocResponse = {
   documentType: 'terms' | 'privacy';
@@ -1200,25 +1221,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       executionCount: number; errorCount: number; paidTenantCount: number;
     }>;
 
-    // LLM model pool — include both Free + Pro pools, with live cooldown state when keys are available
-    const freeApiKey = c.env.OPENROUTER_API_KEY;
-    const proApiKey = c.env.OPENROUTER_API_KEY_PRO;
-
-    const freeModelPool = freeApiKey
-      ? new LlmProxyService(freeApiKey, {
-          modelPool: FREE_MODEL_POOL,
-          preferredPoolSize: Math.min(PREFERRED_POOL_SIZE, FREE_MODEL_POOL.length),
-          productName: 'coderClawLLM',
-        }).status()
-      : FREE_MODEL_POOL.map((m, i) => ({ model: m, preferred: i < PREFERRED_POOL_SIZE, available: true }));
-
-    const proModelPool = proApiKey
-      ? new LlmProxyService(proApiKey, {
-          modelPool: PRO_PAID_MODEL_POOL,
-          preferredPoolSize: Math.min(PREFERRED_POOL_SIZE, PRO_PAID_MODEL_POOL.length),
-          productName: 'coderClawLLMPro',
-        }).status()
-      : PRO_PAID_MODEL_POOL.map((m, i) => ({ model: m, preferred: i < PREFERRED_POOL_SIZE, available: true }));
+    // LLM model pool — include both Free + Pro pools, with live cooldown state when keys are available.
+    const freeModelPool = poolStatus(c.env, !!c.env.OPENROUTER_API_KEY,                                  FREE_MODEL_POOL,     'builderforceLLM');
+    const proModelPool  = poolStatus(c.env, !!(c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY), PRO_PAID_MODEL_POOL, 'builderforceLLMPro');
 
     const modelPool = [...freeModelPool, ...proModelPool];
 

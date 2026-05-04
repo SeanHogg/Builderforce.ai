@@ -10,10 +10,18 @@ export interface Env {
   ENVIRONMENT: string;
   /** Secret used to sign JWTs.  Set via `wrangler secret put JWT_SECRET`. */
   JWT_SECRET: string;
-  /** OpenRouter API key for IDE chat and LLM proxy. Required for /api/ai/chat. Set via wrangler secret put OPENROUTER_API_KEY or api/.env + npm run secrets:from-env */
+  /** OpenRouter API key — drives builderforceLLM (Free plan) and IDE chat. Required for /api/ai/chat.
+   *  Set via `wrangler secret put OPENROUTER_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   OPENROUTER_API_KEY?: string;
-  /** OpenRouter API key for coderClawLLMPro proxy.  Set via `wrangler secret put OPENROUTER_API_KEY_PRO`. */
+  /** OpenRouter API key for builderforceLLMPro / builderforceLLMTeams (paid models).
+   *  Set via `wrangler secret put OPENROUTER_API_KEY_PRO`. Falls back to OPENROUTER_API_KEY when unset. */
   OPENROUTER_API_KEY_PRO?: string;
+  /** Cerebras API key — enables sub-200ms TTFT models in the vendor cascade.
+   *  Set via `wrangler secret put CEREBRAS_API_KEY`. */
+  CEREBRAS_API_KEY?: string;
+  /** Ollama Cloud API key — enables paid managed open-weight models.
+   *  Set via `wrangler secret put OLLAMA_API_KEY`. */
+  OLLAMA_API_KEY?: string;
   /** R2 bucket for file uploads. */
   UPLOADS?: R2Bucket;
 

@@ -281,7 +281,7 @@ export const llmUsageLog = pgTable('llm_usage_log', {
   id:               serial('id').primaryKey(),
   tenantId:         integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
   userId:           varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-  llmProduct:       varchar('llm_product', { length: 32 }).notNull().default('coderClawLLM'),
+  llmProduct:       varchar('llm_product', { length: 32 }).notNull().default('builderforceLLM'),
   model:            varchar('model', { length: 200 }).notNull(),
   promptTokens:     integer('prompt_tokens').notNull().default(0),
   completionTokens: integer('completion_tokens').notNull().default(0),

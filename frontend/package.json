@@ -30,6 +30,7 @@
     "react-dom": "^18",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "simple-icons": "^16.8.0",
     "y-monaco": "^0.1.4",
     "y-protocols": "^1.0.6",
     "y-websocket": "^2.0.3",
