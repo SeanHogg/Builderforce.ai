@@ -18,9 +18,10 @@
     "dist"
   ],
   "scripts": {
+    "check:usecases": "node scripts/check-usecases-sync.mjs",
     "build": "tsup --config tsup.config.ts",
     "type-check": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "npm run check:usecases && vitest run",
     "prepublishOnly": "npm run build"
   },
   "engines": {

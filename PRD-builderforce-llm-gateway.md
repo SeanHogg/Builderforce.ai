@@ -1,6 +1,6 @@
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               # PRD — Builderforce.ai B2B LLM Gateway
 
-**Status:** Step 1 fully complete — 1a–1i all done; **Step 1h redo passes review** (see §10). Step 2 unblocked.
+**Status:** Step 1 complete (1h redo passes). **Step 2 SDK shipped; C1 + C1.fix.1 landed** and SDK follow-ups H1–H3 / M1–M3 are addressed (including CI guardrails). Step 3 (AgentTransport) next.
 **Owner:** Sean
 **Last updated:** 2026-05-04
 
@@ -122,31 +122,96 @@ Step 1h is unblocked. The follow-ups above are tracked separately and do not blo
 
 ### Step 2 — `@builderforce/sdk` npm package
 
-Brand-new top-level package, e.g. `Builderforce.ai/sdk/` or a fresh repo (TBD).
+✅ **Reviewed and accepted (2026-05-04) after C1 fix.**
 
-✅ Initial implementation completed in-repo at `sdk/`:
-- `BuilderforceClient` with API-key auth (`baseUrl` override supported)
-- Methods shipped:
-  - `chat.completions.create({ messages, stream?, useCase?, ... })`
-  - `models.list()`
-  - `usage.get({ days? })`
-- SSE streaming helper shipped (`ChatCompletionStream` async iterator + `toText()`)
-- TypeScript exports include `AIUseCase` union and guard (`isAIUseCase`)
-- Build pipeline ships `.mjs` + `.cjs` + `.d.ts` via `tsup`
-- Vitest tests with mocked `fetch` and streaming coverage
-- Publish hook wired: `prepublishOnly` runs build
+Lives at `Builderforce.ai/sdk/`. Layered DDD-ish: `domain/`, `application/`, `infrastructure/`. Single `BuilderforceClient` composing three sub-APIs (`chat.completions`, `models`, `usage`). Build: `tsup` dual ESM + CJS + `.d.ts`. Tests: `vitest` with mocked `fetch`.
 
-| Item | Notes |
+#### What's right
+
+- ✅ API-key only entry shape (`new BuilderforceClient({ apiKey, baseUrl?, fetch? })`) — matches the PRD constraint exactly. Injectable `fetch` for testability.
+- ✅ `parseSseJson` correctly **buffers across chunks** (`buffer = lines.pop() ?? ''`) — the same bug class the worker review caught is avoided here from day one.
+- ✅ `AIUseCase` is derived as `(typeof AI_USE_CASES)[number]` from a single `as const` array — runtime list and compile-time union come from one source. Good DRY pattern within the SDK.
+- ✅ Async iterator (`Symbol.asyncIterator`) + `toText()` helper covers both per-chunk and buffered consumers.
+- ✅ `BuilderforceApiError` class carries `status`, `code`, `details` from server JSON; thrown on non-2xx. Tested.
+- ✅ Streaming overload typing on `ChatCompletionsApi.create` distinguishes return shape by literal `stream: true` vs omitted/`false`.
+- ✅ Tests cover all three APIs, both streaming code paths, the error class, and the AIUseCase guard. No integration tests (acceptable for v0.1).
+- ✅ Workforce routing left to server — caller passes `model: 'builderforce/workforce-<id>'`, no SDK-side branching.
+
+#### 🔴 Critical (blocks burnrateos / hired.video migration)
+
+| # | Finding |
 |---|---|
-| Package name | `@builderforce/sdk` (scope to confirm available) |
-| Entry shape | `new BuilderforceClient({ apiKey, baseUrl? })` — only **API key** needed |
-| Methods | `chat.completions.create({ messages, stream?, useCase?, ... })`, `models.list()`, `usage.get({ days? })` |
-| Streaming | SSE via `ReadableStream` with helper to iterate chunks |
-| Auth | `Authorization: Bearer <apiKey>` — supports both `clk_*` claw keys and JWT |
-| Workforce routing | Pass `model: 'builderforce/workforce-<agentId>'` — server routes |
-| TypeScript | Full types, with `AIUseCase` union exported for compile-time intent checking |
-| Tests | Vitest with mocked fetch |
-| Publish | npm with `prepublishOnly` build step; ships `.mjs` + `.cjs` + `.d.ts` |
+| **C1** | **`useCase` is dead on arrival end-to-end.** SDK accepts and serializes `useCase: AIUseCase`. Test `index.test.ts:45` even verifies `body.useCase === 'ide.chat'` is sent over the wire. **But `api/src/presentation/routes/llmRoutes.ts:305-334` never reads `useCase` from the request body** — it does `service.complete(body)` which ignores the field. `LlmProxyService.completeForUseCase` exists but is never called by `/v1/chat/completions`. So the entire use-case-routing feature (the whole point of step 1e — the registry of 50 use cases with preferred chains, max_tokens, temperatures) is unreachable from SDK callers. Migrating burnrateos with `useCase: 'coach.chat'` or hired.video with `useCase: 'match'` would silently fall through to the default Free pool with default temperature/max_tokens — defeating the cascade. **Fix:** in `/v1/chat/completions`, branch on `body.useCase`: if present and `isAIUseCase(body.useCase)`, call `service.completeForUseCase(body.useCase, body)`; otherwise call `service.complete(body)`. The SDK side already does the right thing. |
+
+#### 🟠 High
+
+| # | Finding |
+|---|---|
+| **H1** | **`AI_USE_CASES` array is duplicated** between `sdk/src/domain/aiUseCases.ts` and `api/src/application/llm/aiUseCases.ts`. Comment line 1 of the SDK file admits it: `// Keep this list aligned with api/src/application/llm/aiUseCases.ts.` Manual sync = guaranteed drift. Either set up a pnpm/npm workspace and have api import the array from `@builderforce/sdk`, OR generate one from the other on build. Until then, add a CI check that asserts the two arrays match. |
+| **H2** | **No request timeout.** `HttpClient.fetch` has no `AbortSignal`. A hung connection blocks the caller indefinitely. Add an `AbortController` with a configurable default (~60s), exposed via `BuilderforceClientOptions.timeoutMs`. |
+| **H3** | **`sdk/dist/` is committed to the repo.** Built artifacts in version control — `dist/index.cjs`, `dist/index.mjs`, source maps, `.d.ts`, `.d.cts` all live in git. `prepublishOnly` already builds; npm publishes from `files: ["dist"]`. Add `dist/` to `.gitignore` and remove from history. (Side effect: shrinks PR diffs significantly.) |
+
+#### 🟡 Medium
+
+| # | Finding |
+|---|---|
+| **M1** | **No `README.md` in `sdk/`.** Required for npm publish (it's what shows on npmjs.com). At minimum: install, quickstart, streaming example, error handling, env var conventions. |
+| **M2** | **`BuilderforceApiError` doesn't expose `requestId`.** The api emits `x-request-id`; the frontend already plumbs this into its own error events. SDK callers should be able to surface it for support. Add `requestId?: string` from `res.headers.get('x-request-id')`. |
+| **M3** | **Empty `apiKey` accepted at construction.** `new BuilderforceClient({ apiKey: '' })` succeeds; failure happens at first request. Throw at construction time with a clear message. |
+| **M4** | **`stream` overload is a literal-type discriminator.** `client.chat.completions.create({ stream: someBool, ... })` collapses to the non-stream return type because `someBool: boolean` doesn't match the literal `true` overload. Either document that callers must pass `stream` as a literal, or restructure into two methods (`create(...)` and `createStream(...)`). |
+| **M5** | **No retry/backoff helper.** Server-side cascade absorbs most transient failures, but raw network errors and post-cascade 429s bubble up to the caller. Document the expectation, or add an opt-in `maxRetries` config. |
+
+#### 🟢 Low / notes
+
+| # | Finding |
+|---|---|
+| **L1** | `parseSseJson` only handles `data:` lines; ignores `event:`, `id:`, `retry:`, comments. Today the api emits only `data:` so this works — flag if a typed-event SSE channel is added later. |
+| **L2** | No integration tests against a real local api server. Mocked-fetch only. Acceptable for v0.1; track for v0.2. |
+| **L3** | `index.test.ts:45` asserts `useCase` is wire-sent — a green light that **masks** C1. Once C1 is fixed, also assert against a fixture response that the resolved model matched the use-case's preferred chain (or remove the standalone "useCase is sent" assertion since C1's fix makes it semantic, not just structural). |
+| **L4** | `tsconfig.json` includes `types: ["node", "vitest/globals"]`. Verify the published `.d.ts` doesn't leak `Buffer`/`process` symbols into consumer surfaces. Quick check: `tsc --noEmit` against a strict consumer project. |
+
+#### Action items before tenant migrations begin
+
+1. **(C1)** Wire `useCase` reading on `/v1/chat/completions` so `service.completeForUseCase(body.useCase, body)` is invoked when the caller specifies a use case. Add an api-side test that verifies the resolved model matches the use-case's preferred chain.
+2. **(H1)** Decide on workspace-vs-codegen for sharing `AI_USE_CASES`. Add CI sync check until then.
+3. **(H2, H3, M3)** Quick wins: add timeout, `.gitignore dist/`, throw on empty apiKey.
+4. **(M1)** README before publish.
+
+Verdict: foundation is solid; ship the C1 fix and this SDK is ready for hired.video / burnrateos to consume.
+
+#### C1 fix review (2026-05-04)
+
+**Fix landed** in `api/src/presentation/routes/llmRoutes.ts` + new `api/src/presentation/routes/llmRoutes.test.ts`.
+
+What's right:
+- ✅ Pure dispatcher `completeChatRequest(service, body)` named-exported for testability — no Hono dependency, single decision point. Won't be duplicated elsewhere (DRY).
+- ✅ Uses canonical `isAIUseCase` guard from `application/llm/aiUseCases.ts` — no string-literal contamination.
+- ✅ Both branches tested (registered useCase routes through `completeForUseCase`; unknown/missing falls back to `complete`).
+- ✅ `LlmProxyService` import added cleanly to the existing import block; no transitive bloat.
+- ✅ Forward-compatible: callers on older SDK versions won't break if the registry grows server-side.
+
+Residual issues:
+
+| # | Severity | Finding |
+|---|---|---|
+| **C1.fix.1** | ✅ Fixed | `LlmProxyService.STANDARD_BODY_FIELDS` now includes `'useCase'`, so `stripStandardFields` no longer forwards it to vendor payloads. |
+| **C1.fix.2** | 🟢 Low (policy decision) | **Silent fallback on unknown useCase.** A typo like `useCase: 'coach.chat.v2'` quietly routes through default `complete()` instead of `completeForUseCase`. Test on line 41-60 codifies this. Pro: forward-compat. Con: a tenant migrating with a typo gets the wrong chain forever and never finds out. Choice: keep silent OR log a `console.warn` OR return 400 with a list of valid use cases. **Pick a policy and document.** |
+| **C1.fix.3** | 🟢 Low | The new test mocks `completeForUseCase` / `complete` and only asserts which one was called. It does NOT verify that the resolved model actually came from the use-case spec's `preferredChain`. The dispatcher itself is well-tested; an end-to-end "useCase X resolves to model Y from spec.preferredChain[0]" assertion would catch regressions if `completeForUseCase` ever drifts. Optional. |
+
+#### SDK follow-up status (H1–H3, M1–M3)
+
+| Item | Status |
+|---|---|
+| H1 — `AI_USE_CASES` workspace-share / codegen | ✅ Addressed via CI guard: `sdk/scripts/check-usecases-sync.mjs` + `npm run check:usecases` + CI workflow step |
+| H2 — Fetch timeout / `AbortController` | ✅ Addressed: `timeoutMs` option on `BuilderforceClient`/`HttpClient` (default 60s), timeout abort + typed timeout error |
+| H3 — `sdk/dist/` committed; need `.gitignore` | ✅ Addressed: `sdk/dist/` ignored; committed dist artifacts removed from working tree |
+| M1 — `sdk/README.md` | ✅ Addressed (`sdk/README.md` added with install/usage/streaming/errors) |
+| M2 — `requestId` on `BuilderforceApiError` | ✅ Addressed (`requestId` captured from `x-request-id`) |
+| M3 — Throw on empty `apiKey` at construction | ✅ Addressed (`BuilderforceClient` validates non-empty key) |
+
+#### Net assessment
+
+C1 is fully fixed (`useCase` routes + no vendor payload leak). C1.fix.2 policy choice (silent fallback vs warn/400 on unknown useCase) remains optional and does not block tenant migrations.
 
 ### Step 3 — `AgentTransport` in coderClaw
 

@@ -16,6 +16,7 @@ frontend/out/
 .vercel/
 worker/.next/
 worker/dist/
+sdk/dist/
 
 # Env
 .env

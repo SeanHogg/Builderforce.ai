@@ -13,12 +13,14 @@ import {
   llmProxyForPlan,
   productNameForPlan,
   modelPoolForPlan,
+  LlmProxyService,
   FREE_MODEL_POOL,
   PRO_MODEL_POOL,
   type ChatCompletionRequest,
   type LlmUsage,
   type ProductName,
 } from '../../application/llm/LlmProxyService';
+import { isAIUseCase } from '../../application/llm/aiUseCases';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, coderclawInstances } from '../../infrastructure/database/schema';
 import type { FailoverEvent } from '../../application/llm/LlmProxyService';
@@ -331,7 +333,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
 
     const service = llmProxyForPlan(c.env, access.effectivePlan);
-    const result = await service.complete(body);
+    const result = await completeChatRequest(service, body);
 
     // Clone upstream headers we care about
     const upstreamHeaders = new Headers();
@@ -553,4 +555,20 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   );
 
   return router;
+}
+
+/**
+ * Route-level completion dispatcher:
+ * - If caller passes a registered use case, route via completeForUseCase().
+ * - Otherwise keep legacy pool dispatch via complete().
+ */
+export async function completeChatRequest(
+  service: LlmProxyService,
+  body: ChatCompletionRequest,
+) {
+  const useCase = typeof body.useCase === 'string' ? body.useCase : null;
+  if (useCase && isAIUseCase(useCase)) {
+    return service.completeForUseCase(useCase, body);
+  }
+  return service.complete(body);
 }

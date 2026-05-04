@@ -431,7 +431,7 @@ export function adminPoolProxy(
 }
 
 const STANDARD_BODY_FIELDS: ReadonlySet<string> = new Set([
-  'model', 'messages', 'temperature', 'max_tokens', 'top_p', 'stream',
+  'model', 'messages', 'temperature', 'max_tokens', 'top_p', 'stream', 'useCase',
 ]);
 
 /** Pick out non-standard fields from the request body so they can be passed

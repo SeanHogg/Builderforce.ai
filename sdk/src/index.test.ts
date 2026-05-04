@@ -121,7 +121,16 @@ describe('@builderforce/sdk', () => {
   });
 
   it('throws BuilderforceApiError for non-2xx', async () => {
-    const fetchMock = vi.fn(async () => createJsonResponse({ error: 'Unauthorized', code: 'unauthorized' }, 401));
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({ error: 'Unauthorized', code: 'unauthorized' }),
+      {
+        status: 401,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-request-id': 'req_123',
+        },
+      },
+    ));
     const client = new BuilderforceClient({ apiKey: 'bad', fetch: fetchMock as unknown as typeof fetch });
 
     try {
@@ -132,7 +141,34 @@ describe('@builderforce/sdk', () => {
       const apiError = error as BuilderforceApiError;
       expect(apiError.status).toBe(401);
       expect(apiError.code).toBe('unauthorized');
+      expect(apiError.requestId).toBe('req_123');
     }
+  });
+
+  it('throws when apiKey is empty', () => {
+    expect(() => new BuilderforceClient({ apiKey: '   ' })).toThrow(
+      'BuilderforceClient requires a non-empty apiKey',
+    );
+  });
+
+  it('aborts request when timeout elapses', async () => {
+    const fetchMock = vi.fn((_: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      const signal = init?.signal;
+      if (!signal) return;
+      signal.addEventListener('abort', () => reject(new Error('aborted')));
+    }));
+
+    const client = new BuilderforceClient({
+      apiKey: 'clk_test_key',
+      timeoutMs: 5,
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+
+    await expect(client.models.list()).rejects.toMatchObject({
+      name: 'BuilderforceApiError',
+      status: 408,
+      code: 'timeout',
+    });
   });
 
   it('exports AIUseCase guard', () => {
