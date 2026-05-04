@@ -145,10 +145,18 @@ describe('@builderforce/sdk', () => {
     }
   });
 
-  it('throws when apiKey is empty', () => {
-    expect(() => new BuilderforceClient({ apiKey: '   ' })).toThrow(
-      'BuilderforceClient requires a non-empty apiKey',
-    );
+  it('throws BuilderforceApiError when apiKey is empty', () => {
+    let caught: unknown;
+    try {
+      new BuilderforceClient({ apiKey: '   ' });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(BuilderforceApiError);
+    const apiError = caught as BuilderforceApiError;
+    expect(apiError.status).toBe(400);
+    expect(apiError.code).toBe('missing_api_key');
+    expect(apiError.message).toMatch(/non-empty apiKey/);
   });
 
   it('aborts request when timeout elapses', async () => {

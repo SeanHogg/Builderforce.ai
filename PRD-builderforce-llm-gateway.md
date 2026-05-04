@@ -1,6 +1,6 @@
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               # PRD — Builderforce.ai B2B LLM Gateway
 
-**Status:** Step 1 complete (1h redo passes). **Step 2 SDK shipped; C1 + C1.fix.1 landed** and SDK follow-ups H1–H3 / M1–M3 are addressed (including CI guardrails). Step 3 (AgentTransport) next.
+**Status:** Step 1 complete; **Step 2 fully passes second-pass review** (all SDK follow-ups closed; one stream-timeout caveat). **Step 3 conditionally passes** — `IAgentTransport` correct and wired, but a dual-mode orchestrator block + duplicated capability-routing logic + lossy fleet shape round-trip violate the DRY rule (see §4 / Step 3 review). Closing O1 (wrap `RemoteAgentDispatcherAdapter` as `IAgentTransport`) collapses both DRY violations and unblocks dead-code removal.
 **Owner:** Sean
 **Last updated:** 2026-05-04
 
@@ -213,6 +213,18 @@ Residual issues:
 
 C1 is fully fixed (`useCase` routes + no vendor payload leak). C1.fix.2 policy choice (silent fallback vs warn/400 on unknown useCase) remains optional and does not block tenant migrations.
 
+#### Step 2 cleanup review (2026-05-04, second pass)
+
+| Item | Verdict | Notes |
+|---|---|---|
+| C1.fix.1 — `useCase` in `STANDARD_BODY_FIELDS` | ✅ Pass | One-line addition at `LlmProxyService.ts:434`. `useCase` no longer leaks into `extraBody` and onto vendor payloads. |
+| H1 — AI_USE_CASES sync guard | ✅ Pass with caveat | `sdk/scripts/check-usecases-sync.mjs` regex-extracts both lists and exit-codes on mismatch; wired into `npm test` and a dedicated CI job. **Caveat:** the api-side regex (`/export type AIUseCase\s*=\s*([\s\S]*?);/`) extracts from the union literal — if the api ever refactors to mirror the SDK's `(typeof AI_USE_CASES)[number]` pattern, the regex finds nothing. Fragile by intent but acceptable as a transitional check. Real fix is shared workspace package (still tracked). |
+| H2 — Fetch timeout | ✅ Pass with one stream caveat | `fetchWithTimeout` wraps every request with `AbortController`; 60s default; configurable via `timeoutMs`; throws `BuilderforceApiError(408, 'timeout')`. Test added. **Caveat:** the timeout bounds **total** request duration, including streaming bodies. A 60s+ generation will be aborted mid-stream. For streams the timeout should bound time-to-first-byte, not total. Document or split into `connectTimeoutMs` vs `streamTimeoutMs`. |
+| H3 — `sdk/dist/` ignored | ✅ Pass | Root `.gitignore` includes `sdk/dist/`; prior committed artifacts removed in commit `28dc200`. |
+| M1 — README | ✅ Pass | Covers install, quickstart, non-stream/stream chat, models, usage, errors (with `error.requestId`), auth, AIUseCase guard. |
+| M2 — `requestId` on errors | ✅ Pass | `BuilderforceApiError.requestId` populated from `x-request-id`; test asserts. |
+| M3 — Empty `apiKey` throws at construction | ✅ Pass with consistency nit | `apiKey?.trim()` rejects empty/whitespace; test passes `'   '`. **Nit:** throws plain `Error`, not `BuilderforceApiError` — inconsistent with the SDK's typed-error surface. Low impact; one-line fix. |
+
 ### Step 3 — `AgentTransport` in coderClaw
 
 Per the architecture: claws coordinate **both** local (peer on one machine) **and** remote (through builderforce orchestrator).
@@ -224,6 +236,70 @@ Per the architecture: claws coordinate **both** local (peer on one machine) **an
 | Remote impl | WS/HTTP through `api.builderforce.ai` (uses `BUILDERFORCE_API_KEY`) |
 | Existing files to consolidate (DRY) | `src/coderclaw/orchestrator.ts`, `src/infra/remote-subagent.ts`, `src/coderclaw/tools/claw-fleet-tool.ts` should all become callers of one `AgentTransport` |
 | Naming nit | `remote:<id>` prefix should keep its meaning (cross-network); add `local:<id>` for in-machine — flagged in chat earlier |
+
+#### Step 3 progress update (current chat)
+
+- Added `IAgentTransport` domain port with `discover` + `dispatch` contract in `coderClaw`.
+- Added `BuilderforceAgentTransport` infra implementation that centralizes remote fleet discovery (`/api/claws/fleet`) and remote task dispatch (`/api/claws/:id/forward`), including `remote:auto[...]` capability routing.
+- Refactored orchestrator remote execution to use `agentTransport` (with backward-compatible fallback to `remoteDispatcher`).
+- Refactored `claw_fleet` tool to use the same transport abstraction instead of duplicating direct fleet HTTP calls.
+- Exported/shared fleet fetch logic in `remote-subagent.ts` (`fetchFleetEntries`) so transport + adapters reuse one path.
+
+#### Step 3 code review (2026-05-04)
+
+🟡 **Conditional pass.** The transport abstraction is correct; the migration is half-done and visibly violates the DRY rule the project pins on every prompt — two near-identical remote-dispatch blocks now coexist in `orchestrator.ts`, and capability-routing logic is duplicated across `BuilderforceAgentTransport.dispatch` and the orchestrator's legacy block.
+
+Files reviewed (all in `c:/code/agentic/coderClaw/product/src/`):
+
+- `coderclaw/ports.ts` — new `IAgentTransport`, `AgentTransportEntry`, `AgentTransportDispatchPayload`, `AgentTransportDispatchResult`, `AgentTransportKind`
+- `infra/agent-transport.ts` — new `BuilderforceAgentTransport` (83 LOC)
+- `infra/remote-subagent.ts` — extracted `fetchFleetEntries` from `selectClawByCapability`
+- `coderclaw/orchestrator.ts` — added `agentTransport` field, configure key, deprecated shim, dual-mode dispatch block
+- `coderclaw/tools/claw-fleet-tool.ts` — replaced direct `fetch` with `BuilderforceAgentTransport.discover()`
+- `gateway/server-startup.ts` — wires both `agentTransport` and `remoteDispatcher` at startup
+
+##### What's right
+
+- ✅ `IAgentTransport` is correctly typed: discriminated-union `accepted | failed` result, `kind: "local" | "remote"` on entries, optional `register` for discovery-only transports.
+- ✅ `BuilderforceAgentTransport.discover` filters self (`String(entry.id) !== String(myClawId)`) and applies capability filtering in one place.
+- ✅ `fetchFleetEntries` extraction in `remote-subagent.ts` is the right move — single HTTP source for fleet data.
+- ✅ Backward compat preserved: orchestrator falls through to `remoteDispatcher` when `agentTransport` is unset.
+- ✅ Failure path symmetric: both transport and legacy paths set `task.status = "failed"`, emit telemetry, persist workflow, throw.
+
+##### 🟠 High — DRY violations the project's own rule blocks
+
+| # | Finding |
+|---|---|
+| **O1** | **Two near-identical remote-dispatch blocks** in `orchestrator.ts:521-540` (transport path) and `542-559` (legacy path). Both: dispatch → check `status !== "accepted"` → fail-and-throw OR mark completed → set `taskResults` → emit telemetry → persist → return output. The DRY rule pinned on every prompt says: *"If the same logic shows up in 2+ places, extract a shared component / function."* This is exactly that. Recommendation: wrap `RemoteAgentDispatcherAdapter` to implement `IAgentTransport` (one extra adapter file), then the orchestrator has **one** dispatch block and the legacy branch is deleted. Removes ~25 LOC and the duplication. |
+| **O2** | **Capability-routing logic exists in two files.** `BuilderforceAgentTransport.dispatch:39-60` parses `auto[caps]` and selects an online peer. `orchestrator.ts:481-501` parses the same string format and calls `remoteDispatcher.selectByCapability`. When `agentTransport` is wired (production path) only the first runs, but both code paths exist. Same DRY violation — closing O1 closes this too. Worst case: the parsing format drifts between the two locations. |
+| **F1** | **`claw-fleet-tool.ts` does a lossy shape round-trip.** Lines 90-98 take the `discover()` result and rebuild it as a `FleetEntry`-shaped object, filling `slug: ""`, `connectedAt: null`, `lastSeenAt: null` as placeholders. Those fields existed on the original API response (`FleetEntry`) but `AgentTransportEntry` dropped them, so the tool now reports nulls where it used to report real data. **Fix:** add `slug?, connectedAt?, lastSeenAt?` as optional fields on `AgentTransportEntry` and populate them in `discover()`. No more lossy round-trip. |
+
+##### 🟡 Medium
+
+| # | Finding |
+|---|---|
+| **F2** | **`claw-fleet-tool` `total` and `online` counts changed semantics.** Previously: `total = data.fleet.length`, `online = data.fleet.filter(c => c.online).length` over the **un-filtered** fleet. Now: both computed on `discovered` which has self **excluded** and capability-filtered. So a tenant with 3 claws (1 self + 2 peers, both with `lint` capability) calling `claw_fleet { requireCapabilities: ["python"] }` previously saw `total: 3, online: N, filtered: 0`; now sees `total: 0, online: 0, filtered: 0`. Subtle behavior regression — affects diagnostics. **Fix:** either keep the historical semantics by querying `fetchFleetEntries` directly in the tool for the totals, or document the new semantics in the tool's description. |
+| **S1** | **Dead-code-rule violation in waiting in `server-startup.ts`.** Both `agentTransport` AND `remoteDispatcher` are configured every startup. Once O1 is fixed, `remoteDispatcher` becomes pure dead weight. The cleanup rule pinned at the top of every prompt says delete code with no callers. Recommend: track O1 with a removal date; once shipped, delete `RemoteAgentDispatcherAdapter`, `setRemoteDispatcher`, the `remoteDispatcher` config key, and `IRemoteAgentDispatcher`. |
+
+##### 🟢 Low
+
+| # | Finding |
+|---|---|
+| **C2.3** | `BuilderforceAgentTransport.dispatch` only handles `remote:` prefix. The `IAgentTransport` interface implies both `local` and `remote` kinds, but the only implementation is remote-only. Acceptable for now (a `LocalAgentTransport` is a separate task), but worth a class-level comment so the next implementer knows. |
+| **C2.4** | `dispatch(_taskId, payload)` — `taskId` is unused (prefixed). Either remove from the interface or wire it for telemetry/audit. Lean toward removing unless there's a near-term plan to use it. |
+| **C2.6** | `agent-transport.ts:78-80` swallows `awaitRemoteResult` failures silently (`catch {}`) and returns `{ status: "accepted", targetId }` with no `output`. The orchestrator falls back to a placeholder string. Caller can't distinguish "task running" from "result fetch timed out" in the result envelope. Add `logDebug` on the catch for parity with the legacy path's behavior. |
+| **R1** | `fetchFleetEntries` returns `[]` on error; `selectClawByCapability` continues to return `null`. Two error sentinels in two layers (empty array → null). Acceptable; document. |
+
+##### Step 3 follow-up checklist
+
+1. **(O1, O2, S1)** Wrap `RemoteAgentDispatcherAdapter` to implement `IAgentTransport`. Delete the dual-mode dispatch in orchestrator. Delete `remoteDispatcher` port/config/setter. **This is the big DRY win and unblocks dead-code removal.**
+2. **(F1)** Add optional `slug`, `connectedAt`, `lastSeenAt` to `AgentTransportEntry`; populate in `BuilderforceAgentTransport.discover`.
+3. **(F2)** Decide: keep historical `total`/`online` semantics in `claw_fleet` tool (query raw fleet), OR update the tool's description to reflect new post-filter semantics.
+4. **(C2.4)** Remove `taskId` from `IAgentTransport.dispatch` if no near-term use.
+5. **(C2.6)** Add `logDebug` on the swallowed `awaitRemoteResult` error.
+6. **(Stream timeout)** SDK side: either document the total-stream-timeout behavior or split `connectTimeoutMs`/`streamTimeoutMs`.
+
+Net assessment: **functionally correct, but the DRY rule the project enforces is currently being violated by the dual-path orchestrator.** The follow-up that closes O1 is small (one adapter file + ~25 LOC removal) and would bring this section into full compliance.
 
 ---
 

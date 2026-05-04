@@ -1,7 +1,7 @@
 import { ChatCompletionsApi } from './application/ChatCompletionsApi';
 import { ModelsApi } from './application/ModelsApi';
 import { UsageApi } from './application/UsageApi';
-import { HttpClient } from './infrastructure/httpClient';
+import { BuilderforceApiError, HttpClient } from './infrastructure/httpClient';
 
 export interface BuilderforceClientOptions {
   apiKey: string;
@@ -20,7 +20,11 @@ export class BuilderforceClient {
   constructor(options: BuilderforceClientOptions) {
     const apiKey = options.apiKey?.trim();
     if (!apiKey) {
-      throw new Error('BuilderforceClient requires a non-empty apiKey');
+      throw new BuilderforceApiError(
+        'BuilderforceClient requires a non-empty apiKey',
+        400,
+        'missing_api_key',
+      );
     }
 
     const http = new HttpClient({

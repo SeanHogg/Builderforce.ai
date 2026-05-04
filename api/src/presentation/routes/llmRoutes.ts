@@ -560,15 +560,24 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 /**
  * Route-level completion dispatcher:
  * - If caller passes a registered use case, route via completeForUseCase().
- * - Otherwise keep legacy pool dispatch via complete().
+ * - If caller passes an unrecognized useCase string, warn and fall back to
+ *   pool dispatch (forward-compat: older servers may not know newer use cases).
+ * - Otherwise (no useCase) use default pool dispatch.
  */
 export async function completeChatRequest(
   service: LlmProxyService,
   body: ChatCompletionRequest,
 ) {
   const useCase = typeof body.useCase === 'string' ? body.useCase : null;
-  if (useCase && isAIUseCase(useCase)) {
-    return service.completeForUseCase(useCase, body);
+  if (useCase) {
+    if (isAIUseCase(useCase)) {
+      return service.completeForUseCase(useCase, body);
+    }
+    console.warn(
+      `[llmRoutes] unknown useCase "${useCase}" — falling back to default pool dispatch. ` +
+        `Register it in api/src/application/llm/aiUseCases.ts (and re-run sdk check:usecases) ` +
+        `or remove the field from the request.`,
+    );
   }
   return service.complete(body);
 }
