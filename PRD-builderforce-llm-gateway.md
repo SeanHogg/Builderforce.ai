@@ -1,6 +1,6 @@
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               # PRD — Builderforce.ai B2B LLM Gateway
 
-**Status:** Step 1 complete; **Step 2 fully passes second-pass review** (all SDK follow-ups closed; one stream-timeout caveat). **Step 3 conditionally passes** — `IAgentTransport` correct and wired, but a dual-mode orchestrator block + duplicated capability-routing logic + lossy fleet shape round-trip violate the DRY rule (see §4 / Step 3 review). Closing O1 (wrap `RemoteAgentDispatcherAdapter` as `IAgentTransport`) collapses both DRY violations and unblocks dead-code removal.
+**Status:** Step 1 complete. **Step 2 + Step 3 cleanup landed** (DRY + dead-code violations closed; ~80 LOC removed; api/sdk/coderClaw all type-check and test clean). Remaining: optional SDK `connectTimeoutMs` / `streamTimeoutMs` split, optional `LocalAgentTransport` impl, and PRD §6 long-tail (legacy workforce-prefix deprecation, embeddings/vision wiring).
 **Owner:** Sean
 **Last updated:** 2026-05-04
 
@@ -223,7 +223,7 @@ C1 is fully fixed (`useCase` routes + no vendor payload leak). C1.fix.2 policy c
 | H3 — `sdk/dist/` ignored | ✅ Pass | Root `.gitignore` includes `sdk/dist/`; prior committed artifacts removed in commit `28dc200`. |
 | M1 — README | ✅ Pass | Covers install, quickstart, non-stream/stream chat, models, usage, errors (with `error.requestId`), auth, AIUseCase guard. |
 | M2 — `requestId` on errors | ✅ Pass | `BuilderforceApiError.requestId` populated from `x-request-id`; test asserts. |
-| M3 — Empty `apiKey` throws at construction | ✅ Pass with consistency nit | `apiKey?.trim()` rejects empty/whitespace; test passes `'   '`. **Nit:** throws plain `Error`, not `BuilderforceApiError` — inconsistent with the SDK's typed-error surface. Low impact; one-line fix. |
+| M3 — Empty `apiKey` throws at construction | ✅ Pass | `apiKey?.trim()` rejects empty/whitespace and now throws **`BuilderforceApiError(400, 'missing_api_key')`** for typed-error consistency with the rest of the SDK surface. Test rewritten to `instanceof`-assert and check `status` + `code`. |
 
 ### Step 3 — `AgentTransport` in coderClaw
 
@@ -247,7 +247,9 @@ Per the architecture: claws coordinate **both** local (peer on one machine) **an
 
 #### Step 3 code review (2026-05-04)
 
-🟡 **Conditional pass.** The transport abstraction is correct; the migration is half-done and visibly violates the DRY rule the project pins on every prompt — two near-identical remote-dispatch blocks now coexist in `orchestrator.ts`, and capability-routing logic is duplicated across `BuilderforceAgentTransport.dispatch` and the orchestrator's legacy block.
+✅ **Cleanup landed (2026-05-04).** All Step 3 review findings addressed in this chat — see "Step 3 cleanup results" below. Original review left in place for audit history.
+
+🟡 **Original verdict (superseded):** The transport abstraction is correct; the migration is half-done and visibly violates the DRY rule the project pins on every prompt — two near-identical remote-dispatch blocks now coexist in `orchestrator.ts`, and capability-routing logic is duplicated across `BuilderforceAgentTransport.dispatch` and the orchestrator's legacy block.
 
 Files reviewed (all in `c:/code/agentic/coderClaw/product/src/`):
 
@@ -300,6 +302,35 @@ Files reviewed (all in `c:/code/agentic/coderClaw/product/src/`):
 6. **(Stream timeout)** SDK side: either document the total-stream-timeout behavior or split `connectTimeoutMs`/`streamTimeoutMs`.
 
 Net assessment: **functionally correct, but the DRY rule the project enforces is currently being violated by the dual-path orchestrator.** The follow-up that closes O1 is small (one adapter file + ~25 LOC removal) and would bring this section into full compliance.
+
+#### Step 3 cleanup results (2026-05-04, this chat)
+
+All findings from the review above are closed. Verified by `npx tsc --noEmit` clean across api / sdk / coderClaw, and `npm test` green on api (5/5) and sdk (9/9 + use-case sync check).
+
+| # | Status | What was done |
+|---|---|---|
+| O1, O2, S1 | ✅ Closed | Collapsed the dual-mode orchestrator. Single dispatch block. The legacy `IRemoteAgentDispatcher` port was deleted from `ports.ts` along with its `RemoteDispatchResult` type; `RemoteAgentDispatcherAdapter` deleted from `orchestrator-ports-adapter.ts`; `setRemoteDispatcher` shim and `remoteDispatcher` field/config key deleted from orchestrator; `server-startup.ts` no longer imports/configures the legacy adapter. Capability-routing now lives only in `BuilderforceAgentTransport.dispatch` (with `parseAutoTarget` extracted as a single shared helper for the auto-target syntax). Net deletion: ~80 LOC across 4 files. |
+| F1, F2 | ✅ Closed (different fix than proposed) | The proposed fix was to add `slug?, connectedAt?, lastSeenAt?` to `AgentTransportEntry`. Better: the `claw_fleet` tool is a **diagnostic** that wants the un-filtered fleet (including self) for `total`/`online` accuracy. Moved it back to call `fetchFleetEntries` directly — fleet data flows un-mangled through `FleetEntry` (slug/connectedAt/lastSeenAt preserved), `total`/`online` count over the full tenant view (historical semantics restored), `filtered` reflects post-filter count. Transport abstraction is left for *dispatch*, not diagnostics. |
+| C2.4 | ✅ Closed | `IAgentTransport.dispatch(payload)` — `taskId` parameter removed from interface, transport, and orchestrator call site. |
+| C2.6 | ✅ Closed | `agent-transport.ts:awaitRemoteResult` catch now `logDebug`s the correlation id + error before falling back to "result pending" envelope. |
+| C2.3 | ⚠️ Still applies | `BuilderforceAgentTransport` is remote-only — kept as-is; `LocalAgentTransport` is a separate task and isn't currently needed. No code change. |
+| Dead-code sweep | ✅ Closed | `selectClawByCapability` (zero callers after adapter deletion) deleted from `remote-subagent.ts`; file-level docstring updated to describe its actual responsibilities. |
+
+**SDK side cleanup landed in the same chat:**
+
+| # | Status | What was done |
+|---|---|---|
+| M3 nit | ✅ Closed | `BuilderforceClient` now throws `BuilderforceApiError(400, 'missing_api_key')` (was plain `Error`). Test rewritten to assert `instanceof` + `status` + `code`. |
+| C1.fix.2 (unknown useCase policy) | ✅ Closed | Picked **silent + warn**: `completeChatRequest` now `console.warn`s with the offending value and a remediation hint when `useCase` is set but unregistered, then falls back to default pool dispatch. Forward-compatible (older servers don't reject newer use cases) AND visible in logs (typos surface). |
+
+**Verification:**
+```
+api/    npm run type-check  ✓   npm test  ✓ (5/5)
+sdk/    npm run type-check  ✓   npm test  ✓ (9/9 incl. usecases-sync)
+coderClaw/product  npx tsc --noEmit  ✓ (no diagnostics)
+```
+
+Step 3 now complies with the DRY + dead-code rules. **Net diff: ~80 LOC removed, 0 LOC duplicated.**
 
 ---
 
