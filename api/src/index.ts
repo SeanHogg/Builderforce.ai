@@ -180,7 +180,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
     return c.json(doc);
   });
 
-  // coderClawLLM — OpenAI-compatible LLM proxy (no JWT, keyed by OPENROUTER_API_KEY)
+  // builderforceLLM — OpenAI-compatible multi-vendor LLM proxy (tenant or claw API key auth)
   app.route('/llm', createLlmRoutes());
 
   // Marketplace (no JWT required for read, required for write)

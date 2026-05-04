@@ -8,7 +8,7 @@ import { Hono } from 'hono';
 import type { HonoEnv } from '../../env';
 import type { ProjectService } from '../../application/project/ProjectService';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { LlmProxyService, FREE_MODEL_POOL } from '../../application/llm/LlmProxyService';
+import { ideProxy } from '../../application/llm/LlmProxyService';
 
 const IDE_PREFIX = 'ide/';
 
@@ -46,8 +46,12 @@ export function createIdeAiRoutes(projectService: ProjectService): Hono<HonoEnv>
       return c.json({ error: 'messages array is required' }, 400);
     }
 
-    // Route workforce agents to their dedicated inference endpoint
-    const workforceMatch = typeof body.model === 'string' ? /^coderclawllm\/workforce-([^/\s]+)$/.exec(body.model) : null;
+    // Route workforce agents to their dedicated inference endpoint.
+    // Accept both the new `builderforce/workforce-<id>` prefix and the legacy
+    // `coderclawllm/workforce-<id>` prefix for backwards compatibility.
+    const workforceMatch = typeof body.model === 'string'
+      ? /^(?:builderforce|coderclawllm)\/workforce-([^/\s]+)$/.exec(body.model)
+      : null;
     if (workforceMatch) {
       const agentId = workforceMatch[1];
       const agentUrl = new URL(c.req.url);
@@ -60,8 +64,7 @@ export function createIdeAiRoutes(projectService: ProjectService): Hono<HonoEnv>
       return fetch(forwarded);
     }
 
-    const apiKey = c.env.OPENROUTER_API_KEY;
-    if (!apiKey || !apiKey.trim()) {
+    if (!c.env.OPENROUTER_API_KEY || !c.env.OPENROUTER_API_KEY.trim()) {
       return c.json(
         {
           error: 'LLM not configured',
@@ -95,12 +98,7 @@ export function createIdeAiRoutes(projectService: ProjectService): Hono<HonoEnv>
       }
     }
 
-    const service = new LlmProxyService(apiKey, {
-      modelPool: FREE_MODEL_POOL,
-      preferredPoolSize: 2,
-      productName: 'coderClawLLM',
-    });
-    const result = await service.complete({
+    const result = await ideProxy(c.env).complete({
       messages,
       stream: true,
     });

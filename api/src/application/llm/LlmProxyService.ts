@@ -1,68 +1,59 @@
 /**
- * coderClawLLM — OpenRouter free-model proxy with automatic failover.
+ * builderforceLLM — multi-vendor LLM proxy.
  *
- * Handles error signals from OpenRouter:
- *   1. HTTP 4xx/5xx status (except 400/401 which are client errors)
- *   2. HTTP 200 with {"error":{...}} in the body
- *      (OpenRouter sends this for upstream provider errors — rate limits, spend
- *       limits, capacity issues, etc.)
- *   3. First SSE chunk contains an error object (streaming variant of #2)
+ * Routes chat completions through the vendor registry (`./vendors/`) so the
+ * Free pool and Pro pool can cascade across OpenRouter / Cerebras / Ollama
+ * without changes to callers.
  *
- * On any of these signals the model is put on a 60-second cooldown and the next
- * healthy model in the pool is tried transparently.
+ * Responsibilities of this service (vs the vendor modules):
+ *   - Plan-aware key selection: Pro plan prefers OPENROUTER_API_KEY_PRO,
+ *     Free plan uses OPENROUTER_API_KEY. The vendor module itself is
+ *     plan-agnostic.
+ *   - Per-(vendor,model) cooldowns after any provider error (60s).
+ *   - Round-robin within a small "preferred" sub-pool so repeated calls
+ *     spread across the top-N quality models.
+ *   - Streaming with first-chunk error peek (delegated to the streaming
+ *     transport in vendors/types.ts).
  *
- * Pool strategy:
- *   - The first PREFERRED_POOL_SIZE models are the primary pool; round-robin
- *     rotates only within them so they handle the vast majority of traffic.
- *   - The remaining models are fallbacks, tried only when all preferred models
- *     are on cooldown.
+ * The service exposes two entry points:
+ *   - `complete(body)`            — legacy "give me a chat completion from this pool" mode
+ *   - `completeForUseCase(useCase, body)` — declare intent; the chain composer picks the chain
  */
 
+import { isAIUseCase, getUseCaseSpec, type AIUseCase } from './aiUseCases';
+import {
+  dispatchVendor,
+  dispatchVendorStream,
+  getCrossVendorFallbacks,
+  openRouterModule,
+  vendorForModel,
+  type DispatchAttempt,
+  type VendorEnv,
+  type VendorId,
+} from './vendors';
+
 // ---------------------------------------------------------------------------
-// Free model pool — ordered by quality/ctx preference (best first)
-//
-// PREFERRED_POOL_SIZE: the first N models are the primary round-robin group.
-// The rest are genuine fallbacks tried only when preferred are all on cooldown.
+// Pool composition (derived from vendor catalogs — single source of truth)
 // ---------------------------------------------------------------------------
 
-export const FREE_MODEL_POOL = [
-  'google/gemma-4-31b-it:free',                               // Gemma 4 31B, JSON mode, multimodal  ← preferred
-  'openrouter/elephant-alpha',                                // OpenRouter meta-router — auto-picks best available  ← preferred
-  'nousresearch/hermes-3-llama-3.1-405b:free',                // Hermes 3 on Llama 405B — top-tier reasoning
-  'openai/gpt-oss-120b:free',                                 // OpenAI open-source 120B, strong reasoning
-  'meta-llama/llama-3.3-70b-instruct:free',                   // Llama 3.3 70B — solid general-purpose, tool use
-  'z-ai/glm-4.5-air:free',                                    // GLM 4.5 Air — fast, 128K context
-  'qwen/qwen3-next-80b-a3b-instruct:free',                   // Qwen 3 80B MoE, 262K context, structured output
-  'nvidia/nemotron-nano-9b-v2:free',                          // Compact 9B, 128K context, structured output
-  'qwen/qwen3-coder:free',                                    // Qwen 3 Coder — strong for structured code/JSON
-] as const;
+/** OpenRouter free-tier ids, in catalog order. Best/preferred first. */
+export const FREE_MODEL_POOL: readonly string[] = openRouterModule.catalog
+  .filter((m) => m.tier === 'FREE')
+  .map((m) => m.id);
 
-export const PRO_PAID_MODEL_POOL = [
-  'anthropic/claude-3.7-sonnet',
-  'openai/gpt-4.1',
-  'google/gemini-2.5-pro',
-  'x-ai/grok-3-mini',
-] as const;
+/** OpenRouter paid-tier ids (STANDARD / PREMIUM / ULTRA). */
+export const PRO_PAID_MODEL_POOL: readonly string[] = openRouterModule.catalog
+  .filter((m) => m.tier === 'PREMIUM' || m.tier === 'ULTRA' || m.tier === 'STANDARD')
+  .map((m) => m.id);
 
-/**
- * Pro traffic strategy:
- * - Try free coding models first (cost-optimized).
- * - On rate-limit/provider errors, fail over to paid coding models.
- */
-export const PRO_MODEL_POOL = [
-  ...FREE_MODEL_POOL,
-  ...PRO_PAID_MODEL_POOL,
-] as const;
+/** Pro tries free first (cost-optimized), falls over to paid. */
+export const PRO_MODEL_POOL: readonly string[] = [...FREE_MODEL_POOL, ...PRO_PAID_MODEL_POOL];
 
-/** Number of models at the top of the pool that form the primary round-robin group. */
+/** First N models of the active pool form the round-robin "preferred" group. */
 export const PREFERRED_POOL_SIZE = 2;
 
-export type FreeModel = (typeof FREE_MODEL_POOL)[number];
-export type ProModel = (typeof PRO_MODEL_POOL)[number];
-type AnyPoolModel = FreeModel | ProModel;
-
 // ---------------------------------------------------------------------------
-// Types
+// Public types — kept stable for callers (llmRoutes, ideAiRoutes)
 // ---------------------------------------------------------------------------
 
 export interface ChatMessage {
@@ -72,14 +63,14 @@ export interface ChatMessage {
 }
 
 export interface ChatCompletionRequest {
-  /** Ignored when proxied — we pick the model from the pool. */
+  /** Ignored for pool-based dispatch; we pick from the pool. */
   model?: string;
   messages: ChatMessage[];
   temperature?: number;
   max_tokens?: number;
   top_p?: number;
   stream?: boolean;
-  /** Any extra passthrough params for OpenRouter. */
+  /** Any extra passthrough params for the vendor. */
   [key: string]: unknown;
 }
 
@@ -89,272 +80,367 @@ export interface LlmUsage {
   totalTokens:      number;
 }
 
-/** One model attempt that failed and triggered failover. */
+/** One model attempt that failed before the resolved model succeeded. */
 export interface FailoverEvent {
-  /** The model that was tried. */
   model: string;
-  /**
-   * HTTP status code for HTTP-level failures (402, 429, 503, etc.).
-   * 0 for provider errors embedded in a 200 response body or stream chunk.
-   */
+  /** HTTP status, or 0 for embedded errors / network failures. */
   code: number;
 }
 
 export interface ProxyResult {
-  /** The raw Response from OpenRouter (may be streamed). */
+  /** Final upstream Response (may be streamed). */
   response: Response;
   /** Which model actually served the request. */
   resolvedModel: string;
   /** How many failovers happened before success. */
   retries: number;
-  /** Each model that was tried and failed before the resolved model. */
   failovers: FailoverEvent[];
-  /**
-   * Token usage extracted from a non-streaming response body.
-   * Undefined for streaming responses — captured via stream interception in the route.
-   */
+  /** Token usage from non-streaming responses; undefined for streams (route intercepts). */
   usage?: LlmUsage;
 }
 
-// ---------------------------------------------------------------------------
-// Cooldown tracker  (in-memory, per-isolate)
-// ---------------------------------------------------------------------------
+export type ProductName = 'builderforceLLM' | 'builderforceLLMPro' | 'builderforceLLMTeams';
 
-/** model → timestamp when cooldown expires */
-const cooldowns = new Map<string, number>();
-
-const COOLDOWN_MS = 60_000; // 60 s cooldown after any provider error
-
-function markCooldown(model: string): void {
-  cooldowns.set(model, Date.now() + COOLDOWN_MS);
+export interface ProxyEnv extends VendorEnv {
+  /** Pro-tier OpenRouter key. Used in place of OPENROUTER_API_KEY when the
+   *  proxy was constructed with a Pro/Teams productName. */
+  OPENROUTER_API_KEY_PRO?: string | null;
 }
 
-function isOnCooldown(model: string): boolean {
-  const until = cooldowns.get(model);
+// ---------------------------------------------------------------------------
+// Cooldown tracker (per-isolate, in-memory)
+// ---------------------------------------------------------------------------
+
+const cooldowns = new Map<string, number>();
+const COOLDOWN_MS = 60_000;
+
+function cooldownKey(vendor: VendorId, model: string): string { return `${vendor}/${model}`; }
+function markCooldown(vendor: VendorId, model: string): void {
+  cooldowns.set(cooldownKey(vendor, model), Date.now() + COOLDOWN_MS);
+}
+function isOnCooldown(vendor: VendorId, model: string): boolean {
+  const k = cooldownKey(vendor, model);
+  const until = cooldowns.get(k);
   if (!until) return false;
-  if (Date.now() >= until) { cooldowns.delete(model); return false; }
+  if (Date.now() >= until) { cooldowns.delete(k); return false; }
   return true;
 }
 
 // ---------------------------------------------------------------------------
-// Round-robin cursor  (in-memory, per-isolate)
+// Round-robin cursor (per-isolate)
 // ---------------------------------------------------------------------------
 
-/** Advances each request so the starting model rotates within the preferred pool. */
 let requestCursor = 0;
-
-// ---------------------------------------------------------------------------
-// Error detection helpers
-// ---------------------------------------------------------------------------
-
-/**
- * HTTP status codes that warrant failover to the next model.
- * - 400 Bad Request: client error — won't improve by switching models.
- * - 401 Unauthorized: API key invalid — switching models won't help.
- * - Everything else 4xx/5xx: provider/capacity error → try next model.
- */
-function isFailoverStatus(status: number): boolean {
-  return status >= 400 && status !== 400 && status !== 401;
-}
-
-/** Detect any provider error in a parsed JSON body. */
-function isBodyError(json: Record<string, unknown>): boolean {
-  return 'error' in json && json['error'] != null;
-}
-
-/**
- * Detect a provider error in a raw SSE text chunk.
- * Tries to parse the first `data:` line as JSON; falls back to text heuristics.
- */
-function isChunkError(text: string): boolean {
-  if (!text.includes('"error"')) return false;
-  // Try to parse the first SSE data line
-  const dataLine = text.split('\n').find((l) => l.startsWith('data: '));
-  if (!dataLine) return true; // has "error" substring but no parseable line → be safe
-  try {
-    const parsed = JSON.parse(dataLine.slice(6)) as Record<string, unknown>;
-    return 'error' in parsed && parsed['error'] != null;
-  } catch {
-    return true; // unparseable chunk that mentions "error" → failover
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
 
-const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
+export interface LlmProxyOptions {
+  modelPool?: readonly string[];
+  preferredPoolSize?: number;
+  productName?: ProductName;
+}
 
 export class LlmProxyService {
-  private readonly apiKey: string;
-  private readonly modelPool: readonly AnyPoolModel[];
+  private readonly env: ProxyEnv;
+  private readonly modelPool: readonly string[];
   private readonly preferredPoolSize: number;
-  private readonly productName: 'coderClawLLM' | 'coderClawLLMPro' | 'coderClawLLMTeams';
+  private readonly productName: ProductName;
+  private readonly isPro: boolean;
 
-  constructor(
-    apiKey: string,
-    options?: {
-      modelPool?: readonly AnyPoolModel[];
-      preferredPoolSize?: number;
-      productName?: 'coderClawLLM' | 'coderClawLLMPro' | 'coderClawLLMTeams';
-    },
-  ) {
-    this.apiKey = apiKey;
+  constructor(env: ProxyEnv, options?: LlmProxyOptions) {
+    this.env = env;
     this.modelPool = options?.modelPool ?? FREE_MODEL_POOL;
     this.preferredPoolSize = Math.min(options?.preferredPoolSize ?? PREFERRED_POOL_SIZE, this.modelPool.length);
-    this.productName = options?.productName ?? 'coderClawLLM';
+    this.productName = options?.productName ?? 'builderforceLLM';
+    this.isPro = this.productName === 'builderforceLLMPro' || this.productName === 'builderforceLLMTeams';
   }
 
+  // --- Public entry points --------------------------------------------------
+
   /**
-   * Forward a chat-completion request through the free model pool.
-   *
-   * Candidate selection:
-   *   1. Round-robin within the preferred pool (first PREFERRED_POOL_SIZE models).
-   *   2. If all preferred are on cooldown, fall through to the remaining models.
-   *   3. If everything is on cooldown, try all models in order as last resort.
-   *
-   * Any failed attempt is recorded as a FailoverEvent in the result.
+   * Forward a chat-completion request through the configured pool.
+   * The model field on `body` is ignored — the chain composer picks it.
    */
   async complete(
     body: ChatCompletionRequest,
     requestHeaders?: Record<string, string>,
   ): Promise<ProxyResult> {
-    const preferredPool = this.modelPool.slice(0, this.preferredPoolSize) as AnyPoolModel[];
-    const fallbackPool  = this.modelPool.slice(this.preferredPoolSize) as AnyPoolModel[];
-
-    const preferredAvailable = preferredPool.filter((m) => !isOnCooldown(m));
-    const fallbackAvailable  = fallbackPool.filter((m)  => !isOnCooldown(m));
-
-    let candidates: AnyPoolModel[];
-    if (preferredAvailable.length > 0) {
-      // Round-robin within the preferred pool; fallbacks appended after
-      const start = requestCursor % preferredAvailable.length;
-      candidates = [
-        ...preferredAvailable.slice(start),
-        ...preferredAvailable.slice(0, start),
-        ...fallbackAvailable,
-      ];
-    } else if (fallbackAvailable.length > 0) {
-      candidates = fallbackAvailable;
-    } else {
-      // Everything on cooldown — try all in original order as last resort
-      candidates = [...this.modelPool] as AnyPoolModel[];
-    }
-    requestCursor++;
-
-    let lastResponse: Response | undefined;
-    let retries = 0;
-    const failovers: FailoverEvent[] = [];
-
-    for (const model of candidates) {
-      const upstream = await fetch(OPENROUTER_BASE, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
-          'HTTP-Referer': 'https://builderforce.ai',
-          'X-Title': this.productName,
-          ...(requestHeaders ?? {}),
-        },
-        body: JSON.stringify({ ...body, model }),
-      });
-
-      // ── HTTP error status (402 spend limit, 429 rate limit, 5xx, etc.) ───────
-      if (isFailoverStatus(upstream.status)) {
-        failovers.push({ model, code: upstream.status });
-        markCooldown(model);
-        lastResponse = upstream;
-        retries++;
-        continue;
-      }
-
-      // ── Streaming: peek first chunk for embedded error ────────────────────
-      if (body.stream && upstream.body) {
-        const [peekStream, passStream] = upstream.body.tee();
-        const reader = peekStream.getReader();
-        const { value: firstChunk } = await reader.read();
-        reader.cancel().catch(() => { /* ignore */ });
-
-        const firstText = firstChunk ? new TextDecoder().decode(firstChunk) : '';
-
-        if (isChunkError(firstText)) {
-          await passStream.cancel().catch(() => { /* ignore */ });
-          failovers.push({ model, code: 0 });
-          markCooldown(model);
-          retries++;
-          continue;
-        }
-
-        // Good stream — pass through
-        return {
-          response: new Response(passStream, { status: upstream.status, headers: upstream.headers }),
-          resolvedModel: model,
-          retries,
-          failovers,
-        };
-      }
-
-      // ── Non-streaming: read body and check for embedded error ─────────────
-      const json = await upstream.json() as Record<string, unknown>;
-
-      if (isBodyError(json)) {
-        failovers.push({ model, code: 0 });
-        markCooldown(model);
-        retries++;
-        continue;
-      }
-
-      // Extract token usage from the response body
-      const rawUsage = json['usage'] as { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
-      const usage: LlmUsage | undefined = rawUsage ? {
-        promptTokens:     rawUsage.prompt_tokens     ?? 0,
-        completionTokens: rawUsage.completion_tokens ?? 0,
-        totalTokens:      rawUsage.total_tokens      ?? 0,
-      } : undefined;
-
-      // Good response — reconstruct so the route handler can .json() it
-      return {
-        response: new Response(JSON.stringify(json), {
-          status: upstream.status,
-          headers: upstream.headers,
-        }),
-        resolvedModel: model,
-        retries,
-        failovers,
-        usage,
-      };
-    }
-
-    // All candidates exhausted — return a clean error
-    const exhaustedBody = JSON.stringify({
-      error: {
-        message: 'All free models are temporarily unavailable. Please retry in a moment.',
-        code: 429,
-        type: 'rate_limit_error',
-      },
-    });
-    return {
-      response: lastResponse ?? new Response(exhaustedBody, {
-        status: 429,
-        headers: { 'content-type': 'application/json' },
-      }),
-      resolvedModel: candidates[candidates.length - 1] ?? this.modelPool[0] ?? FREE_MODEL_POOL[0],
-      retries,
-      failovers,
-    };
+    const candidates = this.buildCandidateChain(this.modelPool);
+    return this.dispatch(candidates, body, requestHeaders);
   }
 
-  /** Return the current model pool with cooldown status. */
-  status(): Array<{ model: string; preferred: boolean; available: boolean; cooldownUntil?: number }> {
+  /**
+   * Use-case-driven completion. The use-case's preferredChain is the seed of the
+   * dispatch chain; the proxy still adds its own cross-vendor fallbacks so
+   * exhaustion of the use-case chain falls into the broader pool.
+   */
+  async completeForUseCase(
+    useCase: AIUseCase | string,
+    body: ChatCompletionRequest,
+    requestHeaders?: Record<string, string>,
+  ): Promise<ProxyResult> {
+    if (!isAIUseCase(useCase)) {
+      throw new Error(`Unknown AI use case: ${useCase}`);
+    }
+    const spec = getUseCaseSpec(useCase);
+    const seed = [...spec.preferredChain];
+
+    // Apply use-case temperature / max_tokens defaults if caller didn't set them.
+    const enrichedBody: ChatCompletionRequest = {
+      ...body,
+      max_tokens:  body.max_tokens  ?? spec.maxTokens,
+      ...(spec.temperature != null && body.temperature == null ? { temperature: spec.temperature } : {}),
+    };
+
+    const candidates = this.buildCandidateChain(seed);
+    return this.dispatch(candidates, enrichedBody, requestHeaders);
+  }
+
+  /** Per-model status with cooldown info — used by /v1/models. */
+  status(): Array<{ model: string; preferred: boolean; available: boolean; cooldownUntil?: number; vendor: VendorId }> {
     return this.modelPool.map((model, i) => {
-      const until = cooldowns.get(model);
+      const vendor = vendorForModel(model);
+      const until = cooldowns.get(cooldownKey(vendor, model));
       const available = !until || Date.now() >= until;
       return {
         model,
+        vendor,
         preferred: i < this.preferredPoolSize,
         available,
         ...(until && !available ? { cooldownUntil: until } : {}),
       };
     });
   }
+
+  // --- Internals ------------------------------------------------------------
+
+  /**
+   * Compose the candidate chain for one request:
+   *   1. Round-robin within preferred sub-pool (filtered by cooldown)
+   *   2. Append remaining pool (filtered by cooldown)
+   *   3. Append cross-vendor fallbacks (each configured vendor's fallbackModel)
+   *   4. Deduplicate, preserving first occurrence
+   *   5. If everything is on cooldown, fall back to the un-filtered pool
+   */
+  private buildCandidateChain(seed: readonly string[]): string[] {
+    const preferred = seed.slice(0, this.preferredPoolSize);
+    const fallback  = seed.slice(this.preferredPoolSize);
+
+    const preferredAvailable = preferred.filter((m) => !isOnCooldown(vendorForModel(m), m));
+    const fallbackAvailable  = fallback.filter((m)  => !isOnCooldown(vendorForModel(m), m));
+
+    let chain: string[];
+    if (preferredAvailable.length > 0) {
+      const start = requestCursor % preferredAvailable.length;
+      chain = [
+        ...preferredAvailable.slice(start),
+        ...preferredAvailable.slice(0, start),
+        ...fallbackAvailable,
+      ];
+    } else if (fallbackAvailable.length > 0) {
+      chain = [...fallbackAvailable];
+    } else {
+      // Everything cooled — try seed in original order (last resort).
+      chain = [...seed];
+    }
+    requestCursor++;
+
+    // Append cross-vendor fallbacks, then dedupe.
+    const composed = [...chain, ...getCrossVendorFallbacks(this.vendorEnv())];
+    const seen = new Set<string>();
+    return composed.filter((m) => (seen.has(m) ? false : (seen.add(m), true)));
+  }
+
+  /** Synthesize the env passed to vendors — picks the Pro OpenRouter key when applicable. */
+  private vendorEnv(): VendorEnv {
+    return {
+      OPENROUTER_API_KEY: this.isPro
+        ? (this.env.OPENROUTER_API_KEY_PRO ?? this.env.OPENROUTER_API_KEY ?? null)
+        : (this.env.OPENROUTER_API_KEY ?? null),
+      CEREBRAS_API_KEY: this.env.CEREBRAS_API_KEY ?? null,
+      OLLAMA_API_KEY:   this.env.OLLAMA_API_KEY   ?? null,
+    };
+  }
+
+  private async dispatch(
+    candidates: string[],
+    body: ChatCompletionRequest,
+    requestHeaders?: Record<string, string>,
+  ): Promise<ProxyResult> {
+    const messages = body.messages as unknown as Array<Record<string, unknown>>;
+    const extraBody = stripStandardFields(body);
+    const callParams = {
+      messages,
+      ...(body.max_tokens  != null ? { maxTokens:   body.max_tokens  } : {}),
+      ...(body.temperature != null ? { temperature: body.temperature } : {}),
+      ...(body.top_p       != null ? { topP:        body.top_p       } : {}),
+      ...(Object.keys(extraBody).length > 0 ? { extraBody } : {}),
+      title: this.productName,
+    };
+
+    if (body.stream) {
+      return this.dispatchStream(candidates, callParams, requestHeaders);
+    }
+    return this.dispatchJson(candidates, callParams);
+  }
+
+  private async dispatchJson(
+    candidates: string[],
+    callParams: Omit<Parameters<typeof dispatchVendor>[0], 'env' | 'modelChain'>,
+  ): Promise<ProxyResult> {
+    try {
+      const result = await dispatchVendor({
+        env: this.vendorEnv(),
+        modelChain: candidates,
+        ...callParams,
+      });
+      this.applyCooldowns(result.attempts);
+      return {
+        response: new Response(JSON.stringify(result.raw), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+        resolvedModel: result.modelUsed,
+        retries: result.attempts.length,
+        failovers: attemptsToFailovers(result.attempts),
+        ...(result.usage ? {
+          usage: {
+            promptTokens:     result.usage.prompt_tokens     ?? 0,
+            completionTokens: result.usage.completion_tokens ?? 0,
+            totalTokens:      result.usage.total_tokens      ?? 0,
+          },
+        } : {}),
+      };
+    } catch (err) {
+      // Cascade exhausted — surface as a 429 envelope so existing handlers see the same shape.
+      const message = err instanceof Error ? err.message : String(err);
+      const exhaustedBody = JSON.stringify({
+        error: { message, code: 429, type: 'rate_limit_error' },
+      });
+      return {
+        response: new Response(exhaustedBody, {
+          status: 429,
+          headers: { 'content-type': 'application/json' },
+        }),
+        resolvedModel: candidates[candidates.length - 1] ?? this.modelPool[0] ?? FREE_MODEL_POOL[0] ?? '',
+        retries: candidates.length,
+        failovers: candidates.map((model) => ({ model, code: 0 })),
+      };
+    }
+  }
+
+  private async dispatchStream(
+    candidates: string[],
+    callParams: Omit<Parameters<typeof dispatchVendorStream>[0], 'env' | 'modelChain'>,
+    _requestHeaders?: Record<string, string>,
+  ): Promise<ProxyResult> {
+    try {
+      const result = await dispatchVendorStream({
+        env: this.vendorEnv(),
+        modelChain: candidates,
+        ...callParams,
+      });
+      this.applyCooldowns(result.attempts);
+      return {
+        response: result.response,
+        resolvedModel: result.modelUsed,
+        retries: result.attempts.length,
+        failovers: attemptsToFailovers(result.attempts),
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const exhaustedBody = JSON.stringify({
+        error: { message, code: 429, type: 'rate_limit_error' },
+      });
+      return {
+        response: new Response(exhaustedBody, {
+          status: 429,
+          headers: { 'content-type': 'application/json' },
+        }),
+        resolvedModel: candidates[candidates.length - 1] ?? this.modelPool[0] ?? FREE_MODEL_POOL[0] ?? '',
+        retries: candidates.length,
+        failovers: candidates.map((model) => ({ model, code: 0 })),
+      };
+    }
+  }
+
+  private applyCooldowns(attempts: DispatchAttempt[]): void {
+    for (const a of attempts) markCooldown(a.vendor, a.model);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function attemptsToFailovers(attempts: DispatchAttempt[]): FailoverEvent[] {
+  return attempts.map((a) => ({ model: a.model, code: a.status }));
+}
+
+// ---------------------------------------------------------------------------
+// Plan → proxy factory  (eliminates duplicated isPro/pool/productName wiring)
+// ---------------------------------------------------------------------------
+
+export type EffectivePlan = 'free' | 'pro' | 'teams';
+
+/** Map an effective plan to its productName + model pool, then construct the proxy.
+ *  Single source of truth so /v1/chat/completions and /v1/models stay aligned. */
+export function llmProxyForPlan(env: ProxyEnv, effectivePlan: EffectivePlan): LlmProxyService {
+  const productName: ProductName =
+    effectivePlan === 'teams' ? 'builderforceLLMTeams'
+    : effectivePlan === 'pro' ? 'builderforceLLMPro'
+    :                            'builderforceLLM';
+  const modelPool = effectivePlan === 'free' ? FREE_MODEL_POOL : PRO_MODEL_POOL;
+  return new LlmProxyService(env, { modelPool, preferredPoolSize: PREFERRED_POOL_SIZE, productName });
+}
+
+export function productNameForPlan(effectivePlan: EffectivePlan): ProductName {
+  return effectivePlan === 'teams' ? 'builderforceLLMTeams'
+    : effectivePlan === 'pro'      ? 'builderforceLLMPro'
+    :                                 'builderforceLLM';
+}
+
+export function modelPoolForPlan(effectivePlan: EffectivePlan): readonly string[] {
+  return effectivePlan === 'free' ? FREE_MODEL_POOL : PRO_MODEL_POOL;
+}
+
+/** Free-tier proxy for IDE-internal callers (chat, dataset gen, agent inference, brain).
+ *  Always uses FREE_MODEL_POOL and productName='builderforceLLM'. */
+export function ideProxy(env: ProxyEnv): LlmProxyService {
+  return new LlmProxyService(env, {
+    modelPool: FREE_MODEL_POOL,
+    preferredPoolSize: PREFERRED_POOL_SIZE,
+    productName: 'builderforceLLM',
+  });
+}
+
+/** Build a proxy over a specific pool (admin /status etc. — for displaying cooldowns).
+ *  Use llmProxyForPlan when you have an effectivePlan. */
+export function adminPoolProxy(
+  env: ProxyEnv,
+  modelPool: readonly string[],
+  productName: ProductName,
+): LlmProxyService {
+  return new LlmProxyService(env, {
+    modelPool,
+    preferredPoolSize: Math.min(PREFERRED_POOL_SIZE, modelPool.length),
+    productName,
+  });
+}
+
+const STANDARD_BODY_FIELDS: ReadonlySet<string> = new Set([
+  'model', 'messages', 'temperature', 'max_tokens', 'top_p', 'stream',
+]);
+
+/** Pick out non-standard fields from the request body so they can be passed
+ *  through as `extraBody` to the vendor. */
+function stripStandardFields(body: ChatCompletionRequest): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(body)) {
+    if (STANDARD_BODY_FIELDS.has(key)) continue;
+    out[key] = (body as Record<string, unknown>)[key];
+  }
+  return out;
 }

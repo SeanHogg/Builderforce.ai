@@ -7,8 +7,7 @@ import { neon } from '@neondatabase/serverless';
 import type { HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import {
-  LlmProxyService,
-  FREE_MODEL_POOL,
+  ideProxy,
   type ChatCompletionRequest,
 } from '../../application/llm/LlmProxyService';
 
@@ -169,11 +168,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
             controller.close();
             return;
           }
-          const service = new LlmProxyService(c.env.OPENROUTER_API_KEY, {
-            modelPool: FREE_MODEL_POOL,
-            preferredPoolSize: 2,
-            productName: 'coderClawLLM',
-          });
+          const service = ideProxy(c.env);
           const systemPrompt = `You are an expert AI trainer. Generate instruction-tuning examples. Return ONLY a valid JSON array of objects: {"instruction":"...","input":"...","output":"..."}. No other text.`;
           const userPrompt = `Generate ${exampleCount} diverse examples for: ${body.capabilityPrompt}. Return ONLY the JSON array.`;
           const result = await service.complete({
@@ -364,11 +359,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     }
     const modelOutputs: string[] = [];
     if (c.env.OPENROUTER_API_KEY && examples.length > 0) {
-      const service = new LlmProxyService(c.env.OPENROUTER_API_KEY, {
-        modelPool: FREE_MODEL_POOL,
-        preferredPoolSize: 2,
-        productName: 'coderClawLLM',
-      });
+      const service = ideProxy(c.env);
       for (const ex of examples) {
         try {
           const result = await service.complete({
@@ -510,8 +501,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
       return c.json({ error: 'messages array is required' }, 400);
     }
-    const apiKey = c.env.OPENROUTER_API_KEY;
-    if (!apiKey?.trim()) {
+    if (!c.env.OPENROUTER_API_KEY?.trim()) {
       return c.json({ error: 'LLM not configured' }, 503);
     }
     const [agent] = await getSql(c)`SELECT * FROM ide_agents WHERE id = ${agentId}`;
@@ -542,7 +532,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
     const logId = generateId();
     const startMs = Date.now();
-    const service = new LlmProxyService(apiKey, { modelPool: FREE_MODEL_POOL, preferredPoolSize: 2, productName: 'coderClawLLM' });
+    const service = ideProxy(c.env);
     let status = 'ok';
     let errorMessage: string | null = null;
     try {
@@ -550,7 +540,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       const latencyMs = Date.now() - startMs;
       await getSql(c)`
         INSERT INTO agent_inference_logs (id, agent_id, model_ref, latency_ms, status, inference_mode, created_at)
-        VALUES (${logId}, ${agentId}, ${'coderclawllm/workforce-' + agentId}, ${latencyMs}, ${status}, ${inferenceMode}, NOW())
+        VALUES (${logId}, ${agentId}, ${'builderforce/workforce-' + agentId}, ${latencyMs}, ${status}, ${inferenceMode}, NOW())
       `;
       await getSql(c)`UPDATE ide_agents SET request_count = request_count + 1, last_used_at = NOW() WHERE id = ${agentId}`;
       if (!result.response.body) return c.json({ error: 'No stream body' }, 502);

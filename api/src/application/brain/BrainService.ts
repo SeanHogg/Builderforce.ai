@@ -8,10 +8,7 @@ import {
   projectMemories,
   projects,
 } from '../../infrastructure/database/schema';
-import {
-  LlmProxyService,
-  FREE_MODEL_POOL,
-} from '../llm/LlmProxyService';
+import { ideProxy } from '../llm/LlmProxyService';
 import type { Db } from '../../infrastructure/database/connection';
 
 const BRAIN_ORIGIN = 'brainstorm';
@@ -117,12 +114,12 @@ export class BrainService {
   // LLM helper (DRY)
   // -----------------------------------------------------------------------
 
+  // Caller passes the OpenRouter key; `ideProxy` handles pool + productName.
+  // Cross-vendor fallbacks (Cerebras / Ollama) are not enabled here because
+  // the BrainService doesn't carry the full env — internal summarization stays
+  // single-vendor on purpose.
   private buildLlmService(apiKey: string) {
-    return new LlmProxyService(apiKey, {
-      modelPool: FREE_MODEL_POOL,
-      preferredPoolSize: 2,
-      productName: 'coderClawLLM',
-    });
+    return ideProxy({ OPENROUTER_API_KEY: apiKey });
   }
 
   // -----------------------------------------------------------------------
