@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import AppShell from './AppShell';
 import AppFooter from './AppFooter';
 import TopBar from './TopBar';
+import OnboardingGate from './OnboardingGate';
 import { useAuth } from '@/lib/AuthContext';
 
 const APP_SHELL_PATHS = ['/dashboard', '/ide', '/training', '/tenants'];
@@ -80,7 +81,13 @@ export default function ConditionalAppShell({ children }: { children: React.Reac
     return <PublicBrowseShell>{children}</PublicBrowseShell>;
   }
 
-  if (showShell) return <AppShell>{children}</AppShell>;
+  if (showShell) {
+    return (
+      <OnboardingGate renderShell={(gated) => <AppShell>{gated}</AppShell>}>
+        {children}
+      </OnboardingGate>
+    );
+  }
   if (showFooterOnly) {
     return (
       <div
