@@ -33,7 +33,7 @@ export default function RegisterPageClient() {
     setError(null);
     setIsLoading(true);
     try {
-      await register(email, password, name.trim() || undefined);
+      await register(email, password, name.trim() || undefined, agreeToTerms);
       router.push('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
