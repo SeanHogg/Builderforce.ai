@@ -1,0 +1,61 @@
+---
+/**
+ * Custom SiteTitle override.
+ *
+ * Replaces Starlight's default title block with a back-link to the marketing
+ * site (builderforce.ai/) followed by the docs logo + title. Single component
+ * owns this layout; per-page consumers don't need to opt-in to anything.
+ *
+ * The "← Builderforce.ai" link is an absolute URL so it always escapes the
+ * /docs path scope, regardless of locale prefix.
+ */
+import Default from '@astrojs/starlight/components/SiteTitle.astro';
+---
+
+<div class="bf-site-title">
+  <a href="/" class="bf-back" aria-label="Back to Builderforce.ai">
+    <span aria-hidden="true">←</span>
+    <span>Builderforce.ai</span>
+  </a>
+  <span class="bf-divider" aria-hidden="true">|</span>
+  <Default><slot /></Default>
+</div>
+
+<style>
+  .bf-site-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .bf-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: var(--sl-color-gray-3);
+    text-decoration: none;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: color 0.15s ease, background 0.15s ease;
+    white-space: nowrap;
+  }
+  .bf-back:hover {
+    color: var(--sl-color-text);
+    background: var(--sl-color-hairline-light);
+  }
+  .bf-divider {
+    color: var(--sl-color-hairline);
+    user-select: none;
+  }
+
+  @media (max-width: 720px) {
+    .bf-back span:last-child,
+    .bf-divider {
+      display: none;
+    }
+    .bf-back {
+      padding: 4px 6px;
+    }
+  }
+</style>

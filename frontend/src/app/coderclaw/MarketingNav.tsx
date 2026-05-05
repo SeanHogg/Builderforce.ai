@@ -5,20 +5,24 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 
-const NAV_LINKS = [
+/**
+ * Single nav for /coderclaw/* pages. Decides its own active-link state from
+ * `usePathname()`, so consumers (the layout) just drop it in — no props.
+ *
+ * The Docs link is rendered as a plain <a> because /docs/* is served by a
+ * separate Cloudflare Pages deployment (Astro Starlight) that Next.js cannot
+ * client-route into.
+ */
+const NEXT_LINKS = [
   { label: 'Showcase', href: '/coderclaw/showcase' },
   { label: 'Integrations', href: '/coderclaw/integrations' },
   { label: 'Skills', href: '/coderclaw/skills' },
   { label: 'Shoutouts', href: '/coderclaw/shoutouts' },
-  { label: 'Docs', href: '/coderclaw/docs/getting-started' },
 ] as const;
 
 export default function MarketingNav() {
   const pathname = usePathname();
-  const isActive = (href: string) =>
-    href === '/coderclaw/docs/getting-started'
-      ? pathname?.startsWith('/coderclaw/docs')
-      : pathname === href;
+  const isActive = (href: string) => pathname === href;
 
   return (
     <header className="cc-nav">
@@ -35,7 +39,7 @@ export default function MarketingNav() {
           <span className="cc-nav-subtle">by Builderforce.ai</span>
         </Link>
         <nav className="cc-nav-right">
-          {NAV_LINKS.map((l) => (
+          {NEXT_LINKS.map((l) => (
             <Link
               key={l.href}
               href={l.href}
@@ -44,9 +48,8 @@ export default function MarketingNav() {
               {l.label}
             </Link>
           ))}
-          <Link href="/" className="cc-nav-link">
-            Builderforce.ai
-          </Link>
+          <a href="/docs" className="cc-nav-link">Docs</a>
+          <Link href="/" className="cc-nav-link">Builderforce.ai</Link>
           <a
             href="https://github.com/seanhogg/coderclaw"
             target="_blank"

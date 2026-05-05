@@ -43,7 +43,7 @@ export default function ShowcasePage() {
         </div>
       </section>
       <p className="cc-more">
-        Looking for more? <a href="https://docs.coderclaw.ai/start/showcase" target="_blank" rel="noopener">More examples in our docs</a>.
+        Looking for more? <a href="/docs/start/showcase">More examples in our docs</a>.
       </p>
       <style>{`
         .cc-page {

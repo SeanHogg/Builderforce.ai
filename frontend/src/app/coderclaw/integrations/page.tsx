@@ -42,94 +42,94 @@ const minimaxIcon: CustomSvg = {
 };
 
 const chatProviders: IntegrationItem[] = [
-  { name: 'WhatsApp', icon: si(siWhatsapp), color: '#25D366', desc: 'QR pairing via Baileys', docs: 'https://coderclaw.ai/skills/wacli' },
-  { name: 'Telegram', icon: si(siTelegram), color: '#26A5E4', desc: 'Bot API via grammY', docs: 'https://docs.coderclaw.ai/telegram' },
-  { name: 'Discord', icon: si(siDiscord), color: '#5865F2', desc: 'Servers, channels & DMs', docs: 'https://coderclaw.ai/skills/discord' },
-  { name: 'Slack', icon: lc('hash'), color: '#E01E5A', desc: 'Workspace apps via Bolt', docs: 'https://coderclaw.ai/skills/slack' },
-  { name: 'Signal', icon: si(siSignal), color: '#3A76F0', desc: 'Privacy-focused via signal-cli', docs: 'https://docs.coderclaw.ai/channels/signal' },
+  { name: 'WhatsApp', icon: si(siWhatsapp), color: '#25D366', desc: 'QR pairing via Baileys', docs: '/coderclaw/skills/wacli' },
+  { name: 'Telegram', icon: si(siTelegram), color: '#26A5E4', desc: 'Bot API via grammY', docs: '/docs/telegram' },
+  { name: 'Discord', icon: si(siDiscord), color: '#5865F2', desc: 'Servers, channels & DMs', docs: '/coderclaw/skills/discord' },
+  { name: 'Slack', icon: lc('hash'), color: '#E01E5A', desc: 'Workspace apps via Bolt', docs: '/coderclaw/skills/slack' },
+  { name: 'Signal', icon: si(siSignal), color: '#3A76F0', desc: 'Privacy-focused via signal-cli', docs: '/docs/channels/signal' },
   { name: 'iMessage', icon: si(siApple), color: '#007AFF', desc: 'iMessage via imsg (AppleScript bridge)', docs: 'https://github.com/steipete/imsg' },
-  { name: 'Microsoft Teams', icon: lc('users'), color: '#6264A7', desc: 'Enterprise support', docs: 'https://docs.coderclaw.ai/channels/msteams' },
-  { name: 'Nextcloud Talk', icon: si(siNextcloud), color: '#0082C9', desc: 'Self-hosted Nextcloud chat', docs: 'https://docs.coderclaw.ai/channels/nextcloud-talk' },
-  { name: 'Matrix', icon: si(siMatrix), color: '#000000', desc: 'Matrix protocol', docs: 'https://docs.coderclaw.ai/channels/matrix' },
-  { name: 'Nostr', icon: lc('message-circle'), color: '#8F2CFF', desc: 'Decentralized DMs via NIP-04', docs: 'https://docs.coderclaw.ai/channels/nostr' },
-  { name: 'Zalo', icon: si(siZalo), color: '#0068FF', desc: 'Zalo Bot API', docs: 'https://docs.coderclaw.ai/channels/zalo' },
-  { name: 'WebChat', icon: lc('globe'), color: '#00E5CC', desc: 'Browser-based UI', docs: 'https://docs.coderclaw.ai/webchat' },
+  { name: 'Microsoft Teams', icon: lc('users'), color: '#6264A7', desc: 'Enterprise support', docs: '/docs/channels/msteams' },
+  { name: 'Nextcloud Talk', icon: si(siNextcloud), color: '#0082C9', desc: 'Self-hosted Nextcloud chat', docs: '/docs/channels/nextcloud-talk' },
+  { name: 'Matrix', icon: si(siMatrix), color: '#000000', desc: 'Matrix protocol', docs: '/docs/channels/matrix' },
+  { name: 'Nostr', icon: lc('message-circle'), color: '#8F2CFF', desc: 'Decentralized DMs via NIP-04', docs: '/docs/channels/nostr' },
+  { name: 'Zalo', icon: si(siZalo), color: '#0068FF', desc: 'Zalo Bot API', docs: '/docs/channels/zalo' },
+  { name: 'WebChat', icon: lc('globe'), color: '#00E5CC', desc: 'Browser-based UI', docs: '/docs/webchat' },
 ];
 
 const modelProviders: IntegrationItem[] = [
-  { name: 'Anthropic', icon: si(siAnthropic), color: '#D4A574', desc: 'Claude Pro/Max + Opus 4.5', docs: 'https://docs.coderclaw.ai/models' },
-  { name: 'OpenAI', icon: lc('bot'), color: '#00A67E', desc: 'GPT-4, GPT-5, o1', docs: 'https://docs.coderclaw.ai/models' },
-  { name: 'Google', icon: si(siGoogle), color: '#4285F4', desc: 'Gemini 2.5 Pro/Flash', docs: 'https://docs.coderclaw.ai/models' },
-  { name: 'MiniMax', icon: cs(minimaxIcon), color: '#E91E63', desc: 'MiniMax-M2.1', docs: 'https://docs.coderclaw.ai/providers/minimax' },
-  { name: 'xAI', icon: si(siX), color: '#FFFFFF', desc: 'Grok 3 & 4', docs: 'https://docs.coderclaw.ai/models' },
-  { name: 'Vercel AI Gateway', icon: si(siVercel), color: '#FFFFFF', desc: 'Hundreds of models, 1 API key', docs: 'https://docs.coderclaw.ai/providers/vercel-ai-gateway' },
-  { name: 'OpenRouter', icon: lc('zap'), color: '#6366F1', desc: 'Unified API gateway', docs: 'https://docs.coderclaw.ai/models' },
-  { name: 'Mistral', icon: si(siMistralai), color: '#FF7000', desc: 'Mistral Large & Codestral', docs: 'https://docs.coderclaw.ai/models' },
-  { name: 'DeepSeek', icon: lc('brain'), color: '#4D6BFE', desc: 'DeepSeek V3 & R1', docs: 'https://docs.coderclaw.ai/models' },
-  { name: 'Perplexity', icon: si(siPerplexity), color: '#20B8CD', desc: 'Search-augmented AI', docs: 'https://docs.coderclaw.ai/models' },
-  { name: 'Hugging Face', icon: si(siHuggingface), color: '#FFD21E', desc: 'Open-source models', docs: 'https://docs.coderclaw.ai/models' },
-  { name: 'Local Models', icon: si(siOllama), color: '#FFFFFF', desc: 'Ollama, LM Studio', docs: 'https://docs.coderclaw.ai/models' },
+  { name: 'Anthropic', icon: si(siAnthropic), color: '#D4A574', desc: 'Claude Pro/Max + Opus 4.5', docs: '/docs/models' },
+  { name: 'OpenAI', icon: lc('bot'), color: '#00A67E', desc: 'GPT-4, GPT-5, o1', docs: '/docs/models' },
+  { name: 'Google', icon: si(siGoogle), color: '#4285F4', desc: 'Gemini 2.5 Pro/Flash', docs: '/docs/models' },
+  { name: 'MiniMax', icon: cs(minimaxIcon), color: '#E91E63', desc: 'MiniMax-M2.1', docs: '/docs/providers/minimax' },
+  { name: 'xAI', icon: si(siX), color: '#FFFFFF', desc: 'Grok 3 & 4', docs: '/docs/models' },
+  { name: 'Vercel AI Gateway', icon: si(siVercel), color: '#FFFFFF', desc: 'Hundreds of models, 1 API key', docs: '/docs/providers/vercel-ai-gateway' },
+  { name: 'OpenRouter', icon: lc('zap'), color: '#6366F1', desc: 'Unified API gateway', docs: '/docs/models' },
+  { name: 'Mistral', icon: si(siMistralai), color: '#FF7000', desc: 'Mistral Large & Codestral', docs: '/docs/models' },
+  { name: 'DeepSeek', icon: lc('brain'), color: '#4D6BFE', desc: 'DeepSeek V3 & R1', docs: '/docs/models' },
+  { name: 'Perplexity', icon: si(siPerplexity), color: '#20B8CD', desc: 'Search-augmented AI', docs: '/docs/models' },
+  { name: 'Hugging Face', icon: si(siHuggingface), color: '#FFD21E', desc: 'Open-source models', docs: '/docs/models' },
+  { name: 'Local Models', icon: si(siOllama), color: '#FFFFFF', desc: 'Ollama, LM Studio', docs: '/docs/models' },
 ];
 
 const productivityApps: IntegrationItem[] = [
-  { name: 'Apple Notes', icon: lc('sticky-note'), color: '#FFCC00', desc: 'Native macOS/iOS notes', docs: 'https://coderclaw.ai/skills/apple-notes' },
-  { name: 'Apple Reminders', icon: lc('check-square'), color: '#FF9500', desc: 'Task management', docs: 'https://coderclaw.ai/skills/apple-reminders' },
-  { name: 'Things 3', icon: lc('list-todo'), color: '#4A90D9', desc: 'GTD task manager', docs: 'https://coderclaw.ai/skills/things-mac' },
-  { name: 'Notion', icon: si(siNotion), color: '#FFFFFF', desc: 'Workspace & databases', docs: 'https://coderclaw.ai/skills' },
-  { name: 'Obsidian', icon: si(siObsidian), color: '#7C3AED', desc: 'Knowledge graph notes', docs: 'https://coderclaw.ai/skills/obsidian' },
-  { name: 'Bear Notes', icon: lc('pen-tool'), color: '#DD4C4F', desc: 'Markdown notes', docs: 'https://coderclaw.ai/skills' },
-  { name: 'Trello', icon: si(siTrello), color: '#0079BF', desc: 'Kanban boards', docs: 'https://coderclaw.ai/skills/trello' },
-  { name: 'GitHub', icon: si(siGithub), color: '#FFFFFF', desc: 'Code, issues, PRs', docs: 'https://coderclaw.ai/skills' },
+  { name: 'Apple Notes', icon: lc('sticky-note'), color: '#FFCC00', desc: 'Native macOS/iOS notes', docs: '/coderclaw/skills/apple-notes' },
+  { name: 'Apple Reminders', icon: lc('check-square'), color: '#FF9500', desc: 'Task management', docs: '/coderclaw/skills/apple-reminders' },
+  { name: 'Things 3', icon: lc('list-todo'), color: '#4A90D9', desc: 'GTD task manager', docs: '/coderclaw/skills/things-mac' },
+  { name: 'Notion', icon: si(siNotion), color: '#FFFFFF', desc: 'Workspace & databases', docs: '/coderclaw/skills' },
+  { name: 'Obsidian', icon: si(siObsidian), color: '#7C3AED', desc: 'Knowledge graph notes', docs: '/coderclaw/skills/obsidian' },
+  { name: 'Bear Notes', icon: lc('pen-tool'), color: '#DD4C4F', desc: 'Markdown notes', docs: '/coderclaw/skills' },
+  { name: 'Trello', icon: si(siTrello), color: '#0079BF', desc: 'Kanban boards', docs: '/coderclaw/skills/trello' },
+  { name: 'GitHub', icon: si(siGithub), color: '#FFFFFF', desc: 'Code, issues, PRs', docs: '/coderclaw/skills' },
 ];
 
 const musicAudio: IntegrationItem[] = [
-  { name: 'Spotify', icon: si(siSpotify), color: '#1DB954', desc: 'Music playback control', docs: 'https://coderclaw.ai/skills/spotify-player' },
-  { name: 'Sonos', icon: si(siSonos), color: '#FFFFFF', desc: 'Multi-room audio', docs: 'https://coderclaw.ai/skills/sonoscli' },
-  { name: 'Shazam', icon: si(siShazam), color: '#0088FF', desc: 'Song recognition', docs: 'https://coderclaw.ai/skills/songsee' },
+  { name: 'Spotify', icon: si(siSpotify), color: '#1DB954', desc: 'Music playback control', docs: '/coderclaw/skills/spotify-player' },
+  { name: 'Sonos', icon: si(siSonos), color: '#FFFFFF', desc: 'Multi-room audio', docs: '/coderclaw/skills/sonoscli' },
+  { name: 'Shazam', icon: si(siShazam), color: '#0088FF', desc: 'Song recognition', docs: '/coderclaw/skills/songsee' },
 ];
 
 const smartHome: IntegrationItem[] = [
-  { name: 'Philips Hue', icon: si(siPhilipshue), color: '#0065D3', desc: 'Smart lighting', docs: 'https://coderclaw.ai/skills/openhue' },
-  { name: '8Sleep', icon: lc('bed'), color: '#00B4D8', desc: 'Smart mattress', docs: 'https://coderclaw.ai/skills/eightctl' },
-  { name: 'Home Assistant', icon: si(siHomeassistant), color: '#41BDF5', desc: 'Home automation hub', docs: 'https://coderclaw.ai/skills/homeassistant' },
+  { name: 'Philips Hue', icon: si(siPhilipshue), color: '#0065D3', desc: 'Smart lighting', docs: '/coderclaw/skills/openhue' },
+  { name: '8Sleep', icon: lc('bed'), color: '#00B4D8', desc: 'Smart mattress', docs: '/coderclaw/skills/eightctl' },
+  { name: 'Home Assistant', icon: si(siHomeassistant), color: '#41BDF5', desc: 'Home automation hub', docs: '/coderclaw/skills/homeassistant' },
 ];
 
 const tools: IntegrationItem[] = [
-  { name: 'Browser', icon: si(siGooglechrome), color: '#4285F4', desc: 'Chrome/Chromium control', docs: 'https://coderclaw.ai/skills/verify-on-browser' },
-  { name: 'Canvas', icon: lc('monitor-smartphone'), color: '#FF4500', desc: 'Visual workspace + A2UI', docs: 'https://docs.coderclaw.ai/mac/canvas' },
-  { name: 'Voice', icon: lc('mic'), color: '#9B59B6', desc: 'Voice Wake + Talk Mode', docs: 'https://coderclaw.ai/skills/voice-transcribe' },
-  { name: 'Gmail', icon: si(siGmail), color: '#EA4335', desc: 'Pub/Sub email triggers', docs: 'https://docs.coderclaw.ai/gmail-pubsub' },
-  { name: 'Cron', icon: lc('clock'), color: '#F39C12', desc: 'Scheduled tasks', docs: 'https://docs.coderclaw.ai/cron' },
-  { name: 'Webhooks', icon: lc('webhook'), color: '#1ABC9C', desc: 'External triggers', docs: 'https://docs.coderclaw.ai/webhook' },
-  { name: '1Password', icon: si(si1password), color: '#0572EC', desc: 'Secure credentials', docs: 'https://coderclaw.ai/skills/1password' },
-  { name: 'Weather', icon: lc('cloud-sun'), color: '#FFB300', desc: 'Forecasts & conditions', docs: 'https://coderclaw.ai/skills/weather' },
+  { name: 'Browser', icon: si(siGooglechrome), color: '#4285F4', desc: 'Chrome/Chromium control', docs: '/coderclaw/skills/verify-on-browser' },
+  { name: 'Canvas', icon: lc('monitor-smartphone'), color: '#FF4500', desc: 'Visual workspace + A2UI', docs: '/docs/mac/canvas' },
+  { name: 'Voice', icon: lc('mic'), color: '#9B59B6', desc: 'Voice Wake + Talk Mode', docs: '/coderclaw/skills/voice-transcribe' },
+  { name: 'Gmail', icon: si(siGmail), color: '#EA4335', desc: 'Pub/Sub email triggers', docs: '/docs/gmail-pubsub' },
+  { name: 'Cron', icon: lc('clock'), color: '#F39C12', desc: 'Scheduled tasks', docs: '/docs/cron' },
+  { name: 'Webhooks', icon: lc('webhook'), color: '#1ABC9C', desc: 'External triggers', docs: '/docs/webhook' },
+  { name: '1Password', icon: si(si1password), color: '#0572EC', desc: 'Secure credentials', docs: '/coderclaw/skills/1password' },
+  { name: 'Weather', icon: lc('cloud-sun'), color: '#FFB300', desc: 'Forecasts & conditions', docs: '/coderclaw/skills/weather' },
 ];
 
 const mediaCreative: IntegrationItem[] = [
-  { name: 'Image Gen', icon: lc('image'), color: '#E91E63', desc: 'AI image generation', docs: 'https://coderclaw.ai/skills' },
-  { name: 'GIF Search', icon: lc('search'), color: '#00DCDC', desc: 'Find the perfect GIF', docs: 'https://coderclaw.ai/skills/gifgrep' },
-  { name: 'Peekaboo', icon: lc('eye'), color: '#FF6B6B', desc: 'Screen capture & control', docs: 'https://coderclaw.ai/skills/peekaboo' },
-  { name: 'Camera', icon: lc('camera'), color: '#607D8B', desc: 'Photo/video capture', docs: 'https://coderclaw.ai/skills' },
+  { name: 'Image Gen', icon: lc('image'), color: '#E91E63', desc: 'AI image generation', docs: '/coderclaw/skills' },
+  { name: 'GIF Search', icon: lc('search'), color: '#00DCDC', desc: 'Find the perfect GIF', docs: '/coderclaw/skills/gifgrep' },
+  { name: 'Peekaboo', icon: lc('eye'), color: '#FF6B6B', desc: 'Screen capture & control', docs: '/coderclaw/skills/peekaboo' },
+  { name: 'Camera', icon: lc('camera'), color: '#607D8B', desc: 'Photo/video capture', docs: '/coderclaw/skills' },
 ];
 
 const socialComms: IntegrationItem[] = [
-  { name: 'Twitter/X', icon: si(siX), color: '#FFFFFF', desc: 'Tweet, reply, search', docs: 'https://coderclaw.ai/skills/bird' },
-  { name: 'Email', icon: lc('mail'), color: '#D44638', desc: 'Send & read emails', docs: 'https://coderclaw.ai/skills/himalaya' },
+  { name: 'Twitter/X', icon: si(siX), color: '#FFFFFF', desc: 'Tweet, reply, search', docs: '/coderclaw/skills/bird' },
+  { name: 'Email', icon: lc('mail'), color: '#D44638', desc: 'Send & read emails', docs: '/coderclaw/skills/himalaya' },
 ];
 
 const companionApps: IntegrationItem[] = [
-  { name: 'macOS', icon: si(siMacos), color: '#FFFFFF', desc: 'Menu bar app + Voice Wake', docs: 'https://docs.coderclaw.ai/macos' },
-  { name: 'iOS', icon: si(siIos), color: '#007AFF', desc: 'Canvas, camera, Voice Wake', docs: 'https://docs.coderclaw.ai/ios' },
-  { name: 'Android', icon: si(siAndroid), color: '#34A853', desc: 'Canvas, camera, screen', docs: 'https://docs.coderclaw.ai/android' },
-  { name: 'Windows', icon: lc('monitor'), color: '#0078D4', desc: 'WSL2 recommended', docs: 'https://docs.coderclaw.ai/windows' },
-  { name: 'Linux', icon: si(siLinux), color: '#FCC624', desc: 'Native support', docs: 'https://docs.coderclaw.ai/linux' },
+  { name: 'macOS', icon: si(siMacos), color: '#FFFFFF', desc: 'Menu bar app + Voice Wake', docs: '/docs/macos' },
+  { name: 'iOS', icon: si(siIos), color: '#007AFF', desc: 'Canvas, camera, Voice Wake', docs: '/docs/ios' },
+  { name: 'Android', icon: si(siAndroid), color: '#34A853', desc: 'Canvas, camera, screen', docs: '/docs/android' },
+  { name: 'Windows', icon: lc('monitor'), color: '#0078D4', desc: 'WSL2 recommended', docs: '/docs/windows' },
+  { name: 'Linux', icon: si(siLinux), color: '#FCC624', desc: 'Native support', docs: '/docs/linux' },
 ];
 
 const showcaseItems: IntegrationItem[] = [
-  { name: 'Tesco Autopilot', icon: lc('shopping-cart'), color: '#00539F', desc: 'Automated grocery shopping', docs: 'https://docs.coderclaw.ai/start/showcase' },
-  { name: 'Bambu Control', icon: lc('printer'), color: '#00AE42', desc: '3D printer management', docs: 'https://docs.coderclaw.ai/start/showcase' },
-  { name: 'Oura Ring', icon: lc('heart'), color: '#E4B363', desc: 'Health data insights', docs: 'https://docs.coderclaw.ai/start/showcase' },
-  { name: 'Food Ordering', icon: lc('utensils-crossed'), color: '#FF5A5F', desc: 'Foodora integration', docs: 'https://docs.coderclaw.ai/start/showcase' },
+  { name: 'Tesco Autopilot', icon: lc('shopping-cart'), color: '#00539F', desc: 'Automated grocery shopping', docs: '/docs/start/showcase' },
+  { name: 'Bambu Control', icon: lc('printer'), color: '#00AE42', desc: '3D printer management', docs: '/docs/start/showcase' },
+  { name: 'Oura Ring', icon: lc('heart'), color: '#E4B363', desc: 'Health data insights', docs: '/docs/start/showcase' },
+  { name: 'Food Ordering', icon: lc('utensils-crossed'), color: '#FF5A5F', desc: 'Foodora integration', docs: '/docs/start/showcase' },
 ];
 
 export default function IntegrationsPage() {
