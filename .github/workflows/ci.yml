@@ -77,3 +77,20 @@ jobs:
         env:
           NEXT_PUBLIC_WORKER_URL: https://worker.builderforce.ai
         run: npm run build
+
+  docs:
+    name: Docs (Astro Starlight)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: docs-site/package-lock.json
+      - name: Install dependencies
+        working-directory: docs-site
+        run: npm install
+      - name: Build
+        working-directory: docs-site
+        run: npm run build

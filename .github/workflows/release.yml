@@ -92,3 +92,34 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
           wrangler deploy --no-bundle
+
+  deploy-docs:
+    name: Deploy Docs (builderforce.ai/docs)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: docs-site
+        run: npm install
+
+      - name: Build Astro Starlight (base=/docs)
+        working-directory: docs-site
+        run: npm run build
+
+      - name: Install wrangler
+        run: npm install -g wrangler
+
+      - name: Deploy Pages project
+        working-directory: docs-site
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          wrangler pages deploy dist --project-name=builderforce-docs --branch=main

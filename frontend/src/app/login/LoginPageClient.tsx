@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { getStoredWebToken, resolveAndSelectTenant, getOAuthUrl, requestMagicLink } from '@/lib/auth';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 import JsonLd from '@/components/JsonLd';
+import PasswordInput from '@/components/PasswordInput';
 import { loginSchema } from '@/lib/structured-data';
 import { LOGIN_FAQ, STATS } from '@/lib/content';
 
@@ -181,17 +182,14 @@ export default function LoginPageClient() {
               </div>
               <div>
                 <label htmlFor="password" style={labelStyle}>Password</label>
-                <input
+                <PasswordInput
                   id="password"
-                  type="password"
                   autoComplete="current-password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  style={inputStyle}
                   required
-                  onFocus={e => { e.currentTarget.style.borderColor = 'var(--coral-bright)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--surface-coral-soft)'; }}
-                  onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.boxShadow = 'none'; }}
+                  style={inputStyle}
                 />
               </div>
 
