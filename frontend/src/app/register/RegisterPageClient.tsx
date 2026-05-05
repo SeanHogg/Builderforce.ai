@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 import JsonLd from '@/components/JsonLd';
+import PasswordInput from '@/components/PasswordInput';
 import { registerSchema } from '@/lib/structured-data';
 import { REGISTER_FAQ, STATS, FEATURES } from '@/lib/content';
 
@@ -173,18 +174,27 @@ export default function RegisterPageClient() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label htmlFor="password" style={labelStyle}>Password</label>
-                  <input id="password" type="password" autoComplete="new-password"
-                    value={password} onChange={e => setPassword(e.target.value)}
-                    placeholder="Min. 8 chars" style={inputStyle}
-                    required minLength={8} onFocus={focusIn} onBlur={focusOut}
+                  <PasswordInput
+                    id="password"
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="Min. 8 chars"
+                    required
+                    minLength={8}
+                    style={inputStyle}
                   />
                 </div>
                 <div>
                   <label htmlFor="confirm" style={labelStyle}>Confirm</label>
-                  <input id="confirm" type="password" autoComplete="new-password"
-                    value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
-                    placeholder="••••••••" style={inputStyle}
-                    required onFocus={focusIn} onBlur={focusOut}
+                  <PasswordInput
+                    id="confirm"
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    style={inputStyle}
                   />
                 </div>
               </div>
