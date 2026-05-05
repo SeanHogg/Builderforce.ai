@@ -21,7 +21,7 @@ describe('ProjectDetailsPanel', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.resetAllMocks();
-    vi.spyOn(builderforceApi, 'checkProjectKeyAvailable').mockResolvedValue({ available: true });
+    vi.spyOn(builderforceApi, 'checkProjectKeyAvailable').mockImplementation(async (key) => ({ available: true, key }));
   });
 
   afterEach(() => {
