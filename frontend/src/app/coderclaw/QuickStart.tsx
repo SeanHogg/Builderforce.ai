@@ -6,7 +6,7 @@ type Mode = 'oneliner' | 'npm' | 'git';
 
 const COMMANDS: Record<Mode, { comment: string; cmd: string }[]> = {
   oneliner: [
-    { comment: '# Works everywhere. Installs everything. You\'re welcome. 🦞', cmd: 'curl -fsSL https://coderclaw.ai/install.sh | bash' },
+    { comment: '# Works everywhere. Installs everything. You\'re welcome. 🦞', cmd: 'curl -fsSL https://builderforce.ai/install.sh | bash' },
   ],
   npm: [
     { comment: '# Install CoderClaw', cmd: 'npm i -g coderclaw' },

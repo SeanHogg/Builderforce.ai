@@ -6,11 +6,19 @@ export interface FeatureCardProps {
   title: string;
   description: ReactNode;
   icon: ReactNode;
-  external?: boolean;
 }
 
-export default function FeatureCard({ href, title, description, icon, external }: FeatureCardProps) {
-  const isExternal = external || href.startsWith('http');
+/**
+ * Decides its own link rendering based on the href:
+ *   - http(s):// — external (new tab, plain <a>)
+ *   - /docs/*   — served by a separate Cloudflare deployment (Astro Starlight),
+ *                 so Next.js cannot prefetch it. Use a plain same-tab <a>.
+ *   - else      — Next.js internal route via <Link>.
+ *
+ * Consumers don't pass any `external` / `prefetch` flag — the component
+ * derives the right rendering from the path itself.
+ */
+export default function FeatureCard({ href, title, description, icon }: FeatureCardProps) {
   const inner = (
     <>
       <div className="cc-feature-icon">{icon}</div>
@@ -19,9 +27,16 @@ export default function FeatureCard({ href, title, description, icon, external }
     </>
   );
 
-  if (isExternal) {
+  if (/^https?:\/\//.test(href)) {
     return (
       <a href={href} target="_blank" rel="noopener" className="cc-feature-card">
+        {inner}
+      </a>
+    );
+  }
+  if (href.startsWith('/docs')) {
+    return (
+      <a href={href} className="cc-feature-card">
         {inner}
       </a>
     );

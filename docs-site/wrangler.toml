@@ -1,0 +1,8 @@
+# builderforce.ai/docs — Builderforce.ai documentation (Astro Starlight).
+# Deployed as a separate Cloudflare Pages project. To mount it under
+# builderforce.ai/docs/* configure a Workers Route or Pages Custom Domain
+# with a /docs/* path matcher. The Astro `base: '/docs'` already prefixes
+# every emitted URL.
+name = "builderforce-docs"
+pages_build_output_dir = "./dist"
+compatibility_date = "2024-01-01"

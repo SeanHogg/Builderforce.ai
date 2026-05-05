@@ -1,0 +1,129 @@
+/* ================================================================
+   CoderClaw Docs – mirrors coderclaw.ai marketing site theme
+   Deep space dark mode: navy backgrounds + blue / cyan accents
+   ================================================================ */
+
+/* Dark mode (Starlight default) */
+[data-theme='dark'] {
+  --sl-color-accent-low:     #0d1f3d;
+  --sl-color-accent:         #4d9eff;
+  --sl-color-accent-high:    #00e5cc;
+
+  --sl-color-bg:             #050810;
+  --sl-color-bg-nav:         #0a0f1a;
+  --sl-color-bg-sidebar:     #0a0f1a;
+  --sl-color-bg-inline-code: #111827;
+
+  --sl-color-gray-1: #f0f4ff;
+  --sl-color-gray-2: #d0d8f0;
+  --sl-color-gray-3: #8892b0;
+  --sl-color-gray-4: #5a6480;
+  --sl-color-gray-5: #2a3050;
+  --sl-color-gray-6: #111827;
+  --sl-color-gray-7: #0a0f1a;
+
+  --sl-color-hairline:       rgba(136, 146, 176, 0.15);
+  --sl-color-hairline-light: rgba(136, 146, 176, 0.08);
+
+  --sl-color-text:        #f0f4ff;
+  --sl-color-text-accent: #4d9eff;
+  --sl-color-white:       #f0f4ff;
+  --sl-color-black:       #050810;
+}
+
+/* Light mode */
+[data-theme='light'] {
+  --sl-color-accent-low:     #dbeafe;
+  --sl-color-accent:         #3b82f6;
+  --sl-color-accent-high:    #1e40af;
+
+  --sl-color-bg:             #f8faff;
+  --sl-color-bg-nav:         #ffffff;
+  --sl-color-bg-sidebar:     #f0f4ff;
+  --sl-color-bg-inline-code: #e8edfc;
+
+  --sl-color-gray-1: #111827;
+  --sl-color-gray-2: #374151;
+  --sl-color-gray-3: #5a6480;
+  --sl-color-gray-4: #8892b0;
+  --sl-color-gray-5: #c8d0e8;
+  --sl-color-gray-6: #e8edfc;
+  --sl-color-gray-7: #f0f4ff;
+
+  --sl-color-hairline:       rgba(77, 158, 255, 0.2);
+  --sl-color-hairline-light: rgba(77, 158, 255, 0.1);
+
+  --sl-color-text:        #111827;
+  --sl-color-text-accent: #3b82f6;
+  --sl-color-white:       #ffffff;
+  --sl-color-black:       #111827;
+}
+
+/* Light mode readability fixes */
+[data-theme='light'] .sl-markdown-content :is(h1, h2, h3, h4, h5, h6),
+[data-theme='light'] .content-panel :is(h1, h2, h3, h4, h5, h6),
+[data-theme='light'] [data-page-title] {
+  color: #0f172a !important;
+}
+
+[data-theme='light'] site-search button[data-open-modal] {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  border: 1px solid rgba(77, 158, 255, 0.25) !important;
+}
+
+[data-theme='light'] site-search button[data-open-modal] svg {
+  color: #3b82f6 !important;
+}
+
+[data-theme='light'] site-search kbd {
+  background: #eff5ff !important;
+  color: #1f2937 !important;
+  border-color: rgba(77, 158, 255, 0.3) !important;
+}
+
+[data-theme='light'] site-search dialog .dialog-frame,
+[data-theme='light'] #starlight__search {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+}
+
+[data-theme='light'] .sidebar-content,
+[data-theme='light'] .sidebar-pane,
+[data-theme='light'] .right-sidebar {
+  color: #1f2937 !important;
+}
+
+[data-theme='light'] .sidebar-content :is(summary, a, button, label, h2, h3),
+[data-theme='light'] .sidebar-pane :is(summary, a, button, label, h2, h3) {
+  color: #1f2937 !important;
+}
+
+[data-theme='light'] .sidebar-content .group-label,
+[data-theme='light'] .sidebar-pane .group-label,
+[data-theme='light'] .sidebar-content .group-label .large,
+[data-theme='light'] .sidebar-pane .group-label .large,
+[data-theme='light'] .sidebar-content details > summary,
+[data-theme='light'] .sidebar-pane details > summary {
+  color: #0f172a !important;
+  opacity: 1 !important;
+  font-weight: 600;
+}
+
+[data-theme='light'] .sidebar-content a:hover,
+[data-theme='light'] .sidebar-pane a:hover {
+  color: #1d4ed8 !important;
+}
+
+/* Active sidebar item: cyan highlight */
+a[aria-current='page'],
+[data-theme='dark'] a[aria-current='page'] {
+  color: #00e5cc !important;
+  background-color: rgba(0, 229, 204, 0.1) !important;
+}
+
+/* Logo sizing */
+.site-title img {
+  height: 2rem;
+  width: auto;
+}

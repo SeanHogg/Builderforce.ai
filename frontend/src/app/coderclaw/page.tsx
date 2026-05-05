@@ -6,7 +6,7 @@ import NewsletterForm from './NewsletterForm';
 
 const FEATURES = [
   {
-    href: 'https://docs.coderclaw.ai/getting-started',
+    href: '/docs/getting-started',
     title: 'Agent & Sub-agent Manager',
     description:
       'CoderClaw runs and coordinates independent coding agents and sub-agents. Delegate work autonomously across your entire workflow.',
@@ -19,13 +19,13 @@ const FEATURES = [
     icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="28" height="28"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="7" y1="6.5" x2="10" y2="10"/><line x1="17" y1="6.5" x2="14" y2="10"/><line x1="7" y1="17.5" x2="10" y2="14"/><line x1="17" y1="17.5" x2="14" y2="14"/></svg>,
   },
   {
-    href: 'https://docs.coderclaw.ai/getting-started',
+    href: '/docs/getting-started',
     title: 'Business Outcome Focus',
     description: 'Transition from writing code to managing business outcomes. Let the agents handle execution while you focus on strategy.',
     icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="28" height="28"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>,
   },
   {
-    href: 'https://docs.coderclaw.ai/coderclaw-overview',
+    href: '/docs/coderclaw-overview',
     title: 'Self-Healing Runtime',
     description: 'Agents detect failures, fix themselves, and adapt over time. Persistent memory means context survives restarts — no re-explaining your codebase.',
     icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="28" height="28"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>,
@@ -37,19 +37,19 @@ const FEATURES = [
     icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="28" height="28"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
   },
   {
-    href: 'https://docs.coderclaw.ai/mesh',
+    href: '/docs/coderclaw-link',
     title: 'Claw-to-Claw Mesh',
     description: <>Distribute work across a fleet of Claws. Use <code>remote:auto[caps]</code> to route tasks to the best-matched peer. All dispatch is HMAC-signed and Bearer-authenticated.</>,
     icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="28" height="28"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
   },
   {
-    href: 'https://docs.coderclaw.ai/browser',
+    href: '/docs/browser',
     title: 'Full Automation',
     description: 'Agents can browse the web, control your browser, run shell commands, and interact with any tool or service on your behalf.',
     icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="28" height="28"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>,
   },
   {
-    href: 'https://docs.coderclaw.ai/bash',
+    href: '/docs/bash',
     title: 'Full System Access',
     description: 'Read and write files, run shell commands, execute scripts. Full access or sandboxed — your choice.',
     icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="28" height="28"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>,
@@ -61,13 +61,13 @@ const FEATURES = [
     icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="28" height="28"><path d="M19.439 7.85c-.049.322.059.648.289.878l1.568 1.568c.47.47.706 1.087.706 1.704s-.235 1.233-.706 1.704l-1.611 1.611a.98.98 0 0 1-.837.276c-.47-.07-.802-.48-.968-.925a2.501 2.501 0 1 0-3.214 3.214c.446.166.855.497.925.968a.979.979 0 0 1-.276.837l-1.61 1.61a2.404 2.404 0 0 1-1.705.707 2.402 2.402 0 0 1-1.704-.706l-1.568-1.568a1.026 1.026 0 0 0-.877-.29c-.493.074-.84.504-1.02.968a2.5 2.5 0 1 1-3.237-3.237c.464-.18.894-.527.967-1.02a1.026 1.026 0 0 0-.289-.877l-1.568-1.568A2.402 2.402 0 0 1 1.998 12c0-.617.236-1.234.706-1.704L4.23 8.77c.24-.24.581-.353.917-.303.515.077.877.528 1.073 1.01a2.5 2.5 0 1 0 3.259-3.259c-.482-.196-.933-.558-1.01-1.073-.05-.336.062-.676.303-.917l1.525-1.525A2.402 2.402 0 0 1 12 1.998c.617 0 1.234.236 1.704.706l1.568 1.568c.23.23.556.338.877.29.493-.074.84-.504 1.02-.968a2.5 2.5 0 1 1 3.237 3.237c-.464.18-.894.527-.967 1.02Z"/></svg>,
   },
   {
-    href: 'https://docs.coderclaw.ai/deep-understanding',
+    href: '/docs/deep-understanding',
     title: 'Deep Codebase Understanding',
     description: 'AST parsing, semantic maps, dependency graphs and git history give agents real comprehension of your project.',
     icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="28" height="28"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>,
   },
   {
-    href: 'https://docs.coderclaw.ai/coderclaw-workflows',
+    href: '/docs/coderclaw-workflows',
     title: 'Multi-Agent Workflows',
     description: 'Built-in patterns for planning, feature dev, bug fixes, refactors and adversarial reviews keep work moving.',
     icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="28" height="28"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
@@ -147,8 +147,8 @@ export default function CoderClawHome() {
             <li>Open source (MIT) with no vendor lock-in.</li>
           </ul>
           <p className="cc-prose">
-            See the <Link href="/coderclaw/docs/coderclaw-vs-alternatives" className="cc-link">comparison with Copilot, Cursor, Claude</Link> or the{' '}
-            <a href="https://docs.coderclaw.ai" className="cc-link" target="_blank" rel="noopener">full docs</a>.
+            See the <a href="/docs/coderclaw-vs-alternatives" className="cc-link">comparison with Copilot, Cursor, Claude</a> or the{' '}
+            <a href="/docs" className="cc-link">full docs</a>.
           </p>
         </section>
 
@@ -177,7 +177,7 @@ export default function CoderClawHome() {
             <span className="cc-cta-label">Discord</span>
             <span className="cc-cta-sub">Join the community</span>
           </a>
-          <Link href="/coderclaw/docs/getting-started" className="cc-cta">
+          <a href="/docs" className="cc-cta">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="cc-cta-icon">
               <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
               <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
@@ -186,7 +186,7 @@ export default function CoderClawHome() {
             </svg>
             <span className="cc-cta-label">Documentation</span>
             <span className="cc-cta-sub">Learn the ropes</span>
-          </Link>
+          </a>
           <a href="https://github.com/seanhogg/coderclaw" target="_blank" rel="noopener" className="cc-cta">
             <svg viewBox="0 0 24 24" fill="currentColor" className="cc-cta-icon">
               <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
