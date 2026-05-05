@@ -114,20 +114,21 @@ describe('login', () => {
 // ---------------------------------------------------------------------------
 
 describe('register', () => {
-  it('POSTs to /api/auth/web/register with name', async () => {
+  it('POSTs to /api/auth/web/register with name and terms acceptance', async () => {
     fetchSpy.mockResolvedValueOnce(mockOk({ token: 'web-token-abc', user: sampleUser }));
-    const result = await register('new@example.com', 'secret123', 'Test User');
+    const result = await register('new@example.com', 'secret123', 'Test User', true);
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     expect(url).toMatch(/\/api\/auth\/web\/register$/);
     expect(init.method).toBe('POST');
     const body = JSON.parse(init.body as string);
     expect(body.name).toBe('Test User');
+    expect(body.agreeToTerms).toBe(true);
     expect(result.token).toBe('web-token-abc');
   });
 
   it('throws on non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(409, 'Email already exists'));
-    await expect(register('dup@example.com', 'pass')).rejects.toThrow('Email already exists');
+    await expect(register('dup@example.com', 'pass', undefined, true)).rejects.toThrow('Email already exists');
   });
 });
 

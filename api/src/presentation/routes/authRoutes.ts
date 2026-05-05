@@ -518,9 +518,17 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
 
   // POST /api/auth/web/register
   router.post('/web/register', async (c) => {
-    const body = await c.req.json<{ email: string; username?: string; password: string }>();
+    const body = await c.req.json<{
+      email: string;
+      username?: string;
+      password: string;
+      agreeToTerms?: boolean;
+    }>();
     if (!body.email || !body.password) {
       return c.json({ error: 'email and password are required' }, 400);
+    }
+    if (body.agreeToTerms !== true) {
+      return c.json({ error: 'You must accept the Terms of Use and Privacy Policy' }, 400);
     }
 
     const email = body.email.toLowerCase().trim();
@@ -544,6 +552,11 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       .limit(1);
     if (existingUsername) return c.json({ error: 'Username already taken' }, 409);
 
+    const [termsDoc, privacyDoc] = await Promise.all([
+      getActiveLegalDoc(db, 'terms'),
+      getActiveLegalDoc(db, 'privacy'),
+    ]);
+
     const passwordHash = await hashPassword(body.password);
     const apiKeyHash = await hashSecret(crypto.randomUUID());
     const userId = crypto.randomUUID();
@@ -561,6 +574,11 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       .returning();
 
     if (!created) return c.json({ error: 'Failed to create user' }, 500);
+
+    await db.insert(userLegalAcceptances).values([
+      { userId: created.id, documentType: 'terms', version: termsDoc.version },
+      { userId: created.id, documentType: 'privacy', version: privacyDoc.version },
+    ]);
 
     const sessionName = 'Current device';
     const userAgent = getUserAgent(c);

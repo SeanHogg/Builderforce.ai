@@ -194,12 +194,13 @@ export async function login(email: string, password: string): Promise<LoginRespo
 export async function register(
   email: string,
   password: string,
-  name?: string
+  name: string | undefined,
+  agreeToTerms: boolean
 ): Promise<RegisterResponse> {
   const res = await fetch(`${AUTH_API_URL}/api/auth/web/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, name }),
+    body: JSON.stringify({ email, password, name, agreeToTerms }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { message?: string };
