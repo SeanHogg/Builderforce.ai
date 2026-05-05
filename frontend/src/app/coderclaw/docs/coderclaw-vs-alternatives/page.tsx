@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'CoderClaw vs Alternatives — CoderClaw Docs',
@@ -138,7 +139,7 @@ export default function VsAlternativesPage() {
           <li><a href="/coderclaw/docs/getting-started">Quick start guide</a> — up and running in minutes</li>
           <li><a href="/coderclaw/docs/guides">Comprehensive guides</a> — agents, sub-agents, orchestration</li>
           <li><a href="/coderclaw/docs/examples">Examples</a> — real-world CoderClaw workflows</li>
-          <li><a href="/">Builderforce dashboard</a> — manage your mesh</li>
+          <li><Link href="/">Builderforce dashboard</Link> — manage your mesh</li>
         </ul>
       </section>
     </>

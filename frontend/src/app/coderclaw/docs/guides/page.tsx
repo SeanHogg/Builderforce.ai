@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Guides — CoderClaw Docs',
@@ -69,7 +70,7 @@ export default function GuidesPage() {
           <li><strong>Orchestration Engine:</strong> Centralized coordination</li>
         </ul>
         <h3>Getting Started with Builderforce</h3>
-        <p>Access the <a href="/">Builderforce dashboard</a> to:</p>
+        <p>Access the <Link href="/">Builderforce dashboard</Link> to:</p>
         <ul>
           <li>Visualize your agent network</li>
           <li>Monitor agent health and performance</li>

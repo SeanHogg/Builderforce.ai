@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Getting Started — CoderClaw Docs',
@@ -61,7 +62,7 @@ console.log(result);`}</code></pre>
           <li><a href="/coderclaw/docs/guides">Read the comprehensive guides</a> to learn advanced features</li>
           <li><a href="/coderclaw/docs/api-reference">Check the API reference</a> for detailed documentation</li>
           <li><a href="/coderclaw/docs/examples">Explore example projects</a> to see CoderClaw in action</li>
-          <li><a href="/">Access the Builderforce dashboard</a> to manage your agents</li>
+          <li><Link href="/">Access the Builderforce dashboard</Link> to manage your agents</li>
         </ul>
       </section>
     </>
