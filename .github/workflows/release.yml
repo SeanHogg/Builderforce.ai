@@ -42,24 +42,31 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.23.0
+
       - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build Next.js
         working-directory: frontend
         env:
           NEXT_PUBLIC_WORKER_URL: https://worker.builderforce.ai
-        run: npx next build
+        run: pnpm exec next build
 
       - name: Generate Cloudflare Worker (next-on-pages)
         working-directory: frontend
-        run: npx @cloudflare/next-on-pages
+        run: pnpm exec next-on-pages
 
       - name: Create .assetsignore (prevent _worker.js from being uploaded as asset)
         working-directory: frontend
