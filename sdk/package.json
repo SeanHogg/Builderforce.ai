@@ -1,8 +1,30 @@
 {
-  "name": "@builderforce/sdk",
-  "version": "0.1.0",
-  "description": "Builderforce API SDK for chat, models, and usage.",
+  "name": "@seanhogg/builderforce-sdk",
+  "version": "0.2.0",
+  "description": "Typed SDK for the Builderforce.ai LLM gateway — chat completions, models, and usage analytics over an OpenAI-compatible surface.",
   "license": "MIT",
+  "author": "Sean Hogg",
+  "homepage": "https://github.com/SeanHogg/Builderforce.ai/tree/main/sdk#readme",
+  "bugs": {
+    "url": "https://github.com/SeanHogg/Builderforce.ai/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SeanHogg/Builderforce.ai.git",
+    "directory": "sdk"
+  },
+  "keywords": [
+    "builderforce",
+    "llm",
+    "openai-compatible",
+    "ai-gateway",
+    "chat-completions",
+    "openrouter",
+    "cerebras",
+    "ollama",
+    "sdk",
+    "typescript"
+  ],
   "type": "module",
   "main": "dist/index.cjs",
   "module": "dist/index.mjs",
@@ -17,6 +39,9 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "check:usecases": "node scripts/check-usecases-sync.mjs",
     "build": "tsup --config tsup.config.ts",

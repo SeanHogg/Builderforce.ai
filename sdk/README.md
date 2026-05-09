@@ -1,17 +1,17 @@
-# @builderforce/sdk
+# @seanhogg/builderforce-sdk
 
 Typed SDK for Builderforce LLM gateway APIs.
 
 ## Install
 
 ```bash
-npm install @builderforce/sdk
+npm install @seanhogg/builderforce-sdk
 ```
 
 ## Quick start
 
 ```ts
-import { BuilderforceClient } from '@builderforce/sdk';
+import { BuilderforceClient } from '@seanhogg/builderforce-sdk';
 
 const client = new BuilderforceClient({
   apiKey: process.env.BUILDERFORCE_API_KEY!,
@@ -66,7 +66,7 @@ const usage = await client.usage.get({ days: 30 });
 SDK requests throw `BuilderforceApiError` on non-2xx responses:
 
 ```ts
-import { BuilderforceApiError } from '@builderforce/sdk';
+import { BuilderforceApiError } from '@seanhogg/builderforce-sdk';
 
 try {
   await client.models.list();
@@ -94,5 +94,5 @@ Workforce model routing is server-side: pass `model: 'builderforce/workforce-<ag
 `AIUseCase` is exported for compile-time checks:
 
 ```ts
-import type { AIUseCase } from '@builderforce/sdk';
+import type { AIUseCase } from '@seanhogg/builderforce-sdk';
 ```
