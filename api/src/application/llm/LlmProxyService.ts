@@ -163,32 +163,32 @@ export class LlmProxyService {
   // --- Public entry points --------------------------------------------------
 
   /**
-   * Forward a chat-completion request.
+   * Forward a chat-completion request through the configured pool.
    *
-   * Two modes:
+   * Routing is gateway-owned. The caller's `body.model` (if any) is treated
+   * as a *hint* — the gateway puts it at the head of the candidate chain so
+   * it's tried first, but the gateway retains the right to advance through
+   * its own failover chain when that model is unavailable, on cooldown, or
+   * fails. The actual model used is reported via `_builderforce.resolvedModel`
+   * so callers can detect substitution and decide whether to retry on their
+   * own.
    *
-   * 1. **Caller-pinned (`body.model` set)** — the gateway forwards verbatim.
-   *    No substitution, no shape-based reorder, no chain fallback. On vendor
-   *    error the upstream status + body propagate via the standard exhausted-
-   *    chain envelope so the caller can decide whether to retry their own
-   *    fallback chain. Vendor prefixes (`openrouter/<id>`, `cerebras/<id>`,
-   *    `ollama/<id>`) route to the named vendor explicitly.
+   * Vendor prefixes (`openrouter/<id>`, `cerebras/<id>`, `ollama/<id>`) route
+   * to the named vendor explicitly. Bare ids fall back to catalog lookup.
    *
-   * 2. **Pool mode (`body.model` unset)** — the gateway picks from the tenant-
-   *    plan model pool, with shape-based reordering (tools / response_format /
-   *    vision content) and the standard cross-vendor failover chain.
+   * When `body.model` is unset, shape-based reordering (tools / response_format
+   * / vision content) ranks the most-capable models in the pool first.
    */
   async complete(
     body: ChatCompletionRequest,
     requestHeaders?: Record<string, string>,
   ): Promise<ProxyResult> {
-    const callerModel = (body as { model?: unknown }).model;
-    if (typeof callerModel === 'string' && callerModel.length > 0) {
-      // Caller-pinned: chain of length 1, no failover, no cooldown bypass.
-      return this.dispatch([callerModel], body, requestHeaders);
-    }
     const reorderedPool = reorderPoolByShape(body, this.modelPool);
-    const candidates = this.buildCandidateChain(reorderedPool);
+    const callerModel = (body as { model?: unknown }).model;
+    const seed: readonly string[] = (typeof callerModel === 'string' && callerModel.length > 0)
+      ? [callerModel, ...reorderedPool.filter((m) => m !== callerModel)]
+      : reorderedPool;
+    const candidates = this.buildCandidateChain(seed);
     return this.dispatch(candidates, body, requestHeaders);
   }
 

@@ -125,13 +125,15 @@ export interface PerCallOptions {
 
 export interface ChatCompletionCreateParams extends PerCallOptions {
   /**
-   * Model id. When set, the gateway forwards verbatim — no substitution, no
-   * "best available" routing, no silent failover. On vendor error, the upstream
-   * status + body surfaces as a `BuilderforceApiError` so the caller can decide
-   * whether to advance their own fallback chain.
+   * Model **hint** (not a hard pin). When set, the gateway puts this id at the
+   * head of its candidate chain so it's tried first — but the gateway retains
+   * the right to substitute on cooldown, vendor outage, or plan-tier mismatch.
+   * The actual model used is reported via `_builderforce.resolvedModel`; check
+   * it if you need to detect substitution.
    *
    * Vendor prefixes (`openrouter/<id>`, `cerebras/<id>`, `ollama/<id>`) route
-   * to that vendor explicitly. Bare ids fall back to catalog lookup.
+   * to the named vendor when that model is selected. Bare ids fall back to
+   * catalog lookup.
    *
    * When unset, the gateway picks from the tenant-plan model pool with
    * shape-based reordering (tools / response_format / vision content blocks).

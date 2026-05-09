@@ -271,33 +271,26 @@ const usage  = await client.usage.get({ days: 30 });
 
 `usage` returns aggregate spend by model, day, and user; plus `mine` (the calling user's slice) and `totals`. Pass `?detail=true&page=1&limit=100` for row-level pagination — every recorded call with its `useCase`, `metadata`, `idempotencyKey`, and token counts. Use this to reconcile your own usage table against the gateway's ledger.
 
-## Routing — caller picks the model, gateway forwards
+## Routing — `model` is a hint, gateway has final say
 
-The gateway is a transport. It does **not** make policy decisions about which model to use. Two modes:
-
-**1. Caller-pinned (`model` set).** The gateway forwards verbatim — no substitution, no auto-failover, no silent retry. On vendor error you get the upstream status + body in a `BuilderforceApiError` so your code can decide whether to advance your own fallback chain.
+The gateway owns model selection. When you pass a `model`, the gateway treats it as a **hint** — it puts that id at the head of its candidate chain so it's tried first, but it retains the right to substitute on cooldown, vendor outage, or plan-tier mismatch. **Always read `_builderforce.resolvedModel` if you need to know what actually ran.**
 
 ```ts
-// Route to a specific vendor + model
-client.chat.completions.create({
+const res = await client.chat.completions.create({
   model: 'openrouter/anthropic/claude-3-haiku',
   messages: [...],
 });
 
-client.chat.completions.create({
-  model: 'cerebras/llama3.1-8b',
-  messages: [...],
-});
-
-client.chat.completions.create({
-  model: 'ollama/gpt-oss:120b',
-  messages: [...],
-});
+console.log(res._builderforce?.resolvedModel);
+// → 'openrouter/anthropic/claude-3-haiku' on the happy path
+// → some other model in the pool if Claude was on cooldown / failed
 ```
 
-Vendor prefixes (`openrouter/`, `cerebras/`, `ollama/`) explicitly route to that vendor. Bare ids fall back to a catalog lookup.
+Vendor prefixes (`openrouter/`, `cerebras/`, `ollama/`) explicitly route to that vendor when that model is selected. Bare ids fall back to a catalog lookup.
 
-**2. Pool mode (`model` unset).** The gateway picks from the tenant-plan model pool with shape-based reordering — `tools` present → tool-capable models try first, `response_format: 'json_schema'` → structured-output models, image content blocks → vision models. This is for callers who don't run their own model policy.
+When `model` is unset the gateway picks from the tenant-plan pool with shape-based reordering — `tools` present → tool-capable models try first, `response_format: 'json_schema'` → structured-output models, image content blocks → vision models. Useful for callers that don't run their own model policy.
+
+If you need *strict* control (no substitution under any condition) — e.g. for evaluations or reproducibility — issue a separate `BuilderforceApiError` retry from your code on a different model rather than relying on the gateway to honor your hint exactly. The gateway's job is availability; yours is policy.
 
 ## `useCase` — opaque telemetry slug
 
