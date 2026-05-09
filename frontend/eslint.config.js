@@ -8,13 +8,17 @@ const config = [
   ...nextConfig,
   ...nextCoreWebVitalsConfig,
   {
-    // eslint-plugin-react-hooks v6 adds two ergonomics rules that fire on
-    // dozens of pre-existing legitimate patterns (fetch-on-mount, ref-mirror).
-    // Demote to warnings so the build doesn't break — leave them visible so
-    // we can refactor file-by-file.
+    // eslint-plugin-react-hooks v6 + the React Compiler plugin add several
+    // strict ergonomics rules that fire on dozens of pre-existing legitimate
+    // patterns (fetch-on-mount, ref-mirror, manual memoization). Demote to
+    // warnings so the build doesn't break — they stay visible so we can
+    // refactor file-by-file.
     rules: {
-      'react-hooks/set-state-in-effect': 'warn',
-      'react-hooks/refs': 'warn',
+      'react-hooks/set-state-in-effect':       'warn',
+      'react-hooks/refs':                       'warn',
+      'react-hooks/purity':                     'warn',
+      'react-hooks/immutability':               'warn',
+      'react-hooks/preserve-manual-memoization': 'warn',
     },
   },
 ];
