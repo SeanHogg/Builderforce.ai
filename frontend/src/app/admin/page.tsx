@@ -30,6 +30,7 @@ import {
 } from '@/lib/adminApi';
 import { BUILTIN_PERSONAS, type Persona } from '@/lib/marketplaceData';
 import UserDetailDrawer from '@/components/UserDetailDrawer';
+import { TenantApiKeysAdminTab } from '@/components/admin/TenantApiKeysAdminTab';
 
 type AdminTab =
   | 'health'
@@ -37,6 +38,7 @@ type AdminTab =
   | 'usage'
   | 'users'
   | 'tenants'
+  | 'apikeys'
   | 'security'
   | 'legal'
   | 'newsletter'
@@ -56,6 +58,7 @@ const TABS: AdminTab[] = [
   'usage',
   'users',
   'tenants',
+  'apikeys',
   'security',
   'legal',
   'newsletter',
@@ -73,6 +76,7 @@ const TABS: AdminTab[] = [
 const TAB_LABELS: Partial<Record<AdminTab, string>> = {
   impsessions: 'Imp. Sessions',
   auditlog: 'Audit Log',
+  apikeys: 'API Keys',
 };
 
 function fmtDate(d: string) {
@@ -2427,6 +2431,8 @@ export default function AdminPage() {
                 )}
               </div>
             )}
+
+            <TenantApiKeysAdminTab active={tab === 'apikeys'} />
 
             {tab === 'modules' && (
               <div>

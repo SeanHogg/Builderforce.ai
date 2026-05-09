@@ -59,6 +59,11 @@ import {
 } from '../../application/llm/LlmProxyService';
 import { llmFailoverLog } from '../../infrastructure/database/schema';
 import {
+  mintTenantApiKey,
+  listTenantApiKeys,
+  revokeTenantApiKey,
+} from '../../application/llm/tenantApiKeyService';
+import {
   buildOtpAuthUrl,
   decryptSecretFromStorage,
   encryptSecretForStorage,
@@ -2473,6 +2478,45 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         // Note: adminUserId is exposed here for superadmin use; end-user transparency API filters it out
       })),
     });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Tenant API keys (bfk_*) — superadmin mint-on-behalf for any tenant.
+  // The owner self-service flow lives at /api/tenants/:id/api-keys; the
+  // shared service module dedupes the mint/list/revoke logic.
+  // ─────────────────────────────────────────────────────────────────────
+
+  router.get('/tenants/:tenantId/api-keys', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = Number(c.req.param('tenantId'));
+    if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
+    const keys = await listTenantApiKeys(db, tenantId);
+    return c.json({ keys });
+  });
+
+  router.post('/tenants/:tenantId/api-keys', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = Number(c.req.param('tenantId'));
+    if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
+    const adminUserId = c.get('userId') as string | undefined;
+    const body = await c.req.json<{ name?: string }>().catch(() => ({} as { name?: string }));
+    const name = (body.name ?? '').trim() || 'Admin-issued tenant API key';
+    const minted = await mintTenantApiKey(db, {
+      tenantId,
+      name,
+      createdByUserId: adminUserId ?? null,
+    });
+    return c.json(minted, 201);
+  });
+
+  router.delete('/tenants/:tenantId/api-keys/:keyId', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = Number(c.req.param('tenantId'));
+    if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
+    const keyId = c.req.param('keyId');
+    const ok = await revokeTenantApiKey(db, { tenantId, keyId });
+    if (!ok) return c.json({ error: 'Key not found' }, 404);
+    return c.json({ ok: true });
   });
 
   return router;
