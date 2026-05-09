@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { useEmulation } from '@/lib/EmulationContext';
 import { getStoredWebToken } from '@/lib/auth';
@@ -79,6 +79,11 @@ const TAB_LABELS: Partial<Record<AdminTab, string>> = {
   apikeys: 'API Keys',
 };
 
+/** True if `s` is a known admin tab — used to validate `?tab=` URL params. */
+function isAdminTab(s: string | null | undefined): s is AdminTab {
+  return s != null && (TABS as readonly string[]).includes(s);
+}
+
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
@@ -93,8 +98,26 @@ function fmtNum(n: number | string) {
 
 export default function AdminPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, isAuthenticated } = useAuth();
-  const [tab, setTab] = useState<AdminTab>('health');
+
+  // Initial tab from `?tab=` (validated). Keep URL <-> state in sync so
+  // deep-links to `/admin?tab=apikeys` open the right tab and clicks
+  // update the URL (preserves shareability + browser back-button).
+  const initialTab: AdminTab = isAdminTab(searchParams?.get('tab')) ? (searchParams!.get('tab') as AdminTab) : 'health';
+  const [tab, setTab] = useState<AdminTab>(initialTab);
+
+  // Keep URL ?tab= in lockstep with `tab` state — single source of truth
+  // for inbound deep-link AND outbound click navigation.
+  useEffect(() => {
+    const current = searchParams?.get('tab');
+    if (current === tab) return;
+    const params = new URLSearchParams(searchParams?.toString() ?? '');
+    params.set('tab', tab);
+    router.replace(`/admin?${params.toString()}`, { scroll: false });
+    // searchParams identity changes after replace; depend on `tab` only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [health, setHealth] = useState<AdminHealth | null>(null);

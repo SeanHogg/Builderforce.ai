@@ -25,8 +25,16 @@ export async function verifySecret(value: string, storedHash: string): Promise<b
   return diff === 0;
 }
 
-/** Generates a new random API key in the format `<prefix>_<32 hex chars>`. */
-export function generateApiKey(prefix: string = 'clk'): string {
+/**
+ * Generates a new random API key in the format `<prefix>_<32 hex chars>`.
+ *
+ * Prefix conventions (each means one thing — never overload):
+ *   - `clk` — CoderClaw instance API key (`coderclaw_instances.api_key_hash`)
+ *   - `clu` — Legacy user-bootstrap API key (`users.api_key_hash`)
+ *   - `bfk` — Tenant API key for the LLM gateway (`tenant_api_keys.key_hash`)
+ *   - `bfai` — Developer API key for the public read-only API (`developer_api_keys.key_hash`)
+ */
+export function generateApiKey(prefix: 'clk' | 'clu' | 'bfk' | 'bfai'): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   const hex   = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
   return `${prefix}_${hex}`;

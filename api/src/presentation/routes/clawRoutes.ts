@@ -333,7 +333,7 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
     if (limitErr) return c.json(limitErr, 402);
 
     const slug    = body.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    const rawKey  = generateApiKey();
+    const rawKey  = generateApiKey('clk');
     const keyHash = await hashSecret(rawKey);
     const machineProfile = normalizeMachineProfile(body.machineProfile);
 

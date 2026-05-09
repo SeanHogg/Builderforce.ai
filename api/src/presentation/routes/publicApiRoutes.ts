@@ -12,17 +12,7 @@ import { eq, and, isNull, desc, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import * as schema from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
-
-// ---------------------------------------------------------------------------
-// Key hashing — SHA-256 hex (same as PBKDF2 would be overkill for API keys)
-// ---------------------------------------------------------------------------
-
-async function hashApiKey(key: string): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key));
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
+import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
 
 // ---------------------------------------------------------------------------
 // Auth middleware
@@ -33,7 +23,7 @@ async function requireDevApiKey(db: Db, authHeader: string | undefined): Promise
     return { ok: false, error: 'Missing or malformed Authorization header', status: 401 };
   }
   const raw = authHeader.slice(7);
-  const hash = await hashApiKey(raw);
+  const hash = await hashSecret(raw);
 
   const [row] = await db
     .select({ id: schema.developerApiKeys.id, userId: schema.developerApiKeys.userId })
@@ -66,10 +56,8 @@ export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
     const body = await c.req.json<{ name?: string }>().catch(() => ({} as { name?: string }));
     const name = (body.name ?? '').trim() || 'My API Key';
 
-    // Generate a cryptographically random key: bfai_<48 random hex chars>
-    const rawBytes = crypto.getRandomValues(new Uint8Array(24));
-    const rawKey = 'bfai_' + Array.from(rawBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-    const keyHash = await hashApiKey(rawKey);
+    const rawKey = generateApiKey('bfai');
+    const keyHash = await hashSecret(rawKey);
 
     const [row] = await db
       .insert(schema.developerApiKeys)

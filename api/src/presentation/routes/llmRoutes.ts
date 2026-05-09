@@ -13,14 +13,13 @@ import {
   llmProxyForPlan,
   productNameForPlan,
   modelPoolForPlan,
-  LlmProxyService,
   FREE_MODEL_POOL,
   PRO_MODEL_POOL,
   type ChatCompletionRequest,
   type LlmUsage,
   type ProductName,
 } from '../../application/llm/LlmProxyService';
-import { isAIUseCase } from '../../application/llm/aiUseCases';
+import { callOpenRouterEmbeddings } from '../../application/llm/vendors';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, coderclawInstances, tenantApiKeys } from '../../infrastructure/database/schema';
 import type { FailoverEvent } from '../../application/llm/LlmProxyService';
@@ -59,6 +58,8 @@ function logUsage(
   retries: number,
   streamed: boolean,
   usage: LlmUsage,
+  metadata: Record<string, unknown> | null,
+  idempotencyKey: string | null,
 ): void {
   ctx.waitUntil(
     buildDatabase(env)
@@ -73,6 +74,8 @@ function logUsage(
         totalTokens:      usage.totalTokens,
         retries,
         streamed,
+        metadata: metadata ? JSON.stringify(metadata) : null,
+        idempotencyKey,
       })
       .catch(() => { /* never let logging fail the request */ }),
   );
@@ -296,6 +299,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'messages array is required' }, 400);
     }
 
+    // Capture SDK transport metadata for usage logging — the body's `metadata`
+    // is consumed here and stripped before vendor dispatch (see STANDARD_BODY_FIELDS).
+    const callerMetadata = (body as { metadata?: Record<string, unknown> }).metadata ?? null;
+    const idempotencyKey = c.req.header('Idempotency-Key') ?? null;
+
     // ── Daily token limit checks ────────────────────────────────────────────
     const { tokenDailyLimit: planDailyLimit } = getLimits(toTenantPlan(access.effectivePlan));
     const needsTenantUsageQuery =
@@ -357,7 +365,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
 
     const service = llmProxyForPlan(c.env, access.effectivePlan);
-    const result = await completeChatRequest(service, body);
+    const result = await service.complete(body);
 
     // Clone upstream headers we care about
     const upstreamHeaders = new Headers();
@@ -379,7 +387,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       // Wrap the stream to capture usage from the final SSE chunk
       const instrumentedStream = wrapStreamForUsage(
         result.response.body,
-        (usage) => logUsage(c.env, c.executionCtx, access.tenantId, access.userId, llmProduct, result.resolvedModel, result.retries, true, usage),
+        (usage) => logUsage(
+          c.env, c.executionCtx, access.tenantId, access.userId, llmProduct,
+          result.resolvedModel, result.retries, true, usage,
+          callerMetadata, idempotencyKey,
+        ),
       );
 
       return new Response(instrumentedStream, {
@@ -403,6 +415,8 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       result.retries,
       false,
       result.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      callerMetadata,
+      idempotencyKey,
     );
 
     return c.json(
@@ -414,6 +428,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           pool:          modelPoolForPlan(access.effectivePlan).length,
           product:       llmProduct,
           effectivePlan: access.effectivePlan,
+          ...(result.schemaRetries != null ? { schemaRetries: result.schemaRetries } : {}),
         },
       },
       result.response.status as 200,
@@ -572,6 +587,47 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   });
 
   // -----------------------------------------------------------------------
+  // POST /v1/embeddings — OpenAI-compatible. Wired to OpenRouter.
+  // -----------------------------------------------------------------------
+  router.post('/v1/embeddings', async (c) => {
+    let access: TenantAccess;
+    try {
+      access = await requireTenantAccess(c);
+    } catch (err) {
+      return c.json({ error: (err as Error).message || 'Unauthorized' }, 401);
+    }
+
+    const apiKey = access.effectivePlan === 'free'
+      ? c.env.OPENROUTER_API_KEY
+      : (c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY);
+    if (!apiKey) {
+      return c.json({ error: 'Embeddings vendor not configured (missing OPENROUTER_API_KEY)' }, 503);
+    }
+
+    const body = await c.req.json<{
+      model?: string;
+      input: string | string[];
+      metadata?: Record<string, unknown>;
+      [key: string]: unknown;
+    }>().catch(() => null);
+
+    if (!body || (typeof body.input !== 'string' && !Array.isArray(body.input))) {
+      return c.json({ error: '`input` must be a string or array of strings' }, 400);
+    }
+
+    // Strip gateway-only fields before forwarding to the vendor.
+    const { metadata, model, input, ...extraBody } = body;
+    const result = await callOpenRouterEmbeddings({ apiKey, model, input, extraBody });
+
+    return c.json(
+      typeof result.body === 'object' && result.body !== null
+        ? { ...(result.body as Record<string, unknown>), _builderforce: { product: productNameForPlan(access.effectivePlan), effectivePlan: access.effectivePlan } }
+        : result.body,
+      result.status as 200,
+    );
+  });
+
+  // -----------------------------------------------------------------------
   // GET /v1/health
   // -----------------------------------------------------------------------
   router.get('/v1/health', (c) =>
@@ -579,29 +635,4 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   );
 
   return router;
-}
-
-/**
- * Route-level completion dispatcher:
- * - If caller passes a registered use case, route via completeForUseCase().
- * - If caller passes an unrecognized useCase string, warn and fall back to
- *   pool dispatch (forward-compat: older servers may not know newer use cases).
- * - Otherwise (no useCase) use default pool dispatch.
- */
-export async function completeChatRequest(
-  service: LlmProxyService,
-  body: ChatCompletionRequest,
-) {
-  const useCase = typeof body.useCase === 'string' ? body.useCase : null;
-  if (useCase) {
-    if (isAIUseCase(useCase)) {
-      return service.completeForUseCase(useCase, body);
-    }
-    console.warn(
-      `[llmRoutes] unknown useCase "${useCase}" — falling back to default pool dispatch. ` +
-        `Register it in api/src/application/llm/aiUseCases.ts (and re-run sdk check:usecases) ` +
-        `or remove the field from the request.`,
-    );
-  }
-  return service.complete(body);
 }
