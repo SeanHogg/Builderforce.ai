@@ -25,11 +25,11 @@ export async function verifySecret(value: string, storedHash: string): Promise<b
   return diff === 0;
 }
 
-/** Generates a new random API key in the format `clk_<32 hex chars>`. */
-export function generateApiKey(): string {
+/** Generates a new random API key in the format `<prefix>_<32 hex chars>`. */
+export function generateApiKey(prefix: string = 'clk'): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   const hex   = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-  return `clk_${hex}`;
+  return `${prefix}_${hex}`;
 }
 
 // ---------------------------------------------------------------------------

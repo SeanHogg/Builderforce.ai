@@ -384,6 +384,22 @@ export const developerApiKeys = pgTable('developer_api_keys', {
   createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Tenant API keys (bfk_*) — gateway-facing credential for tenant apps
+ * (hired.video, burnrateos, 3rd-party customers) calling /llm/v1/chat/completions.
+ * Tenant-scoped, owner-issued, raw key shown once and only the hash stored.
+ */
+export const tenantApiKeys = pgTable('tenant_api_keys', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  name:             varchar('name', { length: 255 }).notNull(),
+  keyHash:          varchar('key_hash', { length: 64 }).notNull().unique(),
+  createdByUserId:  varchar('created_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  lastUsedAt:       timestamp('last_used_at', { withTimezone: true }),
+  revokedAt:        timestamp('revoked_at', { withTimezone: true }),
+  createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ---------------------------------------------------------------------------
 // Orchestration tables
 // ---------------------------------------------------------------------------

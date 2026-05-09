@@ -79,9 +79,15 @@ try {
 
 ## Auth conventions
 
-- Use `Authorization: Bearer <apiKey>` automatically.
-- API keys can be `clk_*` or tenant-scoped JWTs issued by Builderforce.
-- Workforce model routing is server-side: pass `model: 'builderforce/workforce-<agentId>'` when needed.
+The SDK sends `Authorization: Bearer <apiKey>` automatically. The gateway accepts three credential types:
+
+| Prefix | Issued by | Best for |
+|---|---|---|
+| `bfk_*` | `POST /api/tenants/:tenantId/api-keys` (owner-only) | Tenant apps (server-to-server). Long-lived, tenant-scoped, revocable. |
+| `clk_*` | `POST /api/claws` (CoderClaw registration) | Self-hosted CoderClaw instances; carries optional per-claw daily token cap. |
+| Tenant JWT | `POST /api/auth/web/login` → `POST /api/auth/tenant-token` | Browser-side calls from a logged-in user. Short-lived. |
+
+Workforce model routing is server-side: pass `model: 'builderforce/workforce-<agentId>'` when needed.
 
 ## Use-case safety
 
