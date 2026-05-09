@@ -45,10 +45,7 @@ let alreadyPublished = false;
 try {
   // `npm view <pkg>@<version> version` → prints version if exists, exits 0.
   // Exits non-zero if not found.
-  const out = execFileSync(NPM, ['view', `${name}@${version}`, 'version'], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-    encoding: 'utf8',
-  }).trim();
+  const out = runNpm(`view ${name}@${version} version`).trim();
   alreadyPublished = out === version;
 } catch (err) {
   // Two failure modes:
@@ -69,7 +66,7 @@ if (alreadyPublished) {
 }
 
 console.log(`${name}@${version} is new — publishing ...`);
-execFileSync(NPM, ['publish', '--provenance', '--access', 'public'], {
+runNpm('publish --provenance --access public', {
   cwd: resolve(here, '..'),
   stdio: 'inherit',
 });

@@ -269,23 +269,50 @@ const models = await client.models.list();
 const usage  = await client.usage.get({ days: 30 });
 ```
 
-`usage` returns aggregate spend by model, day, and user; plus `mine` (the calling user's slice) and `totals`.
+`usage` returns aggregate spend by model, day, and user; plus `mine` (the calling user's slice) and `totals`. Pass `?detail=true&page=1&limit=100` for row-level pagination — every recorded call with its `useCase`, `metadata`, `idempotencyKey`, and token counts. Use this to reconcile your own usage table against the gateway's ledger.
 
-## Design — why no `useCase` parameter?
+## Routing — caller picks the model, gateway forwards
 
-Earlier drafts of this SDK exposed a `useCase: AIUseCase` enum that mapped to model-chain presets (e.g. `'salary_estimate'` → `STRUCTURED_CHAIN`). That coupled the SDK's public surface to specific tenant taxonomies (`recruiter_outreach`, `pitch_deck.generate`) and made the gateway's routing logic depend on caller-supplied labels.
+The gateway is a transport. It does **not** make policy decisions about which model to use. Two modes:
 
-v0.3.0 inverts that. **Routing is request-shape-driven** on the gateway side:
+**1. Caller-pinned (`model` set).** The gateway forwards verbatim — no substitution, no auto-failover, no silent retry. On vendor error you get the upstream status + body in a `BuilderforceApiError` so your code can decide whether to advance your own fallback chain.
 
-| Request feature | Gateway prefers |
-|---|---|
-| `tools` set | Tool-capable models |
-| `response_format: 'json_schema'` | Structured-output capable models with conformance retry |
-| Image content blocks | Vision models |
-| Long context (heuristic on token count) | Long-context chain |
-| (otherwise) | Plan-tier default chain |
+```ts
+// Route to a specific vendor + model
+client.chat.completions.create({
+  model: 'openrouter/anthropic/claude-3-haiku',
+  messages: [...],
+});
 
-Tenants describe **what they're sending** (shape), not **what they're trying to do** (intent). For tenant-side analytics on intent, attach a `metadata.feature` string instead — it's persisted alongside usage rows but doesn't affect routing.
+client.chat.completions.create({
+  model: 'cerebras/llama3.1-8b',
+  messages: [...],
+});
+
+client.chat.completions.create({
+  model: 'ollama/gpt-oss:120b',
+  messages: [...],
+});
+```
+
+Vendor prefixes (`openrouter/`, `cerebras/`, `ollama/`) explicitly route to that vendor. Bare ids fall back to a catalog lookup.
+
+**2. Pool mode (`model` unset).** The gateway picks from the tenant-plan model pool with shape-based reordering — `tools` present → tool-capable models try first, `response_format: 'json_schema'` → structured-output models, image content blocks → vision models. This is for callers who don't run their own model policy.
+
+## `useCase` — opaque telemetry slug
+
+Pass any string. The gateway never reads it for routing; it's persisted to `llm_usage_log.use_case` and echoed back in `_builderforce.useCase` for confirmation. Useful for per-feature spend dashboards and reconciliation.
+
+```ts
+client.chat.completions.create({
+  useCase: 'studio_storyboard',  // your taxonomy, free-form
+  metadata: { featureKey: 'storyboard_generate', toolRunId },
+  messages: [...],
+});
+
+// Response carries the echo:
+// { ..., _builderforce: { useCase: 'studio_storyboard', metadata: {...}, requestId: 'req_...' } }
+```
 
 ## License
 

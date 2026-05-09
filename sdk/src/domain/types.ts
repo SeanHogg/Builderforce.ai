@@ -125,10 +125,16 @@ export interface PerCallOptions {
 
 export interface ChatCompletionCreateParams extends PerCallOptions {
   /**
-   * Optional model hint. The gateway routes by request *shape* (presence of
-   * `tools`, `response_format`, image content, plan tier) — callers usually
-   * leave this blank. Pass a specific id when you need to pin a model for
-   * eval / reproducibility.
+   * Model id. When set, the gateway forwards verbatim — no substitution, no
+   * "best available" routing, no silent failover. On vendor error, the upstream
+   * status + body surfaces as a `BuilderforceApiError` so the caller can decide
+   * whether to advance their own fallback chain.
+   *
+   * Vendor prefixes (`openrouter/<id>`, `cerebras/<id>`, `ollama/<id>`) route
+   * to that vendor explicitly. Bare ids fall back to catalog lookup.
+   *
+   * When unset, the gateway picks from the tenant-plan model pool with
+   * shape-based reordering (tools / response_format / vision content blocks).
    */
   model?: string;
   messages: ChatMessage[];
@@ -136,15 +142,21 @@ export interface ChatCompletionCreateParams extends PerCallOptions {
   temperature?: number;
   max_tokens?: number;
   top_p?: number;
-  /** Tool / function-calling spec. The gateway uses presence to pick a tool-capable model. */
+  /** Tool / function-calling spec. */
   tools?: ToolSpec[];
   tool_choice?: ToolChoice;
   /** Structured-output mode. `'json_object'` is loose JSON; `'json_schema'` requests
-   *  vendor-side schema validation with retry across the failover chain. The gateway
-   *  uses presence to pick a structured-output-capable model. */
+   *  gateway-side schema validation with retry across the failover chain. */
   response_format?: ResponseFormat;
+  /**
+   * Opaque telemetry slug. The gateway treats this as a free-form string —
+   * persisted to `llm_usage_log.use_case` and echoed back in `_builderforce.useCase`
+   * for confirmation, but **never used for routing**. The taxonomy is yours.
+   */
+  useCase?: string;
   /** Free-form key/value pairs persisted to `llm_usage_log.metadata` for billing
-   *  trace-back ({ toolRunId, sessionId, userId, … }). Not forwarded to vendors. */
+   *  trace-back ({ toolRunId, sessionId, userId, featureKey, … }). Echoed back
+   *  in `_builderforce.metadata`. Not forwarded to vendors. */
   metadata?: Record<string, string>;
   [key: string]: unknown;
 }
@@ -191,13 +203,21 @@ export interface ChatCompletionResponse {
     total_tokens?: number;
   };
   _builderforce?: {
+    /** The model the gateway dispatched against. Equals `request.model` when caller pinned. */
     resolvedModel?: string;
+    /** How many vendor retries happened inside the failover chain. */
     retries?: number;
     pool?: number;
     product?: string;
     effectivePlan?: string;
     /** Number of vendor retries the gateway performed for json_schema conformance. */
     schemaRetries?: number;
+    /** Echo of `request.useCase` (opaque telemetry slug). */
+    useCase?: string;
+    /** Echo of `request.metadata` for caller-side billing trace-back. */
+    metadata?: Record<string, string>;
+    /** Mirror of the `x-request-id` response header. */
+    requestId?: string;
   };
   [key: string]: unknown;
 }
@@ -284,6 +304,8 @@ export interface EmbeddingsCreateParams extends PerCallOptions {
   model?: string;
   /** Single string or array of strings to embed. */
   input: string | string[];
+  /** Opaque telemetry slug — same semantics as chat. */
+  useCase?: string;
   /** Free-form attribution metadata (same semantics as chat). */
   metadata?: Record<string, string>;
   [key: string]: unknown;

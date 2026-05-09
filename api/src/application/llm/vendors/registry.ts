@@ -43,7 +43,32 @@ for (const mod of MODULES) {
 // Lookups
 // ---------------------------------------------------------------------------
 
+const VENDOR_PREFIXES: ReadonlyArray<{ prefix: string; vendor: VendorId }> = [
+  { prefix: 'openrouter/', vendor: 'openrouter' },
+  { prefix: 'cerebras/',   vendor: 'cerebras' },
+  { prefix: 'ollama/',     vendor: 'ollama' },
+];
+
+/**
+ * Parse an explicit vendor-prefixed model id.
+ *
+ * Caller may pass `openrouter/anthropic/claude-3-haiku`, `cerebras/llama3.1-8b`,
+ * or `ollama/gpt-oss:120b` to route the request to a specific vendor without
+ * relying on catalog membership. Returns `null` for bare ids — callers should
+ * fall back to catalog lookup via `vendorForModel`.
+ */
+export function parseVendorPrefix(modelId: string): { vendor: VendorId; modelId: string } | null {
+  for (const { prefix, vendor } of VENDOR_PREFIXES) {
+    if (modelId.startsWith(prefix)) {
+      return { vendor, modelId: modelId.slice(prefix.length) };
+    }
+  }
+  return null;
+}
+
 export function vendorForModel(modelId: string): VendorId {
+  const prefix = parseVendorPrefix(modelId);
+  if (prefix) return prefix.vendor;
   return INDEX.get(modelId)?.vendor ?? DEFAULT_VENDOR;
 }
 
@@ -131,7 +156,7 @@ export async function dispatchVendor(params: DispatchParams): Promise<DispatchRe
   const skippedNoKey: string[] = [];
 
   for (const model of modelChain) {
-    const vendorId = vendorForModel(model);
+    const { vendorId, vendorModel } = resolveVendorAndModel(model);
     const mod = MODULES_BY_ID[vendorId];
     const apiKey = mod.apiKeyFrom(env);
     if (!apiKey) {
@@ -140,7 +165,8 @@ export async function dispatchVendor(params: DispatchParams): Promise<DispatchRe
     }
 
     try {
-      const result = await mod.call({ ...rest, apiKey, model });
+      const result = await mod.call({ ...rest, apiKey, model: vendorModel });
+      // `modelUsed` echoes what the caller asked for (with prefix preserved).
       return { ...result, modelUsed: model, vendorUsed: vendorId, attempts };
     } catch (err) {
       if (err instanceof VendorRetryableError) {
@@ -160,6 +186,19 @@ export async function dispatchVendor(params: DispatchParams): Promise<DispatchRe
 }
 
 /**
+ * Resolve a model id to its vendor + the un-prefixed id the vendor expects.
+ *   - `openrouter/<x>` → vendor=openrouter, vendorModel=`<x>`
+ *   - `cerebras/<x>`   → vendor=cerebras,   vendorModel=`<x>`
+ *   - `ollama/<x>`     → vendor=ollama,     vendorModel=`<x>`
+ *   - bare ids         → catalog lookup, vendorModel = the bare id
+ */
+function resolveVendorAndModel(model: string): { vendorId: VendorId; vendorModel: string } {
+  const prefix = parseVendorPrefix(model);
+  if (prefix) return { vendorId: prefix.vendor, vendorModel: prefix.modelId };
+  return { vendorId: vendorForModel(model), vendorModel: model };
+}
+
+/**
  * Walk a model chain in streaming mode. Skips vendors that don't implement
  * `callStream` (e.g. Ollama). Throws if every streaming-capable model fails.
  */
@@ -174,7 +213,7 @@ export async function dispatchVendorStream(params: DispatchParams): Promise<Stre
   const skippedNoStream: string[] = [];
 
   for (const model of modelChain) {
-    const vendorId = vendorForModel(model);
+    const { vendorId, vendorModel } = resolveVendorAndModel(model);
     const mod = MODULES_BY_ID[vendorId];
     if (!mod.callStream) {
       skippedNoStream.push(`${vendorId}:${model}`);
@@ -187,7 +226,7 @@ export async function dispatchVendorStream(params: DispatchParams): Promise<Stre
     }
 
     try {
-      const result = await mod.callStream({ ...rest, apiKey, model });
+      const result = await mod.callStream({ ...rest, apiKey, model: vendorModel });
       return { ...result, modelUsed: model, vendorUsed: vendorId, attempts };
     } catch (err) {
       if (err instanceof VendorRetryableError) {
