@@ -66,19 +66,22 @@ if (alreadyPublished) {
 }
 
 // Pre-flight auth check — fail with a useful diagnostic before we waste a
-// build cycle on an `ENEEDAUTH` from `npm publish`. `actions/setup-node@v4`
-// with `registry-url:` injects `NODE_AUTH_TOKEN`; allow `NPM_TOKEN` as a
-// fallback for ad-hoc runs.
-const authToken = process.env.NODE_AUTH_TOKEN || process.env.NPM_TOKEN;
-if (!authToken && !process.env.CI_LOCAL_NPM_LOGIN) {
-  console.error(`Cannot publish ${name}@${version}: no npm auth token in env.`);
+// build cycle on an `ENEEDAUTH` from `npm publish`. Three ways to authenticate:
+//   1. NPM_TOKEN / NODE_AUTH_TOKEN  — automation token in env
+//   2. Trusted Publishing (OIDC)    — `ACTIONS_ID_TOKEN_REQUEST_TOKEN` set by
+//                                     GitHub when `permissions: id-token: write`
+//   3. `npm login`                  — local interactive session
+const hasToken    = !!(process.env.NODE_AUTH_TOKEN || process.env.NPM_TOKEN);
+const hasOidc     = !!process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+const hasLocalCli = !!process.env.CI_LOCAL_NPM_LOGIN;
+
+if (!hasToken && !hasOidc && !hasLocalCli) {
+  console.error(`Cannot publish ${name}@${version}: no npm auth detected.`);
   console.error('');
-  console.error('Set the repo secret `NPM_TOKEN` so CI can publish:');
-  console.error('  1. npm token create --type=automation   # generate a token');
-  console.error('  2. GitHub repo → Settings → Secrets and variables → Actions');
-  console.error('  3. New repository secret → Name: NPM_TOKEN, Value: <token>');
-  console.error('');
-  console.error('Or set CI_LOCAL_NPM_LOGIN=1 to bypass this check when relying on `npm login`.');
+  console.error('Pick one:');
+  console.error('  - Trusted Publishing (recommended): configure on npmjs.com → package → Publishing access');
+  console.error('  - Repo secret `NPM_TOKEN`: `npm token create --type=automation`, then add at Settings → Secrets and variables → Actions');
+  console.error('  - Local: `npm login` then re-run with CI_LOCAL_NPM_LOGIN=1');
   process.exit(1);
 }
 
