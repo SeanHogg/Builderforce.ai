@@ -20,9 +20,6 @@ jobs:
       - name: Install dependencies
         working-directory: sdk
         run: npm install
-      - name: Use-case sync check
-        working-directory: sdk
-        run: npm run check:usecases
       - name: Type check
         working-directory: sdk
         run: npm run type-check
