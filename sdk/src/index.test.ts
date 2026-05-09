@@ -24,7 +24,7 @@ function createSseResponse(lines: string[], status = 200): Response {
   });
 }
 
-describe('@builderforce/sdk', () => {
+describe('@seanhogg/builderforce-sdk', () => {
   it('sends auth header for models.list()', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe('https://api.builderforce.ai/llm/v1/models');

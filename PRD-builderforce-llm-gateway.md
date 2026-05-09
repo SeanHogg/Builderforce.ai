@@ -28,7 +28,7 @@ Make Builderforce.ai the shared, billed, white-label LLM gateway behind every pr
 ```
 ┌──────────────────────────────────┐       ┌──────────────────────────┐
 │  hired.video / burnrateos.com    │       │   CoderClaw agents       │
-│  (uses @builderforce/sdk)        │       │   (uses @builderforce/sdk│
+│  (uses @seanhogg/builderforce-sdk)        │       │   (uses @seanhogg/builderforce-sdk│
 │   only needs BUILDERFORCE_API_KEY│       │    with claw API key)    │
 └────────────────┬─────────────────┘       └────────────┬─────────────┘
                  │                                       │
@@ -120,7 +120,7 @@ What landed:
 
 Step 1h is unblocked. The follow-ups above are tracked separately and do not block Step 2.
 
-### Step 2 — `@builderforce/sdk` npm package
+### Step 2 — `@seanhogg/builderforce-sdk` npm package
 
 ✅ **Reviewed and accepted (2026-05-04) after C1 fix.**
 
@@ -147,7 +147,7 @@ Lives at `Builderforce.ai/sdk/`. Layered DDD-ish: `domain/`, `application/`, `in
 
 | # | Finding |
 |---|---|
-| **H1** | **`AI_USE_CASES` array is duplicated** between `sdk/src/domain/aiUseCases.ts` and `api/src/application/llm/aiUseCases.ts`. Comment line 1 of the SDK file admits it: `// Keep this list aligned with api/src/application/llm/aiUseCases.ts.` Manual sync = guaranteed drift. Either set up a pnpm/npm workspace and have api import the array from `@builderforce/sdk`, OR generate one from the other on build. Until then, add a CI check that asserts the two arrays match. |
+| **H1** | **`AI_USE_CASES` array is duplicated** between `sdk/src/domain/aiUseCases.ts` and `api/src/application/llm/aiUseCases.ts`. Comment line 1 of the SDK file admits it: `// Keep this list aligned with api/src/application/llm/aiUseCases.ts.` Manual sync = guaranteed drift. Either set up a pnpm/npm workspace and have api import the array from `@seanhogg/builderforce-sdk`, OR generate one from the other on build. Until then, add a CI check that asserts the two arrays match. |
 | **H2** | **No request timeout.** `HttpClient.fetch` has no `AbortSignal`. A hung connection blocks the caller indefinitely. Add an `AbortController` with a configurable default (~60s), exposed via `BuilderforceClientOptions.timeoutMs`. |
 | **H3** | **`sdk/dist/` is committed to the repo.** Built artifacts in version control — `dist/index.cjs`, `dist/index.mjs`, source maps, `.d.ts`, `.d.cts` all live in git. `prepublishOnly` already builds; npm publishes from `files: ["dist"]`. Add `dist/` to `.gitignore` and remove from history. (Side effect: shrinks PR diffs significantly.) |
 
@@ -379,7 +379,7 @@ Result: `remote-result-broker.test.ts` 4/4 green, deterministic.
 
 Once Step 2 is published:
 
-1. **Add the SDK as a dependency.** `pnpm add @builderforce/sdk`
+1. **Add the SDK as a dependency.** `pnpm add @seanhogg/builderforce-sdk`
 2. **Add `BUILDERFORCE_API_KEY` env var.** No other config required.
 3. **Replace local LLM modules with SDK calls:**
    - **burnrateos:** delete `product/api/src/worker/services/aiVendors/` (port already absorbed into Builderforce). Replace `dispatchVendor()` calls with `client.chat.completions.create({ useCase, messages })`. Use-case strings already match (e.g. `coach.chat`, `studio.compose`).
