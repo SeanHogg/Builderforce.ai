@@ -4,6 +4,11 @@ on:
   push:
     branches: [ main ]
 
+# Required for npm provenance attestation on `npm publish --provenance`.
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   deploy-api:
     name: Deploy API (api.builderforce.ai)
@@ -99,6 +104,39 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
           wrangler deploy --no-bundle
+
+  publish-sdk:
+    name: Publish SDK (@seanhogg/builderforce-sdk)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install SDK dependencies
+        working-directory: sdk
+        run: npm install
+
+      - name: Type-check + test
+        working-directory: sdk
+        run: |
+          npm run type-check
+          npm test
+
+      - name: Build
+        working-directory: sdk
+        run: npm run build
+
+      - name: Publish if version is new
+        working-directory: sdk
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm run publish:if-new
 
   deploy-docs:
     name: Deploy Docs (builderforce.ai/docs)
