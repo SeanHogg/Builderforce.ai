@@ -22,7 +22,7 @@ import {
 } from '../../application/llm/LlmProxyService';
 import { isAIUseCase } from '../../application/llm/aiUseCases';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, coderclawInstances } from '../../infrastructure/database/schema';
+import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, coderclawInstances, tenantApiKeys } from '../../infrastructure/database/schema';
 import type { FailoverEvent } from '../../application/llm/LlmProxyService';
 import { verifyJwt } from '../../infrastructure/auth/JwtService';
 import { hashSecret } from '../../infrastructure/auth/HashService';
@@ -98,7 +98,33 @@ function toTenantPlan(ep: TenantAccess['effectivePlan']): TenantPlan {
   return TenantPlan.FREE;
 }
 
-async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAccess> {
+/**
+ * Resolve a tenant id to its plan/billing snapshot and derive the
+ * effective plan (downgrades to 'free' when billing isn't active).
+ * Shared between every API-key-style auth path on this route.
+ */
+async function resolveTenantPlan(
+  c: Context<HonoEnv>,
+  tenantId: number,
+): Promise<Pick<TenantAccess, 'plan' | 'billingStatus' | 'effectivePlan'>> {
+  const db = buildDatabase(c.env);
+  const [tenantRow] = await db
+    .select({ id: tenants.id, plan: tenants.plan, billingStatus: tenants.billingStatus })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+
+  if (!tenantRow) throw new Error('Tenant not found');
+
+  const plan = (tenantRow.plan ?? 'free') as TenantAccess['plan'];
+  const billingStatus = (tenantRow.billingStatus ?? 'none') as TenantAccess['billingStatus'];
+  const effectivePlan: TenantAccess['effectivePlan'] =
+    billingStatus === 'active' && (plan === 'pro' || plan === 'teams') ? plan : 'free';
+
+  return { plan, billingStatus, effectivePlan };
+}
+
+export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAccess> {
   const authHeader = c.req.header('Authorization') ?? '';
   if (!authHeader.startsWith('Bearer ')) {
     throw new Error('Missing or malformed Authorization header');
@@ -126,28 +152,45 @@ async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAccess> {
       throw new Error('Invalid or inactive claw API key');
     }
 
-    const [tenantRow] = await db
-      .select({ id: tenants.id, plan: tenants.plan, billingStatus: tenants.billingStatus })
-      .from(tenants)
-      .where(eq(tenants.id, claw.tenantId))
-      .limit(1);
-
-    if (!tenantRow) throw new Error('Tenant not found');
-
-    const plan = (tenantRow.plan ?? 'free') as TenantAccess['plan'];
-    const billingStatus = (tenantRow.billingStatus ?? 'none') as TenantAccess['billingStatus'];
-    const effectivePlan: TenantAccess['effectivePlan'] =
-      billingStatus === 'active' && (plan === 'pro' || plan === 'teams') ? plan : 'free';
-
     return {
       userId: null,
       tenantId: claw.tenantId,
       clawId: claw.id,
       clawTokenDailyLimit: claw.tokenDailyLimit ?? null,
       role: TenantRole.DEVELOPER,
-      plan,
-      billingStatus,
-      effectivePlan,
+      ...(await resolveTenantPlan(c, claw.tenantId)),
+    };
+  }
+
+  // Tenant API key path (bfk_*): self-service tenant credential issued from
+  // the portal; gateway-only. No claw context — plan-level cap still applies.
+  if (token.startsWith('bfk_')) {
+    const db = buildDatabase(c.env);
+    const keyHash = await hashSecret(token);
+    const [row] = await db
+      .select({ id: tenantApiKeys.id, tenantId: tenantApiKeys.tenantId, revokedAt: tenantApiKeys.revokedAt })
+      .from(tenantApiKeys)
+      .where(eq(tenantApiKeys.keyHash, keyHash))
+      .limit(1);
+
+    if (!row || row.revokedAt) {
+      throw new Error('Invalid or revoked tenant API key');
+    }
+
+    c.executionCtx.waitUntil(
+      db.update(tenantApiKeys)
+        .set({ lastUsedAt: new Date() })
+        .where(eq(tenantApiKeys.id, row.id))
+        .catch(() => { /* never let bookkeeping fail the request */ }),
+    );
+
+    return {
+      userId: null,
+      tenantId: row.tenantId,
+      clawId: null,
+      clawTokenDailyLimit: null,
+      role: TenantRole.DEVELOPER,
+      ...(await resolveTenantPlan(c, row.tenantId)),
     };
   }
 
@@ -157,21 +200,9 @@ async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAccess> {
     throw new Error('Workspace token is required');
   }
 
-  const db = buildDatabase(c.env);
-  const [tenantRow] = await db
-    .select({
-      id: tenants.id,
-      plan: tenants.plan,
-      billingStatus: tenants.billingStatus,
-    })
-    .from(tenants)
-    .where(eq(tenants.id, payload.tid))
-    .limit(1);
-
-  if (!tenantRow) throw new Error('Tenant not found');
-
   const isClawToken = payload.sub.startsWith('claw:');
   if (!isClawToken) {
+    const db = buildDatabase(c.env);
     const [membership] = await db
       .select({ userId: tenantMembers.userId })
       .from(tenantMembers)
@@ -187,20 +218,13 @@ async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAccess> {
     }
   }
 
-  const plan = (tenantRow.plan ?? 'free') as TenantAccess['plan'];
-  const billingStatus = (tenantRow.billingStatus ?? 'none') as TenantAccess['billingStatus'];
-  const effectivePlan: TenantAccess['effectivePlan'] =
-    billingStatus === 'active' && (plan === 'pro' || plan === 'teams') ? plan : 'free';
-
   return {
     userId: isClawToken ? null : payload.sub,
     tenantId: payload.tid,
     clawId: null,
     clawTokenDailyLimit: null,
     role: payload.role,
-    plan,
-    billingStatus,
-    effectivePlan,
+    ...(await resolveTenantPlan(c, payload.tid)),
   };
 }
 

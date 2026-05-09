@@ -1112,6 +1112,16 @@ CoderClaw CLI
 
 ---
 
+## Consolidated Gap Register
+
+Roadmap entries logged from in-progress work that are explicitly out of scope of the change that uncovered them. Each entry: what's wrong, where, and what fixing it unblocks.
+
+- **Frontend portal UI for tenant API keys (`bfk_*`) is missing.** Backend endpoints land at [api/src/presentation/routes/tenantApiKeyRoutes.ts](api/src/presentation/routes/tenantApiKeyRoutes.ts) (`POST/GET/DELETE /api/tenants/:tenantId/api-keys`), but there is no frontend page for owners to mint/list/revoke. Today owners must call the API directly with their tenant JWT. Fixing unblocks: self-service tenant-app onboarding without a curl ceremony.
+- **`requireTenantAccess` unit test uses a hand-rolled Drizzle chain mock.** [api/src/presentation/routes/llmRoutes.test.ts](api/src/presentation/routes/llmRoutes.test.ts) `mockDb()` synthesizes `select().from().where().limit()` chains with canned `[row]` returns. If the auth path grows another link (e.g. `.orderBy`, `.innerJoin`), the mock returns `undefined` and the test still passes while production breaks. Fixing (shared test helper or a real in-memory pg) unblocks: confidence that gateway-auth refactors are caught by tests, not prod.
+- **`generateApiKey()` default prefix conflates two semantics.** [api/src/infrastructure/auth/HashService.ts:29](api/src/infrastructure/auth/HashService.ts#L29) defaults to `clk_*` for backwards compatibility. Two callers in [api/src/application/auth/AuthService.ts](api/src/application/auth/AuthService.ts) mint *user* keys (`users.api_key_hash`) using the default, so a `clk_*` key can mean either a CoderClaw API key or a legacy user bootstrap key. Fixing (require prefix at every call site, retire the user-key path or rename to `clu_*`) unblocks: unambiguous credential type discrimination at the auth boundary.
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
