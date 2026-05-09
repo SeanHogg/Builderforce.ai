@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
+import { getStoredTenant } from '@/lib/auth';
 
 interface NavItem {
   href: string;
@@ -53,6 +54,26 @@ const systemNav: NavItem[] = [
 ];
 
 const adminNavItem: NavItem = { href: '/admin', label: 'Platform Admin', icon: '⚙', highlight: true };
+const apiKeysNavItem: NavItem = { href: '/settings/api-keys', label: 'API Keys', icon: '🔑' };
+
+/** Renders the API Keys nav entry only for tenant owners. */
+function OwnerApiKeysNavItem({ collapsed, pathname }: { collapsed: boolean; pathname: string }) {
+  const tenant = getStoredTenant();
+  if (tenant?.role !== 'owner') return null;
+  return <NavSection items={[apiKeysNavItem]} collapsed={collapsed} pathname={pathname} />;
+}
+
+/** Renders the Platform Admin section only for superadmin users. */
+function PlatformAdminNavSection({ collapsed, pathname }: { collapsed: boolean; pathname: string }) {
+  const { user } = useAuth();
+  if (!user?.isSuperadmin) return null;
+  return (
+    <>
+      <div className="nav-section-label">ADMIN</div>
+      <NavSection items={[adminNavItem]} collapsed={collapsed} pathname={pathname} />
+    </>
+  );
+}
 
 function isActive(pathname: string, item: NavItem): boolean {
   if (item.exactMatch) return pathname === item.href;
@@ -97,26 +118,21 @@ interface SidebarProps {
 
 export default function Sidebar({ collapsed, onToggleCollapsed }: SidebarProps) {
   const pathname = usePathname();
-  const { user } = useAuth();
-  const showAdmin = Boolean(user?.isSuperadmin);
+  const path = pathname || '';
 
   return (
     <nav className={`nav ${collapsed ? 'collapsed' : ''}`}>
       <div className="nav-main">
         <div className="nav-section-label">MAIN</div>
-        <NavSection items={mainNav} collapsed={collapsed} pathname={pathname || ''} />
+        <NavSection items={mainNav} collapsed={collapsed} pathname={path} />
         <div className="nav-section-label">MESH</div>
-        <NavSection items={meshNav} collapsed={collapsed} pathname={pathname || ''} />
+        <NavSection items={meshNav} collapsed={collapsed} pathname={path} />
         <div className="nav-section-label">EXTENSIONS</div>
-        <NavSection items={extensionsNav} collapsed={collapsed} pathname={pathname || ''} />
+        <NavSection items={extensionsNav} collapsed={collapsed} pathname={path} />
         <div className="nav-section-label">SYSTEM</div>
-        <NavSection items={systemNav} collapsed={collapsed} pathname={pathname || ''} />
-        {showAdmin && (
-          <>
-            <div className="nav-section-label">ADMIN</div>
-            <NavSection items={[adminNavItem]} collapsed={collapsed} pathname={pathname || ''} />
-          </>
-        )}
+        <NavSection items={systemNav} collapsed={collapsed} pathname={path} />
+        <OwnerApiKeysNavItem collapsed={collapsed} pathname={path} />
+        <PlatformAdminNavSection collapsed={collapsed} pathname={path} />
       </div>
       <div className="nav-footer">
         <button
