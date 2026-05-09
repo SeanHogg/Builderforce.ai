@@ -12,6 +12,27 @@ import {
   getOAuthUrl,
 } from '@/lib/auth';
 
+/**
+ * Self-gating nav link to the API Keys page. Renders nothing when the
+ * current tenant role can't manage keys, so callers don't need a canX prop.
+ */
+function ApiKeysSettingsLink() {
+  const tenant = getStoredTenant();
+  if (tenant?.role !== 'owner') return null;
+  return (
+    <Link
+      href="/settings/api-keys"
+      style={{
+        padding: '6px 12px', fontSize: 12, fontWeight: 600,
+        background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+        border: '1px solid var(--border-subtle)', borderRadius: 8, textDecoration: 'none',
+      }}
+    >
+      API keys →
+    </Link>
+  );
+}
+
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -163,7 +184,7 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
-          <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 10 }}>
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <Link
               href="/tenants"
               style={{
@@ -184,6 +205,7 @@ export default function SettingsPage() {
             >
               Manage member sessions →
             </Link>
+            <ApiKeysSettingsLink />
           </div>
         </div>
       )}
