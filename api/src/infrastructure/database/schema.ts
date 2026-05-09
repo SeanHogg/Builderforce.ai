@@ -292,6 +292,8 @@ export const llmUsageLog = pgTable('llm_usage_log', {
   metadata:         text('metadata'),  // JSONB on the wire; stringified on insert.
   /** SDK-supplied Idempotency-Key — gateway will use this to dedupe retries (TTL TBD). */
   idempotencyKey:   varchar('idempotency_key', { length: 128 }),
+  /** Opaque telemetry slug from `body.useCase`. Free-form; tenant taxonomy. */
+  useCase:          varchar('use_case', { length: 128 }),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
 

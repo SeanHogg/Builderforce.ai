@@ -163,18 +163,30 @@ export class LlmProxyService {
   // --- Public entry points --------------------------------------------------
 
   /**
-   * Forward a chat-completion request through the configured pool.
-   * The model field on `body` is ignored — the chain composer picks it.
+   * Forward a chat-completion request.
    *
-   * Routing is *request-shape-driven*: presence of tools / response_format /
-   * vision content blocks reorders the candidate chain so the most-capable
-   * models for that shape are tried first. Cooldown + cross-vendor fallback
-   * still apply on top.
+   * Two modes:
+   *
+   * 1. **Caller-pinned (`body.model` set)** — the gateway forwards verbatim.
+   *    No substitution, no shape-based reorder, no chain fallback. On vendor
+   *    error the upstream status + body propagate via the standard exhausted-
+   *    chain envelope so the caller can decide whether to retry their own
+   *    fallback chain. Vendor prefixes (`openrouter/<id>`, `cerebras/<id>`,
+   *    `ollama/<id>`) route to the named vendor explicitly.
+   *
+   * 2. **Pool mode (`body.model` unset)** — the gateway picks from the tenant-
+   *    plan model pool, with shape-based reordering (tools / response_format /
+   *    vision content) and the standard cross-vendor failover chain.
    */
   async complete(
     body: ChatCompletionRequest,
     requestHeaders?: Record<string, string>,
   ): Promise<ProxyResult> {
+    const callerModel = (body as { model?: unknown }).model;
+    if (typeof callerModel === 'string' && callerModel.length > 0) {
+      // Caller-pinned: chain of length 1, no failover, no cooldown bypass.
+      return this.dispatch([callerModel], body, requestHeaders);
+    }
     const reorderedPool = reorderPoolByShape(body, this.modelPool);
     const candidates = this.buildCandidateChain(reorderedPool);
     return this.dispatch(candidates, body, requestHeaders);
@@ -613,12 +625,12 @@ export function reorderPoolByShape(
 }
 
 const STANDARD_BODY_FIELDS: ReadonlySet<string> = new Set([
-  'model', 'messages', 'temperature', 'max_tokens', 'top_p', 'stream', 'useCase',
-  // SDK transport metadata — gateway-side only, never forwarded to vendors:
-  'metadata',
-  // OpenAI-compatible passthroughs — kept as-is, but listed here so they
-  // travel via `extraBody` (already snake_case → matches vendor body shape):
-  // 'tools', 'tool_choice', 'response_format' fall through extraBody by design.
+  'model', 'messages', 'temperature', 'max_tokens', 'top_p', 'stream',
+  // Gateway-side only — stripped before vendor dispatch:
+  'useCase',   // opaque telemetry slug; persisted to llm_usage_log.use_case, echoed back
+  'metadata',  // free-form trace-back kv; persisted to llm_usage_log.metadata, echoed back
+  // OpenAI-compatible pass-throughs (`tools`, `tool_choice`, `response_format`)
+  // travel via the `extraBody` catch-all and reach the vendor verbatim.
 ]);
 
 /** Pick out non-standard fields from the request body so they can be passed

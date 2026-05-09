@@ -60,6 +60,7 @@ function logUsage(
   usage: LlmUsage,
   metadata: Record<string, unknown> | null,
   idempotencyKey: string | null,
+  useCase: string | null,
 ): void {
   ctx.waitUntil(
     buildDatabase(env)
@@ -76,6 +77,7 @@ function logUsage(
         streamed,
         metadata: metadata ? JSON.stringify(metadata) : null,
         idempotencyKey,
+        useCase,
       })
       .catch(() => { /* never let logging fail the request */ }),
   );
@@ -300,8 +302,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
 
     // Capture SDK transport metadata for usage logging — the body's `metadata`
-    // is consumed here and stripped before vendor dispatch (see STANDARD_BODY_FIELDS).
-    const callerMetadata = (body as { metadata?: Record<string, unknown> }).metadata ?? null;
+    // and `useCase` are consumed here and stripped before vendor dispatch
+    // (see STANDARD_BODY_FIELDS).
+    const bodyAny = body as Record<string, unknown>;
+    const callerMetadata = (bodyAny.metadata as Record<string, unknown> | undefined) ?? null;
+    const callerUseCase  = typeof bodyAny.useCase === 'string' ? bodyAny.useCase : null;
     const idempotencyKey = c.req.header('Idempotency-Key') ?? null;
 
     // ── Daily token limit checks ────────────────────────────────────────────
@@ -390,7 +395,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         (usage) => logUsage(
           c.env, c.executionCtx, access.tenantId, access.userId, llmProduct,
           result.resolvedModel, result.retries, true, usage,
-          callerMetadata, idempotencyKey,
+          callerMetadata, idempotencyKey, callerUseCase,
         ),
       );
 
@@ -417,6 +422,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       result.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       callerMetadata,
       idempotencyKey,
+      callerUseCase,
     );
 
     return c.json(
@@ -429,6 +435,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           product:       llmProduct,
           effectivePlan: access.effectivePlan,
           ...(result.schemaRetries != null ? { schemaRetries: result.schemaRetries } : {}),
+          ...(callerUseCase     ? { useCase:    callerUseCase  } : {}),
+          ...(callerMetadata    ? { metadata:   callerMetadata as Record<string, string> } : {}),
+          ...(c.req.header('x-request-id') ? { requestId: c.req.header('x-request-id') } : {}),
         },
       },
       result.response.status as 200,
@@ -484,6 +493,58 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     const days = Math.min(Number(c.req.query('days') ?? '30'), 90);
     const db = buildDatabase(c.env);
+
+    // ── Detail mode — row-level pageable per-call ledger for reconciliation
+    // against the caller's own usage table. Same auth, same tenant scoping.
+    if (c.req.query('detail') === 'true') {
+      const limit  = Math.min(Math.max(Number(c.req.query('limit') ?? '100'), 1), 500);
+      const page   = Math.max(Number(c.req.query('page') ?? '1'), 1);
+      const offset = (page - 1) * limit;
+
+      const rows = await db.execute(sql`
+        SELECT
+          id,
+          created_at::text  AS "createdAt",
+          user_id           AS "userId",
+          llm_product       AS "llmProduct",
+          model,
+          prompt_tokens     AS "promptTokens",
+          completion_tokens AS "completionTokens",
+          total_tokens      AS "totalTokens",
+          retries,
+          streamed,
+          use_case          AS "useCase",
+          metadata,
+          idempotency_key   AS "idempotencyKey"
+        FROM llm_usage_log
+        WHERE tenant_id = ${access.tenantId}
+          AND created_at >= NOW() - (${days} || ' days')::interval
+        ORDER BY created_at DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `);
+
+      const [count] = (await db.execute(sql`
+        SELECT COUNT(*)::int AS total
+        FROM llm_usage_log
+        WHERE tenant_id = ${access.tenantId}
+          AND created_at >= NOW() - (${days} || ' days')::interval
+      `)).rows as Array<{ total: number }>;
+
+      // Parse JSON metadata column for caller convenience.
+      const parsed = (rows.rows as Array<{ metadata?: string | null } & Record<string, unknown>>).map((r) => {
+        const md = r.metadata ?? null;
+        const out: Record<string, unknown> = { ...r };
+        if (md != null) {
+          try { out.metadata = JSON.parse(md as string); } catch { out.metadata = md; }
+        }
+        return out;
+      });
+
+      return c.json({
+        days, page, limit, total: Number(count?.total ?? 0),
+        rows: parsed,
+      });
+    }
 
     const byModel = await db.execute(sql`
       SELECT

@@ -132,6 +132,34 @@ describe('@seanhogg/builderforce-sdk', () => {
     });
   });
 
+  it('forwards opaque useCase + metadata, expects them echoed in _builderforce', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { useCase?: string; metadata?: Record<string, string> };
+      expect(body.useCase).toBe('studio_storyboard');
+      expect(body.metadata).toEqual({ toolRunId: 'tr_1', featureKey: 'storyboard' });
+      return createJsonResponse({
+        choices: [{ message: { content: 'ok' } }],
+        _builderforce: {
+          resolvedModel: 'openrouter/anthropic/claude-3-haiku',
+          useCase: 'studio_storyboard',
+          metadata: { toolRunId: 'tr_1', featureKey: 'storyboard' },
+        },
+      });
+    });
+
+    const client = new BuilderforceClient({ apiKey: 'k', fetch: fetchMock as unknown as typeof fetch });
+    const res = await client.chat.completions.create({
+      model: 'openrouter/anthropic/claude-3-haiku',
+      useCase: 'studio_storyboard',
+      metadata: { toolRunId: 'tr_1', featureKey: 'storyboard' },
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+
+    expect(res._builderforce?.useCase).toBe('studio_storyboard');
+    expect(res._builderforce?.metadata).toEqual({ toolRunId: 'tr_1', featureKey: 'storyboard' });
+    expect(res._builderforce?.resolvedModel).toBe('openrouter/anthropic/claude-3-haiku');
+  });
+
   it('sends Idempotency-Key header without leaking it into the body', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       expect(init?.headers).toMatchObject({ 'Idempotency-Key': 'tool-run-42' });
