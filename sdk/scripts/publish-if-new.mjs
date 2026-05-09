@@ -65,6 +65,23 @@ if (alreadyPublished) {
   process.exit(0);
 }
 
+// Pre-flight auth check — fail with a useful diagnostic before we waste a
+// build cycle on an `ENEEDAUTH` from `npm publish`. `actions/setup-node@v4`
+// with `registry-url:` injects `NODE_AUTH_TOKEN`; allow `NPM_TOKEN` as a
+// fallback for ad-hoc runs.
+const authToken = process.env.NODE_AUTH_TOKEN || process.env.NPM_TOKEN;
+if (!authToken && !process.env.CI_LOCAL_NPM_LOGIN) {
+  console.error(`Cannot publish ${name}@${version}: no npm auth token in env.`);
+  console.error('');
+  console.error('Set the repo secret `NPM_TOKEN` so CI can publish:');
+  console.error('  1. npm token create --type=automation   # generate a token');
+  console.error('  2. GitHub repo → Settings → Secrets and variables → Actions');
+  console.error('  3. New repository secret → Name: NPM_TOKEN, Value: <token>');
+  console.error('');
+  console.error('Or set CI_LOCAL_NPM_LOGIN=1 to bypass this check when relying on `npm login`.');
+  process.exit(1);
+}
+
 console.log(`${name}@${version} is new — publishing ...`);
 runNpm('publish --provenance --access public', {
   cwd: resolve(here, '..'),
