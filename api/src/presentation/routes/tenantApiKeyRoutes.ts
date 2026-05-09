@@ -7,15 +7,21 @@
  *
  * Auth: tenant-scoped JWT (Authorization: Bearer <jwt>).
  * Role: OWNER.
+ *
+ * The mint/list/revoke logic itself lives in
+ * `application/llm/tenantApiKeyService.ts` so the superadmin
+ * `adminRoutes.ts` flow can share it without duplication.
  */
 import { Hono } from 'hono';
-import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { tenantApiKeys } from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
+import {
+  mintTenantApiKey,
+  listTenantApiKeys,
+  revokeTenantApiKey,
+} from '../../application/llm/tenantApiKeyService';
 
 export function createTenantApiKeyRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -40,57 +46,23 @@ export function createTenantApiKeyRoutes(db: Db): Hono<HonoEnv> {
     const body     = await c.req.json<{ name?: string }>().catch(() => ({} as { name?: string }));
     const name     = (body.name ?? '').trim() || 'Tenant API Key';
 
-    const rawKey  = generateApiKey('bfk');
-    const keyHash = await hashSecret(rawKey);
-
-    const [row] = await db
-      .insert(tenantApiKeys)
-      .values({ tenantId, name, keyHash, createdByUserId: userId })
-      .returning({
-        id:        tenantApiKeys.id,
-        name:      tenantApiKeys.name,
-        createdAt: tenantApiKeys.createdAt,
-      });
-
-    return c.json({ key: rawKey, id: row!.id, name: row!.name, createdAt: row!.createdAt }, 201);
+    const minted = await mintTenantApiKey(db, { tenantId, name, createdByUserId: userId });
+    return c.json(minted, 201);
   });
 
-  // GET /api/tenants/:tenantId/api-keys — list (no raw key returned)
+  // GET /api/tenants/:tenantId/api-keys
   router.get('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-
-    const rows = await db
-      .select({
-        id:               tenantApiKeys.id,
-        name:             tenantApiKeys.name,
-        createdByUserId:  tenantApiKeys.createdByUserId,
-        lastUsedAt:       tenantApiKeys.lastUsedAt,
-        revokedAt:        tenantApiKeys.revokedAt,
-        createdAt:        tenantApiKeys.createdAt,
-      })
-      .from(tenantApiKeys)
-      .where(eq(tenantApiKeys.tenantId, tenantId))
-      .orderBy(desc(tenantApiKeys.createdAt));
-
-    return c.json({ keys: rows });
+    const keys = await listTenantApiKeys(db, tenantId);
+    return c.json({ keys });
   });
 
-  // DELETE /api/tenants/:tenantId/api-keys/:keyId — revoke
+  // DELETE /api/tenants/:tenantId/api-keys/:keyId
   router.delete('/:keyId', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const keyId    = c.req.param('keyId');
-
-    const result = await db
-      .update(tenantApiKeys)
-      .set({ revokedAt: new Date() })
-      .where(and(
-        eq(tenantApiKeys.id, keyId),
-        eq(tenantApiKeys.tenantId, tenantId),
-        isNull(tenantApiKeys.revokedAt),
-      ))
-      .returning({ id: tenantApiKeys.id });
-
-    if (result.length === 0) return c.json({ error: 'Key not found' }, 404);
+    const ok = await revokeTenantApiKey(db, { tenantId, keyId });
+    if (!ok) return c.json({ error: 'Key not found' }, 404);
     return c.json({ ok: true });
   });
 

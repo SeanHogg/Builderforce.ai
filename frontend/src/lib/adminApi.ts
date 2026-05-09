@@ -889,4 +889,38 @@ export const adminApi = {
     if (!res.ok) throw new Error(`Audit log export failed (${res.status})`);
     return res.text();
   },
+
+  // ─── Tenant API keys (bfk_*) — superadmin mint-on-behalf ─────────────────
+
+  async listTenantApiKeys(tenantId: number): Promise<AdminTenantApiKey[]> {
+    const res = await adminRequest<{ keys: AdminTenantApiKey[] }>(`/api/admin/tenants/${tenantId}/api-keys`);
+    return res.keys;
+  },
+
+  async mintTenantApiKey(tenantId: number, name: string): Promise<AdminMintedTenantApiKey> {
+    return adminRequest<AdminMintedTenantApiKey>(`/api/admin/tenants/${tenantId}/api-keys`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  },
+
+  async revokeTenantApiKey(tenantId: number, keyId: string): Promise<void> {
+    await adminRequest(`/api/admin/tenants/${tenantId}/api-keys/${keyId}`, { method: 'DELETE' });
+  },
 };
+
+export interface AdminTenantApiKey {
+  id: string;
+  name: string;
+  createdByUserId: string | null;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export interface AdminMintedTenantApiKey {
+  key: string;
+  id: string;
+  name: string;
+  createdAt: string;
+}
