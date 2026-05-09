@@ -51,9 +51,10 @@ export function EmulationProvider({ children }: { children: React.ReactNode }) {
   // Memory-only — never written to localStorage; cleared on page reload intentionally.
   const [emulation, setEmulation] = useState<EmulationState | null>(null);
   const [toasts, setToasts] = useState<string[]>([]);
-  // Keep a mutable ref so endEmulation / switchRole always see current sessionId
+  // Keep a mutable ref so endEmulation / switchRole (event handlers) always
+  // see the latest sessionId without re-creating their closures every render.
   const emulationRef = useRef<EmulationState | null>(null);
-  emulationRef.current = emulation;
+  useEffect(() => { emulationRef.current = emulation; }, [emulation]);
   const warnedRef = useRef<Set<string>>(new Set());
 
   // ---------------------------------------------------------------------------
