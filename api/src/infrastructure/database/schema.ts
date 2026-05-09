@@ -288,6 +288,10 @@ export const llmUsageLog = pgTable('llm_usage_log', {
   totalTokens:      integer('total_tokens').notNull().default(0),
   retries:          integer('retries').notNull().default(0),
   streamed:         boolean('streamed').notNull().default(false),
+  /** Caller-supplied metadata for billing trace-back ({ toolRunId, sessionId, userId, … }). */
+  metadata:         text('metadata'),  // JSONB on the wire; stringified on insert.
+  /** SDK-supplied Idempotency-Key — gateway will use this to dedupe retries (TTL TBD). */
+  idempotencyKey:   varchar('idempotency_key', { length: 128 }),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
 

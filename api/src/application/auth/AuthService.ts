@@ -87,7 +87,7 @@ export class AuthService {
     const tenant = await this.tenants.findById(asTenantId(dto.tenantId));
     if (!tenant) throw new UnauthorizedError('Tenant not found');
 
-    const apiKey = generateApiKey();
+    const apiKey = generateApiKey('clu');
     const hash   = await hashSecret(apiKey);
     const user   = await this.users.save(User.create(dto.email, hash));
 
@@ -187,7 +187,7 @@ export class AuthService {
     if (existingUsername) throw new ConflictError(`Username '${dto.username}' is already taken`);
 
     const pwHash  = await hashPassword(dto.password);
-    const apiKey  = generateApiKey();
+    const apiKey  = generateApiKey('clu');
     const keyHash = await hashSecret(apiKey);
 
     const user = await this.users.save(

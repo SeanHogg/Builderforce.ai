@@ -11,7 +11,8 @@
     "db:generate": "npx drizzle-kit generate",
     "db:push": "npx drizzle-kit push",
     "type-check": "tsc --noEmit",
-    "test": "vitest run"
+    "check:schema": "node scripts/check-schema-drift.mjs",
+    "test": "npm run check:schema && vitest run"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",

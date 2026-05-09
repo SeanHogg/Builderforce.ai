@@ -15,12 +15,12 @@
  *   - Streaming with first-chunk error peek (delegated to the streaming
  *     transport in vendors/types.ts).
  *
- * The service exposes two entry points:
- *   - `complete(body)`            — legacy "give me a chat completion from this pool" mode
- *   - `completeForUseCase(useCase, body)` — declare intent; the chain composer picks the chain
+ * Single entry point:
+ *   - `complete(body)` — chat completion. Routing is shape-driven: presence of
+ *     `tools`, `response_format`, image content blocks, etc., influences the
+ *     candidate chain inside the pool. Callers do not pass routing intents.
  */
 
-import { isAIUseCase, getUseCaseSpec, type AIUseCase } from './aiUseCases';
 import {
   dispatchVendor,
   dispatchVendorStream,
@@ -97,6 +97,9 @@ export interface ProxyResult {
   failovers: FailoverEvent[];
   /** Token usage from non-streaming responses; undefined for streams (route intercepts). */
   usage?: LlmUsage;
+  /** Number of times the gateway re-dispatched on non-conforming JSON output
+   *  (only applies when `body.response_format.type` is `json_object`/`json_schema`). */
+  schemaRetries?: number;
 }
 
 export type ProductName = 'builderforceLLM' | 'builderforceLLMPro' | 'builderforceLLMTeams';
@@ -162,40 +165,19 @@ export class LlmProxyService {
   /**
    * Forward a chat-completion request through the configured pool.
    * The model field on `body` is ignored — the chain composer picks it.
+   *
+   * Routing is *request-shape-driven*: presence of tools / response_format /
+   * vision content blocks reorders the candidate chain so the most-capable
+   * models for that shape are tried first. Cooldown + cross-vendor fallback
+   * still apply on top.
    */
   async complete(
     body: ChatCompletionRequest,
     requestHeaders?: Record<string, string>,
   ): Promise<ProxyResult> {
-    const candidates = this.buildCandidateChain(this.modelPool);
+    const reorderedPool = reorderPoolByShape(body, this.modelPool);
+    const candidates = this.buildCandidateChain(reorderedPool);
     return this.dispatch(candidates, body, requestHeaders);
-  }
-
-  /**
-   * Use-case-driven completion. The use-case's preferredChain is the seed of the
-   * dispatch chain; the proxy still adds its own cross-vendor fallbacks so
-   * exhaustion of the use-case chain falls into the broader pool.
-   */
-  async completeForUseCase(
-    useCase: AIUseCase | string,
-    body: ChatCompletionRequest,
-    requestHeaders?: Record<string, string>,
-  ): Promise<ProxyResult> {
-    if (!isAIUseCase(useCase)) {
-      throw new Error(`Unknown AI use case: ${useCase}`);
-    }
-    const spec = getUseCaseSpec(useCase);
-    const seed = [...spec.preferredChain];
-
-    // Apply use-case temperature / max_tokens defaults if caller didn't set them.
-    const enrichedBody: ChatCompletionRequest = {
-      ...body,
-      max_tokens:  body.max_tokens  ?? spec.maxTokens,
-      ...(spec.temperature != null && body.temperature == null ? { temperature: spec.temperature } : {}),
-    };
-
-    const candidates = this.buildCandidateChain(seed);
-    return this.dispatch(candidates, enrichedBody, requestHeaders);
   }
 
   /** Per-model status with cooldown info — used by /v1/models. */
@@ -283,52 +265,107 @@ export class LlmProxyService {
     if (body.stream) {
       return this.dispatchStream(candidates, callParams, requestHeaders);
     }
-    return this.dispatchJson(candidates, callParams);
+    return this.dispatchJson(candidates, callParams, body);
   }
 
+  /**
+   * Non-streaming dispatch with optional `response_format` conformance retry.
+   *
+   * When the request asks for `json_object` or `json_schema` output, the
+   * gateway parses the assistant message after each successful vendor call.
+   * If parsing fails (or, for strict `json_schema`, the document is missing
+   * a required field) the gateway advances past the model that just answered
+   * and re-dispatches on the remaining suffix. The total non-conforming
+   * round-trips are surfaced via `_builderforce.schemaRetries`.
+   */
   private async dispatchJson(
     candidates: string[],
     callParams: Omit<Parameters<typeof dispatchVendor>[0], 'env' | 'modelChain'>,
+    body: ChatCompletionRequest,
   ): Promise<ProxyResult> {
-    try {
-      const result = await dispatchVendor({
-        env: this.vendorEnv(),
-        modelChain: candidates,
-        ...callParams,
-      });
+    let chain = candidates;
+    let totalAttempts = 0;
+    const totalFailovers: FailoverEvent[] = [];
+    let schemaRetries = 0;
+    let lastResult: Awaited<ReturnType<typeof dispatchVendor>> | null = null;
+
+    while (chain.length > 0) {
+      let result: Awaited<ReturnType<typeof dispatchVendor>>;
+      try {
+        result = await dispatchVendor({
+          env: this.vendorEnv(),
+          modelChain: chain,
+          ...callParams,
+        });
+      } catch (err) {
+        return this.exhaustedResponse(candidates, schemaRetries, err);
+      }
+
       this.applyCooldowns(result.attempts);
-      return {
-        response: new Response(JSON.stringify(result.raw), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
-        resolvedModel: result.modelUsed,
-        retries: result.attempts.length,
-        failovers: attemptsToFailovers(result.attempts),
-        ...(result.usage ? {
-          usage: {
-            promptTokens:     result.usage.prompt_tokens     ?? 0,
-            completionTokens: result.usage.completion_tokens ?? 0,
-            totalTokens:      result.usage.total_tokens      ?? 0,
-          },
-        } : {}),
-      };
-    } catch (err) {
-      // Cascade exhausted — surface as a 429 envelope so existing handlers see the same shape.
-      const message = err instanceof Error ? err.message : String(err);
-      const exhaustedBody = JSON.stringify({
-        error: { message, code: 429, type: 'rate_limit_error' },
-      });
-      return {
-        response: new Response(exhaustedBody, {
-          status: 429,
-          headers: { 'content-type': 'application/json' },
-        }),
-        resolvedModel: candidates[candidates.length - 1] ?? this.modelPool[0] ?? FREE_MODEL_POOL[0] ?? '',
-        retries: candidates.length,
-        failovers: candidates.map((model) => ({ model, code: 0 })),
-      };
+      totalAttempts += result.attempts.length;
+      totalFailovers.push(...attemptsToFailovers(result.attempts));
+      lastResult = result;
+
+      const conformanceErr = checkResponseFormatConformance(body, result.raw);
+      if (!conformanceErr) {
+        return this.successJsonResult(result, totalAttempts, totalFailovers, schemaRetries);
+      }
+
+      // Non-conforming: advance past the model that just answered.
+      schemaRetries++;
+      const idx = chain.indexOf(result.modelUsed);
+      chain = idx >= 0 ? chain.slice(idx + 1) : [];
     }
+
+    // Chain exhausted with all candidates non-conforming. Return the last
+    // body so callers see whatever the most-capable model produced, but
+    // surface the retry count so they can detect the conformance failure.
+    if (lastResult) {
+      return this.successJsonResult(lastResult, totalAttempts, totalFailovers, schemaRetries);
+    }
+    return this.exhaustedResponse(candidates, schemaRetries);
+  }
+
+  private successJsonResult(
+    result: Awaited<ReturnType<typeof dispatchVendor>>,
+    totalAttempts: number,
+    totalFailovers: FailoverEvent[],
+    schemaRetries: number,
+  ): ProxyResult {
+    return {
+      response: new Response(JSON.stringify(result.raw), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+      resolvedModel: result.modelUsed,
+      retries: totalAttempts,
+      failovers: totalFailovers,
+      ...(result.usage ? {
+        usage: {
+          promptTokens:     result.usage.prompt_tokens     ?? 0,
+          completionTokens: result.usage.completion_tokens ?? 0,
+          totalTokens:      result.usage.total_tokens      ?? 0,
+        },
+      } : {}),
+      ...(schemaRetries > 0 ? { schemaRetries } : {}),
+    };
+  }
+
+  private exhaustedResponse(candidates: string[], schemaRetries: number, err?: unknown): ProxyResult {
+    const message = err instanceof Error ? err.message : (err ? String(err) : 'All candidates produced non-conforming output');
+    const exhaustedBody = JSON.stringify({
+      error: { message, code: 429, type: 'rate_limit_error' },
+    });
+    return {
+      response: new Response(exhaustedBody, {
+        status: 429,
+        headers: { 'content-type': 'application/json' },
+      }),
+      resolvedModel: candidates[candidates.length - 1] ?? this.modelPool[0] ?? FREE_MODEL_POOL[0] ?? '',
+      retries: candidates.length,
+      failovers: candidates.map((model) => ({ model, code: 0 })),
+      ...(schemaRetries > 0 ? { schemaRetries } : {}),
+    };
   }
 
   private async dispatchStream(
@@ -430,8 +467,158 @@ export function adminPoolProxy(
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Response-format conformance — used by dispatchJson to detect non-conforming
+// model output (broken JSON, missing required fields) and retry across the
+// failover chain. Returns null when the response conforms (or no constraint
+// was requested), or a short reason string when retry is warranted.
+//
+// This is a deliberately *minimal* validator. Full JSON-Schema validation
+// is out of scope here — we don't want a runtime dependency. The two checks
+// catch the most common failure modes:
+//   1. `response_format: { type: 'json_object' }` — content doesn't parse.
+//   2. `response_format: { type: 'json_schema', json_schema: { strict: true,
+//      schema: { required: [...] } } }` — content parses but is missing a
+//      top-level required field.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function extractAssistantContent(raw: unknown): string | null {
+  const choices = (raw as { choices?: Array<{ message?: { content?: unknown } }> } | null)?.choices;
+  const content = choices?.[0]?.message?.content;
+  return typeof content === 'string' ? content : null;
+}
+
+function checkResponseFormatConformance(body: ChatCompletionRequest, raw: unknown): string | null {
+  const rf = (body as { response_format?: { type?: string; json_schema?: { strict?: boolean; schema?: { required?: unknown } } } }).response_format;
+  if (!rf || (rf.type !== 'json_object' && rf.type !== 'json_schema')) return null;
+
+  const content = extractAssistantContent(raw);
+  if (content === null) return null; // Tool-call assistant turns legitimately have no content.
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return 'content is not valid JSON';
+  }
+
+  if (rf.type === 'json_schema' && rf.json_schema?.strict === true) {
+    const required = rf.json_schema?.schema?.required;
+    if (Array.isArray(required) && required.length > 0) {
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        return 'content is JSON but not a top-level object';
+      }
+      const obj = parsed as Record<string, unknown>;
+      for (const field of required as unknown[]) {
+        if (typeof field === 'string' && !(field in obj)) {
+          return `missing required field "${field}"`;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shape-driven routing — single source of truth for "which capability does
+// the request need?" answers. Each capability lists models known to handle
+// that capability well; reorderPoolByShape stable-sorts the configured pool
+// so capable models float to the front, then everything else follows.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Models that reliably honour `tools` / `tool_choice` round-trips. */
+const TOOL_CAPABLE_MODELS: ReadonlySet<string> = new Set([
+  'anthropic/claude-3.7-sonnet',
+  'openai/gpt-4.1',
+  'google/gemini-2.5-pro',
+  'x-ai/grok-3-mini',
+  'qwen/qwen3-next-80b-a3b-instruct:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'qwen/qwen3-coder:free',
+]);
+
+/** Models that reliably emit valid JSON / honour json_schema. */
+const STRUCTURED_OUTPUT_MODELS: ReadonlySet<string> = new Set([
+  'openai/gpt-4.1',
+  'anthropic/claude-3.7-sonnet',
+  'google/gemini-2.5-pro',
+  'qwen/qwen3-coder:free',
+  'qwen/qwen3-next-80b-a3b-instruct:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+]);
+
+/** Models with image-input (vision) capability. */
+const VISION_MODELS: ReadonlySet<string> = new Set([
+  'anthropic/claude-3.7-sonnet',
+  'openai/gpt-4.1',
+  'google/gemini-2.5-pro',
+]);
+
+interface ShapeFlags {
+  hasTools: boolean;
+  hasStructuredOutput: boolean;
+  hasVision: boolean;
+}
+
+function inferShape(body: ChatCompletionRequest): ShapeFlags {
+  const b = body as unknown as Record<string, unknown>;
+  const hasTools = Array.isArray(b.tools) && (b.tools as unknown[]).length > 0;
+
+  const rf = b.response_format as { type?: string } | undefined;
+  const hasStructuredOutput = rf?.type === 'json_object' || rf?.type === 'json_schema';
+
+  const hasVision = Array.isArray(body.messages) && body.messages.some((m) => {
+    const content = (m as unknown as { content?: unknown }).content;
+    return Array.isArray(content) && content.some(
+      (part) => (part as { type?: string } | null)?.type === 'image_url',
+    );
+  });
+
+  return { hasTools, hasStructuredOutput, hasVision };
+}
+
+/**
+ * Stable-sort the pool so models that match the request's required capabilities
+ * come first. A model that matches every required capability ranks above one
+ * that matches some, which ranks above one that matches none.
+ *
+ * Vision is treated as a *hard* requirement — non-vision models are filtered
+ * out of the front rank and only kept as last-resort fallbacks (vendor will
+ * usually error rather than silently drop the image, which is the right
+ * failure mode for the cross-vendor fallback to recover from).
+ */
+export function reorderPoolByShape(
+  body: ChatCompletionRequest,
+  pool: readonly string[],
+): readonly string[] {
+  const shape = inferShape(body);
+  if (!shape.hasTools && !shape.hasStructuredOutput && !shape.hasVision) {
+    return pool;
+  }
+
+  const score = (model: string): number => {
+    let s = 0;
+    if (shape.hasVision           && VISION_MODELS.has(model))            s += 4;
+    if (shape.hasTools            && TOOL_CAPABLE_MODELS.has(model))      s += 2;
+    if (shape.hasStructuredOutput && STRUCTURED_OUTPUT_MODELS.has(model)) s += 1;
+    return s;
+  };
+
+  // Stable sort by descending score; preserves original pool order within ties.
+  return [...pool]
+    .map((m, i) => ({ m, i, s: score(m) }))
+    .sort((a, b) => (b.s - a.s) || (a.i - b.i))
+    .map((x) => x.m);
+}
+
 const STANDARD_BODY_FIELDS: ReadonlySet<string> = new Set([
   'model', 'messages', 'temperature', 'max_tokens', 'top_p', 'stream', 'useCase',
+  // SDK transport metadata — gateway-side only, never forwarded to vendors:
+  'metadata',
+  // OpenAI-compatible passthroughs — kept as-is, but listed here so they
+  // travel via `extraBody` (already snake_case → matches vendor body shape):
+  // 'tools', 'tool_choice', 'response_format' fall through extraBody by design.
 ]);
 
 /** Pick out non-standard fields from the request body so they can be passed
