@@ -1230,3 +1230,38 @@ export const myAdminAccessApi = {
     webRequest<{ sessions: MyAdminAccessSession[] }>('/api/auth/me/admin-access').then((r) => r.sessions ?? []),
 };
 
+// ---------------------------------------------------------------------------
+// Tenant API keys (bfk_*) — gateway credentials for tenant apps.
+// Owner-role only. Raw key returned once on mint and never again.
+// ---------------------------------------------------------------------------
+
+export interface TenantApiKey {
+  id: string;
+  name: string;
+  createdByUserId: string | null;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export interface MintTenantApiKeyResult {
+  key: string;
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export const tenantApiKeysApi = {
+  list: (tenantId: number): Promise<TenantApiKey[]> =>
+    request<{ keys: TenantApiKey[] }>(`/api/tenants/${tenantId}/api-keys`).then((r) => r.keys ?? []),
+
+  mint: (tenantId: number, name: string): Promise<MintTenantApiKeyResult> =>
+    request<MintTenantApiKeyResult>(`/api/tenants/${tenantId}/api-keys`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+
+  revoke: (tenantId: number, keyId: string): Promise<void> =>
+    request(`/api/tenants/${tenantId}/api-keys/${keyId}`, { method: 'DELETE' }).then(() => undefined),
+};
+
