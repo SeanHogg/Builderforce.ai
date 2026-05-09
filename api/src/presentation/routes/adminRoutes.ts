@@ -76,6 +76,24 @@ import {
 import { magicLinkTokens } from '../../infrastructure/database/schema';
 import { sendAdminPasswordResetEmail } from '../../infrastructure/email/EmailService';
 
+/**
+ * Coerce a `platform_modules.permissions` value into `string[]`.
+ *
+ * Schema drift: the column is JSONB in the database (per migration 0038)
+ * but typed as `text` in the Drizzle schema. The pg driver auto-decodes
+ * JSONB into a JS array at runtime, so `m.permissions` is *already* an
+ * array — but `JSON.parse(array)` would coerce to `array.toString()`
+ * (e.g. `"billing:read"`) and throw. This helper handles array, string,
+ * and null inputs uniformly so every read site stays one-liner safe.
+ */
+function coercePermissions(value: unknown): string[] {
+  if (Array.isArray(value)) return value as string[];
+  if (typeof value === 'string' && value.length > 0) {
+    try { return JSON.parse(value) as string[]; } catch { return []; }
+  }
+  return [];
+}
+
 /** Status entry for one model in the admin LLM panel — shared shape whether
  *  the pool is live (real cooldown state) or fake (no key configured). */
 function poolStatus(
@@ -2106,7 +2124,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     return c.json({
       modules: rows.map((m) => ({
         ...m,
-        permissions: JSON.parse(m.permissions ?? '[]') as string[],
+        permissions: coercePermissions(m.permissions),
         createdAt: m.createdAt?.toISOString() ?? null,
         updatedAt: m.updatedAt?.toISOString() ?? null,
       })),
@@ -2139,7 +2157,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       })
       .returning();
     await writeAudit(db, 'MODULE_ASSIGNED', actorId, { metadata: { moduleId: mod!.id, name: mod!.name } });
-    return c.json({ module: { ...mod, permissions: JSON.parse(mod!.permissions ?? '[]') } }, 201);
+    return c.json({ module: { ...mod, permissions: coercePermissions(mod!.permissions) } }, 201);
   });
 
   // PATCH /api/admin/modules/:id
@@ -2160,7 +2178,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .where(eq(platformModules.id, id))
       .returning();
     if (!mod) return c.json({ error: 'Module not found' }, 404);
-    return c.json({ module: { ...mod, permissions: JSON.parse(mod.permissions ?? '[]') } });
+    return c.json({ module: { ...mod, permissions: coercePermissions(mod.permissions) } });
   });
 
   // DELETE /api/admin/modules/:id
@@ -2370,7 +2388,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .from(tenantMemberModules)
       .innerJoin(platformModules, eq(tenantMemberModules.moduleId, platformModules.id))
       .where(and(eq(tenantMemberModules.tenantId, tenantId), eq(tenantMemberModules.userId, targetId)));
-    const modulePerms = assignedModules.flatMap((m) => JSON.parse(m.permissions ?? '[]') as string[]);
+    const modulePerms = assignedModules.flatMap((m) => coercePermissions(m.permissions));
 
     // Per-user overrides
     const userOverrides = await db.select().from(userPermissionOverrides).where(and(eq(userPermissionOverrides.tenantId, tenantId), eq(userPermissionOverrides.userId, targetId)));

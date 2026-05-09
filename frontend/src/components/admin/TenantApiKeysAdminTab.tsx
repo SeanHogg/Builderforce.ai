@@ -32,8 +32,9 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
     adminApi.tenants()
       .then((rows) => {
         if (cancelled) return;
-        setTenants(rows);
-        if (tenantId == null && rows.length > 0) setTenantId(rows[0].id);
+        const list = rows ?? [];
+        setTenants(list);
+        if (tenantId == null && list.length > 0) setTenantId(list[0].id);
       })
       .catch((e: Error) => !cancelled && setError(e.message));
     return () => { cancelled = true; };
@@ -47,7 +48,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
     setLoading(true);
     setError(null);
     adminApi.listTenantApiKeys(tenantId)
-      .then((rows) => !cancelled && setKeys(rows))
+      .then((rows) => !cancelled && setKeys(rows ?? []))
       .catch((e: Error) => !cancelled && setError(e.message))
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };

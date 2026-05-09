@@ -402,7 +402,7 @@ export const adminApi = {
 
   async tenants(): Promise<AdminTenant[]> {
     const res = await adminRequest<{ tenants: AdminTenant[] }>('/api/admin/tenants');
-    return res.tenants;
+    return res.tenants ?? [];
   },
 
   async tenantMembers(tenantId: number): Promise<TenantMember[]> {
@@ -894,7 +894,7 @@ export const adminApi = {
 
   async listTenantApiKeys(tenantId: number): Promise<AdminTenantApiKey[]> {
     const res = await adminRequest<{ keys: AdminTenantApiKey[] }>(`/api/admin/tenants/${tenantId}/api-keys`);
-    return res.keys;
+    return res.keys ?? [];
   },
 
   async mintTenantApiKey(tenantId: number, name: string): Promise<AdminMintedTenantApiKey> {
