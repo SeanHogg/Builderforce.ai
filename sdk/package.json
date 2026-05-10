@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-sdk",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Typed SDK for the Builderforce.ai LLM gateway — chat completions with tool-calling and structured output, embeddings, models, and usage analytics over an OpenAI-compatible surface.",
   "license": "MIT",
   "author": "Sean Hogg",

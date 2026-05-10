@@ -3,7 +3,7 @@
 Typed TypeScript SDK for the [Builderforce.ai](https://builderforce.ai) LLM gateway. OpenAI-compatible chat completions with tool calling and structured output, embeddings, model registry, and usage analytics — all behind a single tenant API key. Vendor failover (OpenRouter / Cerebras / Ollama / Claude / GPT / Gemini / Grok) is handled server-side so your code only knows about Builderforce.
 
 - **Vanilla `fetch` / `AbortController` / `ReadableStream` / `TextDecoder`** — runs on Node 18+, Cloudflare Workers, browsers, edge runtimes.
-- **Zero runtime dependencies.** ~22 kB compressed, ~100 kB unpacked.
+- **Zero runtime dependencies.** ~23 kB compressed, ~102 kB unpacked.
 - **Dual ESM + CJS + `.d.ts`** out of the box.
 
 ## Install
@@ -308,6 +308,7 @@ try {
 | 409 | `idempotent_replay` | `Idempotency-Key` was used within the last 10 min — treat as no-op |
 | 429 | `plan_token_limit_exceeded` | Tenant hit daily plan budget |
 | 429 | `claw_token_limit_exceeded` | Per-claw daily cap exceeded (`clk_*` keys only) |
+| 403 | `origin_not_authorized` | Browser request from an origin not in the key's allowlist (or key has no allowlist — server-only) |
 | 503 | (no code) | Vendor key not configured for the active plan tier |
 | 401 | `missing_api_key` | Auth issues |
 | 403 | (varied) | Wrong scope / wrong tenant for the URL |
