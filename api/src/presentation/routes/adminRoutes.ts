@@ -61,6 +61,7 @@ import { llmFailoverLog } from '../../infrastructure/database/schema';
 import {
   mintTenantApiKey,
   listTenantApiKeys,
+  queryTenantApiKeyUsage,
   revokeTenantApiKey,
   updateTenantApiKey,
 } from '../../application/llm/tenantApiKeyService';
@@ -2531,6 +2532,18 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       allowedOrigins: normalizeOrigins(body.allowedOrigins),
     });
     return c.json(minted, 201);
+  });
+
+  router.get('/tenants/:tenantId/api-keys/:keyId/usage', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = Number(c.req.param('tenantId'));
+    if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
+    const keyId  = c.req.param('keyId');
+    const days   = Number(c.req.query('days')  ?? '30');
+    const page   = Number(c.req.query('page')  ?? '1');
+    const limit  = Number(c.req.query('limit') ?? '100');
+    const result = await queryTenantApiKeyUsage(db, { tenantId, keyId, days, page, limit });
+    return c.json(result);
   });
 
   router.patch('/tenants/:tenantId/api-keys/:keyId', async (c) => {

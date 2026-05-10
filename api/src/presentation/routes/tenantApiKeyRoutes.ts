@@ -20,6 +20,7 @@ import { TenantRole } from '../../domain/shared/types';
 import {
   mintTenantApiKey,
   listTenantApiKeys,
+  queryTenantApiKeyUsage,
   revokeTenantApiKey,
   updateTenantApiKey,
 } from '../../application/llm/tenantApiKeyService';
@@ -74,6 +75,17 @@ export function createTenantApiKeyRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const keys = await listTenantApiKeys(db, tenantId);
     return c.json({ keys });
+  });
+
+  // GET /api/tenants/:tenantId/api-keys/:keyId/usage — per-key audit trail
+  router.get('/:keyId/usage', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const keyId    = c.req.param('keyId');
+    const days     = Number(c.req.query('days')  ?? '30');
+    const page     = Number(c.req.query('page')  ?? '1');
+    const limit    = Number(c.req.query('limit') ?? '100');
+    const result = await queryTenantApiKeyUsage(db, { tenantId, keyId, days, page, limit });
+    return c.json(result);
   });
 
   // PATCH /api/tenants/:tenantId/api-keys/:keyId — partial update (name, allowedOrigins)

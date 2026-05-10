@@ -63,6 +63,7 @@ function logUsage(
   metadata: Record<string, unknown> | null,
   idempotencyKey: string | null,
   useCase: string | null,
+  tenantApiKeyId: string | null,
 ): void {
   ctx.waitUntil(
     buildDatabase(env)
@@ -80,6 +81,7 @@ function logUsage(
         metadata: metadata ? JSON.stringify(metadata) : null,
         idempotencyKey,
         useCase,
+        tenantApiKeyId,
       })
       .catch(() => { /* never let logging fail the request */ }),
   );
@@ -113,6 +115,8 @@ type TenantAccess = {
   clawId: number | null;
   /** Per-claw daily token budget (null = no per-claw cap). */
   clawTokenDailyLimit: number | null;
+  /** UUID of the `bfk_*` tenant API key that authenticated, when applicable. */
+  tenantApiKeyId: string | null;
   role: TenantRole;
   plan: 'free' | 'pro' | 'teams';
   billingStatus: 'none' | 'pending' | 'active' | 'past_due' | 'cancelled';
@@ -192,6 +196,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
       tenantId: claw.tenantId,
       clawId: claw.id,
       clawTokenDailyLimit: claw.tokenDailyLimit,
+      tenantApiKeyId: null,
       role: TenantRole.DEVELOPER,
       ...(await resolveTenantPlan(c, claw.tenantId)),
     };
@@ -257,6 +262,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
       tenantId: keyTenantId,
       clawId: null,
       clawTokenDailyLimit: null,
+      tenantApiKeyId: keyId,
       role: TenantRole.DEVELOPER,
       ...(await resolveTenantPlan(c, keyTenantId)),
     };
@@ -291,6 +297,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
     tenantId: payload.tid,
     clawId: null,
     clawTokenDailyLimit: null,
+    tenantApiKeyId: null,
     role: payload.role,
     ...(await resolveTenantPlan(c, payload.tid)),
   };
@@ -498,7 +505,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         (usage) => logUsage(
           c.env, c.executionCtx, access.tenantId, access.userId, llmProduct,
           result.resolvedModel, result.retries, true, usage,
-          callerMetadata, idempotencyKey, callerUseCase,
+          callerMetadata, idempotencyKey, callerUseCase, access.tenantApiKeyId,
         ),
       );
 
@@ -526,6 +533,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       callerMetadata,
       idempotencyKey,
       callerUseCase,
+      access.tenantApiKeyId,
     );
 
     return c.json(

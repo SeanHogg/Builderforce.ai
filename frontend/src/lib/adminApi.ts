@@ -919,7 +919,45 @@ export const adminApi = {
   async revokeTenantApiKey(tenantId: number, keyId: string): Promise<void> {
     await adminRequest(`/api/admin/tenants/${tenantId}/api-keys/${keyId}`, { method: 'DELETE' });
   },
+
+  async tenantApiKeyUsage(
+    tenantId: number,
+    keyId: string,
+    params?: { days?: number; page?: number; limit?: number },
+  ): Promise<AdminTenantApiKeyUsageResult> {
+    const q = new URLSearchParams();
+    if (params?.days  != null) q.set('days',  String(params.days));
+    if (params?.page  != null) q.set('page',  String(params.page));
+    if (params?.limit != null) q.set('limit', String(params.limit));
+    const suffix = q.toString();
+    return adminRequest<AdminTenantApiKeyUsageResult>(
+      `/api/admin/tenants/${tenantId}/api-keys/${keyId}/usage${suffix ? `?${suffix}` : ''}`,
+    );
+  },
 };
+
+export interface AdminTenantApiKeyUsageRow {
+  id: number;
+  createdAt: string;
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  retries: number;
+  streamed: boolean;
+  useCase: string | null;
+  metadata: Record<string, unknown> | null;
+  idempotencyKey: string | null;
+  userId: string | null;
+}
+
+export interface AdminTenantApiKeyUsageResult {
+  summary: { total: number; totalTokens: number; modelCount: number };
+  rows: AdminTenantApiKeyUsageRow[];
+  days: number;
+  page: number;
+  limit: number;
+}
 
 export interface AdminTenantApiKey {
   id: string;
