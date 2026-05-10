@@ -294,6 +294,8 @@ export const llmUsageLog = pgTable('llm_usage_log', {
   idempotencyKey:   varchar('idempotency_key', { length: 128 }),
   /** Opaque telemetry slug from `body.useCase`. Free-form; tenant taxonomy. */
   useCase:          varchar('use_case', { length: 128 }),
+  /** Which `bfk_*` key authenticated this request. Null for `clk_*` / web JWT auth. */
+  tenantApiKeyId:   uuid('tenant_api_key_id'),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
 

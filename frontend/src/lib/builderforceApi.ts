@@ -1267,6 +1267,29 @@ export interface UpdateTenantApiKeyInput {
   allowedOrigins?: string[] | null;
 }
 
+export interface TenantApiKeyUsageRow {
+  id: number;
+  createdAt: string;
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  retries: number;
+  streamed: boolean;
+  useCase: string | null;
+  metadata: Record<string, unknown> | null;
+  idempotencyKey: string | null;
+  userId: string | null;
+}
+
+export interface TenantApiKeyUsageResult {
+  summary: { total: number; totalTokens: number; modelCount: number };
+  rows: TenantApiKeyUsageRow[];
+  days: number;
+  page: number;
+  limit: number;
+}
+
 export const tenantApiKeysApi = {
   list: (tenantId: number): Promise<TenantApiKey[]> =>
     request<{ keys: TenantApiKey[] }>(`/api/tenants/${tenantId}/api-keys`).then((r) => r.keys ?? []),
@@ -1285,5 +1308,14 @@ export const tenantApiKeysApi = {
 
   revoke: (tenantId: number, keyId: string): Promise<void> =>
     request(`/api/tenants/${tenantId}/api-keys/${keyId}`, { method: 'DELETE' }).then(() => undefined),
+
+  usage: (tenantId: number, keyId: string, params?: { days?: number; page?: number; limit?: number }): Promise<TenantApiKeyUsageResult> => {
+    const q = new URLSearchParams();
+    if (params?.days  != null) q.set('days',  String(params.days));
+    if (params?.page  != null) q.set('page',  String(params.page));
+    if (params?.limit != null) q.set('limit', String(params.limit));
+    const suffix = q.toString();
+    return request<TenantApiKeyUsageResult>(`/api/tenants/${tenantId}/api-keys/${keyId}/usage${suffix ? `?${suffix}` : ''}`);
+  },
 };
 

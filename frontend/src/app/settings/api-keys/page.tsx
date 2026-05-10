@@ -7,6 +7,7 @@ import { MintedTenantApiKeyDisplay } from '@/components/MintedTenantApiKeyDispla
 import { AllowedOriginsField } from '@/components/AllowedOriginsField';
 import { AllowedOriginsBadge } from '@/components/AllowedOriginsBadge';
 import { TenantApiKeyEditor } from '@/components/TenantApiKeyEditor';
+import { TenantApiKeyUsageDrawer } from '@/components/TenantApiKeyUsageDrawer';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -66,6 +67,7 @@ export default function ApiKeysPage() {
   const [revoking, setRevoking] = useState<string | null>(null);
   const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [expandedKeyId, setExpandedKeyId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOwner || !Number.isFinite(tenantId)) { setLoading(false); return; }
@@ -247,23 +249,34 @@ export default function ApiKeysPage() {
                         {revoked && ` · Revoked ${fmtDate(k.revokedAt)}`}
                       </div>
                     </div>
-                    {!revoked && !isEditing && (
+                    {!isEditing && (
                       <>
                         <button
                           type="button"
-                          onClick={() => setEditingKeyId(k.id)}
-                          style={{ ...buttonPrimary, padding: '4px 10px', fontSize: 11 }}
+                          onClick={() => setExpandedKeyId(expandedKeyId === k.id ? null : k.id)}
+                          style={{ ...buttonPrimary, padding: '4px 10px', fontSize: 11, background: 'none' }}
                         >
-                          Edit
+                          {expandedKeyId === k.id ? 'Hide activity' : 'View activity'}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleRevoke(k.id)}
-                          disabled={revoking === k.id}
-                          style={buttonDanger}
-                        >
-                          {revoking === k.id ? '…' : 'Revoke'}
-                        </button>
+                        {!revoked && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setEditingKeyId(k.id)}
+                              style={{ ...buttonPrimary, padding: '4px 10px', fontSize: 11 }}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleRevoke(k.id)}
+                              disabled={revoking === k.id}
+                              style={buttonDanger}
+                            >
+                              {revoking === k.id ? '…' : 'Revoke'}
+                            </button>
+                          </>
+                        )}
                       </>
                     )}
                   </div>
@@ -276,6 +289,10 @@ export default function ApiKeysPage() {
                       saving={savingEdit}
                     />
                   )}
+                  <TenantApiKeyUsageDrawer
+                    expanded={expandedKeyId === k.id}
+                    load={(params) => tenantApiKeysApi.usage(tenantId, k.id, params)}
+                  />
                 </div>
               );
             })}

@@ -11,6 +11,7 @@ import { MintedTenantApiKeyDisplay } from '@/components/MintedTenantApiKeyDispla
 import { AllowedOriginsField } from '@/components/AllowedOriginsField';
 import { AllowedOriginsBadge } from '@/components/AllowedOriginsBadge';
 import { TenantApiKeyEditor } from '@/components/TenantApiKeyEditor';
+import { TenantApiKeyUsageDrawer } from '@/components/TenantApiKeyUsageDrawer';
 
 /**
  * Superadmin tab for minting / listing / revoking tenant `bfk_*` keys
@@ -31,6 +32,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
   const [revoking, setRevoking] = useState<string | null>(null);
   const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [expandedKeyId, setExpandedKeyId] = useState<string | null>(null);
 
   // Load tenant list when the tab becomes active.
   useEffect(() => {
@@ -225,23 +227,34 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
                   <td>{fmtDate(k.lastUsedAt)}</td>
                   <td>{revoked ? `Revoked ${fmtDate(k.revokedAt)}` : 'Active'}</td>
                   <td style={{ display: 'flex', gap: 6 }}>
-                    {!revoked && !isEditing && (
+                    {!isEditing && (
                       <>
                         <button
                           type="button"
                           className="btn-ghost"
-                          onClick={() => setEditingKeyId(k.id)}
+                          onClick={() => setExpandedKeyId(expandedKeyId === k.id ? null : k.id)}
                         >
-                          Edit
+                          {expandedKeyId === k.id ? 'Hide' : 'Activity'}
                         </button>
-                        <button
-                          type="button"
-                          className="btn-ghost"
-                          onClick={() => void handleRevoke(k.id)}
-                          disabled={revoking === k.id}
-                        >
-                          {revoking === k.id ? '…' : 'Revoke'}
-                        </button>
+                        {!revoked && (
+                          <>
+                            <button
+                              type="button"
+                              className="btn-ghost"
+                              onClick={() => setEditingKeyId(k.id)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-ghost"
+                              onClick={() => void handleRevoke(k.id)}
+                              disabled={revoking === k.id}
+                            >
+                              {revoking === k.id ? '…' : 'Revoke'}
+                            </button>
+                          </>
+                        )}
                       </>
                     )}
                   </td>
@@ -257,6 +270,18 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
                         onSave={(patch) => handleEdit(k.id, patch)}
                         onCancel={() => setEditingKeyId(null)}
                         saving={savingEdit}
+                      />
+                    </td>
+                  </tr>,
+                );
+              }
+              if (expandedKeyId === k.id && tenantId != null) {
+                rows.push(
+                  <tr key={`${k.id}-usage`}>
+                    <td colSpan={7} style={{ background: 'var(--bg-base)' }}>
+                      <TenantApiKeyUsageDrawer
+                        expanded
+                        load={(params) => adminApi.tenantApiKeyUsage(tenantId, k.id, params)}
                       />
                     </td>
                   </tr>,
