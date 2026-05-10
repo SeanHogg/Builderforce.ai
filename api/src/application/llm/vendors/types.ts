@@ -11,7 +11,7 @@
  *   3. Implement a `VendorModule` and register it in `vendors/registry.ts`.
  */
 
-export type VendorId = 'openrouter' | 'cerebras' | 'ollama';
+export type VendorId = 'openrouter' | 'cerebras' | 'ollama' | 'nvidia';
 
 /**
  * Tier classification per model — drives pricing, plan gating, and the
@@ -32,6 +32,7 @@ export interface VendorEnv {
   OPENROUTER_API_KEY?: string | null;
   CEREBRAS_API_KEY?: string | null;
   OLLAMA_API_KEY?: string | null;
+  NVIDIA_API_KEY?: string | null;
 }
 
 export interface VendorCallParams {

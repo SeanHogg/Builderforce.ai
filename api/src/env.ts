@@ -22,6 +22,9 @@ export interface Env {
   /** Ollama Cloud API key — enables paid managed open-weight models.
    *  Set via `wrangler secret put OLLAMA_API_KEY`. */
   OLLAMA_API_KEY?: string;
+  /** NVIDIA NIM API key (build.nvidia.com) — adds free NVIDIA-hosted models to the cascade.
+   *  Set via `wrangler secret put NVIDIA_API_KEY` (or api/.env + `npm run secrets:from-env`). */
+  NVIDIA_API_KEY?: string;
   /** R2 bucket for file uploads. */
   UPLOADS?: R2Bucket;
 
