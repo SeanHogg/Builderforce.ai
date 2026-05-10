@@ -3,7 +3,7 @@
 Typed TypeScript SDK for the [Builderforce.ai](https://builderforce.ai) LLM gateway. OpenAI-compatible chat completions with tool calling and structured output, embeddings, model registry, and usage analytics — all behind a single tenant API key. Vendor failover (OpenRouter / Cerebras / Ollama / Claude / GPT / Gemini / Grok) is handled server-side so your code only knows about Builderforce.
 
 - **Vanilla `fetch` / `AbortController` / `ReadableStream` / `TextDecoder`** — runs on Node 18+, Cloudflare Workers, browsers, edge runtimes.
-- **Zero runtime dependencies.** ~12 kB compressed, ~63 kB unpacked.
+- **Zero runtime dependencies.** ~22 kB compressed, ~100 kB unpacked.
 - **Dual ESM + CJS + `.d.ts`** out of the box.
 
 ## Install
@@ -31,7 +31,7 @@ const res = await client.chat.completions.create({
 console.log(res.choices?.[0]?.message?.content);
 ```
 
-The gateway routes by **request shape** — presence of `tools`, `response_format`, image content blocks, plan tier — so callers don't pass routing intents. For typical request shapes per scenario (recruiter outreach, salary estimate, auto-apply orchestration, etc.) see [docs/SCENARIOS.md](./docs/SCENARIOS.md).
+When you don't pass a `model`, the gateway picks one from your plan's pool and reorders by **request shape** — presence of `tools`, `response_format`, image content blocks. When you do pass a `model`, the gateway treats it as a hint (it tries that model first, may substitute on cooldown / failure — read `_builderforce.resolvedModel` to detect substitution). See [docs/SCENARIOS.md](./docs/SCENARIOS.md) for typical request shapes per scenario.
 
 ## Auth
 
@@ -110,6 +110,8 @@ if (toolCall) {
 ```
 
 `tool_choice` accepts `'auto' | 'none' | 'required' | { type: 'function', function: { name } }`. Presence of `tools` causes the gateway to prefer tool-capable models in the failover chain.
+
+**Dotted tool names work transparently.** Names like `governance.snapshot` or `agile.kanban.list` are accepted by the SDK and the gateway sanitizes them on the way to vendors that reject dots (e.g. Anthropic's `^[a-zA-Z0-9_-]{1,64}$` rule), then restores them on the response. Your tool registry's namespacing is preserved end-to-end.
 
 ## Structured output (JSON mode)
 
@@ -206,18 +208,26 @@ const stream = await client.chat.completions.create({
   messages: [...],
 });
 
-// Idempotent retries (gateway-side dedupe within TTL — coming soon)
-await client.chat.completions.create({
-  idempotencyKey: 'tool-run-42',
-  messages: [...],
-});
+// Idempotent retries — gateway returns 409 idempotent_replay if the same
+// (tenant, key) pair was used in the last 10 min, so cron retries don't double-charge.
+try {
+  await client.chat.completions.create({
+    idempotencyKey: `nightly-summary:${date}:${accountId}`,
+    messages: [...],
+  });
+} catch (err) {
+  if (err instanceof BuilderforceApiError && err.code === 'idempotent_replay') {
+    return null; // first attempt already ran — no-op the retry
+  }
+  throw err;
+}
 ```
 
 | Option | Meaning |
 |---|---|
 | `timeoutMs` | Override client-level timeout for this call. Combined with `signal` (below) — whichever fires first wins. |
 | `signal` | Caller's `AbortSignal` for user-cancellable generation. |
-| `idempotencyKey` | Sent as `Idempotency-Key` header. Gateway dedupes within TTL (planned). |
+| `idempotencyKey` | Sent as `Idempotency-Key` header. Gateway 409s on replay within 10 min so retries can no-op safely. (Response-body cache replay is planned.) |
 
 ## Metadata for billing trace-back
 
@@ -237,6 +247,23 @@ await client.chat.completions.create({
 
 `metadata` is gateway-side only — never forwarded to upstream vendors.
 
+## Pre-emptive throttling
+
+Every successful chat-completion response carries the tenant's daily-budget snapshot — both as headers and inside `_builderforce.dailyTokens`. Read either to throttle before you hit the 429 gate.
+
+```ts
+const res = await client.chat.completions.create({ messages: [...] });
+const { used, limit, remaining } = res._builderforce?.dailyTokens ?? {};
+if (remaining != null && remaining < 50_000) {
+  // Switch to cheaper models, queue background work, page on-call, etc.
+}
+
+// Same numbers are also on the response headers:
+//   x-builderforce-daily-tokens-used
+//   x-builderforce-daily-tokens-limit
+//   x-builderforce-daily-tokens-remaining
+```
+
 ## Errors
 
 ```ts
@@ -255,12 +282,14 @@ try {
 |---|---|---|
 | 408 | `timeout` | SDK-side timeout fired |
 | 499 | `aborted` | Caller's `AbortSignal` aborted |
+| 409 | `idempotent_replay` | `Idempotency-Key` was used within the last 10 min — treat as no-op |
 | 429 | `plan_token_limit_exceeded` | Tenant hit daily plan budget |
-| 429 | `claw_token_limit_exceeded` | Per-claw daily cap exceeded (clk_* keys only) |
-| 503 | `embeddings_not_wired` | Embeddings vendor wiring not yet shipped |
+| 429 | `claw_token_limit_exceeded` | Per-claw daily cap exceeded (`clk_*` keys only) |
+| 503 | (no code) | Vendor key not configured for the active plan tier |
 | 401 | `missing_api_key` | Auth issues |
+| 403 | (varied) | Wrong scope / wrong tenant for the URL |
 
-`error.requestId` comes from the gateway's `x-request-id` header — quote it in support tickets.
+`error.requestId` comes from the gateway's `x-request-id` header — quote it in support tickets. Map gateway 429s to your own 503 + alerting (it's an ops issue, not a user issue).
 
 ## Models and usage
 
@@ -290,7 +319,7 @@ Vendor prefixes (`openrouter/`, `cerebras/`, `ollama/`) explicitly route to that
 
 When `model` is unset the gateway picks from the tenant-plan pool with shape-based reordering — `tools` present → tool-capable models try first, `response_format: 'json_schema'` → structured-output models, image content blocks → vision models. Useful for callers that don't run their own model policy.
 
-If you need *strict* control (no substitution under any condition) — e.g. for evaluations or reproducibility — issue a separate `BuilderforceApiError` retry from your code on a different model rather than relying on the gateway to honor your hint exactly. The gateway's job is availability; yours is policy.
+If you need *strict* control (no substitution under any condition) — e.g. for evaluations or reproducibility — see the [strict-pin pattern in SCENARIOS.md](./docs/SCENARIOS.md#strict-model-pinning-eval--reproducibility). It's a thin client-side helper that throws when `_builderforce.resolvedModel` differs from the request. The gateway's job is availability; yours is policy.
 
 ## Multi-tenancy — one Builderforce key, many of *your* tenants
 
