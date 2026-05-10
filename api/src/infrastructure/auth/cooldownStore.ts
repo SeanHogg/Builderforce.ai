@@ -45,39 +45,94 @@ export function classifyFailure(status: number, hint?: string): CooldownClass {
 
 const cacheKey = (vendor: VendorId, model: string) => `cooldown:${vendor}:${model}`;
 
-// In-memory fallback (per-isolate). Mirrors the legacy behavior when no KV
-// binding is present — never written when KV is bound to avoid drift.
-const memCooldowns = new Map<string, number>();
+// ---------------------------------------------------------------------------
+// Backend abstraction — KV (production) and in-memory (dev/test) implement
+// the same surface so `loadCooldownExpiries` and `recordFailure` each have a
+// single body. Selection is per-call: the binding may be present in prod and
+// absent in tests within the same import.
+// ---------------------------------------------------------------------------
+
+interface CooldownBackend {
+  /** Returns expiry epoch-ms; 0 if cooled with unknown expiry; undefined if not cooled. */
+  read(vendor: VendorId, model: string): Promise<number | undefined>;
+  /** Persists `until` epoch-ms with a `ttlSec` lifetime. Errors are absorbed. */
+  write(vendor: VendorId, model: string, until: number, ttlSec: number, status: number, cls: CooldownClass): Promise<void>;
+}
+
+const memMap = new Map<string, number>();
+
+const memBackend: CooldownBackend = {
+  async read(vendor, model) {
+    const k = cacheKey(vendor, model);
+    const until = memMap.get(k);
+    if (!until) return undefined;
+    if (Date.now() >= until) { memMap.delete(k); return undefined; }
+    return until;
+  },
+  async write(vendor, model, until) {
+    memMap.set(cacheKey(vendor, model), until);
+  },
+};
+
+function kvBackend(kv: KVNamespace): CooldownBackend {
+  return {
+    async read(vendor, model) {
+      const v = await kv.get(cacheKey(vendor, model)).catch(() => null);
+      if (v == null) return undefined;
+      try {
+        const parsed = JSON.parse(v) as { until?: unknown };
+        return typeof parsed?.until === 'number' ? parsed.until : 0;
+      } catch { return 0; /* malformed value — still cooled, expiry unknown */ }
+    },
+    async write(vendor, model, until, ttlSec, status, cls) {
+      await kv.put(
+        cacheKey(vendor, model),
+        JSON.stringify({ cls, status, until }),
+        { expirationTtl: ttlSec },
+      ).catch((err) => {
+        console.warn(`[cooldown] kv.put failed for ${vendor}/${model}: ${err}`);
+      });
+    },
+  };
+}
+
+const backendFor = (env: CooldownEnv): CooldownBackend =>
+  env.AUTH_CACHE_KV ? kvBackend(env.AUTH_CACHE_KV) : memBackend;
+
+// ---------------------------------------------------------------------------
+// Public API — backend-agnostic.
+// ---------------------------------------------------------------------------
 
 /**
- * Bulk-fetch cooldown state for a list of (vendor, model) pairs. Returns the
- * subset currently on cooldown so the dispatcher can filter the chain in
- * a single call (vs. a roundtrip per candidate).
+ * Bulk-fetch cooldown expiry for a list of (vendor, model) pairs. Returns a
+ * Map keyed by `${vendor}/${model}` whose value is the epoch-ms expiry. Pairs
+ * not on cooldown are absent from the map. `0` is used when the entry exists
+ * in KV but the stored value lacks an `until` field (legacy shape) — caller
+ * should treat that as "cooled, expiry unknown".
+ */
+export async function loadCooldownExpiries(
+  env: CooldownEnv,
+  candidates: ReadonlyArray<{ vendor: VendorId; model: string }>,
+): Promise<Map<string, number>> {
+  const backend = backendFor(env);
+  const out = new Map<string, number>();
+  await Promise.all(candidates.map(async ({ vendor, model }) => {
+    const until = await backend.read(vendor, model);
+    if (until !== undefined) out.set(`${vendor}/${model}`, until);
+  }));
+  return out;
+}
+
+/**
+ * Set view of `loadCooldownExpiries` — for callers that only need to filter
+ * the candidate chain and don't care about expiry timestamps.
  */
 export async function loadCooldowns(
   env: CooldownEnv,
   candidates: ReadonlyArray<{ vendor: VendorId; model: string }>,
 ): Promise<Set<string>> {
-  const cooled = new Set<string>();
-  const kv = env.AUTH_CACHE_KV;
-
-  if (!kv) {
-    const now = Date.now();
-    for (const { vendor, model } of candidates) {
-      const k = cacheKey(vendor, model);
-      const until = memCooldowns.get(k);
-      if (until && now < until) cooled.add(`${vendor}/${model}`);
-      else if (until) memCooldowns.delete(k);
-    }
-    return cooled;
-  }
-
-  // KV path — parallel reads.
-  await Promise.all(candidates.map(async ({ vendor, model }) => {
-    const v = await kv.get(cacheKey(vendor, model)).catch(() => null);
-    if (v != null) cooled.add(`${vendor}/${model}`);
-  }));
-  return cooled;
+  const map = await loadCooldownExpiries(env, candidates);
+  return new Set(map.keys());
 }
 
 /**
@@ -94,28 +149,15 @@ export async function recordFailure(
 ): Promise<void> {
   const cls = classifyFailure(status, hint);
   const ttl = TTL_SECONDS[cls];
+  const until = Date.now() + ttl * 1000;
 
-  // Always emit a structured log line so ops can grep for stuck vendors.
   console.warn(
     `[cooldown] ${vendor}/${model} cooled for ${ttl}s — class=${cls} status=${status}` +
     (hint ? ` hint="${hint.slice(0, 120)}"` : ''),
   );
 
-  const kv = env.AUTH_CACHE_KV;
-  if (!kv) {
-    memCooldowns.set(cacheKey(vendor, model), Date.now() + ttl * 1000);
-    return;
-  }
-
-  await kv.put(
-    cacheKey(vendor, model),
-    JSON.stringify({ cls, status, at: Date.now() }),
-    { expirationTtl: ttl },
-  ).catch((err) => {
-    // KV write failures shouldn't break dispatch — log and move on.
-    console.warn(`[cooldown] kv.put failed for ${vendor}/${model}: ${err}`);
-  });
+  await backendFor(env).write(vendor, model, until, ttl, status, cls);
 }
 
 /** Test-only: clear the in-memory map. */
-export function _resetMemoryCooldowns(): void { memCooldowns.clear(); }
+export function _resetMemoryCooldowns(): void { memMap.clear(); }
