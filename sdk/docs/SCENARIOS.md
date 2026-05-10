@@ -1,8 +1,13 @@
 # Scenarios — typical request shapes
 
-Reference catalog showing how callers shape requests for common scenarios. **There is no `useCase` parameter** — the gateway routes by request shape (presence of `tools`, `response_format`, image content blocks, plan tier). Use these as starter shapes, then customize `temperature` / `max_tokens` / `model` / `metadata` as needed.
+Reference catalog showing how callers shape requests for common scenarios. The gateway routes primarily by request **shape** (presence of `tools`, `response_format`, image content blocks, plan tier) and the optional `model` hint. Use these as starter shapes, then customize `temperature` / `max_tokens` / `model` / `metadata` as needed.
 
-The `metadata.feature` field is the recommended way to tag intent for analytics — it's persisted to `llm_usage_log.metadata` but doesn't affect routing.
+Two complementary attribution fields:
+
+- **`useCase`** — opaque telemetry slug, free-form. Persisted to `llm_usage_log.use_case`, echoed back in `_builderforce.useCase`. Use for per-feature spend dashboards.
+- **`metadata`** — free-form key/value pairs for richer trace-back (`{ accountId, userId, sessionId, runner, ... }`). Persisted to `llm_usage_log.metadata` JSONB, echoed back in `_builderforce.metadata`.
+
+Neither affects routing. The examples below show both in context.
 
 ---
 
