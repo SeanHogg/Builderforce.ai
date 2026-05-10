@@ -34,6 +34,7 @@ import {
 import { sanitizeRequestToolNames, restoreResponseToolNames } from './toolNameSanitizer';
 import { loadCooldowns, recordFailure } from '../../infrastructure/auth/cooldownStore';
 import { cerebrasModule, ollamaModule } from './vendors';
+import { validateJsonSchema } from './jsonSchemaValidator';
 
 // ---------------------------------------------------------------------------
 // Pool composition (derived from vendor catalogs — single source of truth)
@@ -546,7 +547,7 @@ function extractAssistantContent(raw: unknown): string | null {
 }
 
 function checkResponseFormatConformance(body: ChatCompletionRequest, raw: unknown): string | null {
-  const rf = (body as { response_format?: { type?: string; json_schema?: { strict?: boolean; schema?: { required?: unknown } } } }).response_format;
+  const rf = (body as { response_format?: { type?: string; json_schema?: { strict?: boolean; schema?: unknown } } }).response_format;
   if (!rf || (rf.type !== 'json_object' && rf.type !== 'json_schema')) return null;
 
   const content = extractAssistantContent(raw);
@@ -559,18 +560,15 @@ function checkResponseFormatConformance(body: ChatCompletionRequest, raw: unknow
     return 'content is not valid JSON';
   }
 
-  if (rf.type === 'json_schema' && rf.json_schema?.strict === true) {
-    const required = rf.json_schema?.schema?.required;
-    if (Array.isArray(required) && required.length > 0) {
-      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        return 'content is JSON but not a top-level object';
-      }
-      const obj = parsed as Record<string, unknown>;
-      for (const field of required as unknown[]) {
-        if (typeof field === 'string' && !(field in obj)) {
-          return `missing required field "${field}"`;
-        }
-      }
+  // Full draft-07-subset validation when strict json_schema is requested.
+  // Catches nested type / enum / required / additionalProperties violations
+  // that the consumer's downstream Zod (or equivalent) would otherwise
+  // bounce back as a 4xx — letting the gateway retry the chain instead.
+  if (rf.type === 'json_schema' && rf.json_schema?.strict === true && rf.json_schema.schema) {
+    const errs = validateJsonSchema(parsed, rf.json_schema.schema, { maxErrors: 5 });
+    if (errs.length > 0) {
+      const summary = errs.map((e) => `${e.path || '<root>'}: ${e.message}`).join('; ');
+      return `schema mismatch (${errs.length}${errs.length >= 5 ? '+' : ''} errors): ${summary}`;
     }
   }
 
