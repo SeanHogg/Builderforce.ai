@@ -432,6 +432,13 @@ export const tenants = pgTable('tenants', {
   externalCustomerId:     varchar('external_customer_id', { length: 255 }),
   externalSubscriptionId: varchar('external_subscription_id', { length: 255 }),
   seatCount:              integer('seat_count'),
+  /**
+   * Superadmin override for the daily token budget.
+   *   NULL  → use the plan default (see PlanLimits.tokenDailyLimit).
+   *   -1    → unlimited; the plan-level gate is skipped.
+   *   >= 0  → use this value instead of the plan default.
+   */
+  tokenDailyLimitOverride: integer('token_daily_limit_override'),
   createdAt:              timestamp('created_at').notNull().defaultNow(),
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),
 });

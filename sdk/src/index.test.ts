@@ -287,6 +287,36 @@ describe('@seanhogg/builderforce-sdk', () => {
     expect(res.data).toHaveLength(2);
   });
 
+  it('surfaces terminal + retryAfter on a 429 plan_token_limit_exceeded', async () => {
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({
+        error: 'Plan daily token limit reached (10,000 tokens). Upgrade to Pro at builderforce.ai/pricing.',
+        code: 'plan_token_limit_exceeded',
+        plan: 'free',
+        dailyLimit: 10_000,
+        usedToday: 10_421,
+        terminal: true,
+        retryAfter: 12_345,
+      }),
+      { status: 429, headers: {
+        'Content-Type': 'application/json',
+        'x-request-id': 'req_xyz',
+        'Retry-After': '12345',
+      } },
+    ));
+    const client = new BuilderforceClient({ apiKey: 'k', fetch: fetchMock as unknown as typeof fetch });
+
+    await expect(client.chat.completions.create({ messages: [{ role: 'user', content: 'hi' }] }))
+      .rejects.toMatchObject({
+        name:       'BuilderforceApiError',
+        status:     429,
+        code:       'plan_token_limit_exceeded',
+        terminal:   true,
+        retryAfter: 12345,
+        requestId:  'req_xyz',
+      });
+  });
+
   it('throws BuilderforceApiError for non-2xx', async () => {
     const fetchMock = vi.fn(async () => new Response(
       JSON.stringify({ error: 'Unauthorized', code: 'unauthorized' }),
