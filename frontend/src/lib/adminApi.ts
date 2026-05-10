@@ -34,6 +34,13 @@ export interface AdminTenant {
   createdAt: string;
   memberCount: number;
   clawCount: number;
+  /**
+   * Superadmin override for the daily token cap.
+   *   null → use plan default
+   *   -1   → unlimited
+   *   >= 0 → use this value
+   */
+  tokenDailyLimitOverride: number | null;
 }
 
 export interface AdminHealth {
@@ -408,6 +415,25 @@ export const adminApi = {
   async tenantMembers(tenantId: number): Promise<TenantMember[]> {
     const res = await adminRequest<{ members: TenantMember[] }>(`/api/admin/tenants/${tenantId}/members`);
     return res.members;
+  },
+
+  /**
+   * Set / clear the superadmin override on the daily token cap.
+   *   null → revert to plan default
+   *   -1   → unlimited
+   *   >= 0 → use this value as the daily token cap
+   */
+  async setTenantTokenLimitOverride(
+    tenantId: number,
+    tokenDailyLimitOverride: number | null,
+  ): Promise<{ id: number; tokenDailyLimitOverride: number | null }> {
+    return adminRequest<{ id: number; tokenDailyLimitOverride: number | null }>(
+      `/api/admin/tenants/${tenantId}/token-limit-override`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ tokenDailyLimitOverride }),
+      },
+    );
   },
 
   async health(): Promise<AdminHealth> {

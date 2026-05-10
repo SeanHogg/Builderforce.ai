@@ -3,14 +3,32 @@ export class BuilderforceApiError extends Error {
   public readonly code?: string;
   public readonly details?: unknown;
   public readonly requestId?: string;
+  /**
+   * `true` when the gateway has signalled this error will not resolve by
+   * retrying on a different model — e.g. plan or per-claw daily token cap
+   * exhausted (those caps are per-tenant, not per-model). Consumer-side
+   * fallback chains should short-circuit when this is set.
+   */
+  public readonly terminal?: boolean;
+  /** Seconds the consumer should wait before retrying — server-supplied. */
+  public readonly retryAfter?: number;
 
-  constructor(message: string, status: number, code?: string, details?: unknown, requestId?: string) {
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+    details?: unknown,
+    requestId?: string,
+    extras?: { terminal?: boolean; retryAfter?: number },
+  ) {
     super(message);
     this.name = 'BuilderforceApiError';
     this.status = status;
     this.code = code;
     this.details = details;
     this.requestId = requestId;
+    this.terminal = extras?.terminal;
+    this.retryAfter = extras?.retryAfter;
   }
 }
 
@@ -132,14 +150,48 @@ export class HttpClient {
   private async toApiError(res: Response): Promise<BuilderforceApiError> {
     const fallback = `Request failed (${res.status})`;
     const requestId = res.headers.get('x-request-id') ?? undefined;
+
+    // Prefer server-supplied `Retry-After` header (seconds) when present; the
+    // body's `retryAfter` is a fallback for environments that strip headers.
+    const headerRetryAfter = parsePositiveInt(res.headers.get('retry-after'));
+
     try {
-      const payload = await res.json() as { error?: string; code?: string; details?: unknown };
-      return new BuilderforceApiError(payload.error ?? fallback, res.status, payload.code, payload.details, requestId);
+      const payload = await res.json() as {
+        error?:      string;
+        code?:       string;
+        details?:    unknown;
+        terminal?:   boolean;
+        retryAfter?: number;
+      };
+      return new BuilderforceApiError(
+        payload.error ?? fallback,
+        res.status,
+        payload.code,
+        payload.details,
+        requestId,
+        {
+          terminal:   payload.terminal,
+          retryAfter: headerRetryAfter ?? payload.retryAfter,
+        },
+      );
     } catch {
       const text = await res.text().catch(() => '');
-      return new BuilderforceApiError(text || fallback, res.status, undefined, undefined, requestId);
+      return new BuilderforceApiError(
+        text || fallback,
+        res.status,
+        undefined,
+        undefined,
+        requestId,
+        headerRetryAfter !== undefined ? { retryAfter: headerRetryAfter } : undefined,
+      );
     }
   }
+}
+
+function parsePositiveInt(s: string | null): number | undefined {
+  if (s == null) return undefined;
+  const n = Number(s);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : undefined;
 }
 
 /**

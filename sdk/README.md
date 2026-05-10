@@ -306,14 +306,36 @@ try {
 | 408 | `timeout` | SDK-side timeout fired |
 | 499 | `aborted` | Caller's `AbortSignal` aborted |
 | 409 | `idempotent_replay` | `Idempotency-Key` was used within the last 10 min — treat as no-op |
-| 429 | `plan_token_limit_exceeded` | Tenant hit daily plan budget |
-| 429 | `claw_token_limit_exceeded` | Per-claw daily cap exceeded (`clk_*` keys only) |
+| 429 | `plan_token_limit_exceeded` | Tenant hit daily plan budget. **`error.terminal === true`** — don't retry on a different model. |
+| 429 | `claw_token_limit_exceeded` | Per-claw daily cap exceeded (`clk_*` keys only). **`error.terminal === true`** — same caveat. |
 | 403 | `origin_not_authorized` | Browser request from an origin not in the key's allowlist (or key has no allowlist — server-only) |
 | 503 | (no code) | Vendor key not configured for the active plan tier |
 | 401 | `missing_api_key` | Auth issues |
 | 403 | (varied) | Wrong scope / wrong tenant for the URL |
 
 `error.requestId` comes from the gateway's `x-request-id` header — quote it in support tickets. Map gateway 429s to your own 503 + alerting (it's an ops issue, not a user issue).
+
+### Don't retry terminal errors
+
+Some failures will not resolve by retrying on a different model — most notably daily token-cap exhaustion, which is per-tenant. The gateway sets `error.terminal === true` on those responses; well-behaved fallback chains should short-circuit:
+
+```ts
+async function callWithFallback(profile: Array<{ model: string; ... }>) {
+  for (const attempt of profile) {
+    try {
+      return await client.chat.completions.create({ model: attempt.model, ... });
+    } catch (err) {
+      if (err instanceof BuilderforceApiError) {
+        if (err.terminal) throw err;       // cap exhausted — different model won't help
+        if (err.code === 'aborted') throw err;
+        // else: retry on next model in profile
+      }
+    }
+  }
+}
+```
+
+`error.retryAfter` (seconds) accompanies cap-exhaustion errors so you can sleep precisely until the next UTC midnight reset rather than polling. The same value is on the `Retry-After` response header.
 
 ## Models and usage
 

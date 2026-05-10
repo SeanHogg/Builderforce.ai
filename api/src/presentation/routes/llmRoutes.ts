@@ -34,6 +34,19 @@ import { getLimits } from '../../domain/tenant/PlanLimits';
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Seconds remaining until the next UTC midnight — when the daily token
+ * counter resets. Surfaced on cap-exhausted 429s as both a `Retry-After`
+ * header and a `retryAfter` field so consumers can sleep precisely
+ * instead of polling.
+ */
+function secondsUntilNextUtcMidnight(): number {
+  const now = Date.now();
+  const next = new Date();
+  next.setUTCHours(24, 0, 0, 0); // midnight tomorrow UTC
+  return Math.max(1, Math.ceil((next.getTime() - now) / 1000));
+}
+
 /** Bulk-insert failover events into llm_failover_log, fire-and-forget. */
 function logFailovers(
   env: HonoEnv['Bindings'],
@@ -121,6 +134,13 @@ type TenantAccess = {
   plan: 'free' | 'pro' | 'teams';
   billingStatus: 'none' | 'pending' | 'active' | 'past_due' | 'cancelled';
   effectivePlan: 'free' | 'pro' | 'teams';
+  /**
+   * Superadmin override for the plan-level daily token cap.
+   *   null → use plan default
+   *   -1   → unlimited (skip the gate)
+   *   >= 0 → use this value
+   */
+  tokenDailyLimitOverride: number | null;
 };
 
 /** Map the string effectivePlan to TenantPlan enum for plan limits lookup. */
@@ -138,10 +158,15 @@ function toTenantPlan(ep: TenantAccess['effectivePlan']): TenantPlan {
 async function resolveTenantPlan(
   c: Context<HonoEnv>,
   tenantId: number,
-): Promise<Pick<TenantAccess, 'plan' | 'billingStatus' | 'effectivePlan'>> {
+): Promise<Pick<TenantAccess, 'plan' | 'billingStatus' | 'effectivePlan' | 'tokenDailyLimitOverride'>> {
   const db = buildDatabase(c.env);
   const [tenantRow] = await db
-    .select({ id: tenants.id, plan: tenants.plan, billingStatus: tenants.billingStatus })
+    .select({
+      id: tenants.id,
+      plan: tenants.plan,
+      billingStatus: tenants.billingStatus,
+      tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
+    })
     .from(tenants)
     .where(eq(tenants.id, tenantId))
     .limit(1);
@@ -153,7 +178,12 @@ async function resolveTenantPlan(
   const effectivePlan: TenantAccess['effectivePlan'] =
     billingStatus === 'active' && (plan === 'pro' || plan === 'teams') ? plan : 'free';
 
-  return { plan, billingStatus, effectivePlan };
+  return {
+    plan,
+    billingStatus,
+    effectivePlan,
+    tokenDailyLimitOverride: tenantRow.tokenDailyLimitOverride ?? null,
+  };
 }
 
 export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAccess> {
@@ -383,7 +413,17 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // Single query — value is reused for both the 429 gate and the
     // X-Builderforce-Daily-Tokens-* response headers callers use to
     // pre-emptively throttle before they hit the gate.
-    const { tokenDailyLimit: planDailyLimit } = getLimits(toTenantPlan(access.effectivePlan));
+    //
+    // Effective plan-level cap (per tenant, per UTC day):
+    //   override === -1   → unlimited (gate skipped, no headers emitted)
+    //   override >= 0     → use override
+    //   override === null → use plan default
+    const planLimitDefault = getLimits(toTenantPlan(access.effectivePlan)).tokenDailyLimit;
+    const override = access.tokenDailyLimitOverride;
+    const planUnlimited = override === -1;
+    const planDailyLimit = planUnlimited
+      ? 0  // 0 disables the plan gate below; real "unlimited" is encoded by planUnlimited
+      : (override !== null && override >= 0 ? override : planLimitDefault);
     const needsTenantUsageQuery =
       planDailyLimit > 0 || (access.clawId !== null && access.clawTokenDailyLimit !== null);
 
@@ -409,6 +449,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           return c.json({
             error: `Per-claw daily token limit reached (${access.clawTokenDailyLimit.toLocaleString()} tokens). Increase the limit in the Builderforce portal under Claws → Settings.`,
             code: 'claw_token_limit_exceeded',
+            // `terminal` tells consumer-side fallback chains "no point retrying
+            // this on a different model — the cap is per-tenant/claw, not per-model."
+            terminal: true,
+            retryAfter: secondsUntilNextUtcMidnight(),
           }, 429);
         }
       }
@@ -426,7 +470,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           plan: access.effectivePlan,
           dailyLimit: planDailyLimit,
           usedToday: usageToday,
-        }, 429);
+          terminal: true,
+          retryAfter: secondsUntilNextUtcMidnight(),
+        }, 429, { 'Retry-After': String(secondsUntilNextUtcMidnight()) });
       }
     }
 
