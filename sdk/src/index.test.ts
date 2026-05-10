@@ -305,6 +305,28 @@ describe('@seanhogg/builderforce-sdk', () => {
     );
   });
 
+  it('binds fetch to globalThis so CF Workers does not raise "Illegal invocation"', async () => {
+    // Regression for v0.5.1. CF Workers' fetch is strict-receiver — calling it
+    // via `this.fetchFn(...)` (an instance method dispatch) would throw
+    // "Illegal invocation: function called with incorrect `this` reference".
+    // The fix binds fetchImpl to globalThis at construction time. This test
+    // proves the binding by passing a strict-receiver fake that throws if
+    // called with the wrong `this`.
+    const strictFetch = function strictFetch(this: unknown, _url: RequestInfo | URL, _init?: RequestInit) {
+      // The implementation must call us with globalThis (or undefined under strict).
+      if (this !== globalThis && this !== undefined) {
+        throw new Error('Illegal invocation: function called with incorrect `this` reference.');
+      }
+      return Promise.resolve(new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      }));
+    };
+
+    const client = new BuilderforceClient({ apiKey: 'k', fetch: strictFetch as unknown as typeof fetch });
+    const res = await client.chat.completions.create({ messages: [{ role: 'user', content: 'hi' }] });
+    expect(res.choices?.[0]?.message?.content).toBe('ok');
+  });
+
   it('aborts request when client-level timeout elapses', async () => {
     const fetchMock = vi.fn((_: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
       init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
