@@ -7,6 +7,7 @@
  */
 
 import { cerebrasModule } from './cerebras';
+import { nvidiaModule } from './nvidia';
 import { ollamaModule } from './ollama';
 import { openRouterModule } from './openrouter';
 import {
@@ -21,11 +22,12 @@ import {
   type VendorStreamResult,
 } from './types';
 
-const MODULES: ReadonlyArray<VendorModule> = [openRouterModule, cerebrasModule, ollamaModule];
+const MODULES: ReadonlyArray<VendorModule> = [openRouterModule, cerebrasModule, nvidiaModule, ollamaModule];
 
 const MODULES_BY_ID: Record<VendorId, VendorModule> = {
   openrouter: openRouterModule,
   cerebras:   cerebrasModule,
+  nvidia:     nvidiaModule,
   ollama:     ollamaModule,
 };
 
@@ -46,6 +48,7 @@ for (const mod of MODULES) {
 const VENDOR_PREFIXES: ReadonlyArray<{ prefix: string; vendor: VendorId }> = [
   { prefix: 'openrouter/', vendor: 'openrouter' },
   { prefix: 'cerebras/',   vendor: 'cerebras' },
+  { prefix: 'nim/',        vendor: 'nvidia' },
   { prefix: 'ollama/',     vendor: 'ollama' },
 ];
 

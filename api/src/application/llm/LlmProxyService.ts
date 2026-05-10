@@ -679,12 +679,26 @@ const VISION_MODELS: ReadonlySet<string> = new Set([
   'anthropic/claude-3.7-sonnet',
   'openai/gpt-4.1',
   'google/gemini-2.5-pro',
+  'nvidia/nemotron-nano-12b-v2-vl:free',
+  'microsoft/phi-4-multimodal-instruct',
+]);
+
+/**
+ * OCR-specialized models. Deliberately disjoint from VISION_MODELS — these
+ * are tuned for text extraction, not general visual reasoning, so they should
+ * only float up when the request explicitly signals OCR (via a `useCase`
+ * slug containing "ocr"). On a generic vision request they stay in the pool
+ * at base rank.
+ */
+const OCR_MODELS: ReadonlySet<string> = new Set([
+  'baidu/qianfan-ocr-fast:free',
 ]);
 
 interface ShapeFlags {
   hasTools: boolean;
   hasStructuredOutput: boolean;
   hasVision: boolean;
+  hasOcr: boolean;
 }
 
 function inferShape(body: ChatCompletionRequest): ShapeFlags {
@@ -701,7 +715,13 @@ function inferShape(body: ChatCompletionRequest): ShapeFlags {
     );
   });
 
-  return { hasTools, hasStructuredOutput, hasVision };
+  // OCR is signalled via `useCase` slug — the SDK's free-form telemetry tag.
+  // Substring match on /ocr/i so tenant slugs like `invoice_ocr` or
+  // `receipt_ocr_extract` light up the route without needing an enum.
+  const useCase = typeof b.useCase === 'string' ? b.useCase : '';
+  const hasOcr = /ocr/i.test(useCase);
+
+  return { hasTools, hasStructuredOutput, hasVision, hasOcr };
 }
 
 /**
@@ -719,12 +739,13 @@ export function reorderPoolByShape(
   pool: readonly string[],
 ): readonly string[] {
   const shape = inferShape(body);
-  if (!shape.hasTools && !shape.hasStructuredOutput && !shape.hasVision) {
+  if (!shape.hasTools && !shape.hasStructuredOutput && !shape.hasVision && !shape.hasOcr) {
     return pool;
   }
 
   const score = (model: string): number => {
     let s = 0;
+    if (shape.hasOcr              && OCR_MODELS.has(model))               s += 8;
     if (shape.hasVision           && VISION_MODELS.has(model))            s += 4;
     if (shape.hasTools            && TOOL_CAPABLE_MODELS.has(model))      s += 2;
     if (shape.hasStructuredOutput && STRUCTURED_OUTPUT_MODELS.has(model)) s += 1;
