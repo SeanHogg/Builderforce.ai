@@ -21,6 +21,7 @@ import {
   mintTenantApiKey,
   listTenantApiKeys,
   revokeTenantApiKey,
+  updateTenantApiKey,
 } from '../../application/llm/tenantApiKeyService';
 
 /**
@@ -73,6 +74,24 @@ export function createTenantApiKeyRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const keys = await listTenantApiKeys(db, tenantId);
     return c.json({ keys });
+  });
+
+  // PATCH /api/tenants/:tenantId/api-keys/:keyId — partial update (name, allowedOrigins)
+  router.patch('/:keyId', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const keyId    = c.req.param('keyId');
+    const body     = await c.req.json<{ name?: string; allowedOrigins?: string[] | null }>()
+      .catch(() => ({} as { name?: string; allowedOrigins?: string[] | null }));
+
+    const updated = await updateTenantApiKey(db, {
+      tenantId,
+      keyId,
+      ...(typeof body.name === 'string' ? { name: body.name } : {}),
+      ...(body.allowedOrigins !== undefined ? { allowedOrigins: normalizeOrigins(body.allowedOrigins) } : {}),
+      env: c.env,
+    });
+    if (!updated) return c.json({ error: 'Key not found, revoked, or no fields to update' }, 404);
+    return c.json({ key: updated });
   });
 
   // DELETE /api/tenants/:tenantId/api-keys/:keyId

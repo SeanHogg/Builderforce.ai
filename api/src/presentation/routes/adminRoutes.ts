@@ -62,6 +62,7 @@ import {
   mintTenantApiKey,
   listTenantApiKeys,
   revokeTenantApiKey,
+  updateTenantApiKey,
 } from '../../application/llm/tenantApiKeyService';
 import { normalizeOrigins } from './tenantApiKeyRoutes';
 import {
@@ -2528,6 +2529,25 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       allowedOrigins: normalizeOrigins(body.allowedOrigins),
     });
     return c.json(minted, 201);
+  });
+
+  router.patch('/tenants/:tenantId/api-keys/:keyId', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = Number(c.req.param('tenantId'));
+    if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
+    const keyId = c.req.param('keyId');
+    const body = await c.req.json<{ name?: string; allowedOrigins?: string[] | null }>()
+      .catch(() => ({} as { name?: string; allowedOrigins?: string[] | null }));
+
+    const updated = await updateTenantApiKey(db, {
+      tenantId,
+      keyId,
+      ...(typeof body.name === 'string' ? { name: body.name } : {}),
+      ...(body.allowedOrigins !== undefined ? { allowedOrigins: normalizeOrigins(body.allowedOrigins) } : {}),
+      env: c.env,
+    });
+    if (!updated) return c.json({ error: 'Key not found, revoked, or no fields to update' }, 404);
+    return c.json({ key: updated });
   });
 
   router.delete('/tenants/:tenantId/api-keys/:keyId', async (c) => {

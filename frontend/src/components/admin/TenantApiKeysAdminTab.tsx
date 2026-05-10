@@ -10,6 +10,7 @@ import {
 import { MintedTenantApiKeyDisplay } from '@/components/MintedTenantApiKeyDisplay';
 import { AllowedOriginsField } from '@/components/AllowedOriginsField';
 import { AllowedOriginsBadge } from '@/components/AllowedOriginsBadge';
+import { TenantApiKeyEditor } from '@/components/TenantApiKeyEditor';
 
 /**
  * Superadmin tab for minting / listing / revoking tenant `bfk_*` keys
@@ -28,6 +29,8 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
   const [creating, setCreating] = useState(false);
   const [revealedKey, setRevealedKey] = useState<AdminMintedTenantApiKey | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // Load tenant list when the tab becomes active.
   useEffect(() => {
@@ -78,6 +81,21 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
       setError(e instanceof Error ? e.message : 'Mint failed');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleEdit = async (keyId: string, patch: { name?: string; allowedOrigins?: string[] | null }) => {
+    if (tenantId == null) return;
+    setSavingEdit(true);
+    setError(null);
+    try {
+      const updated = await adminApi.updateTenantApiKey(tenantId, keyId, patch);
+      setKeys((prev) => prev.map((k) => k.id === keyId ? updated : k));
+      setEditingKeyId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Update failed');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -195,9 +213,10 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
               <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</td></tr>
             ) : keys.length === 0 ? (
               <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No keys for this tenant.</td></tr>
-            ) : keys.map((k) => {
+            ) : keys.flatMap((k) => {
               const revoked = !!k.revokedAt;
-              return (
+              const isEditing = editingKeyId === k.id;
+              const rows = [
                 <tr key={k.id} style={{ opacity: revoked ? 0.5 : 1 }}>
                   <td>{k.name}</td>
                   <td><AllowedOriginsBadge allowedOrigins={k.allowedOrigins} /></td>
@@ -205,20 +224,45 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
                   <td>{fmtDate(k.createdAt)}</td>
                   <td>{fmtDate(k.lastUsedAt)}</td>
                   <td>{revoked ? `Revoked ${fmtDate(k.revokedAt)}` : 'Active'}</td>
-                  <td>
-                    {!revoked && (
-                      <button
-                        type="button"
-                        className="btn-ghost"
-                        onClick={() => void handleRevoke(k.id)}
-                        disabled={revoking === k.id}
-                      >
-                        {revoking === k.id ? '…' : 'Revoke'}
-                      </button>
+                  <td style={{ display: 'flex', gap: 6 }}>
+                    {!revoked && !isEditing && (
+                      <>
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          onClick={() => setEditingKeyId(k.id)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          onClick={() => void handleRevoke(k.id)}
+                          disabled={revoking === k.id}
+                        >
+                          {revoking === k.id ? '…' : 'Revoke'}
+                        </button>
+                      </>
                     )}
                   </td>
-                </tr>
-              );
+                </tr>,
+              ];
+              if (isEditing) {
+                rows.push(
+                  <tr key={`${k.id}-edit`}>
+                    <td colSpan={7} style={{ background: 'var(--bg-base)' }}>
+                      <TenantApiKeyEditor
+                        initialName={k.name}
+                        initialAllowedOrigins={k.allowedOrigins}
+                        onSave={(patch) => handleEdit(k.id, patch)}
+                        onCancel={() => setEditingKeyId(null)}
+                        saving={savingEdit}
+                      />
+                    </td>
+                  </tr>,
+                );
+              }
+              return rows;
             })}
           </tbody>
         </table>

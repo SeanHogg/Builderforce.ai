@@ -113,6 +113,82 @@ export async function listTenantApiKeys(db: Db, tenantId: number): Promise<Tenan
   return rows.map((r) => ({ ...r, allowedOrigins: deserializeOrigins(r.allowedOrigins) }));
 }
 
+export interface UpdateTenantApiKeyInput {
+  tenantId: number;
+  keyId:    string;
+  /** When provided, replaces the existing name. Empty string is rejected. */
+  name?:    string;
+  /**
+   * When provided (including explicit `null`), replaces the existing origin
+   * allowlist. `undefined` leaves the existing value untouched.
+   */
+  allowedOrigins?: string[] | null;
+  /** Required to invalidate the auth cache so the new policy takes effect immediately. */
+  env?: Env;
+}
+
+/**
+ * Partial update for a tenant API key — name and/or allowed origins. Returns
+ * the updated row, or `null` when no key matches the (tenantId, keyId) pair
+ * or when the key is revoked. Always invalidates the auth cache when an
+ * `env` is provided so the new policy takes effect within ~1 request rather
+ * than waiting for the existing 60s TTL.
+ *
+ * Used by both the owner self-service flow and the superadmin mint-on-behalf
+ * flow (DRY — single source for the partial-update semantics + cache-bust).
+ */
+export async function updateTenantApiKey(
+  db: Db,
+  args: UpdateTenantApiKeyInput,
+): Promise<TenantApiKeyRow | null> {
+  // Build the patch only from fields the caller actually supplied — avoids
+  // accidentally clearing one column when the caller only wanted to set another.
+  const patch: Record<string, unknown> = {};
+  if (typeof args.name === 'string') {
+    const trimmed = args.name.trim();
+    if (trimmed.length === 0) return null; // empty rename is rejected; surface as no-op
+    patch.name = trimmed;
+  }
+  if (args.allowedOrigins !== undefined) {
+    patch.allowedOrigins = serializeOrigins(args.allowedOrigins);
+  }
+  if (Object.keys(patch).length === 0) return null;
+
+  const [row] = await db
+    .update(tenantApiKeys)
+    .set(patch)
+    .where(and(
+      eq(tenantApiKeys.id, args.keyId),
+      eq(tenantApiKeys.tenantId, args.tenantId),
+      isNull(tenantApiKeys.revokedAt),
+    ))
+    .returning({
+      id:               tenantApiKeys.id,
+      name:             tenantApiKeys.name,
+      keyHash:          tenantApiKeys.keyHash,
+      createdByUserId:  tenantApiKeys.createdByUserId,
+      allowedOrigins:   tenantApiKeys.allowedOrigins,
+      lastUsedAt:       tenantApiKeys.lastUsedAt,
+      revokedAt:        tenantApiKeys.revokedAt,
+      createdAt:        tenantApiKeys.createdAt,
+    });
+  if (!row) return null;
+
+  if (args.env) {
+    await invalidateKeyCache(args.env, 'bfk', row.keyHash);
+  }
+
+  return {
+    id:              row.id,
+    name:            row.name,
+    createdByUserId: row.createdByUserId,
+    allowedOrigins:  deserializeOrigins(row.allowedOrigins),
+    lastUsedAt:      row.lastUsedAt,
+    revokedAt:       row.revokedAt,
+    createdAt:       row.createdAt,
+  };
+}
+
 /**
  * Revoke a key. Returns true if the key existed, was for the given tenant,
  * and was active. Also invalidates the auth cache so the revocation takes
