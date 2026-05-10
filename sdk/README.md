@@ -46,9 +46,25 @@ The SDK sends `Authorization: Bearer <apiKey>` automatically. The gateway accept
 
 | Prefix | Issued by | Best for |
 |---|---|---|
-| `bfk_*` | `POST /api/tenants/:tenantId/api-keys` (owner-only) | Tenant apps (server-to-server). Long-lived, tenant-scoped, revocable. |
+| `bfk_*` | `POST /api/tenants/:tenantId/api-keys` (owner-only) | Tenant apps (server-to-server). Long-lived, tenant-scoped, revocable, optional origin allowlist. |
 | `clk_*` | `POST /api/claws` (CoderClaw registration) | Self-hosted CoderClaw instances; carries optional per-claw daily token cap. |
 | Tenant JWT | `POST /api/auth/web/login` → `POST /api/auth/tenant-token` | Browser-side calls from a logged-in user. Short-lived. |
+
+### Browser use & origin allowlist
+
+By default, every `bfk_*` is a **server-only** key — any request that arrives with an `Origin` header (i.e. came from a browser) is rejected with `403`. This protects against the common failure mode of leaking a long-lived secret through devtools.
+
+To use a key from a browser, register the allowed origins when minting it (in the portal at `/settings/api-keys`, or via the SDK):
+
+| Allowlist | Browser behaviour |
+|---|---|
+| `null` (default) | Server-only. Browser requests rejected. |
+| `['https://app.example.com']` | Browser calls allowed only from `https://app.example.com`. Exact match — no port/subdomain wildcards. |
+| `['*']` | Any origin allowed. Escape hatch — equivalent to shipping a long-lived secret to the world. Don't. |
+
+When you change a key's allowlist later, in-flight calls are unaffected; new calls take the new policy on the next request.
+
+The SDK preflight headers (`Authorization`, `Idempotency-Key`, `Content-Type`) and exposed response headers (`x-builderforce-daily-tokens-*`, `x-request-id`) are all configured on the gateway's CORS policy — your origin only needs to be in your key's allowlist.
 
 ## Streaming chat
 

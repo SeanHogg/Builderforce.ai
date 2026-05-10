@@ -1239,6 +1239,8 @@ export interface TenantApiKey {
   id: string;
   name: string;
   createdByUserId: string | null;
+  /** Browser allowlist — null = server-only key. */
+  allowedOrigins: string[] | null;
   lastUsedAt: string | null;
   revokedAt: string | null;
   createdAt: string;
@@ -1248,17 +1250,24 @@ export interface MintTenantApiKeyResult {
   key: string;
   id: string;
   name: string;
+  allowedOrigins: string[] | null;
   createdAt: string;
+}
+
+export interface MintTenantApiKeyInput {
+  name: string;
+  /** null/empty = server-only; ['*'] = any origin; ['https://x', ...] = exact-match allowlist. */
+  allowedOrigins?: string[] | null;
 }
 
 export const tenantApiKeysApi = {
   list: (tenantId: number): Promise<TenantApiKey[]> =>
     request<{ keys: TenantApiKey[] }>(`/api/tenants/${tenantId}/api-keys`).then((r) => r.keys ?? []),
 
-  mint: (tenantId: number, name: string): Promise<MintTenantApiKeyResult> =>
+  mint: (tenantId: number, input: MintTenantApiKeyInput): Promise<MintTenantApiKeyResult> =>
     request<MintTenantApiKeyResult>(`/api/tenants/${tenantId}/api-keys`, {
       method: 'POST',
-      body: JSON.stringify({ name }),
+      body: JSON.stringify(input),
     }),
 
   revoke: (tenantId: number, keyId: string): Promise<void> =>

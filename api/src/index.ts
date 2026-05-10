@@ -272,7 +272,14 @@ export default {
         headers: {
           'Access-Control-Allow-Origin': allow,
           'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+          // SDK-emitted custom headers must be in this list or the browser
+          // will block the preflight: `Idempotency-Key` (cron retries),
+          // `X-Emulation-Token` (admin emulation flow), `X-Claw-Signature`
+          // (claw-relay HMAC).
+          'Access-Control-Allow-Headers': 'Content-Type,Authorization,Idempotency-Key,X-Emulation-Token,X-Claw-Signature',
+          // Echo the daily-budget snapshot headers so SDK consumers in the
+          // browser can pre-emptively throttle without a second fetch.
+          'Access-Control-Expose-Headers': 'x-request-id,x-builderforce-model,x-builderforce-retries,x-builderforce-product,x-builderforce-effective-plan,x-builderforce-daily-tokens-used,x-builderforce-daily-tokens-limit,x-builderforce-daily-tokens-remaining',
           'Access-Control-Max-Age': '86400',
           Vary: 'Origin',
         },

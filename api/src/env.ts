@@ -29,6 +29,17 @@ export interface Env {
    *  Bind in wrangler.toml:  [[durable_objects.bindings]]  name = "TENANT_RATE_LIMITER" */
   TENANT_RATE_LIMITER?: DurableObjectNamespace;
 
+  /**
+   * Optional KV namespace caching API-key → tenant resolutions for ~60s.
+   * Without it, every chat-completion call hits the DB to validate `bfk_*` /
+   * `clk_*`. With it, the auth lookup short-circuits on cache hit.
+   *
+   * Provision once:  `npx wrangler kv:namespace create AUTH_CACHE_KV`
+   * Then bind in wrangler.toml:
+   *   [[kv_namespaces]]  binding = "AUTH_CACHE_KV"  id = "<id from create output>"
+   */
+  AUTH_CACHE_KV?: KVNamespace;
+
   // ---------------------------------------------------------------------------
   // Payment provider (optional — defaults to "manual" if unset)
   // ---------------------------------------------------------------------------

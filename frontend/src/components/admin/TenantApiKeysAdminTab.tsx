@@ -8,6 +8,8 @@ import {
   type AdminMintedTenantApiKey,
 } from '@/lib/adminApi';
 import { MintedTenantApiKeyDisplay } from '@/components/MintedTenantApiKeyDisplay';
+import { AllowedOriginsField } from '@/components/AllowedOriginsField';
+import { AllowedOriginsBadge } from '@/components/AllowedOriginsBadge';
 
 /**
  * Superadmin tab for minting / listing / revoking tenant `bfk_*` keys
@@ -22,6 +24,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
   const [error, setError] = useState<string | null>(null);
 
   const [newName, setNewName] = useState('');
+  const [newAllowedOrigins, setNewAllowedOrigins] = useState<string[] | null>(null);
   const [creating, setCreating] = useState(false);
   const [revealedKey, setRevealedKey] = useState<AdminMintedTenantApiKey | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
@@ -63,13 +66,14 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
     setCreating(true);
     setError(null);
     try {
-      const minted = await adminApi.mintTenantApiKey(tenantId, name);
+      const minted = await adminApi.mintTenantApiKey(tenantId, { name, allowedOrigins: newAllowedOrigins });
       setRevealedKey(minted);
       setKeys((prev) => [
-        { id: minted.id, name: minted.name, createdByUserId: null, lastUsedAt: null, revokedAt: null, createdAt: minted.createdAt },
+        { id: minted.id, name: minted.name, createdByUserId: null, allowedOrigins: minted.allowedOrigins, lastUsedAt: null, revokedAt: null, createdAt: minted.createdAt },
         ...prev,
       ]);
       setNewName('');
+      setNewAllowedOrigins(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Mint failed');
     } finally {
@@ -139,28 +143,38 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
         border: '1px solid var(--border-subtle)',
       }}>
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Mint a new bfk_* key</div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            type="text"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="e.g. hired.video production"
-            disabled={creating || tenantId == null}
-            style={{
-              flex: 1, padding: '8px 12px', fontSize: 13,
-              background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 8,
-            }}
-          />
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={() => void handleMint()}
-            disabled={creating || tenantId == null}
-          >
-            {creating ? 'Minting…' : 'Mint'}
-          </button>
+        <input
+          type="text"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="e.g. hired.video production"
+          disabled={creating || tenantId == null}
+          style={{
+            width: '100%', padding: '8px 12px', fontSize: 13, marginBottom: 14,
+            background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+            border: '1px solid var(--border-subtle)', borderRadius: 8,
+            boxSizing: 'border-box',
+          }}
+        />
+
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8 }}>
+          Browser access
         </div>
+        <AllowedOriginsField
+          value={newAllowedOrigins}
+          onChange={setNewAllowedOrigins}
+          disabled={creating || tenantId == null}
+        />
+
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={() => void handleMint()}
+          disabled={creating || tenantId == null}
+          style={{ marginTop: 8 }}
+        >
+          {creating ? 'Minting…' : 'Mint'}
+        </button>
       </div>
 
       <div className="table-wrap">
@@ -168,6 +182,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
           <thead>
             <tr>
               <th>Name</th>
+              <th>Browser</th>
               <th>Created by</th>
               <th>Created</th>
               <th>Last used</th>
@@ -177,14 +192,15 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</td></tr>
             ) : keys.length === 0 ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No keys for this tenant.</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No keys for this tenant.</td></tr>
             ) : keys.map((k) => {
               const revoked = !!k.revokedAt;
               return (
                 <tr key={k.id} style={{ opacity: revoked ? 0.5 : 1 }}>
                   <td>{k.name}</td>
+                  <td><AllowedOriginsBadge allowedOrigins={k.allowedOrigins} /></td>
                   <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{k.createdByUserId ?? '—'}</td>
                   <td>{fmtDate(k.createdAt)}</td>
                   <td>{fmtDate(k.lastUsedAt)}</td>

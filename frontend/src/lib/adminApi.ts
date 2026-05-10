@@ -897,10 +897,10 @@ export const adminApi = {
     return res.keys ?? [];
   },
 
-  async mintTenantApiKey(tenantId: number, name: string): Promise<AdminMintedTenantApiKey> {
+  async mintTenantApiKey(tenantId: number, input: { name: string; allowedOrigins?: string[] | null }): Promise<AdminMintedTenantApiKey> {
     return adminRequest<AdminMintedTenantApiKey>(`/api/admin/tenants/${tenantId}/api-keys`, {
       method: 'POST',
-      body: JSON.stringify({ name }),
+      body: JSON.stringify(input),
     });
   },
 
@@ -913,6 +913,7 @@ export interface AdminTenantApiKey {
   id: string;
   name: string;
   createdByUserId: string | null;
+  allowedOrigins: string[] | null;
   lastUsedAt: string | null;
   revokedAt: string | null;
   createdAt: string;
@@ -922,5 +923,6 @@ export interface AdminMintedTenantApiKey {
   key: string;
   id: string;
   name: string;
+  allowedOrigins: string[] | null;
   createdAt: string;
 }

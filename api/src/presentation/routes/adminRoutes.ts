@@ -63,6 +63,7 @@ import {
   listTenantApiKeys,
   revokeTenantApiKey,
 } from '../../application/llm/tenantApiKeyService';
+import { normalizeOrigins } from './tenantApiKeyRoutes';
 import {
   buildOtpAuthUrl,
   decryptSecretFromStorage,
@@ -2517,12 +2518,14 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const tenantId = Number(c.req.param('tenantId'));
     if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
     const adminUserId = c.get('userId') as string | undefined;
-    const body = await c.req.json<{ name?: string }>().catch(() => ({} as { name?: string }));
+    const body = await c.req.json<{ name?: string; allowedOrigins?: string[] | null }>()
+      .catch(() => ({} as { name?: string; allowedOrigins?: string[] | null }));
     const name = (body.name ?? '').trim() || 'Admin-issued tenant API key';
     const minted = await mintTenantApiKey(db, {
       tenantId,
       name,
       createdByUserId: adminUserId ?? null,
+      allowedOrigins: normalizeOrigins(body.allowedOrigins),
     });
     return c.json(minted, 201);
   });
@@ -2532,7 +2535,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const tenantId = Number(c.req.param('tenantId'));
     if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
     const keyId = c.req.param('keyId');
-    const ok = await revokeTenantApiKey(db, { tenantId, keyId });
+    const ok = await revokeTenantApiKey(db, { tenantId, keyId, env: c.env });
     if (!ok) return c.json({ error: 'Key not found' }, 404);
     return c.json({ ok: true });
   });
