@@ -7,6 +7,7 @@ import {
   type AdminTenantApiKey,
   type AdminMintedTenantApiKey,
 } from '@/lib/adminApi';
+import { MintedTenantApiKeyDisplay } from '@/components/MintedTenantApiKeyDisplay';
 
 /**
  * Superadmin tab for minting / listing / revoking tenant `bfk_*` keys
@@ -123,30 +124,12 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
       )}
 
       {revealedKey && (
-        <div style={{
-          padding: 16, marginBottom: 16,
-          background: 'var(--bg-base)', borderRadius: 12,
-          border: '1px solid var(--coral-bright, #f4726e)',
-        }}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
-            Save this key now — it will not be shown again
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>{revealedKey.name}</div>
-          <div style={{
-            fontFamily: 'var(--font-mono)', fontSize: 13, padding: '10px 12px',
-            background: 'var(--bg-elevated)', borderRadius: 8, wordBreak: 'break-all',
-            border: '1px solid var(--border-subtle)',
-          }}>
-            {revealedKey.key}
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button type="button" className="btn-primary" onClick={() => void navigator.clipboard.writeText(revealedKey.key)}>
-              Copy
-            </button>
-            <button type="button" className="btn-ghost" onClick={() => setRevealedKey(null)}>
-              Saved it
-            </button>
-          </div>
+        <div style={{ marginBottom: 16 }}>
+          <MintedTenantApiKeyDisplay
+            rawKey={revealedKey.key}
+            name={revealedKey.name}
+            onDismiss={() => setRevealedKey(null)}
+          />
         </div>
       )}
 

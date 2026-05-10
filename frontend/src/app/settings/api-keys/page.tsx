@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { tenantApiKeysApi, type TenantApiKey } from '@/lib/builderforceApi';
 import { getStoredTenant } from '@/lib/auth';
+import { MintedTenantApiKeyDisplay } from '@/components/MintedTenantApiKeyDisplay';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -127,10 +128,6 @@ export default function ApiKeysPage() {
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    void navigator.clipboard.writeText(text);
-  };
-
   return (
     <div style={{ padding: '32px 40px', maxWidth: 720, margin: '0 auto' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>API Keys</h1>
@@ -142,24 +139,12 @@ export default function ApiKeysPage() {
       </p>
 
       {revealedKey && (
-        <div style={{ ...cardStyle, marginBottom: 20, borderColor: 'var(--coral-bright, #f4726e)' }}>
-          <div style={sectionTitle}>Save this key now — it will not be shown again</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>{revealedKey.name}</div>
-          <div style={{
-            fontFamily: 'var(--font-mono)', fontSize: 13, padding: '10px 12px',
-            background: 'var(--bg-elevated)', borderRadius: 8, wordBreak: 'break-all',
-            border: '1px solid var(--border-subtle)',
-          }}>
-            {revealedKey.key}
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button type="button" onClick={() => copyToClipboard(revealedKey.key)} style={buttonPrimary}>
-              Copy
-            </button>
-            <button type="button" onClick={() => setRevealedKey(null)} style={{ ...buttonPrimary, background: 'none' }}>
-              I&apos;ve saved it
-            </button>
-          </div>
+        <div style={{ marginBottom: 20 }}>
+          <MintedTenantApiKeyDisplay
+            rawKey={revealedKey.key}
+            name={revealedKey.name}
+            onDismiss={() => setRevealedKey(null)}
+          />
         </div>
       )}
 

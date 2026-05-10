@@ -18,9 +18,9 @@ npm install @seanhogg/builderforce-sdk
 import { BuilderforceClient } from '@seanhogg/builderforce-sdk';
 
 const client = new BuilderforceClient({
-  apiKey: process.env.BUILDERFORCE_API_KEY!,
+  apiKey:  process.env.BUILDERFORCE_API_KEY!,
+  baseUrl: process.env.BUILDERFORCE_BASE_URL ?? 'https://api.builderforce.ai',
   // Optional:
-  // baseUrl: 'https://api.builderforce.ai',
   // timeoutMs: 60_000,
 });
 
@@ -30,6 +30,13 @@ const res = await client.chat.completions.create({
 
 console.log(res.choices?.[0]?.message?.content);
 ```
+
+**Env-var convention:**
+
+| Var | Required | Value |
+|---|---|---|
+| `BUILDERFORCE_API_KEY` | yes | Your `bfk_*` / `clk_*` / tenant-JWT (mint at `/settings/api-keys`) |
+| `BUILDERFORCE_BASE_URL` | no | `https://api.builderforce.ai` (production). Override for staging or self-hosted gateways. |
 
 When you don't pass a `model`, the gateway picks one from your plan's pool and reorders by **request shape** — presence of `tools`, `response_format`, image content blocks. When you do pass a `model`, the gateway treats it as a hint (it tries that model first, may substitute on cooldown / failure — read `_builderforce.resolvedModel` to detect substitution). See [docs/SCENARIOS.md](./docs/SCENARIOS.md) for typical request shapes per scenario.
 
