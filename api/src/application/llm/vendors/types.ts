@@ -176,6 +176,48 @@ export const CASCADE_STATUSES: ReadonlySet<number> = new Set<number>([
 
 const AUTH_STATUSES: ReadonlySet<number> = new Set<number>([401, 403]);
 
+/**
+ * Per-vendor-call timeout. Caller (SDK) sets the *outer* deadline for the
+ * whole request; this is the *inner* deadline for one vendor attempt. When
+ * a vendor hangs (e.g. OpenRouter free-tier queueing under load), the
+ * inner timeout fires first, the dispatcher advances to the next candidate,
+ * and the caller still has budget left for another try.
+ *
+ * 25s gives a 60s outer-budget room for ~2 attempts (incl. retry overhead).
+ * Tunable via `VENDOR_CALL_TIMEOUT_MS` env if a deployment needs different.
+ */
+const DEFAULT_VENDOR_CALL_TIMEOUT_MS = 25_000;
+
+/**
+ * Wrap a vendor fetch in a per-call timeout. On timeout, abort the underlying
+ * request AND throw a `VendorRetryableError` so the dispatcher advances. On
+ * any other network error, surface as a retryable error too — dispatcher
+ * already classifies these as cascade-eligible.
+ *
+ * Single helper used by both the JSON and streaming transports (DRY).
+ */
+async function fetchWithVendorTimeout(
+  vendorId: VendorId,
+  model: string,
+  endpoint: string,
+  init: RequestInit,
+  timeoutMs: number = DEFAULT_VENDOR_CALL_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(endpoint, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (controller.signal.aborted) {
+      throw new VendorRetryableError(vendorId, model, 408, `vendor timed out after ${timeoutMs}ms`);
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new VendorRetryableError(vendorId, model, 0, `network: ${msg}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Shared HTTP transport for non-streaming requests
 // ---------------------------------------------------------------------------
@@ -193,22 +235,18 @@ export async function executeChatCompletion(args: {
   const { vendorId, endpoint, apiKey, model, body, headers, title } = args;
   const parseResponse = args.parseResponse ?? parseOpenAIResponse;
 
-  let resp: Response;
-  try {
-    resp = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'X-Title': title ?? 'Builderforce.ai',
-        ...(headers ?? {}),
-      },
-      body: JSON.stringify(body),
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new VendorRetryableError(vendorId, model, 0, `network: ${msg}`);
-  }
+  // Per-vendor timeout — see fetchWithVendorTimeout for rationale. Throws
+  // VendorRetryableError on timeout/network, so the catch block above is gone.
+  const resp = await fetchWithVendorTimeout(vendorId, model, endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'X-Title': title ?? 'Builderforce.ai',
+      ...(headers ?? {}),
+    },
+    body: JSON.stringify(body),
+  });
 
   if (resp.ok) {
     const raw = await resp.json();
@@ -261,22 +299,16 @@ export async function executeChatCompletionStream(args: {
 }): Promise<VendorStreamResult> {
   const { vendorId, endpoint, apiKey, model, body, headers, title } = args;
 
-  let resp: Response;
-  try {
-    resp = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'X-Title': title ?? 'Builderforce.ai',
-        ...(headers ?? {}),
-      },
-      body: JSON.stringify({ ...body, stream: true }),
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new VendorRetryableError(vendorId, model, 0, `network: ${msg}`);
-  }
+  const resp = await fetchWithVendorTimeout(vendorId, model, endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'X-Title': title ?? 'Builderforce.ai',
+      ...(headers ?? {}),
+    },
+    body: JSON.stringify({ ...body, stream: true }),
+  });
 
   if (!resp.ok) {
     const errText = (await resp.text()).slice(0, 400);

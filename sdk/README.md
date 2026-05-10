@@ -248,7 +248,7 @@ try {
 
 | Option | Meaning |
 |---|---|
-| `timeoutMs` | Override client-level timeout for this call. Combined with `signal` (below) — whichever fires first wins. |
+| `timeoutMs` | Override client-level timeout for this call. Combined with `signal` (below) — whichever fires first wins. **This is the *whole-request* budget**; the gateway enforces a separate ~25s per-vendor-call timeout so a single slow vendor doesn't eat the whole budget. With the default 60s `timeoutMs`, the gateway can typically try 2 candidate models before the SDK aborts. |
 | `signal` | Caller's `AbortSignal` for user-cancellable generation. |
 | `idempotencyKey` | Sent as `Idempotency-Key` header. Gateway 409s on replay within 10 min so retries can no-op safely. (Response-body cache replay is planned.) |
 

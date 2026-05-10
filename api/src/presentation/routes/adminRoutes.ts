@@ -98,12 +98,12 @@ function coercePermissions(value: unknown): string[] {
 
 /** Status entry for one model in the admin LLM panel — shared shape whether
  *  the pool is live (real cooldown state) or fake (no key configured). */
-function poolStatus(
+async function poolStatus(
   env: ProxyEnv,
   hasKey: boolean,
   pool: readonly string[],
   productName: ProductName,
-): Array<{ model: string; preferred: boolean; available: boolean; cooldownUntil?: number }> {
+): Promise<Array<{ model: string; preferred: boolean; available: boolean; cooldownUntil?: number }>> {
   if (!hasKey) {
     return pool.map((model, i) => ({ model, preferred: i < PREFERRED_POOL_SIZE, available: true }));
   }
@@ -1247,8 +1247,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     }>;
 
     // LLM model pool — include both Free + Pro pools, with live cooldown state when keys are available.
-    const freeModelPool = poolStatus(c.env, !!c.env.OPENROUTER_API_KEY,                                  FREE_MODEL_POOL,     'builderforceLLM');
-    const proModelPool  = poolStatus(c.env, !!(c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY), PRO_PAID_MODEL_POOL, 'builderforceLLMPro');
+    const [freeModelPool, proModelPool] = await Promise.all([
+      poolStatus(c.env, !!c.env.OPENROUTER_API_KEY,                                  FREE_MODEL_POOL,     'builderforceLLM'),
+      poolStatus(c.env, !!(c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY), PRO_PAID_MODEL_POOL, 'builderforceLLMPro'),
+    ]);
 
     const modelPool = [...freeModelPool, ...proModelPool];
 

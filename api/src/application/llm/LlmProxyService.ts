@@ -32,6 +32,8 @@ import {
   type VendorId,
 } from './vendors';
 import { sanitizeRequestToolNames, restoreResponseToolNames } from './toolNameSanitizer';
+import { loadCooldowns, recordFailure } from '../../infrastructure/auth/cooldownStore';
+import { cerebrasModule, ollamaModule } from './vendors';
 
 // ---------------------------------------------------------------------------
 // Pool composition (derived from vendor catalogs — single source of truth)
@@ -109,26 +111,16 @@ export interface ProxyEnv extends VendorEnv {
   /** Pro-tier OpenRouter key. Used in place of OPENROUTER_API_KEY when the
    *  proxy was constructed with a Pro/Teams productName. */
   OPENROUTER_API_KEY_PRO?: string | null;
+  /** Optional KV namespace for persistent cooldown + key-resolution caching.
+   *  When unset, both fall back to in-memory per-isolate state. */
+  AUTH_CACHE_KV?: KVNamespace;
 }
 
 // ---------------------------------------------------------------------------
-// Cooldown tracker (per-isolate, in-memory)
+// Cooldown tracking lives in `infrastructure/auth/cooldownStore.ts` — KV-backed
+// when the namespace is bound, in-memory fallback otherwise. See that module
+// for the classification → TTL table.
 // ---------------------------------------------------------------------------
-
-const cooldowns = new Map<string, number>();
-const COOLDOWN_MS = 60_000;
-
-function cooldownKey(vendor: VendorId, model: string): string { return `${vendor}/${model}`; }
-function markCooldown(vendor: VendorId, model: string): void {
-  cooldowns.set(cooldownKey(vendor, model), Date.now() + COOLDOWN_MS);
-}
-function isOnCooldown(vendor: VendorId, model: string): boolean {
-  const k = cooldownKey(vendor, model);
-  const until = cooldowns.get(k);
-  if (!until) return false;
-  if (Date.now() >= until) { cooldowns.delete(k); return false; }
-  return true;
-}
 
 // ---------------------------------------------------------------------------
 // Round-robin cursor (per-isolate)
@@ -184,27 +176,63 @@ export class LlmProxyService {
     body: ChatCompletionRequest,
     requestHeaders?: Record<string, string>,
   ): Promise<ProxyResult> {
-    const reorderedPool = reorderPoolByShape(body, this.modelPool);
+    // 1) Pool composition: prepend fast cross-vendor models (Cerebras, Ollama)
+    //    when their keys are bound — sub-200ms TTFT for Cerebras beats
+    //    OpenRouter free-tier under load. The OpenRouter pool stays in place
+    //    behind them so we keep the existing breadth.
+    const fastVendorHead = this.fastVendorHead();
+    const basePool: readonly string[] = [
+      ...fastVendorHead,
+      ...this.modelPool.filter((m) => !fastVendorHead.includes(m)),
+    ];
+    const reorderedPool = reorderPoolByShape(body, basePool);
+
+    // 2) Caller hint goes at the head; rest of the pool follows.
     const callerModel = (body as { model?: unknown }).model;
     const seed: readonly string[] = (typeof callerModel === 'string' && callerModel.length > 0)
       ? [callerModel, ...reorderedPool.filter((m) => m !== callerModel)]
       : reorderedPool;
-    const candidates = this.buildCandidateChain(seed);
+
+    // 3) Pre-fetch cooldown state for the seed (KV-backed when bound, in-memory
+    //    fallback otherwise). One bulk read; the chain composer filters
+    //    synchronously against the resulting set.
+    const cooledSet = await loadCooldowns(
+      this.env,
+      seed.map((m) => ({ vendor: vendorForModel(m), model: m })),
+    );
+    const candidates = this.buildCandidateChain(seed, cooledSet);
     return this.dispatch(candidates, body, requestHeaders);
   }
 
+  /** Cross-vendor fast-tier models worth trying before the main pool. */
+  private fastVendorHead(): string[] {
+    const env = this.vendorEnv();
+    const head: string[] = [];
+    if (env.CEREBRAS_API_KEY) {
+      // Cerebras free models — sub-200ms TTFT.
+      for (const m of cerebrasModule.catalog) if (m.tier === 'FREE') head.push(m.id);
+    }
+    if (env.OLLAMA_API_KEY) {
+      // Ollama Cloud free entries.
+      for (const m of ollamaModule.catalog) if (m.tier === 'FREE') head.push(m.id);
+    }
+    return head;
+  }
+
   /** Per-model status with cooldown info — used by /v1/models. */
-  status(): Array<{ model: string; preferred: boolean; available: boolean; cooldownUntil?: number; vendor: VendorId }> {
+  async status(): Promise<Array<{ model: string; preferred: boolean; available: boolean; cooldownUntil?: number; vendor: VendorId }>> {
+    const cooledSet = await loadCooldowns(
+      this.env,
+      this.modelPool.map((m) => ({ vendor: vendorForModel(m), model: m })),
+    );
     return this.modelPool.map((model, i) => {
       const vendor = vendorForModel(model);
-      const until = cooldowns.get(cooldownKey(vendor, model));
-      const available = !until || Date.now() >= until;
+      const cooled = cooledSet.has(`${vendor}/${model}`);
       return {
         model,
         vendor,
         preferred: i < this.preferredPoolSize,
-        available,
-        ...(until && !available ? { cooldownUntil: until } : {}),
+        available: !cooled,
       };
     });
   }
@@ -219,12 +247,13 @@ export class LlmProxyService {
    *   4. Deduplicate, preserving first occurrence
    *   5. If everything is on cooldown, fall back to the un-filtered pool
    */
-  private buildCandidateChain(seed: readonly string[]): string[] {
+  private buildCandidateChain(seed: readonly string[], cooledSet: Set<string>): string[] {
     const preferred = seed.slice(0, this.preferredPoolSize);
     const fallback  = seed.slice(this.preferredPoolSize);
 
-    const preferredAvailable = preferred.filter((m) => !isOnCooldown(vendorForModel(m), m));
-    const fallbackAvailable  = fallback.filter((m)  => !isOnCooldown(vendorForModel(m), m));
+    const isCooled = (m: string) => cooledSet.has(`${vendorForModel(m)}/${m}`);
+    const preferredAvailable = preferred.filter((m) => !isCooled(m));
+    const fallbackAvailable  = fallback.filter((m)  => !isCooled(m));
 
     let chain: string[];
     if (preferredAvailable.length > 0) {
@@ -424,8 +453,15 @@ export class LlmProxyService {
     }
   }
 
+  /**
+   * Record cooldowns for every failed attempt. Classification (5 min for
+   * transient, 30 min for auth) lives in `cooldownStore.classifyFailure`.
+   * Fire-and-forget — the dispatch result must not wait for KV writes.
+   */
   private applyCooldowns(attempts: DispatchAttempt[]): void {
-    for (const a of attempts) markCooldown(a.vendor, a.model);
+    for (const a of attempts) {
+      void recordFailure(this.env, a.vendor, a.model, a.status, a.error);
+    }
   }
 }
 
