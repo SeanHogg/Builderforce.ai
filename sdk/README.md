@@ -309,6 +309,8 @@ try {
 | 429 | `plan_token_limit_exceeded` | Tenant hit daily plan budget. **`error.terminal === true`** — don't retry on a different model. |
 | 429 | `claw_token_limit_exceeded` | Per-claw daily cap exceeded (`clk_*` keys only). **`error.terminal === true`** — same caveat. |
 | 403 | `origin_not_authorized` | Browser request from an origin not in the key's allowlist (or key has no allowlist — server-only) |
+| 403 | `strict_pin_not_allowed` | `modelStrict: true` requested on a free tenant without a superadmin daily-limit override — upgrade or drop `modelStrict`. |
+| 503 | `model_unavailable` | `modelStrict: true` and the requested model is on cooldown / unconfigured. `error.details = { requestedModel, reason }`. |
 | 503 | (no code) | Vendor key not configured for the active plan tier |
 | 401 | `missing_api_key` | Auth issues |
 | 403 | (varied) | Wrong scope / wrong tenant for the URL |
@@ -365,7 +367,17 @@ Vendor prefixes (`openrouter/`, `cerebras/`, `ollama/`) explicitly route to that
 
 When `model` is unset the gateway picks from the tenant-plan pool with shape-based reordering — `tools` present → tool-capable models try first, `response_format: 'json_schema'` → structured-output models, image content blocks → vision models. Useful for callers that don't run their own model policy.
 
-If you need *strict* control (no substitution under any condition) — e.g. for evaluations or reproducibility — see the [strict-pin pattern in SCENARIOS.md](./docs/SCENARIOS.md#strict-model-pinning-eval--reproducibility). It's a thin client-side helper that throws when `_builderforce.resolvedModel` differs from the request. The gateway's job is availability; yours is policy.
+If you need *strict* control (no substitution under any condition) — e.g. for evaluations or reproducibility — pass `modelStrict: true` alongside `model`. The gateway runs on that model exactly and returns `503 model_unavailable` (with `details: { requestedModel, reason }`) instead of falling through to another model on cooldown / outage / plan-tier mismatch.
+
+```ts
+const res = await client.chat.completions.create({
+  model: 'openrouter/anthropic/claude-3-haiku',
+  modelStrict: true,
+  messages: [...],
+});
+```
+
+**Entitlement:** strict-pin is paid-plan only (Pro / Teams) — or a free tenant with a superadmin-issued daily-limit override. Free-tier requests with `modelStrict: true` get `403 strict_pin_not_allowed` so a single misbehaving model can't drain the daily budget. For a client-side equivalent that works on every plan, see the [strict-pin pattern in SCENARIOS.md](./docs/SCENARIOS.md#strict-model-pinning-eval--reproducibility).
 
 ## Multi-tenancy — one Builderforce key, many of *your* tenants
 
