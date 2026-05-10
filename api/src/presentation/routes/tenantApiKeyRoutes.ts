@@ -23,6 +23,22 @@ import {
   revokeTenantApiKey,
 } from '../../application/llm/tenantApiKeyService';
 
+/**
+ * Normalize a caller-supplied origins array — trim, drop empties, enforce
+ * `https?://...` shape (or the literal `'*'`). Returns `null` for empty/missing
+ * input so the column stores SQL NULL (server-only key). Single helper used
+ * by both mint endpoints (DRY).
+ */
+export function normalizeOrigins(input: unknown): string[] | null {
+  if (!Array.isArray(input)) return null;
+  const cleaned = input
+    .filter((s): s is string => typeof s === 'string')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .filter((s) => s === '*' || /^https?:\/\/[^\s]+$/.test(s));
+  return cleaned.length > 0 ? cleaned : null;
+}
+
 export function createTenantApiKeyRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
@@ -43,10 +59,12 @@ export function createTenantApiKeyRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId   = c.get('userId') as string;
-    const body     = await c.req.json<{ name?: string }>().catch(() => ({} as { name?: string }));
+    const body     = await c.req.json<{ name?: string; allowedOrigins?: string[] | null }>()
+      .catch(() => ({} as { name?: string; allowedOrigins?: string[] | null }));
     const name     = (body.name ?? '').trim() || 'Tenant API Key';
+    const allowedOrigins = normalizeOrigins(body.allowedOrigins);
 
-    const minted = await mintTenantApiKey(db, { tenantId, name, createdByUserId: userId });
+    const minted = await mintTenantApiKey(db, { tenantId, name, createdByUserId: userId, allowedOrigins });
     return c.json(minted, 201);
   });
 
@@ -61,7 +79,7 @@ export function createTenantApiKeyRoutes(db: Db): Hono<HonoEnv> {
   router.delete('/:keyId', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const keyId    = c.req.param('keyId');
-    const ok = await revokeTenantApiKey(db, { tenantId, keyId });
+    const ok = await revokeTenantApiKey(db, { tenantId, keyId, env: c.env });
     if (!ok) return c.json({ error: 'Key not found' }, 404);
     return c.json({ ok: true });
   });

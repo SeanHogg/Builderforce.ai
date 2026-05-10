@@ -22,6 +22,8 @@ import {
 import { callOpenRouterEmbeddings } from '../../application/llm/vendors';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, coderclawInstances, tenantApiKeys } from '../../infrastructure/database/schema';
+import { originAllowed } from '../../application/llm/tenantApiKeyService';
+import { resolveKeyCached } from '../../infrastructure/auth/keyResolutionCache';
 import type { FailoverEvent } from '../../application/llm/LlmProxyService';
 import { verifyJwt } from '../../infrastructure/auth/JwtService';
 import { hashSecret } from '../../infrastructure/auth/HashService';
@@ -140,28 +142,35 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
   // Claw API key path: local CoderClaw instances send their raw clk_xxx key
   // directly as the Bearer token rather than exchanging it for a JWT first.
   if (token.startsWith('clk_')) {
-    const db = buildDatabase(c.env);
     const keyHash = await hashSecret(token);
-    const [claw] = await db
-      .select({
-        id:               coderclawInstances.id,
-        tenantId:         coderclawInstances.tenantId,
-        status:           coderclawInstances.status,
-        tokenDailyLimit:  coderclawInstances.tokenDailyLimit,
-      })
-      .from(coderclawInstances)
-      .where(eq(coderclawInstances.apiKeyHash, keyHash))
-      .limit(1);
 
-    if (!claw || claw.status !== 'active') {
-      throw new Error('Invalid or inactive claw API key');
-    }
+    const resolved = await resolveKeyCached(c.env, 'clk', keyHash, async () => {
+      const db = buildDatabase(c.env);
+      const [r] = await db
+        .select({
+          id:               coderclawInstances.id,
+          tenantId:         coderclawInstances.tenantId,
+          status:           coderclawInstances.status,
+          tokenDailyLimit:  coderclawInstances.tokenDailyLimit,
+        })
+        .from(coderclawInstances)
+        .where(eq(coderclawInstances.apiKeyHash, keyHash))
+        .limit(1);
+      if (!r || r.status !== 'active') return { ok: false, reason: 'Invalid or inactive claw API key' };
+      return {
+        ok: true,
+        payload: { id: r.id, tenantId: r.tenantId, tokenDailyLimit: r.tokenDailyLimit ?? null },
+      };
+    });
+
+    if (!resolved.ok) throw new Error(resolved.reason);
+    const claw = resolved.payload as { id: number; tenantId: number; tokenDailyLimit: number | null };
 
     return {
       userId: null,
       tenantId: claw.tenantId,
       clawId: claw.id,
-      clawTokenDailyLimit: claw.tokenDailyLimit ?? null,
+      clawTokenDailyLimit: claw.tokenDailyLimit,
       role: TenantRole.DEVELOPER,
       ...(await resolveTenantPlan(c, claw.tenantId)),
     };
@@ -170,32 +179,63 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
   // Tenant API key path (bfk_*): self-service tenant credential issued from
   // the portal; gateway-only. No claw context — plan-level cap still applies.
   if (token.startsWith('bfk_')) {
-    const db = buildDatabase(c.env);
     const keyHash = await hashSecret(token);
-    const [row] = await db
-      .select({ id: tenantApiKeys.id, tenantId: tenantApiKeys.tenantId, revokedAt: tenantApiKeys.revokedAt })
-      .from(tenantApiKeys)
-      .where(eq(tenantApiKeys.keyHash, keyHash))
-      .limit(1);
 
-    if (!row || row.revokedAt) {
-      throw new Error('Invalid or revoked tenant API key');
+    // KV-cached lookup: ~1ms hit, ~30-80ms miss. Cache entry covers everything
+    // the auth path needs (id, tenantId, allowedOrigins, revoked flag) so a hit
+    // requires zero DB calls. Falls through to DB when AUTH_CACHE_KV is unbound.
+    const resolved = await resolveKeyCached(c.env, 'bfk', keyHash, async () => {
+      const db = buildDatabase(c.env);
+      const [r] = await db
+        .select({
+          id:              tenantApiKeys.id,
+          tenantId:        tenantApiKeys.tenantId,
+          revokedAt:       tenantApiKeys.revokedAt,
+          allowedOrigins:  tenantApiKeys.allowedOrigins,
+        })
+        .from(tenantApiKeys)
+        .where(eq(tenantApiKeys.keyHash, keyHash))
+        .limit(1);
+      if (!r || r.revokedAt) return { ok: false, reason: 'Invalid or revoked tenant API key' };
+      // Pre-parse allowedOrigins so cache hit doesn't have to.
+      let allowlist: string[] | null = null;
+      if (r.allowedOrigins) {
+        try {
+          const parsed = JSON.parse(r.allowedOrigins);
+          if (Array.isArray(parsed)) allowlist = parsed.filter((s) => typeof s === 'string');
+        } catch { /* malformed → server-only */ }
+      }
+      return { ok: true, payload: { id: r.id, tenantId: r.tenantId, allowedOrigins: allowlist } };
+    });
+
+    if (!resolved.ok) throw new Error(resolved.reason);
+    const { id: keyId, tenantId: keyTenantId, allowedOrigins: allowlist } =
+      resolved.payload as { id: string; tenantId: number; allowedOrigins: string[] | null };
+
+    // Origin allowlist enforcement (single source: tenantApiKeyService.originAllowed).
+    const origin = c.req.header('Origin') ?? null;
+    if (!originAllowed(allowlist, origin)) {
+      throw new Error(
+        `Origin '${origin}' is not authorized for this tenant API key. ` +
+        `This key is server-only — to use it from a browser, register the origin in the portal under Settings → API keys.`,
+      );
     }
 
     c.executionCtx.waitUntil(
-      db.update(tenantApiKeys)
+      buildDatabase(c.env)
+        .update(tenantApiKeys)
         .set({ lastUsedAt: new Date() })
-        .where(eq(tenantApiKeys.id, row.id))
+        .where(eq(tenantApiKeys.id, keyId))
         .catch(() => { /* never let bookkeeping fail the request */ }),
     );
 
     return {
       userId: null,
-      tenantId: row.tenantId,
+      tenantId: keyTenantId,
       clawId: null,
       clawTokenDailyLimit: null,
       role: TenantRole.DEVELOPER,
-      ...(await resolveTenantPlan(c, row.tenantId)),
+      ...(await resolveTenantPlan(c, keyTenantId)),
     };
   }
 

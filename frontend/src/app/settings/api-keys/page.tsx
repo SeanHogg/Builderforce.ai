@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { tenantApiKeysApi, type TenantApiKey } from '@/lib/builderforceApi';
 import { getStoredTenant } from '@/lib/auth';
 import { MintedTenantApiKeyDisplay } from '@/components/MintedTenantApiKeyDisplay';
+import { AllowedOriginsField } from '@/components/AllowedOriginsField';
+import { AllowedOriginsBadge } from '@/components/AllowedOriginsBadge';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -57,6 +59,7 @@ export default function ApiKeysPage() {
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
+  const [newAllowedOrigins, setNewAllowedOrigins] = useState<string[] | null>(null);
   const [revealedKey, setRevealedKey] = useState<{ id: string; key: string; name: string } | null>(null);
 
   const [revoking, setRevoking] = useState<string | null>(null);
@@ -100,13 +103,14 @@ export default function ApiKeysPage() {
     setCreating(true);
     setError(null);
     try {
-      const result = await tenantApiKeysApi.mint(tenantId, name);
+      const result = await tenantApiKeysApi.mint(tenantId, { name, allowedOrigins: newAllowedOrigins });
       setRevealedKey({ id: result.id, key: result.key, name: result.name });
       setKeys((prev) => [
-        { id: result.id, name: result.name, createdByUserId: null, lastUsedAt: null, revokedAt: null, createdAt: result.createdAt },
+        { id: result.id, name: result.name, createdByUserId: null, allowedOrigins: result.allowedOrigins, lastUsedAt: null, revokedAt: null, createdAt: result.createdAt },
         ...prev,
       ]);
       setNewName('');
+      setNewAllowedOrigins(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create key');
     } finally {
@@ -150,28 +154,37 @@ export default function ApiKeysPage() {
 
       <div style={{ ...cardStyle, marginBottom: 20 }}>
         <div style={sectionTitle}>Create a new key</div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            type="text"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="e.g. hired.video production"
-            disabled={creating}
-            style={{
-              flex: 1, padding: '8px 12px', fontSize: 13,
-              background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 8,
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => void handleCreate()}
-            disabled={creating || !newName.trim()}
-            style={{ ...buttonPrimary, opacity: creating || !newName.trim() ? 0.5 : 1 }}
-          >
-            {creating ? 'Creating…' : 'Create'}
-          </button>
+        <input
+          type="text"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="e.g. hired.video production"
+          disabled={creating}
+          style={{
+            width: '100%', padding: '8px 12px', fontSize: 13, marginBottom: 14,
+            background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+            border: '1px solid var(--border-subtle)', borderRadius: 8,
+            boxSizing: 'border-box',
+          }}
+        />
+
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8 }}>
+          Browser access
         </div>
+        <AllowedOriginsField
+          value={newAllowedOrigins}
+          onChange={setNewAllowedOrigins}
+          disabled={creating}
+        />
+
+        <button
+          type="button"
+          onClick={() => void handleCreate()}
+          disabled={creating || !newName.trim()}
+          style={{ ...buttonPrimary, opacity: creating || !newName.trim() ? 0.5 : 1, marginTop: 8 }}
+        >
+          {creating ? 'Creating…' : 'Create key'}
+        </button>
       </div>
 
       <div style={cardStyle}>
@@ -205,10 +218,11 @@ export default function ApiKeysPage() {
                     }}
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {k.name}
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <span>{k.name}</span>
+                      <AllowedOriginsBadge allowedOrigins={k.allowedOrigins} />
                       {revoked && (
-                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--bg-surface)', color: 'var(--text-muted)' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--bg-surface)', color: 'var(--text-muted)' }}>
                           Revoked
                         </span>
                       )}

@@ -401,6 +401,10 @@ export const tenantApiKeys = pgTable('tenant_api_keys', {
   name:             varchar('name', { length: 255 }).notNull(),
   keyHash:          varchar('key_hash', { length: 64 }).notNull().unique(),
   createdByUserId:  varchar('created_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  /** Origin allowlist for browser use. NULL = server-only (any request with an `Origin` header is rejected).
+   *  Array of exact origins or single `'*'` for any-origin escape hatch.
+   *  Stored as JSONB on the wire; stringified on insert (drizzle treats `text` here for portability). */
+  allowedOrigins:   text('allowed_origins'),
   lastUsedAt:       timestamp('last_used_at', { withTimezone: true }),
   revokedAt:        timestamp('revoked_at', { withTimezone: true }),
   createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
