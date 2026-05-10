@@ -42,7 +42,13 @@ export class HttpClient {
   constructor(options: HttpClientOptions) {
     this.apiKey = options.apiKey;
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
-    this.fetchFn = options.fetchFn ?? fetch;
+    // Bind to `globalThis` so calling via `this.fetchFn(...)` doesn't trip
+    // Cloudflare Workers' "Illegal invocation" check — the platform's fetch
+    // requires the global receiver, not an instance method `this`. Affects
+    // any environment that ships a strict-receiver fetch (Workers, Bun, etc.)
+    // and is harmless on Node + browsers.
+    const fetchImpl = options.fetchFn ?? fetch;
+    this.fetchFn = fetchImpl.bind(globalThis);
     this.defaultTimeoutMs = options.timeoutMs ?? 60_000;
   }
 
