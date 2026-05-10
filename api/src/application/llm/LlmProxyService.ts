@@ -31,6 +31,7 @@ import {
   type VendorEnv,
   type VendorId,
 } from './vendors';
+import { sanitizeRequestToolNames, restoreResponseToolNames } from './toolNameSanitizer';
 
 // ---------------------------------------------------------------------------
 // Pool composition (derived from vendor catalogs — single source of truth)
@@ -263,21 +264,26 @@ export class LlmProxyService {
     body: ChatCompletionRequest,
     requestHeaders?: Record<string, string>,
   ): Promise<ProxyResult> {
-    const messages = body.messages as unknown as Array<Record<string, unknown>>;
-    const extraBody = stripStandardFields(body);
+    // Sanitize tool names (`governance.snapshot` → `governance__DOT__snapshot`)
+    // before the body reaches a vendor — Anthropic / some Cerebras configs
+    // reject dots. Walks `tools`, `tool_choice`, message `tool_calls`, and
+    // tool-message `name`. Restored in dispatchJson before returning to caller.
+    const sanitizedBody = sanitizeRequestToolNames(body as unknown as Record<string, unknown>) as unknown as ChatCompletionRequest;
+    const messages = sanitizedBody.messages as unknown as Array<Record<string, unknown>>;
+    const extraBody = stripStandardFields(sanitizedBody);
     const callParams = {
       messages,
-      ...(body.max_tokens  != null ? { maxTokens:   body.max_tokens  } : {}),
-      ...(body.temperature != null ? { temperature: body.temperature } : {}),
-      ...(body.top_p       != null ? { topP:        body.top_p       } : {}),
+      ...(sanitizedBody.max_tokens  != null ? { maxTokens:   sanitizedBody.max_tokens  } : {}),
+      ...(sanitizedBody.temperature != null ? { temperature: sanitizedBody.temperature } : {}),
+      ...(sanitizedBody.top_p       != null ? { topP:        sanitizedBody.top_p       } : {}),
       ...(Object.keys(extraBody).length > 0 ? { extraBody } : {}),
       title: this.productName,
     };
 
-    if (body.stream) {
+    if (sanitizedBody.stream) {
       return this.dispatchStream(candidates, callParams, requestHeaders);
     }
-    return this.dispatchJson(candidates, callParams, body);
+    return this.dispatchJson(candidates, callParams, sanitizedBody);
   }
 
   /**
@@ -344,8 +350,11 @@ export class LlmProxyService {
     totalFailovers: FailoverEvent[],
     schemaRetries: number,
   ): ProxyResult {
+    // Restore dotted tool names that the request-side sanitizer escaped, so
+    // `tool_calls[*].function.name` round-trips to the caller's namespace.
+    const restoredRaw = restoreResponseToolNames(result.raw);
     return {
-      response: new Response(JSON.stringify(result.raw), {
+      response: new Response(JSON.stringify(restoredRaw), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       }),

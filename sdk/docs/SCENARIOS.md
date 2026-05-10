@@ -294,11 +294,12 @@ client.chat.completions.create({
 
 ## Embeddings
 
-> Currently 503s with `embeddings_not_wired` — vendor wiring in flight.
+Wired to OpenRouter; default model `nvidia/llama-nemotron-embed-vl-1b-v2:free`. Override via `model`.
 
 ```ts
 client.embeddings.create({
   input: docs.map((d) => d.text),
+  // model: 'openai/text-embedding-3-small',  // optional override
   metadata: { feature: 'doc-index', batchId },
 });
 ```
@@ -327,17 +328,53 @@ for await (const chunk of stream) {
 
 ---
 
-## Idempotent cron jobs
+## Strict model pinning (eval / reproducibility)
 
-For scheduled enrichment / batch jobs that retry, set an `Idempotency-Key`. The gateway will dedupe identical requests within a TTL (planned — header is accepted today but dedup is not yet enforced; safe to ship).
+The gateway treats `model` as a hint and may substitute on cooldown / vendor failure. When you need *strict* pinning (e.g. running an evaluation against one specific model), detect substitution and reject:
 
 ```ts
-client.chat.completions.create({
-  idempotencyKey: `nightly-summary:${date}:${tenantId}`,
-  messages: [...],
-  metadata: { feature: 'nightly-summary', cronJobId: '#15' },
+async function strictPin(params: ChatCompletionCreateParams) {
+  const res = await client.chat.completions.create(params);
+  if (params.model && res._builderforce?.resolvedModel !== params.model) {
+    throw new Error(
+      `Strict pin failed: requested ${params.model}, gateway resolved ${res._builderforce?.resolvedModel}`,
+    );
+  }
+  return res;
+}
+
+// Use in eval runs where reproducibility trumps availability.
+const baseline = await strictPin({
+  model: 'openrouter/anthropic/claude-3-haiku',
+  messages: evalPrompt,
 });
 ```
+
+This is a thin client-side gate. A gateway-side `strict: true` flag (on the request) would let the gateway 503 instead of substituting; logged as a follow-up in the project Gap Register.
+
+## Idempotent cron jobs
+
+For scheduled enrichment / batch jobs that retry, set an `Idempotency-Key`. The gateway tracks `(tenant_id, key)` for **10 minutes** and refuses to re-dispatch — a retry within the window returns `409 idempotent_replay` instead of 200, so cron retries can't double-charge.
+
+```ts
+try {
+  const res = await client.chat.completions.create({
+    idempotencyKey: `nightly-summary:${date}:${tenantId}`,
+    messages: [...],
+    metadata: { feature: 'nightly-summary', cronJobId: '#15' },
+  });
+  return res;
+} catch (err) {
+  if (err instanceof BuilderforceApiError && err.code === 'idempotent_replay') {
+    // The first attempt already ran. Treat this retry as a no-op.
+    // err.details.previousRequest carries { id, createdAt } if you need to find it.
+    return null;
+  }
+  throw err;
+}
+```
+
+Today the gateway returns 409 on replay but does **not** cache and replay the original response body — true response-cache replay requires a Cloudflare KV namespace and is logged as a follow-up in the project Gap Register.
 
 ---
 

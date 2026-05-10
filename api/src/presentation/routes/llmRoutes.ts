@@ -309,11 +309,15 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const callerUseCase  = typeof bodyAny.useCase === 'string' ? bodyAny.useCase : null;
     const idempotencyKey = c.req.header('Idempotency-Key') ?? null;
 
-    // ── Daily token limit checks ────────────────────────────────────────────
+    // ── Daily token usage + limit checks ────────────────────────────────────
+    // Single query — value is reused for both the 429 gate and the
+    // X-Builderforce-Daily-Tokens-* response headers callers use to
+    // pre-emptively throttle before they hit the gate.
     const { tokenDailyLimit: planDailyLimit } = getLimits(toTenantPlan(access.effectivePlan));
     const needsTenantUsageQuery =
       planDailyLimit > 0 || (access.clawId !== null && access.clawTokenDailyLimit !== null);
 
+    let usageToday = 0;
     if (needsTenantUsageQuery) {
       const todayStart = new Date();
       todayStart.setUTCHours(0, 0, 0, 0);
@@ -327,7 +331,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             gte(llmUsageLog.createdAt, todayStart),
           ),
         );
-      const usageToday = Number(usageRow?.used ?? 0);
+      usageToday = Number(usageRow?.used ?? 0);
 
       // Per-claw cap (optional, set per-claw in portal)
       if (access.clawId !== null && access.clawTokenDailyLimit !== null) {
@@ -356,6 +360,35 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       }
     }
 
+    // ── Idempotency-Key replay guard (10-min window) ────────────────────────
+    // MVP: detect that this exact (tenant, key) was already used recently and
+    // refuse to re-dispatch. Returns 409 with the original request id so the
+    // caller can no-op their retry without double-charging. Does NOT cache
+    // and replay the response body — that requires Cloudflare KV (separate
+    // wrangler.toml change; see Gap Register).
+    if (idempotencyKey) {
+      const tenMinAgo = new Date(Date.now() - 10 * 60_000);
+      const db = buildDatabase(c.env);
+      const [prior] = await db
+        .select({ id: llmUsageLog.id, createdAt: llmUsageLog.createdAt })
+        .from(llmUsageLog)
+        .where(
+          and(
+            eq(llmUsageLog.tenantId, access.tenantId),
+            eq(llmUsageLog.idempotencyKey, idempotencyKey),
+            gte(llmUsageLog.createdAt, tenMinAgo),
+          ),
+        )
+        .limit(1);
+      if (prior) {
+        return c.json({
+          error: `Idempotency-Key '${idempotencyKey}' was used at ${prior.createdAt?.toISOString()}. Treat this as a no-op retry.`,
+          code: 'idempotent_replay',
+          previousRequest: { id: prior.id, createdAt: prior.createdAt?.toISOString() },
+        }, 409);
+      }
+    }
+
     const llmProduct = productNameForPlan(access.effectivePlan);
     const isPro = access.effectivePlan !== 'free';
 
@@ -380,6 +413,13 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     upstreamHeaders.set('x-builderforce-retries', String(result.retries));
     upstreamHeaders.set('x-builderforce-product', llmProduct);
     upstreamHeaders.set('x-builderforce-effective-plan', access.effectivePlan);
+    // Daily-token-limit headers — let callers pre-emptively throttle before
+    // they hit the 429 plan_token_limit_exceeded gate.
+    if (planDailyLimit > 0) {
+      upstreamHeaders.set('x-builderforce-daily-tokens-used', String(usageToday));
+      upstreamHeaders.set('x-builderforce-daily-tokens-limit', String(planDailyLimit));
+      upstreamHeaders.set('x-builderforce-daily-tokens-remaining', String(Math.max(planDailyLimit - usageToday, 0)));
+    }
 
     // ── Streaming ────────────────────────────────────────────────────────────
     if (body.stream && result.response.body) {
@@ -438,6 +478,13 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           ...(callerUseCase     ? { useCase:    callerUseCase  } : {}),
           ...(callerMetadata    ? { metadata:   callerMetadata as Record<string, string> } : {}),
           ...(c.req.header('x-request-id') ? { requestId: c.req.header('x-request-id') } : {}),
+          ...(planDailyLimit > 0 ? {
+            dailyTokens: {
+              used:      usageToday,
+              limit:     planDailyLimit,
+              remaining: Math.max(planDailyLimit - usageToday, 0),
+            },
+          } : {}),
         },
       },
       result.response.status as 200,

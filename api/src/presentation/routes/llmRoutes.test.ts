@@ -19,6 +19,64 @@ vi.mock('../../infrastructure/database/connection', () => ({ buildDatabase: mock
 
 // Imports must follow the vi.mock calls above so the mocks are in place.
 const { requireTenantAccess } = await import('./llmRoutes');
+const { sanitizeToolName, restoreToolName, sanitizeRequestToolNames, restoreResponseToolNames } =
+  await import('../../application/llm/toolNameSanitizer');
+
+// ---------------------------------------------------------------------------
+// Tool-name sanitizer — bidirectional dot escape for vendors that reject dots
+// (Anthropic). Sanitizer runs gateway-side; restoration brings the caller's
+// dotted namespace back on the response path.
+// ---------------------------------------------------------------------------
+
+describe('toolNameSanitizer', () => {
+  it('escapes dots and restores them losslessly', () => {
+    const cases = ['governance.snapshot', 'agile.kanban.list', 'no_dots', 'a.b.c.d'];
+    for (const original of cases) {
+      const sanitized = sanitizeToolName(original);
+      expect(sanitized).not.toMatch(/\./);
+      expect(restoreToolName(sanitized)).toBe(original);
+    }
+  });
+
+  it('round-trips a name that already contains the sentinel', () => {
+    const original = 'foo__DOT__bar.baz';
+    expect(restoreToolName(sanitizeToolName(original))).toBe(original);
+  });
+
+  it('walks tools, tool_choice, message tool_calls, and tool messages on request', () => {
+    const body = {
+      tools: [{ type: 'function', function: { name: 'governance.snapshot' } }],
+      tool_choice: { type: 'function', function: { name: 'agile.kanban.list' } },
+      messages: [
+        { role: 'user', content: 'hi' },
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{ id: 'c1', type: 'function', function: { name: 'governance.snapshot', arguments: '{}' } }],
+        },
+        { role: 'tool', name: 'governance.snapshot', tool_call_id: 'c1', content: '{}' },
+      ],
+    };
+    const out = sanitizeRequestToolNames(body) as typeof body;
+    expect(out.tools[0]!.function.name).not.toMatch(/\./);
+    expect((out.tool_choice.function as { name: string }).name).not.toMatch(/\./);
+    expect((out.messages[1]!.tool_calls as Array<{ function: { name: string } }>)[0]!.function.name).not.toMatch(/\./);
+    expect((out.messages[2] as { name: string }).name).not.toMatch(/\./);
+  });
+
+  it('restores tool_calls names in the response', () => {
+    const raw = {
+      choices: [{
+        message: {
+          role: 'assistant',
+          tool_calls: [{ id: 'c1', type: 'function', function: { name: 'governance__DOT__snapshot', arguments: '{}' } }],
+        },
+      }],
+    };
+    const restored = restoreResponseToolNames(raw) as typeof raw;
+    expect(restored.choices[0]!.message.tool_calls[0]!.function.name).toBe('governance.snapshot');
+  });
+});
 
 // ---------------------------------------------------------------------------
 // requireTenantAccess — bfk_* tenant API key path

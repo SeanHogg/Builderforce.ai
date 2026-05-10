@@ -30,11 +30,8 @@ export class EmbeddingsApi {
   }
 
   /**
-   * Create one or more text embeddings.
-   *
-   * NOTE: As of v0.3.0 the gateway accepts the request shape but the underlying
-   * vendor wiring is still being rolled out — calls may currently 503 with
-   * `code: 'embeddings_not_wired'`. Track gateway PRD §6.7.
+   * Create one or more text embeddings. Wired to OpenRouter (default model
+   * `nvidia/llama-nemotron-embed-vl-1b-v2:free`). Override via `model`.
    */
   create(params: EmbeddingsCreateParams): Promise<EmbeddingsResponse> {
     const { body, request } = splitTransportOptions(params);
