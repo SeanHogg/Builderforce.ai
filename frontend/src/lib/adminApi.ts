@@ -43,6 +43,14 @@ export interface AdminTenant {
   tokenDailyLimitOverride: number | null;
 }
 
+export interface LlmModelStatus {
+  model: string;
+  preferred: boolean;
+  available: boolean;
+  /** Epoch ms when the cooldown lifts. Absent when the model is available. */
+  cooldownUntil?: number;
+}
+
 export interface AdminHealth {
   status: string;
   db: { ok: boolean; latencyMs: number };
@@ -56,24 +64,9 @@ export interface AdminHealth {
   };
   llm: {
     pool: number;
-    models: Array<{
-      model: string;
-      preferred: boolean;
-      available: boolean;
-      cooldownUntil?: number;
-    }>;
-    free: Array<{
-      model: string;
-      preferred: boolean;
-      available: boolean;
-      cooldownUntil?: number;
-    }>;
-    pro: Array<{
-      model: string;
-      preferred: boolean;
-      available: boolean;
-      cooldownUntil?: number;
-    }>;
+    models: LlmModelStatus[];
+    free: LlmModelStatus[];
+    pro: LlmModelStatus[];
   };
   timestamp: string;
 }

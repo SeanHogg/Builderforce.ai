@@ -25,6 +25,7 @@ import {
   type PlatformModule,
   type AuditLogEntry,
   type ImpersonationSession,
+  type LlmModelStatus,
   type TenantMember,
   type UserWorkspace,
 } from '@/lib/adminApi';
@@ -95,6 +96,47 @@ function fmtDateTime(d: string) {
 
 function fmtNum(n: number | string) {
   return Number(n).toLocaleString();
+}
+
+/**
+ * Renders one labelled grid of model badges for a pool (Free or Premium).
+ * Single source of truth for the in/out-of-rotation visual — `available` drives
+ * color, `cooldownUntil` drives the tooltip and an inline "(cooldown)" tag.
+ * Returns null when the pool is empty so consumers don't have to gate it.
+ */
+function ModelPoolBadges({
+  label,
+  keyPrefix,
+  models,
+}: {
+  label: string;
+  keyPrefix: string;
+  models: ReadonlyArray<LlmModelStatus>;
+}) {
+  if (models.length === 0) return null;
+  return (
+    <div>
+      <div className="health-label" style={{ marginBottom: 8 }}>{label} ({models.length})</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {models.map((m) => (
+          <span
+            key={`${keyPrefix}-${m.model}`}
+            style={{
+              padding: '4px 8px',
+              borderRadius: 6,
+              fontSize: 12,
+              background: m.available ? 'var(--success-bg, #d1fae5)' : 'var(--error-bg, #fee2e2)',
+              color: m.available ? 'var(--success-text)' : 'var(--error-text)',
+            }}
+            title={m.cooldownUntil ? `Cooldown until ${new Date(m.cooldownUntil).toLocaleString()}` : m.available ? 'Available' : 'Unavailable (rate limit or error)'}
+          >
+            {m.preferred ? '★ ' : ''}{m.model}
+            {m.cooldownUntil && !m.available ? ' (cooldown)' : ''}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function AdminPage() {
@@ -566,48 +608,8 @@ export default function AdminPage() {
                 <div>
                   <div className="health-label" style={{ marginBottom: 12 }}>LLM pool ({health.llm.pool} models) — status by usage and errors</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    <div>
-                      <div className="health-label" style={{ marginBottom: 8 }}>Free models ({(health.llm.free ?? health.llm.models).length})</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {(health.llm.free ?? health.llm.models).map((m) => (
-                          <span
-                            key={`free-${m.model}`}
-                            style={{
-                              padding: '4px 8px',
-                              borderRadius: 6,
-                              fontSize: 12,
-                              background: m.available ? 'var(--success-bg, #d1fae5)' : 'var(--error-bg, #fee2e2)',
-                              color: m.available ? 'var(--success-text)' : 'var(--error-text)',
-                            }}
-                            title={m.cooldownUntil ? `Cooldown until ${new Date(m.cooldownUntil).toLocaleString()}` : m.available ? 'Available' : 'Unavailable (rate limit or error)'}
-                          >
-                            {m.preferred ? '★ ' : ''}{m.model}
-                            {m.cooldownUntil && !m.available ? ' (cooldown)' : ''}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="health-label" style={{ marginBottom: 8 }}>Premium models ({health.llm.pro?.length ?? 0})</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {(health.llm.pro ?? []).map((m) => (
-                          <span
-                            key={`pro-${m.model}`}
-                            style={{
-                              padding: '4px 8px',
-                              borderRadius: 6,
-                              fontSize: 12,
-                              background: m.available ? 'var(--success-bg, #d1fae5)' : 'var(--error-bg, #fee2e2)',
-                              color: m.available ? 'var(--success-text)' : 'var(--error-text)',
-                            }}
-                            title={m.cooldownUntil ? `Cooldown until ${new Date(m.cooldownUntil).toLocaleString()}` : m.available ? 'Available' : 'Unavailable (rate limit or error)'}
-                          >
-                            {m.preferred ? '★ ' : ''}{m.model}
-                            {m.cooldownUntil && !m.available ? ' (cooldown)' : ''}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
+                    <ModelPoolBadges label="Free models"    keyPrefix="free" models={health.llm.free ?? health.llm.models} />
+                    <ModelPoolBadges label="Premium models" keyPrefix="pro"  models={health.llm.pro  ?? []} />
                   </div>
                 </div>
 

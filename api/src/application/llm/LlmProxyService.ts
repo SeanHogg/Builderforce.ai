@@ -33,7 +33,7 @@ import {
   type VendorId,
 } from './vendors';
 import { sanitizeRequestToolNames, restoreResponseToolNames } from './toolNameSanitizer';
-import { loadCooldowns, recordFailure } from '../../infrastructure/auth/cooldownStore';
+import { loadCooldownExpiries, loadCooldowns, recordFailure } from '../../infrastructure/auth/cooldownStore';
 import { cerebrasModule, ollamaModule } from './vendors';
 import { validateJsonSchema } from './jsonSchemaValidator';
 
@@ -268,18 +268,19 @@ export class LlmProxyService {
 
   /** Per-model status with cooldown info — used by /v1/models. */
   async status(): Promise<Array<{ model: string; preferred: boolean; available: boolean; cooldownUntil?: number; vendor: VendorId }>> {
-    const cooledSet = await loadCooldowns(
+    const cooledMap = await loadCooldownExpiries(
       this.env,
       this.modelPool.map((m) => ({ vendor: vendorForModel(m), model: m })),
     );
     return this.modelPool.map((model, i) => {
       const vendor = vendorForModel(model);
-      const cooled = cooledSet.has(`${vendor}/${model}`);
+      const until  = cooledMap.get(`${vendor}/${model}`);
       return {
         model,
         vendor,
         preferred: i < this.preferredPoolSize,
-        available: !cooled,
+        available: until === undefined,
+        ...(until !== undefined && until > 0 ? { cooldownUntil: until } : {}),
       };
     });
   }
@@ -486,19 +487,7 @@ export class LlmProxyService {
       };
     } catch (err) {
       if (err instanceof CascadeExhaustedError) this.applyCooldowns(err.attempts);
-      const message = err instanceof Error ? err.message : String(err);
-      const exhaustedBody = JSON.stringify({
-        error: { message, code: 429, type: 'rate_limit_error' },
-      });
-      return {
-        response: new Response(exhaustedBody, {
-          status: 429,
-          headers: { 'content-type': 'application/json' },
-        }),
-        resolvedModel: candidates[candidates.length - 1] ?? this.modelPool[0] ?? FREE_MODEL_POOL[0] ?? '',
-        retries: candidates.length,
-        failovers: candidates.map((model) => ({ model, code: 0 })),
-      };
+      return this.exhaustedResponse(candidates, 0, err);
     }
   }
 
