@@ -22,6 +22,7 @@
  */
 
 import {
+  CascadeExhaustedError,
   dispatchVendor,
   dispatchVendorStream,
   getCrossVendorFallbacks,
@@ -391,6 +392,7 @@ export class LlmProxyService {
           ...callParams,
         });
       } catch (err) {
+        if (err instanceof CascadeExhaustedError) this.applyCooldowns(err.attempts);
         return this.exhaustedResponse(candidates, schemaRetries, err);
       }
 
@@ -483,6 +485,7 @@ export class LlmProxyService {
         failovers: attemptsToFailovers(result.attempts),
       };
     } catch (err) {
+      if (err instanceof CascadeExhaustedError) this.applyCooldowns(err.attempts);
       const message = err instanceof Error ? err.message : String(err);
       const exhaustedBody = JSON.stringify({
         error: { message, code: 429, type: 'rate_limit_error' },
@@ -504,7 +507,7 @@ export class LlmProxyService {
    * transient, 30 min for auth) lives in `cooldownStore.classifyFailure`.
    * Fire-and-forget — the dispatch result must not wait for KV writes.
    */
-  private applyCooldowns(attempts: DispatchAttempt[]): void {
+  private applyCooldowns(attempts: ReadonlyArray<DispatchAttempt>): void {
     for (const a of attempts) {
       void recordFailure(this.env, a.vendor, a.model, a.status, a.error);
     }

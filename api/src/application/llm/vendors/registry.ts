@@ -131,6 +131,34 @@ export interface DispatchAttempt {
   error: string;
 }
 
+/**
+ * Thrown when every candidate in the cascade fails. Carries the structured
+ * `attempts[]` so the orchestrator can record per-vendor cooldowns *before*
+ * surfacing the 429 to the caller — without this the dispatcher's failure
+ * record is lost in `Error.message`.
+ */
+export class CascadeExhaustedError extends Error {
+  public readonly attempts: ReadonlyArray<DispatchAttempt>;
+  public readonly skippedNoKey: ReadonlyArray<string>;
+  public readonly skippedNoStream: ReadonlyArray<string>;
+  constructor(
+    kind: 'json' | 'stream',
+    attempts: ReadonlyArray<DispatchAttempt>,
+    skippedNoKey: ReadonlyArray<string>,
+    skippedNoStream: ReadonlyArray<string> = [],
+  ) {
+    const summary = attempts.map((a) => `${a.vendor}/${a.model}=${a.status}`).join(', ');
+    const noKey = skippedNoKey.length    > 0 ? ` (skipped no-key: ${skippedNoKey.join(', ')})` : '';
+    const noStr = skippedNoStream.length > 0 ? ` (skipped no-stream: ${skippedNoStream.join(', ')})` : '';
+    const head  = kind === 'stream' ? 'AI streaming vendor cascade exhausted' : 'AI vendor cascade exhausted';
+    super(`${head} (${attempts.length} attempts: ${summary})${noKey}${noStr}`);
+    this.name = 'CascadeExhaustedError';
+    this.attempts = attempts;
+    this.skippedNoKey = skippedNoKey;
+    this.skippedNoStream = skippedNoStream;
+  }
+}
+
 export interface DispatchParams extends DispatchBody {
   env: VendorEnv;
   modelChain: string[];
@@ -183,9 +211,7 @@ export async function dispatchVendor(params: DispatchParams): Promise<DispatchRe
     }
   }
 
-  const summary = attempts.map((a) => `${a.vendor}/${a.model}=${a.status}`).join(', ');
-  const skip = skippedNoKey.length > 0 ? ` (skipped no-key: ${skippedNoKey.join(', ')})` : '';
-  throw new Error(`AI vendor cascade exhausted (${attempts.length} attempts: ${summary})${skip}`);
+  throw new CascadeExhaustedError('json', attempts, skippedNoKey);
 }
 
 /**
@@ -243,8 +269,5 @@ export async function dispatchVendorStream(params: DispatchParams): Promise<Stre
     }
   }
 
-  const summary = attempts.map((a) => `${a.vendor}/${a.model}=${a.status}`).join(', ');
-  const noKey   = skippedNoKey.length    > 0 ? ` (skipped no-key: ${skippedNoKey.join(', ')})`       : '';
-  const noStrm  = skippedNoStream.length > 0 ? ` (skipped no-stream: ${skippedNoStream.join(', ')})` : '';
-  throw new Error(`AI streaming vendor cascade exhausted (${attempts.length} attempts: ${summary})${noKey}${noStrm}`);
+  throw new CascadeExhaustedError('stream', attempts, skippedNoKey, skippedNoStream);
 }
