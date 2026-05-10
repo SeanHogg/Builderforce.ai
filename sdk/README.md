@@ -178,7 +178,7 @@ for (const obj of res.data) {
 }
 ```
 
-> **Note (v0.3.0):** the `/llm/v1/embeddings` route currently 503s with `code: 'embeddings_not_wired'` — vendor wiring is in flight. The SDK shape is final.
+Wired to OpenRouter; default model `nvidia/llama-nemotron-embed-vl-1b-v2:free` (free-tier, competitive with `text-embedding-3-small` for English). Override via `model`.
 
 ## Per-call options
 
@@ -291,6 +291,28 @@ Vendor prefixes (`openrouter/`, `cerebras/`, `ollama/`) explicitly route to that
 When `model` is unset the gateway picks from the tenant-plan pool with shape-based reordering — `tools` present → tool-capable models try first, `response_format: 'json_schema'` → structured-output models, image content blocks → vision models. Useful for callers that don't run their own model policy.
 
 If you need *strict* control (no substitution under any condition) — e.g. for evaluations or reproducibility — issue a separate `BuilderforceApiError` retry from your code on a different model rather than relying on the gateway to honor your hint exactly. The gateway's job is availability; yours is policy.
+
+## Multi-tenancy — one Builderforce key, many of *your* tenants
+
+The gateway's auth model is **one `bfk_*` key per Builderforce tenant** (i.e. per app integrating with the gateway). If your app itself runs multi-tenant (you serve N customers under a single deployment), use a single `bfk_*` and identify your end-tenants via `metadata`:
+
+```ts
+client.chat.completions.create({
+  metadata: {
+    accountId: customer.accountId,   // your end-tenant
+    userId:    activeUser.id,
+    viewerId:  viewer?.id ?? '',
+    runner:    'cron|user-action|scheduled',
+  },
+  messages: [...],
+});
+```
+
+Each call's metadata persists to `llm_usage_log.metadata` JSONB — pageable via `GET /llm/v1/usage?detail=true&page=N`. You query rows by your own `accountId` to compute per-customer spend without provisioning per-customer keys.
+
+**You do not need to mint per-end-tenant `bfk_*` keys.** The gateway bills your Builderforce tenant in aggregate; per-customer accounting lives in your usage queries.
+
+If you need genuine isolation (separate token budgets per end-tenant, separate revocation), provision multiple `bfk_*` keys via `POST /api/tenants/:tenantId/api-keys` and route per-customer in your code. Most apps don't need this.
 
 ## `useCase` — opaque telemetry slug
 

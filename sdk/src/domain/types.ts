@@ -220,6 +220,17 @@ export interface ChatCompletionResponse {
     metadata?: Record<string, string>;
     /** Mirror of the `x-request-id` response header. */
     requestId?: string;
+    /**
+     * Daily token budget snapshot at request time. Use `remaining` to
+     * pre-emptively throttle before the gateway returns 429
+     * `plan_token_limit_exceeded`. Same numbers are exposed via the
+     * `x-builderforce-daily-tokens-{used,limit,remaining}` response headers.
+     */
+    dailyTokens?: {
+      used:      number;
+      limit:     number;
+      remaining: number;
+    };
   };
   [key: string]: unknown;
 }

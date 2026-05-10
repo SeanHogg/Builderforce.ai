@@ -20,8 +20,12 @@ import {
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 const EMBEDDINGS_ENDPOINT = 'https://openrouter.ai/api/v1/embeddings';
 
-/** OpenAI-compatible default embedding model. Override per-call via `body.model`. */
-export const DEFAULT_EMBEDDING_MODEL = 'openai/text-embedding-3-small';
+/**
+ * Default embedding model. NVIDIA's free Nemotron embed model is competitive
+ * with OpenAI's small for English-only use cases, and is the model BurnRateOS
+ * already calibrated against. Caller can override per-call via `body.model`.
+ */
+export const DEFAULT_EMBEDDING_MODEL = 'nvidia/llama-nemotron-embed-vl-1b-v2:free';
 
 export interface EmbeddingsCallParams {
   apiKey: string;
