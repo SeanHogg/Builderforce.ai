@@ -317,6 +317,68 @@ describe('@seanhogg/builderforce-sdk', () => {
       });
   });
 
+  it('unwraps nested { success: false, error: {...} } envelope into BuilderforceApiError', async () => {
+    // Some tenant proxies wrap the gateway error in `{ success: false, error: {...} }`
+    // (e.g. AI_RATE_LIMITED on burnrateos). The flat reader would have left
+    // `code` undefined and message stringified to "[object Object]".
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({
+        success: false,
+        error: {
+          code:    'AI_RATE_LIMITED',
+          message: 'Plan daily token limit reached (10,000 tokens).',
+          details: { plan: 'free', dailyLimit: 10_000, usedToday: 10_421 },
+        },
+      }),
+      { status: 429, headers: {
+        'Content-Type':  'application/json',
+        'x-request-id':  'req_nested',
+        'Retry-After':   '600',
+      } },
+    ));
+    const client = new BuilderforceClient({ apiKey: 'k', fetch: fetchMock as unknown as typeof fetch });
+
+    await expect(client.chat.completions.create({ messages: [{ role: 'user', content: 'hi' }] }))
+      .rejects.toMatchObject({
+        name:       'BuilderforceApiError',
+        status:     429,
+        code:       'AI_RATE_LIMITED',
+        message:    'Plan daily token limit reached (10,000 tokens).',
+        requestId:  'req_nested',
+        retryAfter: 600,
+        details:    { plan: 'free', dailyLimit: 10_000, usedToday: 10_421 },
+      });
+  });
+
+  it('forwards modelStrict and surfaces 503 model_unavailable details', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { modelStrict?: boolean; model?: string };
+      expect(body.modelStrict).toBe(true);
+      expect(body.model).toBe('cerebras/llama-3.3-70b');
+      return new Response(
+        JSON.stringify({
+          error:   'Model is on cooldown — strict pin cannot substitute.',
+          code:    'model_unavailable',
+          details: { requestedModel: 'cerebras/llama-3.3-70b', reason: 'cooldown' },
+        }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } },
+      );
+    });
+
+    const client = new BuilderforceClient({ apiKey: 'k', fetch: fetchMock as unknown as typeof fetch });
+
+    await expect(client.chat.completions.create({
+      model: 'cerebras/llama-3.3-70b',
+      modelStrict: true,
+      messages: [{ role: 'user', content: 'hi' }],
+    })).rejects.toMatchObject({
+      name:    'BuilderforceApiError',
+      status:  503,
+      code:    'model_unavailable',
+      details: { requestedModel: 'cerebras/llama-3.3-70b', reason: 'cooldown' },
+    });
+  });
+
   it('throws BuilderforceApiError for non-2xx', async () => {
     const fetchMock = vi.fn(async () => new Response(
       JSON.stringify({ error: 'Unauthorized', code: 'unauthorized' }),

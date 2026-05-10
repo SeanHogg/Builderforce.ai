@@ -409,6 +409,24 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const callerUseCase  = typeof bodyAny.useCase === 'string' ? bodyAny.useCase : null;
     const idempotencyKey = c.req.header('Idempotency-Key') ?? null;
 
+    // ── Strict-pin entitlement gate ─────────────────────────────────────────
+    // Free tenants can't request modelStrict — a single misbehaving model
+    // would otherwise drain their daily budget with retries. Paid plans and
+    // superadmin-issued daily-limit overrides bypass this gate.
+    const wantsStrict = bodyAny.modelStrict === true
+                     && typeof bodyAny.model === 'string'
+                     && (bodyAny.model as string).length > 0;
+    if (wantsStrict) {
+      const strictAllowed = access.effectivePlan !== 'free'
+                         || access.tokenDailyLimitOverride !== null;
+      if (!strictAllowed) {
+        return c.json({
+          error: 'modelStrict requires a paid plan (Pro/Teams) or a superadmin-issued daily-limit override.',
+          code: 'strict_pin_not_allowed',
+        }, 403);
+      }
+    }
+
     // ── Daily token usage + limit checks ────────────────────────────────────
     // Single query — value is reused for both the 429 gate and the
     // X-Builderforce-Daily-Tokens-* response headers callers use to

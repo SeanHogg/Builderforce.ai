@@ -156,22 +156,49 @@ export class HttpClient {
     const headerRetryAfter = parsePositiveInt(res.headers.get('retry-after'));
 
     try {
-      const payload = await res.json() as {
+      const payload = await res.json() as Record<string, unknown> | null;
+
+      // Two envelope shapes are in the wild:
+      //
+      //   Flat   — { error: "msg", code, details, terminal?, retryAfter? }
+      //            (gateway's documented shape — plan_token_limit_exceeded etc.)
+      //   Nested — { success: false, error: { code, message, details } }
+      //            (consumer-side wrappers around the gateway, e.g. some
+      //             tenant proxies emit AI_RATE_LIMITED / AI_UNAVAILABLE
+      //             envelopes that re-wrap the upstream error)
+      //
+      // Detect via the `success: false` discriminator and unwrap when nested
+      // so `error.code` / `error.message` / `error.details` always populate.
+      const isNested =
+        payload !== null
+        && typeof payload === 'object'
+        && payload.success === false
+        && typeof payload.error === 'object'
+        && payload.error !== null;
+
+      const inner = (isNested ? payload.error : payload) as {
         error?:      string;
+        message?:    string;
         code?:       string;
         details?:    unknown;
         terminal?:   boolean;
         retryAfter?: number;
-      };
+      } | null;
+
+      const message =
+        (typeof inner?.message === 'string' && inner.message)
+        || (typeof inner?.error === 'string' && inner.error)
+        || fallback;
+
       return new BuilderforceApiError(
-        payload.error ?? fallback,
+        message,
         res.status,
-        payload.code,
-        payload.details,
+        inner?.code,
+        inner?.details,
         requestId,
         {
-          terminal:   payload.terminal,
-          retryAfter: headerRetryAfter ?? payload.retryAfter,
+          terminal:   inner?.terminal,
+          retryAfter: headerRetryAfter ?? inner?.retryAfter,
         },
       );
     } catch {

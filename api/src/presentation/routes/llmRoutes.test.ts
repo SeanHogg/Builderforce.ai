@@ -82,10 +82,25 @@ describe('toolNameSanitizer', () => {
 // requireTenantAccess — bfk_* tenant API key path
 // ---------------------------------------------------------------------------
 
-type TenantApiKeyRow = { id: string; tenantId: number; revokedAt: Date | null };
-type TenantRow = { id: number; plan: 'free' | 'pro' | 'teams'; billingStatus: string };
+type TenantApiKeyRow = {
+  id: string;
+  tenantId: number;
+  revokedAt: Date | null;
+  allowedOrigins?: string | null;
+};
+type TenantRow = {
+  id: number;
+  plan: 'free' | 'pro' | 'teams';
+  billingStatus: string;
+  tokenDailyLimitOverride?: number | null;
+};
 
-function mockDb(opts: { keyRow?: TenantApiKeyRow; tenantRow?: TenantRow }) {
+function mockDb(opts: {
+  keyRow?:    TenantApiKeyRow;
+  tenantRow?: TenantRow;
+  /** Reply for the daily-token sum query (awaited directly on `.where()`). */
+  usageRow?:  { used: bigint | number | null };
+}) {
   // Drizzle-style chainable selects: each terminal `.limit(1)` resolves
   // with `[row]`. Two distinct lookups happen in the bfk_* path: the key
   // row, then the tenant row. We hand back an iterator of canned results.
@@ -93,11 +108,21 @@ function mockDb(opts: { keyRow?: TenantApiKeyRow; tenantRow?: TenantRow }) {
   if (opts.keyRow !== undefined) queue.push([opts.keyRow]);
   if (opts.tenantRow !== undefined) queue.push([opts.tenantRow]);
 
+  const usageRow = opts.usageRow;
+
   const select = vi.fn(() => ({
     from:  () => ({
-      where: () => ({
-        limit: () => Promise.resolve(queue.shift() ?? []),
-      }),
+      where: () => {
+        // `.where()` itself is awaited directly for the daily-token sum
+        // (no `.limit()`), so it must be both thenable AND have a `.limit()`
+        // method for key/tenant lookups that chain `.limit(1)` after it.
+        const node = {
+          limit: () => Promise.resolve(queue.shift() ?? []),
+          then:  (resolve: (v: unknown) => unknown) =>
+            resolve(usageRow !== undefined ? [usageRow] : []),
+        };
+        return node;
+      },
     }),
   }));
   const update = vi.fn(() => ({
@@ -165,5 +190,108 @@ describe('requireTenantAccess (bfk_* path)', () => {
 
     await expect(requireTenantAccess(mockContext('bfk_unknown', db)))
       .rejects.toThrow(/Invalid or revoked tenant API key/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /v1/chat/completions — modelStrict entitlement gate
+// ---------------------------------------------------------------------------
+
+const { createLlmRoutes } = await import('./llmRoutes');
+
+function buildApp() {
+  // The route module exports a Hono router factory; mount it on a parent app
+  // so we can invoke via app.request(...) the same way prod does.
+  const router = createLlmRoutes();
+  return router;
+}
+
+function strictPinRequest(token = 'bfk_strict') {
+  return new Request('http://test.local/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type':  'application/json',
+    },
+    body: JSON.stringify({
+      model:       'cerebras/llama-3.3-70b',
+      modelStrict: true,
+      messages:    [{ role: 'user', content: 'hi' }],
+    }),
+  });
+}
+
+const baseEnv = {
+  JWT_SECRET:       'test',
+  NEON_DATABASE_URL: 'x',
+  // Intentionally NO OPENROUTER_API_KEY — paid-plan acceptance tests stop at
+  // the vendor-key check (503), proving the strict-pin gate didn't fire.
+} as unknown;
+
+// Hono's `app.request(input, init, env, executionCtx)` takes a 4th-arg
+// ExecutionContext. The bfk_* auth path calls `c.executionCtx.waitUntil(...)`
+// to bookkeep `lastUsedAt`; without this, the route throws and returns 401.
+const fakeExecutionCtx = {
+  waitUntil: (_p: Promise<unknown>) => undefined,
+  passThroughOnException: () => undefined,
+} as unknown as ExecutionContext;
+
+describe('POST /v1/chat/completions strict-pin gate', () => {
+  beforeEach(() => {
+    mocks.hashSecret.mockReset();
+    mocks.verifyJwt.mockReset();
+    mocks.buildDatabase.mockReset();
+  });
+
+  it('rejects free tenant without override with 403 strict_pin_not_allowed', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    const db = mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'free', billingStatus: 'none', tokenDailyLimitOverride: null },
+    });
+    mocks.buildDatabase.mockReturnValue(db);
+
+    const app = buildApp();
+    const res = await app.request(strictPinRequest(), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    expect(res.status).toBe(403);
+    const body = await res.json() as { code?: string };
+    expect(body.code).toBe('strict_pin_not_allowed');
+  });
+
+  it('allows free tenant WITH override past the strict gate', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    const db = mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      // tokenDailyLimitOverride === -1 (unlimited via superadmin) → strict allowed
+      tenantRow: { id: 1, plan: 'free', billingStatus: 'none', tokenDailyLimitOverride: -1 },
+      usageRow:  { used: 0 },
+    });
+    mocks.buildDatabase.mockReturnValue(db);
+
+    const app = buildApp();
+    const res = await app.request(strictPinRequest(), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    // We don't reach 403 strict_pin_not_allowed; the request progresses past
+    // the gate to the vendor-key check, which returns 503 (no OPENROUTER_API_KEY
+    // in baseEnv). Proves the gate did not fire.
+    expect(res.status).not.toBe(403);
+    expect(res.status).toBe(503);
+  });
+
+  it('allows paid tenant past the strict gate', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    const db = mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'pro', billingStatus: 'active', tokenDailyLimitOverride: null },
+      usageRow:  { used: 0 },
+    });
+    mocks.buildDatabase.mockReturnValue(db);
+
+    const app = buildApp();
+    const res = await app.request(strictPinRequest(), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    expect(res.status).not.toBe(403);
+    expect(res.status).toBe(503); // missing OPENROUTER_API_KEY_PRO
   });
 });

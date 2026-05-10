@@ -177,6 +177,18 @@ export class LlmProxyService {
     body: ChatCompletionRequest,
     requestHeaders?: Record<string, string>,
   ): Promise<ProxyResult> {
+    const callerModel = (body as { model?: unknown }).model;
+    const wantsStrict = (body as { modelStrict?: unknown }).modelStrict === true
+                     && typeof callerModel === 'string'
+                     && callerModel.length > 0;
+
+    // Strict-pin path: single-model dispatch, no chain, no failover. Cooldown
+    // and missing-vendor-key are the only pre-flight gates; if either fails
+    // the request returns 503 `model_unavailable` instead of falling through.
+    if (wantsStrict) {
+      return this.dispatchStrict(callerModel as string, body, requestHeaders);
+    }
+
     // 1) Pool composition: prepend fast cross-vendor models (Cerebras, Ollama)
     //    when their keys are bound — sub-200ms TTFT for Cerebras beats
     //    OpenRouter free-tier under load. The OpenRouter pool stays in place
@@ -189,7 +201,8 @@ export class LlmProxyService {
     const reorderedPool = reorderPoolByShape(body, basePool);
 
     // 2) Caller hint goes at the head; rest of the pool follows.
-    const callerModel = (body as { model?: unknown }).model;
+    //    `callerModel` was extracted at the top of this function for the
+    //    strict-pin branch; reuse it here for the chained path.
     const seed: readonly string[] = (typeof callerModel === 'string' && callerModel.length > 0)
       ? [callerModel, ...reorderedPool.filter((m) => m !== callerModel)]
       : reorderedPool;
@@ -203,6 +216,38 @@ export class LlmProxyService {
     );
     const candidates = this.buildCandidateChain(seed, cooledSet);
     return this.dispatch(candidates, body, requestHeaders);
+  }
+
+  /**
+   * Strict-pin dispatch — single model, no chain, no failover. Used when
+   * `body.modelStrict === true`. Pre-flight gates:
+   *   - vendor key bound? otherwise 503 `model_unavailable` (reason: `vendor_key_unconfigured`)
+   *   - model on cooldown?  otherwise 503 `model_unavailable` (reason: `cooldown`)
+   * If both pass, dispatches a chain of length 1. Vendor errors propagate
+   * verbatim instead of being absorbed into a chain-exhausted envelope.
+   */
+  private async dispatchStrict(
+    model: string,
+    body: ChatCompletionRequest,
+    requestHeaders?: Record<string, string>,
+  ): Promise<ProxyResult> {
+    const vendor = vendorForModel(model);
+    const env = this.vendorEnv();
+
+    const vendorKeyBound =
+      (vendor === 'openrouter' && !!env.OPENROUTER_API_KEY) ||
+      (vendor === 'cerebras'   && !!env.CEREBRAS_API_KEY)   ||
+      (vendor === 'ollama'     && !!env.OLLAMA_API_KEY);
+    if (!vendorKeyBound) {
+      return strictUnavailableResult(model, 'vendor_key_unconfigured');
+    }
+
+    const cooledSet = await loadCooldowns(this.env, [{ vendor, model }]);
+    if (cooledSet.has(`${vendor}/${model}`)) {
+      return strictUnavailableResult(model, 'cooldown');
+    }
+
+    return this.dispatch([model], body, requestHeaders);
   }
 
   /** Cross-vendor fast-tier models worth trying before the main pool. */
@@ -525,6 +570,32 @@ export function adminPoolProxy(
   });
 }
 
+/**
+ * Build the 503 `model_unavailable` envelope used by strict-pin dispatch
+ * when the requested model can't be honoured. The reason string is exposed
+ * to the caller so they can decide whether to retry on a different model or
+ * surface the error directly.
+ */
+function strictUnavailableResult(
+  model: string,
+  reason: 'cooldown' | 'vendor_key_unconfigured' | 'plan_tier' | 'vendor_outage',
+): ProxyResult {
+  const body = JSON.stringify({
+    error: `Strict-pin: model '${model}' is unavailable (${reason}).`,
+    code: 'model_unavailable',
+    details: { requestedModel: model, reason },
+  });
+  return {
+    response: new Response(body, {
+      status: 503,
+      headers: { 'content-type': 'application/json' },
+    }),
+    resolvedModel: model,
+    retries: 0,
+    failovers: [],
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Response-format conformance — used by dispatchJson to detect non-conforming
 // model output (broken JSON, missing required fields) and retry across the
@@ -670,8 +741,9 @@ export function reorderPoolByShape(
 const STANDARD_BODY_FIELDS: ReadonlySet<string> = new Set([
   'model', 'messages', 'temperature', 'max_tokens', 'top_p', 'stream',
   // Gateway-side only — stripped before vendor dispatch:
-  'useCase',   // opaque telemetry slug; persisted to llm_usage_log.use_case, echoed back
-  'metadata',  // free-form trace-back kv; persisted to llm_usage_log.metadata, echoed back
+  'useCase',     // opaque telemetry slug; persisted to llm_usage_log.use_case, echoed back
+  'metadata',    // free-form trace-back kv; persisted to llm_usage_log.metadata, echoed back
+  'modelStrict', // strict-pin flag — gateway-only; controls failover behaviour
   // OpenAI-compatible pass-throughs (`tools`, `tool_choice`, `response_format`)
   // travel via the `extraBody` catch-all and reach the vendor verbatim.
 ]);

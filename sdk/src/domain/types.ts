@@ -125,11 +125,10 @@ export interface PerCallOptions {
 
 export interface ChatCompletionCreateParams extends PerCallOptions {
   /**
-   * Model **hint** (not a hard pin). When set, the gateway puts this id at the
-   * head of its candidate chain so it's tried first — but the gateway retains
-   * the right to substitute on cooldown, vendor outage, or plan-tier mismatch.
-   * The actual model used is reported via `_builderforce.resolvedModel`; check
-   * it if you need to detect substitution.
+   * Model **hint** (not a hard pin by default). The gateway puts this id at
+   * the head of its candidate chain so it's tried first, but it retains the
+   * right to substitute on cooldown / outage / plan-tier mismatch. Read
+   * `_builderforce.resolvedModel` to detect substitution.
    *
    * Vendor prefixes (`openrouter/<id>`, `cerebras/<id>`, `ollama/<id>`) route
    * to the named vendor when that model is selected. Bare ids fall back to
@@ -137,8 +136,22 @@ export interface ChatCompletionCreateParams extends PerCallOptions {
    *
    * When unset, the gateway picks from the tenant-plan model pool with
    * shape-based reordering (tools / response_format / vision content blocks).
+   *
+   * For *strict* pinning, see `modelStrict`.
    */
   model?: string;
+  /**
+   * When `true` and `model` is set, the gateway runs on `model` exactly —
+   * no substitution. If the model is on cooldown / unconfigured / unavailable,
+   * the gateway returns `503 model_unavailable` instead of falling through to
+   * another model. Use for reproducible eval / A-B-test runs.
+   *
+   * **Entitlement:** strict-pin requires a paid plan (Pro / Teams) OR a
+   * superadmin-issued daily-limit override. Free-tier requests with
+   * `modelStrict: true` get `403 strict_pin_not_allowed` so a single
+   * misbehaving model can't drain a free tenant's daily budget.
+   */
+  modelStrict?: boolean;
   messages: ChatMessage[];
   stream?: boolean;
   temperature?: number;
