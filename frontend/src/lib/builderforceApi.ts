@@ -1260,6 +1260,13 @@ export interface MintTenantApiKeyInput {
   allowedOrigins?: string[] | null;
 }
 
+export interface UpdateTenantApiKeyInput {
+  /** Replace the display name. Empty string is rejected by the server. */
+  name?: string;
+  /** Replace the origin allowlist. `null` = server-only; `['*']` = any origin. Omit to leave unchanged. */
+  allowedOrigins?: string[] | null;
+}
+
 export const tenantApiKeysApi = {
   list: (tenantId: number): Promise<TenantApiKey[]> =>
     request<{ keys: TenantApiKey[] }>(`/api/tenants/${tenantId}/api-keys`).then((r) => r.keys ?? []),
@@ -1269,6 +1276,12 @@ export const tenantApiKeysApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+
+  update: (tenantId: number, keyId: string, patch: UpdateTenantApiKeyInput): Promise<TenantApiKey> =>
+    request<{ key: TenantApiKey }>(`/api/tenants/${tenantId}/api-keys/${keyId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }).then((r) => r.key),
 
   revoke: (tenantId: number, keyId: string): Promise<void> =>
     request(`/api/tenants/${tenantId}/api-keys/${keyId}`, { method: 'DELETE' }).then(() => undefined),

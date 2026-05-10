@@ -6,6 +6,7 @@ import { getStoredTenant } from '@/lib/auth';
 import { MintedTenantApiKeyDisplay } from '@/components/MintedTenantApiKeyDisplay';
 import { AllowedOriginsField } from '@/components/AllowedOriginsField';
 import { AllowedOriginsBadge } from '@/components/AllowedOriginsBadge';
+import { TenantApiKeyEditor } from '@/components/TenantApiKeyEditor';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -63,6 +64,8 @@ export default function ApiKeysPage() {
   const [revealedKey, setRevealedKey] = useState<{ id: string; key: string; name: string } | null>(null);
 
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     if (!isOwner || !Number.isFinite(tenantId)) { setLoading(false); return; }
@@ -115,6 +118,17 @@ export default function ApiKeysPage() {
       setError(e instanceof Error ? e.message : 'Failed to create key');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleEdit = async (keyId: string, patch: { name?: string; allowedOrigins?: string[] | null }) => {
+    setSavingEdit(true);
+    try {
+      const updated = await tenantApiKeysApi.update(tenantId, keyId, patch);
+      setKeys((prev) => prev.map((k) => k.id === keyId ? updated : k));
+      setEditingKeyId(null);
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -200,47 +214,67 @@ export default function ApiKeysPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {keys.map((k) => {
               const revoked = !!k.revokedAt;
+              const isEditing = editingKeyId === k.id;
               return (
                 <div
                   key={k.id}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 12,
                     padding: '10px 12px', borderRadius: 8,
                     background: 'var(--bg-elevated)',
                     border: '1px solid var(--border-subtle)',
                     opacity: revoked ? 0.5 : 1,
                   }}
                 >
-                  <div
-                    style={{
-                      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                      background: revoked ? 'var(--text-muted)' : 'rgba(34,197,94,0.9)',
-                    }}
-                  />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <span>{k.name}</span>
-                      <AllowedOriginsBadge allowedOrigins={k.allowedOrigins} />
-                      {revoked && (
-                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--bg-surface)', color: 'var(--text-muted)' }}>
-                          Revoked
-                        </span>
-                      )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div
+                      style={{
+                        width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                        background: revoked ? 'var(--text-muted)' : 'rgba(34,197,94,0.9)',
+                      }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <span>{k.name}</span>
+                        <AllowedOriginsBadge allowedOrigins={k.allowedOrigins} />
+                        {revoked && (
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--bg-surface)', color: 'var(--text-muted)' }}>
+                            Revoked
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                        Created {fmtDate(k.createdAt)} · Last used {fmtDate(k.lastUsedAt)}
+                        {revoked && ` · Revoked ${fmtDate(k.revokedAt)}`}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                      Created {fmtDate(k.createdAt)} · Last used {fmtDate(k.lastUsedAt)}
-                      {revoked && ` · Revoked ${fmtDate(k.revokedAt)}`}
-                    </div>
+                    {!revoked && !isEditing && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setEditingKeyId(k.id)}
+                          style={{ ...buttonPrimary, padding: '4px 10px', fontSize: 11 }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleRevoke(k.id)}
+                          disabled={revoking === k.id}
+                          style={buttonDanger}
+                        >
+                          {revoking === k.id ? '…' : 'Revoke'}
+                        </button>
+                      </>
+                    )}
                   </div>
-                  {!revoked && (
-                    <button
-                      type="button"
-                      onClick={() => void handleRevoke(k.id)}
-                      disabled={revoking === k.id}
-                      style={buttonDanger}
-                    >
-                      {revoking === k.id ? '…' : 'Revoke'}
-                    </button>
+                  {isEditing && (
+                    <TenantApiKeyEditor
+                      initialName={k.name}
+                      initialAllowedOrigins={k.allowedOrigins}
+                      onSave={(patch) => handleEdit(k.id, patch)}
+                      onCancel={() => setEditingKeyId(null)}
+                      saving={savingEdit}
+                    />
                   )}
                 </div>
               );

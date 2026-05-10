@@ -904,6 +904,18 @@ export const adminApi = {
     });
   },
 
+  async updateTenantApiKey(
+    tenantId: number,
+    keyId: string,
+    patch: { name?: string; allowedOrigins?: string[] | null },
+  ): Promise<AdminTenantApiKey> {
+    const res = await adminRequest<{ key: AdminTenantApiKey }>(`/api/admin/tenants/${tenantId}/api-keys/${keyId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    });
+    return res.key;
+  },
+
   async revokeTenantApiKey(tenantId: number, keyId: string): Promise<void> {
     await adminRequest(`/api/admin/tenants/${tenantId}/api-keys/${keyId}`, { method: 'DELETE' });
   },

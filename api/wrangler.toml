@@ -29,6 +29,13 @@ class_name = "ClawRelayDO"
 binding = "UPLOADS"
 bucket_name = "builderforce-uploads"
 
+# Auth-resolution cache. Caches `bfk_*` and `clk_*` lookups for ~60s so every
+# chat-completion call doesn't pay a Neon round-trip just to validate the key.
+# See api/src/infrastructure/auth/keyResolutionCache.ts.
+[[kv_namespaces]]
+binding = "AUTH_CACHE_KV"
+id = "ce66c3418ad64952b6847227962429d0"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ClawRelayDO"]

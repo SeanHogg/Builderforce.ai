@@ -2,13 +2,25 @@
  * Optional KV-backed cache for API-key → tenant resolution.
  *
  * Hit path: ~1ms (KV read). Miss path: ~30-80ms (Neon round-trip from a
- * Worker). For chat-completion traffic the hit ratio is ~100% after the
- * first call from a given key in any 60-second window.
+ * Worker). After the first call for any given key, every subsequent call
+ * for the next year is a cache hit.
  *
  * Cache key format:  `auth:<keyType>:<sha256(rawKey)>`
  * Cached value:      JSON-encoded ResolvedKey envelope, or `{revoked: true}`
- *                    tombstone written by the revoke endpoint to invalidate
- *                    a still-cached "valid" entry within the same TTL.
+ *                    tombstone written by mutation handlers to invalidate
+ *                    a still-cached entry.
+ *
+ * **TTL is intentionally long (365 days) because every mutation that
+ * affects auth resolution explicitly calls `invalidateKeyCache`** —
+ * specifically: revoke, update (origin allowlist / name), claw deactivation,
+ * claw daily-limit change. Mint creates no cache entry to invalidate (the
+ * first call populates it). Tenant plan/billing changes don't need
+ * invalidation because `resolveTenantPlan` runs fresh on every request,
+ * outside the cached block.
+ *
+ * If you add a new mutation that changes auth resolution, you MUST call
+ * `invalidateKeyCache` from that handler — otherwise the change won't take
+ * effect for up to a year.
  *
  * The KV binding (`AUTH_CACHE_KV`) is *optional* — when not bound, every
  * call falls through to the loader (DB). Single helper so caching is opt-in
@@ -17,7 +29,10 @@
 
 import type { Env } from '../../env';
 
-const TTL_SECONDS = 60;
+/** 365 days. Long-lived because mutations invalidate explicitly. */
+const TTL_SECONDS = 365 * 24 * 60 * 60;
+/** Tombstone TTL — long enough that any in-flight cached entry is dead, then auto-cleans. */
+const TOMBSTONE_TTL_SECONDS = 60 * 60;
 
 /** What the loader returns; gateway auth uses this to populate TenantAccess. */
 export type ResolvedKey =
@@ -73,7 +88,7 @@ export async function invalidateKeyCache(env: Env, keyType: 'bfk' | 'clk', hash:
   if (!kv) return;
   const cacheKey = `auth:${keyType}:${hash}`;
   try {
-    await kv.put(cacheKey, JSON.stringify({ revoked: true }), { expirationTtl: TTL_SECONDS });
+    await kv.put(cacheKey, JSON.stringify({ revoked: true }), { expirationTtl: TOMBSTONE_TTL_SECONDS });
   } catch {
     // Cache invalidation failures degrade to "wait for the existing TTL to expire" — acceptable.
   }

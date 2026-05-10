@@ -31,6 +31,7 @@ import {
   platformPersonas,
 } from '../../infrastructure/database/schema';
 import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
+import { invalidateKeyCache } from '../../infrastructure/auth/keyResolutionCache';
 import { verifyJwt } from '../../infrastructure/auth/JwtService';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import type { HonoEnv } from '../../env';
@@ -391,9 +392,12 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
   router.delete('/:id', authMiddleware as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id       = Number(c.req.param('id'));
-    await db
+    const [deleted] = await db
       .delete(coderclawInstances)
-      .where(and(eq(coderclawInstances.id, id), eq(coderclawInstances.tenantId, tenantId)));
+      .where(and(eq(coderclawInstances.id, id), eq(coderclawInstances.tenantId, tenantId)))
+      .returning({ apiKeyHash: coderclawInstances.apiKeyHash });
+    // Cache lives 365 days; explicit invalidation is what makes deletion take effect.
+    if (deleted) await invalidateKeyCache(c.env, 'clk', deleted.apiKeyHash);
     return c.body(null, 204);
   });
 
@@ -410,12 +414,15 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
     const updated = await clawService.setStatus(clawId, tenantId, body.status);
     if (!updated) return c.json({ error: 'Claw not found' }, 404);
 
-    // Non-active claws should not appear as connected.
+    // Non-active claws should not appear as connected, and the long-TTL auth
+    // cache must be invalidated so the deactivated key stops working immediately.
     if (body.status !== 'active') {
-      await db
+      const [row] = await db
         .update(coderclawInstances)
         .set({ connectedAt: null })
-        .where(and(eq(coderclawInstances.id, clawId), eq(coderclawInstances.tenantId, tenantId)));
+        .where(and(eq(coderclawInstances.id, clawId), eq(coderclawInstances.tenantId, tenantId)))
+        .returning({ apiKeyHash: coderclawInstances.apiKeyHash });
+      if (row) await invalidateKeyCache(c.env, 'clk', row.apiKeyHash);
     }
 
     return c.json({
@@ -452,9 +459,17 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
         updatedAt: new Date(),
       })
       .where(and(eq(coderclawInstances.id, clawId), eq(coderclawInstances.tenantId, tenantId)))
-      .returning({ id: coderclawInstances.id, tokenDailyLimit: coderclawInstances.tokenDailyLimit });
+      .returning({
+        id:              coderclawInstances.id,
+        tokenDailyLimit: coderclawInstances.tokenDailyLimit,
+        apiKeyHash:      coderclawInstances.apiKeyHash,
+      });
 
     if (!updated) return c.json({ error: 'Claw not found' }, 404);
+
+    // tokenDailyLimit is part of the cached value — invalidate so the new cap
+    // takes effect on the very next request rather than waiting for TTL.
+    await invalidateKeyCache(c.env, 'clk', updated.apiKeyHash);
 
     return c.json({ clawId: updated.id, tokenDailyLimit: updated.tokenDailyLimit });
   });
