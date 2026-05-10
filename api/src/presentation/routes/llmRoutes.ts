@@ -85,6 +85,27 @@ function logUsage(
   );
 }
 
+/**
+ * Typed error thrown by `requireTenantAccess` so callers can return the right
+ * HTTP status + code without each catch site re-implementing the mapping.
+ * Single source of truth for "auth-related rejection" surface.
+ */
+class TenantAccessError extends Error {
+  constructor(
+    public readonly status: 401 | 403,
+    public readonly code: string,
+    message: string,
+  ) { super(message); this.name = 'TenantAccessError'; }
+}
+
+/** Convert any throwable from `requireTenantAccess` into a Hono JSON response. */
+function respondToAccessError(c: Context<HonoEnv>, err: unknown) {
+  if (err instanceof TenantAccessError) {
+    return c.json({ error: err.message, code: err.code }, err.status);
+  }
+  return c.json({ error: (err as Error).message || 'Unauthorized' }, 401);
+}
+
 type TenantAccess = {
   userId: string | null;
   tenantId: number;
@@ -215,7 +236,9 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
     // Origin allowlist enforcement (single source: tenantApiKeyService.originAllowed).
     const origin = c.req.header('Origin') ?? null;
     if (!originAllowed(allowlist, origin)) {
-      throw new Error(
+      throw new TenantAccessError(
+        403,
+        'origin_not_authorized',
         `Origin '${origin}' is not authorized for this tenant API key. ` +
         `This key is server-only — to use it from a browser, register the origin in the portal under Settings → API keys.`,
       );
@@ -333,7 +356,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     try {
       access = await requireTenantAccess(c);
     } catch (err) {
-      return c.json({ error: (err as Error).message || 'Unauthorized' }, 401);
+      return respondToAccessError(c, err);
     }
 
     const body = await c.req.json<ChatCompletionRequest>();
@@ -575,7 +598,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     try {
       access = await requireTenantAccess(c);
     } catch (err) {
-      return c.json({ error: (err as Error).message || 'Unauthorized' }, 401);
+      return respondToAccessError(c, err);
     }
 
     const days = Math.min(Number(c.req.query('days') ?? '30'), 90);
@@ -742,7 +765,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     try {
       access = await requireTenantAccess(c);
     } catch (err) {
-      return c.json({ error: (err as Error).message || 'Unauthorized' }, 401);
+      return respondToAccessError(c, err);
     }
 
     const apiKey = access.effectivePlan === 'free'
