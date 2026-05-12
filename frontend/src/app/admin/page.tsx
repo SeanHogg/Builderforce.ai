@@ -1056,7 +1056,14 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <div>
-                  <div className="health-label" style={{ marginBottom: 8 }}>Failover events</div>
+                  <div className="health-label" style={{ marginBottom: 8 }}>
+                    Failover events
+                    {llmUsage.failovers.some((f) => f.errorCode === 429) && (
+                      <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--error-text)', fontWeight: 600 }}>
+                        — {fmtNum(llmUsage.failovers.filter((f) => f.errorCode === 429).reduce((s, f) => s + f.count, 0))} rate-limit hits
+                      </span>
+                    )}
+                  </div>
                   {llmUsage.failovers.length === 0 ? (
                     <p className="text-muted" style={{ fontSize: 13 }}>No failover events in this period.</p>
                   ) : (
@@ -1071,9 +1078,13 @@ export default function AdminPage() {
                         </thead>
                         <tbody>
                           {llmUsage.failovers.map((f, i) => (
-                            <tr key={`${f.model}-${f.errorCode}-${i}`}>
+                            <tr
+                              key={`${f.model}-${f.errorCode}-${i}`}
+                              style={f.errorCode === 429 ? { background: 'var(--error-bg, #fee2e2)' } : undefined}
+                              title={f.errorCode === 429 ? 'Upstream rate-limited this model — cooldown should keep it out of rotation for ~5 min after each hit' : undefined}
+                            >
                               <td>{f.model}</td>
-                              <td style={{ textAlign: 'right' }}>{f.errorCode}</td>
+                              <td style={{ textAlign: 'right', fontWeight: f.errorCode === 429 ? 600 : 400 }}>{f.errorCode}</td>
                               <td style={{ textAlign: 'right' }}>{f.count}</td>
                             </tr>
                           ))}
