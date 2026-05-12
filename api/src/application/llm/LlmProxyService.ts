@@ -216,6 +216,15 @@ export class LlmProxyService {
       seed.map((m) => ({ vendor: vendorForModel(m), model: m })),
     );
     const candidates = this.buildCandidateChain(seed, cooledSet);
+    if (candidates.length === 0) {
+      // Every model in the seed + cross-vendor list is on cooldown. Fail fast
+      // with a clear envelope instead of attempting a vendor with no chain.
+      return this.exhaustedResponse(
+        seed.slice(),
+        0,
+        new Error('All candidate models are on cooldown. Retry in a minute or two.'),
+      );
+    }
     return this.dispatch(candidates, body, requestHeaders);
   }
 
@@ -238,6 +247,7 @@ export class LlmProxyService {
     const vendorKeyBound =
       (vendor === 'openrouter' && !!env.OPENROUTER_API_KEY) ||
       (vendor === 'cerebras'   && !!env.CEREBRAS_API_KEY)   ||
+      (vendor === 'nvidia'     && !!env.NVIDIA_API_KEY)     ||
       (vendor === 'ollama'     && !!env.OLLAMA_API_KEY);
     if (!vendorKeyBound) {
       return strictUnavailableResult(model, 'vendor_key_unconfigured');
@@ -291,9 +301,16 @@ export class LlmProxyService {
    * Compose the candidate chain for one request:
    *   1. Round-robin within preferred sub-pool (filtered by cooldown)
    *   2. Append remaining pool (filtered by cooldown)
-   *   3. Append cross-vendor fallbacks (each configured vendor's fallbackModel)
+   *   3. Append cross-vendor fallbacks (each configured vendor's fallbackModel),
+   *      filtered by cooldown so a cooled cross-vendor entry doesn't sneak back in
    *   4. Deduplicate, preserving first occurrence
-   *   5. If everything is on cooldown, fall back to the un-filtered pool
+   *
+   * When the entire primary pool is cooled, we *skip* it entirely rather than
+   * re-firing already-429'd models. The cross-vendor fallbacks (different
+   * upstreams with independent rate limits) are the recovery path. If those
+   * are also exhausted, the empty chain triggers `exhaustedResponse` upstream
+   * with the failure summary — which is the right answer ("all upstreams
+   * cooled, retry shortly") rather than burning budget on a doomed retry.
    */
   private buildCandidateChain(seed: readonly string[], cooledSet: Set<string>): string[] {
     const preferred = seed.slice(0, this.preferredPoolSize);
@@ -311,16 +328,15 @@ export class LlmProxyService {
         ...preferredAvailable.slice(0, start),
         ...fallbackAvailable,
       ];
-    } else if (fallbackAvailable.length > 0) {
-      chain = [...fallbackAvailable];
     } else {
-      // Everything cooled — try seed in original order (last resort).
-      chain = [...seed];
+      chain = [...fallbackAvailable];
     }
     requestCursor++;
 
-    // Append cross-vendor fallbacks, then dedupe.
-    const composed = [...chain, ...getCrossVendorFallbacks(this.vendorEnv())];
+    // Append cross-vendor fallbacks, dropping any that are themselves cooled
+    // (otherwise we re-fire a vendor that just 429'd from a sibling chain).
+    const crossVendor = getCrossVendorFallbacks(this.vendorEnv()).filter((m) => !isCooled(m));
+    const composed = [...chain, ...crossVendor];
     const seen = new Set<string>();
     return composed.filter((m) => (seen.has(m) ? false : (seen.add(m), true)));
   }
@@ -332,6 +348,7 @@ export class LlmProxyService {
         ? (this.env.OPENROUTER_API_KEY_PRO ?? this.env.OPENROUTER_API_KEY ?? null)
         : (this.env.OPENROUTER_API_KEY ?? null),
       CEREBRAS_API_KEY: this.env.CEREBRAS_API_KEY ?? null,
+      NVIDIA_API_KEY:   this.env.NVIDIA_API_KEY   ?? null,
       OLLAMA_API_KEY:   this.env.OLLAMA_API_KEY   ?? null,
     };
   }
@@ -393,11 +410,12 @@ export class LlmProxyService {
           ...callParams,
         });
       } catch (err) {
-        if (err instanceof CascadeExhaustedError) this.applyCooldowns(err.attempts);
-        return this.exhaustedResponse(candidates, schemaRetries, err);
+        const errAttempts = err instanceof CascadeExhaustedError ? err.attempts : [];
+        await this.applyCooldowns(errAttempts);
+        return this.exhaustedResponse(candidates, schemaRetries, err, errAttempts);
       }
 
-      this.applyCooldowns(result.attempts);
+      await this.applyCooldowns(result.attempts);
       totalAttempts += result.attempts.length;
       totalFailovers.push(...attemptsToFailovers(result.attempts));
       lastResult = result;
@@ -450,19 +468,34 @@ export class LlmProxyService {
     };
   }
 
-  private exhaustedResponse(candidates: string[], schemaRetries: number, err?: unknown): ProxyResult {
+  /**
+   * Build the cascade-exhausted 429 envelope. When real `attempts[]` are
+   * available (from `CascadeExhaustedError`), use them for `failovers` so the
+   * downstream `llm_failover_log` row carries the actual upstream status —
+   * not a synthetic `code: 0`. Without this, the per-model rate-limit panel
+   * cannot distinguish "model 429'd 50 times" from "model wasn't tried."
+   */
+  private exhaustedResponse(
+    candidates: string[],
+    schemaRetries: number,
+    err?: unknown,
+    attempts?: ReadonlyArray<DispatchAttempt>,
+  ): ProxyResult {
     const message = err instanceof Error ? err.message : (err ? String(err) : 'All candidates produced non-conforming output');
     const exhaustedBody = JSON.stringify({
       error: { message, code: 429, type: 'rate_limit_error' },
     });
+    const failovers: FailoverEvent[] = attempts && attempts.length > 0
+      ? attempts.map((a) => ({ model: a.model, code: a.status }))
+      : candidates.map((model) => ({ model, code: 0 }));
     return {
       response: new Response(exhaustedBody, {
         status: 429,
         headers: { 'content-type': 'application/json' },
       }),
       resolvedModel: candidates[candidates.length - 1] ?? this.modelPool[0] ?? FREE_MODEL_POOL[0] ?? '',
-      retries: candidates.length,
-      failovers: candidates.map((model) => ({ model, code: 0 })),
+      retries: attempts?.length ?? candidates.length,
+      failovers,
       ...(schemaRetries > 0 ? { schemaRetries } : {}),
     };
   }
@@ -486,20 +519,26 @@ export class LlmProxyService {
         failovers: attemptsToFailovers(result.attempts),
       };
     } catch (err) {
-      if (err instanceof CascadeExhaustedError) this.applyCooldowns(err.attempts);
-      return this.exhaustedResponse(candidates, 0, err);
+      const errAttempts = err instanceof CascadeExhaustedError ? err.attempts : [];
+      await this.applyCooldowns(errAttempts);
+      return this.exhaustedResponse(candidates, 0, err, errAttempts);
     }
   }
 
   /**
    * Record cooldowns for every failed attempt. Classification (5 min for
    * transient, 30 min for auth) lives in `cooldownStore.classifyFailure`.
-   * Fire-and-forget — the dispatch result must not wait for KV writes.
+   *
+   * Awaited (not fire-and-forget): on Cloudflare Workers a `void` promise can
+   * be aborted when the request lifecycle ends, leaving the cooldown unwritten.
+   * KV writes are ~50–200ms in parallel — only on the failure path — so the
+   * extra latency is acceptable in exchange for cooldowns that actually stick.
    */
-  private applyCooldowns(attempts: ReadonlyArray<DispatchAttempt>): void {
-    for (const a of attempts) {
-      void recordFailure(this.env, a.vendor, a.model, a.status, a.error);
-    }
+  private async applyCooldowns(attempts: ReadonlyArray<DispatchAttempt>): Promise<void> {
+    if (attempts.length === 0) return;
+    await Promise.all(
+      attempts.map((a) => recordFailure(this.env, a.vendor, a.model, a.status, a.error)),
+    );
   }
 }
 
