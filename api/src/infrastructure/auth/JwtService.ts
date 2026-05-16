@@ -8,6 +8,11 @@ export interface JwtPayload {
   sub:  string;       // userId
   tid:  number;       // tenantId
   role: TenantRole;
+  /** true when the underlying user has `isSuperadmin = true`. Mirrors the
+   *  `sa` claim on WebJwtPayload so gateway routes can bypass plan caps and
+   *  strict-pin gates for platform admins. Never set on impersonation tokens —
+   *  impersonation deliberately drops superadmin privileges to preserve audit. */
+  sa?:  boolean;
   sv?:  number;       // session_version — for fast force-logout without a blocklist
   jti?: string;
   sid?: string;

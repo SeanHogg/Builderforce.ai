@@ -141,6 +141,10 @@ type TenantAccess = {
    *   >= 0 → use this value
    */
   tokenDailyLimitOverride: number | null;
+  /** True when the JWT carries `sa: true`. Bypasses plan-cap and strict-pin
+   *  gates so platform admins can use the gateway without hitting tenant caps.
+   *  Always false for `clk_*` and `bfk_*` machine-credential paths. */
+  isSuperadmin: boolean;
 };
 
 /** Map the string effectivePlan to TenantPlan enum for plan limits lookup. */
@@ -228,6 +232,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
       clawTokenDailyLimit: claw.tokenDailyLimit,
       tenantApiKeyId: null,
       role: TenantRole.DEVELOPER,
+      isSuperadmin: false,
       ...(await resolveTenantPlan(c, claw.tenantId)),
     };
   }
@@ -294,6 +299,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
       clawTokenDailyLimit: null,
       tenantApiKeyId: keyId,
       role: TenantRole.DEVELOPER,
+      isSuperadmin: false,
       ...(await resolveTenantPlan(c, keyTenantId)),
     };
   }
@@ -329,6 +335,8 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
     clawTokenDailyLimit: null,
     tenantApiKeyId: null,
     role: payload.role,
+    // Claw-issued JWTs never carry sa:true (clawAuthRoutes never sets it).
+    isSuperadmin: !isClawToken && payload.sa === true,
     ...(await resolveTenantPlan(c, payload.tid)),
   };
 }
@@ -411,13 +419,14 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     // ── Strict-pin entitlement gate ─────────────────────────────────────────
     // Free tenants can't request modelStrict — a single misbehaving model
-    // would otherwise drain their daily budget with retries. Paid plans and
-    // superadmin-issued daily-limit overrides bypass this gate.
+    // would otherwise drain their daily budget with retries. Paid plans,
+    // superadmin-issued daily-limit overrides, and superadmin callers bypass.
     const wantsStrict = bodyAny.modelStrict === true
                      && typeof bodyAny.model === 'string'
                      && (bodyAny.model as string).length > 0;
     if (wantsStrict) {
-      const strictAllowed = access.effectivePlan !== 'free'
+      const strictAllowed = access.isSuperadmin
+                         || access.effectivePlan !== 'free'
                          || access.tokenDailyLimitOverride !== null;
       if (!strictAllowed) {
         return c.json({
@@ -436,9 +445,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     //   override === -1   → unlimited (gate skipped, no headers emitted)
     //   override >= 0     → use override
     //   override === null → use plan default
+    //   Superadmins (sa: true) also bypass — admin diagnostic tools (e.g. the
+    //   /admin?tab=usage AI Analyze button) must not be gated by tenant caps.
     const planLimitDefault = getLimits(toTenantPlan(access.effectivePlan)).tokenDailyLimit;
     const override = access.tokenDailyLimitOverride;
-    const planUnlimited = override === -1;
+    const planUnlimited = override === -1 || access.isSuperadmin;
     const planDailyLimit = planUnlimited
       ? 0  // 0 disables the plan gate below; real "unlimited" is encoded by planUnlimited
       : (override !== null && override >= 0 ? override : planLimitDefault);

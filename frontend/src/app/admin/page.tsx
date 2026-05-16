@@ -774,7 +774,25 @@ export default function AdminPage() {
       );
       setUsageAiPrompt(content);
     } catch (e) {
-      setUsageAiError(e instanceof Error ? e.message : String(e));
+      const err = e as Error & { code?: string; body?: Record<string, unknown> };
+      // Tailored copy when the gateway returns a structured error envelope.
+      // plan_token_limit_exceeded is most common in admin tools — show the
+      // numbers from the envelope rather than swallowing them as "429".
+      if (err.code === 'plan_token_limit_exceeded' && err.body) {
+        const used  = err.body.usedToday  as number | undefined;
+        const limit = err.body.dailyLimit as number | undefined;
+        const retryAfter = err.body.retryAfter as number | undefined;
+        const hours = retryAfter != null ? Math.ceil(retryAfter / 3600) : null;
+        setUsageAiError(
+          `LLM daily token limit reached (${used?.toLocaleString() ?? '?'} / ${limit?.toLocaleString() ?? '?'} tokens used today).` +
+          (hours != null ? ` Resets in ~${hours}h.` : '') +
+          ' Superadmins should bypass this — if you are seeing it, log out and back in to refresh your token (the sa: true claim was added in this release; older tokens still hit the cap until they expire).'
+        );
+      } else if (err.code === 'claw_token_limit_exceeded') {
+        setUsageAiError(err.message);
+      } else {
+        setUsageAiError(err.message || String(e));
+      }
     } finally {
       setUsageAiLoading(false);
     }

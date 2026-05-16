@@ -870,7 +870,8 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     if (!body.tenantId) return c.json({ error: 'tenantId is required' }, 400);
 
     const sessionId = c.get('sessionId') as string | undefined;
-    const result = await authService.tenantToken(userId, body.tenantId, sessionId);
+    const isSuperadmin = c.get('isSuperadmin') === true;
+    const result = await authService.tenantToken(userId, body.tenantId, sessionId, isSuperadmin);
 
     await persistToken(db, result.token, {
       userId,
