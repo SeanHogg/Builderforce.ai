@@ -77,6 +77,7 @@ export interface AdminError {
 
 export interface LlmModelStat {
   model: string;
+  vendor: VendorId;
   requests: number;
   prompt_tokens: number;
   completion_tokens: number;
@@ -93,6 +94,7 @@ export interface LlmDailyStat {
 
 export interface LlmFailoverStat {
   model: string;
+  vendor: VendorId;
   errorCode: number;
   count: number;
 }

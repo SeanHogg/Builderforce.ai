@@ -88,6 +88,10 @@ export interface LlmUsage {
 /** One model attempt that failed before the resolved model succeeded. */
 export interface FailoverEvent {
   model: string;
+  /** Vendor that owns this model — lets callers see if failures concentrate
+   *  on one upstream (e.g. all OpenRouter free-tier saturated) vs are
+   *  distributed across vendors. */
+  vendor: VendorId;
   /** HTTP status, or 0 for embedded errors / network failures. */
   code: number;
 }
@@ -482,12 +486,17 @@ export class LlmProxyService {
     attempts?: ReadonlyArray<DispatchAttempt>,
   ): ProxyResult {
     const message = err instanceof Error ? err.message : (err ? String(err) : 'All candidates produced non-conforming output');
+    const failovers: FailoverEvent[] = attempts && attempts.length > 0
+      ? attempts.map((a) => ({ model: a.model, vendor: a.vendor, code: a.status }))
+      : candidates.map((model) => ({ model, vendor: vendorForModel(model), code: 0 }));
+    // Include the failover breakdown in the body so consumers can see what
+    // was tried — and importantly, which vendor each attempt hit. When every
+    // attempt is on the same vendor (e.g. OpenRouter saturated), callers can
+    // tell their cross-vendor fallback isn't covering them.
     const exhaustedBody = JSON.stringify({
       error: { message, code: 429, type: 'rate_limit_error' },
+      failovers,
     });
-    const failovers: FailoverEvent[] = attempts && attempts.length > 0
-      ? attempts.map((a) => ({ model: a.model, code: a.status }))
-      : candidates.map((model) => ({ model, code: 0 }));
     return {
       response: new Response(exhaustedBody, {
         status: 429,
@@ -547,7 +556,7 @@ export class LlmProxyService {
 // ---------------------------------------------------------------------------
 
 function attemptsToFailovers(attempts: DispatchAttempt[]): FailoverEvent[] {
-  return attempts.map((a) => ({ model: a.model, code: a.status }));
+  return attempts.map((a) => ({ model: a.model, vendor: a.vendor, code: a.status }));
 }
 
 // ---------------------------------------------------------------------------
