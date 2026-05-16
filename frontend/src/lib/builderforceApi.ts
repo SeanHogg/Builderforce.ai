@@ -162,10 +162,13 @@ export const brain = {
   uploadUrl: (key: string) => `${AUTH_API_URL}/api/brain/uploads/${key}`,
 };
 
-/** OpenAI-compatible chat completion (uses tenant JWT for billing). */
+/** OpenAI-compatible chat completion (uses tenant JWT for billing).
+ *  Default model is `openai/gpt-4o-mini` — cheap and fast for ambient calls.
+ *  Pass `model` for tasks that need stronger instruction-following (e.g.
+ *  structured prompt generation, multi-rule analysis). */
 export async function llmChat(
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
-  options?: { temperature?: number; maxTokens?: number }
+  options?: { temperature?: number; maxTokens?: number; model?: string }
 ): Promise<{ content: string }> {
   const headers = authHeaders();
   const hadToken = !!headers.Authorization;
@@ -173,7 +176,7 @@ export async function llmChat(
     method: 'POST',
     headers,
     body: JSON.stringify({
-      model: 'openai/gpt-4o-mini',
+      model: options?.model ?? 'openai/gpt-4o-mini',
       messages,
       temperature: options?.temperature ?? 0.3,
       max_tokens: options?.maxTokens ?? 4096,

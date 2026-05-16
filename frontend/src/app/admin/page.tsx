@@ -737,7 +737,10 @@ export default function AdminPage() {
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        { temperature: 0.1, maxTokens: 2048 }
+        // Anthropic Sonnet for this admin button — best instruction-following
+        // for the 8 hard rules in the system prompt. Small models drifted
+        // (uniform-failover signal, no-op reorders, wrong file attribution).
+        { temperature: 0.1, maxTokens: 2048, model: 'anthropic/claude-3.7-sonnet' }
       );
       setUsageAiPrompt(content);
     } catch (e) {
