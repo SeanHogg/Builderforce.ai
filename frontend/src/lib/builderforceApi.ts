@@ -1008,15 +1008,42 @@ export interface LlmUsageStats {
   period: string;
 }
 
+/** Mirrors `api/src/application/llm/vendors/types.ts:VendorId`. */
+export type VendorId = 'openrouter' | 'cerebras' | 'ollama' | 'nvidia';
+
+/** Per-model status returned by `/llm/v1/health` and `/llm/v1/models` (configured branch). */
+export interface LlmModelStatus {
+  model: string;
+  preferred: boolean;
+  available: boolean;
+  /** Epoch ms when the cooldown lifts. Absent when the model is available. */
+  cooldownUntil?: number;
+  vendor: VendorId;
+}
+
+export interface LlmHealthResponse {
+  status: string;
+  free: LlmModelStatus[];
+  pro: LlmModelStatus[];
+  timestamp: string;
+}
+
+type EffectivePlanLabel = 'free' | 'pro' | 'teams';
+
+/** Union response for `/llm/v1/models` — see `api/src/presentation/routes/llmRoutes.ts`. */
+export type LlmModelsResponse =
+  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; models: string[] }
+  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; object: 'list'; data: LlmModelStatus[] };
+
 export const llmApi = {
   usage: (): Promise<LlmUsageStats> =>
     request<LlmUsageStats>('/llm/v1/usage'),
 
-  health: (): Promise<{ status: string; free: unknown[]; pro: unknown[]; timestamp: string }> =>
-    request<{ status: string; free: unknown[]; pro: unknown[]; timestamp: string }>('/llm/v1/health'),
+  health: (): Promise<LlmHealthResponse> =>
+    request<LlmHealthResponse>('/llm/v1/health'),
 
-  models: (): Promise<{ data: Array<{ id: string; object: string }> }> =>
-    request<{ data: Array<{ id: string; object: string }> }>('/llm/v1/models'),
+  models: (): Promise<LlmModelsResponse> =>
+    request<LlmModelsResponse>('/llm/v1/models'),
 };
 
 // ---------------------------------------------------------------------------

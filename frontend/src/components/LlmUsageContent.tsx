@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { llmApi, type LlmUsageStats } from '@/lib/builderforceApi';
+import { llmApi, type LlmUsageStats, type LlmModelStatus, type LlmHealthResponse } from '@/lib/builderforceApi';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -16,24 +16,10 @@ function fmtNum(n: number) {
   return String(n);
 }
 
-interface ModelStatus {
-  model: string;
-  preferred: boolean;
-  available: boolean;
-  cooldownUntil?: number;
-}
-
-interface LlmHealth {
-  status: string;
-  free: ModelStatus[];
-  pro: ModelStatus[];
-  timestamp: string;
-}
-
 export function LlmUsageContent() {
   const [usage, setUsage] = useState<LlmUsageStats | null>(null);
-  const [health, setHealth] = useState<LlmHealth | null>(null);
-  const [models, setModels] = useState<Array<{ id: string }>>([]);
+  const [health, setHealth] = useState<LlmHealthResponse | null>(null);
+  const [models, setModels] = useState<LlmModelStatus[]>([]);
   const [loadingUsage, setLoadingUsage] = useState(true);
   const [loadingHealth, setLoadingHealth] = useState(true);
   const [errorUsage, setErrorUsage] = useState<string | null>(null);
@@ -49,13 +35,13 @@ export function LlmUsageContent() {
 
     llmApi
       .health()
-      .then((h) => setHealth(h as LlmHealth))
+      .then(setHealth)
       .catch((e: Error) => setErrorHealth(e.message))
       .finally(() => setLoadingHealth(false));
 
     llmApi
       .models()
-      .then((r) => setModels(r.data ?? []))
+      .then((r) => setModels(r.configured ? r.data : []))
       .catch(() => {});
   }, []);
 

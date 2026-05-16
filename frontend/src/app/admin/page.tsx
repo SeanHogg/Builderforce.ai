@@ -26,6 +26,7 @@ import {
   type AuditLogEntry,
   type ImpersonationSession,
   type LlmModelStatus,
+  type VendorId,
   type TenantMember,
   type UserWorkspace,
 } from '@/lib/adminApi';
@@ -539,11 +540,27 @@ export default function AdminPage() {
     setUsageAiCopied(false);
     try {
       // Pull the real catalog so the AI can't invent model ids and we can
-      // verify "already at position 0" claims.
+      // verify "already at position 0" claims. Each entry now carries `vendor`
+      // (typed: 'openrouter' | 'cerebras' | 'nvidia' | 'ollama'), which lets us
+      // resolve the editable file path server-side rather than asking the AI
+      // to apply prefix-rules.
       const healthSnapshot = await adminApi.health();
+      const VENDOR_FILE: Record<VendorId, string> = {
+        openrouter: 'api/src/application/llm/vendors/openrouter.ts',
+        cerebras:   'api/src/application/llm/vendors/cerebras.ts',
+        nvidia:     'api/src/application/llm/vendors/nvidia.ts',
+        ollama:     'api/src/application/llm/vendors/ollama.ts',
+      };
+      const enrichCatalog = (rows: ReadonlyArray<LlmModelStatus>) =>
+        rows.map((m, i) => ({
+          position: i,
+          model: m.model,
+          vendor: m.vendor,
+          vendorFile: VENDOR_FILE[m.vendor],
+        }));
       const catalog = {
-        free: healthSnapshot.llm.free.map((m, i) => ({ position: i, model: m.model })),
-        pro:  healthSnapshot.llm.pro.map((m, i)  => ({ position: i, model: m.model })),
+        free: enrichCatalog(healthSnapshot.llm.free),
+        pro:  enrichCatalog(healthSnapshot.llm.pro),
       };
       const catalogIds = new Set<string>([
         ...healthSnapshot.llm.free.map((m) => m.model),
@@ -650,7 +667,7 @@ export default function AdminPage() {
         '',
         '1. Pool composition is DERIVED, not hand-listed.',
         '   - `FREE_MODEL_POOL` and `PRO_MODEL_POOL` in api/src/application/llm/LlmProxyService.ts are computed from each vendor module\'s `catalog` array.',
-        '   - To reorder which models are tried first within a vendor, reorder entries in that vendor\'s catalog file (see vendor-prefix map below). There is no "fallback list in registry.ts".',
+        '   - To reorder which models are tried first within a vendor, reorder entries in that vendor\'s catalog file (each catalog entry carries `vendorFile`). There is no "fallback list in registry.ts".',
         '   - `PREFERRED_POOL_SIZE` (currently 2) controls how many top-of-pool entries participate in round-robin. To prioritize a single model strongly, put it at position 0 of its vendor catalog AND consider raising/lowering PREFERRED_POOL_SIZE.',
         '',
         '2. Cross-vendor failover is ONE model per vendor, set by `VendorModule.fallbackModel`.',
@@ -658,11 +675,7 @@ export default function AdminPage() {
         '   - api/src/application/llm/vendors/nvidia.ts   → `fallbackModel: \'nvidia/nemotron-mini-4b-instruct\'`',
         '   - To change which model takes over when the OpenRouter pool is exhausted, edit `fallbackModel` in the relevant vendor file.',
         '',
-        '3. Model-id prefix → vendor file map (use this to send the engineer to the right file):',
-        '   - `cerebras/<id>`                    → api/src/application/llm/vendors/cerebras.ts',
-        '   - `nvidia/<id>` or `nim/<id>`        → api/src/application/llm/vendors/nvidia.ts',
-        '   - `ollama/<id>`                      → api/src/application/llm/vendors/ollama.ts',
-        '   - everything else (bare ids, `:free`, `anthropic/...`, `openai/...`, `meta-llama/...`, `cognitivecomputations/...`, etc.) → api/src/application/llm/vendors/openrouter.ts',
+        '3. Each entry in `catalog.free` / `catalog.pro` carries `vendor` and `vendorFile` — the file you must edit for any catalog change to that model. Use the supplied `vendorFile` verbatim; do not apply prefix rules yourself.',
         '',
         '4. Cooldown semantics (api/src/infrastructure/auth/cooldownStore.ts).',
         '   - Cooldowns punish FAILURES, classified by HTTP status: transient (5xx, 429) → 5 min; auth (401/403) → 30 min.',
@@ -691,7 +704,7 @@ export default function AdminPage() {
         '  4. If `dataQuality.smallSample` is true, output ONE recommendation only: `Collect more data before tuning — only X total requests in window.` and stop.',
         '  5. Skip any model row where `lowSample === true` unless it has ≥ 80% retryRate (overwhelming evidence even at small N).',
         '  6. For REORDER_CATALOG, verify the target model is NOT already at the recommended position in `catalog.free` or `catalog.pro`. If it is already there, the recommendation is a no-op — drop it. (`catalog.free[0].model` is the current top.)',
-        '  7. Map every catalog edit to the correct vendor file using the prefix rules above (point 3 in architecture). A bare id like `llama3.1-8b` or `qwen-3-235b-...` is Cerebras — edit `cerebras.ts`, not `openrouter.ts`.',
+        '  7. For every catalog edit, copy the `vendorFile` field from the matching catalog entry verbatim into the recommendation. Never invent or transform a file path.',
         '  8. Cap your output at 5 recommendations total. Pick the highest-signal ones. Quality over quantity.',
         '',
         'OUTPUT CONTRACT — produce ONLY the prompt text the user will paste into Claude Code. No preamble, no markdown fences around the whole prompt, no commentary. Follow this template exactly:',
