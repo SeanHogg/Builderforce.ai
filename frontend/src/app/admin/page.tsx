@@ -553,20 +553,72 @@ export default function AdminPage() {
         failovers: llmUsage.failovers,
         dailyTrend: llmUsage.daily.slice(-14),
       };
-      const systemPrompt =
-        'You are a senior engineer reviewing observability data from the Builderforce.ai LLM gateway. ' +
-        'The gateway code lives in api/src/application/llm/LlmProxyService.ts, api/src/application/llm/vendors/registry.ts, ' +
-        'and api/src/presentation/routes/llmRoutes.ts. Given the usage JSON the user pastes, output ONLY a single ' +
-        'copy-paste-ready prompt that the user will paste into Claude Code to fix the consumer-facing AI endpoint. ' +
-        'The prompt must (1) include the relevant data points the engineer needs (retry rates, failover hot spots, ' +
-        'rate-limit hits, token mix per model, daily trend), (2) call out specific concrete changes to model ' +
-        'selection, fallback ordering, cooldown logic, and streaming behavior justified by the numbers, and ' +
-        '(3) reference the file paths above so Claude Code edits the right files. Do not include preamble, ' +
-        'commentary, or markdown fences around the prompt — output the prompt text only.';
+      const systemPrompt = [
+        'You are a senior engineer producing a Claude Code prompt that another engineer will paste verbatim to improve the Builderforce.ai LLM gateway based on observed usage.',
+        '',
+        'GATEWAY ARCHITECTURE — ground every recommendation in these facts. Do not invent files, lists, or knobs that are not listed here.',
+        '',
+        '1. Pool composition is DERIVED, not hand-listed.',
+        '   - `FREE_MODEL_POOL` and `PRO_MODEL_POOL` in api/src/application/llm/LlmProxyService.ts are computed from each vendor module\'s `catalog` array.',
+        '   - To reorder which models are tried first within a vendor, reorder entries in that vendor\'s catalog file (see vendor-prefix map below). There is no "fallback list in registry.ts".',
+        '   - `PREFERRED_POOL_SIZE` (currently 2) controls how many top-of-pool entries participate in round-robin. To prioritize a single model strongly, put it at position 0 of its vendor catalog AND consider raising/lowering PREFERRED_POOL_SIZE.',
+        '',
+        '2. Cross-vendor failover is ONE model per vendor, set by `VendorModule.fallbackModel`.',
+        '   - api/src/application/llm/vendors/cerebras.ts → `fallbackModel: \'llama3.1-8b\'`',
+        '   - api/src/application/llm/vendors/nvidia.ts   → `fallbackModel: \'nvidia/nemotron-mini-4b-instruct\'`',
+        '   - To change which model takes over when the OpenRouter pool is exhausted, edit `fallbackModel` in the relevant vendor file.',
+        '',
+        '3. Model-id prefix → vendor file map (use this to send the engineer to the right file):',
+        '   - `cerebras/<id>`                    → api/src/application/llm/vendors/cerebras.ts',
+        '   - `nvidia/<id>` or `nim/<id>`        → api/src/application/llm/vendors/nvidia.ts',
+        '   - `ollama/<id>`                      → api/src/application/llm/vendors/ollama.ts',
+        '   - everything else (bare ids, `:free`, `anthropic/...`, `openai/...`, `meta-llama/...`, `cognitivecomputations/...`, etc.) → api/src/application/llm/vendors/openrouter.ts',
+        '',
+        '4. Cooldown semantics (api/src/infrastructure/auth/cooldownStore.ts).',
+        '   - Cooldowns punish FAILURES, classified by HTTP status: transient (5xx, 429) → 5 min; auth (401/403) → 30 min.',
+        '   - Cooldowns are NEVER triggered by heavy successful usage. Do not recommend "cool down heavy-usage models" — that is structurally invalid.',
+        '   - Legal cooldown changes: shorten/lengthen the TTL for a classification, add a new classification for a specific status, or add an early-recovery health probe (already an open gap).',
+        '',
+        '5. Streaming is CLIENT-controlled.',
+        '   - The gateway streams when `body.stream === true` arrives from the caller (api/src/presentation/routes/llmRoutes.ts). The gateway cannot decide to stream based on token count because `total_tokens` is only known after generation finishes.',
+        '   - Legal streaming-related changes: change which models the streaming dispatcher prefers (same catalog reorder mechanism), or exclude a vendor from streaming if it has no `callStream`.',
+        '',
+        '6. Rate limiting is UPSTREAM-owned.',
+        '   - The gateway does not enforce per-model request-per-minute limits — those live with the vendor (Cerebras quotas, OpenRouter limits, etc.).',
+        '   - Legal RL-adjacent changes: cooldown TTL tuning, catalog reordering away from rate-limited vendors, or `PREFERRED_POOL_SIZE` changes to spread load.',
+        '',
+        'LEGAL RECOMMENDATION TYPES (every recommendation in your output must be one of these):',
+        '  A. REORDER_CATALOG  — move a model up/down in <vendor-file>.catalog',
+        '  B. REMOVE_FROM_CATALOG — delete a model entry from <vendor-file>.catalog',
+        '  C. SWAP_FALLBACK   — change `fallbackModel` in <vendor-file>',
+        '  D. TUNE_COOLDOWN   — change a TTL or classification in cooldownStore.ts',
+        '  E. TUNE_PREFERRED  — change `PREFERRED_POOL_SIZE` in LlmProxyService.ts',
+        '',
+        'OUTPUT CONTRACT — produce ONLY the prompt text the user will paste into Claude Code. No preamble, no markdown fences around the whole prompt, no commentary. Follow this template exactly:',
+        '',
+        '----- TEMPLATE -----',
+        'Based on the following Builderforce.ai gateway usage data, make the listed changes. Each recommendation is grounded in a specific number from the data and a specific file from the architecture.',
+        '',
+        'USAGE DATA:',
+        '<paste a short readable summary of the data: window, top models by request count with retry%, failover-error breakdown including 429 counts, daily-trend direction>',
+        '',
+        'CHANGES:',
+        '1. <RECOMMENDATION_TYPE> in <file_path>: <action>',
+        '   Reason: <one-sentence justification citing the specific number, e.g. "X had Y retries on Z requests = N% retry rate, vs pool median M%">',
+        '2. ...',
+        '',
+        'CONSTRAINTS:',
+        '- Do not invent files or knobs outside the five legal types above.',
+        '- Do not change client-controlled behavior (streaming flag, model selection by string).',
+        '- Verify catalog edits by running `npm run typecheck` in api/ before reporting done.',
+        '----- END TEMPLATE -----',
+        '',
+        'Do not propose more recommendations than the data supports. If the data shows no actionable signal in a category (e.g. zero failovers), say so explicitly and do not invent a change. If the data window is too small to draw conclusions (e.g. < 50 total requests), output a single recommendation: "Collect more data before tuning."',
+      ].join('\n');
       const userPrompt =
         'Usage data (JSON):\n```json\n' +
         JSON.stringify(summary, null, 2) +
-        '\n```\nProduce the Claude Code prompt now.';
+        '\n```\nProduce the Claude Code prompt now, following the OUTPUT CONTRACT exactly.';
       const { content } = await llmChat(
         [
           { role: 'system', content: systemPrompt },
