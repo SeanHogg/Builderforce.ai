@@ -538,20 +538,110 @@ export default function AdminPage() {
     setUsageAiError('');
     setUsageAiCopied(false);
     try {
+      // Pull the real catalog so the AI can't invent model ids and we can
+      // verify "already at position 0" claims.
+      const healthSnapshot = await adminApi.health();
+      const catalog = {
+        free: healthSnapshot.llm.free.map((m, i) => ({ position: i, model: m.model })),
+        pro:  healthSnapshot.llm.pro.map((m, i)  => ({ position: i, model: m.model })),
+      };
+      const catalogIds = new Set<string>([
+        ...healthSnapshot.llm.free.map((m) => m.model),
+        ...healthSnapshot.llm.pro.map((m) => m.model),
+      ]);
+
+      // Normalize byModel: callers can address Cerebras/NVIDIA/Ollama with or
+      // without the vendor prefix; merge duplicates so the same upstream model
+      // isn't double-counted (this caused "move llama3.1-8b" + "move
+      // cerebras/llama3.1-8b" duplicates in the previous output).
+      const stripVendorPrefix = (id: string): string => {
+        for (const p of ['cerebras/', 'nvidia/', 'nim/', 'ollama/']) {
+          if (id.startsWith(p)) {
+            const stripped = id.slice(p.length);
+            // Only strip if the stripped form is in the catalog — otherwise
+            // it's an openrouter-style id that legitimately keeps its prefix.
+            if (catalogIds.has(stripped)) return stripped;
+          }
+        }
+        return id;
+      };
+      const mergedByModel = new Map<string, {
+        model: string;
+        requests: number;
+        retries: number;
+        streamed: number;
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+      }>();
+      for (const m of llmUsage.byModel) {
+        const key = stripVendorPrefix(m.model);
+        const prev = mergedByModel.get(key);
+        if (prev) {
+          prev.requests += m.requests;
+          prev.retries += m.retries;
+          prev.streamed += m.streamed_requests;
+          prev.promptTokens += m.prompt_tokens;
+          prev.completionTokens += m.completion_tokens;
+          prev.totalTokens += m.total_tokens;
+        } else {
+          mergedByModel.set(key, {
+            model: key,
+            requests: m.requests,
+            retries: m.retries,
+            streamed: m.streamed_requests,
+            promptTokens: m.prompt_tokens,
+            completionTokens: m.completion_tokens,
+            totalTokens: m.total_tokens,
+          });
+        }
+      }
+      const byModel = [...mergedByModel.values()]
+        .sort((a, b) => b.requests - a.requests)
+        .map((m) => ({
+          ...m,
+          retryRate: m.requests > 0 ? Number((m.retries / m.requests).toFixed(3)) : 0,
+          inCatalog: catalogIds.has(m.model),
+          lowSample: m.requests < 5,
+        }));
+
+      // Failover artifact detection — if most rows share the same count, the
+      // cascade is just walking the whole pool uniformly and `count` is not a
+      // quality signal. Force the AI to use retryRate per model instead.
+      const failoverCounts = llmUsage.failovers.map((f) => f.count);
+      const fMean = failoverCounts.length > 0
+        ? failoverCounts.reduce((s, n) => s + n, 0) / failoverCounts.length
+        : 0;
+      const fVariance = failoverCounts.length > 0
+        ? failoverCounts.reduce((s, n) => s + (n - fMean) ** 2, 0) / failoverCounts.length
+        : 0;
+      const fStddev = Math.sqrt(fVariance);
+      const cv = fMean > 0 ? fStddev / fMean : 0;
+      const uniformFailoverArtifact = failoverCounts.length >= 5 && cv < 0.15;
+
+      // Use the windowed sum from byModel — `llmUsage.totals` is lifetime per
+      // the known gap (README "Consolidated Gap Register": totals card is
+      // all-time while byModel/daily are windowed). Lifetime totals would
+      // under-trigger the small-sample gate.
+      const windowedRequests = byModel.reduce((s, m) => s + m.requests, 0);
+      const dataQuality = {
+        totalRequests: windowedRequests,
+        smallSample: windowedRequests < 50,
+        uniformFailoverArtifact,
+        coefficientOfVariation: Number(cv.toFixed(3)),
+        note: uniformFailoverArtifact
+          ? 'Failover counts are near-uniform across models — this means the cascade walked the full pool on most failed requests, not that any specific model is bad. Use byModel[].retryRate as the quality signal, not failovers[].count.'
+          : 'Failover counts vary across models — failovers[].count is informative.',
+      };
+
       const summary = {
         windowDays: llmUsage.days,
         totals: llmUsage.totals,
-        byModel: llmUsage.byModel.map((m) => ({
-          model: m.model,
-          requests: m.requests,
-          retries: m.retries,
-          streamed: m.streamed_requests,
-          promptTokens: m.prompt_tokens,
-          completionTokens: m.completion_tokens,
-          totalTokens: m.total_tokens,
-        })),
+        dataQuality,
+        byModel,
         failovers: llmUsage.failovers,
         dailyTrend: llmUsage.daily.slice(-14),
+        catalog,
       };
       const systemPrompt = [
         'You are a senior engineer producing a Claude Code prompt that another engineer will paste verbatim to improve the Builderforce.ai LLM gateway based on observed usage.',
@@ -594,6 +684,16 @@ export default function AdminPage() {
         '  D. TUNE_COOLDOWN   — change a TTL or classification in cooldownStore.ts',
         '  E. TUNE_PREFERRED  — change `PREFERRED_POOL_SIZE` in LlmProxyService.ts',
         '',
+        'HARD RULES — violating any of these invalidates the output:',
+        '  1. Only reference model ids that appear verbatim in `catalog.free` or `catalog.pro`. If an id is not in the catalog, do not recommend touching it — it does not exist in the codebase.',
+        '  2. Use `byModel[].retryRate` (already pre-computed: retries / requests) as the per-model quality signal. Do NOT cite raw `byModel[].retries` or `failovers[].count` directly — they need normalization.',
+        '  3. If `dataQuality.uniformFailoverArtifact` is true, treat the entire `failovers` array as low-signal. Do not infer quality from those counts. Lean on retryRate instead.',
+        '  4. If `dataQuality.smallSample` is true, output ONE recommendation only: `Collect more data before tuning — only X total requests in window.` and stop.',
+        '  5. Skip any model row where `lowSample === true` unless it has ≥ 80% retryRate (overwhelming evidence even at small N).',
+        '  6. For REORDER_CATALOG, verify the target model is NOT already at the recommended position in `catalog.free` or `catalog.pro`. If it is already there, the recommendation is a no-op — drop it. (`catalog.free[0].model` is the current top.)',
+        '  7. Map every catalog edit to the correct vendor file using the prefix rules above (point 3 in architecture). A bare id like `llama3.1-8b` or `qwen-3-235b-...` is Cerebras — edit `cerebras.ts`, not `openrouter.ts`.',
+        '  8. Cap your output at 5 recommendations total. Pick the highest-signal ones. Quality over quantity.',
+        '',
         'OUTPUT CONTRACT — produce ONLY the prompt text the user will paste into Claude Code. No preamble, no markdown fences around the whole prompt, no commentary. Follow this template exactly:',
         '',
         '----- TEMPLATE -----',
@@ -613,7 +713,7 @@ export default function AdminPage() {
         '- Verify catalog edits by running `npm run typecheck` in api/ before reporting done.',
         '----- END TEMPLATE -----',
         '',
-        'Do not propose more recommendations than the data supports. If the data shows no actionable signal in a category (e.g. zero failovers), say so explicitly and do not invent a change. If the data window is too small to draw conclusions (e.g. < 50 total requests), output a single recommendation: "Collect more data before tuning."',
+        'Final check before emitting: re-read HARD RULES 1, 6, 7, 8. If any of your recommendations violates one of those rules, drop it. It is better to emit zero recommendations than to emit a single bogus one.',
       ].join('\n');
       const userPrompt =
         'Usage data (JSON):\n```json\n' +
@@ -624,7 +724,7 @@ export default function AdminPage() {
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        { temperature: 0.2, maxTokens: 2048 }
+        { temperature: 0.1, maxTokens: 2048 }
       );
       setUsageAiPrompt(content);
     } catch (e) {
