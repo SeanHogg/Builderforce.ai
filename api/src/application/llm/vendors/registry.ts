@@ -12,6 +12,7 @@ import { ollamaModule } from './ollama';
 import { openRouterModule } from './openrouter';
 import {
   VendorRetryableError,
+  isEmptyChatResponse,
   type AiModelTier,
   type VendorCallParams,
   type VendorCallResult,
@@ -197,6 +198,18 @@ export async function dispatchVendor(params: DispatchParams): Promise<DispatchRe
 
     try {
       const result = await mod.call({ ...rest, apiKey, model: vendorModel });
+      // Empty-but-200 detection. Some free-tier upstreams accept a request,
+      // burn 10–20s, then return `choices[0].message.content === ""` with no
+      // error code. Treat as retryable so the cascade advances and the model
+      // gets cooled via the `embedded` classification (5 min).
+      if (isEmptyChatResponse(result)) {
+        throw new VendorRetryableError(
+          vendorId,
+          vendorModel,
+          502,
+          `embedded:empty: upstream returned 200 OK with no content for ${vendorId}/${vendorModel}`,
+        );
+      }
       // `modelUsed` echoes what the caller asked for (with prefix preserved).
       return { ...result, modelUsed: model, vendorUsed: vendorId, attempts };
     } catch (err) {

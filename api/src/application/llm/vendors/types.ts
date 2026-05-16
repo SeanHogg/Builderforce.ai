@@ -104,6 +104,25 @@ export const parseOpenAIResponse: ResponseParser = (raw) => {
   };
 };
 
+/**
+ * Detect a 200 OK with no usable content. Some free-tier upstreams accept a
+ * request, take 10–20s, and return `choices[0].message.content === ""` with
+ * no error code — looks like success but isn't. Tool-call-only responses
+ * (`message.tool_calls` populated, `content` empty/null) are legitimate and
+ * must NOT be classified as empty.
+ *
+ * Used by the dispatcher to convert these into `VendorRetryableError` so the
+ * cascade advances and a cooldown is recorded — keeping bad-but-200 models
+ * out of rotation for the standard `embedded` window (5 min).
+ */
+export function isEmptyChatResponse(result: VendorCallResult): boolean {
+  if (result.content.trim().length > 0) return false;
+  const raw = result.raw as { choices?: Array<{ message?: { tool_calls?: unknown[] } }> } | null;
+  const toolCalls = raw?.choices?.[0]?.message?.tool_calls;
+  if (Array.isArray(toolCalls) && toolCalls.length > 0) return false;
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Token-usage normalization (handles both OpenAI prompt_tokens/completion_tokens
 // and Anthropic-style input_tokens/output_tokens vendors emit)
