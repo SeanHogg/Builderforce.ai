@@ -29,6 +29,7 @@ import {
   type TenantMember,
   type UserWorkspace,
 } from '@/lib/adminApi';
+import { llmChat } from '@/lib/builderforceApi';
 import { BUILTIN_PERSONAS, type Persona } from '@/lib/marketplaceData';
 import UserDetailDrawer from '@/components/UserDetailDrawer';
 import { TenantApiKeysAdminTab } from '@/components/admin/TenantApiKeysAdminTab';
@@ -169,6 +170,10 @@ export default function AdminPage() {
   const [errors, setErrors] = useState<AdminError[]>([]);
   const [llmUsage, setLlmUsage] = useState<LlmUsageStats | null>(null);
   const [usageDays, setUsageDays] = useState(30);
+  const [usageAiPrompt, setUsageAiPrompt] = useState('');
+  const [usageAiLoading, setUsageAiLoading] = useState(false);
+  const [usageAiError, setUsageAiError] = useState('');
+  const [usageAiCopied, setUsageAiCopied] = useState(false);
   const [showToken, setShowToken] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
   const [copiedEnv, setCopiedEnv] = useState(false);
@@ -524,6 +529,67 @@ export default function AdminPage() {
       setErrorMsg(e instanceof Error ? e.message : String(e));
     } finally {
       setLegalPublishing(false);
+    }
+  };
+
+  const runUsageAiAnalysis = async () => {
+    if (!llmUsage) return;
+    setUsageAiLoading(true);
+    setUsageAiError('');
+    setUsageAiCopied(false);
+    try {
+      const summary = {
+        windowDays: llmUsage.days,
+        totals: llmUsage.totals,
+        byModel: llmUsage.byModel.map((m) => ({
+          model: m.model,
+          requests: m.requests,
+          retries: m.retries,
+          streamed: m.streamed_requests,
+          promptTokens: m.prompt_tokens,
+          completionTokens: m.completion_tokens,
+          totalTokens: m.total_tokens,
+        })),
+        failovers: llmUsage.failovers,
+        dailyTrend: llmUsage.daily.slice(-14),
+      };
+      const systemPrompt =
+        'You are a senior engineer reviewing observability data from the Builderforce.ai LLM gateway. ' +
+        'The gateway code lives in api/src/application/llm/LlmProxyService.ts, api/src/application/llm/vendors/registry.ts, ' +
+        'and api/src/presentation/routes/llmRoutes.ts. Given the usage JSON the user pastes, output ONLY a single ' +
+        'copy-paste-ready prompt that the user will paste into Claude Code to fix the consumer-facing AI endpoint. ' +
+        'The prompt must (1) include the relevant data points the engineer needs (retry rates, failover hot spots, ' +
+        'rate-limit hits, token mix per model, daily trend), (2) call out specific concrete changes to model ' +
+        'selection, fallback ordering, cooldown logic, and streaming behavior justified by the numbers, and ' +
+        '(3) reference the file paths above so Claude Code edits the right files. Do not include preamble, ' +
+        'commentary, or markdown fences around the prompt — output the prompt text only.';
+      const userPrompt =
+        'Usage data (JSON):\n```json\n' +
+        JSON.stringify(summary, null, 2) +
+        '\n```\nProduce the Claude Code prompt now.';
+      const { content } = await llmChat(
+        [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        { temperature: 0.2, maxTokens: 2048 }
+      );
+      setUsageAiPrompt(content);
+    } catch (e) {
+      setUsageAiError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUsageAiLoading(false);
+    }
+  };
+
+  const copyUsageAiPrompt = async () => {
+    if (!usageAiPrompt) return;
+    try {
+      await navigator.clipboard.writeText(usageAiPrompt);
+      setUsageAiCopied(true);
+      setTimeout(() => setUsageAiCopied(false), 2000);
+    } catch (e) {
+      setUsageAiError(e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -937,6 +1003,46 @@ export default function AdminPage() {
 
             {tab === 'usage' && llmUsage && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={runUsageAiAnalysis}
+                    disabled={usageAiLoading}
+                    title="Send this period's usage data to the LLM and generate a Claude Code prompt to improve the AI endpoint"
+                  >
+                    {usageAiLoading ? 'Analyzing…' : 'AI Analyze'}
+                  </button>
+                </div>
+                {usageAiError && (
+                  <div className="error-banner" style={{ fontSize: 13 }}>{usageAiError}</div>
+                )}
+                {usageAiPrompt && (
+                  <div className="health-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div className="health-label">Claude Code prompt — paste this to fix the AI endpoint</div>
+                      <button type="button" className="btn-ghost" onClick={copyUsageAiPrompt}>
+                        {usageAiCopied ? '✓ Copied' : 'Copy'}
+                      </button>
+                    </div>
+                    <textarea
+                      readOnly
+                      value={usageAiPrompt}
+                      style={{
+                        width: '100%',
+                        minHeight: 240,
+                        fontFamily: 'var(--font-mono, monospace)',
+                        fontSize: 12,
+                        padding: 12,
+                        background: 'var(--bg-secondary, #0b0b0b)',
+                        color: 'var(--text-primary)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 6,
+                        resize: 'vertical',
+                      }}
+                    />
+                  </div>
+                )}
                 <div className="health-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
                   <div className="health-card">
                     <div className="health-label">Requests</div>
