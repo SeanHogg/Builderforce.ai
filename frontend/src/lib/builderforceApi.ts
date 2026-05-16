@@ -184,8 +184,26 @@ export async function llmChat(
   });
   checkUnauthorizedAndRedirect(res, hadToken);
   if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
-    throw new Error(err.error?.message || res.statusText || 'LLM request failed');
+    // Two error envelope shapes can come back here:
+    //   1. Gateway-side (e.g. plan_token_limit_exceeded, idempotent_replay,
+    //      cascade_exhausted): { error: "...message...", code, ...fields }
+    //   2. Upstream OpenAI-shaped passthrough: { error: { message, type, code } }
+    // Parse both and preserve structured fields on the thrown Error so callers
+    // can branch on `.code` / `.body` for tailored UI handling.
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+    const errVal = body.error;
+    const msg = typeof errVal === 'string'
+      ? errVal
+      : (errVal && typeof errVal === 'object' && 'message' in errVal
+          ? String((errVal as { message?: unknown }).message ?? '')
+          : '');
+    const err = new Error(msg || res.statusText || 'LLM request failed') as Error & {
+      status?: number; code?: string; body?: Record<string, unknown>;
+    };
+    err.status = res.status;
+    err.code = typeof body.code === 'string' ? body.code : undefined;
+    err.body = body;
+    throw err;
   }
   const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
   const content = data.choices?.[0]?.message?.content?.trim() ?? '';
