@@ -630,6 +630,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         _builderforce: {
           resolvedModel: result.resolvedModel,
           retries:       result.retries,
+          // Per-attempt breakdown (model + vendor + code) when the cascade
+          // retried before this success. Empty when the first model answered.
+          // Lets callers see which vendor recovered the request and detect
+          // single-vendor concentration patterns over time.
+          ...(result.failovers.length > 0 ? { failovers: result.failovers } : {}),
           pool:          modelPoolForPlan(access.effectivePlan).length,
           product:       llmProduct,
           effectivePlan: access.effectivePlan,
