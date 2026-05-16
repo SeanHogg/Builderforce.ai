@@ -5,6 +5,9 @@
 
 import { getApiBaseUrl } from './apiClient';
 import { checkUnauthorizedAndRedirect, getStoredWebToken } from './auth';
+import type { LlmModelStatus, VendorId } from './builderforceApi';
+
+export type { LlmModelStatus, VendorId };
 
 // ---------------------------------------------------------------------------
 // Types (mirror api/admin routes)
@@ -41,14 +44,6 @@ export interface AdminTenant {
    *   >= 0 → use this value
    */
   tokenDailyLimitOverride: number | null;
-}
-
-export interface LlmModelStatus {
-  model: string;
-  preferred: boolean;
-  available: boolean;
-  /** Epoch ms when the cooldown lifts. Absent when the model is available. */
-  cooldownUntil?: number;
 }
 
 export interface AdminHealth {
