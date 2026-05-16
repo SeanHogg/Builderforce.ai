@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { useEmulation } from '@/lib/EmulationContext';
@@ -175,6 +175,58 @@ export default function AdminPage() {
   const [usageAiLoading, setUsageAiLoading] = useState(false);
   const [usageAiError, setUsageAiError] = useState('');
   const [usageAiCopied, setUsageAiCopied] = useState(false);
+
+  // Per-vendor aggregates for the Usage tab — one source of truth used by
+  // both the vendor-summary cards and the vendor-grouped model table below.
+  const byVendor = useMemo(() => {
+    if (!llmUsage) return [] as Array<{
+      vendor: VendorId; modelCount: number; requests: number;
+      retries: number; streamed: number; totalTokens: number; failoverCount: number;
+    }>;
+    const map = new Map<VendorId, {
+      vendor: VendorId; modelCount: number; requests: number;
+      retries: number; streamed: number; totalTokens: number; failoverCount: number;
+    }>();
+    const ensure = (v: VendorId) => {
+      let row = map.get(v);
+      if (!row) {
+        row = { vendor: v, modelCount: 0, requests: 0, retries: 0, streamed: 0, totalTokens: 0, failoverCount: 0 };
+        map.set(v, row);
+      }
+      return row;
+    };
+    for (const m of llmUsage.byModel) {
+      const row = ensure(m.vendor);
+      row.modelCount += 1;
+      row.requests += m.requests;
+      row.retries += m.retries;
+      row.streamed += m.streamed_requests;
+      row.totalTokens += m.total_tokens;
+    }
+    for (const f of llmUsage.failovers) {
+      ensure(f.vendor).failoverCount += f.count;
+    }
+    return [...map.values()].sort((a, b) => b.requests - a.requests);
+  }, [llmUsage]);
+
+  // byModel sorted by vendor (alphabetical) then by requests desc, so vendor
+  // groups appear together visually without a separate <tbody> per vendor.
+  const byModelSorted = useMemo(() => {
+    if (!llmUsage) return [];
+    return [...llmUsage.byModel].sort((a, b) => {
+      if (a.vendor !== b.vendor) return a.vendor.localeCompare(b.vendor);
+      return b.requests - a.requests;
+    });
+  }, [llmUsage]);
+
+  // failovers sorted by vendor then by count desc — same grouping pattern.
+  const failoversSorted = useMemo(() => {
+    if (!llmUsage) return [];
+    return [...llmUsage.failovers].sort((a, b) => {
+      if (a.vendor !== b.vendor) return a.vendor.localeCompare(b.vendor);
+      return b.count - a.count;
+    });
+  }, [llmUsage]);
   const [showToken, setShowToken] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
   const [copiedEnv, setCopiedEnv] = useState(false);
@@ -1317,6 +1369,25 @@ export default function AdminPage() {
                     </div>
                   </div>
                 )}
+                {byVendor.length > 0 && (
+                  <div>
+                    <div className="health-label" style={{ marginBottom: 8 }}>By vendor</div>
+                    <div className="health-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
+                      {byVendor.map((v) => (
+                        <div key={v.vendor} className="health-card">
+                          <div className="health-label" style={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>{v.vendor}</div>
+                          <div className="health-value">{fmtNum(v.requests)}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                            {v.modelCount} model{v.modelCount === 1 ? '' : 's'} · {fmtNum(v.totalTokens)} tokens
+                          </div>
+                          <div style={{ fontSize: 12, color: v.failoverCount > 0 ? 'var(--error-text)' : 'var(--text-muted)', fontWeight: v.failoverCount > 0 ? 600 : 400 }}>
+                            {fmtNum(v.failoverCount)} failover{v.failoverCount === 1 ? '' : 's'} · {fmtNum(v.retries)} retries
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span className="text-muted" style={{ fontSize: 14 }}>By model — last</span>
@@ -1346,6 +1417,7 @@ export default function AdminPage() {
                     <table className="data-table">
                       <thead>
                         <tr>
+                          <th>Vendor</th>
                           <th>Model</th>
                           <th style={{ textAlign: 'right' }}>Requests</th>
                           <th style={{ textAlign: 'right' }}>Retries</th>
@@ -1356,25 +1428,31 @@ export default function AdminPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {llmUsage.byModel.length === 0 ? (
-                          <tr><td colSpan={7} className="text-muted" style={{ padding: 24 }}>No usage in this period.</td></tr>
+                        {byModelSorted.length === 0 ? (
+                          <tr><td colSpan={8} className="text-muted" style={{ padding: 24 }}>No usage in this period.</td></tr>
                         ) : (
-                          llmUsage.byModel.map((m) => (
-                            <tr key={m.model}>
-                              <td>{m.model}</td>
-                              <td style={{ textAlign: 'right' }}>{fmtNum(m.requests)}</td>
-                              <td style={{ textAlign: 'right' }}>{fmtNum(m.retries)}</td>
-                              <td style={{ textAlign: 'right' }}>{fmtNum(m.streamed_requests)}</td>
-                              <td style={{ textAlign: 'right' }}>{fmtNum(m.prompt_tokens)}</td>
-                              <td style={{ textAlign: 'right' }}>{fmtNum(m.completion_tokens)}</td>
-                              <td style={{ textAlign: 'right' }}>{fmtNum(m.total_tokens)}</td>
-                            </tr>
-                          ))
+                          byModelSorted.map((m, i) => {
+                            const prevVendor = i > 0 ? byModelSorted[i - 1].vendor : null;
+                            const isVendorBreak = m.vendor !== prevVendor;
+                            return (
+                              <tr key={m.model} style={isVendorBreak && i > 0 ? { borderTop: '2px solid var(--border-subtle, #2a2a2a)' } : undefined}>
+                                <td style={{ textTransform: 'uppercase', fontSize: 11, color: 'var(--text-muted)' }}>{isVendorBreak ? m.vendor : ''}</td>
+                                <td>{m.model}</td>
+                                <td style={{ textAlign: 'right' }}>{fmtNum(m.requests)}</td>
+                                <td style={{ textAlign: 'right' }}>{fmtNum(m.retries)}</td>
+                                <td style={{ textAlign: 'right' }}>{fmtNum(m.streamed_requests)}</td>
+                                <td style={{ textAlign: 'right' }}>{fmtNum(m.prompt_tokens)}</td>
+                                <td style={{ textAlign: 'right' }}>{fmtNum(m.completion_tokens)}</td>
+                                <td style={{ textAlign: 'right' }}>{fmtNum(m.total_tokens)}</td>
+                              </tr>
+                            );
+                          })
                         )}
                       </tbody>
                       <tfoot>
                         {llmUsage.byModel.length > 0 && (
                           <tr style={{ fontWeight: 600 }}>
+                            <td></td>
                             <td>Total</td>
                             <td style={{ textAlign: 'right' }}>{fmtNum(llmUsage.totals.requests)}</td>
                             <td style={{ textAlign: 'right' }}>{fmtNum(llmUsage.byModel.reduce((s, m) => s + m.retries, 0))}</td>
@@ -1397,30 +1475,39 @@ export default function AdminPage() {
                       </span>
                     )}
                   </div>
-                  {llmUsage.failovers.length === 0 ? (
+                  {failoversSorted.length === 0 ? (
                     <p className="text-muted" style={{ fontSize: 13 }}>No failover events in this period.</p>
                   ) : (
                     <div className="table-wrap">
                       <table className="data-table" style={{ fontSize: 13 }}>
                         <thead>
                           <tr>
+                            <th>Vendor</th>
                             <th>Model</th>
                             <th style={{ textAlign: 'right' }}>HTTP code</th>
                             <th style={{ textAlign: 'right' }}>Count</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {llmUsage.failovers.map((f, i) => (
-                            <tr
-                              key={`${f.model}-${f.errorCode}-${i}`}
-                              style={f.errorCode === 429 ? { background: 'var(--error-bg, #fee2e2)' } : undefined}
-                              title={f.errorCode === 429 ? 'Upstream rate-limited this model — cooldown should keep it out of rotation for ~5 min after each hit' : undefined}
-                            >
-                              <td>{f.model}</td>
-                              <td style={{ textAlign: 'right', fontWeight: f.errorCode === 429 ? 600 : 400 }}>{f.errorCode}</td>
-                              <td style={{ textAlign: 'right' }}>{f.count}</td>
-                            </tr>
-                          ))}
+                          {failoversSorted.map((f, i) => {
+                            const prevVendor = i > 0 ? failoversSorted[i - 1].vendor : null;
+                            const isVendorBreak = f.vendor !== prevVendor;
+                            return (
+                              <tr
+                                key={`${f.model}-${f.errorCode}-${i}`}
+                                style={{
+                                  ...(f.errorCode === 429 ? { background: 'var(--error-bg, #fee2e2)' } : {}),
+                                  ...(isVendorBreak && i > 0 ? { borderTop: '2px solid var(--border-subtle, #2a2a2a)' } : {}),
+                                }}
+                                title={f.errorCode === 429 ? 'Upstream rate-limited this model — cooldown should keep it out of rotation for ~5 min after each hit' : undefined}
+                              >
+                                <td style={{ textTransform: 'uppercase', fontSize: 11, color: 'var(--text-muted)' }}>{isVendorBreak ? f.vendor : ''}</td>
+                                <td>{f.model}</td>
+                                <td style={{ textAlign: 'right', fontWeight: f.errorCode === 429 ? 600 : 400 }}>{f.errorCode}</td>
+                                <td style={{ textAlign: 'right' }}>{f.count}</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

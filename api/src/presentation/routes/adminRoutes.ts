@@ -57,6 +57,7 @@ import {
   type ProductName,
   type ProxyEnv,
 } from '../../application/llm/LlmProxyService';
+import { vendorForModel } from '../../application/llm/vendors';
 import { llmFailoverLog } from '../../infrastructure/database/schema';
 import {
   mintTenantApiKey,
@@ -1428,6 +1429,11 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       ORDER BY count DESC
     `);
 
+    // Enrich per-model and per-failover rows with `vendor` so the admin UI
+    // can group by vendor without re-deriving prefix→vendor mappings client-side.
+    const enrichVendor = <T extends { model: string }>(rows: ReadonlyArray<T>) =>
+      rows.map((r) => ({ ...r, vendor: vendorForModel(r.model) }));
+
     return c.json({
       days,
       totals: {
@@ -1437,9 +1443,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         completionTokens:  Number(totals?.total_completion_tokens ?? 0),
         modelCount:        Number(totals?.model_count             ?? 0),
       },
-      byModel:    byModel.rows,
+      byModel:    enrichVendor(byModel.rows as Array<{ model: string }>),
       daily:      daily.rows,
-      failovers:  failovers.rows,
+      failovers:  enrichVendor(failovers.rows as Array<{ model: string }>),
     });
   });
 
