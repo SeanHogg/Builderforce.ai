@@ -21,7 +21,7 @@ import {
 } from '../../application/llm/LlmProxyService';
 import { callOpenRouterEmbeddings } from '../../application/llm/vendors';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, coderclawInstances, tenantApiKeys } from '../../infrastructure/database/schema';
+import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, coderclawInstances, tenantApiKeys, users } from '../../infrastructure/database/schema';
 import { originAllowed } from '../../application/llm/tenantApiKeyService';
 import { resolveKeyCached } from '../../infrastructure/auth/keyResolutionCache';
 import type { FailoverEvent } from '../../application/llm/LlmProxyService';
@@ -311,11 +311,21 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
   }
 
   const isClawToken = payload.sub.startsWith('claw:');
+  // Join `users.isSuperadmin` into the membership check so we don't depend on
+  // the JWT carrying `sa: true`. Old JWTs minted before the `sa` claim was
+  // added still grant superadmin bypass — no re-login required. New JWTs that
+  // already carry the claim still benefit (the join is one DB round trip the
+  // membership check was already paying for).
+  let dbIsSuperadmin = false;
   if (!isClawToken) {
     const db = buildDatabase(c.env);
     const [membership] = await db
-      .select({ userId: tenantMembers.userId })
+      .select({
+        userId: tenantMembers.userId,
+        isSuperadmin: users.isSuperadmin,
+      })
       .from(tenantMembers)
+      .innerJoin(users, eq(users.id, tenantMembers.userId))
       .where(and(
         eq(tenantMembers.tenantId, payload.tid),
         eq(tenantMembers.userId, payload.sub),
@@ -326,6 +336,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
     if (!membership) {
       throw new Error('User is not an active member of this tenant');
     }
+    dbIsSuperadmin = membership.isSuperadmin === true;
   }
 
   return {
@@ -335,8 +346,10 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
     clawTokenDailyLimit: null,
     tenantApiKeyId: null,
     role: payload.role,
-    // Claw-issued JWTs never carry sa:true (clawAuthRoutes never sets it).
-    isSuperadmin: !isClawToken && payload.sa === true,
+    // `users.isSuperadmin` (joined into the membership query above) is the
+    // sole source of truth — fresh on every call, instant revocation.
+    // Claw-issued JWTs are never superadmin.
+    isSuperadmin: !isClawToken && dbIsSuperadmin,
     ...(await resolveTenantPlan(c, payload.tid)),
   };
 }

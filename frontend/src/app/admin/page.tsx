@@ -639,25 +639,37 @@ export default function AdminPage() {
         const key = stripVendorPrefix(f.model);
         failedByModel.set(key, (failedByModel.get(key) ?? 0) + f.count);
       }
+      // IMPORTANT: do NOT spread `m` — the raw `retries` and other unnormalized
+      // counts let the AI compute its own (wrong) ratios and bypass our
+      // pre-computed quality signals. Explicit field list only.
       const byModel = [...mergedByModel.values()]
         .sort((a, b) => b.requests - a.requests)
         .map((m) => {
           const failedAttempts = failedByModel.get(m.model) ?? 0;
           const totalAttempts = failedAttempts + m.requests;
           return {
-            ...m,
-            // `retries` = count of OTHER models that failed before this one
-            // answered (recorded on the winning row in llm_usage_log). High
-            // value = this model is rescuing the cascade. NOT a failure signal.
-            avgCascadeDepth: m.requests > 0
-              ? Number((m.retries / m.requests).toFixed(2))
-              : 0,
-            // True per-model failure rate — only meaningful when the failover
-            // data isn't a uniform-walk artifact.
+            model: m.model,
+            // `successfulAnswers` is the count of requests this model successfully
+            // answered (winning row in llm_usage_log).
+            successfulAnswers: m.requests,
+            // Cascade-attempted-and-failed count derived from the failovers table.
+            failedAttempts,
+            totalAttempts,
+            // True per-model failure rate — null when uniform-failover-artifact
+            // makes per-model differentiation unreliable.
             failureRate: uniformFailoverArtifact || totalAttempts === 0
               ? null
               : Number((failedAttempts / totalAttempts).toFixed(3)),
-            failedAttempts,
+            // Average count of OTHER models that failed before this one answered
+            // (from llm_usage_log.retries on the winning row). High = this model
+            // rescues the cascade often — that is a GOOD trait. Not a failure signal.
+            avgCascadeDepth: m.requests > 0
+              ? Number((m.retries / m.requests).toFixed(2))
+              : 0,
+            streamedAnswers: m.streamed,
+            promptTokens: m.promptTokens,
+            completionTokens: m.completionTokens,
+            totalTokens: m.totalTokens,
             inCatalog: catalogIds.has(m.model),
             lowSample: m.requests < 5,
           };
@@ -667,7 +679,7 @@ export default function AdminPage() {
       // the known gap (README "Consolidated Gap Register": totals card is
       // all-time while byModel/daily are windowed). Lifetime totals would
       // under-trigger the small-sample gate.
-      const windowedRequests = byModel.reduce((s, m) => s + m.requests, 0);
+      const windowedRequests = byModel.reduce((s, m) => s + m.successfulAnswers, 0);
       const dataQuality = {
         totalRequests: windowedRequests,
         smallSample: windowedRequests < 50,
@@ -726,8 +738,8 @@ export default function AdminPage() {
         '',
         'HARD RULES — violating any of these invalidates the output:',
         '  1. Only reference model ids that appear verbatim in `catalog.free` or `catalog.pro`. If an id is not in the catalog, do not recommend touching it — it does not exist in the codebase.',
-        '  2. PER-MODEL QUALITY SIGNAL = `byModel[].failureRate` (failed cascade attempts / total attempts, range 0..1). HIGH failureRate = this model is failing — REMOVE or demote. LOW failureRate = this model is reliable — promote or keep.',
-        '  3. DO NOT use `byModel[].avgCascadeDepth` as a failure signal. `avgCascadeDepth` is how many OTHER models failed before this one rescued the request. HIGH avgCascadeDepth = this model is the safety net (GOOD). Promoting a high-avgCascadeDepth model is fine; REMOVING one is destructive.',
+        '  2. PER-MODEL QUALITY SIGNAL = `byModel[].failureRate` (= `failedAttempts / totalAttempts`, range 0..1, pre-computed). HIGH failureRate = this model is failing — REMOVE or demote. LOW failureRate = this model is reliable — promote or keep. NEVER compute your own ratio from raw fields; use the pre-computed `failureRate` field as-is.',
+        '  3. DO NOT use `byModel[].avgCascadeDepth` as a failure signal. `avgCascadeDepth` is how many OTHER models failed before this one rescued the request. HIGH avgCascadeDepth = this model is the safety net (GOOD). Promoting a high-avgCascadeDepth model is fine; REMOVING one is destructive. There is no "retry rate" field — that phrase from prior outputs was wrong.',
         '  4. If `byModel[i].failureRate` is `null` (because `dataQuality.uniformFailoverArtifact` is true), there is no per-model failure data for that row. In that case REORDER_CATALOG and REMOVE_FROM_CATALOG are FORBIDDEN — pool-wide signal does not differentiate. Only TUNE_COOLDOWN, TUNE_PREFERRED, and SWAP_FALLBACK remain legal.',
         '  5. If `dataQuality.smallSample` is true, output ONE recommendation only: `Collect more data before tuning — only X total requests in window.` and stop.',
         '  6. Skip any model row where `lowSample === true` unless it has `failureRate >= 0.80` (overwhelming evidence even at small N).',
@@ -785,8 +797,7 @@ export default function AdminPage() {
         const hours = retryAfter != null ? Math.ceil(retryAfter / 3600) : null;
         setUsageAiError(
           `LLM daily token limit reached (${used?.toLocaleString() ?? '?'} / ${limit?.toLocaleString() ?? '?'} tokens used today).` +
-          (hours != null ? ` Resets in ~${hours}h.` : '') +
-          ' Superadmins should bypass this — if you are seeing it, log out and back in to refresh your token (the sa: true claim was added in this release; older tokens still hit the cap until they expire).'
+          (hours != null ? ` Resets in ~${hours}h.` : '')
         );
       } else if (err.code === 'claw_token_limit_exceeded') {
         setUsageAiError(err.message);

@@ -99,6 +99,5 @@ export const webAuthMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => 
 
   c.set('userId', payload.sub);
   if (payload.sid) c.set('sessionId', payload.sid);
-  if (payload.sa) c.set('isSuperadmin', true);
   await next();
 };
