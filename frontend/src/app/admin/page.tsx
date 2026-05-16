@@ -613,18 +613,10 @@ export default function AdminPage() {
           });
         }
       }
-      const byModel = [...mergedByModel.values()]
-        .sort((a, b) => b.requests - a.requests)
-        .map((m) => ({
-          ...m,
-          retryRate: m.requests > 0 ? Number((m.retries / m.requests).toFixed(3)) : 0,
-          inCatalog: catalogIds.has(m.model),
-          lowSample: m.requests < 5,
-        }));
-
       // Failover artifact detection — if most rows share the same count, the
-      // cascade is just walking the whole pool uniformly and `count` is not a
-      // quality signal. Force the AI to use retryRate per model instead.
+      // cascade is just walking the whole pool uniformly and `failovers[].count`
+      // is not a per-model quality signal. When this is true, we cannot
+      // compute a meaningful per-model failureRate.
       const failoverCounts = llmUsage.failovers.map((f) => f.count);
       const fMean = failoverCounts.length > 0
         ? failoverCounts.reduce((s, n) => s + n, 0) / failoverCounts.length
@@ -635,6 +627,41 @@ export default function AdminPage() {
       const fStddev = Math.sqrt(fVariance);
       const cv = fMean > 0 ? fStddev / fMean : 0;
       const uniformFailoverArtifact = failoverCounts.length >= 5 && cv < 0.15;
+
+      // Per-model failure rate, derived from failover events. Normalize the
+      // failover-row model id the same way we normalize byModel rows so
+      // cerebras/llama3.1-8b and llama3.1-8b roll up to the same model.
+      // failureRate = failedAttempts / (failedAttempts + successfulAnswers).
+      // When the failover counts are a uniform-cascade-walk artifact, the
+      // numerator is noise — set failureRate to null so the AI can't act on it.
+      const failedByModel = new Map<string, number>();
+      for (const f of llmUsage.failovers) {
+        const key = stripVendorPrefix(f.model);
+        failedByModel.set(key, (failedByModel.get(key) ?? 0) + f.count);
+      }
+      const byModel = [...mergedByModel.values()]
+        .sort((a, b) => b.requests - a.requests)
+        .map((m) => {
+          const failedAttempts = failedByModel.get(m.model) ?? 0;
+          const totalAttempts = failedAttempts + m.requests;
+          return {
+            ...m,
+            // `retries` = count of OTHER models that failed before this one
+            // answered (recorded on the winning row in llm_usage_log). High
+            // value = this model is rescuing the cascade. NOT a failure signal.
+            avgCascadeDepth: m.requests > 0
+              ? Number((m.retries / m.requests).toFixed(2))
+              : 0,
+            // True per-model failure rate — only meaningful when the failover
+            // data isn't a uniform-walk artifact.
+            failureRate: uniformFailoverArtifact || totalAttempts === 0
+              ? null
+              : Number((failedAttempts / totalAttempts).toFixed(3)),
+            failedAttempts,
+            inCatalog: catalogIds.has(m.model),
+            lowSample: m.requests < 5,
+          };
+        });
 
       // Use the windowed sum from byModel — `llmUsage.totals` is lifetime per
       // the known gap (README "Consolidated Gap Register": totals card is
@@ -647,8 +674,8 @@ export default function AdminPage() {
         uniformFailoverArtifact,
         coefficientOfVariation: Number(cv.toFixed(3)),
         note: uniformFailoverArtifact
-          ? 'Failover counts are near-uniform across models — this means the cascade walked the full pool on most failed requests, not that any specific model is bad. Use byModel[].retryRate as the quality signal, not failovers[].count.'
-          : 'Failover counts vary across models — failovers[].count is informative.',
+          ? 'Failover counts are near-uniform across models — the cascade walked the full pool on most failed requests, so failureRate is set to null for every model. REORDER_CATALOG and REMOVE_FROM_CATALOG are NOT legal in this state because there is no per-model failure signal. Only TUNE_COOLDOWN, TUNE_PREFERRED, and SWAP_FALLBACK may be recommended.'
+          : 'Failover counts vary across models — byModel[].failureRate is the per-model quality signal. byModel[].avgCascadeDepth is a rescue-depth signal (HIGH = this model rescued the cascade often, which is GOOD) and MUST NOT be used as a failure signal.',
       };
 
       const summary = {
@@ -699,13 +726,16 @@ export default function AdminPage() {
         '',
         'HARD RULES — violating any of these invalidates the output:',
         '  1. Only reference model ids that appear verbatim in `catalog.free` or `catalog.pro`. If an id is not in the catalog, do not recommend touching it — it does not exist in the codebase.',
-        '  2. Use `byModel[].retryRate` (already pre-computed: retries / requests) as the per-model quality signal. Do NOT cite raw `byModel[].retries` or `failovers[].count` directly — they need normalization.',
-        '  3. If `dataQuality.uniformFailoverArtifact` is true, treat the entire `failovers` array as low-signal. Do not infer quality from those counts. Lean on retryRate instead.',
-        '  4. If `dataQuality.smallSample` is true, output ONE recommendation only: `Collect more data before tuning — only X total requests in window.` and stop.',
-        '  5. Skip any model row where `lowSample === true` unless it has ≥ 80% retryRate (overwhelming evidence even at small N).',
-        '  6. For REORDER_CATALOG, verify the target model is NOT already at the recommended position in `catalog.free` or `catalog.pro`. If it is already there, the recommendation is a no-op — drop it. (`catalog.free[0].model` is the current top.)',
-        '  7. For every catalog edit, copy the `vendorFile` field from the matching catalog entry verbatim into the recommendation. Never invent or transform a file path.',
-        '  8. Cap your output at 5 recommendations total. Pick the highest-signal ones. Quality over quantity.',
+        '  2. PER-MODEL QUALITY SIGNAL = `byModel[].failureRate` (failed cascade attempts / total attempts, range 0..1). HIGH failureRate = this model is failing — REMOVE or demote. LOW failureRate = this model is reliable — promote or keep.',
+        '  3. DO NOT use `byModel[].avgCascadeDepth` as a failure signal. `avgCascadeDepth` is how many OTHER models failed before this one rescued the request. HIGH avgCascadeDepth = this model is the safety net (GOOD). Promoting a high-avgCascadeDepth model is fine; REMOVING one is destructive.',
+        '  4. If `byModel[i].failureRate` is `null` (because `dataQuality.uniformFailoverArtifact` is true), there is no per-model failure data for that row. In that case REORDER_CATALOG and REMOVE_FROM_CATALOG are FORBIDDEN — pool-wide signal does not differentiate. Only TUNE_COOLDOWN, TUNE_PREFERRED, and SWAP_FALLBACK remain legal.',
+        '  5. If `dataQuality.smallSample` is true, output ONE recommendation only: `Collect more data before tuning — only X total requests in window.` and stop.',
+        '  6. Skip any model row where `lowSample === true` unless it has `failureRate >= 0.80` (overwhelming evidence even at small N).',
+        '  7. For REORDER_CATALOG, verify the target model is NOT already at the recommended position in `catalog.free` or `catalog.pro`. If it is already there, the recommendation is a no-op — drop it. (`catalog.free[0].model` is the current top.)',
+        '  8. For every catalog edit, copy the `vendorFile` field from the matching catalog entry verbatim into the recommendation. Never invent or transform a file path.',
+        '  9. TUNE_COOLDOWN: NEVER shorten the transient-failure (5xx, 429) TTL. Shortening it on rate-limit failures causes retry storms — the same model gets re-fired before the upstream limit clears, triggering more 429s. Lengthening the transient TTL is allowed; only the AUTH classification (401/403) may have its TTL shortened, and only with a specific data justification.',
+        ' 10. NO DUPLICATES — the same `(type, file, model)` tuple may not appear twice in your output. Before emitting, scan your own list and drop dupes.',
+        ' 11. Cap your output at 5 unique recommendations total. Pick the highest-signal ones. Quality over quantity.',
         '',
         'OUTPUT CONTRACT — produce ONLY the prompt text the user will paste into Claude Code. No preamble, no markdown fences around the whole prompt, no commentary. Follow this template exactly:',
         '',
@@ -726,7 +756,7 @@ export default function AdminPage() {
         '- Verify catalog edits by running `npm run typecheck` in api/ before reporting done.',
         '----- END TEMPLATE -----',
         '',
-        'Final check before emitting: re-read HARD RULES 1, 6, 7, 8. If any of your recommendations violates one of those rules, drop it. It is better to emit zero recommendations than to emit a single bogus one.',
+        'Final check before emitting: re-read HARD RULES 2, 3, 4, 7, 9, 10. If any recommendation cites avgCascadeDepth as a failure signal, drop it. If any rec touches catalog while failureRate is null, drop it. If any rec shortens the transient cooldown TTL, drop it. If any rec is a duplicate of another, drop the duplicate. It is better to emit zero recommendations than to emit a single bogus one.',
       ].join('\n');
       const userPrompt =
         'Usage data (JSON):\n```json\n' +
