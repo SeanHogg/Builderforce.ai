@@ -489,13 +489,17 @@ export class LlmProxyService {
     const failovers: FailoverEvent[] = attempts && attempts.length > 0
       ? attempts.map((a) => ({ model: a.model, vendor: a.vendor, code: a.status }))
       : candidates.map((model) => ({ model, vendor: vendorForModel(model), code: 0 }));
-    // Include the failover breakdown in the body so consumers can see what
-    // was tried — and importantly, which vendor each attempt hit. When every
-    // attempt is on the same vendor (e.g. OpenRouter saturated), callers can
-    // tell their cross-vendor fallback isn't covering them.
+    // Failover breakdown lives under `error.details.failovers` — OpenAI-style
+    // envelope so the SDK's existing `details` accessor on BuilderforceApiError
+    // picks it up without a parser change. Lets callers detect single-vendor
+    // saturation (e.g. all attempts on OpenRouter) and route around it.
     const exhaustedBody = JSON.stringify({
-      error: { message, code: 429, type: 'rate_limit_error' },
-      failovers,
+      error: {
+        message,
+        code: 429,
+        type: 'rate_limit_error',
+        details: { failovers },
+      },
     });
     return {
       response: new Response(exhaustedBody, {

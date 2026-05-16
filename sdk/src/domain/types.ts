@@ -1,5 +1,22 @@
 export type ChatRole = 'system' | 'user' | 'assistant' | 'tool';
 
+/**
+ * One model attempt that failed before the resolved model succeeded.
+ * Surfaced on successful responses in `_builderforce.failovers` (when retries
+ * happened) and on cascade-exhausted errors in `error.details.failovers`.
+ *
+ * `vendor` lets callers detect when every failure concentrated on one
+ * upstream — e.g. all `openrouter` means a saturated shared key, not a
+ * model-specific issue.
+ */
+export interface FailoverEvent {
+  model: string;
+  /** `'openrouter' | 'cerebras' | 'nvidia' | 'ollama'` */
+  vendor: string;
+  /** HTTP status code, or 0 for embedded errors / network failures. */
+  code: number;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Vision content blocks (OpenAI-compatible). A user/system message's `content`
 // can be a plain string OR a sequence of typed parts (text + image_url).
@@ -222,6 +239,13 @@ export interface ChatCompletionResponse {
     resolvedModel?: string;
     /** How many vendor retries happened inside the failover chain. */
     retries?: number;
+    /**
+     * Per-attempt breakdown of the cascade — present only when `retries > 0`.
+     * Each entry is one model the gateway tried that failed before the
+     * resolved model succeeded. Use `vendor` to detect single-vendor
+     * concentration (e.g. all failures on `openrouter` = saturated key).
+     */
+    failovers?: FailoverEvent[];
     pool?: number;
     product?: string;
     effectivePlan?: string;

@@ -1,3 +1,5 @@
+import type { FailoverEvent } from '../domain/types';
+
 export class BuilderforceApiError extends Error {
   public readonly status: number;
   public readonly code?: string;
@@ -12,6 +14,13 @@ export class BuilderforceApiError extends Error {
   public readonly terminal?: boolean;
   /** Seconds the consumer should wait before retrying — server-supplied. */
   public readonly retryAfter?: number;
+  /**
+   * Cascade attempts that failed before this error was returned — populated
+   * when the gateway returns `429 cascade_exhausted` with a `details.failovers`
+   * array. Each entry includes the vendor that owns the model so callers can
+   * detect single-vendor saturation (e.g. all attempts on `openrouter`).
+   */
+  public readonly failovers?: FailoverEvent[];
 
   constructor(
     message: string,
@@ -29,6 +38,24 @@ export class BuilderforceApiError extends Error {
     this.requestId = requestId;
     this.terminal = extras?.terminal;
     this.retryAfter = extras?.retryAfter;
+    // Pull typed failovers out of `details.failovers` when the gateway
+    // supplied them. Validation is light — drop entries missing required
+    // fields so consumers never get a partially-populated row.
+    if (details && typeof details === 'object') {
+      const f = (details as { failovers?: unknown }).failovers;
+      if (Array.isArray(f)) {
+        const cleaned: FailoverEvent[] = [];
+        for (const entry of f) {
+          if (entry && typeof entry === 'object') {
+            const e = entry as { model?: unknown; vendor?: unknown; code?: unknown };
+            if (typeof e.model === 'string' && typeof e.vendor === 'string' && typeof e.code === 'number') {
+              cleaned.push({ model: e.model, vendor: e.vendor, code: e.code });
+            }
+          }
+        }
+        if (cleaned.length > 0) this.failovers = cleaned;
+      }
+    }
   }
 }
 

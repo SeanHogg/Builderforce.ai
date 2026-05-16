@@ -23,6 +23,7 @@ export type {
   ChatCompletionCreateParams,
   ChatCompletionChunk,
   ChatCompletionResponse,
+  FailoverEvent,
   // Models / usage
   ModelsListResponse,
   UsageByModel,
