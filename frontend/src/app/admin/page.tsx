@@ -29,6 +29,8 @@ import {
   type VendorId,
   type TenantMember,
   type UserWorkspace,
+  type VendorHealthRow,
+  type VendorHealthSnapshot,
 } from '@/lib/adminApi';
 import { llmChat } from '@/lib/builderforceApi';
 import { BUILTIN_PERSONAS, type Persona } from '@/lib/marketplaceData';
@@ -171,6 +173,13 @@ export default function AdminPage() {
   const [errors, setErrors] = useState<AdminError[]>([]);
   const [llmUsage, setLlmUsage] = useState<LlmUsageStats | null>(null);
   const [usageDays, setUsageDays] = useState(30);
+  // Vendor health probes — keyed by vendor id. `latest` is fetched on tab load,
+  // `running` toggles per vendor while a manual probe is in flight, and `result`
+  // is the snapshot returned from the last manual probe (overrides `latest`).
+  const [vendorHealthLatest, setVendorHealthLatest] = useState<Record<string, VendorHealthRow>>({});
+  const [vendorHealthResult, setVendorHealthResult] = useState<Record<string, VendorHealthSnapshot>>({});
+  const [vendorHealthRunning, setVendorHealthRunning] = useState<Record<string, boolean>>({});
+  const [vendorHealthError, setVendorHealthError] = useState<Record<string, string>>({});
   const [usageAiPrompt, setUsageAiPrompt] = useState('');
   const [usageAiLoading, setUsageAiLoading] = useState(false);
   const [usageAiError, setUsageAiError] = useState('');
@@ -352,7 +361,14 @@ export default function AdminPage() {
           const [tenantsData, errorsData] = await Promise.all([adminApi.tenants(), adminApi.errors()]);
           setTenants(tenantsData);
           setErrors(errorsData);
-        } else if (t === 'usage') setLlmUsage(await adminApi.llmUsage(usageDays));
+        } else if (t === 'usage') {
+          const [usage, healthRows] = await Promise.all([
+            adminApi.llmUsage(usageDays),
+            adminApi.llmHealthLatest().catch(() => [] as VendorHealthRow[]),
+          ]);
+          setLlmUsage(usage);
+          setVendorHealthLatest(Object.fromEntries(healthRows.map((r) => [r.vendor, r])));
+        }
         else if (t === 'users') setUsers(await adminApi.users());
         else if (t === 'tenants') setTenants(await adminApi.tenants());
         else if (t === 'security') {
@@ -420,6 +436,22 @@ export default function AdminPage() {
     if (!isSuperadmin || !isAuthenticated) return;
     loadTab(tab);
   }, [isSuperadmin, isAuthenticated, tab, loadTab]);
+
+  const runVendorHealthCheck = useCallback(async (vendor: VendorId) => {
+    setVendorHealthRunning((prev) => ({ ...prev, [vendor]: true }));
+    setVendorHealthError((prev) => ({ ...prev, [vendor]: '' }));
+    try {
+      const snapshot = await adminApi.probeVendorHealth(vendor);
+      setVendorHealthResult((prev) => ({ ...prev, [vendor]: snapshot }));
+    } catch (err) {
+      setVendorHealthError((prev) => ({
+        ...prev,
+        [vendor]: err instanceof Error ? err.message : String(err),
+      }));
+    } finally {
+      setVendorHealthRunning((prev) => ({ ...prev, [vendor]: false }));
+    }
+  }, []);
 
   const webToken = getStoredWebToken();
 
@@ -1373,18 +1405,56 @@ export default function AdminPage() {
                   <div>
                     <div className="health-label" style={{ marginBottom: 8 }}>By vendor</div>
                     <div className="health-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
-                      {byVendor.map((v) => (
-                        <div key={v.vendor} className="health-card">
-                          <div className="health-label" style={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>{v.vendor}</div>
-                          <div className="health-value">{fmtNum(v.requests)}</div>
-                          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                            {v.modelCount} model{v.modelCount === 1 ? '' : 's'} · {fmtNum(v.totalTokens)} tokens
+                      {byVendor.map((v) => {
+                        const fresh = vendorHealthResult[v.vendor];
+                        const last  = vendorHealthLatest[v.vendor];
+                        const health = fresh ?? last;
+                        const running = !!vendorHealthRunning[v.vendor];
+                        const probeErr = vendorHealthError[v.vendor];
+                        const statusColor: Record<string, string> = {
+                          ok: 'var(--success-text, #16a34a)',
+                          degraded: 'var(--warning-text, #d97706)',
+                          down: 'var(--error-text, #dc2626)',
+                          unconfigured: 'var(--text-muted)',
+                        };
+                        return (
+                          <div key={v.vendor} className="health-card">
+                            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                              <div className="health-label" style={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>{v.vendor}</div>
+                              <button
+                                type="button"
+                                className="btn-ghost"
+                                style={{ fontSize: 11, padding: '2px 8px', opacity: running ? 0.6 : 1 }}
+                                disabled={running}
+                                onClick={() => runVendorHealthCheck(v.vendor)}
+                                title="Probe every model in this vendor's catalog"
+                              >
+                                {running ? 'Checking…' : 'Check'}
+                              </button>
+                            </div>
+                            <div className="health-value">{fmtNum(v.requests)}</div>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                              {v.modelCount} model{v.modelCount === 1 ? '' : 's'} · {fmtNum(v.totalTokens)} tokens
+                            </div>
+                            <div style={{ fontSize: 12, color: v.failoverCount > 0 ? 'var(--error-text)' : 'var(--text-muted)', fontWeight: v.failoverCount > 0 ? 600 : 400 }}>
+                              {fmtNum(v.failoverCount)} failover{v.failoverCount === 1 ? '' : 's'} · {fmtNum(v.retries)} retries
+                            </div>
+                            {probeErr ? (
+                              <div style={{ fontSize: 11, color: 'var(--error-text)', marginTop: 6 }}>{probeErr}</div>
+                            ) : health ? (
+                              <div style={{ marginTop: 6, fontSize: 12, color: statusColor[health.status] ?? 'var(--text-muted)', fontWeight: 600 }}>
+                                {health.status} · {health.okCount}/{health.probedCount} ok
+                                {health.latencyMs > 0 && (
+                                  <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> · {health.latencyMs}ms</span>
+                                )}
+                                {!fresh && last?.createdAt && (
+                                  <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> · {fmtDateTime(last.createdAt)}</span>
+                                )}
+                              </div>
+                            ) : null}
                           </div>
-                          <div style={{ fontSize: 12, color: v.failoverCount > 0 ? 'var(--error-text)' : 'var(--text-muted)', fontWeight: v.failoverCount > 0 ? 600 : 400 }}>
-                            {fmtNum(v.failoverCount)} failover{v.failoverCount === 1 ? '' : 's'} · {fmtNum(v.retries)} retries
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}

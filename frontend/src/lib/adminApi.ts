@@ -113,6 +113,31 @@ export interface LlmUsageStats {
   failovers: LlmFailoverStat[];
 }
 
+export type VendorHealthStatus = 'ok' | 'degraded' | 'down' | 'unconfigured';
+
+export interface VendorHealthModel {
+  model: string;
+  ok: boolean;
+  status: number;
+  latencyMs: number;
+  error?: string;
+}
+
+export interface VendorHealthSnapshot {
+  vendor: VendorId;
+  status: VendorHealthStatus;
+  probedCount: number;
+  okCount: number;
+  failedCount: number;
+  latencyMs: number;
+  models: VendorHealthModel[];
+}
+
+export interface VendorHealthRow extends VendorHealthSnapshot {
+  trigger: 'manual' | 'cron';
+  createdAt: string;
+}
+
 export interface LegalDocument {
   documentType: 'terms' | 'privacy';
   version: string;
@@ -450,6 +475,17 @@ export const adminApi = {
 
   async llmUsage(days = 30): Promise<LlmUsageStats> {
     return adminRequest<LlmUsageStats>(`/api/admin/llm-usage?days=${days}`);
+  },
+
+  async llmHealthLatest(): Promise<VendorHealthRow[]> {
+    const res = await adminRequest<{ vendors: VendorHealthRow[] }>('/api/admin/llm-health');
+    return res.vendors;
+  },
+
+  async probeVendorHealth(vendor: VendorId): Promise<VendorHealthSnapshot> {
+    return adminRequest<VendorHealthSnapshot>(`/api/admin/llm-health/${vendor}`, {
+      method: 'POST',
+    });
   },
 
   // Legal

@@ -1037,8 +1037,12 @@ export interface LlmModelStatus {
   model: string;
   preferred: boolean;
   available: boolean;
-  /** Epoch ms when the cooldown lifts. Absent when the model is available. */
+  /** Epoch ms when the per-model cooldown lifts. Absent when no per-model cooldown. */
   cooldownUntil?: number;
+  /** Epoch ms when the per-vendor cooldown lifts. Set when an upstream is wholesale-cooled. */
+  vendorCooledUntil?: number;
+  /** Whether the vendor's API key is bound in this environment. False → model is unservable. */
+  keyBound?: boolean;
   vendor: VendorId;
 }
 

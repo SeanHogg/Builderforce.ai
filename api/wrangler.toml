@@ -40,6 +40,11 @@ id = "ce66c3418ad64952b6847227962429d0"
 tag = "v1"
 new_sqlite_classes = ["ClawRelayDO"]
 
+# Cron triggers — see scheduled() in src/index.ts
+# 09:00 UTC daily: probe every registered LLM vendor and email superadmins on status change.
+[triggers]
+crons = ["0 9 * * *"]
+
 [observability]
 enabled = false
 head_sampling_rate = 1

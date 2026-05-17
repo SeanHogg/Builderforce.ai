@@ -115,6 +115,11 @@ export function getModule(id: VendorId): VendorModule {
   return MODULES_BY_ID[id];
 }
 
+/** All registered vendor ids, in registry order (cerebras → ollama → nvidia → openrouter). */
+export function getAllVendorIds(): VendorId[] {
+  return MODULES.map((m) => m.id);
+}
+
 /**
  * Cross-vendor fallback chain — each vendor's `fallbackModel`, but only for
  * vendors that have an API key configured in this env. Used to extend a

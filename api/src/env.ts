@@ -118,6 +118,11 @@ export interface Env {
   /** From address for notification emails, e.g. "Builderforce <notifications@builderforce.ai>" */
   NOTIFICATION_EMAIL_FROM?: string;
 
+  /** Optional comma-separated override of LLM vendor-health alert recipients.
+   *  When unset, the scheduled() runner emails every user with isSuperadmin=true.
+   *  Set via: wrangler secret put LLM_HEALTH_ALERT_RECIPIENTS */
+  LLM_HEALTH_ALERT_RECIPIENTS?: string;
+
   MICROSOFT_CLIENT_ID?: string;
   MICROSOFT_CLIENT_SECRET?: string;
 }
