@@ -192,3 +192,67 @@ export async function sendAdminPasswordResetEmail(
 
   await provider.send({ to, subject: 'Your Builderforce account access has been reset', html });
 }
+
+// ---------------------------------------------------------------------------
+// LLM vendor health alert — sent by the scheduled() cron when one or more
+// vendors' status differs from the previous run. Plain string template (no
+// HTML escaping issues since input is server-controlled vendor/model ids).
+// ---------------------------------------------------------------------------
+
+export interface LlmHealthChangeRow {
+  vendor: string;
+  previousStatus: string | null;
+  currentStatus:  string;
+  okCount:        number;
+  failedCount:    number;
+  probedCount:    number;
+  failedModels:   string[]; // model ids that failed in this run
+}
+
+export async function sendLlmHealthAlertEmail(
+  env: EmailEnv,
+  to: string,
+  changes: LlmHealthChangeRow[],
+  timestampIso: string,
+): Promise<void> {
+  const provider = getEmailProvider(env);
+  if (!provider) return;
+
+  const rows = changes.map((c) => {
+    const transition = `${c.previousStatus ?? 'n/a'} → ${c.currentStatus}`;
+    const failed = c.failedModels.length > 0
+      ? `<br><span style="font-size:12px;color:#64748b">failed models: ${c.failedModels.map(escapeHtml).join(', ')}</span>`
+      : '';
+    return `
+      <tr>
+        <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0"><strong>${escapeHtml(c.vendor)}</strong></td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">${escapeHtml(transition)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">${c.okCount} / ${c.probedCount} ok${failed}</td>
+      </tr>`;
+  }).join('');
+
+  const body = `
+      <p>The daily LLM vendor health probe detected status changes for ${changes.length} vendor${changes.length === 1 ? '' : 's'}.</p>
+      <p style="font-size:12px;color:#64748b">Run at ${escapeHtml(timestampIso)}</p>
+      <table style="border-collapse:collapse;width:100%;margin-top:12px">
+        <thead>
+          <tr style="background:#f8fafc">
+            <th style="text-align:left;padding:8px 12px;border-bottom:1px solid #e2e8f0">Vendor</th>
+            <th style="text-align:left;padding:8px 12px;border-bottom:1px solid #e2e8f0">Status</th>
+            <th style="text-align:left;padding:8px 12px;border-bottom:1px solid #e2e8f0">Models</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p style="font-size:13px;color:#64748b;margin-top:20px">
+        Review the per-model breakdown at <a href="https://builderforce.ai/admin?tab=usage">/admin?tab=usage</a>.
+      </p>`;
+
+  const subject = `[Builderforce] LLM vendor health changed — ${changes.map((c) => `${c.vendor}=${c.currentStatus}`).join(', ')}`;
+  const html = render(HEADER + body + FOOTER, {
+    Subject: subject,
+    Year: String(new Date().getFullYear()),
+  });
+
+  await provider.send({ to, subject, html });
+}

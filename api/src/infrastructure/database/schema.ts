@@ -306,6 +306,25 @@ export const llmFailoverLog = pgTable('llm_failover_log', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+/**
+ * Per-vendor health-probe results. One row per run. `modelsJson` is a JSONB
+ * array of `{ model, ok, status, latencyMs, error? }` (stored as text per the
+ * column convention used elsewhere — the pg driver auto-decodes JSONB at read
+ * time). Used by the admin UI vendor cards and the scheduled() cron handler.
+ */
+export const llmHealthProbes = pgTable('llm_health_probes', {
+  id:           serial('id').primaryKey(),
+  vendor:       varchar('vendor', { length: 32 }).notNull(),
+  status:       varchar('status', { length: 16 }).notNull(),
+  probedCount:  integer('probed_count').notNull().default(0),
+  okCount:      integer('ok_count').notNull().default(0),
+  failedCount:  integer('failed_count').notNull().default(0),
+  latencyMs:    integer('latency_ms').notNull().default(0),
+  modelsJson:   text('models_json').notNull().default('[]'),
+  trigger:      varchar('trigger', { length: 16 }).notNull(),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+});
+
 export const projectInsightEvents = pgTable('project_insight_events', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),

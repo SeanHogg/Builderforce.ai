@@ -56,8 +56,9 @@ import {
   type ProductName,
   type ProxyEnv,
 } from '../../application/llm/LlmProxyService';
-import { vendorForModel } from '../../application/llm/vendors';
-import { llmFailoverLog } from '../../infrastructure/database/schema';
+import { getAllVendorIds, vendorForModel, type VendorId } from '../../application/llm/vendors';
+import { llmFailoverLog, llmHealthProbes } from '../../infrastructure/database/schema';
+import { probeVendor, type VendorProbeResult } from '../../application/llm/vendorHealthProbe';
 import {
   mintTenantApiKey,
   listTenantApiKeys,
@@ -93,6 +94,36 @@ function coercePermissions(value: unknown): string[] {
   if (Array.isArray(value)) return value as string[];
   if (typeof value === 'string' && value.length > 0) {
     try { return JSON.parse(value) as string[]; } catch { return []; }
+  }
+  return [];
+}
+
+/** Persist one health-probe run. Shared by the manual route and the cron handler.
+ *  `modelsJson` column is `text` per schema convention — store as a JSON string. */
+export async function persistProbe(
+  db: Db,
+  result: VendorProbeResult,
+  trigger: 'manual' | 'cron',
+): Promise<void> {
+  await db.insert(llmHealthProbes).values({
+    vendor:       result.vendor,
+    status:       result.status,
+    probedCount:  result.probedCount,
+    okCount:      result.okCount,
+    failedCount:  result.failedCount,
+    latencyMs:    result.latencyMs,
+    modelsJson:   JSON.stringify(result.models),
+    trigger,
+  });
+}
+
+/** Schema-drift coercion mirroring `coercePermissions` above: the column is
+ *  declared `text` in Drizzle but is JSONB in the database, so the pg driver
+ *  may return either a string or a pre-decoded array. */
+function coerceProbeModels(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.length > 0) {
+    try { return JSON.parse(value) as unknown[]; } catch { return []; }
   }
   return [];
 }
@@ -1445,6 +1476,56 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       byModel:    enrichVendor(byModel.rows as Array<{ model: string }>),
       daily:      daily.rows,
       failovers:  enrichVendor(failovers.rows as Array<{ model: string }>),
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/admin/llm-health/:vendor — probe every model in the vendor's
+  // catalog with a 1-token chat completion. Persists the result row so the
+  // scheduled() cron can diff against prior runs. Returns the live probe to
+  // the caller.
+  // -------------------------------------------------------------------------
+  router.post('/llm-health/:vendor', async (c) => {
+    const vendorParam = c.req.param('vendor');
+    const allowed = new Set(getAllVendorIds() as string[]);
+    if (!allowed.has(vendorParam)) {
+      return c.json({ error: `Unknown vendor: ${vendorParam}` }, 400);
+    }
+    const result = await probeVendor(c.env, vendorParam as VendorId);
+    await persistProbe(buildDatabase(c.env), result, 'manual');
+    return c.json(result);
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/llm-health — latest probe per vendor, for the admin UI
+  // -------------------------------------------------------------------------
+  router.get('/llm-health', async (c) => {
+    const db = buildDatabase(c.env);
+    const rows = (await db.execute(sql`
+      SELECT DISTINCT ON (vendor)
+        vendor, status, probed_count AS "probedCount", ok_count AS "okCount",
+        failed_count AS "failedCount", latency_ms AS "latencyMs",
+        models_json AS "modelsJson", trigger,
+        created_at AS "createdAt"
+      FROM llm_health_probes
+      ORDER BY vendor, created_at DESC
+    `)).rows as Array<{
+      vendor: string; status: string;
+      probedCount: number; okCount: number; failedCount: number; latencyMs: number;
+      modelsJson: unknown; trigger: string; createdAt: Date | string;
+    }>;
+    return c.json({
+      vendors: rows.map((r) => ({
+        vendor:       r.vendor,
+        status:       r.status,
+        probedCount:  r.probedCount,
+        okCount:      r.okCount,
+        failedCount:  r.failedCount,
+        latencyMs:    r.latencyMs,
+        models:       coerceProbeModels(r.modelsJson),
+        trigger:      r.trigger,
+        createdAt:    r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+      })),
     });
   });
 

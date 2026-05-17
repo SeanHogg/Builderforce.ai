@@ -81,6 +81,7 @@ import {
   OPENAPI_TITLE,
   OPENAPI_DESCRIPTION,
 } from './openapi/schema';
+import { runVendorHealthCron } from './application/llm/vendorHealthCron';
 
 // Middleware
 import { addCorsToResponse, corsMiddleware } from './presentation/middleware/cors';
@@ -262,6 +263,22 @@ function optionCorsAllowOrigin(origin: string | null, corsOrigins: string | unde
 }
 
 export default {
+  /**
+   * Cloudflare scheduled() handler — fires on cron triggers declared in
+   * api/wrangler.toml `[triggers] crons`. Currently:
+   *   - daily LLM vendor health probe (every cron tick runs the same sweep;
+   *     change-detection inside the runner suppresses email noise).
+   *
+   * Errors are caught and logged so a probe failure can't poison the rest of
+   * the cron schedule.
+   */
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(
+      runVendorHealthCron(env).catch((err) => {
+        console.error('[cron:llm-health] failed', err);
+      }),
+    );
+  },
   fetch(request: Request, env: Env, ctx: ExecutionContext): Response | Promise<Response> {
     // Handle OPTIONS without building the app so we never require NEON_DATABASE_URL for preflight.
     if (request.method === 'OPTIONS') {

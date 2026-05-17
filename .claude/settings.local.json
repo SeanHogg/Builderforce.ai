@@ -12,7 +12,8 @@
       "WebFetch",
       "WebSearch",
       "TodoWrite",
-      "NotebookEdit"
+      "NotebookEdit",
+      "PowerShell(Get-ChildItem \"c:\\\\code\\\\agentic\\\\Builderforce.ai\\\\api\\\\migrations\" | Sort-Object Name -Descending | Select-Object -First 8 | ForEach-Object { $_.Name })"
     ],
     "defaultMode": "bypassPermissions"
   }
