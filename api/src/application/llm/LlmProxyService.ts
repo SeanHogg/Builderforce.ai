@@ -26,8 +26,9 @@ import {
   dispatchVendor,
   dispatchVendorStream,
   getCrossVendorFallbacks,
-  openRouterModule,
+  modelsByTier,
   vendorForModel,
+  vendorKeyBound,
   type DispatchAttempt,
   type VendorEnv,
   type VendorId,
@@ -40,22 +41,25 @@ import {
   loadCooledVendorExpiries,
   recordFailure,
 } from '../../infrastructure/auth/cooldownStore';
-import { cerebrasModule, ollamaModule } from './vendors';
 import { validateJsonSchema } from './jsonSchemaValidator';
 
 // ---------------------------------------------------------------------------
 // Pool composition (derived from vendor catalogs — single source of truth)
+//
+// Multi-vendor by construction. `modelsByTier` walks every registered vendor
+// in registry MODULES order (cerebras → ollama → nvidia → openrouter), so the
+// free pool naturally starts with sub-200ms TTFT Cerebras entries and ends
+// with the highest-variance OpenRouter free tier. When a vendor's key isn't
+// bound, its models stay in the pool but are filtered out at dispatch by
+// `dispatchVendor`'s no-key skip — and surfaced as `available: false` in
+// `status()` so the admin UI doesn't claim availability for unbound vendors.
 // ---------------------------------------------------------------------------
 
-/** OpenRouter free-tier ids, in catalog order. Best/preferred first. */
-export const FREE_MODEL_POOL: readonly string[] = openRouterModule.catalog
-  .filter((m) => m.tier === 'FREE')
-  .map((m) => m.id);
+/** Free-tier model ids across every registered vendor. */
+export const FREE_MODEL_POOL: readonly string[] = modelsByTier('FREE');
 
-/** OpenRouter paid-tier ids (STANDARD / PREMIUM / ULTRA). */
-export const PRO_PAID_MODEL_POOL: readonly string[] = openRouterModule.catalog
-  .filter((m) => m.tier === 'PREMIUM' || m.tier === 'ULTRA' || m.tier === 'STANDARD')
-  .map((m) => m.id);
+/** Paid-tier model ids (STANDARD / PREMIUM / ULTRA) across every registered vendor. */
+export const PRO_PAID_MODEL_POOL: readonly string[] = modelsByTier('STANDARD', 'PREMIUM', 'ULTRA');
 
 /** Pro tries free first (cost-optimized), falls over to paid. */
 export const PRO_MODEL_POOL: readonly string[] = [...FREE_MODEL_POOL, ...PRO_PAID_MODEL_POOL];
@@ -200,16 +204,11 @@ export class LlmProxyService {
       return this.dispatchStrict(callerModel as string, body, requestHeaders);
     }
 
-    // 1) Pool composition: prepend fast cross-vendor models (Cerebras, Ollama)
-    //    when their keys are bound — sub-200ms TTFT for Cerebras beats
-    //    OpenRouter free-tier under load. The OpenRouter pool stays in place
-    //    behind them so we keep the existing breadth.
-    const fastVendorHead = this.fastVendorHead();
-    const basePool: readonly string[] = [
-      ...fastVendorHead,
-      ...this.modelPool.filter((m) => !fastVendorHead.includes(m)),
-    ];
-    const reorderedPool = reorderPoolByShape(body, basePool);
+    // 1) Pool composition is already TTFT-ordered (Cerebras → Ollama → NVIDIA
+    //    → OpenRouter) because `modelsByTier` walks the registry's MODULES
+    //    array in priority order. Shape-based reorder then floats capable
+    //    models (tools / structured / vision) to the head within that order.
+    const reorderedPool = reorderPoolByShape(body, this.modelPool);
 
     // 2) Caller hint goes at the head; rest of the pool follows.
     //    `callerModel` was extracted at the top of this function for the
@@ -256,14 +255,7 @@ export class LlmProxyService {
     requestHeaders?: Record<string, string>,
   ): Promise<ProxyResult> {
     const vendor = vendorForModel(model);
-    const env = this.vendorEnv();
-
-    const vendorKeyBound =
-      (vendor === 'openrouter' && !!env.OPENROUTER_API_KEY) ||
-      (vendor === 'cerebras'   && !!env.CEREBRAS_API_KEY)   ||
-      (vendor === 'nvidia'     && !!env.NVIDIA_API_KEY)     ||
-      (vendor === 'ollama'     && !!env.OLLAMA_API_KEY);
-    if (!vendorKeyBound) {
+    if (!vendorKeyBound(this.vendorEnv(), vendor)) {
       return strictUnavailableResult(model, 'vendor_key_unconfigured');
     }
 
@@ -278,23 +270,9 @@ export class LlmProxyService {
     return this.dispatch([model], body, requestHeaders);
   }
 
-  /** Cross-vendor fast-tier models worth trying before the main pool. */
-  private fastVendorHead(): string[] {
+  /** Per-model status with cooldown + key-bound info — used by /v1/models. */
+  async status(): Promise<Array<{ model: string; preferred: boolean; available: boolean; cooldownUntil?: number; vendor: VendorId; vendorCooledUntil?: number; keyBound: boolean }>> {
     const env = this.vendorEnv();
-    const head: string[] = [];
-    if (env.CEREBRAS_API_KEY) {
-      // Cerebras free models — sub-200ms TTFT.
-      for (const m of cerebrasModule.catalog) if (m.tier === 'FREE') head.push(m.id);
-    }
-    if (env.OLLAMA_API_KEY) {
-      // Ollama Cloud free entries.
-      for (const m of ollamaModule.catalog) if (m.tier === 'FREE') head.push(m.id);
-    }
-    return head;
-  }
-
-  /** Per-model status with cooldown info — used by /v1/models. */
-  async status(): Promise<Array<{ model: string; preferred: boolean; available: boolean; cooldownUntil?: number; vendor: VendorId; vendorCooledUntil?: number }>> {
     const poolVendors = Array.from(new Set(this.modelPool.map((m) => vendorForModel(m))));
     const [cooledMap, vendorCooledMap] = await Promise.all([
       loadCooldownExpiries(this.env, this.modelPool.map((m) => ({ vendor: vendorForModel(m), model: m }))),
@@ -304,11 +282,13 @@ export class LlmProxyService {
       const vendor      = vendorForModel(model);
       const until       = cooledMap.get(`${vendor}/${model}`);
       const vendorUntil = vendorCooledMap.get(vendor);
+      const keyBound    = vendorKeyBound(env, vendor);
       return {
         model,
         vendor,
         preferred: i < this.preferredPoolSize,
-        available: vendorUntil === undefined && until === undefined,
+        keyBound,
+        available: keyBound && vendorUntil === undefined && until === undefined,
         ...(until       !== undefined && until       > 0 ? { cooldownUntil:       until       } : {}),
         ...(vendorUntil !== undefined && vendorUntil > 0 ? { vendorCooledUntil:   vendorUntil } : {}),
       };
