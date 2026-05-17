@@ -33,7 +33,13 @@ import {
   type VendorId,
 } from './vendors';
 import { sanitizeRequestToolNames, restoreResponseToolNames } from './toolNameSanitizer';
-import { loadCooldownExpiries, loadCooldowns, recordFailure } from '../../infrastructure/auth/cooldownStore';
+import {
+  loadCooldownExpiries,
+  loadCooldowns,
+  loadCooledVendors,
+  loadCooledVendorExpiries,
+  recordFailure,
+} from '../../infrastructure/auth/cooldownStore';
 import { cerebrasModule, ollamaModule } from './vendors';
 import { validateJsonSchema } from './jsonSchemaValidator';
 
@@ -213,13 +219,17 @@ export class LlmProxyService {
       : reorderedPool;
 
     // 3) Pre-fetch cooldown state for the seed (KV-backed when bound, in-memory
-    //    fallback otherwise). One bulk read; the chain composer filters
-    //    synchronously against the resulting set.
-    const cooledSet = await loadCooldowns(
-      this.env,
-      seed.map((m) => ({ vendor: vendorForModel(m), model: m })),
-    );
-    const candidates = this.buildCandidateChain(seed, cooledSet);
+    //    fallback otherwise). One bulk read each for per-model and per-vendor;
+    //    the chain composer filters synchronously against the resulting sets.
+    //    Vendor cooldown short-circuits the per-model walk when one upstream's
+    //    key is globally throttled — without it, the cascade burns ~20 models
+    //    on the saturated vendor before reaching cross-vendor fallbacks.
+    const seedVendors = Array.from(new Set(seed.map((m) => vendorForModel(m))));
+    const [cooledSet, cooledVendors] = await Promise.all([
+      loadCooldowns(this.env, seed.map((m) => ({ vendor: vendorForModel(m), model: m }))),
+      loadCooledVendors(this.env, seedVendors),
+    ]);
+    const candidates = this.buildCandidateChain(seed, cooledSet, cooledVendors);
     if (candidates.length === 0) {
       // Every model in the seed + cross-vendor list is on cooldown. Fail fast
       // with a clear envelope instead of attempting a vendor with no chain.
@@ -257,8 +267,11 @@ export class LlmProxyService {
       return strictUnavailableResult(model, 'vendor_key_unconfigured');
     }
 
-    const cooledSet = await loadCooldowns(this.env, [{ vendor, model }]);
-    if (cooledSet.has(`${vendor}/${model}`)) {
+    const [cooledSet, cooledVendors] = await Promise.all([
+      loadCooldowns(this.env, [{ vendor, model }]),
+      loadCooledVendors(this.env, [vendor]),
+    ]);
+    if (cooledVendors.has(vendor) || cooledSet.has(`${vendor}/${model}`)) {
       return strictUnavailableResult(model, 'cooldown');
     }
 
@@ -281,20 +294,23 @@ export class LlmProxyService {
   }
 
   /** Per-model status with cooldown info — used by /v1/models. */
-  async status(): Promise<Array<{ model: string; preferred: boolean; available: boolean; cooldownUntil?: number; vendor: VendorId }>> {
-    const cooledMap = await loadCooldownExpiries(
-      this.env,
-      this.modelPool.map((m) => ({ vendor: vendorForModel(m), model: m })),
-    );
+  async status(): Promise<Array<{ model: string; preferred: boolean; available: boolean; cooldownUntil?: number; vendor: VendorId; vendorCooledUntil?: number }>> {
+    const poolVendors = Array.from(new Set(this.modelPool.map((m) => vendorForModel(m))));
+    const [cooledMap, vendorCooledMap] = await Promise.all([
+      loadCooldownExpiries(this.env, this.modelPool.map((m) => ({ vendor: vendorForModel(m), model: m }))),
+      loadCooledVendorExpiries(this.env, poolVendors),
+    ]);
     return this.modelPool.map((model, i) => {
-      const vendor = vendorForModel(model);
-      const until  = cooledMap.get(`${vendor}/${model}`);
+      const vendor      = vendorForModel(model);
+      const until       = cooledMap.get(`${vendor}/${model}`);
+      const vendorUntil = vendorCooledMap.get(vendor);
       return {
         model,
         vendor,
         preferred: i < this.preferredPoolSize,
-        available: until === undefined,
-        ...(until !== undefined && until > 0 ? { cooldownUntil: until } : {}),
+        available: vendorUntil === undefined && until === undefined,
+        ...(until       !== undefined && until       > 0 ? { cooldownUntil:       until       } : {}),
+        ...(vendorUntil !== undefined && vendorUntil > 0 ? { vendorCooledUntil:   vendorUntil } : {}),
       };
     });
   }
@@ -309,6 +325,13 @@ export class LlmProxyService {
    *      filtered by cooldown so a cooled cross-vendor entry doesn't sneak back in
    *   4. Deduplicate, preserving first occurrence
    *
+   * Per-model cooldown excludes specific models that recently failed. Per-vendor
+   * cooldown is the wider net: when one upstream key is globally throttled
+   * (e.g. all OpenRouter free-tier 429s), the vendor itself is cooled and we
+   * skip every model owned by that vendor in one pass — instead of walking
+   * 20+ models on the saturated key one 429 at a time. See
+   * `maybeTripVendorCooldown` in cooldownStore.ts for the trip conditions.
+   *
    * When the entire primary pool is cooled, we *skip* it entirely rather than
    * re-firing already-429'd models. The cross-vendor fallbacks (different
    * upstreams with independent rate limits) are the recovery path. If those
@@ -316,11 +339,18 @@ export class LlmProxyService {
    * with the failure summary — which is the right answer ("all upstreams
    * cooled, retry shortly") rather than burning budget on a doomed retry.
    */
-  private buildCandidateChain(seed: readonly string[], cooledSet: Set<string>): string[] {
+  private buildCandidateChain(
+    seed: readonly string[],
+    cooledSet: Set<string>,
+    cooledVendors: Set<VendorId>,
+  ): string[] {
     const preferred = seed.slice(0, this.preferredPoolSize);
     const fallback  = seed.slice(this.preferredPoolSize);
 
-    const isCooled = (m: string) => cooledSet.has(`${vendorForModel(m)}/${m}`);
+    const isCooled = (m: string) => {
+      const v = vendorForModel(m);
+      return cooledVendors.has(v) || cooledSet.has(`${v}/${m}`);
+    };
     const preferredAvailable = preferred.filter((m) => !isCooled(m));
     const fallbackAvailable  = fallback.filter((m)  => !isCooled(m));
 
@@ -337,8 +367,9 @@ export class LlmProxyService {
     }
     requestCursor++;
 
-    // Append cross-vendor fallbacks, dropping any that are themselves cooled
-    // (otherwise we re-fire a vendor that just 429'd from a sibling chain).
+    // Append cross-vendor fallbacks, dropping any whose vendor or model is
+    // cooled (otherwise we re-fire an upstream that just 429'd from a
+    // sibling chain).
     const crossVendor = getCrossVendorFallbacks(this.vendorEnv()).filter((m) => !isCooled(m));
     const composed = [...chain, ...crossVendor];
     const seen = new Set<string>();
