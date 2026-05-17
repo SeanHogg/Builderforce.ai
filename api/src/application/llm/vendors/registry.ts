@@ -23,7 +23,16 @@ import {
   type VendorStreamResult,
 } from './types';
 
-const MODULES: ReadonlyArray<VendorModule> = [openRouterModule, cerebrasModule, nvidiaModule, ollamaModule];
+/**
+ * Vendor priority for the cascade — fastest TTFT first, so that when keys are
+ * bound for multiple vendors the free pool naturally lands sub-200ms Cerebras
+ * entries at the top, Ollama Cloud next, NVIDIA NIM, then OpenRouter free
+ * (highest variance, broadest coverage). This order propagates into:
+ *   - `modelsByTier(...)` → the FREE/PRO pool composition in LlmProxyService
+ *   - `getCrossVendorFallbacks(...)` → the cross-vendor tail of each chain
+ * Drives both Pool composition and Pool ordering with one source of truth.
+ */
+const MODULES: ReadonlyArray<VendorModule> = [cerebrasModule, ollamaModule, nvidiaModule, openRouterModule];
 
 const MODULES_BY_ID: Record<VendorId, VendorModule> = {
   openrouter: openRouterModule,
@@ -74,6 +83,15 @@ export function vendorForModel(modelId: string): VendorId {
   const prefix = parseVendorPrefix(modelId);
   if (prefix) return prefix.vendor;
   return INDEX.get(modelId)?.vendor ?? DEFAULT_VENDOR;
+}
+
+/**
+ * Whether the given vendor has an API key bound in this env. Centralised here
+ * so neither the proxy nor the admin route has to repeat the per-vendor
+ * `env.<NAME>_API_KEY` conditional — each vendor module owns its key-lookup.
+ */
+export function vendorKeyBound(env: VendorEnv, vendor: VendorId): boolean {
+  return !!MODULES_BY_ID[vendor].apiKeyFrom(env);
 }
 
 export function tierForModel(modelId: string): AiModelTier {
