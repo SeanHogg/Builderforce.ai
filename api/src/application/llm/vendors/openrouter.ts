@@ -96,6 +96,14 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'openai/gpt-4.1',                            tier: 'PREMIUM', label: 'GPT-4.1',            brand: 'OpenAI'    },
   { id: 'google/gemini-2.5-pro',                     tier: 'PREMIUM', label: 'Gemini 2.5 Pro',     brand: 'Google'    },
   { id: 'x-ai/grok-3-mini',                          tier: 'PREMIUM', label: 'Grok 3 Mini',        brand: 'xAI'       },
+
+  // NOTE: `google/gemini-2.5-flash-lite` is the always-on paid last-resort
+  // fallback (see `PAID_LAST_RESORT_MODEL` in LlmProxyService) and is
+  // deliberately NOT listed in the catalog. Keeping it out of FREE_MODEL_POOL
+  // and PRO_PAID_MODEL_POOL guarantees it only runs AFTER every primary +
+  // cross-vendor candidate has failed — never in the middle of a chain.
+  // Tier classification falls through `tierForOpenRouterModel`'s heuristic
+  // and resolves to 'STANDARD' for usage logging.
 ];
 
 const CATALOG_BY_ID = new Map(CATALOG.map((m) => [m.id, m]));

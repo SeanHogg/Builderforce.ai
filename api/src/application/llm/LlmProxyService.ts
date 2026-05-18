@@ -64,6 +64,18 @@ export const PRO_PAID_MODEL_POOL: readonly string[] = modelsByTier('STANDARD', '
 /** Pro tries free first (cost-optimized), falls over to paid. */
 export const PRO_MODEL_POOL: readonly string[] = [...FREE_MODEL_POOL, ...PRO_PAID_MODEL_POOL];
 
+/**
+ * Always-on last-resort paid fallback. Appended to *every* non-strict candidate
+ * chain (Free plan included) so a fully-saturated free pool never surfaces an
+ * `LLM_UNAVAILABLE` / cascade-exhausted 429 to the caller. Dedup in
+ * `buildCandidateChain` collapses this with a Pro pool that already contains it.
+ *
+ * Chosen for the cost/quality balance — ~$0.075/1M input, reliable JSON output,
+ * broad capability coverage. Skipped only when its vendor key is unbound or it
+ * is itself on cooldown.
+ */
+export const PAID_LAST_RESORT_MODEL = 'google/gemini-2.5-flash-lite';
+
 /** First N models of the active pool form the round-robin "preferred" group. */
 export const PREFERRED_POOL_SIZE = 2;
 
@@ -217,15 +229,22 @@ export class LlmProxyService {
       ? [callerModel, ...reorderedPool.filter((m) => m !== callerModel)]
       : reorderedPool;
 
-    // 3) Pre-fetch cooldown state for the seed (KV-backed when bound, in-memory
-    //    fallback otherwise). One bulk read each for per-model and per-vendor;
-    //    the chain composer filters synchronously against the resulting sets.
-    //    Vendor cooldown short-circuits the per-model walk when one upstream's
-    //    key is globally throttled — without it, the cascade burns ~20 models
-    //    on the saturated vendor before reaching cross-vendor fallbacks.
-    const seedVendors = Array.from(new Set(seed.map((m) => vendorForModel(m))));
+    // 3) Pre-fetch cooldown state for the seed + paid last-resort (KV-backed
+    //    when bound, in-memory fallback otherwise). One bulk read each for
+    //    per-model and per-vendor; the chain composer filters synchronously
+    //    against the resulting sets. Vendor cooldown short-circuits the
+    //    per-model walk when one upstream's key is globally throttled —
+    //    without it, the cascade burns ~20 models on the saturated vendor
+    //    before reaching cross-vendor fallbacks. The last-resort model is
+    //    included here so the chain composer can skip it when individually
+    //    cooled instead of firing a doomed retry against a saturated endpoint.
+    const lastResortVendor = vendorForModel(PAID_LAST_RESORT_MODEL);
+    const seedVendors = Array.from(new Set([...seed.map((m) => vendorForModel(m)), lastResortVendor]));
     const [cooledSet, cooledVendors] = await Promise.all([
-      loadCooldowns(this.env, seed.map((m) => ({ vendor: vendorForModel(m), model: m }))),
+      loadCooldowns(this.env, [
+        ...seed.map((m) => ({ vendor: vendorForModel(m), model: m })),
+        { vendor: lastResortVendor, model: PAID_LAST_RESORT_MODEL },
+      ]),
       loadCooledVendors(this.env, seedVendors),
     ]);
     const candidates = this.buildCandidateChain(seed, cooledSet, cooledVendors);
@@ -351,7 +370,13 @@ export class LlmProxyService {
     // cooled (otherwise we re-fire an upstream that just 429'd from a
     // sibling chain).
     const crossVendor = getCrossVendorFallbacks(this.vendorEnv()).filter((m) => !isCooled(m));
-    const composed = [...chain, ...crossVendor];
+
+    // Always-on last-resort paid model. Appended after free + cross-vendor so
+    // a fully-saturated free pool falls through to the cheapest paid model
+    // instead of returning a 429 to the caller. Dedup below collapses it for
+    // Pro pools that already include it via PRO_PAID_MODEL_POOL.
+    const lastResort = isCooled(PAID_LAST_RESORT_MODEL) ? [] : [PAID_LAST_RESORT_MODEL];
+    const composed = [...chain, ...crossVendor, ...lastResort];
     const seen = new Set<string>();
     return composed.filter((m) => (seen.has(m) ? false : (seen.add(m), true)));
   }
