@@ -458,6 +458,13 @@ export const tenants = pgTable('tenants', {
    *   >= 0  → use this value instead of the plan default.
    */
   tokenDailyLimitOverride: integer('token_daily_limit_override'),
+  /**
+   * Superadmin grant of premium routing — when TRUE the LLM proxy uses the
+   * premium model pool (top PREMIUM-tier models) and the extended per-vendor
+   * timeout regardless of plan/billingStatus. Mirrors tokenDailyLimitOverride:
+   * for comped / beta access without flipping the billing plan.
+   */
+  premiumOverride:        boolean('premium_override').notNull().default(false),
   createdAt:              timestamp('created_at').notNull().defaultNow(),
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),
 });

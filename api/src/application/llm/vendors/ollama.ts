@@ -89,6 +89,7 @@ export const ollamaModule: VendorModule = {
       body,
       parseResponse: parseOllamaResponse,
       ...(params.title ? { title: params.title } : {}),
+      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
     });
   },
   // No callStream — Ollama emits NDJSON not SSE; orchestrator will skip during streaming dispatch.

@@ -1207,6 +1207,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         t.external_customer_id AS "externalCustomerId",
         t.external_subscription_id AS "externalSubscriptionId",
         t.token_daily_limit_override AS "tokenDailyLimitOverride",
+        t.premium_override AS "premiumOverride",
         CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' THEN true ELSE false END AS "isPaid",
         CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' THEN 'pro' ELSE 'free' END AS "effectivePlan",
         t.created_at AS "createdAt",
@@ -1215,7 +1216,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       FROM tenants t
       LEFT JOIN tenant_members tm ON tm.tenant_id = t.id AND tm.is_active = true
       LEFT JOIN coderclaw_instances ci ON ci.tenant_id = t.id
-      GROUP BY t.id, t.name, t.slug, t.status, t.plan, t.billing_status, t.billing_email, t.billing_updated_at, t.external_customer_id, t.external_subscription_id, t.token_daily_limit_override, t.created_at
+      GROUP BY t.id, t.name, t.slug, t.status, t.plan, t.billing_status, t.billing_email, t.billing_updated_at, t.external_customer_id, t.external_subscription_id, t.token_daily_limit_override, t.premium_override, t.created_at
       ORDER BY t.created_at DESC
       LIMIT 500
     `);
@@ -1255,6 +1256,33 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (!updated) return c.json({ error: 'Tenant not found' }, 404);
 
     return c.json({ id: updated.id, tokenDailyLimitOverride: updated.tokenDailyLimitOverride });
+  });
+
+  // -------------------------------------------------------------------------
+  // PATCH /api/admin/tenants/:id/premium-override
+  // Body: { premiumOverride: boolean }
+  //   true  → premium routing (top PREMIUM-tier models + extended vendor timeout)
+  //   false → revert to plan-driven routing
+  // -------------------------------------------------------------------------
+  router.patch('/tenants/:id/premium-override', async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    if (!tenantId) return c.json({ error: 'Invalid tenant id' }, 400);
+
+    const body = await c.req.json<{ premiumOverride?: boolean }>();
+    if (typeof body.premiumOverride !== 'boolean') {
+      return c.json({ error: 'premiumOverride must be a boolean' }, 400);
+    }
+
+    const db = buildDatabase(c.env);
+    const [updated] = await db
+      .update(tenants)
+      .set({ premiumOverride: body.premiumOverride, updatedAt: new Date() })
+      .where(eq(tenants.id, tenantId))
+      .returning({ id: tenants.id, premiumOverride: tenants.premiumOverride });
+
+    if (!updated) return c.json({ error: 'Tenant not found' }, 404);
+
+    return c.json({ id: updated.id, premiumOverride: updated.premiumOverride });
   });
 
   // -------------------------------------------------------------------------

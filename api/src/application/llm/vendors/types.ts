@@ -48,6 +48,11 @@ export interface VendorCallParams {
   extraBody?: Record<string, unknown>;
   /** Sent as `X-Title` header for OpenRouter analytics; ignored by other vendors. */
   title?: string;
+  /** Per-vendor-call deadline. Overrides `DEFAULT_VENDOR_CALL_TIMEOUT_MS` when
+   *  set — used by the premium routing path so PREMIUM-tier models that legitimately
+   *  take 30–50s (long-context tailoring, structured extraction) don't get
+   *  killed by the free-tier 25s budget. */
+  timeoutMs?: number;
 }
 
 export interface VendorUsage {
@@ -197,16 +202,20 @@ export const CASCADE_STATUSES: ReadonlySet<number> = new Set<number>([
 const AUTH_STATUSES: ReadonlySet<number> = new Set<number>([401, 403]);
 
 /**
- * Per-vendor-call timeout. Caller (SDK) sets the *outer* deadline for the
- * whole request; this is the *inner* deadline for one vendor attempt. When
- * a vendor hangs (e.g. OpenRouter free-tier queueing under load), the
+ * Per-vendor-call timeout *default*. The caller (SDK) sets the *outer* deadline
+ * for the whole request; this is the *inner* deadline for one vendor attempt.
+ * When a vendor hangs (e.g. OpenRouter free-tier queueing under load), the
  * inner timeout fires first, the dispatcher advances to the next candidate,
  * and the caller still has budget left for another try.
  *
  * 25s gives a 60s outer-budget room for ~2 attempts (incl. retry overhead).
- * Tunable via `VENDOR_CALL_TIMEOUT_MS` env if a deployment needs different.
+ *
+ * Per-call override via `VendorCallParams.timeoutMs` — used by the premium
+ * routing path to extend this to 60s for PREMIUM-tier models that legitimately
+ * take 30-50s (long-context tailoring, structured extraction). See
+ * `PREMIUM_VENDOR_CALL_TIMEOUT_MS` in LlmProxyService for the premium value.
  */
-const DEFAULT_VENDOR_CALL_TIMEOUT_MS = 25_000;
+export const DEFAULT_VENDOR_CALL_TIMEOUT_MS = 25_000;
 
 /**
  * Wrap a vendor fetch in a per-call timeout. On timeout, abort the underlying
@@ -221,8 +230,9 @@ async function fetchWithVendorTimeout(
   model: string,
   endpoint: string,
   init: RequestInit,
-  timeoutMs: number = DEFAULT_VENDOR_CALL_TIMEOUT_MS,
+  timeoutMsArg?: number,
 ): Promise<Response> {
+  const timeoutMs = timeoutMsArg && timeoutMsArg > 0 ? timeoutMsArg : DEFAULT_VENDOR_CALL_TIMEOUT_MS;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -251,8 +261,9 @@ export async function executeChatCompletion(args: {
   headers?: Record<string, string>;
   title?: string;
   parseResponse?: ResponseParser;
+  timeoutMs?: number;
 }): Promise<VendorCallResult> {
-  const { vendorId, endpoint, apiKey, model, body, headers, title } = args;
+  const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs } = args;
   const parseResponse = args.parseResponse ?? parseOpenAIResponse;
 
   // Per-vendor timeout — see fetchWithVendorTimeout for rationale. Throws
@@ -266,7 +277,7 @@ export async function executeChatCompletion(args: {
       ...(headers ?? {}),
     },
     body: JSON.stringify(body),
-  });
+  }, timeoutMs);
 
   if (resp.ok) {
     const raw = await resp.json();
@@ -316,8 +327,9 @@ export async function executeChatCompletionStream(args: {
   body: Record<string, unknown>;
   headers?: Record<string, string>;
   title?: string;
+  timeoutMs?: number;
 }): Promise<VendorStreamResult> {
-  const { vendorId, endpoint, apiKey, model, body, headers, title } = args;
+  const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs } = args;
 
   const resp = await fetchWithVendorTimeout(vendorId, model, endpoint, {
     method: 'POST',
@@ -328,7 +340,7 @@ export async function executeChatCompletionStream(args: {
       ...(headers ?? {}),
     },
     body: JSON.stringify({ ...body, stream: true }),
-  });
+  }, timeoutMs);
 
   if (!resp.ok) {
     const errText = (await resp.text()).slice(0, 400);

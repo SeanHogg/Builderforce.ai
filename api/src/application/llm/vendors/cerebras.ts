@@ -59,6 +59,7 @@ export const cerebrasModule: VendorModule = {
       model: params.model,
       body: { ...buildBody(params), stream: false },
       ...(params.title ? { title: params.title } : {}),
+      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
     });
   },
   async callStream(params: VendorCallParams): Promise<VendorStreamResult> {
@@ -69,6 +70,7 @@ export const cerebrasModule: VendorModule = {
       model: params.model,
       body: buildBody(params),
       ...(params.title ? { title: params.title } : {}),
+      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
     });
   },
 };

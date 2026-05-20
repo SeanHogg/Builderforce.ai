@@ -65,6 +65,29 @@ export const PRO_PAID_MODEL_POOL: readonly string[] = modelsByTier('STANDARD', '
 export const PRO_MODEL_POOL: readonly string[] = [...FREE_MODEL_POOL, ...PRO_PAID_MODEL_POOL];
 
 /**
+ * Premium routing pool — top PREMIUM-tier models only, used when a tenant has
+ * `premium_override` set. Skips FREE and STANDARD entirely so a single attempt
+ * lands on a high-quality model. Three candidates so the cascade has fallback
+ * room within the extended outer budget (180s SDK / 60s per-vendor).
+ *
+ * Derived from `modelsByTier('PREMIUM')` so adding a new PREMIUM model to any
+ * vendor catalog automatically extends the candidate list — and the first three
+ * in registry order become the active premium cascade.
+ */
+const PREMIUM_PRIORITY_COUNT = 3;
+export const PREMIUM_PRIORITY_POOL: readonly string[] =
+  modelsByTier('PREMIUM').slice(0, PREMIUM_PRIORITY_COUNT);
+
+/**
+ * Per-vendor-call timeout for premium routing. PREMIUM-tier models on long-
+ * context inputs (resume tailoring, structured job extraction) routinely take
+ * 30-50s end-to-end; the default 25s budget kills these prematurely. Paired
+ * with the extended SDK outer budget so all three premium candidates can be
+ * tried within one request.
+ */
+export const PREMIUM_VENDOR_CALL_TIMEOUT_MS = 60_000;
+
+/**
  * Always-on last-resort paid fallback. Appended to *every* non-strict candidate
  * chain (Free plan included) so a fully-saturated free pool never surfaces an
  * `LLM_UNAVAILABLE` / cascade-exhausted 429 to the caller. Dedup in
@@ -164,6 +187,11 @@ export interface LlmProxyOptions {
   modelPool?: readonly string[];
   preferredPoolSize?: number;
   productName?: ProductName;
+  /** Per-vendor-call deadline. Defaults to `DEFAULT_VENDOR_CALL_TIMEOUT_MS`
+   *  in the vendor transport. The premium routing path sets this to
+   *  `PREMIUM_VENDOR_CALL_TIMEOUT_MS` so PREMIUM-tier long-context calls
+   *  aren't killed by the free-tier 25s budget. */
+  vendorCallTimeoutMs?: number;
 }
 
 export class LlmProxyService {
@@ -172,6 +200,7 @@ export class LlmProxyService {
   private readonly preferredPoolSize: number;
   private readonly productName: ProductName;
   private readonly isPro: boolean;
+  private readonly vendorCallTimeoutMs: number | undefined;
 
   constructor(env: ProxyEnv, options?: LlmProxyOptions) {
     this.env = env;
@@ -179,6 +208,7 @@ export class LlmProxyService {
     this.preferredPoolSize = Math.min(options?.preferredPoolSize ?? PREFERRED_POOL_SIZE, this.modelPool.length);
     this.productName = options?.productName ?? 'builderforceLLM';
     this.isPro = this.productName === 'builderforceLLMPro' || this.productName === 'builderforceLLMTeams';
+    this.vendorCallTimeoutMs = options?.vendorCallTimeoutMs;
   }
 
   // --- Public entry points --------------------------------------------------
@@ -412,6 +442,7 @@ export class LlmProxyService {
       ...(sanitizedBody.top_p       != null ? { topP:        sanitizedBody.top_p       } : {}),
       ...(Object.keys(extraBody).length > 0 ? { extraBody } : {}),
       title: this.productName,
+      ...(this.vendorCallTimeoutMs ? { timeoutMs: this.vendorCallTimeoutMs } : {}),
     };
 
     if (sanitizedBody.stream) {
@@ -605,25 +636,63 @@ function attemptsToFailovers(attempts: DispatchAttempt[]): FailoverEvent[] {
 
 export type EffectivePlan = 'free' | 'pro' | 'teams';
 
-/** Map an effective plan to its productName + model pool, then construct the proxy.
- *  Single source of truth so /v1/chat/completions and /v1/models stay aligned. */
-export function llmProxyForPlan(env: ProxyEnv, effectivePlan: EffectivePlan): LlmProxyService {
+/**
+ * Resolve the (productName, modelPool, vendorCallTimeoutMs) triple for a
+ * given (plan, premiumOverride) pair. Single source of truth so the proxy
+ * factory, the model-listing endpoint, and the response header logic stay
+ * aligned. Per the DRY rule: callers consume this rather than recomputing
+ * any of the three branches independently.
+ *
+ *   premiumOverride=true → top PREMIUM-tier models + extended 60s vendor
+ *     timeout + Pro OpenRouter key. Plan/billing irrelevant — superadmin
+ *     grant overrides them so comped / beta access works without flipping
+ *     the billing plan.
+ *
+ *   premiumOverride=false → plan-driven routing as before.
+ */
+export function resolveRouting(
+  effectivePlan: EffectivePlan,
+  premiumOverride: boolean,
+): { productName: ProductName; modelPool: readonly string[]; vendorCallTimeoutMs?: number } {
+  if (premiumOverride) {
+    return {
+      productName: 'builderforceLLMPro',
+      modelPool: PREMIUM_PRIORITY_POOL,
+      vendorCallTimeoutMs: PREMIUM_VENDOR_CALL_TIMEOUT_MS,
+    };
+  }
   const productName: ProductName =
     effectivePlan === 'teams' ? 'builderforceLLMTeams'
     : effectivePlan === 'pro' ? 'builderforceLLMPro'
     :                            'builderforceLLM';
   const modelPool = effectivePlan === 'free' ? FREE_MODEL_POOL : PRO_MODEL_POOL;
-  return new LlmProxyService(env, { modelPool, preferredPoolSize: PREFERRED_POOL_SIZE, productName });
+  return { productName, modelPool };
 }
 
-export function productNameForPlan(effectivePlan: EffectivePlan): ProductName {
-  return effectivePlan === 'teams' ? 'builderforceLLMTeams'
-    : effectivePlan === 'pro'      ? 'builderforceLLMPro'
-    :                                 'builderforceLLM';
+/** Map an effective plan to its productName + model pool, then construct the proxy.
+ *  When `premiumOverride` is true the routing is forced to the premium pool
+ *  + extended vendor timeout regardless of plan. Single entry point so
+ *  /v1/chat/completions and /v1/models stay aligned. */
+export function llmProxyForPlan(
+  env: ProxyEnv,
+  effectivePlan: EffectivePlan,
+  premiumOverride = false,
+): LlmProxyService {
+  const { productName, modelPool, vendorCallTimeoutMs } = resolveRouting(effectivePlan, premiumOverride);
+  return new LlmProxyService(env, {
+    modelPool,
+    preferredPoolSize: PREFERRED_POOL_SIZE,
+    productName,
+    ...(vendorCallTimeoutMs ? { vendorCallTimeoutMs } : {}),
+  });
 }
 
-export function modelPoolForPlan(effectivePlan: EffectivePlan): readonly string[] {
-  return effectivePlan === 'free' ? FREE_MODEL_POOL : PRO_MODEL_POOL;
+export function productNameForPlan(effectivePlan: EffectivePlan, premiumOverride = false): ProductName {
+  return resolveRouting(effectivePlan, premiumOverride).productName;
+}
+
+export function modelPoolForPlan(effectivePlan: EffectivePlan, premiumOverride = false): readonly string[] {
+  return resolveRouting(effectivePlan, premiumOverride).modelPool;
 }
 
 /** Free-tier proxy for IDE-internal callers (chat, dataset gen, agent inference, brain).

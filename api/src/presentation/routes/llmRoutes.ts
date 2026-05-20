@@ -141,6 +141,10 @@ type TenantAccess = {
    *   >= 0 → use this value
    */
   tokenDailyLimitOverride: number | null;
+  /** Superadmin grant of premium routing — when true the LLM proxy uses the
+   *  premium model pool (top PREMIUM-tier models) and the extended per-vendor
+   *  timeout regardless of plan/billingStatus. Comped / beta access. */
+  premiumOverride: boolean;
   /** True when the JWT carries `sa: true`. Bypasses plan-cap and strict-pin
    *  gates so platform admins can use the gateway without hitting tenant caps.
    *  Always false for `clk_*` and `bfk_*` machine-credential paths. */
@@ -162,7 +166,7 @@ function toTenantPlan(ep: TenantAccess['effectivePlan']): TenantPlan {
 async function resolveTenantPlan(
   c: Context<HonoEnv>,
   tenantId: number,
-): Promise<Pick<TenantAccess, 'plan' | 'billingStatus' | 'effectivePlan' | 'tokenDailyLimitOverride'>> {
+): Promise<Pick<TenantAccess, 'plan' | 'billingStatus' | 'effectivePlan' | 'tokenDailyLimitOverride' | 'premiumOverride'>> {
   const db = buildDatabase(c.env);
   const [tenantRow] = await db
     .select({
@@ -170,6 +174,7 @@ async function resolveTenantPlan(
       plan: tenants.plan,
       billingStatus: tenants.billingStatus,
       tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
+      premiumOverride: tenants.premiumOverride,
     })
     .from(tenants)
     .where(eq(tenants.id, tenantId))
@@ -187,6 +192,7 @@ async function resolveTenantPlan(
     billingStatus,
     effectivePlan,
     tokenDailyLimitOverride: tenantRow.tokenDailyLimitOverride ?? null,
+    premiumOverride: tenantRow.premiumOverride === true,
   };
 }
 
@@ -547,8 +553,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       }
     }
 
-    const llmProduct = productNameForPlan(access.effectivePlan);
-    const isPro = access.effectivePlan !== 'free';
+    const llmProduct = productNameForPlan(access.effectivePlan, access.premiumOverride);
+    // Premium override forces the Pro OpenRouter key path; otherwise plan-driven.
+    const isPro = access.premiumOverride || access.effectivePlan !== 'free';
 
     // Validate required key for the active plan up-front so callers get a clear 503.
     const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
@@ -560,7 +567,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       }, 503);
     }
 
-    const service = llmProxyForPlan(c.env, access.effectivePlan);
+    const service = llmProxyForPlan(c.env, access.effectivePlan, access.premiumOverride);
     const result = await service.complete(body);
 
     // Clone upstream headers we care about
@@ -571,6 +578,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     upstreamHeaders.set('x-builderforce-retries', String(result.retries));
     upstreamHeaders.set('x-builderforce-product', llmProduct);
     upstreamHeaders.set('x-builderforce-effective-plan', access.effectivePlan);
+    if (access.premiumOverride) upstreamHeaders.set('x-builderforce-premium', 'true');
     // Daily-token-limit headers — let callers pre-emptively throttle before
     // they hit the 429 plan_token_limit_exceeded gate.
     if (planDailyLimit > 0) {
@@ -635,9 +643,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           // Lets callers see which vendor recovered the request and detect
           // single-vendor concentration patterns over time.
           ...(result.failovers.length > 0 ? { failovers: result.failovers } : {}),
-          pool:          modelPoolForPlan(access.effectivePlan).length,
+          pool:          modelPoolForPlan(access.effectivePlan, access.premiumOverride).length,
           product:       llmProduct,
           effectivePlan: access.effectivePlan,
+          ...(access.premiumOverride ? { premium: true } : {}),
           ...(result.schemaRetries != null ? { schemaRetries: result.schemaRetries } : {}),
           ...(callerUseCase     ? { useCase:    callerUseCase  } : {}),
           ...(callerMetadata    ? { metadata:   callerMetadata as Record<string, string> } : {}),
@@ -667,8 +676,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
 
     const effectivePlan = access?.effectivePlan ?? 'free';
-    const productName = productNameForPlan(effectivePlan);
-    const isPro = effectivePlan !== 'free';
+    const premiumOverride = access?.premiumOverride === true;
+    const productName = productNameForPlan(effectivePlan, premiumOverride);
+    // Premium override implies the Pro key path (same as in /v1/chat/completions).
+    const isPro = premiumOverride || effectivePlan !== 'free';
 
     const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
     if (!requiredKey) {
@@ -676,16 +687,18 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         configured: false,
         product: productName,
         effectivePlan,
-        models: modelPoolForPlan(effectivePlan),
+        ...(premiumOverride ? { premium: true } : {}),
+        models: modelPoolForPlan(effectivePlan, premiumOverride),
       });
     }
 
-    const service = llmProxyForPlan(c.env, effectivePlan);
+    const service = llmProxyForPlan(c.env, effectivePlan, premiumOverride);
     return c.json({
       configured: true,
       object: 'list',
       product: productName,
       effectivePlan,
+      ...(premiumOverride ? { premium: true } : {}),
       data: service.status(),
     });
   });
@@ -893,7 +906,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     return c.json(
       typeof result.body === 'object' && result.body !== null
-        ? { ...(result.body as Record<string, unknown>), _builderforce: { product: productNameForPlan(access.effectivePlan), effectivePlan: access.effectivePlan } }
+        ? { ...(result.body as Record<string, unknown>), _builderforce: { product: productNameForPlan(access.effectivePlan, access.premiumOverride), effectivePlan: access.effectivePlan, ...(access.premiumOverride ? { premium: true } : {}) } }
         : result.body,
       result.status as 200,
     );

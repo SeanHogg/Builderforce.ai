@@ -37,6 +37,7 @@ import { BUILTIN_PERSONAS, type Persona } from '@/lib/marketplaceData';
 import UserDetailDrawer from '@/components/UserDetailDrawer';
 import { TenantApiKeysAdminTab } from '@/components/admin/TenantApiKeysAdminTab';
 import { TenantTokenLimitOverrideEditor } from '@/components/admin/TenantTokenLimitOverrideEditor';
+import { TenantPremiumOverrideEditor } from '@/components/admin/TenantPremiumOverrideEditor';
 
 type AdminTab =
   | 'health'
@@ -1189,6 +1190,11 @@ export default function AdminPage() {
                                     tenantId={t.id}
                                     value={t.tokenDailyLimitOverride ?? null}
                                     onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, tokenDailyLimitOverride: next } : x))}
+                                  />
+                                  <TenantPremiumOverrideEditor
+                                    tenantId={t.id}
+                                    value={t.premiumOverride === true}
+                                    onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, premiumOverride: next } : x))}
                                   />
                                   {!tenantMembersMap[t.id] ? (
                                     <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading members…</span>
