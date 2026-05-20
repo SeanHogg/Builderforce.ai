@@ -93,6 +93,7 @@ type TenantRow = {
   plan: 'free' | 'pro' | 'teams';
   billingStatus: string;
   tokenDailyLimitOverride?: number | null;
+  premiumOverride?: boolean;
 };
 
 function mockDb(opts: {

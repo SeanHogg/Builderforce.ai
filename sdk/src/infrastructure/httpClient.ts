@@ -94,7 +94,12 @@ export class HttpClient {
     // and is harmless on Node + browsers.
     const fetchImpl = options.fetchFn ?? fetch;
     this.fetchFn = fetchImpl.bind(globalThis);
-    this.defaultTimeoutMs = options.timeoutMs ?? 60_000;
+    // 180s aligns the outer SDK budget with the premium routing path on the
+    // gateway: per-vendor 60s × up to 3 PREMIUM-tier attempts = ~180s. Customers
+    // running tailor / job-extract style long-context calls were hitting the
+    // previous 60s cap before the gateway could finish its premium cascade.
+    // Per-call `timeoutMs` still overrides for callers that want a tighter UX.
+    this.defaultTimeoutMs = options.timeoutMs ?? 180_000;
   }
 
   async getJson<T>(path: string, options?: RequestOptions): Promise<T> {

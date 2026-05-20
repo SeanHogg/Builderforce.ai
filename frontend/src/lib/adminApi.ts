@@ -44,6 +44,10 @@ export interface AdminTenant {
    *   >= 0 → use this value
    */
   tokenDailyLimitOverride: number | null;
+  /** Superadmin grant of premium routing — when true the LLM proxy uses the
+   *  premium model pool (top PREMIUM-tier models) and the extended per-vendor
+   *  timeout regardless of plan/billingStatus. */
+  premiumOverride: boolean;
 }
 
 export interface AdminHealth {
@@ -447,6 +451,24 @@ export const adminApi = {
       {
         method: 'PATCH',
         body: JSON.stringify({ tokenDailyLimitOverride }),
+      },
+    );
+  },
+
+  /**
+   * Set / clear the superadmin premium-routing override.
+   *   true  → tenant routes through PREMIUM-tier models + extended vendor timeout
+   *   false → tenant routes through their plan default
+   */
+  async setTenantPremiumOverride(
+    tenantId: number,
+    premiumOverride: boolean,
+  ): Promise<{ id: number; premiumOverride: boolean }> {
+    return adminRequest<{ id: number; premiumOverride: boolean }>(
+      `/api/admin/tenants/${tenantId}/premium-override`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ premiumOverride }),
       },
     );
   },
