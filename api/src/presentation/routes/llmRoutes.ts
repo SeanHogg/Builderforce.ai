@@ -699,7 +699,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       product: productName,
       effectivePlan,
       ...(premiumOverride ? { premium: true } : {}),
-      data: service.status(),
+      data: await service.status(),
     });
   });
 
