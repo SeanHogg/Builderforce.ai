@@ -124,12 +124,25 @@ jobs:
         with:
           node-version: 20
 
-      # Trusted Publishing on `npm publish` requires npm >= 11.5.1 (Sept 2025).
-      # Node 20 ships npm 10.x by default, which doesn't attempt OIDC at all
-      # and instead errors with `ENEEDAUTH` when no `_authToken` is set.
-      # Upgrade in-place so the publish step can use OIDC.
+      # Trusted Publishing on `npm publish` requires npm >= 11.5.1. Node 20
+      # ships npm 10.x by default, which silently skips OIDC and errors with
+      # `ENEEDAUTH` when no `_authToken` is set. Pin to `latest` rather than a
+      # specific minor range so we don't silently no-op when the requested
+      # version doesn't match a published release.
       - name: Upgrade npm to a Trusted-Publishing-capable version
-        run: npm install -g npm@^11.5.1
+        run: npm install -g npm@latest
+
+      # Diagnostic line — the previous run's log only showed the publish step,
+      # so we couldn't tell whether the upgrade above actually took effect.
+      # This prints the versions + OIDC env presence (true/false, never the
+      # token value itself) so the next failure (if any) is self-describing.
+      - name: Print toolchain + OIDC env state
+        run: |
+          echo "node $(node --version)"
+          echo "npm  $(npm --version)"
+          echo "registry $(npm config get registry)"
+          echo "ACTIONS_ID_TOKEN_REQUEST_URL   present? $([ -n \"$ACTIONS_ID_TOKEN_REQUEST_URL\" ] && echo true || echo false)"
+          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN present? $([ -n \"$ACTIONS_ID_TOKEN_REQUEST_TOKEN\" ] && echo true || echo false)"
 
       - name: Install SDK dependencies
         working-directory: sdk
