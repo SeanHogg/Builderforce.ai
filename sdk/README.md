@@ -297,6 +297,14 @@ try {
 } catch (error) {
   if (error instanceof BuilderforceApiError) {
     console.error(error.status, error.code, error.requestId, error.message);
+    // `vendor` + `model` identify the upstream the gateway dispatched against
+    // — set on every error where an upstream was selected (single-attempt
+    // 429s, timeouts, `model_unavailable`, …). Unset only for pre-dispatch
+    // errors (auth failures, validation, tenant-cap 429s) — distinguish by
+    // checking presence of `error.vendor`, not by parsing model-id prefixes.
+    if (error.vendor) {
+      console.error(`upstream: ${error.vendor}/${error.model}`);
+    }
   }
 }
 ```
@@ -350,7 +358,7 @@ const usage  = await client.usage.get({ days: 30 });
 
 ## Routing — `model` is a hint, gateway has final say
 
-The gateway owns model selection. When you pass a `model`, the gateway treats it as a **hint** — it puts that id at the head of its candidate chain so it's tried first, but it retains the right to substitute on cooldown, vendor outage, or plan-tier mismatch. **Always read `_builderforce.resolvedModel` if you need to know what actually ran.**
+The gateway owns model selection. When you pass a `model`, the gateway treats it as a **hint** — it puts that id at the head of its candidate chain so it's tried first, but it retains the right to substitute on cooldown, vendor outage, or plan-tier mismatch. **Always read `_builderforce.resolvedModel` if you need to know what actually ran.** Pair it with `_builderforce.resolvedVendor` (the upstream that owns the resolved model — `'openrouter'`, `'cerebras'`, `'nvidia'`, `'ollama'`, `'googleai'`, …) for per-vendor cost / latency aggregation without parsing the model-id prefix.
 
 ```ts
 const res = await client.chat.completions.create({

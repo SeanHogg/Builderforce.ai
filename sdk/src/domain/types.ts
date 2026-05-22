@@ -237,6 +237,13 @@ export interface ChatCompletionResponse {
   _builderforce?: {
     /** The model the gateway dispatched against. Equals `request.model` when caller pinned. */
     resolvedModel?: string;
+    /**
+     * Vendor that owns the resolved model (`'openrouter' | 'cerebras' | 'nvidia'
+     * | 'ollama' | 'googleai' | …`). Sourced from the gateway's catalog so
+     * consumers doing per-vendor cost / latency aggregation get a single field
+     * to group by without parsing model-id prefixes.
+     */
+    resolvedVendor?: string;
     /** How many vendor retries happened inside the failover chain. */
     retries?: number;
     /**
