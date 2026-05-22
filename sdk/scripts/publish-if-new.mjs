@@ -86,7 +86,12 @@ if (!hasToken && !hasOidc && !hasLocalCli) {
 }
 
 console.log(`${name}@${version} is new — publishing ...`);
-runNpm('publish --provenance --access public', {
+// `--loglevel=verbose` is opt-in via $NPM_PUBLISH_VERBOSE so day-to-day runs
+// stay quiet but a CI debugging cycle can flip one env var to see the full
+// auth handshake (Trusted Publishing OIDC handshake / token resolution /
+// stale `.npmrc` short-circuit) without editing this script.
+const verbose = process.env.NPM_PUBLISH_VERBOSE === '1' ? ' --loglevel=verbose' : '';
+runNpm(`publish --provenance --access public${verbose}`, {
   cwd: resolve(here, '..'),
   stdio: 'inherit',
 });

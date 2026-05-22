@@ -138,11 +138,18 @@ jobs:
       # token value itself) so the next failure (if any) is self-describing.
       - name: Print toolchain + OIDC env state
         run: |
-          echo "node $(node --version)"
-          echo "npm  $(npm --version)"
-          echo "registry $(npm config get registry)"
-          echo "ACTIONS_ID_TOKEN_REQUEST_URL   present? $([ -n \"$ACTIONS_ID_TOKEN_REQUEST_URL\" ] && echo true || echo false)"
-          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN present? $([ -n \"$ACTIONS_ID_TOKEN_REQUEST_TOKEN\" ] && echo true || echo false)"
+          echo "node:     $(node --version)"
+          echo "npm:      $(npm --version)"
+          echo "registry: $(npm config get registry)"
+          if [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ];   then echo "ACTIONS_ID_TOKEN_REQUEST_URL:   present"; else echo "ACTIONS_ID_TOKEN_REQUEST_URL:   MISSING"; fi
+          if [ -n "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]; then echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN: present"; else echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN: MISSING"; fi
+          # Show any stale auth lines that could short-circuit OIDC. If anything
+          # matches, that's the smoking gun — the CLI sees a token and never
+          # tries trusted publishing.
+          echo "--- .npmrc files that could carry a stale _authToken ---"
+          for f in ~/.npmrc /etc/npmrc ./sdk/.npmrc ./.npmrc; do
+            if [ -f "$f" ]; then echo "$f:"; grep -E '_authToken|registry' "$f" || echo "  (no auth/registry lines)"; fi
+          done
 
       - name: Install SDK dependencies
         working-directory: sdk
@@ -164,8 +171,16 @@ jobs:
       # release.yml). `NPM_TOKEN` is intentionally NOT passed — token-auth
       # being present in `.npmrc` would short-circuit the OIDC fallback and
       # send a stale token on the PUT.
+      #
+      # `NPM_PUBLISH_VERBOSE=1` flips `npm publish` into `--loglevel=verbose`
+      # so the auth handshake (which token type, which registry call, which
+      # `.npmrc` line wins) is visible in the workflow log — needed while we
+      # diagnose the persistent `ENEEDAUTH` after the OIDC migration. Drop
+      # this env line once 0.8.0 publishes cleanly.
       - name: Publish if version is new
         working-directory: sdk
+        env:
+          NPM_PUBLISH_VERBOSE: '1'
         run: npm run publish:if-new
 
   deploy-docs:
