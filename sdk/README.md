@@ -1,9 +1,9 @@
 # @seanhogg/builderforce-sdk
 
-Typed TypeScript SDK for the [Builderforce.ai](https://builderforce.ai) LLM gateway. OpenAI-compatible chat completions with tool calling and structured output, embeddings, model registry, and usage analytics — all behind a single tenant API key. Vendor failover (OpenRouter / Cerebras / Ollama / Claude / GPT / Gemini / Grok) is handled server-side so your code only knows about Builderforce.
+Typed TypeScript SDK for the [Builderforce.ai](https://builderforce.ai) LLM gateway. OpenAI-compatible chat completions with tool calling and structured output, embeddings, image generation (Together → FluxAPI cascade), model registry, and usage analytics — all behind a single tenant API key. Vendor failover (OpenRouter / Cerebras / Ollama / Claude / GPT / Gemini / Grok / Flux) is handled server-side so your code only knows about Builderforce.
 
 - **Vanilla `fetch` / `AbortController` / `ReadableStream` / `TextDecoder`** — runs on Node 18+, Cloudflare Workers, browsers, edge runtimes.
-- **Zero runtime dependencies.** ~23 kB compressed, ~102 kB unpacked.
+- **Zero runtime dependencies.** ~34 kB compressed, ~154 kB unpacked.
 - **Dual ESM + CJS + `.d.ts`** out of the box.
 
 ## Install
@@ -204,6 +204,29 @@ for (const obj of res.data) {
 ```
 
 Wired to OpenRouter; default model `nvidia/llama-nemotron-embed-vl-1b-v2:free` (free-tier, competitive with `text-embedding-3-small` for English). Override via `model`.
+
+## Image generation
+
+```ts
+const res = await client.images.generate({
+  prompt: 'A studio photo of a corgi astronaut, soft rim light',
+  size:   '1024x1024',
+  n:      1,
+});
+
+for (const img of res.data) {
+  console.log(img.url);          // hosted URL (default)
+  // img.b64_json                 // when `response_format: 'b64_json'`
+  // img.revised_prompt           // vendor-side prompt rewrite, if any
+}
+
+console.log(res._builderforce?.resolvedModel);  // which model actually served
+console.log(res._builderforce?.resolvedVendor); // 'together' | 'fluxapi' | …
+```
+
+OpenAI-compatible surface — same `prompt` / `size` / `n` / `response_format: 'url' | 'b64_json'` shape. Behind the scenes the gateway cascades free Together vendors → premium FluxAPI fallback, so a saturated free pool falls through instead of returning a 429. Vendor-prefix the `model` (`together/<id>`, `fluxapi/flux-kontext-pro`) to pin; bare ids resolve via catalog lookup. Same `useCase` / `metadata` / `idempotencyKey` / `timeoutMs` / `signal` options as chat, with the same billing trace-back semantics.
+
+Each generated image is billed against the tenant's daily token budget at a flat ~1000-token rate, so `plan_token_limit_exceeded` 429s + the `Don't retry terminal errors` pattern below apply identically to images.
 
 ## Per-call options
 
