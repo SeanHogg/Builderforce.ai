@@ -124,6 +124,13 @@ jobs:
         with:
           node-version: 20
 
+      # Trusted Publishing on `npm publish` requires npm >= 11.5.1 (Sept 2025).
+      # Node 20 ships npm 10.x by default, which doesn't attempt OIDC at all
+      # and instead errors with `ENEEDAUTH` when no `_authToken` is set.
+      # Upgrade in-place so the publish step can use OIDC.
+      - name: Upgrade npm to a Trusted-Publishing-capable version
+        run: npm install -g npm@^11.5.1
+
       - name: Install SDK dependencies
         working-directory: sdk
         run: npm install
