@@ -379,6 +379,112 @@ describe('@seanhogg/builderforce-sdk', () => {
     });
   });
 
+  it('exposes top-level vendor + model on a single-attempt 429 (no cascade)', async () => {
+    // Regression: terminal non-cascade errors used to surface no vendor info,
+    // forcing consumers to parse `error.model` prefixes to recover vendor —
+    // a heuristic that silently mis-attributes every OpenRouter-routed family
+    // (`qwen/*`, `google/*`, `anthropic/*`). Gateway now sets vendor + model
+    // on the envelope so consumers group by `error.vendor` directly.
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({
+        error: {
+          message: 'Upstream rate-limited the request',
+          code:    429,
+          type:    'rate_limit_error',
+          vendor:  'openrouter',
+          model:   'qwen/qwen3-coder:free',
+          details: { failovers: [{ model: 'qwen/qwen3-coder:free', vendor: 'openrouter', code: 429 }] },
+        },
+      }),
+      { status: 429, headers: { 'Content-Type': 'application/json' } },
+    ));
+    const client = new BuilderforceClient({ apiKey: 'k', fetch: fetchMock as unknown as typeof fetch });
+
+    await expect(client.chat.completions.create({ messages: [{ role: 'user', content: 'hi' }] }))
+      .rejects.toMatchObject({
+        name:   'BuilderforceApiError',
+        status: 429,
+        code:   '429',
+        vendor: 'openrouter',
+        model:  'qwen/qwen3-coder:free',
+      });
+  });
+
+  it('recovers model from details.requestedModel on strict-pin 503', async () => {
+    // The strict-pin envelope carries `requestedModel` under details (legacy
+    // shape) — the SDK falls back to that when the top-level `model` is
+    // absent, so existing gateways serve a useful `error.model` immediately
+    // even before they're upgraded to set the top-level field.
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({
+        error:   'Model is on cooldown — strict pin cannot substitute.',
+        code:    'model_unavailable',
+        vendor:  'cerebras',
+        model:   'cerebras/llama-3.3-70b',
+        details: { requestedModel: 'cerebras/llama-3.3-70b', reason: 'cooldown' },
+      }),
+      { status: 503, headers: { 'Content-Type': 'application/json' } },
+    ));
+    const client = new BuilderforceClient({ apiKey: 'k', fetch: fetchMock as unknown as typeof fetch });
+
+    await expect(client.chat.completions.create({
+      model: 'cerebras/llama-3.3-70b',
+      modelStrict: true,
+      messages: [{ role: 'user', content: 'hi' }],
+    })).rejects.toMatchObject({
+      name:   'BuilderforceApiError',
+      status: 503,
+      code:   'model_unavailable',
+      vendor: 'cerebras',
+      model:  'cerebras/llama-3.3-70b',
+    });
+  });
+
+  it('surfaces _builderforce.resolvedVendor alongside resolvedModel on success', async () => {
+    const fetchMock = vi.fn(async () => createJsonResponse({
+      choices: [{ message: { content: 'hi' } }],
+      _builderforce: {
+        resolvedModel:  'openrouter/anthropic/claude-3-haiku',
+        resolvedVendor: 'openrouter',
+        retries:        0,
+      },
+    }));
+
+    const client = new BuilderforceClient({ apiKey: 'k', fetch: fetchMock as unknown as typeof fetch });
+    const res = await client.chat.completions.create({ messages: [{ role: 'user', content: 'hi' }] });
+
+    expect(res._builderforce?.resolvedVendor).toBe('openrouter');
+    expect(res._builderforce?.resolvedModel).toBe('openrouter/anthropic/claude-3-haiku');
+  });
+
+  it('leaves vendor + model undefined on pre-dispatch errors (no upstream selected)', async () => {
+    // 401 auth-fail / 400 validation-fail / tenant-cap 429s never selected
+    // an upstream — `vendor` and `model` should stay unset so consumers can
+    // distinguish "the gateway tried an upstream" from "the gateway rejected
+    // before dispatch" by presence of the field alone.
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({
+        error: 'Plan daily token limit reached (10,000 tokens).',
+        code:  'plan_token_limit_exceeded',
+        terminal: true,
+        retryAfter: 12_345,
+      }),
+      { status: 429, headers: { 'Content-Type': 'application/json' } },
+    ));
+    const client = new BuilderforceClient({ apiKey: 'k', fetch: fetchMock as unknown as typeof fetch });
+
+    await client.chat.completions.create({ messages: [{ role: 'user', content: 'hi' }] }).catch((err) => {
+      expect(err).toMatchObject({
+        name:     'BuilderforceApiError',
+        status:   429,
+        code:     'plan_token_limit_exceeded',
+        terminal: true,
+      });
+      expect(err.vendor).toBeUndefined();
+      expect(err.model).toBeUndefined();
+    });
+  });
+
   it('throws BuilderforceApiError for non-2xx', async () => {
     const fetchMock = vi.fn(async () => new Response(
       JSON.stringify({ error: 'Unauthorized', code: 'unauthorized' }),

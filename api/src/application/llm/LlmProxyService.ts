@@ -166,6 +166,11 @@ export interface ProxyResult {
   response: Response;
   /** Which model actually served the request. */
   resolvedModel: string;
+  /** Vendor that owns `resolvedModel` — sourced from the catalog. Always set
+   *  (every successful or failed response has *some* model the cascade landed
+   *  on); routes echo it back to consumers as `_builderforce.resolvedVendor`
+   *  and on errors as the top-level `vendor` field. */
+  resolvedVendor: VendorId;
   /** How many failovers happened before success. */
   retries: number;
   failovers: FailoverEvent[];
@@ -523,6 +528,7 @@ export class LlmProxyService {
         headers: { 'content-type': 'application/json' },
       }),
       resolvedModel: result.modelUsed,
+      resolvedVendor: result.vendorUsed,
       retries: totalAttempts,
       failovers: totalFailovers,
       ...(result.usage ? {
@@ -553,15 +559,30 @@ export class LlmProxyService {
     const failovers: FailoverEvent[] = attempts && attempts.length > 0
       ? attempts.map((a) => ({ model: a.model, vendor: a.vendor, code: a.status }))
       : candidates.map((model) => ({ model, vendor: vendorForModel(model), code: 0 }));
+    // Pick the *last* dispatched attempt as the "model the gateway was on when
+    // it gave up" — that's the most informative attribution for consumers
+    // doing per-vendor saturation rollups. Falls back to the last candidate
+    // when no attempts ran (every model on cooldown / no key bound).
+    const resolvedModel = attempts && attempts.length > 0
+      ? attempts[attempts.length - 1]!.model
+      : (candidates[candidates.length - 1] ?? this.modelPool[0] ?? FREE_MODEL_POOL[0] ?? '');
+    const resolvedVendor: VendorId = attempts && attempts.length > 0
+      ? attempts[attempts.length - 1]!.vendor
+      : vendorForModel(resolvedModel);
     // Failover breakdown lives under `error.details.failovers` — OpenAI-style
     // envelope so the SDK's existing `details` accessor on BuilderforceApiError
-    // picks it up without a parser change. Lets callers detect single-vendor
-    // saturation (e.g. all attempts on OpenRouter) and route around it.
+    // picks it up without a parser change. Top-level `vendor` + `model` give
+    // consumers a single field to group by without parsing the model-id prefix
+    // (which fails silently for OpenRouter-routed families like `qwen/*`,
+    // `google/*`, `anthropic/*` that share the prefix with the model family,
+    // not the upstream vendor).
     const exhaustedBody = JSON.stringify({
       error: {
         message,
         code: 429,
         type: 'rate_limit_error',
+        vendor: resolvedVendor,
+        model: resolvedModel,
         details: { failovers },
       },
     });
@@ -570,7 +591,8 @@ export class LlmProxyService {
         status: 429,
         headers: { 'content-type': 'application/json' },
       }),
-      resolvedModel: candidates[candidates.length - 1] ?? this.modelPool[0] ?? FREE_MODEL_POOL[0] ?? '',
+      resolvedModel,
+      resolvedVendor,
       retries: attempts?.length ?? candidates.length,
       failovers,
       ...(schemaRetries > 0 ? { schemaRetries } : {}),
@@ -592,6 +614,7 @@ export class LlmProxyService {
       return {
         response: result.response,
         resolvedModel: result.modelUsed,
+        resolvedVendor: result.vendorUsed,
         retries: result.attempts.length,
         failovers: attemptsToFailovers(result.attempts),
       };
@@ -726,9 +749,15 @@ function strictUnavailableResult(
   model: string,
   reason: 'cooldown' | 'vendor_key_unconfigured' | 'plan_tier' | 'vendor_outage',
 ): ProxyResult {
+  const vendor = vendorForModel(model);
   const body = JSON.stringify({
     error: `Strict-pin: model '${model}' is unavailable (${reason}).`,
     code: 'model_unavailable',
+    // Top-level `vendor` + `model` so SDK consumers' per-vendor rollups pick
+    // up strict-pin 503s without parsing the model id prefix. `details`
+    // retains `requestedModel` for backward compat.
+    vendor,
+    model,
     details: { requestedModel: model, reason },
   });
   return {
@@ -737,6 +766,7 @@ function strictUnavailableResult(
       headers: { 'content-type': 'application/json' },
     }),
     resolvedModel: model,
+    resolvedVendor: vendor,
     retries: 0,
     failovers: [],
   };

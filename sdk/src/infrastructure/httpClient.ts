@@ -21,6 +21,26 @@ export class BuilderforceApiError extends Error {
    * detect single-vendor saturation (e.g. all attempts on `openrouter`).
    */
   public readonly failovers?: FailoverEvent[];
+  /**
+   * Upstream vendor the gateway dispatched against (`'openrouter' | 'cerebras'
+   * | 'nvidia' | 'ollama' | 'googleai' | …`). Set on every error where the
+   * gateway selected an upstream — including single-attempt failures that
+   * never ran a cascade (timeouts, single-vendor 429s, `model_unavailable`).
+   *
+   * Unset only for pre-dispatch errors where no vendor was ever selected:
+   * `401`/`403` auth failures, `400` validation failures, `409` idempotent
+   * replay, and tenant-cap 429s (`plan_token_limit_exceeded`,
+   * `claw_token_limit_exceeded`) — those caps are per-tenant, not per-model.
+   *
+   * Sourced from the gateway's catalog lookup so consumers never have to
+   * parse the model id to recover vendor identity.
+   */
+  public readonly vendor?: string;
+  /**
+   * Model id the gateway dispatched against — set whenever `vendor` is set.
+   * Pair with `vendor` for per-attempt observability without prefix parsing.
+   */
+  public readonly model?: string;
 
   constructor(
     message: string,
@@ -28,7 +48,7 @@ export class BuilderforceApiError extends Error {
     code?: string,
     details?: unknown,
     requestId?: string,
-    extras?: { terminal?: boolean; retryAfter?: number },
+    extras?: { terminal?: boolean; retryAfter?: number; vendor?: string; model?: string },
   ) {
     super(message);
     this.name = 'BuilderforceApiError';
@@ -38,6 +58,8 @@ export class BuilderforceApiError extends Error {
     this.requestId = requestId;
     this.terminal = extras?.terminal;
     this.retryAfter = extras?.retryAfter;
+    this.vendor = extras?.vendor;
+    this.model = extras?.model;
     // Pull typed failovers out of `details.failovers` when the gateway
     // supplied them. Validation is light — drop entries missing required
     // fields so consumers never get a partially-populated row.
@@ -226,6 +248,8 @@ export class HttpClient {
         details?:    unknown;
         terminal?:   boolean;
         retryAfter?: number;
+        vendor?:     string;
+        model?:      string;
       } | null;
 
       const message =
@@ -238,6 +262,23 @@ export class HttpClient {
       // consumer-side switches. String codes pass through unchanged.
       const code = typeof inner?.code === 'number' ? String(inner.code) : inner?.code;
 
+      // Vendor/model may travel at the top of the error envelope (gateway
+      // dispatched against an upstream) OR be embedded in details (e.g.
+      // `model_unavailable` carries `details.requestedModel`). Prefer the
+      // top-level fields; fall back to details so we still extract a model
+      // from the strict-pin 503 envelope without a gateway change.
+      const detailsObj = (inner?.details && typeof inner.details === 'object')
+        ? inner.details as { vendor?: unknown; model?: unknown; requestedModel?: unknown }
+        : null;
+      const vendor = typeof inner?.vendor === 'string'
+        ? inner.vendor
+        : (typeof detailsObj?.vendor === 'string' ? detailsObj.vendor : undefined);
+      const model = typeof inner?.model === 'string'
+        ? inner.model
+        : (typeof detailsObj?.model === 'string'
+            ? detailsObj.model
+            : (typeof detailsObj?.requestedModel === 'string' ? detailsObj.requestedModel : undefined));
+
       return new BuilderforceApiError(
         message,
         res.status,
@@ -247,6 +288,8 @@ export class HttpClient {
         {
           terminal:   inner?.terminal,
           retryAfter: headerRetryAfter ?? inner?.retryAfter,
+          vendor,
+          model,
         },
       );
     } catch {

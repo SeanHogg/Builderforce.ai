@@ -587,6 +587,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const contentType = result.response.headers.get('content-type');
     if (contentType) upstreamHeaders.set('content-type', contentType);
     upstreamHeaders.set('x-builderforce-model', result.resolvedModel);
+    upstreamHeaders.set('x-builderforce-vendor', result.resolvedVendor);
     upstreamHeaders.set('x-builderforce-retries', String(result.retries));
     upstreamHeaders.set('x-builderforce-product', llmProduct);
     upstreamHeaders.set('x-builderforce-effective-plan', access.effectivePlan);
@@ -648,8 +649,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       {
         ...upstream,
         _builderforce: {
-          resolvedModel: result.resolvedModel,
-          retries:       result.retries,
+          resolvedModel:  result.resolvedModel,
+          resolvedVendor: result.resolvedVendor,
+          retries:        result.retries,
           // Per-attempt breakdown (model + vendor + code) when the cascade
           // retried before this success. Empty when the first model answered.
           // Lets callers see which vendor recovered the request and detect
