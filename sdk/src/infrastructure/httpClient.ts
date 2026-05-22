@@ -190,28 +190,39 @@ export class HttpClient {
     try {
       const payload = await res.json() as Record<string, unknown> | null;
 
-      // Two envelope shapes are in the wild:
+      // Three envelope shapes are in the wild:
       //
       //   Flat   — { error: "msg", code, details, terminal?, retryAfter? }
       //            (gateway's documented shape — plan_token_limit_exceeded etc.)
-      //   Nested — { success: false, error: { code, message, details } }
+      //   OpenAI — { error: { message, code, type, details } }
+      //            (cascade-exhausted 429 on both chat and image surfaces —
+      //             matches OpenAI's error envelope convention)
+      //   Wrapped — { success: false, error: { code, message, details } }
       //            (consumer-side wrappers around the gateway, e.g. some
       //             tenant proxies emit AI_RATE_LIMITED / AI_UNAVAILABLE
       //             envelopes that re-wrap the upstream error)
       //
-      // Detect via the `success: false` discriminator and unwrap when nested
-      // so `error.code` / `error.message` / `error.details` always populate.
-      const isNested =
+      // Unwrap to a single `inner` shape so `details.failovers` etc. always
+      // populate on `BuilderforceApiError` regardless of which envelope the
+      // gateway picked. Single parsing site for every surface (DRY).
+      const errorObj =
+        payload !== null
+        && typeof payload === 'object'
+        && typeof payload.error === 'object'
+        && payload.error !== null
+          ? payload.error as Record<string, unknown>
+          : null;
+
+      const isWrapped =
         payload !== null
         && typeof payload === 'object'
         && payload.success === false
-        && typeof payload.error === 'object'
-        && payload.error !== null;
+        && errorObj !== null;
 
-      const inner = (isNested ? payload.error : payload) as {
+      const inner = (isWrapped || errorObj !== null ? errorObj : payload) as {
         error?:      string;
         message?:    string;
-        code?:       string;
+        code?:       string | number;
         details?:    unknown;
         terminal?:   boolean;
         retryAfter?: number;
@@ -222,10 +233,15 @@ export class HttpClient {
         || (typeof inner?.error === 'string' && inner.error)
         || fallback;
 
+      // Coerce numeric error codes (e.g. cascade-exhausted emits `code: 429`)
+      // to string so `BuilderforceApiError.code` stays a stable type for
+      // consumer-side switches. String codes pass through unchanged.
+      const code = typeof inner?.code === 'number' ? String(inner.code) : inner?.code;
+
       return new BuilderforceApiError(
         message,
         res.status,
-        inner?.code,
+        code,
         inner?.details,
         requestId,
         {

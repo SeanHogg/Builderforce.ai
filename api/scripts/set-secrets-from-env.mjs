@@ -39,6 +39,9 @@ const SECRET_KEYS = [
   'CEREBRAS_API_KEY',
   'NVIDIA_API_KEY',
   'OLLAMA_API_KEY',
+  'GOOGLE_API_KEY',
+  'TOGETHER_API_KEY',
+  'FLUX_API_KEY',
 ];
 
 for (const key of SECRET_KEYS) {

@@ -63,7 +63,6 @@ export const ollamaModule: VendorModule = {
   id: 'ollama',
   catalog: CATALOG,
   tierFor: tierForOllamaModel,
-  fallbackModel: 'gemma4',
   apiKeyFrom(env) { return env.OLLAMA_API_KEY ?? null; },
   async call(params: VendorCallParams): Promise<VendorCallResult> {
     const { model, messages, tools, maxTokens, temperature, topP, extraBody } = params;

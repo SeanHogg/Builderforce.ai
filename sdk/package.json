@@ -1,7 +1,7 @@
 {
   "name": "@seanhogg/builderforce-sdk",
-  "version": "0.8.0",
-  "description": "Typed SDK for the Builderforce.ai LLM gateway — chat completions with tool-calling and structured output, embeddings, models, and usage analytics over an OpenAI-compatible surface.",
+  "version": "0.9.0",
+  "description": "Typed SDK for the Builderforce.ai LLM gateway — chat completions with tool-calling and structured output, embeddings, image generation, models, and usage analytics over an OpenAI-compatible surface.",
   "license": "MIT",
   "author": "Sean Hogg",
   "homepage": "https://github.com/SeanHogg/Builderforce.ai/tree/main/sdk#readme",
@@ -19,8 +19,11 @@
     "openai-compatible",
     "ai-gateway",
     "chat-completions",
+    "image-generation",
+    "flux",
     "openrouter",
     "cerebras",
+    "together",
     "ollama",
     "sdk",
     "typescript"

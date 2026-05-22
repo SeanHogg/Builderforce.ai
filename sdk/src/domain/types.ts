@@ -382,3 +382,72 @@ export interface EmbeddingsResponse {
   };
   [key: string]: unknown;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Image generation (`POST /v1/images/generations`) — OpenAI-compatible shape.
+// Cascades free Together vendors → premium FluxAPI fallback so callers always
+// see a successful response unless every upstream is saturated.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ImageGenerationCreateParams extends PerCallOptions {
+  /**
+   * Model hint — gateway-owned routing. Bare ids resolve via catalog lookup;
+   * vendor-prefixed ids (`together/<id>`, `fluxapi/flux-kontext-pro`) pin to a
+   * specific vendor. When unset, the gateway picks from the tenant-plan image
+   * pool starting with the free tier.
+   */
+  model?: string;
+  /** Required text prompt. */
+  prompt: string;
+  /** OpenAI-compatible size string: "1024x1024", "1792x1024", "1024x1792", etc.
+   *  Mapped to each vendor's native dimension format (FluxAPI receives an
+   *  `aspectRatio`; Together receives `width`/`height`). */
+  size?: string;
+  /** Number of images to generate (default 1). Vendors that don't support
+   *  batching silently clamp to 1 — read `data.length` to confirm. */
+  n?: number;
+  /** "url" (default) returns hosted URLs; "b64_json" returns base64-encoded image bytes. */
+  response_format?: 'url' | 'b64_json';
+  /** Opaque telemetry slug — same semantics as chat. Persisted to `llm_usage_log.use_case`. */
+  useCase?: string;
+  /** Free-form attribution metadata — same semantics as chat. */
+  metadata?: Record<string, string>;
+  [key: string]: unknown;
+}
+
+export interface ImageGenerationDataEntry {
+  url?: string;
+  b64_json?: string;
+  /** Vendor-side prompt revision (some vendors auto-rewrite for safety / quality). */
+  revised_prompt?: string;
+}
+
+export interface ImageGenerationResponse {
+  /** ISO seconds timestamp — OpenAI-compatible. */
+  created: number;
+  /** One entry per generated image. */
+  data: ImageGenerationDataEntry[];
+  /** The model that actually served the request (same as `_builderforce.resolvedModel`). */
+  model?: string;
+  _builderforce?: {
+    /** The model the gateway dispatched against. */
+    resolvedModel?: string;
+    /** Vendor that owns the resolved model — `'together' | 'fluxapi'`. */
+    resolvedVendor?: string;
+    /** How many vendor retries happened before the resolved vendor succeeded. */
+    retries?: number;
+    /** Per-attempt breakdown, present only when `retries > 0`. */
+    failovers?: FailoverEvent[];
+    product?: string;
+    effectivePlan?: string;
+    /** True when superadmin premium-override is active for this tenant. */
+    premium?: boolean;
+    /** Echo of `request.useCase`. */
+    useCase?: string;
+    /** Echo of `request.metadata`. */
+    metadata?: Record<string, string>;
+    /** Mirror of the `x-request-id` response header. */
+    requestId?: string;
+  };
+  [key: string]: unknown;
+}

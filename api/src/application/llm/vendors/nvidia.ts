@@ -61,7 +61,6 @@ export const nvidiaModule: VendorModule = {
   id: 'nvidia',
   catalog: CATALOG,
   tierFor: tierForNvidiaModel,
-  fallbackModel: 'nvidia/nemotron-mini-4b-instruct',
   apiKeyFrom(env) { return env.NVIDIA_API_KEY ?? null; },
   async call(params: VendorCallParams): Promise<VendorCallResult> {
     return executeChatCompletion({
