@@ -11,7 +11,7 @@
  *   3. Implement a `VendorModule` and register it in `vendors/registry.ts`.
  */
 
-export type VendorId = 'openrouter' | 'cerebras' | 'ollama' | 'nvidia';
+export type VendorId = 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai';
 
 /**
  * Tier classification per model — drives pricing, plan gating, and the
@@ -33,6 +33,9 @@ export interface VendorEnv {
   CEREBRAS_API_KEY?: string | null;
   OLLAMA_API_KEY?: string | null;
   NVIDIA_API_KEY?: string | null;
+  /** Google AI (Gemini) API key — direct call to generativelanguage.googleapis.com.
+   *  Powers the gateway's premium fallback at the tail of every cascade. */
+  GOOGLE_API_KEY?: string | null;
 }
 
 export interface VendorCallParams {
@@ -85,8 +88,6 @@ export interface VendorModule {
   apiKeyFrom(env: VendorEnv): string | null;
   catalog: ReadonlyArray<VendorModelEntry>;
   tierFor(modelId: string): AiModelTier;
-  /** Used as a last-resort entry in cross-vendor fallback chains. */
-  fallbackModel: string;
   call(params: VendorCallParams): Promise<VendorCallResult>;
   /** Optional streaming variant. Vendors that omit this are skipped during streaming dispatch. */
   callStream?(params: VendorCallParams): Promise<VendorStreamResult>;
@@ -167,10 +168,14 @@ function numOrUndef(v: unknown): number | undefined {
  *   200 + error — provider returned a 200 with `{error: ...}` in the body or first SSE chunk
  */
 export class VendorRetryableError extends Error {
-  public readonly vendorId: VendorId;
+  /** Vendor identifier as a string label so this class can be shared between
+   *  the chat surface (`VendorId`) and the image surface (`ImageVendorId`)
+   *  without the union pulling image ids into the chat registry's
+   *  `Record<VendorId, VendorModule>` lookup. */
+  public readonly vendorId: string;
   public readonly status: number;
   public readonly model: string;
-  constructor(vendorId: VendorId, model: string, status: number, message: string) {
+  constructor(vendorId: string, model: string, status: number, message: string) {
     super(`[${vendorId}/${model}] ${status}: ${message}`);
     this.name = 'VendorRetryableError';
     this.vendorId = vendorId;
@@ -184,9 +189,9 @@ export class VendorRetryableError extends Error {
  * payload itself is bad. Currently only HTTP 400.
  */
 export class VendorFatalError extends Error {
-  public readonly vendorId: VendorId;
+  public readonly vendorId: string;
   public readonly status: number;
-  constructor(vendorId: VendorId, status: number, message: string) {
+  constructor(vendorId: string, status: number, message: string) {
     super(`[${vendorId}] ${status}: ${message}`);
     this.name = 'VendorFatalError';
     this.vendorId = vendorId;
@@ -199,7 +204,7 @@ export const CASCADE_STATUSES: ReadonlySet<number> = new Set<number>([
   404, 408, 429, 500, 502, 503, 504,
 ]);
 
-const AUTH_STATUSES: ReadonlySet<number> = new Set<number>([401, 403]);
+export const AUTH_STATUSES: ReadonlySet<number> = new Set<number>([401, 403]);
 
 /**
  * Per-vendor-call timeout *default*. The caller (SDK) sets the *outer* deadline
@@ -223,10 +228,14 @@ export const DEFAULT_VENDOR_CALL_TIMEOUT_MS = 25_000;
  * any other network error, surface as a retryable error too — dispatcher
  * already classifies these as cascade-eligible.
  *
- * Single helper used by both the JSON and streaming transports (DRY).
+ * Exported so the image-generation vendors (`../imageVendors/`) reuse the
+ * same timeout + classification path instead of duplicating it. The vendor id
+ * is typed as `string` because the chat-side `VendorId` enum doesn't include
+ * image vendor ids (different registries); the value flows into
+ * `VendorRetryableError.vendorId` (also `string`) without a cast.
  */
-async function fetchWithVendorTimeout(
-  vendorId: VendorId,
+export async function fetchWithVendorTimeout(
+  vendorId: string,
   model: string,
   endpoint: string,
   init: RequestInit,

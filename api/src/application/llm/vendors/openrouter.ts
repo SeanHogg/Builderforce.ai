@@ -97,13 +97,13 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'google/gemini-2.5-pro',                     tier: 'PREMIUM', label: 'Gemini 2.5 Pro',     brand: 'Google'    },
   { id: 'x-ai/grok-3-mini',                          tier: 'PREMIUM', label: 'Grok 3 Mini',        brand: 'xAI'       },
 
-  // NOTE: `google/gemini-2.5-flash-lite` is the always-on paid last-resort
-  // fallback (see `PAID_LAST_RESORT_MODEL` in LlmProxyService) and is
+  // NOTE: `google/gemini-2.5-flash-lite` is part of the vendor-diverse premium
+  // fallback chain (see `PREMIUM_FALLBACK_MODELS` in LlmProxyService) and is
   // deliberately NOT listed in the catalog. Keeping it out of FREE_MODEL_POOL
-  // and PRO_PAID_MODEL_POOL guarantees it only runs AFTER every primary +
-  // cross-vendor candidate has failed — never in the middle of a chain.
-  // Tier classification falls through `tierForOpenRouterModel`'s heuristic
-  // and resolves to 'STANDARD' for usage logging.
+  // and PRO_PAID_MODEL_POOL guarantees it only runs AFTER every primary
+  // candidate has failed — never in the middle of a chain. Tier classification
+  // falls through `tierForOpenRouterModel`'s heuristic and resolves to
+  // 'STANDARD' for usage logging.
 ];
 
 const CATALOG_BY_ID = new Map(CATALOG.map((m) => [m.id, m]));
@@ -139,7 +139,6 @@ export const openRouterModule: VendorModule = {
   id: 'openrouter',
   catalog: CATALOG,
   tierFor: tierForOpenRouterModel,
-  fallbackModel: 'meta-llama/llama-3.3-70b-instruct:free',
   apiKeyFrom(env) { return env.OPENROUTER_API_KEY ?? null; },
   async call(params: VendorCallParams): Promise<VendorCallResult> {
     return executeChatCompletion({

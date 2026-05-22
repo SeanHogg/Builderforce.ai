@@ -7,6 +7,7 @@
  */
 
 import { cerebrasModule } from './cerebras';
+import { googleAiModule } from './googleai';
 import { nvidiaModule } from './nvidia';
 import { ollamaModule } from './ollama';
 import { openRouterModule } from './openrouter';
@@ -27,18 +28,21 @@ import {
  * Vendor priority for the cascade — fastest TTFT first, so that when keys are
  * bound for multiple vendors the free pool naturally lands sub-200ms Cerebras
  * entries at the top, Ollama Cloud next, NVIDIA NIM, then OpenRouter free
- * (highest variance, broadest coverage). This order propagates into:
+ * (highest variance, broadest coverage). `googleai` is intentionally last:
+ * its catalog is all PREMIUM-tier and serves only as the proxy's last-resort
+ * paid fallback, not as part of the free rotation. This order propagates into:
  *   - `modelsByTier(...)` → the FREE/PRO pool composition in LlmProxyService
  *   - `getCrossVendorFallbacks(...)` → the cross-vendor tail of each chain
  * Drives both Pool composition and Pool ordering with one source of truth.
  */
-const MODULES: ReadonlyArray<VendorModule> = [cerebrasModule, ollamaModule, nvidiaModule, openRouterModule];
+const MODULES: ReadonlyArray<VendorModule> = [cerebrasModule, ollamaModule, nvidiaModule, openRouterModule, googleAiModule];
 
 const MODULES_BY_ID: Record<VendorId, VendorModule> = {
   openrouter: openRouterModule,
   cerebras:   cerebrasModule,
   nvidia:     nvidiaModule,
   ollama:     ollamaModule,
+  googleai:   googleAiModule,
 };
 
 /** Used when a model id isn't in any vendor's catalog (treats as OpenRouter). */
@@ -60,6 +64,7 @@ const VENDOR_PREFIXES: ReadonlyArray<{ prefix: string; vendor: VendorId }> = [
   { prefix: 'cerebras/',   vendor: 'cerebras' },
   { prefix: 'nim/',        vendor: 'nvidia' },
   { prefix: 'ollama/',     vendor: 'ollama' },
+  { prefix: 'googleai/',   vendor: 'googleai' },
 ];
 
 /**
@@ -118,17 +123,6 @@ export function getModule(id: VendorId): VendorModule {
 /** All registered vendor ids, in registry order (cerebras → ollama → nvidia → openrouter). */
 export function getAllVendorIds(): VendorId[] {
   return MODULES.map((m) => m.id);
-}
-
-/**
- * Cross-vendor fallback chain — each vendor's `fallbackModel`, but only for
- * vendors that have an API key configured in this env. Used to extend a
- * primary chain with a final last-resort run across providers.
- */
-export function getCrossVendorFallbacks(env: VendorEnv): string[] {
-  return MODULES
-    .filter((mod) => !!mod.apiKeyFrom(env))
-    .map((mod) => mod.fallbackModel);
 }
 
 /**

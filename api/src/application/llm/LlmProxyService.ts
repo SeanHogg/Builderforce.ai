@@ -25,14 +25,15 @@ import {
   CascadeExhaustedError,
   dispatchVendor,
   dispatchVendorStream,
-  getCrossVendorFallbacks,
   modelsByTier,
+  tierForModel,
   vendorForModel,
   vendorKeyBound,
   type DispatchAttempt,
   type VendorEnv,
   type VendorId,
 } from './vendors';
+import { composeFreeCappedCascade } from './cascadeComposer';
 import { sanitizeRequestToolNames, restoreResponseToolNames } from './toolNameSanitizer';
 import {
   loadCooldownExpiries,
@@ -88,18 +89,37 @@ export const PREMIUM_PRIORITY_POOL: readonly string[] =
 export const PREMIUM_VENDOR_CALL_TIMEOUT_MS = 60_000;
 
 /**
- * Always-on last-resort paid fallback. Appended to *every* non-strict candidate
- * chain (Free plan included) so a fully-saturated free pool never surfaces an
- * `LLM_UNAVAILABLE` / cascade-exhausted 429 to the caller. Dedup in
- * `buildCandidateChain` collapses this with a Pro pool that already contains it.
+ * Premium fallback chain — appended to *every* non-strict candidate chain so a
+ * fully-saturated free pool never surfaces an `LLM_UNAVAILABLE` / cascade-
+ * exhausted 429 to the caller. Direct Google AI (`googleai/*`) is tried first
+ * because it has the lowest variance and isn't subject to OpenRouter's shared
+ * rate limits; the OpenRouter Gemini entry is the vendor-diverse backup so a
+ * Google AI outage still resolves through a different upstream.
  *
- * Chosen for the cost/quality balance — ~$0.075/1M input, reliable JSON output,
- * broad capability coverage. Skipped only when its vendor key is unbound or it
- * is itself on cooldown.
+ * Each entry is skipped at chain-build time when its vendor key is unbound or
+ * the model is on cooldown.
  */
-export const PAID_LAST_RESORT_MODEL = 'google/gemini-2.5-flash-lite';
+export const PREMIUM_FALLBACK_MODELS: readonly string[] = [
+  'googleai/gemini-2.5-flash',
+  'googleai/gemini-2.5-flash-lite',
+  'google/gemini-2.5-flash-lite', // via OpenRouter — vendor-diverse backup
+];
 
-/** First N models of the active pool form the round-robin "preferred" group. */
+/**
+ * Maximum number of FREE-tier attempts the cascade walks before falling through
+ * to the premium fallback chain. Caps "we cycled 20 free models and still
+ * 429'd" failure modes: every request now ends with at most 2 free attempts +
+ * the premium fallback list, so callers reliably get a successful response
+ * even when the free pool is saturated.
+ *
+ * Non-FREE models in the seed (Pro/Teams paid models, premium-priority routing)
+ * are not affected by this cap — they're kept verbatim in the chain so paying
+ * tenants still get the models their plan unlocks.
+ */
+export const FREE_ATTEMPT_BUDGET = 2;
+
+/** First N models of the active pool form the round-robin "preferred" group.
+ *  Aligned with FREE_ATTEMPT_BUDGET so the round-robin window matches the cap. */
 export const PREFERRED_POOL_SIZE = 2;
 
 // ---------------------------------------------------------------------------
@@ -177,7 +197,11 @@ export interface ProxyEnv extends VendorEnv {
 // Round-robin cursor (per-isolate)
 // ---------------------------------------------------------------------------
 
-let requestCursor = 0;
+/** Round-robin cursor (per-isolate). Boxed in an object so it can be shared
+ *  by reference with `composeFreeCappedCascade` — the helper increments it
+ *  in place, so chat and image cascades both contribute to the same rotation
+ *  on a single Worker isolate (no contention, just a counter). */
+const chatRequestCursor: { value: number } = { value: 0 };
 
 // ---------------------------------------------------------------------------
 // Service
@@ -259,27 +283,30 @@ export class LlmProxyService {
       ? [callerModel, ...reorderedPool.filter((m) => m !== callerModel)]
       : reorderedPool;
 
-    // 3) Pre-fetch cooldown state for the seed + paid last-resort (KV-backed
-    //    when bound, in-memory fallback otherwise). One bulk read each for
-    //    per-model and per-vendor; the chain composer filters synchronously
-    //    against the resulting sets. Vendor cooldown short-circuits the
-    //    per-model walk when one upstream's key is globally throttled —
-    //    without it, the cascade burns ~20 models on the saturated vendor
-    //    before reaching cross-vendor fallbacks. The last-resort model is
-    //    included here so the chain composer can skip it when individually
-    //    cooled instead of firing a doomed retry against a saturated endpoint.
-    const lastResortVendor = vendorForModel(PAID_LAST_RESORT_MODEL);
-    const seedVendors = Array.from(new Set([...seed.map((m) => vendorForModel(m)), lastResortVendor]));
+    // 3) Pre-fetch cooldown state for the seed + premium fallback chain
+    //    (KV-backed when bound, in-memory fallback otherwise). One bulk read
+    //    each for per-model and per-vendor; the chain composer filters
+    //    synchronously against the resulting sets. Vendor cooldown short-
+    //    circuits the per-model walk when one upstream's key is globally
+    //    throttled — without it, the cascade burns models on the saturated
+    //    vendor before reaching the premium fallback. The fallback models
+    //    are included so the chain composer skips any individually cooled
+    //    entry instead of firing a doomed retry against a saturated endpoint.
+    const fallbackPairs = PREMIUM_FALLBACK_MODELS.map((m) => ({ vendor: vendorForModel(m), model: m }));
+    const seedVendors = Array.from(new Set([
+      ...seed.map((m) => vendorForModel(m)),
+      ...fallbackPairs.map((p) => p.vendor),
+    ]));
     const [cooledSet, cooledVendors] = await Promise.all([
       loadCooldowns(this.env, [
         ...seed.map((m) => ({ vendor: vendorForModel(m), model: m })),
-        { vendor: lastResortVendor, model: PAID_LAST_RESORT_MODEL },
+        ...fallbackPairs,
       ]),
       loadCooledVendors(this.env, seedVendors),
     ]);
     const candidates = this.buildCandidateChain(seed, cooledSet, cooledVendors);
     if (candidates.length === 0) {
-      // Every model in the seed + cross-vendor list is on cooldown. Fail fast
+      // Every model in the seed + premium fallback list is on cooldown. Fail fast
       // with a clear envelope instead of attempting a vendor with no chain.
       return this.exhaustedResponse(
         seed.slice(),
@@ -347,68 +374,37 @@ export class LlmProxyService {
   // --- Internals ------------------------------------------------------------
 
   /**
-   * Compose the candidate chain for one request:
-   *   1. Round-robin within preferred sub-pool (filtered by cooldown)
-   *   2. Append remaining pool (filtered by cooldown)
-   *   3. Append cross-vendor fallbacks (each configured vendor's fallbackModel),
-   *      filtered by cooldown so a cooled cross-vendor entry doesn't sneak back in
-   *   4. Deduplicate, preserving first occurrence
+   * Compose the candidate chain for one request via the shared
+   * `composeFreeCappedCascade` helper.
    *
    * Per-model cooldown excludes specific models that recently failed. Per-vendor
    * cooldown is the wider net: when one upstream key is globally throttled
    * (e.g. all OpenRouter free-tier 429s), the vendor itself is cooled and we
    * skip every model owned by that vendor in one pass — instead of walking
-   * 20+ models on the saturated key one 429 at a time. See
+   * many models on the saturated key one 429 at a time. See
    * `maybeTripVendorCooldown` in cooldownStore.ts for the trip conditions.
    *
-   * When the entire primary pool is cooled, we *skip* it entirely rather than
-   * re-firing already-429'd models. The cross-vendor fallbacks (different
-   * upstreams with independent rate limits) are the recovery path. If those
-   * are also exhausted, the empty chain triggers `exhaustedResponse` upstream
-   * with the failure summary — which is the right answer ("all upstreams
-   * cooled, retry shortly") rather than burning budget on a doomed retry.
+   * The FREE cap is the headline guarantee: regardless of how saturated the
+   * upstream free pool is, every cascade tries at most 2 free models before
+   * falling through to the premium fallback — so callers always see a
+   * successful response instead of `cascade-exhausted` 429s.
    */
   private buildCandidateChain(
     seed: readonly string[],
     cooledSet: Set<string>,
     cooledVendors: Set<VendorId>,
   ): string[] {
-    const preferred = seed.slice(0, this.preferredPoolSize);
-    const fallback  = seed.slice(this.preferredPoolSize);
-
-    const isCooled = (m: string) => {
-      const v = vendorForModel(m);
-      return cooledVendors.has(v) || cooledSet.has(`${v}/${m}`);
-    };
-    const preferredAvailable = preferred.filter((m) => !isCooled(m));
-    const fallbackAvailable  = fallback.filter((m)  => !isCooled(m));
-
-    let chain: string[];
-    if (preferredAvailable.length > 0) {
-      const start = requestCursor % preferredAvailable.length;
-      chain = [
-        ...preferredAvailable.slice(start),
-        ...preferredAvailable.slice(0, start),
-        ...fallbackAvailable,
-      ];
-    } else {
-      chain = [...fallbackAvailable];
-    }
-    requestCursor++;
-
-    // Append cross-vendor fallbacks, dropping any whose vendor or model is
-    // cooled (otherwise we re-fire an upstream that just 429'd from a
-    // sibling chain).
-    const crossVendor = getCrossVendorFallbacks(this.vendorEnv()).filter((m) => !isCooled(m));
-
-    // Always-on last-resort paid model. Appended after free + cross-vendor so
-    // a fully-saturated free pool falls through to the cheapest paid model
-    // instead of returning a 429 to the caller. Dedup below collapses it for
-    // Pro pools that already include it via PRO_PAID_MODEL_POOL.
-    const lastResort = isCooled(PAID_LAST_RESORT_MODEL) ? [] : [PAID_LAST_RESORT_MODEL];
-    const composed = [...chain, ...crossVendor, ...lastResort];
-    const seen = new Set<string>();
-    return composed.filter((m) => (seen.has(m) ? false : (seen.add(m), true)));
+    return composeFreeCappedCascade({
+      seed,
+      premiumFallback: PREMIUM_FALLBACK_MODELS,
+      freeBudget: FREE_ATTEMPT_BUDGET,
+      tierOf: tierForModel,
+      isUnavailable: (m) => {
+        const v = vendorForModel(m);
+        return cooledVendors.has(v) || cooledSet.has(`${v}/${m}`);
+      },
+      cursor: chatRequestCursor,
+    });
   }
 
   /** Synthesize the env passed to vendors — picks the Pro OpenRouter key when applicable. */
@@ -420,6 +416,7 @@ export class LlmProxyService {
       CEREBRAS_API_KEY: this.env.CEREBRAS_API_KEY ?? null,
       NVIDIA_API_KEY:   this.env.NVIDIA_API_KEY   ?? null,
       OLLAMA_API_KEY:   this.env.OLLAMA_API_KEY   ?? null,
+      GOOGLE_API_KEY:   this.env.GOOGLE_API_KEY   ?? null,
     };
   }
 

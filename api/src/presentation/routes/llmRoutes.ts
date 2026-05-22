@@ -17,9 +17,15 @@ import {
   PRO_MODEL_POOL,
   type ChatCompletionRequest,
   type LlmUsage,
-  type ProductName,
 } from '../../application/llm/LlmProxyService';
 import { callOpenRouterEmbeddings } from '../../application/llm/vendors';
+import {
+  imageProxyForPlan,
+  imageProductNameForPlan,
+  FREE_IMAGE_MODEL_POOL,
+  PAID_IMAGE_MODEL_POOL,
+  type ImageGenerationRequest,
+} from '../../application/llm/ImageProxyService';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, coderclawInstances, tenantApiKeys, users } from '../../infrastructure/database/schema';
 import { originAllowed } from '../../application/llm/tenantApiKeyService';
@@ -47,11 +53,14 @@ function secondsUntilNextUtcMidnight(): number {
   return Math.max(1, Math.ceil((next.getTime() - now) / 1000));
 }
 
-/** Bulk-insert failover events into llm_failover_log, fire-and-forget. */
+/** Bulk-insert failover events into llm_failover_log, fire-and-forget.
+ *  Accepts the minimal shape used by both chat (`FailoverEvent`) and image
+ *  (`ImageFailoverEvent`) surfaces — only `model` + `code` are persisted, the
+ *  `vendor` label rides along on the typed event but isn't written here. */
 function logFailovers(
   env: HonoEnv['Bindings'],
   ctx: ExecutionContext,
-  failovers: FailoverEvent[],
+  failovers: ReadonlyArray<{ model: string; code: number }>,
 ): void {
   if (failovers.length === 0) return;
   ctx.waitUntil(
@@ -62,13 +71,16 @@ function logFailovers(
   );
 }
 
-/** Write one row to llm_usage_log, fire-and-forget via ctx.waitUntil. */
+/** Write one row to llm_usage_log, fire-and-forget via ctx.waitUntil.
+ *  `llmProduct` accepts any product label — chat (`builderforceLLM*`) or
+ *  image (`builderforceImage*`) — since the DB column is `varchar(32)` and
+ *  this function is the single insert site shared by both surfaces. */
 function logUsage(
   env: HonoEnv['Bindings'],
   ctx: ExecutionContext,
   tenantId: number,
   userId: string | null,
-  llmProduct: ProductName,
+  llmProduct: string,
   model: string,
   retries: number,
   streamed: boolean,
@@ -913,10 +925,112 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   });
 
   // -----------------------------------------------------------------------
+  // POST /v1/images/generations — OpenAI-compatible image generation.
+  // Cascades free Together → premium FluxAPI fallback.
+  // -----------------------------------------------------------------------
+  router.post('/v1/images/generations', async (c) => {
+    let access: TenantAccess;
+    try {
+      access = await requireTenantAccess(c);
+    } catch (err) {
+      return respondToAccessError(c, err);
+    }
+
+    const body = await c.req.json<ImageGenerationRequest>().catch(() => null);
+    if (!body || typeof body.prompt !== 'string' || body.prompt.trim().length === 0) {
+      return c.json({ error: '`prompt` is required and must be a non-empty string' }, 400);
+    }
+
+    // Validate that at least one image vendor key is bound before dispatching.
+    if (!c.env.TOGETHER_API_KEY && !c.env.FLUX_API_KEY) {
+      return c.json({
+        error: 'Image generation not configured (missing TOGETHER_API_KEY and FLUX_API_KEY)',
+      }, 503);
+    }
+
+    // Capture SDK transport metadata for usage logging — stripped before vendor dispatch
+    // by `stripStandardFields` in ImageProxyService.
+    const bodyAny = body as Record<string, unknown>;
+    const callerMetadata = (bodyAny.metadata as Record<string, unknown> | undefined) ?? null;
+    const callerUseCase  = typeof bodyAny.useCase === 'string' ? bodyAny.useCase : null;
+    const idempotencyKey = c.req.header('Idempotency-Key') ?? null;
+
+    const productName = imageProductNameForPlan(access.effectivePlan, access.premiumOverride);
+    const service = imageProxyForPlan(c.env, access.effectivePlan, access.premiumOverride);
+    const result = await service.generate(body);
+
+    // Image accounting: charge a flat per-image token estimate against the
+    // tenant's daily token budget. Keeps image-gen subject to the same
+    // `plan_token_limit_exceeded` gate as chat without needing a separate
+    // image-only ledger. ~1000 tokens per generated image is a deliberate
+    // overestimate vs the actual compute cost — favours conservative caps.
+    const IMAGE_TOKEN_COST = 1000;
+    const imagesReturned = Math.max(result.body.data.length, 0);
+    const billedTokens = imagesReturned > 0 ? imagesReturned * IMAGE_TOKEN_COST : 0;
+    const cascadeExhausted = result.body.data.length === 0;
+
+    // Log usage (always, even on cascade-exhausted runs so failure rates are visible).
+    logFailovers(c.env, c.executionCtx, result.failovers);
+    logUsage(
+      c.env,
+      c.executionCtx,
+      access.tenantId,
+      access.userId,
+      productName,
+      result.resolvedModel,
+      result.retries,
+      false,
+      { promptTokens: 0, completionTokens: 0, totalTokens: billedTokens },
+      callerMetadata,
+      idempotencyKey,
+      callerUseCase,
+      access.tenantApiKeyId,
+    );
+
+    if (cascadeExhausted) {
+      // All vendors failed — surface a 429 with the failover breakdown so callers
+      // can decide whether to retry on a different prompt.
+      return c.json({
+        error: {
+          message: 'Image vendor cascade exhausted. Retry shortly or simplify the prompt.',
+          code: 429,
+          type: 'rate_limit_error',
+          details: { failovers: result.failovers },
+        },
+      }, 429);
+    }
+
+    return c.json({
+      created: result.body.created,
+      data: result.body.data,
+      model: result.body.model,
+      _builderforce: {
+        resolvedModel: result.resolvedModel,
+        resolvedVendor: result.resolvedVendor,
+        retries: result.retries,
+        ...(result.failovers.length > 0 ? { failovers: result.failovers } : {}),
+        product: productName,
+        effectivePlan: access.effectivePlan,
+        ...(access.premiumOverride ? { premium: true } : {}),
+        ...(callerUseCase  ? { useCase:  callerUseCase  } : {}),
+        ...(callerMetadata ? { metadata: callerMetadata as Record<string, string> } : {}),
+        ...(c.req.header('x-request-id') ? { requestId: c.req.header('x-request-id') } : {}),
+      },
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // GET /v1/health
   // -----------------------------------------------------------------------
   router.get('/v1/health', (c) =>
-    c.json({ status: 'ok', service: 'builderforceLLM', pool: FREE_MODEL_POOL.length, proPool: PRO_MODEL_POOL.length }),
+    c.json({
+      status: 'ok',
+      service: 'builderforceLLM',
+      pool: FREE_MODEL_POOL.length,
+      proPool: PRO_MODEL_POOL.length,
+      imagePool: FREE_IMAGE_MODEL_POOL.length,
+      imageProPool: PAID_IMAGE_MODEL_POOL.length,
+    }),
   );
 
   return router;

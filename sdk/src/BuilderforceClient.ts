@@ -1,5 +1,6 @@
 import { ChatCompletionsApi } from './application/ChatCompletionsApi';
 import { EmbeddingsApi } from './application/EmbeddingsApi';
+import { ImagesApi } from './application/ImagesApi';
 import { ModelsApi } from './application/ModelsApi';
 import { UsageApi } from './application/UsageApi';
 import { BuilderforceApiError, HttpClient } from './infrastructure/httpClient';
@@ -18,6 +19,7 @@ export class BuilderforceClient {
     completions: ChatCompletionsApi;
   };
   public readonly embeddings: EmbeddingsApi;
+  public readonly images: ImagesApi;
   public readonly models: ModelsApi;
   public readonly usage: UsageApi;
 
@@ -42,6 +44,7 @@ export class BuilderforceClient {
       completions: new ChatCompletionsApi(http),
     };
     this.embeddings = new EmbeddingsApi(http);
+    this.images = new ImagesApi(http);
     this.models = new ModelsApi(http);
     this.usage = new UsageApi(http);
   }

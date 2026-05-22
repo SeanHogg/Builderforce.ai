@@ -25,6 +25,26 @@ export interface Env {
   /** NVIDIA NIM API key (build.nvidia.com) — adds free NVIDIA-hosted models to the cascade.
    *  Set via `wrangler secret put NVIDIA_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   NVIDIA_API_KEY?: string;
+  /** Google AI (Gemini) API key — powers the gateway's premium fallback. After the
+   *  2-attempt free budget is exhausted every cascade falls through to Google AI direct
+   *  (`gemini-2.5-flash` / `gemini-2.5-flash-lite`) so callers always see a successful
+   *  response. Set via `wrangler secret put GOOGLE_API_KEY` (or api/.env + `npm run secrets:from-env`). */
+  GOOGLE_API_KEY?: string;
+
+  // ---------------------------------------------------------------------------
+  // Image generation (`POST /v1/images/generations`)
+  // ---------------------------------------------------------------------------
+
+  /** Together.ai API key — free-tier image-generation vendor. Drives the
+   *  primary attempts for `POST /v1/images/generations` (Flux Schnell free,
+   *  DreamShaper, etc.) before falling through to the premium FluxAPI fallback.
+   *  Set via `wrangler secret put TOGETHER_API_KEY` (or api/.env + `npm run secrets:from-env`). */
+  TOGETHER_API_KEY?: string;
+  /** FluxAPI (fluxapi.ai) API key — premium image-generation fallback. After the
+   *  free Together attempts fail, the proxy falls through to Flux Kontext Pro
+   *  here so image-gen callers always see a successful response.
+   *  Set via `wrangler secret put FLUX_API_KEY` (or api/.env + `npm run secrets:from-env`). */
+  FLUX_API_KEY?: string;
   /** R2 bucket for file uploads. */
   UPLOADS?: R2Bucket;
 

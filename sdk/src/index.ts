@@ -35,8 +35,13 @@ export type {
   EmbeddingsCreateParams,
   EmbeddingsResponse,
   EmbeddingObject,
+  // Image generation
+  ImageGenerationCreateParams,
+  ImageGenerationResponse,
+  ImageGenerationDataEntry,
 } from './domain/types';
 
 export { ChatCompletionStream } from './application/ChatCompletionsApi';
 export { EmbeddingsApi } from './application/EmbeddingsApi';
+export { ImagesApi } from './application/ImagesApi';
 export { BuilderforceApiError } from './infrastructure/httpClient';

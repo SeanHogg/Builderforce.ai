@@ -1,9 +1,15 @@
 /**
- * Cerebras vendor module — sub-200ms TTFT inference for latency-critical use cases
- * (classification, simple routing, fast first-token chat).
+ * Google AI (Gemini) vendor module — direct call to Google's Generative Language
+ * API via its OpenAI-compatible surface at
+ * `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`.
  *
- * Quotas (2026-05): llama3.1-8b — 30 req/min, 60K tok/min, 14.4K req/day, 1M tok/day.
- *                  qwen-3-235b — 1 req/min, 30K tok/min, 14.4K req/day, 1M tok/day.
+ * Used as the primary premium fallback for the gateway's cascade: after the
+ * 2-attempt free budget is exhausted, the chain falls through here so callers
+ * always see a successful response from a high-reliability paid endpoint.
+ *
+ * All catalog entries are classified PREMIUM — even `gemini-2.5-flash-lite`,
+ * the cheapest model, is paid and reserved for fallback rather than primary
+ * Free-pool rotation. Authenticates with `GOOGLE_API_KEY`.
  */
 
 import {
@@ -17,17 +23,18 @@ import {
   type VendorStreamResult,
 } from './types';
 
-const ENDPOINT = 'https://api.cerebras.ai/v1/chat/completions';
+const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
-  { id: 'llama3.1-8b',                      tier: 'FREE', label: 'Llama 3.1 8B (Cerebras · Fast)',   brand: 'Cerebras' },
-  { id: 'qwen-3-235b-a22b-instruct-2507',   tier: 'FREE', label: 'Qwen 3 235B (Cerebras · Preview)', brand: 'Cerebras' },
+  { id: 'gemini-2.5-flash',      tier: 'PREMIUM', label: 'Gemini 2.5 Flash (Google AI)',      brand: 'Google' },
+  { id: 'gemini-2.5-flash-lite', tier: 'PREMIUM', label: 'Gemini 2.5 Flash Lite (Google AI)', brand: 'Google' },
+  { id: 'gemini-2.5-pro',        tier: 'PREMIUM', label: 'Gemini 2.5 Pro (Google AI)',        brand: 'Google' },
 ];
 
 const CATALOG_BY_ID = new Map(CATALOG.map((m) => [m.id, m]));
 
-function tierForCerebrasModel(modelId: string): AiModelTier {
-  return CATALOG_BY_ID.get(modelId)?.tier ?? 'FREE';
+function tierForGoogleAiModel(modelId: string): AiModelTier {
+  return CATALOG_BY_ID.get(modelId)?.tier ?? 'PREMIUM';
 }
 
 function buildBody(params: VendorCallParams): Record<string, unknown> {
@@ -37,22 +44,21 @@ function buildBody(params: VendorCallParams): Record<string, unknown> {
     messages,
     ...(tools ? { tools } : {}),
     ...(toolChoice ? { tool_choice: toolChoice } : {}),
-    // Cerebras prefers `max_completion_tokens` (newer field name).
-    ...(maxTokens != null ? { max_completion_tokens: maxTokens } : {}),
+    ...(maxTokens != null ? { max_tokens: maxTokens } : {}),
     ...(temperature != null ? { temperature } : {}),
     ...(topP != null ? { top_p: topP } : {}),
     ...(extraBody ?? {}),
   };
 }
 
-export const cerebrasModule: VendorModule = {
-  id: 'cerebras',
+export const googleAiModule: VendorModule = {
+  id: 'googleai',
   catalog: CATALOG,
-  tierFor: tierForCerebrasModel,
-  apiKeyFrom(env) { return env.CEREBRAS_API_KEY ?? null; },
+  tierFor: tierForGoogleAiModel,
+  apiKeyFrom(env) { return env.GOOGLE_API_KEY ?? null; },
   async call(params: VendorCallParams): Promise<VendorCallResult> {
     return executeChatCompletion({
-      vendorId: 'cerebras',
+      vendorId: 'googleai',
       endpoint: ENDPOINT,
       apiKey: params.apiKey,
       model: params.model,
@@ -63,7 +69,7 @@ export const cerebrasModule: VendorModule = {
   },
   async callStream(params: VendorCallParams): Promise<VendorStreamResult> {
     return executeChatCompletionStream({
-      vendorId: 'cerebras',
+      vendorId: 'googleai',
       endpoint: ENDPOINT,
       apiKey: params.apiKey,
       model: params.model,
