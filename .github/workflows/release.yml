@@ -112,44 +112,19 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # NOTE: `registry-url` is intentionally omitted — it would write
-      # `//registry.npmjs.org/:_authToken=...` into `.npmrc`, which makes
-      # `npm publish` send token auth on the PUT instead of falling through
-      # to Trusted Publishing OIDC. The npm CLI uses the OIDC token minted
-      # from `ACTIONS_ID_TOKEN_REQUEST_TOKEN` (granted by the top-level
-      # `id-token: write` permission) for both provenance signing and
-      # publish-auth, so no token is required here.
       - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # Trusted Publishing on `npm publish` requires npm >= 11.5.1. Node 20
-      # ships npm 10.x by default, which silently skips OIDC and errors with
-      # `ENEEDAUTH` when no `_authToken` is set. Pin to `latest` rather than a
-      # specific minor range so we don't silently no-op when the requested
-      # version doesn't match a published release.
+      # Trusted Publishing on `npm publish` requires npm >= 11.5.1, which is
+      # newer than the npm 10.x bundled with Node 20. `JS-DevTools/npm-publish`
+      # invokes the system npm CLI, so this upgrade must happen before the
+      # publish step or the action falls back to token-auth and ENEEDAUTHs.
       - name: Upgrade npm to a Trusted-Publishing-capable version
-        run: npm install -g npm@latest
-
-      # Diagnostic line — the previous run's log only showed the publish step,
-      # so we couldn't tell whether the upgrade above actually took effect.
-      # This prints the versions + OIDC env presence (true/false, never the
-      # token value itself) so the next failure (if any) is self-describing.
-      - name: Print toolchain + OIDC env state
         run: |
-          echo "node:     $(node --version)"
-          echo "npm:      $(npm --version)"
-          echo "registry: $(npm config get registry)"
-          if [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ];   then echo "ACTIONS_ID_TOKEN_REQUEST_URL:   present"; else echo "ACTIONS_ID_TOKEN_REQUEST_URL:   MISSING"; fi
-          if [ -n "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]; then echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN: present"; else echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN: MISSING"; fi
-          # Show any stale auth lines that could short-circuit OIDC. If anything
-          # matches, that's the smoking gun — the CLI sees a token and never
-          # tries trusted publishing.
-          echo "--- .npmrc files that could carry a stale _authToken ---"
-          for f in ~/.npmrc /etc/npmrc ./sdk/.npmrc ./.npmrc; do
-            if [ -f "$f" ]; then echo "$f:"; grep -E '_authToken|registry' "$f" || echo "  (no auth/registry lines)"; fi
-          done
+          npm install -g npm@latest
+          echo "npm $(npm --version) — Trusted Publishing requires >= 11.5.1"
 
       - name: Install SDK dependencies
         working-directory: sdk
@@ -168,20 +143,20 @@ jobs:
       # Auth flow: Trusted Publishing OIDC (configured on npmjs.com →
       # @seanhogg/builderforce-sdk → Publishing access → Add trusted
       # publisher → GitHub Actions / SeanHogg / Builderforce.ai /
-      # release.yml). `NPM_TOKEN` is intentionally NOT passed — token-auth
-      # being present in `.npmrc` would short-circuit the OIDC fallback and
-      # send a stale token on the PUT.
-      #
-      # `NPM_PUBLISH_VERBOSE=1` flips `npm publish` into `--loglevel=verbose`
-      # so the auth handshake (which token type, which registry call, which
-      # `.npmrc` line wins) is visible in the workflow log — needed while we
-      # diagnose the persistent `ENEEDAUTH` after the OIDC migration. Drop
-      # this env line once 0.8.0 publishes cleanly.
+      # release.yml). The action upgrades npm in-process to a Trusted-
+      # Publishing-capable version, then runs `npm publish` with the OIDC
+      # token minted from `ACTIONS_ID_TOKEN_REQUEST_TOKEN` (granted by the
+      # workflow-level `id-token: write` permission). The "publish only if
+      # the version is new" behaviour we previously hand-rolled is built in
+      # via `if-new-version` strategy.
       - name: Publish if version is new
-        working-directory: sdk
-        env:
-          NPM_PUBLISH_VERBOSE: '1'
-        run: npm run publish:if-new
+        uses: JS-DevTools/npm-publish@v3
+        with:
+          package: sdk
+          access: public
+          provenance: true
+          strategy: upgrade
+          ignore-scripts: false
 
   deploy-docs:
     name: Deploy Docs (builderforce.ai/docs)
