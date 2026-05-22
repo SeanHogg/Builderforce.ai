@@ -49,8 +49,7 @@
     "build": "tsup --config tsup.config.ts",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
-    "prepublishOnly": "npm run build",
-    "publish:if-new": "node scripts/publish-if-new.mjs"
+    "prepublishOnly": "npm run build"
   },
   "engines": {
     "node": ">=18"
