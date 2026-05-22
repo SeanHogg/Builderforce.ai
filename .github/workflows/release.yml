@@ -112,11 +112,17 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      # NOTE: `registry-url` is intentionally omitted — it would write
+      # `//registry.npmjs.org/:_authToken=...` into `.npmrc`, which makes
+      # `npm publish` send token auth on the PUT instead of falling through
+      # to Trusted Publishing OIDC. The npm CLI uses the OIDC token minted
+      # from `ACTIONS_ID_TOKEN_REQUEST_TOKEN` (granted by the top-level
+      # `id-token: write` permission) for both provenance signing and
+      # publish-auth, so no token is required here.
       - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Install SDK dependencies
         working-directory: sdk
@@ -132,10 +138,14 @@ jobs:
         working-directory: sdk
         run: npm run build
 
+      # Auth flow: Trusted Publishing OIDC (configured on npmjs.com →
+      # @seanhogg/builderforce-sdk → Publishing access → Add trusted
+      # publisher → GitHub Actions / SeanHogg / Builderforce.ai /
+      # release.yml). `NPM_TOKEN` is intentionally NOT passed — token-auth
+      # being present in `.npmrc` would short-circuit the OIDC fallback and
+      # send a stale token on the PUT.
       - name: Publish if version is new
         working-directory: sdk
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm run publish:if-new
 
   deploy-docs:
