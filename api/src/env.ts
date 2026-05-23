@@ -30,6 +30,16 @@ export interface Env {
    *  (`gemini-2.5-flash` / `gemini-2.5-flash-lite`) so callers always see a successful
    *  response. Set via `wrangler secret put GOOGLE_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   GOOGLE_API_KEY?: string;
+  /** Cloudflare Workers AI auth token — `cfut_*`. Adds Cloudflare-hosted models
+   *  (e.g. `@cf/meta/llama-3-8b-instruct`) to the paid pool. Both this AND
+   *  `CLOUDFLARE_ACCOUNT_ID` must be set; either missing → Cloudflare is skipped
+   *  by the cascade. Set via `wrangler secret put CLOUDFLARE_AI_API_TOKEN`. */
+  CLOUDFLARE_AI_API_TOKEN?: string;
+  /** Cloudflare account id (32-char hex). Embedded in the Workers AI URL —
+   *  `https://api.cloudflare.com/client/v4/accounts/<id>/ai/run/<model>`. Not a
+   *  secret per se, but stored alongside the token in Worker bindings.
+   *  Set via `wrangler secret put CLOUDFLARE_ACCOUNT_ID`. */
+  CLOUDFLARE_ACCOUNT_ID?: string;
 
   // ---------------------------------------------------------------------------
   // Image generation (`POST /v1/images/generations`)
