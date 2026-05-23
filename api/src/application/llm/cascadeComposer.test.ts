@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { composeFreeCappedCascade } from './cascadeComposer';
+import { composeFreeCappedCascade, buildCooldownPredicate } from './cascadeComposer';
 
 // ---------------------------------------------------------------------------
 // composeFreeCappedCascade — shared helper for the 2-free-then-premium chain.
@@ -97,6 +97,30 @@ describe('composeFreeCappedCascade', () => {
     expect(chain).toEqual([]);
   });
 
+  it('respects per-model cooldown even for the pinned hint (composer integration)', () => {
+    // Regression for the "paid failover not working" production trace: caller
+    // pins anthropic/claude-3-haiku, vendor cooldown is hot on openrouter,
+    // pool has nvidia models with bad ids. Pinned model must still be tried.
+    const vendorOf = (m: string) => m.startsWith('nvidia/') ? 'nvidia' : 'openrouter';
+    const isUnavailable = buildCooldownPredicate({
+      cooledModels:  new Set<string>(),                  // no per-model cooldown
+      cooledVendors: new Set<string>(['openrouter']),    // openrouter cooled by free 429s
+      vendorOf,
+      pinnedModel:   'anthropic/claude-3-haiku',
+    });
+    const chain = composeFreeCappedCascade({
+      seed: ['anthropic/claude-3-haiku', 'qwen/qwen3-coder:free', 'nvidia/some-paid-model'],
+      premiumFallback: [],
+      freeBudget: 2,
+      tierOf: tierMap({ 'qwen/qwen3-coder:free': 'FREE' }),
+      isUnavailable,
+      cursor: { value: 0 },
+    });
+    // Pinned anthropic model is kept (vendor cooldown bypassed for it).
+    // qwen is dropped (openrouter cooled, not pinned). nvidia paid is kept.
+    expect(chain).toEqual(['anthropic/claude-3-haiku', 'nvidia/some-paid-model']);
+  });
+
   it('increments cursor exactly once per call regardless of FREE slice size', () => {
     const cursor = { value: 5 };
     composeFreeCappedCascade({
@@ -108,5 +132,56 @@ describe('composeFreeCappedCascade', () => {
       cursor,
     });
     expect(cursor.value).toBe(6);
+  });
+});
+
+describe('buildCooldownPredicate', () => {
+  const vendorOf = (m: string) => m.split('/')[0]!;
+
+  it('filters models on per-model cooldown', () => {
+    const isUnavail = buildCooldownPredicate({
+      cooledModels:  new Set(['openrouter/qwen/qwen3-coder:free']),
+      cooledVendors: new Set(),
+      vendorOf:      (_m) => 'openrouter',  // all openrouter-vended in this test
+    });
+    expect(isUnavail('qwen/qwen3-coder:free')).toBe(true);
+    expect(isUnavail('anthropic/claude-3-haiku')).toBe(false);
+  });
+
+  it('filters models on per-vendor cooldown by default', () => {
+    const isUnavail = buildCooldownPredicate({
+      cooledModels:  new Set(),
+      cooledVendors: new Set(['openrouter']),
+      vendorOf:      (_m) => 'openrouter',
+    });
+    expect(isUnavail('anthropic/claude-3-haiku')).toBe(true);
+    expect(isUnavail('qwen/qwen3-coder:free')).toBe(true);
+  });
+
+  it('bypasses per-vendor cooldown for the caller-pinned model', () => {
+    // The headline behaviour: caller pinned a paid model, the vendor is cooled
+    // because its free key 429'd, but the pinned model still gets through.
+    const isUnavail = buildCooldownPredicate({
+      cooledModels:  new Set(),
+      cooledVendors: new Set(['openrouter']),
+      vendorOf:      (_m) => 'openrouter',
+      pinnedModel:   'anthropic/claude-3-haiku',
+    });
+    expect(isUnavail('anthropic/claude-3-haiku')).toBe(false);  // pinned → pass
+    expect(isUnavail('qwen/qwen3-coder:free')).toBe(true);      // not pinned → still vendor-cooled
+  });
+
+  it('still respects per-model cooldown on the pinned hint', () => {
+    // Per-model cooldown is sticky even for the pinned slot — we don't retry
+    // a model that itself just failed N seconds ago. In production
+    // `anthropic/claude-3-haiku` resolves to vendor `openrouter` via catalog
+    // lookup, so the cooldown key is `openrouter/anthropic/claude-3-haiku`.
+    const isUnavail = buildCooldownPredicate({
+      cooledModels:  new Set(['openrouter/anthropic/claude-3-haiku']),
+      cooledVendors: new Set(),
+      vendorOf:      (_m) => 'openrouter',
+      pinnedModel:   'anthropic/claude-3-haiku',
+    });
+    expect(isUnavail('anthropic/claude-3-haiku')).toBe(true);
   });
 });

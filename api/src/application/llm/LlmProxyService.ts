@@ -33,7 +33,7 @@ import {
   type VendorEnv,
   type VendorId,
 } from './vendors';
-import { composeFreeCappedCascade } from './cascadeComposer';
+import { composeFreeCappedCascade, buildCooldownPredicate } from './cascadeComposer';
 import { sanitizeRequestToolNames, restoreResponseToolNames } from './toolNameSanitizer';
 import {
   loadCooldownExpiries,
@@ -309,7 +309,14 @@ export class LlmProxyService {
       ]),
       loadCooledVendors(this.env, seedVendors),
     ]);
-    const candidates = this.buildCandidateChain(seed, cooledSet, cooledVendors);
+    // Pinned hint bypasses vendor-level cooldown so a caller-explicit paid model
+    // (`anthropic/claude-3-haiku`) gets tried even when the same vendor's free
+    // key has 429'd its way into vendor cooldown. Per-model cooldown still
+    // applies — we won't retry a model that *itself* just failed.
+    const pinnedHint = typeof callerModel === 'string' && callerModel.length > 0
+      ? callerModel
+      : undefined;
+    const candidates = this.buildCandidateChain(seed, cooledSet, cooledVendors, pinnedHint);
     if (candidates.length === 0) {
       // Every model in the seed + premium fallback list is on cooldown. Fail fast
       // with a clear envelope instead of attempting a vendor with no chain.
@@ -398,16 +405,19 @@ export class LlmProxyService {
     seed: readonly string[],
     cooledSet: Set<string>,
     cooledVendors: Set<VendorId>,
+    pinnedModel?: string,
   ): string[] {
     return composeFreeCappedCascade({
       seed,
       premiumFallback: PREMIUM_FALLBACK_MODELS,
       freeBudget: FREE_ATTEMPT_BUDGET,
       tierOf: tierForModel,
-      isUnavailable: (m) => {
-        const v = vendorForModel(m);
-        return cooledVendors.has(v) || cooledSet.has(`${v}/${m}`);
-      },
+      isUnavailable: buildCooldownPredicate({
+        cooledModels:  cooledSet,
+        cooledVendors,
+        vendorOf:      vendorForModel,
+        ...(pinnedModel !== undefined ? { pinnedModel } : {}),
+      }),
       cursor: chatRequestCursor,
     });
   }

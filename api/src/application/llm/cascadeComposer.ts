@@ -38,6 +38,48 @@ export interface ComposeCascadeOptions {
 }
 
 /**
+ * Build the `isUnavailable` predicate fed into `composeFreeCappedCascade`,
+ * combining per-model cooldown, per-vendor cooldown, and the
+ * "caller-pinned bypasses vendor cooldown" rule.
+ *
+ * Why pinned bypasses vendor cooldown but not per-model cooldown:
+ *   - Per-vendor cooldown is global: e.g. an OpenRouter free-tier 429-storm
+ *     trips it, then the cascade skips *every* OpenRouter model — including
+ *     paid ones the caller explicitly asked for. That's wrong: the caller's
+ *     hint is an explicit choice and should at least be tried.
+ *   - Per-model cooldown is specific: the exact model the caller named has
+ *     already failed recently. Retrying it immediately would burn the
+ *     cascade budget on a known-broken endpoint. So the pinned model still
+ *     respects its own cooldown.
+ *
+ * Single source of truth for this gate — extracted so it's unit-testable in
+ * isolation (no need to spin up LlmProxyService + vendor mocks just to verify
+ * "pinned paid model gets through even when free vendor is cooled").
+ */
+export function buildCooldownPredicate(opts: {
+  /** Set of `<vendor>/<model>` keys that recently failed. */
+  cooledModels: Set<string>;
+  /** Vendors fully cooled (free-key 429-storm etc.). */
+  cooledVendors: Set<string>;
+  /** Catalog lookup — `(model) => vendorId`. */
+  vendorOf: (m: string) => string;
+  /**
+   * Caller's `body.model` hint (non-strict). When matched, per-vendor cooldown
+   * is bypassed so an explicit paid pin gets a chance to run. Per-model
+   * cooldown still applies. Pass `undefined` when caller didn't pin.
+   */
+  pinnedModel?: string;
+}): (m: string) => boolean {
+  const { cooledModels, cooledVendors, vendorOf, pinnedModel } = opts;
+  return (m) => {
+    const v = vendorOf(m);
+    if (cooledModels.has(`${v}/${m}`)) return true;
+    if (pinnedModel !== undefined && m === pinnedModel) return false;
+    return cooledVendors.has(v);
+  };
+}
+
+/**
  * Compose a candidate chain that honours the FREE attempt cap, round-robins
  * within the FREE slice for load spreading, keeps all non-FREE seed entries
  * verbatim, appends the premium fallback chain, and dedups (preserving first
