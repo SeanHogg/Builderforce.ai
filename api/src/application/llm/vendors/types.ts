@@ -11,7 +11,7 @@
  *   3. Implement a `VendorModule` and register it in `vendors/registry.ts`.
  */
 
-export type VendorId = 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai';
+export type VendorId = 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare';
 
 /**
  * Tier classification per model — drives pricing, plan gating, and the
@@ -36,6 +36,13 @@ export interface VendorEnv {
   /** Google AI (Gemini) API key — direct call to generativelanguage.googleapis.com.
    *  Powers the gateway's premium fallback at the tail of every cascade. */
   GOOGLE_API_KEY?: string | null;
+  /** Cloudflare Workers AI token — `cfut_*` auth header for `/ai/run/...` calls. */
+  CLOUDFLARE_AI_API_TOKEN?: string | null;
+  /** Cloudflare account id — embedded in the endpoint URL
+   *  (`/client/v4/accounts/<id>/ai/run/<model>`). Not a token, despite needing
+   *  to live alongside one in the Worker secrets; we accept it under the env
+   *  name the operator gave us. */
+  CLOUDFLARE_ACCOUNT_ID?: string | null;
 }
 
 export interface VendorCallParams {

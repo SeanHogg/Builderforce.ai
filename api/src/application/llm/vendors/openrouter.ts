@@ -90,12 +90,27 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'liquid/lfm-2.5-1.2b-thinking:free',         tier: 'FREE', label: 'LFM 2.5 1.2B Thinking (Free)',       brand: 'Liquid'    },
   { id: 'liquid/lfm-2.5-1.2b-instruct:free',         tier: 'FREE', label: 'LFM 2.5 1.2B Instruct (Free)',       brand: 'Liquid'    },
   { id: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free', tier: 'FREE', label: 'Dolphin Mistral 24B Venice (Free)', brand: 'CognitiveComputations' },
+  { id: 'openrouter/owl-alpha',                      tier: 'FREE', label: 'OpenRouter Owl Alpha (Free)',          brand: 'OpenRouter' },
+  { id: 'deepseek/deepseek-v4-flash:free',           tier: 'FREE', label: 'DeepSeek V4 Flash (Free)',             brand: 'DeepSeek'  },
+  { id: 'arcee-ai/trinity-large-thinking:free',      tier: 'FREE', label: 'Arcee Trinity Large Thinking (Free)',  brand: 'Arcee'     },
+  { id: 'openai/gpt-oss-20b:free',                   tier: 'FREE', label: 'GPT-OSS 20B (Free)',                   brand: 'OpenAI'    },
+
+  // ── STANDARD tier — paid low-cost models, prefixed in the paid pool so
+  //    Pro/Teams tenants land on cheap models before reaching PREMIUM/ULTRA.
+  { id: 'meta-llama/llama-3-8b-instruct',            tier: 'STANDARD', label: 'Llama 3 8B Instruct',      brand: 'Meta'      },
+  { id: 'google/gemma-3-4b-it',                      tier: 'STANDARD', label: 'Gemma 3 4B Instruct',      brand: 'Google'    },
+  { id: 'microsoft/phi-4',                           tier: 'STANDARD', label: 'Phi-4',                    brand: 'Microsoft' },
+  { id: 'qwen/qwen3.5-9b',                           tier: 'STANDARD', label: 'Qwen 3.5 9B',              brand: 'Qwen'      },
+  { id: 'z-ai/glm-4-32b',                            tier: 'STANDARD', label: 'GLM 4 32B',                brand: 'Z.AI'      },
+  { id: 'openai/gpt-5-nano',                         tier: 'STANDARD', label: 'GPT-5 Nano',               brand: 'OpenAI'    },
 
   // ── PREMIUM tier — paid coding-grade models
-  { id: 'anthropic/claude-3.7-sonnet',               tier: 'PREMIUM', label: 'Claude 3.7 Sonnet',  brand: 'Anthropic' },
-  { id: 'openai/gpt-4.1',                            tier: 'PREMIUM', label: 'GPT-4.1',            brand: 'OpenAI'    },
-  { id: 'google/gemini-2.5-pro',                     tier: 'PREMIUM', label: 'Gemini 2.5 Pro',     brand: 'Google'    },
-  { id: 'x-ai/grok-3-mini',                          tier: 'PREMIUM', label: 'Grok 3 Mini',        brand: 'xAI'       },
+  { id: 'anthropic/claude-3.7-sonnet',               tier: 'PREMIUM', label: 'Claude 3.7 Sonnet',     brand: 'Anthropic' },
+  { id: 'openai/gpt-4.1',                            tier: 'PREMIUM', label: 'GPT-4.1',               brand: 'OpenAI'    },
+  { id: 'openai/o4-mini',                            tier: 'PREMIUM', label: 'o4-mini (reasoning)',   brand: 'OpenAI'    },
+  { id: 'google/gemini-2.5-pro',                     tier: 'PREMIUM', label: 'Gemini 2.5 Pro',        brand: 'Google'    },
+  { id: 'x-ai/grok-3-mini',                          tier: 'PREMIUM', label: 'Grok 3 Mini',           brand: 'xAI'       },
+  { id: 'alibaba/qwen3.5-397b-a17b',                 tier: 'PREMIUM', label: 'Qwen 3.5 397B (MoE)',   brand: 'Alibaba'   },
 
   // NOTE: `google/gemini-2.5-flash-lite` is part of the vendor-diverse premium
   // fallback chain (see `PREMIUM_FALLBACK_MODELS` in LlmProxyService) and is

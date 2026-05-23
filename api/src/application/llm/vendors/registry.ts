@@ -7,6 +7,7 @@
  */
 
 import { cerebrasModule } from './cerebras';
+import { cloudflareModule } from './cloudflare';
 import { googleAiModule } from './googleai';
 import { nvidiaModule } from './nvidia';
 import { ollamaModule } from './ollama';
@@ -35,7 +36,7 @@ import {
  *   - `getCrossVendorFallbacks(...)` → the cross-vendor tail of each chain
  * Drives both Pool composition and Pool ordering with one source of truth.
  */
-const MODULES: ReadonlyArray<VendorModule> = [cerebrasModule, ollamaModule, nvidiaModule, openRouterModule, googleAiModule];
+const MODULES: ReadonlyArray<VendorModule> = [cerebrasModule, ollamaModule, nvidiaModule, cloudflareModule, openRouterModule, googleAiModule];
 
 const MODULES_BY_ID: Record<VendorId, VendorModule> = {
   openrouter: openRouterModule,
@@ -43,6 +44,7 @@ const MODULES_BY_ID: Record<VendorId, VendorModule> = {
   nvidia:     nvidiaModule,
   ollama:     ollamaModule,
   googleai:   googleAiModule,
+  cloudflare: cloudflareModule,
 };
 
 /** Used when a model id isn't in any vendor's catalog (treats as OpenRouter). */
@@ -65,6 +67,11 @@ const VENDOR_PREFIXES: ReadonlyArray<{ prefix: string; vendor: VendorId }> = [
   { prefix: 'nim/',        vendor: 'nvidia' },
   { prefix: 'ollama/',     vendor: 'ollama' },
   { prefix: 'googleai/',   vendor: 'googleai' },
+  // Cloudflare model ids natively start with `@cf/...` so they're
+  // self-identifying without a `cloudflare/` URL-style prefix. We still accept
+  // `cloudflare/@cf/...` for symmetry with the other vendors — callers who
+  // prefer the explicit form can use it; bare `@cf/...` resolves via catalog.
+  { prefix: 'cloudflare/', vendor: 'cloudflare' },
 ];
 
 /**

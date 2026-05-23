@@ -428,10 +428,12 @@ export class LlmProxyService {
       OPENROUTER_API_KEY: this.isPro
         ? (this.env.OPENROUTER_API_KEY_PRO ?? this.env.OPENROUTER_API_KEY ?? null)
         : (this.env.OPENROUTER_API_KEY ?? null),
-      CEREBRAS_API_KEY: this.env.CEREBRAS_API_KEY ?? null,
-      NVIDIA_API_KEY:   this.env.NVIDIA_API_KEY   ?? null,
-      OLLAMA_API_KEY:   this.env.OLLAMA_API_KEY   ?? null,
-      GOOGLE_API_KEY:   this.env.GOOGLE_API_KEY   ?? null,
+      CEREBRAS_API_KEY:         this.env.CEREBRAS_API_KEY         ?? null,
+      NVIDIA_API_KEY:           this.env.NVIDIA_API_KEY           ?? null,
+      OLLAMA_API_KEY:           this.env.OLLAMA_API_KEY           ?? null,
+      GOOGLE_API_KEY:           this.env.GOOGLE_API_KEY           ?? null,
+      CLOUDFLARE_AI_API_TOKEN:  this.env.CLOUDFLARE_AI_API_TOKEN  ?? null,
+      CLOUDFLARE_ACCOUNT_ID:    this.env.CLOUDFLARE_ACCOUNT_ID    ?? null,
     };
   }
 
