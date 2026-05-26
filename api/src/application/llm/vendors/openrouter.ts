@@ -16,6 +16,7 @@ import {
   type VendorModule,
   type VendorStreamResult,
 } from './types';
+import { sanitizeExtraBodyForVendor } from '../jsonSchemaSanitize';
 
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 const EMBEDDINGS_ENDPOINT = 'https://openrouter.ai/api/v1/embeddings';
@@ -136,6 +137,13 @@ function tierForOpenRouterModel(modelId: string): AiModelTier {
 
 function buildBody(params: VendorCallParams): Record<string, unknown> {
   const { model, messages, tools, toolChoice, maxTokens, temperature, topP, extraBody } = params;
+  // OpenRouter routes many free-tier model ids (`qwen/qwen3-coder:free`,
+  // `qwen/qwen3-next-80b-a3b-instruct:free`, etc.) to Cerebras as the upstream
+  // provider. Cerebras's strict JSON-Schema validator rejects draft-07
+  // keywords like `maxLength` that Zod's `toJSONSchema()` emits by default —
+  // strip them here so the call doesn't bounce with `[cerebras] 400` embedded
+  // in the OpenRouter response. See jsonSchemaSanitize.ts for the keyword set.
+  const safeExtra = sanitizeExtraBodyForVendor('openrouter', extraBody);
   return {
     model,
     messages,
@@ -144,7 +152,7 @@ function buildBody(params: VendorCallParams): Record<string, unknown> {
     ...(maxTokens != null ? { max_tokens: maxTokens } : {}),
     ...(temperature != null ? { temperature } : {}),
     ...(topP != null ? { top_p: topP } : {}),
-    ...(extraBody ?? {}),
+    ...(safeExtra ?? {}),
   };
 }
 
