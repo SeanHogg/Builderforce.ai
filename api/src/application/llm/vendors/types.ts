@@ -206,6 +206,39 @@ export class VendorFatalError extends Error {
   }
 }
 
+/**
+ * Worker-runtime exhaustion: the Cloudflare Worker that's running the gateway
+ * has hit its per-invocation subrequest cap (50 on free, 1000 on paid). Every
+ * subsequent `fetch()` from the same isolate will throw the same error, so
+ * advancing the cascade is *guaranteed* to waste 4–6 more attempts on
+ * identical 0ms-failures. The dispatcher must short-circuit on this error,
+ * surface a distinct envelope to the caller, and SKIP cooldown writes
+ * (which are themselves subrequests that would compound the problem).
+ *
+ * Detected by substring match in `fetchWithVendorTimeout` because the
+ * runtime's exception is a plain `Error` whose message is the only
+ * machine-readable signal. The substring `Too many subrequests by single
+ * Worker invocation` is the canonical phrasing as of the 2026-05-26
+ * production trace `llm-2cc6ba1b-...`.
+ */
+export class WorkerSubrequestExhaustedError extends Error {
+  public readonly vendorId: string;
+  public readonly model: string;
+  constructor(vendorId: string, model: string, message: string) {
+    super(`[${vendorId}/${model}] worker subrequest cap exhausted: ${message}`);
+    this.name = 'WorkerSubrequestExhaustedError';
+    this.vendorId = vendorId;
+    this.model = model;
+  }
+}
+
+/** Detect Cloudflare's per-invocation subrequest cap exhaustion message.
+ *  Single source of truth — the substring is also matched in tests. */
+const SUBREQUEST_CAP_MARKER = 'Too many subrequests by single Worker invocation';
+export function isSubrequestCapMessage(msg: string): boolean {
+  return msg.includes(SUBREQUEST_CAP_MARKER);
+}
+
 /** Statuses that trigger cascade to the next model. */
 export const CASCADE_STATUSES: ReadonlySet<number> = new Set<number>([
   404, 408, 429, 500, 502, 503, 504,
@@ -258,6 +291,15 @@ export async function fetchWithVendorTimeout(
       throw new VendorRetryableError(vendorId, model, 408, `vendor timed out after ${timeoutMs}ms`);
     }
     const msg = err instanceof Error ? err.message : String(err);
+    // Cloudflare's per-invocation subrequest cap. Every later `fetch()` from
+    // this isolate will throw the same thing, so trying the next vendor in
+    // the cascade is guaranteed to burn budget on 0ms identical failures —
+    // raise a sentinel error the dispatcher recognises and propagates
+    // immediately. Caught BEFORE the generic `network:` wrap so the
+    // dispatcher sees the typed error class, not a `VendorRetryableError`.
+    if (isSubrequestCapMessage(msg)) {
+      throw new WorkerSubrequestExhaustedError(vendorId, model, msg);
+    }
     throw new VendorRetryableError(vendorId, model, 0, `network: ${msg}`);
   } finally {
     clearTimeout(timer);
