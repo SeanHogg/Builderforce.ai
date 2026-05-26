@@ -29,6 +29,7 @@ import {
   tierForModel,
   vendorForModel,
   vendorKeyBound,
+  WorkerSubrequestExhaustedError,
   type DispatchAttempt,
   type VendorEnv,
   type VendorId,
@@ -121,6 +122,34 @@ export const FREE_ATTEMPT_BUDGET = 2;
 /** First N models of the active pool form the round-robin "preferred" group.
  *  Aligned with FREE_ATTEMPT_BUDGET so the round-robin window matches the cap. */
 export const PREFERRED_POOL_SIZE = 2;
+
+/**
+ * Hard cap on how many seed models get a cooldown KV read up-front.
+ *
+ * The model pool can contain 40+ FREE entries across all vendors. Without this
+ * cap, every `complete()` call issued one KV `get` per pool entry just to
+ * prefetch cooldown state — ~50 subrequests *before* the first vendor fetch.
+ * Cloudflare's per-invocation subrequest cap (50 free / 1000 paid) was being
+ * exhausted by the bookkeeping path alone (production trace
+ * `llm-2cc6ba1b-...`, 2026-05-26: cooldown reads + 6 vendor attempts =
+ * cascade collapse with `Too many subrequests by single Worker invocation`).
+ *
+ * Why 12: `FREE_ATTEMPT_BUDGET` (=2) + `PREMIUM_FALLBACK_MODELS.length` (3) +
+ * caller-pinned hint (1) is the minimum the chain composer can use; 12 leaves
+ * headroom for ~6 cooled-and-skipped FREE entries before the composer's
+ * walking-the-pool-looking-for-non-cooled loop runs dry — which is far more
+ * skips than we've ever observed simultaneously, since cooldowns expire on
+ * 5–30 minute windows. The shape-reorder + caller-hint prefix ensures the
+ * 12 entries actually queried are the most likely to be tried.
+ *
+ * Trade-off: a model past index 12 that *is* cooled won't be filtered out of
+ * the chain composer's view, so it could be attempted at dispatch time and
+ * fail. The dispatcher records the failure and re-cools the model — the next
+ * request sees the cooldown if the same model lands in the leading 12. Net
+ * effect: a one-request lag on a stale cooldown, in exchange for a hard
+ * upper bound on KV subrequests per gateway call.
+ */
+export const COOLDOWN_PREFETCH_LIMIT = 12;
 
 // ---------------------------------------------------------------------------
 // Public types — kept stable for callers (llmRoutes, ideAiRoutes)
@@ -288,23 +317,23 @@ export class LlmProxyService {
       ? [callerModel, ...reorderedPool.filter((m) => m !== callerModel)]
       : reorderedPool;
 
-    // 3) Pre-fetch cooldown state for the seed + premium fallback chain
-    //    (KV-backed when bound, in-memory fallback otherwise). One bulk read
-    //    each for per-model and per-vendor; the chain composer filters
-    //    synchronously against the resulting sets. Vendor cooldown short-
-    //    circuits the per-model walk when one upstream's key is globally
-    //    throttled — without it, the cascade burns models on the saturated
-    //    vendor before reaching the premium fallback. The fallback models
-    //    are included so the chain composer skips any individually cooled
-    //    entry instead of firing a doomed retry against a saturated endpoint.
+    // 3) Pre-fetch cooldown state for the leading seed slice + premium fallback
+    //    (KV-backed when bound, in-memory fallback otherwise). The seed is
+    //    truncated to `COOLDOWN_PREFETCH_LIMIT` entries to bound subrequest
+    //    cost — see that constant for the trade-off rationale. Vendor
+    //    cooldown short-circuits the per-model walk when one upstream's key
+    //    is globally throttled; the fallback models are included so the
+    //    chain composer skips any individually cooled entry instead of
+    //    firing a doomed retry against a saturated endpoint.
+    const seedPrefix = seed.slice(0, COOLDOWN_PREFETCH_LIMIT);
     const fallbackPairs = PREMIUM_FALLBACK_MODELS.map((m) => ({ vendor: vendorForModel(m), model: m }));
     const seedVendors = Array.from(new Set([
-      ...seed.map((m) => vendorForModel(m)),
+      ...seedPrefix.map((m) => vendorForModel(m)),
       ...fallbackPairs.map((p) => p.vendor),
     ]));
     const [cooledSet, cooledVendors] = await Promise.all([
       loadCooldowns(this.env, [
-        ...seed.map((m) => ({ vendor: vendorForModel(m), model: m })),
+        ...seedPrefix.map((m) => ({ vendor: vendorForModel(m), model: m })),
         ...fallbackPairs,
       ]),
       loadCooledVendors(this.env, seedVendors),
@@ -495,6 +524,15 @@ export class LlmProxyService {
           ...callParams,
         });
       } catch (err) {
+        // Worker subrequest cap exhausted — every later fetch from this isolate
+        // throws the same thing. Surface a distinct 503 envelope and SKIP
+        // cooldown writes (each is another subrequest that would compound the
+        // problem and may itself throw the same error). The 503 lets the
+        // caller distinguish "infrastructure ceiling" from "vendor rate limit"
+        // and back off rather than retrying a doomed loop.
+        if (err instanceof WorkerSubrequestExhaustedError) {
+          return this.subrequestExhaustedResponse(candidates, schemaRetries, err);
+        }
         const errAttempts = err instanceof CascadeExhaustedError ? err.attempts : [];
         await this.applyCooldowns(errAttempts);
         return this.exhaustedResponse(candidates, schemaRetries, err, errAttempts);
@@ -611,6 +649,46 @@ export class LlmProxyService {
     };
   }
 
+  /**
+   * Build the 503 `worker_subrequest_exhausted` envelope. Distinct from
+   * `exhaustedResponse` because the failure mode is infrastructure
+   * (Cloudflare's per-invocation subrequest cap), not vendor saturation —
+   * callers should back off and retry rather than walk their own failover
+   * chain across more models. Skips cooldown writes deliberately: each KV
+   * `put` is another subrequest that would compound the problem and may
+   * itself throw the same error.
+   */
+  private subrequestExhaustedResponse(
+    candidates: string[],
+    schemaRetries: number,
+    err: WorkerSubrequestExhaustedError,
+  ): ProxyResult {
+    const resolvedModel  = err.model || (candidates[candidates.length - 1] ?? this.modelPool[0] ?? FREE_MODEL_POOL[0] ?? '');
+    const resolvedVendor = vendorForModel(resolvedModel);
+    const body = JSON.stringify({
+      error: {
+        message: `Gateway hit Cloudflare's per-invocation subrequest cap; retry the request to land on a fresh Worker isolate. (${err.message})`,
+        code: 503,
+        type: 'service_unavailable',
+        reason: 'worker_subrequest_exhausted',
+        vendor: resolvedVendor,
+        model:  resolvedModel,
+        details: { failovers: [{ model: resolvedModel, vendor: resolvedVendor, code: 0 }] },
+      },
+    });
+    return {
+      response: new Response(body, {
+        status: 503,
+        headers: { 'content-type': 'application/json', 'retry-after': '1' },
+      }),
+      resolvedModel,
+      resolvedVendor,
+      retries: 1,
+      failovers: [{ model: resolvedModel, vendor: resolvedVendor, code: 0 }],
+      ...(schemaRetries > 0 ? { schemaRetries } : {}),
+    };
+  }
+
   private async dispatchStream(
     candidates: string[],
     callParams: Omit<Parameters<typeof dispatchVendorStream>[0], 'env' | 'modelChain'>,
@@ -631,6 +709,9 @@ export class LlmProxyService {
         failovers: attemptsToFailovers(result.attempts),
       };
     } catch (err) {
+      if (err instanceof WorkerSubrequestExhaustedError) {
+        return this.subrequestExhaustedResponse(candidates, 0, err);
+      }
       const errAttempts = err instanceof CascadeExhaustedError ? err.attempts : [];
       await this.applyCooldowns(errAttempts);
       return this.exhaustedResponse(candidates, 0, err, errAttempts);

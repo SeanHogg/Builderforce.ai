@@ -14,6 +14,7 @@ import { ollamaModule } from './ollama';
 import { openRouterModule } from './openrouter';
 import {
   VendorRetryableError,
+  WorkerSubrequestExhaustedError,
   isEmptyChatResponse,
   type AiModelTier,
   type VendorCallParams,
@@ -237,6 +238,15 @@ export async function dispatchVendor(params: DispatchParams): Promise<DispatchRe
       // `modelUsed` echoes what the caller asked for (with prefix preserved).
       return { ...result, modelUsed: model, vendorUsed: vendorId, attempts };
     } catch (err) {
+      // Worker hit Cloudflare's per-invocation subrequest cap — every future
+      // fetch from this isolate is guaranteed to throw the same thing.
+      // Stop advancing the cascade and bubble up so the proxy can surface a
+      // distinct 503 envelope WITHOUT writing more cooldown KV entries
+      // (which would themselves be additional subrequests).
+      if (err instanceof WorkerSubrequestExhaustedError) {
+        attempts.push({ model, vendor: vendorId, status: 0, error: err.message });
+        throw err;
+      }
       if (err instanceof VendorRetryableError) {
         attempts.push({ model, vendor: vendorId, status: err.status, error: err.message });
         console.warn(
@@ -295,6 +305,12 @@ export async function dispatchVendorStream(params: DispatchParams): Promise<Stre
       const result = await mod.callStream({ ...rest, apiKey, model: vendorModel });
       return { ...result, modelUsed: model, vendorUsed: vendorId, attempts };
     } catch (err) {
+      // See dispatchVendor — short-circuit on subrequest exhaustion so we
+      // don't burn the rest of the chain on identical 0ms failures.
+      if (err instanceof WorkerSubrequestExhaustedError) {
+        attempts.push({ model, vendor: vendorId, status: 0, error: err.message });
+        throw err;
+      }
       if (err instanceof VendorRetryableError) {
         attempts.push({ model, vendor: vendorId, status: err.status, error: err.message });
         console.warn(
