@@ -16,6 +16,7 @@ import {
   type VendorModule,
   type VendorStreamResult,
 } from './types';
+import { sanitizeExtraBodyForVendor } from '../jsonSchemaSanitize';
 
 const ENDPOINT = 'https://api.cerebras.ai/v1/chat/completions';
 
@@ -32,6 +33,12 @@ function tierForCerebrasModel(modelId: string): AiModelTier {
 
 function buildBody(params: VendorCallParams): Record<string, unknown> {
   const { model, messages, tools, toolChoice, maxTokens, temperature, topP, extraBody } = params;
+  // Strip draft-07 JSON-Schema keywords Cerebras's strict validator rejects
+  // (`maxLength` / `minLength` / `format` / `pattern` / etc. — see
+  // jsonSchemaSanitize.ts). Without this, any consumer that ran their Zod
+  // schema through `z.toJSONSchema()` gets a 400 back from Cerebras the moment
+  // they include a `.max(N)` on a string field.
+  const safeExtra = sanitizeExtraBodyForVendor('cerebras', extraBody);
   return {
     model,
     messages,
@@ -41,7 +48,7 @@ function buildBody(params: VendorCallParams): Record<string, unknown> {
     ...(maxTokens != null ? { max_completion_tokens: maxTokens } : {}),
     ...(temperature != null ? { temperature } : {}),
     ...(topP != null ? { top_p: topP } : {}),
-    ...(extraBody ?? {}),
+    ...(safeExtra ?? {}),
   };
 }
 
