@@ -1,0 +1,28 @@
+# Build artifacts that should be regenerated inside the container
+**/node_modules
+**/.next
+**/.wrangler
+**/dist
+**/build
+**/coverage
+**/.vercel
+
+# Local dev state
+**/*.log
+**/.env.local
+**/.env.*.local
+.git
+.github
+
+# IDE
+.vscode
+.idea
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Repo-specific scratch
+docs-site/dist
+webdit/dist
+migrations/migrate-state

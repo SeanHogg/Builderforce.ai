@@ -36,12 +36,16 @@ __export(src_exports, {
   StudioPanel: () => StudioPanel,
   VideoEngine: () => VideoEngine,
   VideoPreview: () => VideoPreview,
+  hasWebGPUSupport: () => hasWebGPUSupport,
   probeDevice: () => probeDevice,
   useEngineStatus: () => useEngineStatus
 });
 module.exports = __toCommonJS(src_exports);
 
 // src/engine/device-router.ts
+function hasWebGPUSupport() {
+  return typeof navigator !== "undefined" && "gpu" in navigator;
+}
 async function probeDevice(target = "auto") {
   const order = target === "auto" ? ["webnn", "webgpu", "cpu"] : target === "cpu" ? ["cpu"] : target === "webgpu" ? ["webgpu"] : ["webnn"];
   for (const candidate of order) {
@@ -76,7 +80,7 @@ async function probeWebNN() {
   return null;
 }
 async function probeWebGPU() {
-  if (typeof navigator === "undefined") return null;
+  if (!hasWebGPUSupport()) return null;
   const nav = navigator;
   if (!nav.gpu) return null;
   try {
@@ -118,6 +122,7 @@ function estimateGpuMemoryMb(adapter) {
 
 // src/engine/diffusion-engine.ts
 var ort = __toESM(require("onnxruntime-web"), 1);
+var import_transformers = require("@huggingface/transformers");
 
 // src/engine/weight-cache.ts
 var DB_NAME = "builderforce-studio-weights";
@@ -220,136 +225,192 @@ async function writeToIdb(key, value) {
 }
 
 // src/engine/diffusion-engine.ts
+import_transformers.env.allowLocalModels = false;
+if (import_transformers.env.backends?.onnx?.wasm) {
+  import_transformers.env.backends.onnx.wasm.numThreads = 1;
+}
 var MODEL_REGISTRY = {
   "lcm-dreamshaper-v7": {
     id: "lcm-dreamshaper-v7",
     defaultSteps: 4,
-    defaultGuidance: 1.5,
+    defaultGuidance: 1,
+    // LCM works best with CFG ~1
     minVramMb: 6 * 1024,
-    hfRepo: "lcm-sd/lcm-dreamshaper-v7-onnx",
+    hfRepo: "Xenova/LCM_Dreamshaper_v7-onnx",
+    textEmbedDim: 768,
+    sequenceLength: 77,
+    vaeScalingFactor: 0.18215,
+    defaultTimesteps: [999, 759, 519, 259],
     files: {
-      unet: "unet/model.onnx",
-      vaeDecoder: "vae_decoder/model.onnx",
-      textEncoder: "text_encoder/model.onnx",
-      tokenizer: "tokenizer/tokenizer.json"
+      unet: "unet/model_fp16.onnx",
+      vaeDecoder: "vae_decoder/model_fp16.onnx"
     }
   },
   "sd-turbo": {
     id: "sd-turbo",
     defaultSteps: 1,
     defaultGuidance: 0,
+    // SD-Turbo is unconditional CFG
     minVramMb: 4 * 1024,
-    hfRepo: "stabilityai/sd-turbo-onnx",
+    hfRepo: "Xenova/sd-turbo",
+    textEmbedDim: 1024,
+    sequenceLength: 77,
+    vaeScalingFactor: 0.18215,
+    defaultTimesteps: [999],
     files: {
-      unet: "unet/model.onnx",
-      vaeDecoder: "vae_decoder/model.onnx",
-      textEncoder: "text_encoder/model.onnx",
-      tokenizer: "tokenizer/tokenizer.json"
+      unet: "unet/model_fp16.onnx",
+      vaeDecoder: "vae_decoder/model_fp16.onnx"
     }
   }
 };
+var ALPHAS_CUMPROD = computeAlphasCumprod(85e-5, 0.012, 1e3);
+function computeAlphasCumprod(betaStart, betaEnd, T) {
+  const out = new Float32Array(T);
+  const sqrtStart = Math.sqrt(betaStart);
+  const sqrtEnd = Math.sqrt(betaEnd);
+  let running = 1;
+  for (let t = 0; t < T; t++) {
+    const sqrtBeta = sqrtStart + (sqrtEnd - sqrtStart) * (t / (T - 1));
+    const beta = sqrtBeta * sqrtBeta;
+    running *= 1 - beta;
+    out[t] = running;
+  }
+  return out;
+}
 var DiffusionEngine = class {
   constructor(opts) {
     this.opts = opts;
   }
   opts;
+  tokenizer = null;
+  textEncoder = null;
   unetSession = null;
   vaeSession = null;
-  textEncoderSession = null;
-  tokenizerJson = null;
+  // -------------------------------------------------------------------------
   async init() {
-    const descriptor = MODEL_REGISTRY[this.opts.model];
+    const descriptor = this.descriptor;
     const sessionOptions = this.buildSessionOptions();
-    const [unetBuf, vaeBuf, textEncBuf, tokenizerBuf] = await Promise.all([
-      this.fetchWeight(descriptor.files.unet, descriptor.hfRepo),
-      this.fetchWeight(descriptor.files.vaeDecoder, descriptor.hfRepo),
-      this.fetchWeight(descriptor.files.textEncoder, descriptor.hfRepo),
-      this.fetchWeight(descriptor.files.tokenizer, descriptor.hfRepo)
+    const hfDevice = this.mapDeviceToHf();
+    const hfDtype = hfDevice === "webgpu" ? "fp16" : "fp32";
+    this.tokenizer = await import_transformers.AutoTokenizer.from_pretrained(descriptor.hfRepo);
+    this.textEncoder = await import_transformers.AutoModel.from_pretrained(descriptor.hfRepo, {
+      subfolder: "text_encoder",
+      device: hfDevice,
+      dtype: hfDtype
+    });
+    const [unetBuf, vaeBuf] = await Promise.all([
+      this.fetchWeight(descriptor.files.unet),
+      this.fetchWeight(descriptor.files.vaeDecoder)
     ]);
     this.unetSession = await ort.InferenceSession.create(new Uint8Array(unetBuf), sessionOptions);
     this.vaeSession = await ort.InferenceSession.create(new Uint8Array(vaeBuf), sessionOptions);
-    this.textEncoderSession = await ort.InferenceSession.create(
-      new Uint8Array(textEncBuf),
-      sessionOptions
-    );
-    this.tokenizerJson = JSON.parse(new TextDecoder().decode(tokenizerBuf));
+  }
+  // -------------------------------------------------------------------------
+  // Public surface
+  // -------------------------------------------------------------------------
+  get descriptor() {
+    return MODEL_REGISTRY[this.opts.model];
+  }
+  get activeDevice() {
+    return this.opts.probed.kind;
+  }
+  /** Tokenise and encode the prompt → conditioning embedding [1, seqLen, embedDim]. */
+  async embedPrompt(prompt) {
+    if (!this.tokenizer || !this.textEncoder) {
+      throw new Error("DiffusionEngine.init() not called");
+    }
+    const { textEmbedDim, sequenceLength } = this.descriptor;
+    const encoded = await this.tokenizer(prompt, {
+      padding: "max_length",
+      max_length: sequenceLength,
+      truncation: true,
+      return_tensors: "pt"
+    });
+    const out = await this.textEncoder({ input_ids: encoded.input_ids });
+    const hidden = out.last_hidden_state?.data;
+    if (!hidden) {
+      throw new Error("Text encoder returned no last_hidden_state");
+    }
+    if (hidden.length !== sequenceLength * textEmbedDim) {
+      throw new Error(
+        `Text encoder dim mismatch: expected ${sequenceLength * textEmbedDim}, got ${hidden.length}. Check ${this.descriptor.hfRepo} text_encoder config.`
+      );
+    }
+    return new Float32Array(hidden);
+  }
+  /** Sample a fresh latent from deterministic gaussian noise. */
+  sampleInitialLatent(seed) {
+    const latentH = this.opts.height / 8;
+    const latentW = this.opts.width / 8;
+    return gaussianNoise(1 * 4 * latentH * latentW, seed);
   }
   /**
-   * Run the full denoise → decode pipeline for one frame. The caller owns the
-   * scheduler choice (LCM vs DDIM/Euler for SD-Turbo) by passing the right
-   * `steps` and `guidance`. The shared primitive is responsible only for the
-   * inner loop and VAE decode.
+   * Shared denoise primitive for both LCM and SD-Turbo. Uses the LCMScheduler
+   * consistency-model step formula at the chosen timesteps; SD-Turbo with
+   * timesteps=[999] degenerates to a single step that's equivalent to its
+   * native one-shot generation up to a small numerical constant.
    */
   async denoise(inputs) {
     if (!this.unetSession || !this.vaeSession) {
       throw new Error("DiffusionEngine.init() not called");
     }
-    let latent = new Float32Array(inputs.latent);
     const latentH = this.opts.height / 8;
     const latentW = this.opts.width / 8;
-    for (let stepIdx = 0; stepIdx < inputs.steps; stepIdx++) {
-      const sigma = sigmaForStep(stepIdx, inputs.steps);
-      const timestep = stepToTimestep(stepIdx, inputs.steps);
+    const latentShape = [1, 4, latentH, latentW];
+    const timesteps = inputs.timesteps ?? this.descriptor.defaultTimesteps;
+    let sample = new Float32Array(inputs.latent);
+    for (let i = 0; i < timesteps.length; i++) {
+      const t = timesteps[i];
+      const alpha = ALPHAS_CUMPROD[t] ?? 1e-3;
+      const sqrtAlpha = Math.sqrt(alpha);
+      const sqrtOneMinusAlpha = Math.sqrt(1 - alpha);
       const noisePred = await this.runUnet({
-        latent,
+        sample,
         condEmbedding: inputs.condEmbedding,
         uncondEmbedding: inputs.uncondEmbedding,
-        timestep,
+        timestep: t,
         guidance: inputs.guidance,
-        latentShape: [1, 4, latentH, latentW]
+        latentShape
       });
-      for (let i = 0; i < latent.length; i++) {
-        latent[i] = latent[i] - sigma * noisePred[i];
+      const predictedX0 = new Float32Array(sample.length);
+      for (let j = 0; j < sample.length; j++) {
+        predictedX0[j] = (sample[j] - sqrtOneMinusAlpha * noisePred[j]) / sqrtAlpha;
+      }
+      if (i < timesteps.length - 1) {
+        const tNext = timesteps[i + 1];
+        const alphaNext = ALPHAS_CUMPROD[tNext] ?? 1e-3;
+        const sqrtAlphaNext = Math.sqrt(alphaNext);
+        const sqrtOneMinusAlphaNext = Math.sqrt(1 - alphaNext);
+        const noise = gaussianNoise(sample.length, inputs.seed + i * 7919);
+        for (let j = 0; j < sample.length; j++) {
+          sample[j] = sqrtAlphaNext * predictedX0[j] + sqrtOneMinusAlphaNext * noise[j];
+        }
+      } else {
+        sample = predictedX0;
       }
     }
-    const pixels = await this.runVaeDecode(latent, latentH, latentW);
+    const pixels = await this.runVaeDecode(sample, latentH, latentW);
     return { pixels };
   }
-  /** Tokenise and embed the prompt. Returns [1, seqLen, embedDim] tensor. */
-  async embedPrompt(_prompt) {
-    if (!this.textEncoderSession || !this.tokenizerJson) {
-      throw new Error("DiffusionEngine.init() not called");
-    }
-    const seqLen = 77;
-    const embedDim = 768;
-    return new Float32Array(seqLen * embedDim);
-  }
-  /** Allocate a fresh latent tensor seeded from a deterministic RNG. */
-  sampleInitialLatent(seed) {
-    const latentH = this.opts.height / 8;
-    const latentW = this.opts.width / 8;
-    const size = 1 * 4 * latentH * latentW;
-    const out = new Float32Array(size);
-    let state = seed >>> 0 || 1;
-    for (let i = 0; i < size; i++) {
-      state = state * 1664525 + 1013904223 >>> 0;
-      const u1 = (state + 1) / 4294967296;
-      state = state * 1664525 + 1013904223 >>> 0;
-      const u2 = (state + 1) / 4294967296;
-      out[i] = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-    }
-    return out;
-  }
-  get activeDevice() {
-    return this.opts.probed.kind;
-  }
-  // ---------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // Internals
-  // ---------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   buildSessionOptions() {
     const kind = this.opts.probed.kind;
-    if (kind === "webnn") {
-      return { executionProviders: ["webnn", "wasm"] };
-    }
-    if (kind === "webgpu") {
-      return { executionProviders: ["webgpu", "wasm"] };
-    }
+    if (kind === "webnn") return { executionProviders: ["webnn", "wasm"] };
+    if (kind === "webgpu") return { executionProviders: ["webgpu", "wasm"] };
     return { executionProviders: ["wasm"] };
   }
-  async fetchWeight(file, hfRepo) {
+  mapDeviceToHf() {
+    const kind = this.opts.probed.kind;
+    if (kind === "webgpu") return "webgpu";
+    if (kind === "webnn") return "webnn";
+    return "wasm";
+  }
+  async fetchWeight(file) {
     return getOrFetchWeight({
       cacheKey: `${this.opts.model}/${file}`,
-      hfRepo,
+      hfRepo: this.descriptor.hfRepo,
       hfPath: file,
       sources: this.opts.weightSources,
       apiKey: this.opts.apiKey,
@@ -359,23 +420,36 @@ var DiffusionEngine = class {
   }
   async runUnet(args) {
     const session = this.unetSession;
-    const sample = new ort.Tensor("float32", args.latent, args.latentShape);
-    const ts = new ort.Tensor("int64", BigInt64Array.from([BigInt(args.timestep)]), [1]);
-    const encHidden = new ort.Tensor("float32", args.condEmbedding, [1, 77, 768]);
-    const feeds = {
-      sample,
-      timestep: ts,
-      encoder_hidden_states: encHidden
-    };
-    const condOut = await session.run(feeds);
-    const condNoise = condOut.out_sample?.data;
-    if (!condNoise) throw new Error("UNet output missing `out_sample`");
+    const { textEmbedDim, sequenceLength } = this.descriptor;
+    const sampleTensor = new ort.Tensor("float32", args.sample, args.latentShape);
+    const tsTensor = new ort.Tensor("int64", BigInt64Array.from([BigInt(args.timestep)]), [1]);
+    const condTensor = new ort.Tensor(
+      "float32",
+      args.condEmbedding,
+      [1, sequenceLength, textEmbedDim]
+    );
+    const condOut = await session.run({
+      sample: sampleTensor,
+      timestep: tsTensor,
+      encoder_hidden_states: condTensor
+    });
+    const condNoise = pickFirstFloat32(condOut);
+    if (!condNoise) throw new Error("UNet returned no Float32 output");
     if (!args.uncondEmbedding || args.guidance <= 0) {
       return condNoise;
     }
-    const uncondEncHidden = new ort.Tensor("float32", args.uncondEmbedding, [1, 77, 768]);
-    const uncondOut = await session.run({ ...feeds, encoder_hidden_states: uncondEncHidden });
-    const uncondNoise = uncondOut.out_sample?.data;
+    const uncondTensor = new ort.Tensor(
+      "float32",
+      args.uncondEmbedding,
+      [1, sequenceLength, textEmbedDim]
+    );
+    const uncondOut = await session.run({
+      sample: sampleTensor,
+      timestep: tsTensor,
+      encoder_hidden_states: uncondTensor
+    });
+    const uncondNoise = pickFirstFloat32(uncondOut);
+    if (!uncondNoise) throw new Error("UNet unconditional pass returned no Float32 output");
     const guided = new Float32Array(condNoise.length);
     for (let i = 0; i < condNoise.length; i++) {
       guided[i] = uncondNoise[i] + args.guidance * (condNoise[i] - uncondNoise[i]);
@@ -385,21 +459,33 @@ var DiffusionEngine = class {
   async runVaeDecode(latent, h, w) {
     const session = this.vaeSession;
     const scaled = new Float32Array(latent.length);
-    const scale = 0.18215;
+    const scale = this.descriptor.vaeScalingFactor;
     for (let i = 0; i < latent.length; i++) scaled[i] = latent[i] / scale;
     const input = new ort.Tensor("float32", scaled, [1, 4, h, w]);
     const out = await session.run({ latent_sample: input });
-    const pixels = out.sample?.data;
-    if (!pixels) throw new Error("VAE decoder output missing `sample`");
+    const pixels = pickFirstFloat32(out);
+    if (!pixels) throw new Error("VAE decoder returned no Float32 output");
     return pixels;
   }
 };
-function sigmaForStep(stepIdx, totalSteps) {
-  const t = (totalSteps - stepIdx) / totalSteps;
-  return 0.1 + 0.9 * t;
+function gaussianNoise(length, seed) {
+  const out = new Float32Array(length);
+  let state = seed >>> 0 || 1;
+  for (let i = 0; i < length; i++) {
+    state = state * 1664525 + 1013904223 >>> 0;
+    const u1 = (state + 1) / 4294967296;
+    state = state * 1664525 + 1013904223 >>> 0;
+    const u2 = (state + 1) / 4294967296;
+    out[i] = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+  return out;
 }
-function stepToTimestep(stepIdx, totalSteps) {
-  return Math.round(999 * (1 - stepIdx / Math.max(1, totalSteps)));
+function pickFirstFloat32(result) {
+  for (const value of Object.values(result)) {
+    const data = value.data;
+    if (data instanceof Float32Array) return data;
+  }
+  return null;
 }
 
 // src/engine/mamba-coherence.ts
@@ -657,6 +743,7 @@ var VideoEngine = class _VideoEngine {
     args.onPromptExpanded?.(resolvedPrompt);
     const promptEmbedding = await this.diffusion.embedPrompt(resolvedPrompt);
     const negativeEmbedding = args.negativePrompt ? await this.diffusion.embedPrompt(args.negativePrompt) : null;
+    const timesteps = trimTimesteps(descriptor.defaultTimesteps, steps);
     const frames = [];
     const muxFrames = [];
     for (let frameIdx = 0; frameIdx < args.frames; frameIdx++) {
@@ -666,8 +753,8 @@ var VideoEngine = class _VideoEngine {
       const conditionedPrompt = coherenceMode === "prompt-bias" ? applyToPrompt({
         ctx: { mode: coherenceMode, strength: coherenceStrength, state: this.mambaState },
         promptEmbedding,
-        seqLen: 77,
-        embedDim: 768
+        seqLen: descriptor.sequenceLength,
+        embedDim: descriptor.textEmbedDim
       }) : promptEmbedding;
       let latent = this.diffusion.sampleInitialLatent(seed + frameIdx);
       if (coherenceMode === "latent-residual") {
@@ -680,8 +767,9 @@ var VideoEngine = class _VideoEngine {
         latent,
         condEmbedding: conditionedPrompt,
         uncondEmbedding: negativeEmbedding,
-        steps,
-        guidance
+        timesteps,
+        guidance,
+        seed: seed + frameIdx
       });
       const rgba = pixelsToRgba(pixels, width, height);
       const imageData = new ImageData(
@@ -722,6 +810,16 @@ var VideoEngine = class _VideoEngine {
 function deriveR2Base(baseUrl) {
   if (!baseUrl) return void 0;
   return `${baseUrl.replace(/\/$/, "")}/api/studio/weights`;
+}
+function trimTimesteps(defaults, steps) {
+  if (steps >= defaults.length) return defaults;
+  if (steps <= 1) return [defaults[0]];
+  const out = [];
+  for (let i = 0; i < steps; i++) {
+    const idx = Math.round(i * (defaults.length - 1) / (steps - 1));
+    out.push(defaults[idx]);
+  }
+  return out;
 }
 
 // src/components/StudioPanel.tsx
@@ -1136,6 +1234,7 @@ function StudioPanel({
   StudioPanel,
   VideoEngine,
   VideoPreview,
+  hasWebGPUSupport,
   probeDevice,
   useEngineStatus
 });

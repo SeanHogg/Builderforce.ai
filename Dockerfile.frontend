@@ -1,0 +1,62 @@
+# syntax=docker/dockerfile:1.7
+#
+# Builderforce.ai frontend — Next.js dev/build container.
+#
+# Multi-stage:
+#   1. sdk-build    — produces sdk/dist
+#   2. studio-build — produces studio/dist (depends on sdk's published surface)
+#   3. deps         — installs frontend deps with file:../sdk + file:../studio
+#                     resolvable because both /dist trees are copied in first
+#   4. dev          — Next.js dev server with HMR (default target)
+#   5. production   — `next build` + `next start` (for CI / prod images)
+
+# ----- sdk -----
+FROM node:20-bookworm-slim AS sdk-build
+WORKDIR /repo/sdk
+COPY sdk/package.json sdk/package-lock.json* ./
+RUN --mount=type=cache,target=/root/.npm npm install --no-audit --no-fund
+COPY sdk/tsconfig.json sdk/tsup.config.ts ./
+COPY sdk/src ./src
+RUN npm run build
+
+# ----- studio -----
+FROM node:20-bookworm-slim AS studio-build
+WORKDIR /repo/studio
+COPY studio/package.json studio/package-lock.json* ./
+RUN --mount=type=cache,target=/root/.npm npm install --no-audit --no-fund
+COPY studio/tsconfig.json studio/tsup.config.ts ./
+COPY studio/src ./src
+COPY studio/README.md ./README.md
+RUN npm run type-check && npm run build
+
+# ----- frontend deps -----
+FROM node:20-bookworm-slim AS deps
+WORKDIR /repo
+COPY --from=sdk-build /repo/sdk/dist /repo/sdk/dist
+COPY --from=sdk-build /repo/sdk/package.json /repo/sdk/package.json
+COPY --from=studio-build /repo/studio/dist /repo/studio/dist
+COPY --from=studio-build /repo/studio/package.json /repo/studio/package.json
+WORKDIR /repo/frontend
+COPY frontend/package.json frontend/pnpm-lock.yaml* ./
+RUN corepack enable && corepack prepare pnpm@10.23.0 --activate
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile || pnpm install
+
+# ----- dev (default) -----
+FROM deps AS dev
+WORKDIR /repo/frontend
+COPY frontend/ ./
+ENV NODE_ENV=development
+ENV NEXT_TELEMETRY_DISABLED=1
+EXPOSE 3000
+CMD ["pnpm", "dev", "--", "--hostname", "0.0.0.0"]
+
+# ----- production -----
+FROM deps AS production
+WORKDIR /repo/frontend
+COPY frontend/ ./
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN pnpm exec next build
+EXPOSE 3000
+CMD ["pnpm", "exec", "next", "start", "--", "--hostname", "0.0.0.0"]

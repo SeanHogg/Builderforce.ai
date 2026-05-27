@@ -20,7 +20,7 @@ export type {
 } from './types';
 
 export { VideoEngine } from './engine/video-engine';
-export { probeDevice } from './engine/device-router';
+export { probeDevice, hasWebGPUSupport } from './engine/device-router';
 export { MODEL_REGISTRY } from './engine/diffusion-engine';
 
 export { StudioPanel } from './components/StudioPanel';

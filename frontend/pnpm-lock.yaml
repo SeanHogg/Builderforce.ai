@@ -22,7 +22,7 @@ importers:
         version: file:../sdk
       '@seanhogg/builderforce-studio':
         specifier: file:../studio
-        version: file:../studio(@seanhogg/builderforce-sdk@file:../sdk)(onnxruntime-web@1.26.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: file:../studio(@huggingface/transformers@3.8.1)(@seanhogg/builderforce-sdk@file:../sdk)(onnxruntime-web@1.26.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@webcontainer/api':
         specifier: ^1.3.0
         version: 1.6.4
@@ -1025,6 +1025,7 @@ packages:
     resolution: {directory: ../studio, type: directory}
     engines: {node: '>=18'}
     peerDependencies:
+      '@huggingface/transformers': '>=3.8.0'
       '@seanhogg/builderforce-sdk': '>=0.8.0'
       onnxruntime-web: '>=1.21.0'
       react: '>=18'
@@ -4607,8 +4608,9 @@ snapshots:
 
   '@seanhogg/builderforce-sdk@file:../sdk': {}
 
-  '@seanhogg/builderforce-studio@file:../studio(@seanhogg/builderforce-sdk@file:../sdk)(onnxruntime-web@1.26.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@seanhogg/builderforce-studio@file:../studio(@huggingface/transformers@3.8.1)(@seanhogg/builderforce-sdk@file:../sdk)(onnxruntime-web@1.26.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
+      '@huggingface/transformers': 3.8.1
       '@seanhogg/builderforce-sdk': file:../sdk
       mp4-muxer: 5.2.2
       onnxruntime-web: 1.26.0

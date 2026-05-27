@@ -15,6 +15,7 @@
  */
 
 import { pipeline, env as hfEnv } from '@huggingface/transformers';
+import { hasWebGPUSupport, probeDevice } from '@seanhogg/builderforce-studio';
 import { downloadDataset, uploadArtifact, updateTrainingJob, streamTrainingLogs } from './api';
 import type { TrainingLog } from './types';
 
@@ -62,42 +63,16 @@ export interface WebGPUTrainerOptions {
 const WEBGPU_MAX_PARAMS = 2e9;
 
 /**
- * Checks whether WebGPU is available in the current browser context.
- */
-export function isWebGPUAvailable(): boolean {
-  return typeof navigator !== 'undefined' && 'gpu' in navigator;
-}
-
-/**
- * Requests a WebGPU adapter and device for training.
- * Returns null if WebGPU is unavailable or the adapter cannot be obtained.
- */
-export async function requestWebGPUDevice(): Promise<GPUDevice | null> {
-  if (!isWebGPUAvailable()) return null;
-  try {
-    const adapter = await (navigator as Navigator & { gpu: GPU }).gpu.requestAdapter({
-      powerPreference: 'high-performance',
-    });
-    if (!adapter) return null;
-    const device = await adapter.requestDevice({
-      requiredFeatures: [],
-      requiredLimits: {
-        maxBufferSize: adapter.limits?.maxBufferSize ?? 0,
-        maxStorageBufferBindingSize: adapter.limits?.maxStorageBufferBindingSize ?? 0,
-      },
-    });
-    return device;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Determines whether a model should use WebGPU in-browser training or
  * fall back to cloud GPU offload based on parameter count.
+ *
+ * WebGPU device-availability check delegates to `hasWebGPUSupport()` from
+ * the studio package — this file does NOT define its own probe. The previous
+ * `isWebGPUAvailable()` / `requestWebGPUDevice()` exports were collapsed into
+ * the studio's canonical `probeDevice()` after the studio package landed.
  */
 export function shouldUseWebGPU(maxParams: number): boolean {
-  return maxParams <= WEBGPU_MAX_PARAMS;
+  return hasWebGPUSupport() && maxParams <= WEBGPU_MAX_PARAMS;
 }
 
 /**
@@ -146,7 +121,8 @@ export class WebGPUTrainer {
   /** Initialise the WebGPU device and verify Transformers.js WebGPU integration. */
   async init(): Promise<void> {
     this.options.onLog('Initialising WebGPU device…');
-    this.device = await requestWebGPUDevice();
+    const probed = await probeDevice('webgpu');
+    this.device = probed?.gpuDevice ?? null;
     if (!this.device) {
       throw new Error('WebGPU is not available in this browser. Please use Chrome 113+ or Edge 113+.');
     }

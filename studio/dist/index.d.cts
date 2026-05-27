@@ -1,5 +1,5 @@
-import { a as DiffusionModelId, C as CoherenceMode, c as MambaStateSnapshot, P as ProbedDevice } from './index-BcwxwloF.cjs';
-export { A as ActiveDevice, D as DeviceTarget, G as GenerateOptions, b as GenerateResult, M as MODEL_REGISTRY, d as ModelDescriptor, V as VideoEngine, e as VideoEngineOptions, W as WeightSource, p as probeDevice } from './index-BcwxwloF.cjs';
+import { a as DiffusionModelId, C as CoherenceMode, c as MambaStateSnapshot, P as ProbedDevice } from './index-5vZh6pTw.cjs';
+export { A as ActiveDevice, D as DeviceTarget, G as GenerateOptions, b as GenerateResult, M as MODEL_REGISTRY, d as ModelDescriptor, V as VideoEngine, e as VideoEngineOptions, W as WeightSource, h as hasWebGPUSupport, p as probeDevice } from './index-5vZh6pTw.cjs';
 import * as react_jsx_runtime from 'react/jsx-runtime';
 
 interface StudioPanelProps {

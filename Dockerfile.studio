@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1.7
+#
+# @seanhogg/builderforce-studio — standalone build image.
+#
+# Produces the published-shape `dist/` so the package can be consumed either by
+# the colocated frontend (via `file:../studio`) or as a published npm artifact.
+# Used by:
+#   - Dockerfile.frontend (COPY --from=studio-build /studio/dist /app/studio/dist)
+#   - the publish-studio job in .github/workflows/release.yml (mirror, not source)
+#
+# Two stages so the cached `npm install` layer survives source edits and only
+# the final `dist/` ships forward — no node_modules in downstream consumers.
+
+FROM node:20-bookworm-slim AS deps
+WORKDIR /studio
+COPY studio/package.json studio/package-lock.json* ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm install --no-audit --no-fund
+
+FROM deps AS build
+COPY studio/tsconfig.json studio/tsup.config.ts ./
+COPY studio/src ./src
+COPY studio/README.md ./README.md
+RUN npm run type-check
+RUN npm run build
+
+FROM scratch AS export
+COPY --from=build /studio/dist /dist
+COPY --from=build /studio/package.json /package.json

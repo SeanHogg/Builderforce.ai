@@ -121,6 +121,8 @@ export class VideoEngine {
       ? await this.diffusion.embedPrompt(args.negativePrompt)
       : null;
 
+    const timesteps = trimTimesteps(descriptor.defaultTimesteps, steps);
+
     const frames: ImageBitmap[] = [];
     const muxFrames: MuxFrame[] = [];
 
@@ -134,8 +136,8 @@ export class VideoEngine {
           ? applyToPrompt({
               ctx: { mode: coherenceMode, strength: coherenceStrength, state: this.mambaState },
               promptEmbedding,
-              seqLen: 77,
-              embedDim: 768,
+              seqLen: descriptor.sequenceLength,
+              embedDim: descriptor.textEmbedDim,
             })
           : promptEmbedding;
 
@@ -151,8 +153,9 @@ export class VideoEngine {
         latent,
         condEmbedding: conditionedPrompt,
         uncondEmbedding: negativeEmbedding,
-        steps,
+        timesteps,
         guidance,
+        seed: seed + frameIdx,
       });
 
       const rgba = pixelsToRgba(pixels, width, height);
@@ -201,4 +204,20 @@ export class VideoEngine {
 function deriveR2Base(baseUrl: string | undefined): string | undefined {
   if (!baseUrl) return undefined;
   return `${baseUrl.replace(/\/$/, '')}/api/studio/weights`;
+}
+
+/**
+ * Honour the consumer-requested step count while staying on the model's
+ * trained timestep schedule. Picks `steps` indices evenly across the
+ * descriptor's default schedule so 2-step LCM still hits useful timesteps.
+ */
+function trimTimesteps(defaults: number[], steps: number): number[] {
+  if (steps >= defaults.length) return defaults;
+  if (steps <= 1) return [defaults[0]];
+  const out: number[] = [];
+  for (let i = 0; i < steps; i++) {
+    const idx = Math.round((i * (defaults.length - 1)) / (steps - 1));
+    out.push(defaults[idx]);
+  }
+  return out;
 }

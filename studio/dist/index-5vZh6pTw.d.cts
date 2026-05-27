@@ -37,12 +37,21 @@ interface ModelDescriptor {
     defaultGuidance: number;
     /** Minimum advertised VRAM in MB. The engine warns below this. */
     minVramMb: number;
-    /** ONNX weight files that compose this pipeline. */
+    /** Hugging Face repo id used both for the transformers.js tokenizer/text-encoder
+     *  pull and for the raw-ORT UNet/VAE weight fetch through weight-cache.ts. */
+    hfRepo: string;
+    /** Cross-attention dimension. SD1.x = 768, SD2.x / SD-Turbo = 1024. */
+    textEmbedDim: number;
+    /** Tokenizer max sequence length. 77 for CLIP-based SD. */
+    sequenceLength: number;
+    /** VAE scale factor applied before decoder. SD1.x = 0.18215, SDXL = 0.13025. */
+    vaeScalingFactor: number;
+    /** Diffusion timesteps the scheduler hits, ordered most-noisy → least. */
+    defaultTimesteps: number[];
+    /** ONNX weight files served via the studio R2 proxy / HF CDN fallback. */
     files: {
         unet: string;
         vaeDecoder: string;
-        textEncoder: string;
-        tokenizer: string;
     };
 }
 interface VideoEngineOptions {
@@ -175,6 +184,16 @@ interface ProbedDevice {
     approxMemoryMb: number | null;
 }
 /**
+ * Synchronous WebGPU-availability check. Returns true when the browser exposes
+ * `navigator.gpu` — does NOT actually request an adapter, so it's safe to call
+ * during render. Consumers that need the actual device should `await probeDevice('webgpu')`.
+ *
+ * This is the single sync probe — frontend's previous `isWebGPUAvailable` /
+ * `isMambaWebGPUAvailable` / `requestWebGPUDevice` all collapse to this plus
+ * `probeDevice('webgpu')`.
+ */
+declare function hasWebGPUSupport(): boolean;
+/**
  * Probe in priority order. Pass an explicit `target` to force one path
  * (useful for tests and for the StudioPanel's "force CPU" advanced toggle).
  *
@@ -184,19 +203,22 @@ interface ProbedDevice {
 declare function probeDevice(target?: DeviceTarget): Promise<ProbedDevice | null>;
 
 /**
- * DiffusionEngine — ONNX-RT-Web backed denoising pipeline.
+ * DiffusionEngine — hybrid ORT + transformers.js denoising pipeline.
  *
- * One `denoise(latent, condEmbedding, steps, guidance)` primitive is shared
- * between LCM (4-step) and SD-Turbo (1-step). The per-model differences live
- * in the MODEL_REGISTRY (steps, guidance defaults, file layout) and in the
- * scheduler choice, not in two parallel pipelines.
+ * Layered architecture:
+ *   • transformers.js (extension layer) — owns the CLIP BPE tokenizer + the
+ *     text-encoder ONNX session. We do NOT hand-roll BPE.
+ *   • raw onnxruntime-web (base layer) — owns the UNet + VAE-decoder sessions.
+ *     We keep direct control here so Mamba latent-residual coherence can
+ *     inject biases between scheduler steps without going through an opaque
+ *     pipeline wrapper.
  *
- * Hardware path is decided by device-router (already probed). This module
- * receives the InferenceSession config and runs the ONNX graphs.
+ * The shared denoise() primitive runs an LCM-style consistency-model step
+ * that works for both backbones — SD-Turbo with timesteps=[999] degrades to
+ * the standard single-step formulation, LCM with timesteps=[999,759,519,259]
+ * uses the same formula 4× with the right alpha schedule.
  */
 
-declare const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor & {
-    hfRepo: string;
-}>;
+declare const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor>;
 
-export { type ActiveDevice as A, type CoherenceMode as C, type DeviceTarget as D, type GenerateOptions as G, MODEL_REGISTRY as M, type ProbedDevice as P, VideoEngine as V, type WeightSource as W, type DiffusionModelId as a, type GenerateResult as b, type MambaStateSnapshot as c, type ModelDescriptor as d, type VideoEngineOptions as e, probeDevice as p };
+export { type ActiveDevice as A, type CoherenceMode as C, type DeviceTarget as D, type GenerateOptions as G, MODEL_REGISTRY as M, type ProbedDevice as P, VideoEngine as V, type WeightSource as W, type DiffusionModelId as a, type GenerateResult as b, type MambaStateSnapshot as c, type ModelDescriptor as d, type VideoEngineOptions as e, hasWebGPUSupport as h, probeDevice as p };

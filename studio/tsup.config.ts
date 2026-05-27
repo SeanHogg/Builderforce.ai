@@ -17,6 +17,7 @@ export default defineConfig({
     'react-dom',
     'react/jsx-runtime',
     'onnxruntime-web',
+    '@huggingface/transformers',
     'mambacode.js',
     '@seanhogg/builderforce-sdk',
   ],

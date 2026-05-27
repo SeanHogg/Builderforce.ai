@@ -1,8 +1,9 @@
 import {
   MODEL_REGISTRY,
   VideoEngine,
+  hasWebGPUSupport,
   probeDevice
-} from "./chunk-U3Q7HXEX.mjs";
+} from "./chunk-SM2HXDXS.mjs";
 
 // src/components/StudioPanel.tsx
 import { useCallback, useEffect as useEffect3, useRef as useRef2, useState as useState2 } from "react";
@@ -415,6 +416,7 @@ export {
   StudioPanel,
   VideoEngine,
   VideoPreview,
+  hasWebGPUSupport,
   probeDevice,
   useEngineStatus
 };
