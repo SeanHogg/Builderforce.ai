@@ -157,7 +157,7 @@ export class MambaModelProvider implements ModelProvider {
     }
 
     try {
-      // Dynamic import — mambacode.js is a pure-ESM browser library
+      // Dynamic import — mambacode.js is a pure-ESM browser library.
       const mamba = await import('mambacode.js');
 
       const { device } = await mamba.initWebGPU();
