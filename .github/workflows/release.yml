@@ -118,107 +118,21 @@ jobs:
 
   publish-sdk:
     name: Publish SDK (@seanhogg/builderforce-sdk)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Use Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      # Trusted Publishing on `npm publish` requires npm >= 11.5.1, which is
-      # newer than the npm 10.x bundled with Node 20. Without this upgrade
-      # `npm publish` skips the OIDC flow entirely and errors `ENEEDAUTH`
-      # since no `_authToken` is in `.npmrc`.
-      - name: Upgrade npm to a Trusted-Publishing-capable version
-        run: |
-          npm install -g npm@latest
-          echo "npm $(npm --version) — Trusted Publishing requires >= 11.5.1"
-
-      - name: Install SDK dependencies
-        working-directory: sdk
-        run: npm install
-
-      - name: Type-check + test
-        working-directory: sdk
-        run: |
-          npm run type-check
-          npm test
-
-      - name: Build
-        working-directory: sdk
-        run: npm run build
-
-      # Auth flow: Trusted Publishing OIDC (configured on npmjs.com →
-      # @seanhogg/builderforce-sdk → Publishing access → Add trusted
-      # publisher → GitHub Actions / SeanHogg / Builderforce.ai /
-      # release.yml). With `id-token: write` granted at workflow level and
-      # no `_authToken` set in `.npmrc`, npm CLI 11.15+ auto-discovers OIDC,
-      # mints a GitHub OIDC token, exchanges it at npmjs's OIDC endpoint,
-      # and uses the returned credential for the publish PUT. No long-lived
-      # token in repo secrets.
-      #
-      # `JS-DevTools/npm-publish@v3` would be cleaner but requires a `token`
-      # input — it doesn't support OIDC trusted publishing as of v3. Running
-      # `npm publish` directly is the only path that activates OIDC auth.
-      - name: Publish if version is new
-        working-directory: sdk
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          if npm view "@seanhogg/builderforce-sdk@$VERSION" version >/dev/null 2>&1; then
-            echo "@seanhogg/builderforce-sdk@$VERSION is already on npm — skipping."
-          else
-            echo "@seanhogg/builderforce-sdk@$VERSION is new — publishing via OIDC."
-            npm publish --provenance --access public
-          fi
+    uses: ./.github/workflows/publish-npm-package.yml
+    with:
+      package-dir: sdk
+      package-name: '@seanhogg/builderforce-sdk'
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   publish-studio:
     name: Publish Studio (@seanhogg/builderforce-studio)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Use Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Upgrade npm to a Trusted-Publishing-capable version
-        run: |
-          npm install -g npm@latest
-          echo "npm $(npm --version) — Trusted Publishing requires >= 11.5.1"
-
-      - name: Install Studio dependencies
-        working-directory: studio
-        run: npm install
-
-      - name: Type-check + test
-        working-directory: studio
-        run: |
-          npm run type-check
-          npm test --if-present
-
-      - name: Build
-        working-directory: studio
-        run: npm run build
-
-      # Trusted Publishing OIDC — same pattern as publish-sdk.
-      # Configure once at https://www.npmjs.com/package/@seanhogg/builderforce-studio/access
-      # → Publishing access → Add trusted publisher → GitHub Actions /
-      # SeanHogg / Builderforce.ai / release.yml.
-      - name: Publish if version is new
-        working-directory: studio
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          if npm view "@seanhogg/builderforce-studio@$VERSION" version >/dev/null 2>&1; then
-            echo "@seanhogg/builderforce-studio@$VERSION is already on npm — skipping."
-          else
-            echo "@seanhogg/builderforce-studio@$VERSION is new — publishing via OIDC."
-            npm publish --provenance --access public
-          fi
+    uses: ./.github/workflows/publish-npm-package.yml
+    with:
+      package-dir: studio
+      package-name: '@seanhogg/builderforce-studio'
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   deploy-docs:
     name: Deploy Docs (builderforce.ai/docs)
