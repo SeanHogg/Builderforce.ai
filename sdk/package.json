@@ -49,6 +49,7 @@
     "build": "tsup --config tsup.config.ts",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
+    "prepare": "npm run build",
     "prepublishOnly": "npm run build"
   },
   "engines": {

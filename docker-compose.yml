@@ -2,64 +2,35 @@
 #
 #   docker compose up --build
 #
-# Brings up the entire stack with zero external prerequisites:
-#   - postgres :5432  local Postgres for the API gateway
-#   - db-migrate      one-shot: runs api/scripts/migrate.mjs against postgres
-#   - sdk-watch       tsup --watch on sdk/, publishes to a named volume
+# Brings up:
+#   - sdk-watch       tsup --watch on sdk/,    publishes to a named volume
 #   - studio-watch    tsup --watch on studio/, publishes to a named volume
-#   - api      :8787  Cloudflare Worker (wrangler dev), reads from postgres
-#   - frontend :3000  Next.js dev server with HMR; consumes sdk + studio via
-#                     link: protocol (symlinks into host filesystem) so edits
-#                     to studio/src trigger tsup rebuild → next HMR.
+#   - api      :8787  Cloudflare Worker (wrangler dev)
+#   - frontend :3000  Next.js dev with HMR
 #
-# The AI Video Studio itself runs in the BROWSER (WebGPU / WebNN). Docker only
-# hosts the dev servers. Open http://localhost:3000/studio in Chrome 113+.
+# Hot-reload behaviour:
+#   - Edit studio/src/*  → studio-watch tsup rebuilds → frontend HMR picks up
+#   - Edit sdk/src/*     → sdk-watch tsup rebuilds   → frontend HMR picks up
+#   - Edit frontend/src/* → next dev HMR (direct)
+#   - Edit api/src/*     → wrangler dev hot-reloads worker
+#
+# Prerequisites the stack does NOT provision (intentional):
+#   - NEON_DATABASE_URL must be set in api/.dev.vars (or env). The api uses
+#     @neondatabase/serverless HTTP transport — see Gap Register for why
+#     we don't bundle a local Postgres.
+#   - JWT_SECRET and OPENROUTER_API_KEY also live in api/.dev.vars.
+#
+# The AI Video Studio runs entirely in the BROWSER (WebGPU / WebNN). Docker
+# only hosts the dev servers. Open http://localhost:3000/studio in Chrome 113+.
 
 volumes:
-  postgres-data:
   sdk-dist:
   studio-dist:
 
 services:
   # ---------------------------------------------------------------------------
-  # Postgres + migrations
-  # ---------------------------------------------------------------------------
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: builderforce
-      POSTGRES_PASSWORD: builderforce
-      POSTGRES_DB: builderforce
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U builderforce -d builderforce"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-
-  db-migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile.api
-      target: deps
-    command: ["node", "scripts/migrate.mjs"]
-    working_dir: /repo/api
-    environment:
-      NEON_DATABASE_URL: postgres://builderforce:builderforce@postgres:5432/builderforce
-    volumes:
-      - ./api/scripts:/repo/api/scripts:ro
-      - ./api/migrations:/repo/api/migrations:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: "no"
-
-  # ---------------------------------------------------------------------------
   # Workspace watchers — produce dist/ to named volumes that frontend consumes.
-  # Each runs `npm install` once then `tsup --watch` for the lifetime of the stack.
+  # Each runs `npm install` once then `tsup --watch` for the stack's lifetime.
   # ---------------------------------------------------------------------------
   sdk-watch:
     image: node:20-bookworm-slim
@@ -104,6 +75,7 @@ services:
 
   # ---------------------------------------------------------------------------
   # API worker (wrangler dev)
+  # workerd is pre-pulled at image-build time (Dockerfile.api deps stage).
   # ---------------------------------------------------------------------------
   api:
     build:
@@ -113,19 +85,13 @@ services:
     environment:
       ENVIRONMENT: development
       CORS_ORIGINS: http://localhost:3000
-      NEON_DATABASE_URL: postgres://builderforce:builderforce@postgres:5432/builderforce
-      # JWT_SECRET and OPENROUTER_API_KEY come from api/.dev.vars if present.
+      # NEON_DATABASE_URL, JWT_SECRET, OPENROUTER_API_KEY come from api/.dev.vars
     ports:
       - "8787:8787"
     volumes:
       - ./api/src:/repo/api/src:ro
       - ./api/wrangler.toml:/repo/api/wrangler.toml:ro
       - ./api/.dev.vars:/repo/api/.dev.vars:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      db-migrate:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:8787/health || exit 1"]
       interval: 10s
@@ -135,9 +101,8 @@ services:
 
   # ---------------------------------------------------------------------------
   # Frontend (Next.js dev)
-  # Frontend's node_modules symlinks (pnpm link:) point at /repo/sdk and
-  # /repo/studio — bind-mounted from host. The dist subdirs are populated by
-  # sdk-watch + studio-watch via named volumes mounted onto the same paths.
+  # link: protocol means sdk + studio are symlinks; bind-mount + named volume
+  # together let watcher rebuilds flow into the running Next dev server.
   # ---------------------------------------------------------------------------
   frontend:
     build:
