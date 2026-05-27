@@ -5,12 +5,20 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: version,
   },
+  outputFileTracingRoot: __dirname,
   transpilePackages: ['@monaco-editor/react', 'monaco-editor', '@seanhogg/builderforce-studio', '@seanhogg/builderforce-sdk'],
   webpack(config) {
     config.module.rules.push({
       test: /\.md$/,
       type: 'asset/source',
     });
+    // pnpm + linked workspace packages: when webpack follows the symlinked
+    // package into its real .pnpm/<hash>/ location, peer-dep resolution
+    // from that deep path fails to find sibling packages. symlinks:false
+    // keeps the symlink path during resolution so module lookup walks the
+    // declared path's parents — which are inside frontend/node_modules
+    // where both packages exist together.
+    config.resolve.symlinks = false;
     return config;
   },
   async headers() {
