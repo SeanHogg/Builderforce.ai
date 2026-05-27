@@ -14,15 +14,16 @@
  *   - Final adapter uploaded to R2 via worker artifact endpoint
  */
 
-import { pipeline, env as hfEnv } from '@huggingface/transformers';
-import { hasWebGPUSupport, probeDevice } from '@seanhogg/builderforce-studio';
+import { pipeline } from '@huggingface/transformers';
+import {
+  configureOnnxRuntime,
+  hasWebGPUSupport,
+  probeDevice,
+} from '@seanhogg/builderforce-studio';
 import { downloadDataset, uploadArtifact, updateTrainingJob, streamTrainingLogs } from './api';
 import type { TrainingLog } from './types';
 
-hfEnv.allowLocalModels = false;
-if (hfEnv.backends?.onnx?.wasm) {
-  hfEnv.backends.onnx.wasm.numThreads = 1;
-}
+configureOnnxRuntime();
 
 export interface LoRAConfig {
   rank: number;

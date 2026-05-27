@@ -17,6 +17,8 @@
     "@cloudflare/next-on-pages": "^1.13.16",
     "@huggingface/transformers": "^3.8.1",
     "@monaco-editor/react": "^4.6.0",
+    "@seanhogg/builderforce-sdk": "link:../sdk",
+    "@seanhogg/builderforce-studio": "link:../studio",
     "@webcontainer/api": "^1.3.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0",
@@ -25,10 +27,8 @@
     "lit": "^3.3.2",
     "mambacode.js": "github:SeanHogg/Mamba",
     "monaco-editor": "^0.55.1",
-    "@seanhogg/builderforce-studio": "link:../studio",
-    "@seanhogg/builderforce-sdk": "link:../sdk",
-    "onnxruntime-web": "^1.21.0",
     "next": "15.5.2",
+    "onnxruntime-web": "^1.21.0",
     "react": "^18",
     "react-dom": "^18",
     "react-markdown": "^10.1.0",
@@ -53,6 +53,7 @@
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",
+    "vercel": "^47.1.4",
     "vitest": "^4.0.18"
   },
   "packageManager": "pnpm@10.23.0"
