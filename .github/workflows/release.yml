@@ -59,21 +59,16 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: frontend/pnpm-lock.yaml
 
-      # Frontend has `link:../sdk` and `link:../studio` deps that point to
-      # sibling workspaces. pnpm symlinks them but does not auto-build their
-      # dist/ output, so the next build below would fail to resolve module
-      # entry points. Build the linked workspaces first.
-      - name: Build SDK
+      # Frontend's `link:` deps don't auto-build the linked packages' dist/.
+      # Each linked package's `prepare` script runs `npm run build` on install,
+      # so a plain `npm install` here is sufficient to produce dist/.
+      - name: Install + build SDK
         working-directory: sdk
-        run: |
-          npm install --no-audit --no-fund
-          npm run build
+        run: npm install --no-audit --no-fund
 
-      - name: Build Studio
+      - name: Install + build Studio
         working-directory: studio
-        run: |
-          npm install --no-audit --no-fund
-          npm run build
+        run: npm install --no-audit --no-fund
 
       - name: Install dependencies
         working-directory: frontend
