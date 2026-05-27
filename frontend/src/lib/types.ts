@@ -267,19 +267,12 @@ export type TrainingMode = 'behavior' | 'memory' | 'hybrid' | 'mamba';
 /** Inference execution target */
 export type InferenceMode = 'local' | 'hybrid' | 'cloud';
 
-/** Compact snapshot of a Mamba SSM state vector, serialisable to IndexedDB / R2 */
-export interface MambaStateSnapshot {
-  /** Packed Float32 values encoded as a plain number array for JSON portability */
-  data: number[];
-  /** Dimensionality of each state channel */
-  dim: number;
-  /** SSM order (hidden states per channel) */
-  order: number;
-  /** Number of parallel channels */
-  channels: number;
-  /** Monotonically increasing sequence counter */
-  step: number;
-}
+/** Compact snapshot of a Mamba SSM state vector, serialisable to IndexedDB / R2.
+ *  Canonical definition lives in @seanhogg/builderforce-studio — re-exported
+ *  here so existing frontend imports from '@/lib/types' keep working without
+ *  carrying a duplicate declaration. */
+import type { MambaStateSnapshot } from '@seanhogg/builderforce-studio';
+export type { MambaStateSnapshot };
 
 /** Configuration for the Mamba state engine */
 export interface MambaConfig {

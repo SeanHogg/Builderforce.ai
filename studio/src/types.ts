@@ -44,12 +44,21 @@ export interface ModelDescriptor {
   defaultGuidance: number;
   /** Minimum advertised VRAM in MB. The engine warns below this. */
   minVramMb: number;
-  /** ONNX weight files that compose this pipeline. */
+  /** Hugging Face repo id used both for the transformers.js tokenizer/text-encoder
+   *  pull and for the raw-ORT UNet/VAE weight fetch through weight-cache.ts. */
+  hfRepo: string;
+  /** Cross-attention dimension. SD1.x = 768, SD2.x / SD-Turbo = 1024. */
+  textEmbedDim: number;
+  /** Tokenizer max sequence length. 77 for CLIP-based SD. */
+  sequenceLength: number;
+  /** VAE scale factor applied before decoder. SD1.x = 0.18215, SDXL = 0.13025. */
+  vaeScalingFactor: number;
+  /** Diffusion timesteps the scheduler hits, ordered most-noisy → least. */
+  defaultTimesteps: number[];
+  /** ONNX weight files served via the studio R2 proxy / HF CDN fallback. */
   files: {
     unet: string;
     vaeDecoder: string;
-    textEncoder: string;
-    tokenizer: string;
   };
 }
 

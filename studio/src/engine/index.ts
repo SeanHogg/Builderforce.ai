@@ -6,7 +6,7 @@
  */
 
 export { VideoEngine } from './video-engine';
-export { probeDevice } from './device-router';
+export { probeDevice, hasWebGPUSupport } from './device-router';
 export { MODEL_REGISTRY } from './diffusion-engine';
 export type {
   MambaStateSnapshot,

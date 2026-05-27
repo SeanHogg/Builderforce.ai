@@ -28,7 +28,9 @@ export interface ApplyToPromptArgs {
   ctx: CoherenceContext;
   /** Original prompt embedding [1, seqLen, embedDim]. */
   promptEmbedding: Float32Array;
+  /** Sequence length (e.g. 77 for CLIP). */
   seqLen: number;
+  /** Embedding dimension (768 for SD1.x, 1024 for SD2.x / SD-Turbo). Read from MODEL_REGISTRY, not hardcoded. */
   embedDim: number;
 }
 

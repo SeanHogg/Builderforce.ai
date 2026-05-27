@@ -16,8 +16,9 @@ import {
   listTrainingJobs,
 } from '@/lib/api';
 import { getApiBaseUrl } from '@/lib/apiClient';
-import { WebGPUTrainer, isWebGPUAvailable, shouldUseWebGPU, type TrainingStep } from '@/lib/webgpu-trainer';
-import { MambaEngine, isMambaWebGPUAvailable } from '@/lib/mamba-engine';
+import { hasWebGPUSupport } from '@seanhogg/builderforce-studio';
+import { WebGPUTrainer, shouldUseWebGPU, type TrainingStep } from '@/lib/webgpu-trainer';
+import { MambaEngine } from '@/lib/mamba-engine';
 import { MambaModelProvider, type MambaProviderConfig } from '@/lib/model-provider';
 
 interface AITrainingPanelProps {
@@ -61,8 +62,8 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
   const [isGenerating, setIsGenerating] = useState(false);
   const [isTraining, setIsTraining] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const [webgpuAvailable] = useState(isWebGPUAvailable);
-  const [mambaWebGPU] = useState(isMambaWebGPUAvailable);
+  const [webgpuAvailable] = useState(hasWebGPUSupport);
+  const [mambaWebGPU] = useState(hasWebGPUSupport);
   const [memorySequences, setMemorySequences] = useState('');
   const trainerRef = useRef<WebGPUTrainer | null>(null);
   const mambaRef = useRef<MambaEngine | null>(null);

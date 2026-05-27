@@ -1,11 +1,13 @@
 import {
   MODEL_REGISTRY,
   VideoEngine,
+  hasWebGPUSupport,
   probeDevice
-} from "./chunk-U3Q7HXEX.mjs";
+} from "./chunk-SM2HXDXS.mjs";
 export {
   MODEL_REGISTRY,
   VideoEngine,
+  hasWebGPUSupport,
   probeDevice
 };
 //# sourceMappingURL=engine.mjs.map

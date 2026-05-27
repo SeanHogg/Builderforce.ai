@@ -1,0 +1,60 @@
+# Builderforce.ai — full-stack local dev via Docker.
+#
+#   docker compose up --build
+#
+# Brings up:
+#   - api     :8787  Cloudflare Worker (wrangler dev)
+#   - frontend:3000  Next.js (with AI Video Studio at /studio)
+#
+# The AI Video Studio runs entirely in the browser (WebGPU / WebNN) — Docker
+# only hosts the dev servers. Open http://localhost:3000/studio in Chrome 113+
+# with hardware acceleration enabled.
+#
+# Studio + SDK are built INSIDE the frontend image (multi-stage), so the host
+# does not need Node installed. Each rebuild picks up the latest source.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+      target: dev
+    environment:
+      ENVIRONMENT: development
+      CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8787:8787"
+    volumes:
+      # Source + config are mounted so wrangler dev picks up edits.
+      # `.dev.vars` is the wrangler convention for local secrets — drop
+      # NEON_DATABASE_URL / JWT_SECRET / OPENROUTER_API_KEY there.
+      - ./api/src:/repo/api/src:ro
+      - ./api/wrangler.toml:/repo/api/wrangler.toml:ro
+      - ./api/.dev.vars:/repo/api/.dev.vars:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8787/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      target: dev
+    environment:
+      NEXT_PUBLIC_WORKER_URL: http://localhost:8787
+      NEXT_PUBLIC_API_URL: http://localhost:8787
+    ports:
+      - "3000:3000"
+    volumes:
+      # Hot-reload frontend source. Studio and SDK are built into the image
+      # (`COPY --from=studio-build`), so editing studio/src needs a rebuild —
+      # tradeoff for avoiding two extra long-running tsup watchers.
+      - ./frontend/src:/repo/frontend/src
+      - ./frontend/public:/repo/frontend/public:ro
+      - ./frontend/next.config.js:/repo/frontend/next.config.js:ro
+    depends_on:
+      api:
+        condition: service_healthy

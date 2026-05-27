@@ -45,6 +45,15 @@ interface NavigatorWithMl {
 }
 
 /**
+ * Synchronous WebGPU-availability check. Returns true when the browser exposes
+ * `navigator.gpu` — does NOT request an adapter, so it's safe to call during
+ * render. Consumers that need the actual device should `await probeDevice('webgpu')`.
+ */
+export function hasWebGPUSupport(): boolean {
+  return typeof navigator !== 'undefined' && 'gpu' in navigator;
+}
+
+/**
  * Probe in priority order. Pass an explicit `target` to force one path
  * (useful for tests and for the StudioPanel's "force CPU" advanced toggle).
  *
@@ -98,7 +107,7 @@ async function probeWebNN(): Promise<ProbedDevice | null> {
 }
 
 async function probeWebGPU(): Promise<ProbedDevice | null> {
-  if (typeof navigator === 'undefined') return null;
+  if (!hasWebGPUSupport()) return null;
   const nav = navigator as Navigator & GpuWithRequestAdapter;
   if (!nav.gpu) return null;
 
