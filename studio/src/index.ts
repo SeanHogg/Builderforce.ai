@@ -22,6 +22,8 @@ export type {
 export { VideoEngine } from './engine/video-engine';
 export { probeDevice, hasWebGPUSupport } from './engine/device-router';
 export { MODEL_REGISTRY } from './engine/diffusion-engine';
+export { configureOnnxRuntime } from './engine/onnx-runtime-config';
+export type { OnnxRuntimeConfigOptions } from './engine/onnx-runtime-config';
 
 export { StudioPanel } from './components/StudioPanel';
 export type { StudioPanelProps } from './components/StudioPanel';

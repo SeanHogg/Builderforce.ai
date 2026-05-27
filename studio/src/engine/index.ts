@@ -8,6 +8,8 @@
 export { VideoEngine } from './video-engine';
 export { probeDevice, hasWebGPUSupport } from './device-router';
 export { MODEL_REGISTRY } from './diffusion-engine';
+export { configureOnnxRuntime } from './onnx-runtime-config';
+export type { OnnxRuntimeConfigOptions } from './onnx-runtime-config';
 export type {
   MambaStateSnapshot,
   DeviceTarget,

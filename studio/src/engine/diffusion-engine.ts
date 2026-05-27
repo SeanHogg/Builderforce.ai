@@ -17,7 +17,6 @@
 
 import * as ort from 'onnxruntime-web';
 import {
-  env as hfEnv,
   AutoTokenizer,
   AutoModel,
   type PreTrainedTokenizer,
@@ -31,13 +30,11 @@ import type {
 } from '../types';
 import type { ProbedDevice } from './device-router';
 import { getOrFetchWeight } from './weight-cache';
+import { configureOnnxRuntime } from './onnx-runtime-config';
 
-// transformers.js global configuration — idempotent so safe alongside the
-// frontend's existing hfEnv usage in webgpu-trainer.ts.
-hfEnv.allowLocalModels = false;
-if (hfEnv.backends?.onnx?.wasm) {
-  hfEnv.backends.onnx.wasm.numThreads = 1;
-}
+// Apply shared ONNX runtime config (WASM CDN paths, thread count) once at
+// module load. Idempotent — safe to call from multiple modules.
+configureOnnxRuntime();
 
 // ---------------------------------------------------------------------------
 // Model registry — single source of truth for per-model dims, timesteps,
