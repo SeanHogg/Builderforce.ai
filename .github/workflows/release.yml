@@ -163,6 +163,52 @@ jobs:
             npm publish --provenance --access public
           fi
 
+  publish-studio:
+    name: Publish Studio (@seanhogg/builderforce-studio)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Upgrade npm to a Trusted-Publishing-capable version
+        run: |
+          npm install -g npm@latest
+          echo "npm $(npm --version) — Trusted Publishing requires >= 11.5.1"
+
+      - name: Install Studio dependencies
+        working-directory: studio
+        run: npm install
+
+      - name: Type-check + test
+        working-directory: studio
+        run: |
+          npm run type-check
+          npm test --if-present
+
+      - name: Build
+        working-directory: studio
+        run: npm run build
+
+      # Trusted Publishing OIDC — same pattern as publish-sdk.
+      # Configure once at https://www.npmjs.com/package/@seanhogg/builderforce-studio/access
+      # → Publishing access → Add trusted publisher → GitHub Actions /
+      # SeanHogg / Builderforce.ai / release.yml.
+      - name: Publish if version is new
+        working-directory: studio
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "@seanhogg/builderforce-studio@$VERSION" version >/dev/null 2>&1; then
+            echo "@seanhogg/builderforce-studio@$VERSION is already on npm — skipping."
+          else
+            echo "@seanhogg/builderforce-studio@$VERSION is new — publishing via OIDC."
+            npm publish --provenance --access public
+          fi
+
   deploy-docs:
     name: Deploy Docs (builderforce.ai/docs)
     runs-on: ubuntu-latest

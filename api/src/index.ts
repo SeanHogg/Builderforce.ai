@@ -74,6 +74,7 @@ import { createCostForecastRoutes }    from './presentation/routes/costForecastR
 import { createDashboardRoutes }       from './presentation/routes/dashboardRoutes';
 import { createTeamMemoryRoutes }      from './presentation/routes/teamMemoryRoutes';
 import { createPublicApiRoutes }       from './presentation/routes/publicApiRoutes';
+import { createStudioRoutes }          from './presentation/routes/studioWeightRoutes';
 
 import { API_VERSION } from './version';
 import {
@@ -241,6 +242,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/teams/memory', createTeamMemoryRoutes(db));
   app.route('/api/ide',       createIdeRoutes());
   app.route('/api/ai',        createIdeAiRoutes(projectService));
+  app.route('/api/studio',    createStudioRoutes());
 
   app.onError(errorHandler);
   app.notFound((c) => addCorsToResponse(c, c.json({ error: 'Not found' }, 404)));
