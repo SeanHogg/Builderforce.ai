@@ -2,27 +2,35 @@
 #
 # Builderforce.ai API worker — `wrangler dev` container.
 #
-# Cloudflare Workers can run locally via wrangler dev's workerd binary. The
+# Cloudflare Workers run locally via wrangler dev's workerd binary. The
 # Worker binds R2 + Durable Objects in production; locally wrangler dev
-# provides in-memory replacements automatically (controlled by wrangler.toml).
+# provides in-memory replacements automatically.
 #
-# Environment expected at runtime:
-#   - NEON_DATABASE_URL   (real Neon postgres or compatible)
-#   - JWT_SECRET
-#   - OPENROUTER_API_KEY  (for LLM gateway prompt expansion)
-# Inject via docker-compose env_file or env: block.
+# `NEON_DATABASE_URL` is injected by docker-compose pointing at the bundled
+# postgres service. `JWT_SECRET` / `OPENROUTER_API_KEY` come from api/.dev.vars.
+#
+# Targets:
+#   - deps  (intermediate)  node_modules only — reused by db-migrate
+#   - dev   (default)       wrangler dev on :8787
+#
+# The `deps` stage also pre-pulls workerd by invoking `wrangler --version`,
+# so cold `docker compose up` has deterministic latency.
 
 FROM node:20-bookworm-slim AS deps
 WORKDIR /repo/api
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates wget \
+  && rm -rf /var/lib/apt/lists/*
 COPY api/package.json api/package-lock.json* ./
 RUN --mount=type=cache,target=/root/.npm \
     npm install --no-audit --no-fund
+# Force workerd download into the wrangler cache so first `wrangler dev`
+# doesn't pause for the pull.
+RUN npx wrangler --version
 
 FROM deps AS dev
 WORKDIR /repo/api
 COPY api/ ./
 ENV NODE_ENV=development
 EXPOSE 8787
-# `wrangler dev --ip 0.0.0.0` so the dev server is reachable from other
-# containers (frontend) and from the host.
 CMD ["npx", "wrangler", "dev", "--ip", "0.0.0.0", "--port", "8787"]
