@@ -17,6 +17,7 @@ frontend/out/
 worker/.next/
 worker/dist/
 sdk/dist/
+studio/dist/
 
 # Env
 .env

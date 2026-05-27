@@ -63,13 +63,8 @@ export interface WebGPUTrainerOptions {
 const WEBGPU_MAX_PARAMS = 2e9;
 
 /**
- * Determines whether a model should use WebGPU in-browser training or
- * fall back to cloud GPU offload based on parameter count.
- *
- * WebGPU device-availability check delegates to `hasWebGPUSupport()` from
- * the studio package — this file does NOT define its own probe. The previous
- * `isWebGPUAvailable()` / `requestWebGPUDevice()` exports were collapsed into
- * the studio's canonical `probeDevice()` after the studio package landed.
+ * Returns true when a model is small enough for in-browser WebGPU training
+ * AND the host actually exposes WebGPU.
  */
 export function shouldUseWebGPU(maxParams: number): boolean {
   return hasWebGPUSupport() && maxParams <= WEBGPU_MAX_PARAMS;
