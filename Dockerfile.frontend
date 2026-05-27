@@ -2,47 +2,33 @@
 #
 # Builderforce.ai frontend — Next.js dev/build container.
 #
-# Multi-stage:
-#   1. sdk-build    — produces sdk/dist
-#   2. studio-build — produces studio/dist (depends on sdk's published surface)
-#   3. deps         — installs frontend deps with file:../sdk + file:../studio
-#                     resolvable because both /dist trees are copied in first
-#   4. dev          — Next.js dev server with HMR (default target)
-#   5. production   — `next build` + `next start` (for CI / prod images)
+# Studio + SDK are NOT baked into this image. docker-compose mounts them via
+# bind-mounts on the host source + named volumes for the watcher-produced
+# dist/ output. That gives true hot-reload: edit studio/src on the host →
+# tsup-watch rebuilds → Next.js HMR picks up.
+#
+# Two targets:
+#   - dev         (default) Next.js dev server with HMR
+#   - production  `next build` + `next start`
+#
+# The pnpm install at deps stage installs frontend's regular deps plus
+# the `link:../studio` and `link:../sdk` placeholders. Actual content is
+# bind-mounted at runtime by docker-compose.
 
-# ----- sdk -----
-FROM node:20-bookworm-slim AS sdk-build
-WORKDIR /repo/sdk
-COPY sdk/package.json sdk/package-lock.json* ./
-RUN --mount=type=cache,target=/root/.npm npm install --no-audit --no-fund
-COPY sdk/tsconfig.json sdk/tsup.config.ts ./
-COPY sdk/src ./src
-RUN npm run build
-
-# ----- studio -----
-FROM node:20-bookworm-slim AS studio-build
-WORKDIR /repo/studio
-COPY studio/package.json studio/package-lock.json* ./
-RUN --mount=type=cache,target=/root/.npm npm install --no-audit --no-fund
-COPY studio/tsconfig.json studio/tsup.config.ts ./
-COPY studio/src ./src
-COPY studio/README.md ./README.md
-RUN npm run type-check && npm run build
-
-# ----- frontend deps -----
 FROM node:20-bookworm-slim AS deps
 WORKDIR /repo
-COPY --from=sdk-build /repo/sdk/dist /repo/sdk/dist
-COPY --from=sdk-build /repo/sdk/package.json /repo/sdk/package.json
-COPY --from=studio-build /repo/studio/dist /repo/studio/dist
-COPY --from=studio-build /repo/studio/package.json /repo/studio/package.json
+# Stub package.json for the link: targets so pnpm install succeeds before
+# the real source is bind-mounted. Stubs are replaced at runtime by the
+# host bind mounts under /repo/sdk and /repo/studio.
+RUN mkdir -p /repo/sdk /repo/studio && \
+    printf '{"name":"@seanhogg/builderforce-sdk","version":"0.0.0","main":"dist/index.cjs","module":"dist/index.mjs","types":"dist/index.d.ts"}\n' > /repo/sdk/package.json && \
+    printf '{"name":"@seanhogg/builderforce-studio","version":"0.0.0","main":"dist/index.cjs","module":"dist/index.mjs","types":"dist/index.d.ts"}\n' > /repo/studio/package.json
 WORKDIR /repo/frontend
 COPY frontend/package.json frontend/pnpm-lock.yaml* ./
 RUN corepack enable && corepack prepare pnpm@10.23.0 --activate
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile || pnpm install
 
-# ----- dev (default) -----
 FROM deps AS dev
 WORKDIR /repo/frontend
 COPY frontend/ ./
@@ -51,7 +37,6 @@ ENV NEXT_TELEMETRY_DISABLED=1
 EXPOSE 3000
 CMD ["pnpm", "dev", "--", "--hostname", "0.0.0.0"]
 
-# ----- production -----
 FROM deps AS production
 WORKDIR /repo/frontend
 COPY frontend/ ./

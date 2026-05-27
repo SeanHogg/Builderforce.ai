@@ -2,18 +2,109 @@
 #
 #   docker compose up --build
 #
-# Brings up:
-#   - api     :8787  Cloudflare Worker (wrangler dev)
-#   - frontend:3000  Next.js (with AI Video Studio at /studio)
+# Brings up the entire stack with zero external prerequisites:
+#   - postgres :5432  local Postgres for the API gateway
+#   - db-migrate      one-shot: runs api/scripts/migrate.mjs against postgres
+#   - sdk-watch       tsup --watch on sdk/, publishes to a named volume
+#   - studio-watch    tsup --watch on studio/, publishes to a named volume
+#   - api      :8787  Cloudflare Worker (wrangler dev), reads from postgres
+#   - frontend :3000  Next.js dev server with HMR; consumes sdk + studio via
+#                     link: protocol (symlinks into host filesystem) so edits
+#                     to studio/src trigger tsup rebuild → next HMR.
 #
-# The AI Video Studio runs entirely in the browser (WebGPU / WebNN) — Docker
-# only hosts the dev servers. Open http://localhost:3000/studio in Chrome 113+
-# with hardware acceleration enabled.
-#
-# Studio + SDK are built INSIDE the frontend image (multi-stage), so the host
-# does not need Node installed. Each rebuild picks up the latest source.
+# The AI Video Studio itself runs in the BROWSER (WebGPU / WebNN). Docker only
+# hosts the dev servers. Open http://localhost:3000/studio in Chrome 113+.
+
+volumes:
+  postgres-data:
+  sdk-dist:
+  studio-dist:
 
 services:
+  # ---------------------------------------------------------------------------
+  # Postgres + migrations
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: builderforce
+      POSTGRES_PASSWORD: builderforce
+      POSTGRES_DB: builderforce
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U builderforce -d builderforce"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  db-migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+      target: deps
+    command: ["node", "scripts/migrate.mjs"]
+    working_dir: /repo/api
+    environment:
+      NEON_DATABASE_URL: postgres://builderforce:builderforce@postgres:5432/builderforce
+    volumes:
+      - ./api/scripts:/repo/api/scripts:ro
+      - ./api/migrations:/repo/api/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # Workspace watchers — produce dist/ to named volumes that frontend consumes.
+  # Each runs `npm install` once then `tsup --watch` for the lifetime of the stack.
+  # ---------------------------------------------------------------------------
+  sdk-watch:
+    image: node:20-bookworm-slim
+    working_dir: /sdk
+    command:
+      - sh
+      - -c
+      - "npm install --no-audit --no-fund && npx tsup --config tsup.config.ts --watch"
+    volumes:
+      - ./sdk/src:/sdk/src
+      - ./sdk/package.json:/sdk/package.json:ro
+      - ./sdk/tsconfig.json:/sdk/tsconfig.json:ro
+      - ./sdk/tsup.config.ts:/sdk/tsup.config.ts:ro
+      - sdk-dist:/sdk/dist
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /sdk/dist/index.mjs"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 60s
+
+  studio-watch:
+    image: node:20-bookworm-slim
+    working_dir: /studio
+    command:
+      - sh
+      - -c
+      - "npm install --no-audit --no-fund && npx tsup --config tsup.config.ts --watch"
+    volumes:
+      - ./studio/src:/studio/src
+      - ./studio/package.json:/studio/package.json:ro
+      - ./studio/tsconfig.json:/studio/tsconfig.json:ro
+      - ./studio/tsup.config.ts:/studio/tsup.config.ts:ro
+      - ./studio/README.md:/studio/README.md:ro
+      - studio-dist:/studio/dist
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /studio/dist/index.mjs && test -f /studio/dist/styles.css"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # API worker (wrangler dev)
+  # ---------------------------------------------------------------------------
   api:
     build:
       context: .
@@ -22,15 +113,19 @@ services:
     environment:
       ENVIRONMENT: development
       CORS_ORIGINS: http://localhost:3000
+      NEON_DATABASE_URL: postgres://builderforce:builderforce@postgres:5432/builderforce
+      # JWT_SECRET and OPENROUTER_API_KEY come from api/.dev.vars if present.
     ports:
       - "8787:8787"
     volumes:
-      # Source + config are mounted so wrangler dev picks up edits.
-      # `.dev.vars` is the wrangler convention for local secrets — drop
-      # NEON_DATABASE_URL / JWT_SECRET / OPENROUTER_API_KEY there.
       - ./api/src:/repo/api/src:ro
       - ./api/wrangler.toml:/repo/api/wrangler.toml:ro
       - ./api/.dev.vars:/repo/api/.dev.vars:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:8787/health || exit 1"]
       interval: 10s
@@ -38,6 +133,12 @@ services:
       retries: 12
       start_period: 30s
 
+  # ---------------------------------------------------------------------------
+  # Frontend (Next.js dev)
+  # Frontend's node_modules symlinks (pnpm link:) point at /repo/sdk and
+  # /repo/studio — bind-mounted from host. The dist subdirs are populated by
+  # sdk-watch + studio-watch via named volumes mounted onto the same paths.
+  # ---------------------------------------------------------------------------
   frontend:
     build:
       context: .
@@ -49,12 +150,17 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # Hot-reload frontend source. Studio and SDK are built into the image
-      # (`COPY --from=studio-build`), so editing studio/src needs a rebuild —
-      # tradeoff for avoiding two extra long-running tsup watchers.
       - ./frontend/src:/repo/frontend/src
       - ./frontend/public:/repo/frontend/public:ro
       - ./frontend/next.config.js:/repo/frontend/next.config.js:ro
+      - ./sdk:/repo/sdk
+      - ./studio:/repo/studio
+      - sdk-dist:/repo/sdk/dist
+      - studio-dist:/repo/studio/dist
     depends_on:
       api:
+        condition: service_healthy
+      sdk-watch:
+        condition: service_healthy
+      studio-watch:
         condition: service_healthy
