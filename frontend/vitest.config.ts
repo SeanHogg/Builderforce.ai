@@ -24,6 +24,13 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // The upstream mambacode.js github tarball ships no `dist/`, so vite's
+      // static import-analysis can't resolve `import('mambacode.js')` from
+      // model-provider.ts even though webpack handles it at production
+      // runtime. Route the specifier to a test-only stub that throws on
+      // every entry point — model-provider's try/catch swallows the error
+      // and the "gracefully handles missing mambacode.js" tests still pass.
+      'mambacode.js': path.resolve(__dirname, './src/test/stubs/mambacode-stub.ts'),
     },
   },
 });
