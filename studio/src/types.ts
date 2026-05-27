@@ -1,0 +1,116 @@
+/**
+ * Public types for @seanhogg/builderforce-studio.
+ *
+ * MambaStateSnapshot is the canonical shape for SSM state serialization across
+ * the studio engine, the host frontend (frontend/src/lib/mamba-engine.ts), and
+ * the published agent packages stored in R2. Keep this shape stable — agent
+ * packages already in the wild depend on it.
+ */
+
+/** Compact snapshot of a Mamba SSM state vector, serialisable to IndexedDB / R2 / JSON. */
+export interface MambaStateSnapshot {
+  /** Packed Float32 values encoded as a plain number array for JSON portability. */
+  data: number[];
+  /** Dimensionality of each state channel. */
+  dim: number;
+  /** SSM order (hidden states per channel). */
+  order: number;
+  /** Number of parallel channels. */
+  channels: number;
+  /** Monotonically increasing sequence counter. */
+  step: number;
+}
+
+/** Hardware execution target. `auto` probes WebNN → WebGPU → CPU and picks the first that initialises. */
+export type DeviceTarget = 'auto' | 'webnn' | 'webgpu' | 'cpu';
+
+/** Active hardware path the engine ended up on, reported back to the consumer. */
+export type ActiveDevice = 'webnn' | 'webgpu' | 'cpu';
+
+/** Diffusion backbone. */
+export type DiffusionModelId = 'lcm-dreamshaper-v7' | 'sd-turbo';
+
+/** Mamba-state-driven coherence mode. */
+export type CoherenceMode = 'prompt-bias' | 'latent-residual';
+
+/** Source for fetching model weights. The engine falls back across these in order. */
+export type WeightSource = 'r2-proxy' | 'huggingface-cdn';
+
+export interface ModelDescriptor {
+  id: DiffusionModelId;
+  /** Number of denoising steps. LCM = 4, SD-Turbo = 1. */
+  defaultSteps: number;
+  /** Default classifier-free-guidance scale. */
+  defaultGuidance: number;
+  /** Minimum advertised VRAM in MB. The engine warns below this. */
+  minVramMb: number;
+  /** ONNX weight files that compose this pipeline. */
+  files: {
+    unet: string;
+    vaeDecoder: string;
+    textEncoder: string;
+    tokenizer: string;
+  };
+}
+
+export interface VideoEngineOptions {
+  /** Builderforce API key. Used to call the LLM gateway for prompt expansion. */
+  apiKey: string;
+  /** Builderforce gateway base URL. Defaults to https://api.builderforce.ai. */
+  baseUrl?: string;
+  /** Which diffusion backbone to use. */
+  model: DiffusionModelId;
+  /** Hardware target. */
+  device?: DeviceTarget;
+  /** Weight source preference order. Defaults to ['r2-proxy', 'huggingface-cdn']. */
+  weightSources?: WeightSource[];
+  /** Optional initial Mamba state. If omitted, the engine starts from a zero state. */
+  mambaState?: MambaStateSnapshot;
+  /** Output dimensions. Defaults to 512x512. */
+  width?: number;
+  height?: number;
+}
+
+export interface GenerateOptions {
+  /** Short user prompt. The engine expands this through the LLM gateway before diffusion. */
+  prompt: string;
+  /** Skip LLM expansion and use the prompt verbatim. */
+  skipPromptExpansion?: boolean;
+  /** Total frame count to generate. */
+  frames: number;
+  /** Playback framerate of the output MP4. */
+  fps: number;
+  /** Override denoising steps (defaults to the model's defaultSteps). */
+  steps?: number;
+  /** Override classifier-free-guidance scale. */
+  guidance?: number;
+  /** Negative prompt (SD-Turbo only — LCM ignores). */
+  negativePrompt?: string;
+  /** Seed for the initial latent noise. Defaults to Date.now(). */
+  seed?: number;
+  /** How the Mamba state biases each frame. */
+  coherence?: CoherenceMode;
+  /** 0 = no coherence (pure i.i.d. frames), 1 = maximum lock to previous frame. */
+  coherenceStrength?: number;
+  /** Called once per finished frame. */
+  onFrame?: (frameIdx: number, bitmap: ImageBitmap, state: MambaStateSnapshot) => void;
+  /** Called when prompt expansion finishes (before diffusion starts). */
+  onPromptExpanded?: (expanded: string) => void;
+  /** AbortSignal for cancelling generation mid-flight. */
+  signal?: AbortSignal;
+}
+
+export interface GenerateResult {
+  /** MP4 Blob ready for download, upload, or playback via URL.createObjectURL. */
+  blob: Blob;
+  /** Final Mamba state after the last frame. Round-trip to IDB or R2 to resume. */
+  mambaState: MambaStateSnapshot;
+  /** Raw frames if the consumer wants them. */
+  frames: ImageBitmap[];
+  /** Which device path was actually used. */
+  activeDevice: ActiveDevice;
+  /** The expanded prompt sent to the diffusion model. */
+  resolvedPrompt: string;
+  /** Total wall-clock generation time in milliseconds. */
+  elapsedMs: number;
+}

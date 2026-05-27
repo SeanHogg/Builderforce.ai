@@ -5,7 +5,7 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: version,
   },
-  transpilePackages: ['@monaco-editor/react', 'monaco-editor'],
+  transpilePackages: ['@monaco-editor/react', 'monaco-editor', '@seanhogg/builderforce-studio', '@seanhogg/builderforce-sdk'],
   webpack(config) {
     config.module.rules.push({
       test: /\.md$/,

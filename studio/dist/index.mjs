@@ -1,0 +1,421 @@
+import {
+  MODEL_REGISTRY,
+  VideoEngine,
+  probeDevice
+} from "./chunk-U3Q7HXEX.mjs";
+
+// src/components/StudioPanel.tsx
+import { useCallback, useEffect as useEffect3, useRef as useRef2, useState as useState2 } from "react";
+
+// src/components/ModelPicker.tsx
+import { jsx, jsxs } from "react/jsx-runtime";
+var MODEL_LABELS = {
+  "lcm-dreamshaper-v7": "LCM Dreamshaper v7 \u2014 4-step, balanced quality",
+  "sd-turbo": "SD-Turbo \u2014 1-step, fastest"
+};
+function ModelPicker({ value, onChange, disabled }) {
+  const entries = Object.keys(MODEL_REGISTRY);
+  return /* @__PURE__ */ jsxs("div", { className: "bfs-field", children: [
+    /* @__PURE__ */ jsx("label", { className: "bfs-label", children: "Diffusion model" }),
+    /* @__PURE__ */ jsx(
+      "select",
+      {
+        className: "bfs-select",
+        value,
+        onChange: (e) => onChange(e.target.value),
+        disabled,
+        children: entries.map((id) => /* @__PURE__ */ jsx("option", { value: id, children: MODEL_LABELS[id] }, id))
+      }
+    ),
+    /* @__PURE__ */ jsxs("p", { className: "bfs-hint", children: [
+      MODEL_REGISTRY[value].defaultSteps,
+      " step",
+      MODEL_REGISTRY[value].defaultSteps > 1 ? "s" : "",
+      " ",
+      "\xB7 ~",
+      Math.round(MODEL_REGISTRY[value].minVramMb / 1024),
+      " GB VRAM minimum"
+    ] })
+  ] });
+}
+
+// src/components/CoherenceControls.tsx
+import { jsx as jsx2, jsxs as jsxs2 } from "react/jsx-runtime";
+var MODE_DESCRIPTIONS = {
+  "prompt-bias": "Mamba state biases the prompt embedding. Lightweight, works with any U-Net.",
+  "latent-residual": "Mamba state biases the initial latent noise. Stronger temporal lock, slightly more compute."
+};
+function CoherenceControls({
+  mode,
+  strength,
+  onModeChange,
+  onStrengthChange,
+  disabled
+}) {
+  return /* @__PURE__ */ jsxs2("div", { className: "bfs-field", children: [
+    /* @__PURE__ */ jsx2("label", { className: "bfs-label", children: "Temporal coherence (Mamba state)" }),
+    /* @__PURE__ */ jsx2("div", { className: "bfs-radio-row", children: ["prompt-bias", "latent-residual"].map((m) => /* @__PURE__ */ jsxs2("label", { className: "bfs-radio", children: [
+      /* @__PURE__ */ jsx2(
+        "input",
+        {
+          type: "radio",
+          name: "bfs-coherence",
+          value: m,
+          checked: mode === m,
+          onChange: () => onModeChange(m),
+          disabled
+        }
+      ),
+      /* @__PURE__ */ jsx2("span", { children: m === "prompt-bias" ? "Prompt bias" : "Latent residual" })
+    ] }, m)) }),
+    /* @__PURE__ */ jsx2("p", { className: "bfs-hint", children: MODE_DESCRIPTIONS[mode] }),
+    /* @__PURE__ */ jsxs2("label", { className: "bfs-label", style: { marginTop: 12 }, children: [
+      "Coherence strength: ",
+      /* @__PURE__ */ jsx2("span", { className: "bfs-mono", children: strength.toFixed(2) })
+    ] }),
+    /* @__PURE__ */ jsx2(
+      "input",
+      {
+        type: "range",
+        min: 0,
+        max: 1,
+        step: 0.05,
+        value: strength,
+        onChange: (e) => onStrengthChange(Number(e.target.value)),
+        disabled,
+        className: "bfs-range"
+      }
+    ),
+    /* @__PURE__ */ jsx2("p", { className: "bfs-hint", children: "0 = i.i.d. frames \xB7 1 = maximum lock to previous frame." })
+  ] });
+}
+
+// src/components/VideoPreview.tsx
+import { useEffect, useRef } from "react";
+import { jsx as jsx3, jsxs as jsxs3 } from "react/jsx-runtime";
+function VideoPreview({ frames, videoUrl, width, height }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    if (videoUrl) return;
+    const canvas = canvasRef.current;
+    if (!canvas || frames.length === 0) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const latest = frames[frames.length - 1];
+    ctx.drawImage(latest, 0, 0, canvas.width, canvas.height);
+  }, [frames, videoUrl]);
+  return /* @__PURE__ */ jsxs3("div", { className: "bfs-preview", style: { aspectRatio: `${width} / ${height}` }, children: [
+    videoUrl ? /* @__PURE__ */ jsx3("video", { src: videoUrl, controls: true, autoPlay: true, loop: true, className: "bfs-preview-video" }) : /* @__PURE__ */ jsx3("canvas", { ref: canvasRef, width, height, className: "bfs-preview-canvas" }),
+    !videoUrl && frames.length === 0 && /* @__PURE__ */ jsx3("div", { className: "bfs-preview-empty", children: "Preview will appear here as frames generate." })
+  ] });
+}
+
+// src/components/useEngineStatus.ts
+import { useEffect as useEffect2, useState } from "react";
+function useEngineStatus() {
+  const [status, setStatus] = useState({ state: "probing" });
+  useEffect2(() => {
+    let cancelled = false;
+    probeDevice("auto").then((device) => {
+      if (cancelled) return;
+      if (!device) {
+        setStatus({
+          state: "unsupported",
+          reason: "This browser cannot run the AI Video Studio. Requires WebGPU (Chrome 113+, Edge 113+) or WebNN."
+        });
+        return;
+      }
+      setStatus({ state: "ready", device });
+    }).catch((err) => {
+      if (cancelled) return;
+      setStatus({
+        state: "unsupported",
+        reason: err instanceof Error ? err.message : String(err)
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return status;
+}
+
+// src/components/StudioPanel.tsx
+import { jsx as jsx4, jsxs as jsxs4 } from "react/jsx-runtime";
+var DEFAULT_WIDTH = 512;
+var DEFAULT_HEIGHT = 512;
+function StudioPanel({
+  apiKey,
+  baseUrl,
+  defaultModel = "lcm-dreamshaper-v7",
+  defaultCoherence = "prompt-bias",
+  defaultFrames = 16,
+  defaultFps = 8,
+  onVideoGenerated,
+  initialMambaState
+}) {
+  const status = useEngineStatus();
+  const engineRef = useRef2(null);
+  const abortRef = useRef2(null);
+  const [prompt, setPrompt] = useState2("");
+  const [model, setModel] = useState2(defaultModel);
+  const [coherenceMode, setCoherenceMode] = useState2(defaultCoherence);
+  const [coherenceStrength, setCoherenceStrength] = useState2(0.5);
+  const [frames, setFrames] = useState2(defaultFrames);
+  const [fps, setFps] = useState2(defaultFps);
+  const [isGenerating, setIsGenerating] = useState2(false);
+  const [progressLabel, setProgressLabel] = useState2("");
+  const [expandedPrompt, setExpandedPrompt] = useState2("");
+  const [previewFrames, setPreviewFrames] = useState2([]);
+  const [videoUrl, setVideoUrl] = useState2(null);
+  const [result, setResult] = useState2(null);
+  const [error, setError] = useState2(null);
+  useEffect3(() => {
+    return () => {
+      if (videoUrl) URL.revokeObjectURL(videoUrl);
+    };
+  }, [videoUrl]);
+  const handleGenerate = useCallback(async () => {
+    if (status.state !== "ready") return;
+    if (!prompt.trim()) {
+      setError("Enter a prompt before generating.");
+      return;
+    }
+    if (!apiKey) {
+      setError("Missing Builderforce API key.");
+      return;
+    }
+    setError(null);
+    setIsGenerating(true);
+    setProgressLabel("Initialising engine\u2026");
+    setPreviewFrames([]);
+    if (videoUrl) {
+      URL.revokeObjectURL(videoUrl);
+      setVideoUrl(null);
+    }
+    setResult(null);
+    const abort = new AbortController();
+    abortRef.current = abort;
+    try {
+      if (!engineRef.current) {
+        const engine = await VideoEngine.create({
+          apiKey,
+          baseUrl,
+          model,
+          mambaState: initialMambaState,
+          width: DEFAULT_WIDTH,
+          height: DEFAULT_HEIGHT
+        });
+        if (!engine) {
+          throw new Error("Engine refused to start on this device.");
+        }
+        engineRef.current = engine;
+      }
+      setProgressLabel("Expanding prompt via Builderforce LLM\u2026");
+      const generated = await engineRef.current.generate({
+        prompt,
+        frames,
+        fps,
+        coherence: coherenceMode,
+        coherenceStrength,
+        signal: abort.signal,
+        onPromptExpanded: (expanded) => {
+          setExpandedPrompt(expanded);
+          setProgressLabel("Generating frames\u2026");
+        },
+        onFrame: (idx, bitmap) => {
+          setPreviewFrames((prev) => [...prev, bitmap]);
+          setProgressLabel(`Frame ${idx + 1} / ${frames}`);
+        }
+      });
+      const url = URL.createObjectURL(generated.blob);
+      setVideoUrl(url);
+      setResult(generated);
+      onVideoGenerated?.(generated.blob, generated.mambaState);
+      setProgressLabel(`Done in ${(generated.elapsedMs / 1e3).toFixed(1)}s on ${generated.activeDevice.toUpperCase()}.`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message === "Generation aborted" || message === "Mux aborted") {
+        setProgressLabel("Cancelled.");
+      } else {
+        setError(message);
+        setProgressLabel("");
+      }
+    } finally {
+      setIsGenerating(false);
+      abortRef.current = null;
+    }
+  }, [
+    apiKey,
+    baseUrl,
+    coherenceMode,
+    coherenceStrength,
+    fps,
+    frames,
+    initialMambaState,
+    model,
+    onVideoGenerated,
+    prompt,
+    status.state,
+    videoUrl
+  ]);
+  const handleCancel = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+  const handleDownload = useCallback(() => {
+    if (!result) return;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(result.blob);
+    a.download = `builderforce-video-${Date.now()}.mp4`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5e3);
+  }, [result]);
+  if (status.state === "probing") {
+    return /* @__PURE__ */ jsxs4("div", { className: "bfs-root bfs-state-probing", children: [
+      /* @__PURE__ */ jsx4("div", { className: "bfs-spinner" }),
+      /* @__PURE__ */ jsx4("p", { children: "Probing hardware (WebNN \u2192 WebGPU \u2192 CPU)\u2026" })
+    ] });
+  }
+  if (status.state === "unsupported") {
+    return /* @__PURE__ */ jsxs4("div", { className: "bfs-root bfs-state-unsupported", children: [
+      /* @__PURE__ */ jsx4("h2", { children: "AI Video Studio unavailable" }),
+      /* @__PURE__ */ jsx4("p", { children: status.reason }),
+      /* @__PURE__ */ jsx4("p", { className: "bfs-hint", children: "Open this page in Chrome 113+ or Edge 113+ with hardware acceleration enabled." })
+    ] });
+  }
+  const device = status.device;
+  return /* @__PURE__ */ jsxs4("div", { className: "bfs-root", children: [
+    /* @__PURE__ */ jsx4("header", { className: "bfs-header", children: /* @__PURE__ */ jsxs4("div", { children: [
+      /* @__PURE__ */ jsx4("h1", { className: "bfs-title", children: "AI Video Studio" }),
+      /* @__PURE__ */ jsxs4("p", { className: "bfs-subtitle", children: [
+        "Running on ",
+        /* @__PURE__ */ jsx4("strong", { children: device.label }),
+        device.approxMemoryMb ? ` \xB7 ~${(device.approxMemoryMb / 1024).toFixed(1)} GB available` : ""
+      ] })
+    ] }) }),
+    /* @__PURE__ */ jsxs4("div", { className: "bfs-grid", children: [
+      /* @__PURE__ */ jsxs4("section", { className: "bfs-controls", children: [
+        /* @__PURE__ */ jsxs4("div", { className: "bfs-field", children: [
+          /* @__PURE__ */ jsx4("label", { className: "bfs-label", htmlFor: "bfs-prompt", children: "What video do you want to generate?" }),
+          /* @__PURE__ */ jsx4(
+            "textarea",
+            {
+              id: "bfs-prompt",
+              className: "bfs-prompt",
+              rows: 4,
+              placeholder: "e.g. a fox running through autumn forest at golden hour, slow motion, cinematic",
+              value: prompt,
+              onChange: (e) => setPrompt(e.target.value),
+              disabled: isGenerating
+            }
+          ),
+          expandedPrompt && /* @__PURE__ */ jsxs4("p", { className: "bfs-hint", children: [
+            /* @__PURE__ */ jsx4("strong", { children: "Expanded:" }),
+            " ",
+            expandedPrompt
+          ] })
+        ] }),
+        /* @__PURE__ */ jsx4(ModelPicker, { value: model, onChange: setModel, disabled: isGenerating }),
+        /* @__PURE__ */ jsxs4("div", { className: "bfs-row", children: [
+          /* @__PURE__ */ jsxs4("div", { className: "bfs-field bfs-flex", children: [
+            /* @__PURE__ */ jsx4("label", { className: "bfs-label", children: "Frames" }),
+            /* @__PURE__ */ jsx4(
+              "input",
+              {
+                type: "number",
+                className: "bfs-input",
+                min: 1,
+                max: 120,
+                value: frames,
+                onChange: (e) => setFrames(Math.max(1, Math.min(120, Number(e.target.value) || 1))),
+                disabled: isGenerating
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxs4("div", { className: "bfs-field bfs-flex", children: [
+            /* @__PURE__ */ jsx4("label", { className: "bfs-label", children: "FPS" }),
+            /* @__PURE__ */ jsx4(
+              "input",
+              {
+                type: "number",
+                className: "bfs-input",
+                min: 1,
+                max: 60,
+                value: fps,
+                onChange: (e) => setFps(Math.max(1, Math.min(60, Number(e.target.value) || 1))),
+                disabled: isGenerating
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxs4("div", { className: "bfs-field bfs-flex", children: [
+            /* @__PURE__ */ jsx4("label", { className: "bfs-label", children: "Duration" }),
+            /* @__PURE__ */ jsxs4("div", { className: "bfs-readout", children: [
+              (frames / fps).toFixed(2),
+              "s"
+            ] })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsx4(
+          CoherenceControls,
+          {
+            mode: coherenceMode,
+            strength: coherenceStrength,
+            onModeChange: setCoherenceMode,
+            onStrengthChange: setCoherenceStrength,
+            disabled: isGenerating
+          }
+        ),
+        /* @__PURE__ */ jsxs4("div", { className: "bfs-actions", children: [
+          isGenerating ? /* @__PURE__ */ jsx4("button", { type: "button", className: "bfs-btn bfs-btn-danger", onClick: handleCancel, children: "Cancel" }) : /* @__PURE__ */ jsx4(
+            "button",
+            {
+              type: "button",
+              className: "bfs-btn bfs-btn-primary",
+              onClick: handleGenerate,
+              disabled: !prompt.trim(),
+              children: "Generate video"
+            }
+          ),
+          result && !isGenerating && /* @__PURE__ */ jsx4("button", { type: "button", className: "bfs-btn bfs-btn-secondary", onClick: handleDownload, children: "Download MP4" })
+        ] }),
+        progressLabel && /* @__PURE__ */ jsx4("p", { className: "bfs-progress", children: progressLabel }),
+        error && /* @__PURE__ */ jsx4("p", { className: "bfs-error", children: error })
+      ] }),
+      /* @__PURE__ */ jsxs4("section", { className: "bfs-preview-pane", children: [
+        /* @__PURE__ */ jsx4(
+          VideoPreview,
+          {
+            frames: previewFrames,
+            videoUrl,
+            width: DEFAULT_WIDTH,
+            height: DEFAULT_HEIGHT
+          }
+        ),
+        result && /* @__PURE__ */ jsxs4("dl", { className: "bfs-meta", children: [
+          /* @__PURE__ */ jsx4("dt", { children: "Device" }),
+          /* @__PURE__ */ jsx4("dd", { children: result.activeDevice.toUpperCase() }),
+          /* @__PURE__ */ jsx4("dt", { children: "Frames" }),
+          /* @__PURE__ */ jsx4("dd", { children: result.frames.length }),
+          /* @__PURE__ */ jsx4("dt", { children: "Mamba step" }),
+          /* @__PURE__ */ jsx4("dd", { children: result.mambaState.step }),
+          /* @__PURE__ */ jsx4("dt", { children: "Elapsed" }),
+          /* @__PURE__ */ jsxs4("dd", { children: [
+            (result.elapsedMs / 1e3).toFixed(2),
+            "s"
+          ] })
+        ] })
+      ] })
+    ] })
+  ] });
+}
+export {
+  CoherenceControls,
+  MODEL_REGISTRY,
+  ModelPicker,
+  StudioPanel,
+  VideoEngine,
+  VideoPreview,
+  probeDevice,
+  useEngineStatus
+};
+//# sourceMappingURL=index.mjs.map

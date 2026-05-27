@@ -31,6 +31,7 @@ const mainNav: NavItem[] = [
   },
   { href: '/tasks', label: 'Task Mgmt', icon: '☑' },
   { href: '/training', label: 'Training', icon: '🎓' },
+  { href: '/studio', label: 'AI Video Studio', icon: '🎬' },
 ];
 
 const meshNav: NavItem[] = [
