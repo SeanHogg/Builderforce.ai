@@ -1,0 +1,89 @@
+# Reusable workflow: publish an npm package from a workspace subdirectory.
+#
+# Single source of truth for both `@seanhogg/builderforce-sdk` and
+# `@seanhogg/builderforce-studio` publishes. Caller passes `package-dir` and
+# `package-name`; this workflow handles install, type-check, test, and the
+# version-gated publish.
+#
+# Auth resolution (preferred → fallback):
+#   1. OIDC trusted publishing — set up at
+#      https://www.npmjs.com/package/<name>/access → "Add trusted publisher" →
+#      GitHub Actions / <org> / <repo> / release.yml.
+#      Works zero-secrets but requires the package to exist on npm first OR
+#      be pre-registered with the trusted publisher.
+#   2. NPM_TOKEN secret — optional fallback for first-time publishes of new
+#      packages. Add NPM_TOKEN to repo secrets, run once, then remove it
+#      after configuring OIDC trusted publishing.
+
+name: Publish npm package (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      package-dir:
+        description: 'Workspace directory containing the package (e.g. "sdk")'
+        type: string
+        required: true
+      package-name:
+        description: 'Published npm name (e.g. "@seanhogg/builderforce-sdk")'
+        type: string
+        required: true
+    secrets:
+      NPM_TOKEN:
+        description: 'Optional fallback when OIDC trusted publishing is not yet configured for this package on npmjs.com'
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Trusted Publishing requires npm >= 11.5.1 (Node 20 ships npm 10.x)
+      - name: Upgrade npm
+        run: |
+          npm install -g npm@latest
+          echo "npm $(npm --version) — Trusted Publishing requires >= 11.5.1"
+
+      # `npm install` triggers the package's `prepare` script which runs the
+      # build, so we don't need an explicit Build step here.
+      - name: Install + type-check + test
+        working-directory: ${{ inputs.package-dir }}
+        run: |
+          npm install --no-audit --no-fund
+          npm run type-check
+          npm test
+
+      - name: Auth (NPM_TOKEN if set, otherwise OIDC)
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
+            echo "Auth mode: NPM_TOKEN"
+          else
+            echo "Auth mode: OIDC (npmjs.com trusted publisher must be configured for ${{ inputs.package-name }})"
+          fi
+
+      - name: Publish if version is new
+        working-directory: ${{ inputs.package-dir }}
+        env:
+          PKG_NAME: ${{ inputs.package-name }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "$PKG_NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "$PKG_NAME@$VERSION already on npm — skipping."
+          else
+            echo "$PKG_NAME@$VERSION is new — publishing."
+            npm publish --provenance --access public
+          fi
