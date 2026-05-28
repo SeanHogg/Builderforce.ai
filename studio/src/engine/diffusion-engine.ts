@@ -16,16 +16,12 @@
  */
 
 import * as ort from 'onnxruntime-web';
-import {
-  AutoTokenizer,
-  AutoModel,
-  type PreTrainedTokenizer,
-  type PreTrainedModel,
-} from '@huggingface/transformers';
+import { AutoTokenizer, type PreTrainedTokenizer } from '@huggingface/transformers';
 import type {
   ActiveDevice,
   DiffusionModelId,
   ModelDescriptor,
+  OnnxFile,
   WeightSource,
 } from '../types';
 import type { ProbedDevice } from './device-router';
@@ -48,29 +44,33 @@ export const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor> = {
     defaultSteps: 4,
     defaultGuidance: 1.0, // LCM works best with CFG ~1
     minVramMb: 6 * 1024,
-    hfRepo: 'Xenova/LCM_Dreamshaper_v7-onnx',
-    textEmbedDim: 768,
+    hfRepo: 'aislamov/lcm-dreamshaper-v7-onnx',
+    tokenizerRepo: 'Xenova/clip-vit-large-patch14',
+    textEmbedDim: 768, // SD1.5 base
     sequenceLength: 77,
     vaeScalingFactor: 0.18215,
     defaultTimesteps: [999, 759, 519, 259],
     files: {
-      unet: 'unet/model_fp16.onnx',
-      vaeDecoder: 'vae_decoder/model_fp16.onnx',
+      textEncoder: { model: 'text_encoder/model.onnx' },
+      unet: { model: 'unet/model.onnx', externalData: 'unet/model.onnx_data' },
+      vaeDecoder: { model: 'vae_decoder/model.onnx', externalData: 'vae_decoder/model.onnx_data' },
     },
   },
   'sd-turbo': {
     id: 'sd-turbo',
     defaultSteps: 1,
-    defaultGuidance: 0.0, // SD-Turbo is unconditional CFG
+    defaultGuidance: 0.0, // SD-Turbo is unconditional
     minVramMb: 4 * 1024,
-    hfRepo: 'Xenova/sd-turbo',
-    textEmbedDim: 1024,
+    hfRepo: 'schmuell/sd-turbo-ort-web', // ORT-team browser demo build (single-file ONNX)
+    tokenizerRepo: 'Xenova/clip-vit-large-patch14',
+    textEmbedDim: 1024, // SD2.1 base
     sequenceLength: 77,
     vaeScalingFactor: 0.18215,
     defaultTimesteps: [999],
     files: {
-      unet: 'unet/model_fp16.onnx',
-      vaeDecoder: 'vae_decoder/model_fp16.onnx',
+      textEncoder: { model: 'text_encoder/model.onnx' },
+      unet: { model: 'unet/model.onnx' },
+      vaeDecoder: { model: 'vae_decoder/model.onnx' },
     },
   },
 };
@@ -134,7 +134,7 @@ export interface DenoiseResult {
 
 export class DiffusionEngine {
   private tokenizer: PreTrainedTokenizer | null = null;
-  private textEncoder: PreTrainedModel | null = null;
+  private textEncoderSession: ort.InferenceSession | null = null;
   private unetSession: ort.InferenceSession | null = null;
   private vaeSession: ort.InferenceSession | null = null;
 
@@ -143,26 +143,20 @@ export class DiffusionEngine {
   // -------------------------------------------------------------------------
 
   async init(): Promise<void> {
-    const descriptor = this.descriptor;
+    const d = this.descriptor;
     const sessionOptions = this.buildSessionOptions();
-    const hfDevice = this.mapDeviceToHf();
-    const hfDtype = hfDevice === 'webgpu' ? 'fp16' : 'fp32';
 
-    // 1. Tokenizer + text encoder via transformers.js (extension layer)
-    this.tokenizer = await AutoTokenizer.from_pretrained(descriptor.hfRepo);
-    this.textEncoder = await AutoModel.from_pretrained(descriptor.hfRepo, {
-      subfolder: 'text_encoder',
-      device: hfDevice,
-      dtype: hfDtype,
-    });
+    // transformers.js does ONLY tokenization — the CLIP BPE tokenizer is the
+    // one piece we don't want to hand-roll. Everything else is raw ORT.
+    this.tokenizer = await AutoTokenizer.from_pretrained(d.tokenizerRepo);
 
-    // 2. UNet + VAE via raw ORT (base layer — keeps mid-step control)
-    const [unetBuf, vaeBuf] = await Promise.all([
-      this.fetchWeight(descriptor.files.unet),
-      this.fetchWeight(descriptor.files.vaeDecoder),
+    // Text encoder, UNet, VAE decoder — all raw ORT sessions (with external
+    // data sidecars where the export splits weights >2GB).
+    [this.textEncoderSession, this.unetSession, this.vaeSession] = await Promise.all([
+      this.createSession(d.files.textEncoder, sessionOptions),
+      this.createSession(d.files.unet, sessionOptions),
+      this.createSession(d.files.vaeDecoder, sessionOptions),
     ]);
-    this.unetSession = await ort.InferenceSession.create(new Uint8Array(unetBuf), sessionOptions);
-    this.vaeSession = await ort.InferenceSession.create(new Uint8Array(vaeBuf), sessionOptions);
   }
 
   // -------------------------------------------------------------------------
@@ -177,25 +171,31 @@ export class DiffusionEngine {
     return this.opts.probed.kind;
   }
 
-  /** Tokenise and encode the prompt → conditioning embedding [1, seqLen, embedDim]. */
+  /** Tokenise (transformers.js) then run the CLIP text encoder (raw ORT) →
+   *  conditioning embedding [1, seqLen, embedDim]. */
   async embedPrompt(prompt: string): Promise<Float32Array> {
-    if (!this.tokenizer || !this.textEncoder) {
+    if (!this.tokenizer || !this.textEncoderSession) {
       throw new Error('DiffusionEngine.init() not called');
     }
     const { textEmbedDim, sequenceLength } = this.descriptor;
+
     const encoded = await this.tokenizer(prompt, {
       padding: 'max_length',
       max_length: sequenceLength,
       truncation: true,
-      return_tensors: 'pt',
     });
 
-    const out: { last_hidden_state?: { data: Float32Array }; text_embeds?: { data: Float32Array } } =
-      await this.textEncoder({ input_ids: encoded.input_ids });
+    // diffusers ONNX text encoders take int32 `input_ids` of shape [1, seqLen].
+    const rawIds = encoded.input_ids.data as ArrayLike<bigint | number>;
+    const ids = Int32Array.from({ length: sequenceLength }, (_unused, i) =>
+      i < rawIds.length ? Number(rawIds[i]) : 0,
+    );
+    const idTensor = new ort.Tensor('int32', ids, [1, sequenceLength]);
 
-    const hidden = out.last_hidden_state?.data;
+    const out = await this.textEncoderSession.run({ input_ids: idTensor });
+    const hidden = (out.last_hidden_state?.data as Float32Array | undefined) ?? pickFirstFloat32(out);
     if (!hidden) {
-      throw new Error('Text encoder returned no last_hidden_state');
+      throw new Error('Text encoder returned no Float32 output');
     }
     if (hidden.length !== sequenceLength * textEmbedDim) {
       throw new Error(
@@ -283,11 +283,24 @@ export class DiffusionEngine {
     return { executionProviders: ['wasm'] };
   }
 
-  private mapDeviceToHf(): 'webgpu' | 'webnn' | 'wasm' {
-    const kind = this.opts.probed.kind;
-    if (kind === 'webgpu') return 'webgpu';
-    if (kind === 'webnn') return 'webnn';
-    return 'wasm';
+  /** Create an ORT session for one model file, attaching its external-data
+   *  sidecar when the export splits weights into a `.onnx_data` blob. */
+  private async createSession(
+    file: OnnxFile,
+    baseOptions: ort.InferenceSession.SessionOptions,
+  ): Promise<ort.InferenceSession> {
+    const modelBuf = await this.fetchWeight(file.model);
+    const options: ort.InferenceSession.SessionOptions = { ...baseOptions };
+
+    if (file.externalData) {
+      const dataBuf = await this.fetchWeight(file.externalData);
+      // The .onnx graph references its sidecar by basename (e.g.
+      // 'model.onnx_data'); ORT matches the externalData `path` against it.
+      options.externalData = [
+        { path: basename(file.externalData), data: new Uint8Array(dataBuf) },
+      ];
+    }
+    return ort.InferenceSession.create(new Uint8Array(modelBuf), options);
   }
 
   private async fetchWeight(file: string): Promise<ArrayBuffer> {
@@ -398,4 +411,10 @@ function pickFirstFloat32(result: ort.InferenceSession.OnnxValueMapType): Float3
     if (data instanceof Float32Array) return data;
   }
   return null;
+}
+
+/** Last path segment — the name an .onnx graph uses to reference its sidecar. */
+function basename(path: string): string {
+  const i = path.lastIndexOf('/');
+  return i === -1 ? path : path.slice(i + 1);
 }

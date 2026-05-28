@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-studio",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Embeddable, fully client-side AI video studio for the browser. Runs LCM / SD-Turbo diffusion on WebGPU or WebNN, conditioned on a Mamba SSM state vector for frame-to-frame temporal coherence, and muxes the output to MP4 via WebCodecs. The prompt-expansion brain is the Builderforce LLM gateway, not a bundled WebLLM.",
   "license": "MIT",
   "author": "Sean Hogg",

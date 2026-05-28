@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 import JsonLd from '@/components/JsonLd';
+import OAuthButtons from '@/components/OAuthButtons';
 import PasswordInput from '@/components/PasswordInput';
 import { registerSchema } from '@/lib/structured-data';
 import { REGISTER_FAQ, STATS, FEATURES } from '@/lib/content';
@@ -233,6 +234,8 @@ export default function RegisterPageClient() {
                 {isLoading ? 'Creating account…' : 'Create Account →'}
               </button>
             </form>
+
+            <OAuthButtons />
           </div>
 
           <p style={{ textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: 20 }}>
