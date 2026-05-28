@@ -17,12 +17,14 @@
 
 FROM node:20-bookworm-slim AS deps
 WORKDIR /repo
-# Stub package.json for the link: targets so pnpm install succeeds before
-# the real source is bind-mounted. Stubs are replaced at runtime by the
-# host bind mounts under /repo/sdk and /repo/studio.
-RUN mkdir -p /repo/sdk /repo/studio && \
-    printf '{"name":"@seanhogg/builderforce-sdk","version":"0.0.0","main":"dist/index.cjs","module":"dist/index.mjs","types":"dist/index.d.ts"}\n' > /repo/sdk/package.json && \
-    printf '{"name":"@seanhogg/builderforce-studio","version":"0.0.0","main":"dist/index.cjs","module":"dist/index.mjs","types":"dist/index.d.ts"}\n' > /repo/studio/package.json
+# Stub package.json for the link: targets so pnpm install succeeds before the
+# real source is bind-mounted. Stubs are replaced at runtime by the host bind
+# mounts under /repo/sdk, /repo/studio, /repo/studio-embedded. Written as
+# separate single-line RUNs so Dockerfile linters don't misparse the JSON.
+RUN mkdir -p /repo/sdk /repo/studio /repo/studio-embedded
+RUN printf '%s' '{"name":"@seanhogg/builderforce-sdk","version":"0.0.0","main":"dist/index.cjs","module":"dist/index.mjs","types":"dist/index.d.ts"}' > /repo/sdk/package.json
+RUN printf '%s' '{"name":"@seanhogg/builderforce-studio","version":"0.0.0","main":"dist/index.cjs","module":"dist/index.mjs","types":"dist/index.d.ts"}' > /repo/studio/package.json
+RUN printf '%s' '{"name":"@seanhogg/builderforce-studio-embedded","version":"0.0.0","main":"dist/index.cjs","module":"dist/index.mjs","types":"dist/index.d.ts"}' > /repo/studio-embedded/package.json
 WORKDIR /repo/frontend
 COPY frontend/package.json frontend/pnpm-lock.yaml* ./
 RUN corepack enable && corepack prepare pnpm@10.23.0 --activate
