@@ -11,9 +11,13 @@ CREATE TABLE IF NOT EXISTS projects (
   description TEXT,
   owner_id TEXT NOT NULL,
   template TEXT DEFAULT 'vanilla',
+  modality TEXT DEFAULT 'designer',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Idempotent column add for databases created before the modality column existed.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS modality TEXT DEFAULT 'designer';
 
 CREATE TABLE IF NOT EXISTS project_members (
   project_id TEXT NOT NULL,

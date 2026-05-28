@@ -17,11 +17,11 @@ import { useCollaboration } from '@/hooks/useCollaboration';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
 import { saveFile, fetchFileContent, deleteFile, fetchFiles, updateProject } from '@/lib/api';
 import { brain } from '@/lib/builderforceApi';
-import { MODALITIES, DEFAULT_MODALITY, type ProjectModality } from '@/lib/modality';
+import { MODALITIES, DEFAULT_MODALITY, getModality, RIGHT_TAB_LABELS, type ProjectModality, type RightTab } from '@/lib/modality';
 import { getStoredTenantToken } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/apiClient';
-import { StudioPanel } from '@seanhogg/builderforce-studio';
-import '@seanhogg/builderforce-studio/styles.css';
+import { StudioPanel } from '@seanhogg/builderforce-studio-embedded';
+import '@seanhogg/builderforce-studio-embedded/styles.css';
 
 interface IDEProps {
   project: Project;
@@ -34,7 +34,6 @@ interface IDEProps {
 }
 
 type CenterView = 'preview' | 'code';
-type RightTab = 'files' | 'train' | 'publish' | 'state';
 
 export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId }: IDEProps) {
   const router = useRouter();
@@ -64,6 +63,15 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   useEffect(() => {
     setProjectTitle(project.name);
   }, [project.name]);
+
+  // When modality changes, clamp the active right-panel tab to the allowed set.
+  const allowedRightTabs = getModality(modality).rightTabs;
+  useEffect(() => {
+    if (!allowedRightTabs.includes(rightTab)) {
+      setRightTab(allowedRightTabs[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modality]);
 
   const { state: wcState, mountFiles, runCommand, runCommandAndWait, startShell, startDevServer, getOrBootWebContainer } = useWebContainer();
   const { doc: ydoc, connected: collabConnected } = useCollaboration(project.id, 'user-local');
@@ -562,20 +570,22 @@ export default defineConfig({
         {statusLabel && (
           <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{statusLabel}</span>
         )}
-        <button
-          onClick={handleRun}
-          disabled={isRunning}
-          style={{
-            background: isRunning ? 'var(--bg-elevated)' : 'linear-gradient(135deg, #22c55e, #16a34a)',
-            color: '#fff', border: 'none', borderRadius: 8,
-            padding: '5px 14px', fontSize: '0.82rem', fontWeight: 600,
-            cursor: isRunning ? 'wait' : 'pointer', fontFamily: 'var(--font-display)',
-            display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
-            opacity: isRunning ? 0.6 : 1,
-          }}
-        >
-          {isRunning ? '⏳ Running…' : '▶ Run'}
-        </button>
+        {getModality(modality).showRunButton && (
+          <button
+            onClick={handleRun}
+            disabled={isRunning}
+            style={{
+              background: isRunning ? 'var(--bg-elevated)' : 'linear-gradient(135deg, #22c55e, #16a34a)',
+              color: '#fff', border: 'none', borderRadius: 8,
+              padding: '5px 14px', fontSize: '0.82rem', fontWeight: 600,
+              cursor: isRunning ? 'wait' : 'pointer', fontFamily: 'var(--font-display)',
+              display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
+              opacity: isRunning ? 0.6 : 1,
+            }}
+          >
+            {isRunning ? '⏳ Running…' : '▶ Run'}
+          </button>
+        )}
       </div>
 
       <ProjectsSlideOutPanel
@@ -616,6 +626,7 @@ export default defineConfig({
               router.replace(chatId != null ? `${path}?chat=${chatId}` : path, { scroll: false });
             }}
             modality={modality}
+            onUsePrompt={modality === 'video' ? setVideoPrompt : undefined}
           />
         </div>
 
@@ -624,7 +635,7 @@ export default defineConfig({
           {modality === 'video' ? (
             <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
               <StudioPanel
-                apiKey={getStoredTenantToken() ?? ''}
+                authToken={getStoredTenantToken() ?? ''}
                 baseUrl={getApiBaseUrl()}
                 hideHeader
                 promptValue={videoPrompt}
@@ -748,7 +759,7 @@ export default defineConfig({
         {/* Right panel: Files / Train / Publish */}
         <div style={{ width: 300, flexShrink: 0, borderLeft: '1px solid var(--border-subtle)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-            {([['files', '📁 Files'], ['train', '🧠 Train'], ['publish', '🚀 Publish'], ['state', '🔬 State']] as [RightTab, string][]).map(([tab, label]) => (
+            {allowedRightTabs.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setRightTab(tab)}
@@ -760,7 +771,7 @@ export default defineConfig({
                   cursor: 'pointer', fontFamily: 'var(--font-display)',
                   whiteSpace: 'nowrap',
                 }}
-              >{label}</button>
+              >{RIGHT_TAB_LABELS[tab]}</button>
             ))}
           </div>
           <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>

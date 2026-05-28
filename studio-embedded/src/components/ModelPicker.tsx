@@ -1,5 +1,4 @@
-import { MODEL_REGISTRY } from '../engine/diffusion-engine';
-import type { DiffusionModelId } from '../types';
+import { MODEL_REGISTRY, type DiffusionModelId } from '@seanhogg/builderforce-studio';
 
 interface ModelPickerProps {
   value: DiffusionModelId;

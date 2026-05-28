@@ -13,6 +13,9 @@
 
 export type ProjectModality = 'designer' | 'video' | 'llm';
 
+/** Right-panel tab ids the IDE can surface. Each modality picks the relevant subset. */
+export type RightTab = 'files' | 'train' | 'publish' | 'state';
+
 export interface ModalityDef {
   id: ProjectModality;
   label: string;
@@ -26,7 +29,20 @@ export interface ModalityDef {
   brainPlaceholder: string;
   /** Brain empty-state hint for this modality. */
   brainEmptyState: string;
+  /** Right-panel tabs relevant to this modality, in display order. */
+  rightTabs: RightTab[];
+  /** Whether the green "Run" button applies (npm install + Vite dev server).
+   *  Video drives generation from its own panel; LLM has its own training flow. */
+  showRunButton: boolean;
 }
+
+/** Labels for the right-panel tabs — single source so the IDE doesn't inline them. */
+export const RIGHT_TAB_LABELS: Record<RightTab, string> = {
+  files: '📁 Files',
+  train: '🧠 Train',
+  publish: '🚀 Publish',
+  state: '🔬 State',
+};
 
 export const MODALITIES: ModalityDef[] = [
   {
@@ -41,6 +57,8 @@ export const MODALITIES: ModalityDef[] = [
     ].join('\n'),
     brainPlaceholder: 'Ask AI to build, explain, or refactor…',
     brainEmptyState: 'Open a file for context, or ask me to generate an app or create files.',
+    rightTabs: ['files', 'train', 'publish', 'state'],
+    showRunButton: true,
   },
   {
     id: 'video',
@@ -53,7 +71,9 @@ export const MODALITIES: ModalityDef[] = [
       'When the user asks for a video, reply with a single refined prompt paragraph they can paste straight into the generator — no preamble, under 220 characters.',
     ].join('\n'),
     brainPlaceholder: 'Describe the video you want…',
-    brainEmptyState: "Describe a scene and I'll craft a video prompt you can generate on the right.",
+    brainEmptyState: "Describe a scene and I'll craft a video prompt — use it in the generator on the left.",
+    rightTabs: ['files', 'state'],
+    showRunButton: false,
   },
   {
     id: 'llm',
@@ -64,6 +84,8 @@ export const MODALITIES: ModalityDef[] = [
       'You are assisting with building and training a custom LLM inside Builderforce.ai. Help the user design datasets, choose architectures, and reason about training runs.',
     brainPlaceholder: 'Ask about building or training your model…',
     brainEmptyState: 'LLM modality is coming soon — build and train models here.',
+    rightTabs: ['files', 'train', 'publish', 'state'],
+    showRunButton: false,
   },
 ];
 

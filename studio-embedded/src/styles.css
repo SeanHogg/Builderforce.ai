@@ -1,0 +1,288 @@
+/*
+ * @seanhogg/builderforce-studio — styles for StudioPanel and friends.
+ *
+ * All selectors are prefixed `bfs-` to avoid colliding with host application
+ * styles. CSS custom properties cascade from `:root` of the host so the panel
+ * respects the surrounding theme when available.
+ */
+
+.bfs-root {
+  --bfs-bg: var(--bg-surface, #0a0f1a);
+  --bfs-bg-deep: var(--bg-deep, #050810);
+  --bfs-fg: var(--text-primary, #e5e7eb);
+  --bfs-fg-muted: var(--text-secondary, #9ca3af);
+  --bfs-accent: var(--coral-bright, #4d9eff);
+  --bfs-accent-2: var(--cyan-bright, #00e5cc);
+  --bfs-border: rgba(255, 255, 255, 0.08);
+  --bfs-danger: #ef4444;
+
+  font-family: var(--font-body, system-ui, -apple-system, "Segoe UI", sans-serif);
+  color: var(--bfs-fg);
+  background: var(--bfs-bg-deep);
+  padding: 24px;
+  border-radius: 16px;
+  min-height: 600px;
+  box-sizing: border-box;
+}
+
+.bfs-state-probing,
+.bfs-state-unsupported {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+  min-height: 480px;
+}
+
+.bfs-state-unsupported h2 {
+  margin: 0;
+  font-family: var(--font-display, var(--font-body));
+  font-size: 1.5rem;
+}
+
+.bfs-spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid var(--bfs-border);
+  border-top-color: var(--bfs-accent);
+  animation: bfs-spin 0.9s linear infinite;
+}
+
+@keyframes bfs-spin {
+  to { transform: rotate(360deg); }
+}
+
+.bfs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--bfs-border);
+}
+
+.bfs-title {
+  margin: 0 0 4px 0;
+  font-family: var(--font-display, var(--font-body));
+  font-size: 1.75rem;
+  letter-spacing: -0.02em;
+}
+
+.bfs-subtitle {
+  margin: 0;
+  color: var(--bfs-fg-muted);
+  font-size: 0.875rem;
+}
+
+.bfs-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+}
+
+@media (max-width: 900px) {
+  .bfs-grid { grid-template-columns: 1fr; }
+}
+
+.bfs-controls,
+.bfs-preview-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.bfs-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bfs-row {
+  display: flex;
+  gap: 12px;
+}
+
+.bfs-flex {
+  flex: 1;
+}
+
+.bfs-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--bfs-fg);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bfs-hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--bfs-fg-muted);
+  line-height: 1.4;
+}
+
+.bfs-prompt,
+.bfs-input,
+.bfs-select {
+  background: var(--bfs-bg);
+  color: var(--bfs-fg);
+  border: 1px solid var(--bfs-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.bfs-prompt {
+  resize: vertical;
+  min-height: 84px;
+}
+
+.bfs-prompt:focus,
+.bfs-input:focus,
+.bfs-select:focus {
+  border-color: var(--bfs-accent);
+}
+
+.bfs-readout {
+  background: var(--bfs-bg);
+  color: var(--bfs-fg-muted);
+  border: 1px solid var(--bfs-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: var(--font-mono, ui-monospace, "SF Mono", monospace);
+  font-size: 0.9375rem;
+}
+
+.bfs-radio-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.bfs-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.bfs-range {
+  width: 100%;
+  accent-color: var(--bfs-accent);
+}
+
+.bfs-mono {
+  font-family: var(--font-mono, ui-monospace, "SF Mono", monospace);
+  color: var(--bfs-accent-2);
+}
+
+.bfs-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.bfs-btn {
+  appearance: none;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.05s ease;
+}
+
+.bfs-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.bfs-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.bfs-btn-primary {
+  background: var(--bfs-accent);
+  color: white;
+}
+
+.bfs-btn-secondary {
+  background: transparent;
+  color: var(--bfs-fg);
+  border: 1px solid var(--bfs-border);
+}
+
+.bfs-btn-danger {
+  background: var(--bfs-danger);
+  color: white;
+}
+
+.bfs-progress {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--bfs-accent-2);
+}
+
+.bfs-error {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--bfs-danger);
+}
+
+.bfs-preview {
+  position: relative;
+  width: 100%;
+  background: var(--bfs-bg);
+  border: 1px solid var(--bfs-border);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bfs-preview-canvas,
+.bfs-preview-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.bfs-preview-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bfs-fg-muted);
+  font-size: 0.875rem;
+  padding: 24px;
+  text-align: center;
+}
+
+.bfs-meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.bfs-meta dt {
+  color: var(--bfs-fg-muted);
+}
+
+.bfs-meta dd {
+  margin: 0;
+  font-family: var(--font-mono, ui-monospace, "SF Mono", monospace);
+}

@@ -1,9 +1,12 @@
 /**
- * @seanhogg/builderforce-studio
+ * @seanhogg/builderforce-studio — headless engine.
  *
- * Public entry point. Exports the engine plus React components. Consumers that
- * want the engine without React should import from
- * `@seanhogg/builderforce-studio/engine`.
+ * Client-side video-generation engine: LCM / SD-Turbo diffusion on WebGPU or
+ * WebNN (via onnxruntime-web), CLIP tokenization (via @huggingface/transformers),
+ * Mamba SSM temporal coherence, and WebCodecs MP4 muxing. No React, no UI.
+ *
+ * For a ready-made React `<StudioPanel>`, install
+ * @seanhogg/builderforce-studio-embedded, which builds on this engine.
  */
 
 export type {
@@ -14,6 +17,7 @@ export type {
   CoherenceMode,
   WeightSource,
   ModelDescriptor,
+  OnnxFile,
   VideoEngineOptions,
   GenerateOptions,
   GenerateResult,
@@ -21,14 +25,7 @@ export type {
 
 export { VideoEngine } from './engine/video-engine';
 export { probeDevice, hasWebGPUSupport } from './engine/device-router';
+export type { ProbedDevice } from './engine/device-router';
 export { MODEL_REGISTRY } from './engine/diffusion-engine';
 export { configureOnnxRuntime } from './engine/onnx-runtime-config';
 export type { OnnxRuntimeConfigOptions } from './engine/onnx-runtime-config';
-
-export { StudioPanel } from './components/StudioPanel';
-export type { StudioPanelProps } from './components/StudioPanel';
-export { ModelPicker } from './components/ModelPicker';
-export { CoherenceControls } from './components/CoherenceControls';
-export { VideoPreview } from './components/VideoPreview';
-export { useEngineStatus } from './components/useEngineStatus';
-export type { EngineStatus } from './components/useEngineStatus';

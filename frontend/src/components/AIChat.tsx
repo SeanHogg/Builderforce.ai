@@ -26,9 +26,11 @@ interface AIChatProps {
   onStartBrainStormSession?: (message: string) => void | Promise<void>;
   /** Active project modality — drives the Brain's system prompt, placeholder, and empty state. */
   modality?: ProjectModality;
+  /** When set (video modality), assistant messages get a "Use in generator" action that hands the text to the video panel. */
+  onUsePrompt?: (content: string) => void;
 }
 
-export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, onCreateFile, initialMessages, onMessagesPersisted, onStartBrainStormSession, modality = 'designer' }: AIChatProps) {
+export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, onCreateFile, initialMessages, onMessagesPersisted, onStartBrainStormSession, modality = 'designer', onUsePrompt }: AIChatProps) {
   const modalityDef = getModality(modality);
   const [messages, setMessages] = useState<AIMessage[]>(initialMessages ?? []);
   const [input, setInput] = useState('');
@@ -283,13 +285,31 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
             onCreateFile={onCreateFile}
             actions={
               message.role === 'assistant' && message.content ? (
-                <ChatMessageActions
-                  onCopy={() => copyMessage(message.content, message.id)}
-                  copied={copiedId === message.id}
-                  projectId={Number(projectId)}
-                  assistantContent={message.content}
-                  conversationMessages={messages.map((m) => ({ role: m.role, content: m.content }))}
-                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <ChatMessageActions
+                    onCopy={() => copyMessage(message.content, message.id)}
+                    copied={copiedId === message.id}
+                    projectId={Number(projectId)}
+                    assistantContent={message.content}
+                    conversationMessages={messages.map((m) => ({ role: m.role, content: m.content }))}
+                  />
+                  {modality === 'video' && onUsePrompt && (
+                    <button
+                      type="button"
+                      onClick={() => onUsePrompt(message.content)}
+                      title="Send this prompt to the video generator"
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        fontSize: '0.7rem', fontWeight: 600,
+                        background: 'rgba(77,158,255,0.15)', color: 'var(--coral-bright, #4d9eff)',
+                        border: '1px solid var(--coral-bright, #4d9eff)', borderRadius: 6,
+                        padding: '2px 8px', cursor: 'pointer', fontFamily: 'var(--font-display)',
+                      }}
+                    >
+                      🎬 Use in generator
+                    </button>
+                  )}
+                </div>
               ) : undefined
             }
           />

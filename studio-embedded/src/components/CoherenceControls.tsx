@@ -1,4 +1,4 @@
-import type { CoherenceMode } from '../types';
+import type { CoherenceMode } from '@seanhogg/builderforce-studio';
 
 interface CoherenceControlsProps {
   mode: CoherenceMode;

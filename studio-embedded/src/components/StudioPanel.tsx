@@ -14,21 +14,25 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { VideoEngine } from '../engine/video-engine';
-import type {
-  CoherenceMode,
-  DiffusionModelId,
-  GenerateResult,
-  MambaStateSnapshot,
-} from '../types';
+import {
+  VideoEngine,
+  type CoherenceMode,
+  type DiffusionModelId,
+  type GenerateResult,
+  type MambaStateSnapshot,
+} from '@seanhogg/builderforce-studio';
 import { ModelPicker } from './ModelPicker';
 import { CoherenceControls } from './CoherenceControls';
 import { VideoPreview } from './VideoPreview';
 import { useEngineStatus } from './useEngineStatus';
 
 export interface StudioPanelProps {
-  /** Builderforce API key. Used both for LLM prompt expansion and R2 weight fetches. */
-  apiKey: string;
+  /** Builderforce auth credential for the LLM gateway + R2 weight fetches.
+   *  Accepts either a minted `bfk_*` API key (external npm consumers) or a
+   *  tenant JWT (in-app embedders). Sent as `Authorization: Bearer <token>`. */
+  authToken?: string;
+  /** @deprecated Use `authToken`. Kept as an alias for 0.1.x consumers. */
+  apiKey?: string;
   /** Override gateway base URL (defaults to https://api.builderforce.ai). */
   baseUrl?: string;
   /** Default diffusion backbone. Users can switch via the model picker. */
@@ -56,6 +60,7 @@ const DEFAULT_WIDTH = 512;
 const DEFAULT_HEIGHT = 512;
 
 export function StudioPanel({
+  authToken,
   apiKey,
   baseUrl,
   defaultModel = 'lcm-dreamshaper-v7',
@@ -68,6 +73,7 @@ export function StudioPanel({
   promptValue,
   onPromptChange,
 }: StudioPanelProps) {
+  const token = authToken ?? apiKey ?? '';
   const status = useEngineStatus();
   const engineRef = useRef<VideoEngine | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -108,8 +114,8 @@ export function StudioPanel({
       setError('Enter a prompt before generating.');
       return;
     }
-    if (!apiKey) {
-      setError('Missing Builderforce API key.');
+    if (!token) {
+      setError('Missing Builderforce auth token (pass authToken).');
       return;
     }
 
@@ -129,7 +135,7 @@ export function StudioPanel({
     try {
       if (!engineRef.current) {
         const engine = await VideoEngine.create({
-          apiKey,
+          apiKey: token,
           baseUrl,
           model,
           mambaState: initialMambaState,
@@ -178,7 +184,7 @@ export function StudioPanel({
       abortRef.current = null;
     }
   }, [
-    apiKey,
+    token,
     baseUrl,
     coherenceMode,
     coherenceStrength,

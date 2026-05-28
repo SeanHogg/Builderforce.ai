@@ -6,8 +6,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { probeDevice } from '../engine/device-router';
-import type { ProbedDevice } from '../engine/device-router';
+import { probeDevice, type ProbedDevice } from '@seanhogg/builderforce-studio';
 
 export type EngineStatus =
   | { state: 'probing' }

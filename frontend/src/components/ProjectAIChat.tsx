@@ -35,6 +35,8 @@ interface ProjectAIChatProps {
   onChatSelect?: (chatId: number | null) => void;
   /** Active project modality — forwarded to the Brain so it adapts its persona. */
   modality?: ProjectModality;
+  /** Video modality: hand an assistant message to the video generator. */
+  onUsePrompt?: (content: string) => void;
 }
 
 function toAIMessages(messages: Array<{ id: number; role: string; content: string }>): AIMessage[] {
@@ -56,6 +58,7 @@ export function ProjectAIChat({
   initialChatId,
   onChatSelect,
   modality = 'designer',
+  onUsePrompt,
 }: ProjectAIChatProps) {
   const [chats, setChats] = useState<ProjectChatSummary[]>([]);
   const [currentChatId, setCurrentChatId] = useState<number | null>(null);
@@ -329,6 +332,7 @@ export function ProjectAIChat({
             onMessagesPersisted={handleMessagesPersisted}
             onStartBrainStormSession={onStartBrainStormSession}
             modality={modality}
+            onUsePrompt={onUsePrompt}
           />
         )}
       </div>

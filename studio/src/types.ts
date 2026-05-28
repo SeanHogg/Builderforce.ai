@@ -83,6 +83,8 @@ export interface VideoEngineOptions {
   apiKey: string;
   /** Builderforce gateway base URL. Defaults to https://api.builderforce.ai. */
   baseUrl?: string;
+  /** Gateway model id used for prompt expansion. Defaults to googleai/gemini-2.5-flash-lite. */
+  promptModel?: string;
   /** Which diffusion backbone to use. */
   model: DiffusionModelId;
   /** Hardware target. */

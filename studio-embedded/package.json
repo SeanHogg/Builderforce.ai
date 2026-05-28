@@ -1,17 +1,17 @@
 {
-  "name": "@seanhogg/builderforce-studio",
-  "version": "0.2.0",
-  "description": "Headless client-side AI video-generation engine for the browser. Runs LCM / SD-Turbo diffusion on WebGPU or WebNN (onnxruntime-web), CLIP tokenization via @huggingface/transformers, Mamba SSM temporal coherence, and WebCodecs MP4 muxing. No React. For a ready-made <StudioPanel>, see @seanhogg/builderforce-studio-embedded.",
+  "name": "@seanhogg/builderforce-studio-embedded",
+  "version": "0.1.0",
+  "description": "Full embeddable AI Video Studio for React — <StudioPanel> drop-in that runs LCM / SD-Turbo diffusion on WebGPU/WebNN, conditioned on a Mamba SSM state for temporal coherence, and muxes MP4 via WebCodecs. React layer on top of the headless @seanhogg/builderforce-studio engine.",
   "license": "MIT",
   "author": "Sean Hogg",
-  "homepage": "https://github.com/SeanHogg/Builderforce.ai/tree/main/studio#readme",
+  "homepage": "https://github.com/SeanHogg/Builderforce.ai/tree/main/studio-embedded#readme",
   "bugs": {
     "url": "https://github.com/SeanHogg/Builderforce.ai/issues"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/SeanHogg/Builderforce.ai.git",
-    "directory": "studio"
+    "directory": "studio-embedded"
   },
   "keywords": [
     "builderforce",
@@ -21,12 +21,10 @@
     "sd-turbo",
     "webgpu",
     "webnn",
-    "onnxruntime-web",
-    "mamba",
-    "ssm",
-    "in-browser",
-    "engine",
-    "headless"
+    "react",
+    "embeddable",
+    "studio",
+    "in-browser"
   ],
   "type": "module",
   "main": "dist/index.cjs",
@@ -37,7 +35,8 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
-    }
+    },
+    "./styles.css": "./dist/styles.css"
   },
   "files": [
     "dist"
@@ -56,19 +55,18 @@
     "node": ">=18"
   },
   "peerDependencies": {
-    "@huggingface/transformers": ">=3.8.0",
-    "@seanhogg/builderforce-sdk": ">=0.8.0",
-    "onnxruntime-web": ">=1.21.0"
-  },
-  "dependencies": {
-    "mp4-muxer": "^5.2.2"
+    "@seanhogg/builderforce-studio": ">=0.2.0",
+    "react": ">=18",
+    "react-dom": ">=18"
   },
   "devDependencies": {
-    "@huggingface/transformers": "^3.8.1",
-    "@seanhogg/builderforce-sdk": "^0.8.1",
+    "@seanhogg/builderforce-studio": "file:../studio",
     "@types/node": "^24.7.2",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
     "@webgpu/types": "^0.1.50",
-    "onnxruntime-web": "^1.21.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "tsup": "^8.5.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.3"
