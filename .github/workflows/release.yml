@@ -126,11 +126,22 @@ jobs:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   publish-studio:
-    name: Publish Studio (@seanhogg/builderforce-studio)
+    name: Publish Studio engine (@seanhogg/builderforce-studio)
     uses: ./.github/workflows/publish-npm-package.yml
     with:
       package-dir: studio
       package-name: '@seanhogg/builderforce-studio'
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-studio-embedded:
+    name: Publish Studio embedded (@seanhogg/builderforce-studio-embedded)
+    # Engine must publish first — the embedded package peer-depends on it.
+    needs: publish-studio
+    uses: ./.github/workflows/publish-npm-package.yml
+    with:
+      package-dir: studio-embedded
+      package-name: '@seanhogg/builderforce-studio-embedded'
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 

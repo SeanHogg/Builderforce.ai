@@ -6,7 +6,7 @@ const nextConfig = {
     NEXT_PUBLIC_APP_VERSION: version,
   },
   outputFileTracingRoot: __dirname,
-  transpilePackages: ['@monaco-editor/react', 'monaco-editor', '@seanhogg/builderforce-studio', '@seanhogg/builderforce-sdk'],
+  transpilePackages: ['@monaco-editor/react', 'monaco-editor', '@seanhogg/builderforce-studio', '@seanhogg/builderforce-studio-embedded', '@seanhogg/builderforce-sdk'],
   webpack(config) {
     config.module.rules.push({
       test: /\.md$/,

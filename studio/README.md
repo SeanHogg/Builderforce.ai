@@ -1,51 +1,27 @@
 # @seanhogg/builderforce-studio
 
-> Embeddable client-side AI video studio. Runs Stable Diffusion (LCM / SD-Turbo) on WebGPU or WebNN inside any browser, conditioned on a Mamba SSM state vector for frame-to-frame temporal coherence, and muxes the result to MP4 via WebCodecs. No server-side GPU. No frame upload. Prompt expansion uses the Builderforce LLM gateway.
+> Headless, fully client-side AI video-generation **engine** for the browser. Runs LCM / SD-Turbo diffusion on WebGPU or WebNN, conditioned on a Mamba SSM state for frame-to-frame temporal coherence, and muxes MP4 via WebCodecs. No React, no UI, no server GPU.
+
+This package is the **engine**. For a ready-made React `<StudioPanel>` component, install [`@seanhogg/builderforce-studio-embedded`](https://www.npmjs.com/package/@seanhogg/builderforce-studio-embedded), which builds on this.
 
 ```bash
 npm install @seanhogg/builderforce-studio \
-  @seanhogg/builderforce-sdk \
-  mambacode.js \
-  onnxruntime-web
+  onnxruntime-web @huggingface/transformers @seanhogg/builderforce-sdk
 ```
 
-## Embedded usage
-
-```tsx
-import { StudioPanel } from '@seanhogg/builderforce-studio';
-import '@seanhogg/builderforce-studio/styles.css';
-
-export function MyApp() {
-  return (
-    <StudioPanel
-      apiKey={process.env.BUILDERFORCE_API_KEY!}
-      defaultModel="lcm-dreamshaper-v7"
-      onVideoGenerated={(blob, state) => {
-        const url = URL.createObjectURL(blob);
-        // …upload, save, or play
-      }}
-    />
-  );
-}
-```
-
-`StudioPanel` self-gates: if the tenant isn't entitled to the `studio` module or no WebGPU/WebNN device is reachable, it renders an appropriate fallback. Consumers never compute `canUseStudio` or `hasWebGPU` — the panel owns those decisions.
-
-## Engine-only usage
-
-If you want full control over the pipeline (no React):
+## Usage
 
 ```ts
-import { VideoEngine } from '@seanhogg/builderforce-studio/engine';
+import { VideoEngine, probeDevice } from '@seanhogg/builderforce-studio';
 
 const engine = await VideoEngine.create({
-  apiKey: 'bfk_...',
-  model: 'lcm-dreamshaper-v7',
-  device: 'auto',           // 'webnn' | 'webgpu' | 'cpu' | 'auto'
+  authToken: 'bfk_...',          // or a tenant JWT — Authorization: Bearer
+  model: 'lcm-dreamshaper-v7',   // | 'sd-turbo'
+  device: 'auto',                // 'webnn' | 'webgpu' | 'cpu' | 'auto'
 });
 
 if (!engine) {
-  // No path viable on this device — render fallback UI
+  // No viable device — render an unsupported state in your UI.
   return;
 }
 
@@ -54,9 +30,9 @@ const result = await engine.generate({
   frames: 24,
   fps: 12,
   steps: 4,
-  coherence: 'prompt-bias',           // | 'latent-residual'
+  coherence: 'prompt-bias',       // | 'latent-residual'
   coherenceStrength: 0.5,
-  onFrame: (idx, bitmap) => { /* progress preview */ },
+  onFrame: (idx, bitmap) => { /* live preview */ },
 });
 
 // result.blob       → MP4 Blob
@@ -64,32 +40,31 @@ const result = await engine.generate({
 // result.frames     → ImageBitmap[]
 ```
 
+> `VideoEngineOptions.apiKey` is still accepted as an alias; new code should pass `authToken`.
+
 ## Architecture
 
 ```
 [Short prompt]
-   │
-   ▼  HTTPS  (Builderforce LLM gateway — existing /api/ai/chat endpoint)
-[Detailed prompt + scene description]
-   │
+   │  HTTPS — Builderforce LLM gateway (prompt expansion)
    ▼
-[VideoEngine] ─── per-frame loop ───┐
-   │                                 │
-   ▼                                 │
-[DiffusionEngine]                    │
-   ├─ LCM 4-step / SD-Turbo 1-step   │  Mamba state h_t
-   ├─ ONNX-RT-Web on WebGPU/WebNN    │  feeds back into next frame
-   └─ shared denoise() primitive     │  via prompt-bias OR latent-residual
-   │                                 │
-   ▼                                 │
-[MambaCoherence] ────── advances h_t ┘
-   │
+[VideoEngine] ── per-frame loop ──┐
+   ▼                              │  Mamba state h_t
+[DiffusionEngine]                 │  feeds the next frame via
+   ├─ CLIP tokenizer (transformers.js) │  prompt-bias OR latent-residual
+   ├─ text-encoder / UNet / VAE (onnxruntime-web)
+   └─ LCM consistency-model scheduler
+   ▼                              │
+[MambaCoherence] ─── advances h_t ┘
    ▼
-[WebCodecsMuxer]
-   │
-   ▼
-[MP4 Blob]
+[WebCodecsMuxer] → MP4 Blob
 ```
+
+## Exports
+
+`VideoEngine`, `probeDevice`, `hasWebGPUSupport`, `configureOnnxRuntime`, `MODEL_REGISTRY`, and all engine types (`MambaStateSnapshot`, `DiffusionModelId`, `GenerateOptions`, `GenerateResult`, `ProbedDevice`, …).
+
+WASM binaries load from a CDN at runtime via `configureOnnxRuntime()` so nothing multi-MB ships in your bundle.
 
 ## License
 

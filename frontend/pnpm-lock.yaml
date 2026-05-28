@@ -23,6 +23,9 @@ importers:
       '@seanhogg/builderforce-studio':
         specifier: link:../studio
         version: link:../studio
+      '@seanhogg/builderforce-studio-embedded':
+        specifier: link:../studio-embedded
+        version: link:../studio-embedded
       '@webcontainer/api':
         specifier: ^1.3.0
         version: 1.6.4

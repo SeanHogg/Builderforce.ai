@@ -1,4 +1,6 @@
 import { defineConfig } from 'tsup';
+import { copyFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 export default defineConfig({
   entry: { index: 'src/index.ts' },
@@ -8,12 +10,15 @@ export default defineConfig({
   clean: true,
   outDir: 'dist',
   external: [
-    'onnxruntime-web',
-    '@huggingface/transformers',
-    'mambacode.js',
-    '@seanhogg/builderforce-sdk',
+    'react',
+    'react-dom',
+    'react/jsx-runtime',
+    '@seanhogg/builderforce-studio',
   ],
   outExtension({ format }) {
     return { js: format === 'esm' ? '.mjs' : '.cjs' };
+  },
+  onSuccess: async () => {
+    copyFileSync(resolve('src/styles.css'), resolve('dist/styles.css'));
   },
 });

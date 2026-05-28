@@ -17,6 +17,8 @@ export interface ExpandPromptOptions {
   apiKey: string;
   baseUrl?: string;
   prompt: string;
+  /** Gateway model id for prompt expansion. Defaults to googleai/gemini-2.5-flash-lite. */
+  promptModel?: string;
   signal?: AbortSignal;
 }
 
@@ -34,7 +36,11 @@ export async function expandPrompt(opts: ExpandPromptOptions): Promise<string> {
   });
 
   const completion = await client.chat.completions.create({
-    model: 'auto',
+    // Explicit lightweight model — the gateway still failovers across the
+    // cascade if this is cooled, but we avoid relying on undocumented
+    // "unknown id → substitute" behaviour that a future strict-pin mode
+    // would break. Override via `promptModel` if a different model is wanted.
+    model: opts.promptModel ?? 'googleai/gemini-2.5-flash-lite',
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: opts.prompt },

@@ -110,6 +110,7 @@ export class VideoEngine {
       : await expandPrompt({
           apiKey: this.opts.apiKey,
           baseUrl: this.opts.baseUrl,
+          promptModel: this.opts.promptModel,
           prompt: args.prompt,
           signal: args.signal,
         });

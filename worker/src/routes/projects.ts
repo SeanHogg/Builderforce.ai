@@ -119,13 +119,14 @@ projects.get('/:id', async (c) => {
 
 projects.put('/:id', async (c) => {
   try {
-    const body = await c.req.json<{ name?: string; description?: string }>();
+    const body = await c.req.json<{ name?: string; description?: string; modality?: string }>();
     const sql = neon(c.env.NEON_DATABASE_URL);
     const rows = await sql`
       UPDATE projects
       SET
         name        = COALESCE(${body.name ?? null}, name),
         description = COALESCE(${body.description ?? null}, description),
+        modality    = COALESCE(${body.modality ?? null}, modality),
         updated_at  = NOW()
       WHERE id = ${c.req.param('id')}
       RETURNING *
