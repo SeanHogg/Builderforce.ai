@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { AIChat } from './AIChat';
+import type { ProjectModality } from '@/lib/modality';
 import {
   listProjectChats,
   getProjectChat,
@@ -32,6 +33,8 @@ interface ProjectAIChatProps {
   initialChatId?: number | null;
   /** Called when user selects a chat so the host can sync URL (e.g. /ide/1?chat=4). */
   onChatSelect?: (chatId: number | null) => void;
+  /** Active project modality — forwarded to the Brain so it adapts its persona. */
+  modality?: ProjectModality;
 }
 
 function toAIMessages(messages: Array<{ id: number; role: string; content: string }>): AIMessage[] {
@@ -52,6 +55,7 @@ export function ProjectAIChat({
   onStartBrainStormSession,
   initialChatId,
   onChatSelect,
+  modality = 'designer',
 }: ProjectAIChatProps) {
   const [chats, setChats] = useState<ProjectChatSummary[]>([]);
   const [currentChatId, setCurrentChatId] = useState<number | null>(null);
@@ -324,6 +328,7 @@ export function ProjectAIChat({
             initialMessages={currentMessages}
             onMessagesPersisted={handleMessagesPersisted}
             onStartBrainStormSession={onStartBrainStormSession}
+            modality={modality}
           />
         )}
       </div>

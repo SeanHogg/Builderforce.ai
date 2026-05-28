@@ -43,6 +43,13 @@ export interface StudioPanelProps {
   onVideoGenerated?: (blob: Blob, mambaState: MambaStateSnapshot) => void;
   /** Optional initial Mamba state — pass a resumed snapshot to continue a session. */
   initialMambaState?: MambaStateSnapshot;
+  /** Hide the panel's own title header — for embedding inside a host that
+   *  already shows project chrome (e.g. the Builderforce IDE video modality). */
+  hideHeader?: boolean;
+  /** Optional prompt supplied by the host (e.g. the IDE Brain). When it changes,
+   *  the panel adopts it as the current prompt without auto-generating. */
+  promptValue?: string;
+  onPromptChange?: (prompt: string) => void;
 }
 
 const DEFAULT_WIDTH = 512;
@@ -57,6 +64,9 @@ export function StudioPanel({
   defaultFps = 8,
   onVideoGenerated,
   initialMambaState,
+  hideHeader = false,
+  promptValue,
+  onPromptChange,
 }: StudioPanelProps) {
   const status = useEngineStatus();
   const engineRef = useRef<VideoEngine | null>(null);
@@ -76,6 +86,14 @@ export function StudioPanel({
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [result, setResult] = useState<GenerateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Adopt a host-supplied prompt (e.g. the IDE Brain hands one over).
+  useEffect(() => {
+    if (promptValue !== undefined && promptValue !== prompt) {
+      setPrompt(promptValue);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [promptValue]);
 
   // Revoke object URLs on unmount so we don't leak blob references.
   useEffect(() => {
@@ -212,15 +230,17 @@ export function StudioPanel({
 
   return (
     <div className="bfs-root">
-      <header className="bfs-header">
-        <div>
-          <h1 className="bfs-title">AI Video Studio</h1>
-          <p className="bfs-subtitle">
-            Running on <strong>{device.label}</strong>
-            {device.approxMemoryMb ? ` · ~${(device.approxMemoryMb / 1024).toFixed(1)} GB available` : ''}
-          </p>
-        </div>
-      </header>
+      {!hideHeader && (
+        <header className="bfs-header">
+          <div>
+            <h1 className="bfs-title">AI Video Studio</h1>
+            <p className="bfs-subtitle">
+              Running on <strong>{device.label}</strong>
+              {device.approxMemoryMb ? ` · ~${(device.approxMemoryMb / 1024).toFixed(1)} GB available` : ''}
+            </p>
+          </div>
+        </header>
+      )}
 
       <div className="bfs-grid">
         <section className="bfs-controls">
@@ -234,7 +254,10 @@ export function StudioPanel({
               rows={4}
               placeholder="e.g. a fox running through autumn forest at golden hour, slow motion, cinematic"
               value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
+              onChange={(e) => {
+                setPrompt(e.target.value);
+                onPromptChange?.(e.target.value);
+              }}
               disabled={isGenerating}
             />
             {expandedPrompt && (

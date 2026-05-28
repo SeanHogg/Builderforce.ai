@@ -36,6 +36,8 @@ export interface Project {
   name: string;
   description?: string | null;
   template?: string | null;
+  /** Active IDE modality for this project: 'designer' | 'video' | 'llm'. Defaults to 'designer'. */
+  modality?: string | null;
   key?: string;
   tenantId?: number;
   status?: string;

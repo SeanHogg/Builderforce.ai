@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { AIMessage, InferenceMode } from '@/lib/types';
+import { type ProjectModality, getModality } from '@/lib/modality';
 import { sendAIMessage } from '@/lib/api';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import { ChatInput } from '@/components/ChatInput';
@@ -23,9 +24,12 @@ interface AIChatProps {
   onMessagesPersisted?: (user: { role: string; content: string }, assistant: { role: string; content: string }) => void;
   /** When provided, clicking Up arrow runs this instead of sending to IDE AI (e.g. start a new Brain Storm session and redirect). */
   onStartBrainStormSession?: (message: string) => void | Promise<void>;
+  /** Active project modality — drives the Brain's system prompt, placeholder, and empty state. */
+  modality?: ProjectModality;
 }
 
-export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, onCreateFile, initialMessages, onMessagesPersisted, onStartBrainStormSession }: AIChatProps) {
+export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, onCreateFile, initialMessages, onMessagesPersisted, onStartBrainStormSession, modality = 'designer' }: AIChatProps) {
+  const modalityDef = getModality(modality);
   const [messages, setMessages] = useState<AIMessage[]>(initialMessages ?? []);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -116,10 +120,7 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
       }
 
       const systemParts: string[] = [
-        'You are an expert AI coding assistant built into Builderforce.ai, a browser-based IDE. Help users generate and build apps.',
-        'Use markdown for your response: headings, lists, bold, and fenced code blocks.',
-        'When suggesting new or existing files, use a code block with the file path as the language tag so the user can create the file in one click. Examples: ```package.json (then JSON content), ```src/index.js (then JS content), ```.gitignore (then content).',
-        'When you write code for the currently open file, use a normal code block (e.g. ```javascript) so the user can apply it.',
+        modalityDef.brainSystemPrompt,
         activeFile ? `The user currently has the file \`${activeFile}\` open.` : '',
         activeFileContent ? `\n\nCurrent content of that file:\n\`\`\`\n${activeFileContent.slice(0, 4000)}\n\`\`\`` : '',
       ];
@@ -258,16 +259,16 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
       <div className="bs-messages" style={{ flex: 1, overflowY: 'auto' }}>
         {messages.length === 0 && (
           <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '48px 16px' }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>💬</div>
-            <p style={{ fontSize: '0.9rem', marginBottom: 6, color: 'var(--text-primary)' }}>Ask me anything about your code!</p>
-            {activeFile ? (
+            <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>{modalityDef.icon}</div>
+            <p style={{ fontSize: '0.9rem', marginBottom: 6, color: 'var(--text-primary)' }}>{modalityDef.label} Brain</p>
+            {activeFile && modality === 'designer' ? (
               <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
                 I can see <strong style={{ color: 'var(--coral-bright)' }}>{activeFile}</strong><br />
                 Ask me to explain, refactor, or add features. You can also ask to generate a new app or files.
               </p>
             ) : (
               <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                Open a file for context, or ask me to generate an app or create files.
+                {modalityDef.brainEmptyState}
               </p>
             )}
           </div>
@@ -301,7 +302,7 @@ export function AIChat({ projectId, activeFile, activeFileContent, onApplyCode, 
           value={input}
           onChange={setInput}
           onSubmit={sendMessage}
-          placeholder="Ask AI..."
+          placeholder={modalityDef.brainPlaceholder}
           disabled={isLoading}
           rows={2}
           submitOnEnter={false}

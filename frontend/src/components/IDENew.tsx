@@ -17,6 +17,11 @@ import { useCollaboration } from '@/hooks/useCollaboration';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
 import { saveFile, fetchFileContent, deleteFile, fetchFiles, updateProject } from '@/lib/api';
 import { brain } from '@/lib/builderforceApi';
+import { MODALITIES, DEFAULT_MODALITY, type ProjectModality } from '@/lib/modality';
+import { getStoredTenantToken } from '@/lib/auth';
+import { getApiBaseUrl } from '@/lib/apiClient';
+import { StudioPanel } from '@seanhogg/builderforce-studio';
+import '@seanhogg/builderforce-studio/styles.css';
 
 interface IDEProps {
   project: Project;
@@ -33,6 +38,10 @@ type RightTab = 'files' | 'train' | 'publish' | 'state';
 
 export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId }: IDEProps) {
   const router = useRouter();
+  const [modality, setModality] = useState<ProjectModality>(
+    (project.modality as ProjectModality | undefined) ?? DEFAULT_MODALITY,
+  );
+  const [videoPrompt, setVideoPrompt] = useState('');
   const [files, setFiles] = useState<FileEntry[]>(initialFiles);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [activeFile, setActiveFile] = useState<string | undefined>();
@@ -355,6 +364,18 @@ export default defineConfig({
     } catch { /* silent */ }
   }, [project.id]);
 
+  const handleModalityChange = useCallback(
+    (next: ProjectModality) => {
+      if (next === modality) return;
+      setModality(next);
+      // Persist the choice so reopening the project restores the modality.
+      updateProject(project.id, { modality: next })
+        .then((updated) => onProjectUpdate?.({ ...project, ...updated }))
+        .catch(() => { /* non-fatal: switch still applies for this session */ });
+    },
+    [modality, project, onProjectUpdate],
+  );
+
   const handleStartBrainStormSession = useCallback(
     async (message: string) => {
       try {
@@ -488,6 +509,46 @@ export default defineConfig({
           </button>
         )}
 
+        {/* Modality switcher — same chrome across modalities; one project, many modes */}
+        <div
+          role="tablist"
+          aria-label="Project modality"
+          style={{
+            display: 'flex', gap: 2, marginLeft: 8, padding: 2,
+            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+            borderRadius: 8, flexShrink: 0,
+          }}
+        >
+          {MODALITIES.map((m) => {
+            const active = modality === m.id;
+            const disabled = !!m.comingSoon;
+            return (
+              <button
+                key={m.id}
+                role="tab"
+                aria-selected={active}
+                disabled={disabled}
+                onClick={() => handleModalityChange(m.id)}
+                title={disabled ? `${m.label} — coming soon` : `${m.label} modality`}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  padding: '4px 10px', fontSize: '0.78rem', fontWeight: 600,
+                  fontFamily: 'var(--font-display)',
+                  background: active ? 'var(--bg-deep)' : 'transparent',
+                  color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+                  border: 'none', borderRadius: 6,
+                  cursor: disabled ? 'not-allowed' : 'pointer',
+                  opacity: disabled ? 0.5 : 1,
+                }}
+              >
+                <span>{m.icon}</span>
+                {m.label}
+                {disabled && <span style={{ fontSize: '0.55rem', marginLeft: 2, opacity: 0.8 }}>·soon</span>}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Spacer */}
         <div style={{ flex: 1 }} />
 
@@ -554,11 +615,24 @@ export default defineConfig({
               const path = `/ide/${project.publicId ?? project.id}`;
               router.replace(chatId != null ? `${path}?chat=${chatId}` : path, { scroll: false });
             }}
+            modality={modality}
           />
         </div>
 
-        {/* Center panel: Preview/Code toggle + Terminal */}
+        {/* Center panel — content depends on the active modality, chrome stays consistent */}
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+          {modality === 'video' ? (
+            <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+              <StudioPanel
+                apiKey={getStoredTenantToken() ?? ''}
+                baseUrl={getApiBaseUrl()}
+                hideHeader
+                promptValue={videoPrompt}
+                onPromptChange={setVideoPrompt}
+              />
+            </div>
+          ) : (
+          <>
           {/* Preview/Code toggle */}
           <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)', padding: '2px 6px', gap: 6, flexShrink: 0 }}>
             {(['preview', 'code'] as CenterView[]).map(view => (
@@ -667,6 +741,8 @@ export default defineConfig({
               />
             </div>
           </div>
+          </>
+          )}
         </div>
 
         {/* Right panel: Files / Train / Publish */}
