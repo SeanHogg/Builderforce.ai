@@ -95,7 +95,7 @@ export async function createProject(data: {
 
 export async function updateProject(
   id: number | string,
-  data: Partial<Pick<Project, 'name' | 'description' | 'template' | 'key' | 'status' | 'governance'>>
+  data: Partial<Pick<Project, 'name' | 'description' | 'template' | 'key' | 'status' | 'governance' | 'modality'>>
 ): Promise<Project> {
   const res = isWorkerForProjects()
     ? await projectsRequest<Project>(`/api/projects/${id}`, {
