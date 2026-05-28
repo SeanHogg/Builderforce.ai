@@ -36,6 +36,16 @@ export type CoherenceMode = 'prompt-bias' | 'latent-residual';
 /** Source for fetching model weights. The engine falls back across these in order. */
 export type WeightSource = 'r2-proxy' | 'huggingface-cdn';
 
+/** A single ONNX model file, plus an optional external-data sidecar.
+ *  diffusers ONNX exports >2GB split weights into a `model.onnx` graph and a
+ *  `model.onnx_data` tensor blob; onnxruntime-web needs both. */
+export interface OnnxFile {
+  /** Path within the HF repo, e.g. 'unet/model.onnx'. */
+  model: string;
+  /** Optional external-data sidecar, e.g. 'unet/model.onnx_data'. */
+  externalData?: string;
+}
+
 export interface ModelDescriptor {
   id: DiffusionModelId;
   /** Number of denoising steps. LCM = 4, SD-Turbo = 1. */
@@ -44,9 +54,14 @@ export interface ModelDescriptor {
   defaultGuidance: number;
   /** Minimum advertised VRAM in MB. The engine warns below this. */
   minVramMb: number;
-  /** Hugging Face repo id used both for the transformers.js tokenizer/text-encoder
-   *  pull and for the raw-ORT UNet/VAE weight fetch through weight-cache.ts. */
+  /** Hugging Face repo id for the raw-ORT text-encoder/UNet/VAE weight fetch
+   *  through weight-cache.ts. */
   hfRepo: string;
+  /** Separate transformers.js-native repo for the CLIP tokenizer. The model
+   *  repos keep tokenizer files in a `tokenizer/` subfolder that AutoTokenizer
+   *  can't load; SD's tokenizer is the standard CLIP BPE so a root-level CLIP
+   *  repo produces identical token ids. */
+  tokenizerRepo: string;
   /** Cross-attention dimension. SD1.x = 768, SD2.x / SD-Turbo = 1024. */
   textEmbedDim: number;
   /** Tokenizer max sequence length. 77 for CLIP-based SD. */
@@ -57,8 +72,9 @@ export interface ModelDescriptor {
   defaultTimesteps: number[];
   /** ONNX weight files served via the studio R2 proxy / HF CDN fallback. */
   files: {
-    unet: string;
-    vaeDecoder: string;
+    textEncoder: OnnxFile;
+    unet: OnnxFile;
+    vaeDecoder: OnnxFile;
   };
 }
 
