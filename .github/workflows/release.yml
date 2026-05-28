@@ -66,8 +66,13 @@ jobs:
         working-directory: sdk
         run: npm install --no-audit --no-fund
 
-      - name: Install + build Studio
+      - name: Install + build Studio engine
         working-directory: studio
+        run: npm install --no-audit --no-fund
+
+      # Must follow the engine build — studio-embedded file:-depends on it.
+      - name: Install + build Studio embedded
+        working-directory: studio-embedded
         run: npm install --no-audit --no-fund
 
       - name: Install dependencies

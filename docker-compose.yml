@@ -26,6 +26,7 @@
 volumes:
   sdk-dist:
   studio-dist:
+  studio-embedded-dist:
 
 services:
   # ---------------------------------------------------------------------------
@@ -52,26 +53,34 @@ services:
       retries: 60
       start_period: 60s
 
+  # One watcher owns both studio packages: it builds the engine first (so the
+  # embedded package's file:../studio prepare hook finds tsup), builds embedded,
+  # then watches both — engine in the background, embedded in the foreground.
+  # A single container avoids two services racing on the studio-dist volume.
   studio-watch:
     image: node:20-bookworm-slim
     working_dir: /studio
     command:
       - sh
       - -c
-      - "npm install --no-audit --no-fund && npx tsup --config tsup.config.ts --watch"
+      - "cd /studio && npm install --no-audit --no-fund && cd /studio-embedded && npm install --no-audit --no-fund && (cd /studio && npx tsup --config tsup.config.ts --watch &) && cd /studio-embedded && npx tsup --config tsup.config.ts --watch"
     volumes:
       - ./studio/src:/studio/src
       - ./studio/package.json:/studio/package.json:ro
       - ./studio/tsconfig.json:/studio/tsconfig.json:ro
       - ./studio/tsup.config.ts:/studio/tsup.config.ts:ro
-      - ./studio/README.md:/studio/README.md:ro
+      - ./studio-embedded/src:/studio-embedded/src
+      - ./studio-embedded/package.json:/studio-embedded/package.json:ro
+      - ./studio-embedded/tsconfig.json:/studio-embedded/tsconfig.json:ro
+      - ./studio-embedded/tsup.config.ts:/studio-embedded/tsup.config.ts:ro
       - studio-dist:/studio/dist
+      - studio-embedded-dist:/studio-embedded/dist
     healthcheck:
-      test: ["CMD-SHELL", "test -f /studio/dist/index.mjs && test -f /studio/dist/styles.css"]
+      test: ["CMD-SHELL", "test -f /studio/dist/index.mjs && test -f /studio-embedded/dist/index.mjs && test -f /studio-embedded/dist/styles.css"]
       interval: 5s
       timeout: 3s
-      retries: 60
-      start_period: 60s
+      retries: 80
+      start_period: 90s
 
   # ---------------------------------------------------------------------------
   # API worker (wrangler dev)
@@ -120,8 +129,10 @@ services:
       - ./frontend/next.config.js:/repo/frontend/next.config.js:ro
       - ./sdk:/repo/sdk
       - ./studio:/repo/studio
+      - ./studio-embedded:/repo/studio-embedded
       - sdk-dist:/repo/sdk/dist
       - studio-dist:/repo/studio/dist
+      - studio-embedded-dist:/repo/studio-embedded/dist
     depends_on:
       api:
         condition: service_healthy
