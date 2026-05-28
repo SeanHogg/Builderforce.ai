@@ -142,6 +142,9 @@ jobs:
     with:
       package-dir: studio-embedded
       package-name: '@seanhogg/builderforce-studio-embedded'
+      # studio-embedded file:-depends on ../studio; build the engine (with its
+      # devDeps) first so the embedded install's prepare re-run finds tsup.
+      prebuild-package-dir: studio
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 

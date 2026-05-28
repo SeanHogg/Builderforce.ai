@@ -28,6 +28,11 @@ on:
         description: 'Published npm name (e.g. "@seanhogg/builderforce-sdk")'
         type: string
         required: true
+      prebuild-package-dir:
+        description: 'Optional sibling package to install+build first (e.g. "studio"), when this package file:-depends on it. Pre-installing it means its devDeps (tsup) exist when the main install re-runs its `prepare` hook.'
+        type: string
+        required: false
+        default: ''
     secrets:
       NPM_TOKEN:
         description: 'Optional fallback when OIDC trusted publishing is not yet configured for this package on npmjs.com'
@@ -54,6 +59,14 @@ jobs:
         run: |
           npm install -g npm@latest
           echo "npm $(npm --version) — Trusted Publishing requires >= 11.5.1"
+
+      # When this package file:-depends on a sibling, install the sibling first
+      # so its devDeps (e.g. tsup) are present — otherwise the main install's
+      # re-run of the sibling's `prepare` hook fails with `tsup: not found`.
+      - name: Pre-build local dependency
+        if: inputs.prebuild-package-dir != ''
+        working-directory: ${{ inputs.prebuild-package-dir }}
+        run: npm install --no-audit --no-fund
 
       # `npm install` triggers the package's `prepare` script which runs the
       # build, so we don't need an explicit Build step here.
