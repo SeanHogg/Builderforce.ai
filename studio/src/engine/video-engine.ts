@@ -218,6 +218,12 @@ export class VideoEngine {
   setMambaState(state: MambaStateSnapshot): void {
     this.mambaState = state;
   }
+
+  /** Release ORT sessions + GPUDevice. Idempotent. After dispose the engine
+   *  cannot be reused — create a new one with VideoEngine.create. */
+  async dispose(): Promise<void> {
+    await this.diffusion.dispose();
+  }
 }
 
 function deriveR2Base(baseUrl: string | undefined): string | undefined {
