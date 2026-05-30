@@ -23,7 +23,7 @@ export interface ModalityDef {
   /** Roadmap placeholder — switcher renders it disabled with a "soon" tag. */
   comingSoon?: boolean;
   /** Static system-prompt prefix injected into the Brain so the AI knows the
-   *  active modality. Dynamic context (open file, etc.) is appended by AIChat. */
+   *  active modality. Dynamic context (open file, etc.) is appended by the Brain. */
   brainSystemPrompt: string;
   /** Brain input placeholder for this modality. */
   brainPlaceholder: string;

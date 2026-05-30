@@ -276,6 +276,16 @@ export class DiffusionEngine {
     const sessionOptions = this.buildSessionOptions();
     const onProgress = this.opts.onProgress;
 
+    // Fail fast before downloading 1.7GB if the device clearly can't run it.
+    const memoryError = checkMemoryForModel(
+      this.opts.probed.approxMemoryMb,
+      d.minVramMb,
+      d.id,
+    );
+    if (memoryError) {
+      throw new Error(memoryError);
+    }
+
     reportProgress(`Loading CLIP tokenizer (${d.tokenizerRepo})…`, onProgress);
     this.tokenizer = await AutoTokenizer.from_pretrained(d.tokenizerRepo);
     reportProgress('Tokenizer ready.', onProgress);
@@ -451,9 +461,13 @@ export class DiffusionEngine {
       ];
     }
     reportProgress(`Creating ${label} ORT session…`, onProgress);
-    const session = await ort.InferenceSession.create(new Uint8Array(modelBuf), options);
-    reportProgress(`${label} ready.`, onProgress);
-    return session;
+    try {
+      const session = await ort.InferenceSession.create(new Uint8Array(modelBuf), options);
+      reportProgress(`${label} ready.`, onProgress);
+      return session;
+    } catch (err) {
+      throw explainSessionCreateError(err, label, this.descriptor.id, this.descriptor.minVramMb);
+    }
   }
 
   private async fetchWeight(file: string): Promise<ArrayBuffer> {
@@ -585,6 +599,64 @@ function pickFirstFloat32(result: ort.InferenceSession.OnnxValueMapType): Float3
     if (data instanceof Float32Array) return data;
   }
   return null;
+}
+
+/**
+ * Pre-flight memory check. Returns null when memory is sufficient (or unknown);
+ * returns an error message when the probed memory is below the model's declared
+ * minimum. Caller throws if the message is non-null.
+ *
+ * Why this exists: skipping the check sends the user into a multi-minute model
+ * download that ends with the opaque ORT `std::bad_alloc` (ERROR_CODE 6). A
+ * pre-flight check fails in milliseconds with an actionable message instead.
+ *
+ * `approxMemoryMb` of `null` means the device didn't report — we don't refuse
+ * in that case (better to attempt and surface a real error than block on
+ * unknowns), but a logged warning is the right shape.
+ */
+export function checkMemoryForModel(
+  approxMemoryMb: number | null,
+  minVramMb: number,
+  modelId: string,
+): string | null {
+  if (approxMemoryMb === null) return null;
+  if (approxMemoryMb >= minVramMb) return null;
+  return (
+    `Insufficient GPU memory for ${modelId}: device reports ` +
+    `~${(approxMemoryMb / 1024).toFixed(1)} GB available, ` +
+    `model needs at least ~${(minVramMb / 1024).toFixed(1)} GB. ` +
+    `Try a lighter model (e.g. sd-turbo) or close other GPU-heavy tabs.`
+  );
+}
+
+/**
+ * Translate ORT's opaque session-create errors into actionable diagnostics.
+ * Wraps `InferenceSession.create()` so a `std::bad_alloc` becomes a sentence
+ * the user can act on, not a stack trace into the WASM runtime.
+ */
+export function explainSessionCreateError(
+  err: unknown,
+  label: string,
+  modelId: string,
+  minVramMb: number,
+): Error {
+  const message = err instanceof Error ? err.message : String(err);
+  if (/bad_alloc|out of memory|memory access out of bounds/i.test(message)) {
+    return new Error(
+      `Out of memory while creating the ${label} ORT session for ${modelId} ` +
+        `(needs ~${(minVramMb / 1024).toFixed(1)} GB). ` +
+        `Close other GPU-heavy tabs and reload, or pick a lighter model. ` +
+        `Original error: ${message}`,
+    );
+  }
+  if (/InsertedPrecisionFreeCast|SimplifiedLayerNormFusion|graph_utils\.cc/.test(message)) {
+    return new Error(
+      `${label} ORT session refused to load due to a graph-fusion crash. ` +
+        `This usually means graphOptimizationLevel is too aggressive — verify ` +
+        `buildOrtSessionOptions still pins 'basic'. Original error: ${message}`,
+    );
+  }
+  return err instanceof Error ? err : new Error(message);
 }
 
 /**

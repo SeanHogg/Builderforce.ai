@@ -31,6 +31,8 @@ import {
   SUPPORTED_DTYPES,
   materializeTensor,
   buildOrtSessionOptions,
+  checkMemoryForModel,
+  explainSessionCreateError,
 } from './diffusion-engine';
 
 describe('MODEL_REGISTRY × UNet input contract', () => {
@@ -129,6 +131,59 @@ describe('buildOrtSessionOptions (graph-fusion crash guard)', () => {
     expect(buildOrtSessionOptions('webgpu').executionProviders).toEqual(['webgpu', 'wasm']);
     expect(buildOrtSessionOptions('webnn').executionProviders).toEqual(['webnn', 'wasm']);
     expect(buildOrtSessionOptions('cpu').executionProviders).toEqual(['wasm']);
+  });
+});
+
+describe('checkMemoryForModel (pre-flight OOM guard)', () => {
+  // Regression: without this, the engine attempts to load 1.7GB on a 4GB
+  // device and ends with an opaque ORT `std::bad_alloc` (ERROR_CODE 6) after
+  // multi-minute download. Fail fast with an actionable message instead.
+  it('returns null when memory is sufficient', () => {
+    expect(checkMemoryForModel(8 * 1024, 6 * 1024, 'lcm')).toBeNull();
+    expect(checkMemoryForModel(6 * 1024, 6 * 1024, 'lcm')).toBeNull();
+  });
+
+  it('returns an actionable error string when memory is below the minimum', () => {
+    const msg = checkMemoryForModel(4 * 1024, 6 * 1024, 'lcm-dreamshaper-v7');
+    expect(msg).toContain('lcm-dreamshaper-v7');
+    expect(msg).toContain('4.0 GB');
+    expect(msg).toContain('6.0 GB');
+    expect(msg).toMatch(/sd-turbo|lighter model/);
+  });
+
+  it('returns null when device memory is unknown (allow attempt rather than block)', () => {
+    expect(checkMemoryForModel(null, 6 * 1024, 'lcm')).toBeNull();
+  });
+});
+
+describe('explainSessionCreateError (opaque ORT crash → actionable message)', () => {
+  it("rewraps a std::bad_alloc into a memory-shortage explanation", () => {
+    const wrapped = explainSessionCreateError(
+      new Error('Can\'t create a session. ERROR_CODE: 6, ERROR_MESSAGE: std::bad_alloc'),
+      'unet',
+      'lcm-dreamshaper-v7',
+      6 * 1024,
+    );
+    expect(wrapped.message).toContain('Out of memory');
+    expect(wrapped.message).toContain('unet');
+    expect(wrapped.message).toContain('lcm-dreamshaper-v7');
+    expect(wrapped.message).toContain('6.0 GB');
+  });
+
+  it('rewraps the SimplifiedLayerNormFusion crash into a graph-options hint', () => {
+    const wrapped = explainSessionCreateError(
+      new Error('graph_utils.cc:30 InsertedPrecisionFreeCast_/text_model/...'),
+      'text_encoder',
+      'sd-turbo',
+      4 * 1024,
+    );
+    expect(wrapped.message).toContain('graph-fusion crash');
+    expect(wrapped.message).toContain('buildOrtSessionOptions');
+  });
+
+  it('passes through unrelated errors unchanged', () => {
+    const orig = new Error('totally different problem');
+    expect(explainSessionCreateError(orig, 'unet', 'lcm', 6 * 1024)).toBe(orig);
   });
 });
 

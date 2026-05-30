@@ -4,6 +4,23 @@ import { useEffect, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 
+/**
+ * The collab WS lives in the separate `worker/` deployment (CollaborationRoom
+ * Durable Object), NOT the api worker. Without a dedicated endpoint, y-websocket
+ * defaulted to `${NEXT_PUBLIC_WORKER_URL}/api/collab` → fell back to the api
+ * worker URL (no collab route) → connection refused → reconnect loop with no
+ * backoff → infinite console spam.
+ *
+ * Make collab opt-in: set NEXT_PUBLIC_COLLAB_WS_URL to the collab endpoint
+ * (e.g. wss://collab.builderforce.ai). When unset, the hook is inert — no WS
+ * attempted, no spam, no silent failure mode.
+ */
+function getCollabWsUrl(): string | null {
+  const explicit = process.env.NEXT_PUBLIC_COLLAB_WS_URL;
+  if (explicit && explicit.trim()) return explicit.replace(/\/+$/, '');
+  return null;
+}
+
 export function useCollaboration(projectId: string | number, userId: string) {
   const docRef = useRef<Y.Doc | null>(null);
   const providerRef = useRef<WebsocketProvider | null>(null);
@@ -12,19 +29,20 @@ export function useCollaboration(projectId: string | number, userId: string) {
 
   useEffect(() => {
     if (!roomId || !userId) return;
-
-    const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787';
-    const wsUrl = workerUrl.replace(/^http/, 'ws');
+    const wsBase = getCollabWsUrl();
+    if (!wsBase) {
+      // Collab not configured for this environment — log once, do nothing.
+      // eslint-disable-next-line no-console
+      console.info(
+        '[builderforce] Real-time collaboration disabled: set NEXT_PUBLIC_COLLAB_WS_URL to enable.',
+      );
+      return;
+    }
 
     const doc = new Y.Doc();
     docRef.current = doc;
 
-    const provider = new WebsocketProvider(
-      `${wsUrl}/api/collab`,
-      roomId,
-      doc,
-      { connect: true }
-    );
+    const provider = new WebsocketProvider(wsBase, roomId, doc, { connect: true });
     providerRef.current = provider;
 
     provider.on('status', ({ status }: { status: string }) => {
