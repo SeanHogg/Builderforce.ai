@@ -208,6 +208,10 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
           return;
         }
       }
+      // Claim the auto-reply guard for this chat: a user-driven send must not be
+      // re-answered by the trailing-user-message auto-reply effect (which exists
+      // only for chats seeded elsewhere and deep-linked in).
+      autoRepliedChatIdRef.current = id;
 
       const attachments = [...pendingAttachments];
       setPendingAttachments([]);

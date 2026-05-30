@@ -30,6 +30,7 @@ import {
   KNOWN_UNET_INPUTS,
   SUPPORTED_DTYPES,
   materializeTensor,
+  buildOrtSessionOptions,
 } from './diffusion-engine';
 
 describe('MODEL_REGISTRY × UNet input contract', () => {
@@ -105,6 +106,29 @@ describe('reportProgress (no-silent-phase invariant)', () => {
     expect(() => reportProgress('no-sink', undefined)).not.toThrow();
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
+  });
+});
+
+describe('buildOrtSessionOptions (graph-fusion crash guard)', () => {
+  // Regression: ORT-web's default graphOptimizationLevel 'all' runs extended
+  // fusions (SimplifiedLayerNormFusion, InsertedPrecisionFreeCast folding)
+  // that crash on browser-exported SD/SD-Turbo/LCM text-encoders. We MUST
+  // pin to 'basic'. If a future refactor cranks it back up, this test fails.
+
+  it("pins graphOptimizationLevel to 'basic' on every device path", () => {
+    for (const device of ['webgpu', 'webnn', 'cpu'] as const) {
+      const opts = buildOrtSessionOptions(device);
+      expect(
+        opts.graphOptimizationLevel,
+        `device=${device} must use 'basic' to avoid the SimplifiedLayerNormFusion crash`,
+      ).toBe('basic');
+    }
+  });
+
+  it('picks the right executionProviders chain per device', () => {
+    expect(buildOrtSessionOptions('webgpu').executionProviders).toEqual(['webgpu', 'wasm']);
+    expect(buildOrtSessionOptions('webnn').executionProviders).toEqual(['webnn', 'wasm']);
+    expect(buildOrtSessionOptions('cpu').executionProviders).toEqual(['wasm']);
   });
 });
 

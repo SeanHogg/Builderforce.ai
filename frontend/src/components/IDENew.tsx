@@ -1,12 +1,10 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { FileExplorer } from './FileExplorer';
 import { EditorTabs } from './EditorTabs';
 import { CodeEditor } from './CodeEditor';
 import { Terminal } from './Terminal';
-import { ProjectAIChat } from './ProjectAIChat';
 import { AITrainingPanel } from './AITrainingPanel';
 import { AgentPublishPanel } from './AgentPublishPanel';
 import { AgentStateViewer } from './AgentStateViewer';
@@ -17,7 +15,7 @@ import { useWebContainer } from '@/hooks/useWebContainer';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
 import { saveFile, fetchFileContent, deleteFile, fetchFiles, updateProject } from '@/lib/api';
-import { brain } from '@/lib/builderforceApi';
+import { useRegisterBrainActions, useBrainContext, savePrd, saveTasks, type BrainAction } from '@/lib/brain';
 import { MODALITIES, DEFAULT_MODALITY, getModality, RIGHT_TAB_LABELS, type ProjectModality, type RightTab } from '@/lib/modality';
 import { getStoredTenantToken } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/apiClient';
@@ -37,7 +35,6 @@ interface IDEProps {
 type CenterView = 'preview' | 'code';
 
 export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId }: IDEProps) {
-  const router = useRouter();
   const [modality, setModality] = useState<ProjectModality>(
     (project.modality as ProjectModality | undefined) ?? DEFAULT_MODALITY,
   );
@@ -385,22 +382,146 @@ export default defineConfig({
     [modality, project, onProjectUpdate],
   );
 
-  const handleStartBrainStormSession = useCallback(
-    async (message: string) => {
-      try {
-        const title = message.slice(0, 80).trim() || 'New chat';
-        const chat = await brain.createChat({
-          title,
-          projectId: typeof project.id === 'number' ? project.id : Number(project.id),
-        });
-        await brain.sendMessages(chat.id, [{ role: 'user', content: message }]);
-        router.push(`/brainstorm?chat=${chat.id}`);
-      } catch (e) {
-        console.error('Start Brain Storm session failed:', e);
-      }
+  // --- Brain integration ----------------------------------------------------
+  // The IDE's AI lives in the global Brain drawer. The IDE exposes its
+  // capabilities as MCP-style actions the Brain can call via tool-calling, and
+  // publishes ambient context (project, modality, open file) the Brain reads.
+  const projectIdNum = typeof project.id === 'number' ? project.id : Number(project.id);
+  const brainCtx = useBrainContext();
+
+  const applyCodeToActiveFile = useCallback((code: string) => {
+    if (!activeFile) return false;
+    setFileContents(prev => ({ ...prev, [activeFile]: code }));
+    saveFile(project.id, activeFile, code).catch(console.error);
+    return true;
+  }, [activeFile, project.id]);
+
+  const createProjectFile = useCallback((path: string, content: string) => {
+    setFileContents(prev => ({ ...prev, [path]: content }));
+    saveFile(project.id, path, content)
+      .then(() => {
+        refreshFiles();
+        if (!openFiles.includes(path)) {
+          setOpenFiles(prev => [...prev, path]);
+          setActiveFile(path);
+        }
+      })
+      .catch(console.error);
+  }, [project.id, refreshFiles, openFiles]);
+
+  // Latest IDE state for action handlers, so the registered action array stays
+  // stable (no re-registration churn) while `run()` reads current values.
+  const liveRef = useRef({ activeFile, modality, applyCodeToActiveFile, createProjectFile });
+  liveRef.current = { activeFile, modality, applyCodeToActiveFile, createProjectFile };
+
+  const brainActions = useMemo<BrainAction[]>(() => [
+    {
+      name: 'create_file',
+      description: 'Create or overwrite a file in the current project and open it in the editor.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Project-relative file path, e.g. src/App.jsx' },
+          content: { type: 'string', description: 'Full file contents' },
+        },
+        required: ['path', 'content'],
+      },
+      run: async ({ path, content }: { path: string; content: string }) => {
+        if (!path) return { error: 'A file path is required.' };
+        liveRef.current.createProjectFile(path, content ?? '');
+        return { created: path };
+      },
     },
-    [project.id, router]
-  );
+    {
+      name: 'apply_code_to_active_file',
+      description: "Replace the contents of the file currently open in the editor.",
+      parameters: {
+        type: 'object',
+        properties: { code: { type: 'string', description: 'New full contents for the open file' } },
+        required: ['code'],
+      },
+      run: async ({ code }: { code: string }) => {
+        const applied = liveRef.current.applyCodeToActiveFile(code ?? '');
+        return applied ? { applied: liveRef.current.activeFile } : { error: 'No file is open in the editor.' };
+      },
+    },
+    {
+      name: 'use_video_prompt',
+      description: 'Load a refined prompt into the video generator (video modality only).',
+      parameters: {
+        type: 'object',
+        properties: { prompt: { type: 'string', description: 'The video prompt to load into the generator' } },
+        required: ['prompt'],
+      },
+      run: async ({ prompt }: { prompt: string }) => {
+        if (liveRef.current.modality !== 'video') return { error: 'The project is not in Video modality.' };
+        setVideoPrompt(prompt ?? '');
+        return { loaded: true };
+      },
+    },
+    {
+      name: 'generate_prd',
+      description: 'Save a Product Requirements Document (markdown) to the project specs.',
+      parameters: {
+        type: 'object',
+        properties: { prd: { type: 'string', description: 'The full PRD in markdown' } },
+        required: ['prd'],
+      },
+      run: async ({ prd }: { prd: string }) => {
+        if (!prd?.trim()) return { error: 'PRD content is empty.' };
+        await savePrd(projectIdNum, prd);
+        return { saved: true };
+      },
+    },
+    {
+      name: 'generate_tasks',
+      description: 'Add a list of actionable tasks to the project.',
+      parameters: {
+        type: 'object',
+        properties: {
+          tasks: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { title: { type: 'string' }, description: { type: 'string' } },
+              required: ['title'],
+            },
+          },
+        },
+        required: ['tasks'],
+      },
+      run: async ({ tasks }: { tasks: Array<{ title: string; description?: string }> }) => {
+        const list = Array.isArray(tasks) ? tasks.filter(t => t?.title?.trim()) : [];
+        if (list.length === 0) return { error: 'No tasks provided.' };
+        await saveTasks(projectIdNum, {
+          titles: list.map(t => t.title),
+          descriptions: list.map(t => t.description ?? ''),
+        });
+        return { added: list.length };
+      },
+    },
+  ], [projectIdNum]);
+
+  useRegisterBrainActions(brainActions);
+
+  // Publish ambient context so the Brain knows the active project/modality and
+  // can see the open file.
+  const activeFileContent = activeFile ? (fileContents[activeFile] ?? '') : undefined;
+  const setBrainContext = brainCtx.setContext;
+  useEffect(() => {
+    const extraSystem = activeFile
+      ? `The user currently has the file \`${activeFile}\` open.${activeFileContent ? `\n\nCurrent content of that file:\n\`\`\`\n${activeFileContent.slice(0, 4000)}\n\`\`\`` : ''}`
+      : undefined;
+    setBrainContext({ projectId: projectIdNum, modality, extraSystem });
+  }, [setBrainContext, projectIdNum, modality, activeFile, activeFileContent]);
+
+  // Deep link: when opened with ?chat=, surface that chat in the Brain drawer.
+  const setBrainOpen = brainCtx.setOpen;
+  useEffect(() => {
+    if (initialChatId == null) return;
+    setBrainContext({ initialChatId });
+    setBrainOpen(true);
+  }, [initialChatId, setBrainContext, setBrainOpen]);
 
   const statusLabel = wcState.status === 'booting'
     ? '⏳ Booting…'
@@ -595,42 +716,9 @@ export default defineConfig({
         currentProjectId={typeof project.id === 'number' ? project.id : Number(project.id)}
       />
 
-      {/* Main content */}
+      {/* Main content. AI lives in the global Brain drawer (bottom-right), not a
+          left panel — the IDE registers its actions with the Brain instead. */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Brain: project-scoped chats (same selector as Brain Storm, project fixed) */}
-        <div style={{ width: 320, flexShrink: 0, borderRight: '1px solid var(--border-subtle)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <ProjectAIChat
-            projectId={project.id}
-            projectName={project.name}
-            activeFile={activeFile}
-            activeFileContent={activeFile ? (fileContents[activeFile] || '') : undefined}
-            onApplyCode={activeFile ? (code) => {
-              setFileContents(prev => ({ ...prev, [activeFile]: code }));
-              saveFile(project.id, activeFile, code).catch(console.error);
-            } : undefined}
-            onCreateFile={(path, content) => {
-              setFileContents(prev => ({ ...prev, [path]: content }));
-              saveFile(project.id, path, content)
-                .then(() => {
-                  refreshFiles();
-                  if (!openFiles.includes(path)) {
-                    setOpenFiles(prev => [...prev, path]);
-                    setActiveFile(path);
-                  }
-                })
-                .catch(console.error);
-            }}
-            onStartBrainStormSession={handleStartBrainStormSession}
-            initialChatId={initialChatId}
-            onChatSelect={(chatId) => {
-              const path = `/ide/${project.publicId ?? project.id}`;
-              router.replace(chatId != null ? `${path}?chat=${chatId}` : path, { scroll: false });
-            }}
-            modality={modality}
-            onUsePrompt={modality === 'video' ? setVideoPrompt : undefined}
-          />
-        </div>
-
         {/* Center panel — content depends on the active modality, chrome stays consistent */}
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
           {modality === 'video' ? (

@@ -6,6 +6,8 @@ import AppFooter from './AppFooter';
 import TopBar from './TopBar';
 import OnboardingGate from './OnboardingGate';
 import { useAuth } from '@/lib/AuthContext';
+import { BrainActionsProvider, BrainContextProvider } from '@/lib/brain';
+import { FloatingBrain } from './brain/FloatingBrain';
 
 const APP_SHELL_PATHS = ['/dashboard', '/ide', '/training', '/tenants'];
 
@@ -82,10 +84,18 @@ export default function ConditionalAppShell({ children }: { children: React.Reac
   }
 
   if (showShell) {
+    // The Brain (global AI assistant) is available across every app-shell route.
+    // Providers wrap the whole shell so pages can register actions / publish
+    // context; the floating drawer mounts once and hides itself on /brainstorm.
     return (
-      <OnboardingGate renderShell={(gated) => <AppShell>{gated}</AppShell>}>
-        {children}
-      </OnboardingGate>
+      <BrainActionsProvider>
+        <BrainContextProvider>
+          <OnboardingGate renderShell={(gated) => <AppShell>{gated}</AppShell>}>
+            {children}
+          </OnboardingGate>
+          <FloatingBrain />
+        </BrainContextProvider>
+      </BrainActionsProvider>
     );
   }
   if (showFooterOnly) {
