@@ -76,16 +76,32 @@ export interface ModelDescriptor {
     unet: OnnxFile;
     vaeDecoder: OnnxFile;
   };
-  /** Exact UNet input tensor names this model expects. The engine iterates this
-   *  list to build feeds; any name missing a registered builder fails the
-   *  registry-contract unit test before it can fail at runtime as
-   *  "input 'X' is missing in 'feeds'". */
-  unetInputNames: readonly string[];
+  /** Exact UNet input tensor names + dtypes this model expects. The engine
+   *  iterates this list to build feeds; any name missing a registered builder
+   *  fails the registry-contract test before it can throw at runtime as
+   *  "input 'X' is missing in 'feeds'". The dtype guards against the
+   *  "Unexpected input data type" error class — e.g. LCM Dreamshaper expects
+   *  `timestep` as float32, SD-Turbo as int64. */
+  unetInputs: readonly OrtInputSpec[];
+  /** Text-encoder input spec (same dtype hazard as the UNet — `input_ids`
+   *  is int32 in some exports, int64 in others). */
+  textEncoderInputs: readonly OrtInputSpec[];
   /** LCM consistency-model guidance-scale embedding dimension. Set on LCM
    *  exports (aislamov/* uses 256). When set, the engine produces a
    *  `timestep_cond` feed of shape [1, dim]. Leave undefined for non-LCM
    *  UNets (SD / SD-Turbo). */
   lcmGuidanceEmbedDim?: number;
+}
+
+/** Supported ONNX tensor dtypes the engine knows how to build feeds for. */
+export type OrtTensorDtype = 'float32' | 'int32' | 'int64';
+
+/** A single ORT session input — name (as declared in the model graph) + the
+ *  tensor dtype ORT will accept for it. Wrong dtype → "Unexpected input data
+ *  type" at runtime; the registry-contract test catches misdeclaration. */
+export interface OrtInputSpec {
+  name: string;
+  dtype: OrtTensorDtype;
 }
 
 export interface VideoEngineOptions {

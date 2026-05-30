@@ -18,6 +18,8 @@ export type {
   WeightSource,
   ModelDescriptor,
   OnnxFile,
+  OrtInputSpec,
+  OrtTensorDtype,
   VideoEngineOptions,
   GenerateOptions,
   GenerateResult,
