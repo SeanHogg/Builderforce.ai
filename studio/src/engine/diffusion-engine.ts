@@ -622,11 +622,20 @@ export function checkMemoryForModel(
   if (approxMemoryMb === null) return null;
   if (approxMemoryMb >= minVramMb) return null;
   return (
-    `Insufficient GPU memory for ${modelId}: device reports ` +
+    `Insufficient memory for ${modelId}: device reports ` +
     `~${(approxMemoryMb / 1024).toFixed(1)} GB available, ` +
     `model needs at least ~${(minVramMb / 1024).toFixed(1)} GB. ` +
-    `Try a lighter model (e.g. sd-turbo) or close other GPU-heavy tabs.`
+    `${lighterModelHint(modelId)}`
   );
+}
+
+/** Suggest a lighter model from the registry — never the failing one. */
+function lighterModelHint(failingModelId: string): string {
+  const alternatives = Object.keys(MODEL_REGISTRY).filter((id) => id !== failingModelId);
+  if (alternatives.length === 0) {
+    return 'Close other GPU-heavy tabs and retry.';
+  }
+  return `Try a lighter model (${alternatives.join(', ')}) or close other GPU-heavy tabs.`;
 }
 
 /**
@@ -645,7 +654,7 @@ export function explainSessionCreateError(
     return new Error(
       `Out of memory while creating the ${label} ORT session for ${modelId} ` +
         `(needs ~${(minVramMb / 1024).toFixed(1)} GB). ` +
-        `Close other GPU-heavy tabs and reload, or pick a lighter model. ` +
+        `${lighterModelHint(modelId)} ` +
         `Original error: ${message}`,
     );
   }

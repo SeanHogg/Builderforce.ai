@@ -148,11 +148,21 @@ describe('checkMemoryForModel (pre-flight OOM guard)', () => {
     expect(msg).toContain('lcm-dreamshaper-v7');
     expect(msg).toContain('4.0 GB');
     expect(msg).toContain('6.0 GB');
-    expect(msg).toMatch(/sd-turbo|lighter model/);
+    expect(msg).toMatch(/lighter model|Close other/);
   });
 
   it('returns null when device memory is unknown (allow attempt rather than block)', () => {
     expect(checkMemoryForModel(null, 6 * 1024, 'lcm')).toBeNull();
+  });
+
+  // Regression: prior version suggested "sd-turbo" even when sd-turbo WAS
+  // the failing model — a self-contradicting recommendation.
+  it('never suggests the failing model itself as a "lighter" alternative', () => {
+    for (const id of Object.keys(MODEL_REGISTRY)) {
+      const msg = checkMemoryForModel(1, 999_999, id);
+      expect(msg, `'${id}' must not be recommended when it is the failing model`)
+        .not.toMatch(new RegExp(`Try a lighter model.*\\b${id}\\b`));
+    }
   });
 });
 
@@ -184,6 +194,21 @@ describe('explainSessionCreateError (opaque ORT crash → actionable message)', 
   it('passes through unrelated errors unchanged', () => {
     const orig = new Error('totally different problem');
     expect(explainSessionCreateError(orig, 'unet', 'lcm', 6 * 1024)).toBe(orig);
+  });
+
+  // Same regression guard as checkMemoryForModel — the OOM message must not
+  // tell the user to switch TO the model they're already running.
+  it('never recommends the failing model itself in the OOM message', () => {
+    for (const id of Object.keys(MODEL_REGISTRY)) {
+      const wrapped = explainSessionCreateError(
+        new Error('std::bad_alloc'),
+        'unet',
+        id,
+        4 * 1024,
+      );
+      expect(wrapped.message, `'${id}' must not be recommended when it just OOM'd`)
+        .not.toMatch(new RegExp(`Try a lighter model.*\\b${id}\\b`));
+    }
   });
 });
 
