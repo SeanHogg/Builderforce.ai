@@ -425,10 +425,7 @@ export class DiffusionEngine {
   // -------------------------------------------------------------------------
 
   private buildSessionOptions(): ort.InferenceSession.SessionOptions {
-    const kind = this.opts.probed.kind;
-    if (kind === 'webnn') return { executionProviders: ['webnn', 'wasm'] };
-    if (kind === 'webgpu') return { executionProviders: ['webgpu', 'wasm'] };
-    return { executionProviders: ['wasm'] };
+    return buildOrtSessionOptions(this.opts.probed.kind);
   }
 
   /** Create an ORT session for one model file, attaching its external-data
@@ -588,6 +585,31 @@ function pickFirstFloat32(result: ort.InferenceSession.OnnxValueMapType): Float3
     if (data instanceof Float32Array) return data;
   }
   return null;
+}
+
+/**
+ * Build ORT session options for a probed device.
+ *
+ * `graphOptimizationLevel: 'basic'` is critical — ORT-web's default `'all'`
+ * runs extended fusions (SimplifiedLayerNormFusion, ConstantFolding for
+ * inserted Casts) that crash on most browser-exported SD / SD-Turbo / LCM
+ * text-encoders with errors like:
+ *
+ *   "Attempting to get index by a name which does not exist:
+ *    InsertedPrecisionFreeCast_/text_model/final_layer_norm/Constant_output_0
+ *    for node /text_model/encoder/layers.0/layer_norm1/Mul/SimplifiedLayerNormFusion/"
+ *
+ * `'basic'` skips the entire extended-fusion pass while keeping the cheap
+ * constant-folding optimizations that don't touch the layout. Matches what
+ * Microsoft's ORT-web SD-Turbo demo and aislamov's diffusers-js demos use.
+ */
+export function buildOrtSessionOptions(
+  device: ActiveDevice,
+): ort.InferenceSession.SessionOptions {
+  const base: ort.InferenceSession.SessionOptions = { graphOptimizationLevel: 'basic' };
+  if (device === 'webnn') return { ...base, executionProviders: ['webnn', 'wasm'] };
+  if (device === 'webgpu') return { ...base, executionProviders: ['webgpu', 'wasm'] };
+  return { ...base, executionProviders: ['wasm'] };
 }
 
 /** Last path segment — the name an .onnx graph uses to reference its sidecar. */
