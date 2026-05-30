@@ -22,6 +22,8 @@ import type {
   DiffusionModelId,
   ModelDescriptor,
   OnnxFile,
+  OrtInputSpec,
+  OrtTensorDtype,
   WeightSource,
 } from '../types';
 import type { ProbedDevice } from './device-router';
@@ -55,7 +57,15 @@ export const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor> = {
       unet: { model: 'unet/model.onnx', externalData: 'unet/model.onnx_data' },
       vaeDecoder: { model: 'vae_decoder/model.onnx', externalData: 'vae_decoder/model.onnx_data' },
     },
-    unetInputNames: ['sample', 'timestep', 'encoder_hidden_states', 'timestep_cond'],
+    // LCM Dreamshaper (aislamov) UNet expects timestep as float32 (NOT int64).
+    // Drift here surfaces as: "Unexpected input data type. Actual: int64, expected: float".
+    unetInputs: [
+      { name: 'sample', dtype: 'float32' },
+      { name: 'timestep', dtype: 'float32' },
+      { name: 'encoder_hidden_states', dtype: 'float32' },
+      { name: 'timestep_cond', dtype: 'float32' },
+    ],
+    textEncoderInputs: [{ name: 'input_ids', dtype: 'int32' }],
     lcmGuidanceEmbedDim: 256, // standard for LCM-LoRA-derived exports
   },
   'sd-turbo': {
@@ -74,7 +84,13 @@ export const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor> = {
       unet: { model: 'unet/model.onnx' },
       vaeDecoder: { model: 'vae_decoder/model.onnx' },
     },
-    unetInputNames: ['sample', 'timestep', 'encoder_hidden_states'],
+    // schmuell/sd-turbo-ort-web export uses int64 timestep (standard SD UNet).
+    unetInputs: [
+      { name: 'sample', dtype: 'float32' },
+      { name: 'timestep', dtype: 'int64' },
+      { name: 'encoder_hidden_states', dtype: 'float32' },
+    ],
+    textEncoderInputs: [{ name: 'input_ids', dtype: 'int32' }],
   },
 };
 
@@ -94,32 +110,70 @@ interface UnetInputContext {
   latentShape: [number, number, number, number];
 }
 
-type UnetInputBuilder = (ctx: UnetInputContext) => ort.Tensor;
+/** A builder produces the raw payload + shape; the engine wraps it in a Tensor
+ *  of the descriptor's declared dtype via `materializeTensor`. Splitting "compute
+ *  the value" from "type the tensor" lets one builder serve every dtype that
+ *  makes sense for that input (e.g. `timestep` is float32 in LCM, int64 in SD). */
+interface RawTensor {
+  data: Float32Array;
+  shape: readonly number[];
+}
+type UnetInputBuilder = (ctx: UnetInputContext) => RawTensor;
 
 const UNET_INPUT_BUILDERS: Record<string, UnetInputBuilder> = {
-  sample: (ctx) => new ort.Tensor('float32', ctx.sample, ctx.latentShape),
-  timestep: (ctx) =>
-    new ort.Tensor('int64', BigInt64Array.from([BigInt(ctx.timestep)]), [1]),
-  encoder_hidden_states: (ctx) =>
-    new ort.Tensor('float32', ctx.condEmbedding, [
-      1,
-      ctx.descriptor.sequenceLength,
-      ctx.descriptor.textEmbedDim,
-    ]),
+  sample: (ctx) => ({ data: ctx.sample, shape: ctx.latentShape }),
+  timestep: (ctx) => ({ data: Float32Array.from([ctx.timestep]), shape: [1] }),
+  encoder_hidden_states: (ctx) => ({
+    data: ctx.condEmbedding,
+    shape: [1, ctx.descriptor.sequenceLength, ctx.descriptor.textEmbedDim],
+  }),
   timestep_cond: (ctx) => {
     // LCM consistency-model guidance-scale embedding. Diffusers convention:
     // embed (w - 1) where w is the CFG scale. w=1 (LCM default) → all zeros.
     const dim = ctx.descriptor.lcmGuidanceEmbedDim ?? 256;
-    const data = guidanceScaleEmbedding(ctx.guidance - 1, dim);
-    return new ort.Tensor('float32', data, [1, dim]);
+    return {
+      data: guidanceScaleEmbedding(ctx.guidance - 1, dim),
+      shape: [1, dim],
+    };
   },
 };
 
 /** Names the engine knows how to build. Exported so the registry contract test
- *  can assert every model's `unetInputNames` is a subset of this. */
+ *  can assert every model's `unetInputs` references a known name. */
 export const KNOWN_UNET_INPUTS: ReadonlySet<string> = new Set(
   Object.keys(UNET_INPUT_BUILDERS),
 );
+
+/** Dtypes the engine can materialize. Exported for the registry contract test. */
+export const SUPPORTED_DTYPES: ReadonlySet<OrtTensorDtype> = new Set<OrtTensorDtype>([
+  'float32',
+  'int32',
+  'int64',
+]);
+
+/** Wrap a Float32Array payload as an ORT Tensor of the requested dtype.
+ *  Single conversion site — every dtype change happens here, no duplication. */
+export function materializeTensor(
+  dtype: OrtTensorDtype,
+  raw: RawTensor,
+): ort.Tensor {
+  const shape = [...raw.shape];
+  if (dtype === 'float32') {
+    return new ort.Tensor('float32', raw.data, shape);
+  }
+  if (dtype === 'int32') {
+    const out = new Int32Array(raw.data.length);
+    for (let i = 0; i < raw.data.length; i++) out[i] = raw.data[i] | 0;
+    return new ort.Tensor('int32', out, shape);
+  }
+  if (dtype === 'int64') {
+    const out = new BigInt64Array(raw.data.length);
+    for (let i = 0; i < raw.data.length; i++) out[i] = BigInt(raw.data[i] | 0);
+    return new ort.Tensor('int64', out, shape);
+  }
+  // Exhaustive on OrtTensorDtype — adding a new dtype to the type forces this.
+  throw new Error(`Unsupported dtype: ${dtype satisfies never}`);
+}
 
 /** Sinusoidal guidance-scale embedding (diffusers parity). */
 function guidanceScaleEmbedding(w: number, dim: number): Float32Array {
@@ -217,6 +271,12 @@ export class DiffusionEngine {
       this.createSession(d.files.unet, sessionOptions),
       this.createSession(d.files.vaeDecoder, sessionOptions),
     ]);
+
+    // Validate the loaded models' input names match what the registry declares.
+    // Catches model-vs-registry drift at init time with a clear error instead
+    // of an opaque "input 'X' is missing in 'feeds'" on the first run.
+    assertSessionMatchesSpec('unet', this.unetSession, d.unetInputs);
+    assertSessionMatchesSpec('text_encoder', this.textEncoderSession, d.textEncoderInputs);
   }
 
   // -------------------------------------------------------------------------
@@ -245,14 +305,24 @@ export class DiffusionEngine {
       truncation: true,
     });
 
-    // diffusers ONNX text encoders take int32 `input_ids` of shape [1, seqLen].
+    // Build input_ids with the dtype declared for THIS model's text encoder
+    // (int32 for most diffusers exports, but int64 for some — drift surfaces as
+    // "Unexpected input data type" without the per-model declaration).
     const rawIds = encoded.input_ids.data as ArrayLike<bigint | number>;
-    const ids = Int32Array.from({ length: sequenceLength }, (_unused, i) =>
-      i < rawIds.length ? Number(rawIds[i]) : 0,
-    );
-    const idTensor = new ort.Tensor('int32', ids, [1, sequenceLength]);
+    const idFloats = new Float32Array(sequenceLength);
+    for (let i = 0; i < sequenceLength; i++) {
+      idFloats[i] = i < rawIds.length ? Number(rawIds[i]) : 0;
+    }
+    const inputIdsSpec = this.descriptor.textEncoderInputs.find((s) => s.name === 'input_ids');
+    if (!inputIdsSpec) {
+      throw new Error(`Model '${this.descriptor.id}' textEncoderInputs missing 'input_ids' spec.`);
+    }
+    const idTensor = materializeTensor(inputIdsSpec.dtype, {
+      data: idFloats,
+      shape: [1, sequenceLength],
+    });
 
-    const out = await this.textEncoderSession.run({ input_ids: idTensor });
+    const out = await this.textEncoderSession.run({ [inputIdsSpec.name]: idTensor });
     const hidden = (out.last_hidden_state?.data as Float32Array | undefined) ?? pickFirstFloat32(out);
     if (!hidden) {
       throw new Error('Text encoder returned no Float32 output');
@@ -391,15 +461,15 @@ export class DiffusionEngine {
       latentShape: args.latentShape,
     };
     const feeds: Record<string, ort.Tensor> = {};
-    for (const name of this.descriptor.unetInputNames) {
-      const builder = UNET_INPUT_BUILDERS[name];
+    for (const spec of this.descriptor.unetInputs) {
+      const builder = UNET_INPUT_BUILDERS[spec.name];
       if (!builder) {
         throw new Error(
-          `Model '${this.descriptor.id}' declares UNet input '${name}' but no builder is registered. ` +
+          `Model '${this.descriptor.id}' declares UNet input '${spec.name}' but no builder is registered. ` +
             `Add it to UNET_INPUT_BUILDERS in diffusion-engine.ts.`,
         );
       }
-      feeds[name] = builder(ctx);
+      feeds[spec.name] = materializeTensor(spec.dtype, builder(ctx));
     }
     return feeds;
   }
@@ -498,4 +568,24 @@ function pickFirstFloat32(result: ort.InferenceSession.OnnxValueMapType): Float3
 function basename(path: string): string {
   const i = path.lastIndexOf('/');
   return i === -1 ? path : path.slice(i + 1);
+}
+
+/** Init-time drift check: every input the registry declares for `session`
+ *  must exist in `session.inputNames`. Throws with a clear, actionable error
+ *  if the model and the registry disagree. */
+function assertSessionMatchesSpec(
+  sessionLabel: string,
+  session: ort.InferenceSession,
+  specs: readonly OrtInputSpec[],
+): void {
+  const declared = specs.map((s) => s.name);
+  const actual = session.inputNames;
+  const missing = declared.filter((n) => !actual.includes(n));
+  if (missing.length > 0) {
+    throw new Error(
+      `Registry/model mismatch on ${sessionLabel}: declared input(s) [${missing.join(', ')}] ` +
+        `are not in the model's inputNames [${actual.join(', ')}]. ` +
+        `Update MODEL_REGISTRY in diffusion-engine.ts to match the actual export.`,
+    );
+  }
 }

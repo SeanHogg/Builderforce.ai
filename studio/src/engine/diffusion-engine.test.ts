@@ -1,26 +1,22 @@
 import { describe, it, expect, vi } from 'vitest';
 
 /**
- * Registry contract guard for the "input 'X' is missing in 'feeds'" family of
- * runtime ORT errors:
+ * Registry contract guard for two runtime ORT error families:
  *
- *   1. Every name in a model's `unetInputNames` must have a registered builder
- *      in UNET_INPUT_BUILDERS. A name without a builder fails the build at
- *      session.run() time — this test catches it before that.
- *   2. LCM exports require the `timestep_cond` input + an embedding dim.
- *   3. Standard SD UNets (SD-Turbo) must NOT declare `timestep_cond` — feeding
- *      it would trigger an "unknown input" error from the other direction.
+ *   1. "input 'X' is missing in 'feeds'" — every name in a model's `unetInputs`
+ *      must have a registered builder in UNET_INPUT_BUILDERS.
+ *   2. "Unexpected input data type. Actual: (tensor(int64)), expected: (tensor(float))"
+ *      — every input declares a dtype the engine can materialize, and the LCM
+ *      `timestep` is float32 (not int64), the SD-Turbo `timestep` is int64.
  *
- * Mock the heavy runtime modules so this test runs in node without a browser
- * or a real ORT/WASM load; we only inspect the declared shape of the registry.
+ * Both classes were observed at runtime and only catchable by an in-browser
+ * session.run() before this contract was made explicit + testable.
  */
 
 vi.mock('onnxruntime-web', () => ({
   env: { versions: { common: '0.0.0-test' }, wasm: {} },
-  // Tensor is referenced by UNET_INPUT_BUILDERS at module load; provide a stub
-  // so importing diffusion-engine doesn't blow up.
   Tensor: class {
-    constructor(_type: string, _data: unknown, _dims: number[]) {}
+    constructor(public type: string, public data: unknown, public dims: number[]) {}
   },
   InferenceSession: { create: vi.fn() },
 }));
@@ -29,40 +25,84 @@ vi.mock('@huggingface/transformers', () => ({
   AutoTokenizer: { from_pretrained: vi.fn() },
 }));
 
-import { MODEL_REGISTRY, KNOWN_UNET_INPUTS } from './diffusion-engine';
+import {
+  MODEL_REGISTRY,
+  KNOWN_UNET_INPUTS,
+  SUPPORTED_DTYPES,
+  materializeTensor,
+} from './diffusion-engine';
 
 describe('MODEL_REGISTRY × UNet input contract', () => {
   for (const [id, descriptor] of Object.entries(MODEL_REGISTRY)) {
     it(`${id}: every declared UNet input has a registered builder`, () => {
-      for (const name of descriptor.unetInputNames) {
+      for (const spec of descriptor.unetInputs) {
         expect(
-          KNOWN_UNET_INPUTS.has(name),
-          `Model '${id}' declares UNet input '${name}' but UNET_INPUT_BUILDERS has no builder for it. Add one to diffusion-engine.ts.`,
+          KNOWN_UNET_INPUTS.has(spec.name),
+          `Model '${id}' declares UNet input '${spec.name}' but UNET_INPUT_BUILDERS has no builder.`,
+        ).toBe(true);
+      }
+    });
+
+    it(`${id}: every declared dtype is supported by materializeTensor`, () => {
+      for (const spec of [...descriptor.unetInputs, ...descriptor.textEncoderInputs]) {
+        expect(
+          SUPPORTED_DTYPES.has(spec.dtype),
+          `Model '${id}' input '${spec.name}' declares unsupported dtype '${spec.dtype}'.`,
         ).toBe(true);
       }
     });
   }
 
-  it("lcm-dreamshaper-v7 declares 'timestep_cond' + lcmGuidanceEmbedDim (regression: 'input timestep_cond is missing in feeds')", () => {
+  it("lcm-dreamshaper-v7 declares timestep_cond + lcmGuidanceEmbedDim (regression: missing-input feed)", () => {
     const lcm = MODEL_REGISTRY['lcm-dreamshaper-v7'];
-    expect(lcm.unetInputNames).toContain('timestep_cond');
+    expect(lcm.unetInputs.map((s) => s.name)).toContain('timestep_cond');
     expect(lcm.lcmGuidanceEmbedDim).toBeGreaterThan(0);
   });
 
-  it("sd-turbo does NOT declare 'timestep_cond' (it is a non-LCM UNet)", () => {
+  it("lcm-dreamshaper-v7 timestep is float32 (regression: 'Unexpected input data type int64, expected float')", () => {
+    const ts = MODEL_REGISTRY['lcm-dreamshaper-v7'].unetInputs.find((s) => s.name === 'timestep');
+    expect(ts?.dtype).toBe('float32');
+  });
+
+  it('sd-turbo timestep is int64 (standard SD UNet export — flipping it would break SD-Turbo)', () => {
+    const ts = MODEL_REGISTRY['sd-turbo'].unetInputs.find((s) => s.name === 'timestep');
+    expect(ts?.dtype).toBe('int64');
+  });
+
+  it('sd-turbo does NOT declare timestep_cond (non-LCM UNet)', () => {
     const sdt = MODEL_REGISTRY['sd-turbo'];
-    expect(sdt.unetInputNames).not.toContain('timestep_cond');
+    expect(sdt.unetInputs.map((s) => s.name)).not.toContain('timestep_cond');
     expect(sdt.lcmGuidanceEmbedDim).toBeUndefined();
   });
 
-  it("every model declares the three base inputs sample / timestep / encoder_hidden_states", () => {
+  it('every model declares the three base inputs sample / timestep / encoder_hidden_states', () => {
     for (const [id, descriptor] of Object.entries(MODEL_REGISTRY)) {
+      const names = descriptor.unetInputs.map((s) => s.name);
       for (const required of ['sample', 'timestep', 'encoder_hidden_states']) {
-        expect(
-          descriptor.unetInputNames,
-          `${id} is missing required base UNet input '${required}'`,
-        ).toContain(required);
+        expect(names, `${id} missing required UNet input '${required}'`).toContain(required);
       }
     }
+  });
+});
+
+describe('materializeTensor produces a Tensor of the requested dtype', () => {
+  const raw = { data: new Float32Array([1, 2, 3]), shape: [3] as const };
+
+  it('float32 → Float32Array', () => {
+    const t = materializeTensor('float32', raw);
+    expect(t.type).toBe('float32');
+    expect(t.data).toBeInstanceOf(Float32Array);
+  });
+
+  it('int64 → BigInt64Array (regression for the LCM timestep mis-dtype bug)', () => {
+    const t = materializeTensor('int64', raw);
+    expect(t.type).toBe('int64');
+    expect(t.data).toBeInstanceOf(BigInt64Array);
+  });
+
+  it('int32 → Int32Array', () => {
+    const t = materializeTensor('int32', raw);
+    expect(t.type).toBe('int32');
+    expect(t.data).toBeInstanceOf(Int32Array);
   });
 });
