@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { sendAIMessageAndCollect } from '@/lib/api';
-import { specsApi, tasksApi } from '@/lib/builderforceApi';
+import { generatePrd, savePrd, generateTasks, saveTasks } from '@/lib/brain';
 import { ChatMessageContent } from './ChatMessageContent';
 
 interface ChatProjectActionsProps {
@@ -32,19 +31,7 @@ export function ChatProjectActions({
     setError(null);
     setPrdLoading(true);
     try {
-      const conversationText =
-        conversationMessages && conversationMessages.length > 0
-          ? conversationMessages
-              .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
-              .join('\n\n')
-          : assistantContent;
-      const messages = [
-        {
-          role: 'user' as const,
-          content: `Generate a Product Requirements Document (PRD) based on the following conversation. Output only the PRD in markdown: clear sections (Overview, Goals, Requirements, etc.). No preamble or "here is the PRD".\n\n---\n\n${conversationText.slice(0, 12000)}`,
-        },
-      ];
-      const prd = await sendAIMessageAndCollect(projectId, messages);
+      const prd = await generatePrd({ assistantContent, conversationMessages });
       if (prd.trim()) setPrdModal({ prd: prd.trim() });
       else setError('No PRD content generated.');
     } catch (e) {
@@ -52,18 +39,13 @@ export function ChatProjectActions({
     } finally {
       setPrdLoading(false);
     }
-  }, [projectId, assistantContent, conversationMessages]);
+  }, [assistantContent, conversationMessages]);
 
   const handleSavePrd = useCallback(async () => {
     if (!prdModal) return;
     setError(null);
     try {
-      await specsApi.create({
-        projectId,
-        goal: 'From chat',
-        prd: prdModal.prd,
-        status: 'draft',
-      });
+      await savePrd(projectId, prdModal.prd);
       setPrdModal(null);
       onPrdSaved?.();
     } catch (e) {
@@ -75,29 +57,7 @@ export function ChatProjectActions({
     setError(null);
     setTasksLoading(true);
     try {
-      const messages = [
-        {
-          role: 'user' as const,
-          content: `Based on this response, extract or generate a list of actionable tasks. Output one task per line. Each line: "title" or "title | description". No numbering, no bullets, no preamble. Plain lines only.\n\n---\n\n${assistantContent.slice(0, 8000)}`,
-        },
-      ];
-      const text = await sendAIMessageAndCollect(projectId, messages);
-      const lines = text
-        .split(/\n/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-      const titles: string[] = [];
-      const descriptions: string[] = [];
-      for (const line of lines) {
-        const pipe = line.indexOf('|');
-        if (pipe >= 0) {
-          titles.push(line.slice(0, pipe).trim());
-          descriptions.push(line.slice(pipe + 1).trim());
-        } else {
-          titles.push(line);
-          descriptions.push('');
-        }
-      }
+      const { titles, descriptions } = await generateTasks(assistantContent);
       if (titles.length > 0) setTasksModal({ titles, descriptions });
       else setError('No tasks extracted.');
     } catch (e) {
@@ -105,19 +65,13 @@ export function ChatProjectActions({
     } finally {
       setTasksLoading(false);
     }
-  }, [projectId, assistantContent]);
+  }, [assistantContent]);
 
   const handleAddAllTasks = useCallback(async () => {
     if (!tasksModal) return;
     setError(null);
     try {
-      for (let i = 0; i < tasksModal.titles.length; i++) {
-        await tasksApi.create({
-          projectId,
-          title: tasksModal.titles[i],
-          description: tasksModal.descriptions[i] || null,
-        });
-      }
+      await saveTasks(projectId, { titles: tasksModal.titles, descriptions: tasksModal.descriptions });
       setTasksModal(null);
       onTasksAdded?.();
     } catch (e) {
