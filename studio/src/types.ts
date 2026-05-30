@@ -27,8 +27,8 @@ export type DeviceTarget = 'auto' | 'webnn' | 'webgpu' | 'cpu';
 /** Active hardware path the engine ended up on, reported back to the consumer. */
 export type ActiveDevice = 'webnn' | 'webgpu' | 'cpu';
 
-/** Diffusion backbone. */
-export type DiffusionModelId = 'lcm-dreamshaper-v7' | 'sd-turbo';
+/** Diffusion backbone. Ordered roughly smallest → largest VRAM footprint. */
+export type DiffusionModelId = 'lcm-tiny-sd' | 'sd-turbo' | 'lcm-dreamshaper-v7';
 
 /** Mamba-state-driven coherence mode. */
 export type CoherenceMode = 'prompt-bias' | 'latent-residual';

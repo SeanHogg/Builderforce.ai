@@ -41,6 +41,34 @@ configureOnnxRuntime();
 // ---------------------------------------------------------------------------
 
 export const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor> = {
+  'lcm-tiny-sd': {
+    id: 'lcm-tiny-sd',
+    defaultSteps: 4,
+    defaultGuidance: 1.0,
+    minVramMb: 2 * 1024, // BK-SDM Tiny UNet (~0.3 GB fp16) + text-encoder + VAE
+    hfRepo: 'akameswa/lcm-tiny-sd-onnx-fp16',
+    tokenizerRepo: 'Xenova/clip-vit-large-patch14',
+    textEmbedDim: 768, // SD1.5 base
+    sequenceLength: 77,
+    vaeScalingFactor: 0.18215,
+    defaultTimesteps: [999, 759, 519, 259],
+    files: {
+      textEncoder: { model: 'text_encoder/model.onnx' },
+      unet: { model: 'unet/model.onnx', externalData: 'unet/model.onnx_data' },
+      vaeDecoder: { model: 'vae_decoder/model.onnx', externalData: 'vae_decoder/model.onnx_data' },
+    },
+    // Same I/O contract as other LCM exports (Diffusers ONNX convention).
+    // fp16 here refers to WEIGHTS, not I/O — exports typically keep
+    // sample/timestep/encoder_hidden_states as float32 for compatibility.
+    unetInputs: [
+      { name: 'sample', dtype: 'float32' },
+      { name: 'timestep', dtype: 'float32' },
+      { name: 'encoder_hidden_states', dtype: 'float32' },
+      { name: 'timestep_cond', dtype: 'float32' },
+    ],
+    textEncoderInputs: [{ name: 'input_ids', dtype: 'int32' }],
+    lcmGuidanceEmbedDim: 256,
+  },
   'lcm-dreamshaper-v7': {
     id: 'lcm-dreamshaper-v7',
     defaultSteps: 4,
@@ -286,6 +314,23 @@ export class DiffusionEngine {
       throw new Error(memoryError);
     }
 
+    // Listen for GPU device loss (Windows D3D12 TDR, OS driver reset, etc).
+    // The lost-promise fires once; we report it through the same progress
+    // channel so the user sees a clear "GPU device lost" message instead of
+    // a silent stall.
+    if (this.opts.probed.kind === 'webgpu' && this.opts.probed.gpuDevice) {
+      this.opts.probed.gpuDevice.lost
+        .then((info) => {
+          reportProgress(
+            `GPU device LOST (${info.reason}): ${info.message}. ` +
+              `Reload the page; pick a lower resolution or lighter model on retry.`,
+            onProgress,
+          );
+        })
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
+        .catch(() => {});
+    }
+
     reportProgress(`Loading CLIP tokenizer (${d.tokenizerRepo})…`, onProgress);
     this.tokenizer = await AutoTokenizer.from_pretrained(d.tokenizerRepo);
     reportProgress('Tokenizer ready.', onProgress);
@@ -349,7 +394,11 @@ export class DiffusionEngine {
       shape: [1, sequenceLength],
     });
 
-    const out = await this.textEncoderSession.run({ [inputIdsSpec.name]: idTensor });
+    const out = await this.runSession(
+      this.textEncoderSession,
+      { [inputIdsSpec.name]: idTensor },
+      'text_encoder',
+    );
     const hidden = (out.last_hidden_state?.data as Float32Array | undefined) ?? pickFirstFloat32(out);
     if (!hidden) {
       throw new Error('Text encoder returned no Float32 output');
@@ -466,7 +515,35 @@ export class DiffusionEngine {
       reportProgress(`${label} ready.`, onProgress);
       return session;
     } catch (err) {
-      throw explainSessionCreateError(err, label, this.descriptor.id, this.descriptor.minVramMb);
+      throw explainOrtError(
+        err,
+        `${label} session create`,
+        this.descriptor.id,
+        this.descriptor.minVramMb,
+        this.opts.probed.approxMemoryMb,
+      );
+    }
+  }
+
+  /** Wrap session.run() so DXGI_ERROR_DEVICE_HUNG, std::bad_alloc, "Device is
+   *  lost", and similar runtime ORT failures become actionable messages
+   *  instead of raw WebGPU stack traces. Single sink — every session.run
+   *  call in the engine goes through here. */
+  private async runSession(
+    session: ort.InferenceSession,
+    feeds: Record<string, ort.Tensor>,
+    label: string,
+  ): Promise<ort.InferenceSession.OnnxValueMapType> {
+    try {
+      return await session.run(feeds);
+    } catch (err) {
+      throw explainOrtError(
+        err,
+        `${label} session run`,
+        this.descriptor.id,
+        this.descriptor.minVramMb,
+        this.opts.probed.approxMemoryMb,
+      );
     }
   }
 
@@ -527,7 +604,7 @@ export class DiffusionEngine {
       guidance: args.guidance,
       latentShape: args.latentShape,
     });
-    const condOut = await session.run(condFeeds);
+    const condOut = await this.runSession(session, condFeeds, 'unet (conditional)');
     const condNoise = pickFirstFloat32(condOut);
     if (!condNoise) throw new Error('UNet returned no Float32 output');
 
@@ -542,7 +619,7 @@ export class DiffusionEngine {
       guidance: args.guidance,
       latentShape: args.latentShape,
     });
-    const uncondOut = await session.run(uncondFeeds);
+    const uncondOut = await this.runSession(session, uncondFeeds, 'unet (unconditional)');
     const uncondNoise = pickFirstFloat32(uncondOut);
     if (!uncondNoise) throw new Error('UNet unconditional pass returned no Float32 output');
 
@@ -559,7 +636,7 @@ export class DiffusionEngine {
     const scale = this.descriptor.vaeScalingFactor;
     for (let i = 0; i < latent.length; i++) scaled[i] = latent[i] / scale;
     const input = new ort.Tensor('float32', scaled, [1, 4, h, w]);
-    const out = await session.run({ latent_sample: input });
+    const out = await this.runSession(session, { latent_sample: input }, 'vae_decoder');
     const pixels = pickFirstFloat32(out);
     if (!pixels) throw new Error('VAE decoder returned no Float32 output');
     return pixels;
@@ -656,23 +733,33 @@ function lighterModelHint(failingModelId: string, availableMb: number | null): s
 }
 
 /**
- * Translate ORT's opaque session-create errors into actionable diagnostics.
- * Wraps `InferenceSession.create()` so a `std::bad_alloc` becomes a sentence
- * the user can act on, not a stack trace into the WASM runtime.
+ * Translate ORT/WebGPU's opaque errors into actionable diagnostics. Used
+ * everywhere ORT can throw — `InferenceSession.create()` AND every `session.run()`.
+ * A raw `std::bad_alloc` / `DXGI_ERROR_DEVICE_HUNG` / `Device is lost` becomes
+ * a sentence the user can act on, not a stack trace into the WASM runtime.
  */
-export function explainSessionCreateError(
+export function explainOrtError(
   err: unknown,
   label: string,
   modelId: string,
   minVramMb: number,
+  availableMemoryMb: number | null = null,
 ): Error {
   const message = err instanceof Error ? err.message : String(err);
   if (/bad_alloc|out of memory|memory access out of bounds/i.test(message)) {
     return new Error(
-      `Out of memory while creating the ${label} ORT session for ${modelId} ` +
+      `Out of memory during ${label} for ${modelId} ` +
         `(needs ~${(minVramMb / 1024).toFixed(1)} GB). ` +
-        `${lighterModelHint(modelId, null)} ` +
+        `${lighterModelHint(modelId, availableMemoryMb)} ` +
         `Original error: ${message}`,
+    );
+  }
+  if (/DXGI_ERROR_DEVICE_HUNG|Device.*is lost|GPUDevice.*lost|mapAsync.*lost/i.test(message)) {
+    return new Error(
+      `GPU device was lost during ${label} for ${modelId} — typically a Windows TDR ` +
+        `(driver timeout, ~2 s per kernel). The model is too heavy for this GPU at the current ` +
+        `resolution. Try a lower resolution (e.g. 256×256), pick a lighter model, or switch ` +
+        `the device target to CPU. Original error: ${message}`,
     );
   }
   if (/InsertedPrecisionFreeCast|SimplifiedLayerNormFusion|graph_utils\.cc/.test(message)) {
@@ -684,6 +771,9 @@ export function explainSessionCreateError(
   }
   return err instanceof Error ? err : new Error(message);
 }
+
+/** @deprecated Use explainOrtError. Kept as an alias for the existing tests. */
+export const explainSessionCreateError = explainOrtError;
 
 /**
  * Build ORT session options for a probed device.
