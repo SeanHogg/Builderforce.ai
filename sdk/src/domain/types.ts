@@ -15,6 +15,13 @@ export interface FailoverEvent {
   vendor: string;
   /** HTTP status code, or 0 for embedded errors / network failures. */
   code: number;
+  /** Wall-clock time the gateway spent on this attempt, ms. Present on newer
+   *  gateway versions; absent on older ones. */
+  durationMs?: number;
+  /** Coarse failure class — `'rate_limit' | 'timeout' | 'auth' | 'server_error'
+   *  | 'client_error' | 'network' | 'skipped'`. The full upstream error text is
+   *  NOT exposed to callers; quote `traceId` to support for that. */
+  kind?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -235,6 +242,14 @@ export interface ChatCompletionResponse {
     total_tokens?: number;
   };
   _builderforce?: {
+    /**
+     * Gateway trace id (`llm-…`) for this call. Quote it to Builderforce
+     * support to pull up full server-side diagnostics (who called, every model
+     * attempt, every exception, request/response bodies). On the error path the
+     * same value is surfaced as `error.details.correlationId`. Only the id
+     * crosses the wire — the full detail stays builder-side.
+     */
+    traceId?: string;
     /** The model the gateway dispatched against. Equals `request.model` when caller pinned. */
     resolvedModel?: string;
     /**
@@ -437,6 +452,9 @@ export interface ImageGenerationResponse {
   /** The model that actually served the request (same as `_builderforce.resolvedModel`). */
   model?: string;
   _builderforce?: {
+    /** Gateway trace id (`llm-…`) — quote to support for full server-side
+     *  diagnostics. Mirrors `error.details.correlationId` on the failure path. */
+    traceId?: string;
     /** The model the gateway dispatched against. */
     resolvedModel?: string;
     /** Vendor that owns the resolved model — `'together' | 'fluxapi'`. */

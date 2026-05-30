@@ -71,7 +71,12 @@ export class BuilderforceApiError extends Error {
           if (entry && typeof entry === 'object') {
             const e = entry as { model?: unknown; vendor?: unknown; code?: unknown };
             if (typeof e.model === 'string' && typeof e.vendor === 'string' && typeof e.code === 'number') {
-              cleaned.push({ model: e.model, vendor: e.vendor, code: e.code });
+              const ev = entry as { durationMs?: unknown; kind?: unknown };
+              cleaned.push({
+                model: e.model, vendor: e.vendor, code: e.code,
+                ...(typeof ev.durationMs === 'number' ? { durationMs: ev.durationMs } : {}),
+                ...(typeof ev.kind === 'string' ? { kind: ev.kind } : {}),
+              });
             }
           }
         }

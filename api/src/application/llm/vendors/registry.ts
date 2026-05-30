@@ -155,6 +155,28 @@ export interface DispatchAttempt {
   vendor: VendorId;
   status: number;
   error: string;
+  /** Wall-clock time spent on this attempt, ms (diagnostic tracing). */
+  durationMs?: number;
+  /** Coarse failure class — rate_limit | timeout | auth | server_error |
+   *  client_error | network (diagnostic tracing). Derived from status + error. */
+  kind?: string;
+}
+
+/**
+ * Coarse failure class for one attempt — populates `DispatchAttempt.kind` and,
+ * rolled up, the trace's `classification`. Mirrors the buckets a consumer sees
+ * in the failover breakdown. Derived from HTTP status, with an error-text
+ * fallback for the status-0 (network / thrown-before-response) case so timeouts
+ * stay distinguishable from generic network failures.
+ */
+export function kindForStatus(status: number, error?: string): string {
+  if (status === 429) return 'rate_limit';
+  if (status === 408) return 'timeout';
+  if (status === 401 || status === 403) return 'auth';
+  if (status >= 500) return 'server_error';
+  if (status >= 400) return 'client_error';
+  if (error && /timed?\s*out|timeout|aborted/i.test(error)) return 'timeout';
+  return 'network';
 }
 
 /**
@@ -221,6 +243,7 @@ export async function dispatchVendor(params: DispatchParams): Promise<DispatchRe
       continue;
     }
 
+    const startedAt = Date.now();
     try {
       const result = await mod.call({ ...rest, apiKey, model: vendorModel });
       // Empty-but-200 detection. Some free-tier upstreams accept a request,
@@ -238,17 +261,18 @@ export async function dispatchVendor(params: DispatchParams): Promise<DispatchRe
       // `modelUsed` echoes what the caller asked for (with prefix preserved).
       return { ...result, modelUsed: model, vendorUsed: vendorId, attempts };
     } catch (err) {
+      const durationMs = Date.now() - startedAt;
       // Worker hit Cloudflare's per-invocation subrequest cap — every future
       // fetch from this isolate is guaranteed to throw the same thing.
       // Stop advancing the cascade and bubble up so the proxy can surface a
       // distinct 503 envelope WITHOUT writing more cooldown KV entries
       // (which would themselves be additional subrequests).
       if (err instanceof WorkerSubrequestExhaustedError) {
-        attempts.push({ model, vendor: vendorId, status: 0, error: err.message });
+        attempts.push({ model, vendor: vendorId, status: 0, error: err.message, durationMs, kind: 'network' });
         throw err;
       }
       if (err instanceof VendorRetryableError) {
-        attempts.push({ model, vendor: vendorId, status: err.status, error: err.message });
+        attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message) });
         console.warn(
           `[vendors] ${vendorId}/${model} returned ${err.status}; trying next in chain (${attempts.length}/${modelChain.length} failed)`,
         );
@@ -301,18 +325,20 @@ export async function dispatchVendorStream(params: DispatchParams): Promise<Stre
       continue;
     }
 
+    const startedAt = Date.now();
     try {
       const result = await mod.callStream({ ...rest, apiKey, model: vendorModel });
       return { ...result, modelUsed: model, vendorUsed: vendorId, attempts };
     } catch (err) {
+      const durationMs = Date.now() - startedAt;
       // See dispatchVendor — short-circuit on subrequest exhaustion so we
       // don't burn the rest of the chain on identical 0ms failures.
       if (err instanceof WorkerSubrequestExhaustedError) {
-        attempts.push({ model, vendor: vendorId, status: 0, error: err.message });
+        attempts.push({ model, vendor: vendorId, status: 0, error: err.message, durationMs, kind: 'network' });
         throw err;
       }
       if (err instanceof VendorRetryableError) {
-        attempts.push({ model, vendor: vendorId, status: err.status, error: err.message });
+        attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message) });
         console.warn(
           `[vendors] stream ${vendorId}/${model} returned ${err.status}; trying next in chain (${attempts.length}/${modelChain.length} failed)`,
         );

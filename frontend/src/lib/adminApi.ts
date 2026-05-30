@@ -79,6 +79,60 @@ export interface AdminError {
   createdAt: string;
 }
 
+/** One row in the superadmin LLM trace list (summary columns only). */
+export interface AdminLlmTraceSummary {
+  traceId: string;
+  createdAt: string | null;
+  tenantId: number | null;
+  userId: string | null;
+  surface: string;
+  llmProduct: string | null;
+  resolvedModel: string | null;
+  resolvedVendor: string | null;
+  status: number | null;
+  success: boolean;
+  outcome: string | null;
+  classification: string | null;
+  attemptCount: number;
+  retries: number;
+  schemaRetries: number;
+  durationMs: number;
+  totalTokens: number;
+  useCase: string | null;
+  consumerRequestId: string | null;
+  streamed: boolean;
+  errorMessage: string | null;
+}
+
+export interface AdminLlmTraceAttempt {
+  model: string;
+  vendor: string;
+  status: number;
+  error?: string;
+  durationMs?: number;
+  kind?: string;
+}
+
+/** Full single LLM trace (builder-side only) — every detail of one call. */
+export interface AdminLlmTraceDetail extends AdminLlmTraceSummary {
+  effectivePlan: string | null;
+  premiumOverride: boolean;
+  clawId: number | null;
+  tenantApiKeyId: string | null;
+  promptTokens: number;
+  completionTokens: number;
+  idempotencyKey: string | null;
+  requestIp: string | null;
+  origin: string | null;
+  userAgent: string | null;
+  requestShape: unknown;
+  candidateChain: unknown;
+  attempts: AdminLlmTraceAttempt[] | null;
+  requestBody: unknown;
+  responseBody: unknown;
+  callerMetadata: unknown;
+}
+
 export interface LlmModelStat {
   model: string;
   vendor: VendorId;
@@ -480,6 +534,27 @@ export const adminApi = {
   async errors(): Promise<AdminError[]> {
     const res = await adminRequest<{ errors: AdminError[] }>('/api/admin/errors');
     return res.errors;
+  },
+
+  async listLlmTraces(params: {
+    q?: string; tenantId?: number; model?: string; success?: boolean;
+    outcome?: string; days?: number; limit?: number; page?: number;
+  } = {}): Promise<{ traces: AdminLlmTraceSummary[]; page: number; limit: number; days: number }> {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set('q', params.q);
+    if (params.tenantId != null) qs.set('tenantId', String(params.tenantId));
+    if (params.model) qs.set('model', params.model);
+    if (params.success != null) qs.set('success', String(params.success));
+    if (params.outcome) qs.set('outcome', params.outcome);
+    if (params.days != null) qs.set('days', String(params.days));
+    if (params.limit != null) qs.set('limit', String(params.limit));
+    if (params.page != null) qs.set('page', String(params.page));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return adminRequest(`/api/admin/llm/traces${suffix}`);
+  },
+
+  async getLlmTrace(traceId: string): Promise<{ trace: AdminLlmTraceDetail }> {
+    return adminRequest(`/api/admin/llm/traces/${encodeURIComponent(traceId)}`);
   },
 
   async impersonate(userId: string, tenantId: number): Promise<{

@@ -188,6 +188,11 @@ export interface FailoverEvent {
   vendor: VendorId;
   /** HTTP status, or 0 for embedded errors / network failures. */
   code: number;
+  /** Wall-clock time spent on this attempt, ms (diagnostic tracing). */
+  durationMs?: number;
+  /** Coarse failure class — rate_limit | timeout | auth | server_error |
+   *  network | skipped (diagnostic tracing). */
+  kind?: string;
 }
 
 export interface ProxyResult {
@@ -208,6 +213,27 @@ export interface ProxyResult {
   /** Number of times the gateway re-dispatched on non-conforming JSON output
    *  (only applies when `body.response_format.type` is `json_object`/`json_schema`). */
   schemaRetries?: number;
+  // --- Diagnostic tracing (stamped by complete() via finalize) -------------
+  /** Authoritative gateway trace id (`llm-<uuid>`) echoed to the consumer and
+   *  used by the superadmin trace lookup. */
+  traceId?: string;
+  /** Total gateway wall-clock time for this call, ms. */
+  durationMs?: number;
+  /** Final HTTP status returned to the caller (mirrors `response.status`). */
+  status?: number;
+  /** The model chain the gateway actually walked for this request. */
+  candidateChain?: string[];
+  /** success | cascade_exhausted | all_cooldown | subrequest_exhausted |
+   *  strict_unavailable | schema_nonconforming. */
+  outcome?: string;
+  /** Rolled-up failure class across attempts — rate_limit | timeout | auth |
+   *  server_error | mixed | none. */
+  classification?: string;
+  /** Raw per-attempt diagnostics (model, vendor, status, error text, durationMs,
+   *  kind). Server-side ONLY — written to the superadmin trace, NEVER serialized
+   *  back to the caller (the per-attempt error text can contain raw upstream
+   *  provider payloads). */
+  attempts?: DispatchAttempt[];
 }
 
 export type ProductName = 'builderforceLLM' | 'builderforceLLMPro' | 'builderforceLLMTeams';
@@ -291,7 +317,10 @@ export class LlmProxyService {
   async complete(
     body: ChatCompletionRequest,
     requestHeaders?: Record<string, string>,
+    traceId?: string,
   ): Promise<ProxyResult> {
+    const startedAt = Date.now();
+    const tid = traceId ?? newTraceId();
     const callerModel = (body as { model?: unknown }).model;
     const wantsStrict = (body as { modelStrict?: unknown }).modelStrict === true
                      && typeof callerModel === 'string'
@@ -301,7 +330,10 @@ export class LlmProxyService {
     // and missing-vendor-key are the only pre-flight gates; if either fails
     // the request returns 503 `model_unavailable` instead of falling through.
     if (wantsStrict) {
-      return this.dispatchStrict(callerModel as string, body, requestHeaders);
+      return this.finalize(
+        await this.dispatchStrict(callerModel as string, body, requestHeaders),
+        tid, startedAt, [callerModel as string],
+      );
     }
 
     // 1) Pool composition is already TTFT-ordered (Cerebras → Ollama → NVIDIA
@@ -349,13 +381,37 @@ export class LlmProxyService {
     if (candidates.length === 0) {
       // Every model in the seed + premium fallback list is on cooldown. Fail fast
       // with a clear envelope instead of attempting a vendor with no chain.
-      return this.exhaustedResponse(
-        seed.slice(),
-        0,
-        new Error('All candidate models are on cooldown. Retry in a minute or two.'),
+      return this.finalize(
+        this.exhaustedResponse(
+          seed.slice(),
+          0,
+          new Error('All candidate models are on cooldown. Retry in a minute or two.'),
+        ),
+        tid, startedAt, seed.slice(), 'all_cooldown',
       );
     }
-    return this.dispatch(candidates, body, requestHeaders);
+    return this.finalize(await this.dispatch(candidates, body, requestHeaders), tid, startedAt, candidates);
+  }
+
+  /** Stamp request-level diagnostics onto a ProxyResult before it leaves
+   *  complete(). Single place that owns the trace id, total duration, candidate
+   *  chain, final status, rolled-up classification, and outcome — so every
+   *  return path (strict / cooldown / dispatched) is uniform. */
+  private finalize(
+    result: ProxyResult,
+    traceId: string,
+    startedAt: number,
+    candidateChain: readonly string[],
+    outcomeOverride?: string,
+  ): ProxyResult {
+    result.traceId = traceId;
+    result.durationMs = Date.now() - startedAt;
+    result.status = result.response.status;
+    if (!result.candidateChain) result.candidateChain = [...candidateChain];
+    if (!result.classification) result.classification = classificationFromFailovers(result.failovers);
+    if (outcomeOverride) result.outcome = outcomeOverride;
+    else if (!result.outcome) result.outcome = result.response.status < 400 ? 'success' : 'cascade_exhausted';
+    return result;
   }
 
   /**
@@ -581,6 +637,8 @@ export class LlmProxyService {
       resolvedVendor: result.vendorUsed,
       retries: totalAttempts,
       failovers: totalFailovers,
+      outcome: 'success',
+      attempts: result.attempts,
       ...(result.usage ? {
         usage: {
           promptTokens:     result.usage.prompt_tokens     ?? 0,
@@ -607,8 +665,12 @@ export class LlmProxyService {
   ): ProxyResult {
     const message = err instanceof Error ? err.message : (err ? String(err) : 'All candidates produced non-conforming output');
     const failovers: FailoverEvent[] = attempts && attempts.length > 0
-      ? attempts.map((a) => ({ model: a.model, vendor: a.vendor, code: a.status }))
-      : candidates.map((model) => ({ model, vendor: vendorForModel(model), code: 0 }));
+      ? attempts.map((a) => ({
+          model: a.model, vendor: a.vendor, code: a.status,
+          ...(a.durationMs != null ? { durationMs: a.durationMs } : {}),
+          ...(a.kind ? { kind: a.kind } : {}),
+        }))
+      : candidates.map((model) => ({ model, vendor: vendorForModel(model), code: 0, durationMs: 0, kind: 'skipped' }));
     // Pick the *last* dispatched attempt as the "model the gateway was on when
     // it gave up" — that's the most informative attribution for consumers
     // doing per-vendor saturation rollups. Falls back to the last candidate
@@ -645,6 +707,8 @@ export class LlmProxyService {
       resolvedVendor,
       retries: attempts?.length ?? candidates.length,
       failovers,
+      outcome: 'cascade_exhausted',
+      attempts: attempts ? [...attempts] : [],
       ...(schemaRetries > 0 ? { schemaRetries } : {}),
     };
   }
@@ -673,7 +737,7 @@ export class LlmProxyService {
         reason: 'worker_subrequest_exhausted',
         vendor: resolvedVendor,
         model:  resolvedModel,
-        details: { failovers: [{ model: resolvedModel, vendor: resolvedVendor, code: 0 }] },
+        details: { failovers: [{ model: resolvedModel, vendor: resolvedVendor, code: 0, durationMs: 0, kind: 'network' }] },
       },
     });
     return {
@@ -684,7 +748,9 @@ export class LlmProxyService {
       resolvedModel,
       resolvedVendor,
       retries: 1,
-      failovers: [{ model: resolvedModel, vendor: resolvedVendor, code: 0 }],
+      failovers: [{ model: resolvedModel, vendor: resolvedVendor, code: 0, durationMs: 0, kind: 'network' }],
+      outcome: 'subrequest_exhausted',
+      attempts: [{ model: resolvedModel, vendor: resolvedVendor, status: 0, error: err.message, durationMs: 0, kind: 'network' }],
       ...(schemaRetries > 0 ? { schemaRetries } : {}),
     };
   }
@@ -707,6 +773,8 @@ export class LlmProxyService {
         resolvedVendor: result.vendorUsed,
         retries: result.attempts.length,
         failovers: attemptsToFailovers(result.attempts),
+        outcome: 'success',
+        attempts: result.attempts,
       };
     } catch (err) {
       if (err instanceof WorkerSubrequestExhaustedError) {
@@ -740,7 +808,31 @@ export class LlmProxyService {
 // ---------------------------------------------------------------------------
 
 function attemptsToFailovers(attempts: DispatchAttempt[]): FailoverEvent[] {
-  return attempts.map((a) => ({ model: a.model, vendor: a.vendor, code: a.status }));
+  return attempts.map((a) => ({
+    model: a.model,
+    vendor: a.vendor,
+    code: a.status,
+    ...(a.durationMs != null ? { durationMs: a.durationMs } : {}),
+    ...(a.kind ? { kind: a.kind } : {}),
+  }));
+}
+
+/** Authoritative gateway trace id. Prefix `llm-` mirrors what consumers already
+ *  surface as `correlationId`, so a customer can quote it straight back to a
+ *  superadmin for lookup. */
+export function newTraceId(): string {
+  return `llm-${crypto.randomUUID()}`;
+}
+
+/** Roll a set of per-attempt `kind`s up into one classification for the trace.
+ *  `skipped` attempts (cooldown / no key) don't count toward the class. */
+function classificationFromFailovers(failovers: ReadonlyArray<FailoverEvent>): string {
+  const kinds = new Set(
+    failovers.map((f) => f.kind).filter((k): k is string => !!k && k !== 'skipped'),
+  );
+  if (kinds.size === 0) return 'none';
+  if (kinds.size === 1) return [...kinds][0]!;
+  return 'mixed';
 }
 
 // ---------------------------------------------------------------------------
@@ -862,6 +954,8 @@ function strictUnavailableResult(
     resolvedVendor: vendor,
     retries: 0,
     failovers: [],
+    outcome: 'strict_unavailable',
+    attempts: [],
   };
 }
 

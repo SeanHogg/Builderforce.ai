@@ -325,6 +325,63 @@ export const llmHealthProbes = pgTable('llm_health_probes', {
   createdAt:    timestamp('created_at').notNull().defaultNow(),
 });
 
+/**
+ * Full per-call diagnostic trace for every BuilderLLM gateway request — one row
+ * per LLM call, keyed by the authoritative `traceId` (`llm-<uuid>`) the gateway
+ * generates. The trace id (and ONLY the trace id) is echoed to the caller; the
+ * full details captured here NEVER leave the builder side — they exist solely
+ * for superadmin diagnostics (who called, how long, every model attempt, every
+ * exception, the candidate chain, and the request/response bodies). Written
+ * fire-and-forget (ctx.waitUntil) so tracing never adds latency. JSON columns
+ * are `text` per this schema's convention (the pg driver decodes at read time).
+ */
+export const llmTraces = pgTable('llm_traces', {
+  id:                serial('id').primaryKey(),
+  traceId:           varchar('trace_id', { length: 48 }).notNull().unique(),
+  tenantId:          integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+  userId:            varchar('user_id', { length: 36 }),
+  clawId:            integer('claw_id'),
+  tenantApiKeyId:    uuid('tenant_api_key_id'),
+  llmProduct:        varchar('llm_product', { length: 32 }),
+  /** chat | image | ide-chat | brain | dataset-gen | agent */
+  surface:           varchar('surface', { length: 16 }).notNull().default('chat'),
+  effectivePlan:     varchar('effective_plan', { length: 8 }),
+  premiumOverride:   boolean('premium_override').notNull().default(false),
+  resolvedModel:     varchar('resolved_model', { length: 200 }),
+  resolvedVendor:    varchar('resolved_vendor', { length: 32 }),
+  /** Final HTTP status returned to the caller. */
+  status:            integer('status'),
+  success:           boolean('success').notNull().default(false),
+  /** success | cascade_exhausted | all_cooldown | subrequest_exhausted | strict_unavailable | schema_nonconforming */
+  outcome:           varchar('outcome', { length: 32 }),
+  /** rate_limit | timeout | auth | server_error | mixed | none */
+  classification:    varchar('classification', { length: 16 }),
+  attemptCount:      integer('attempt_count').notNull().default(0),
+  retries:           integer('retries').notNull().default(0),
+  schemaRetries:     integer('schema_retries').notNull().default(0),
+  durationMs:        integer('duration_ms').notNull().default(0),
+  promptTokens:      integer('prompt_tokens').notNull().default(0),
+  completionTokens:  integer('completion_tokens').notNull().default(0),
+  totalTokens:       integer('total_tokens').notNull().default(0),
+  useCase:           varchar('use_case', { length: 128 }),
+  idempotencyKey:    varchar('idempotency_key', { length: 128 }),
+  /** Caller's own x-request-id / x-correlation-id, for cross-referencing. */
+  consumerRequestId: varchar('consumer_request_id', { length: 128 }),
+  requestIp:         varchar('request_ip', { length: 64 }),
+  origin:            varchar('origin', { length: 255 }),
+  userAgent:         text('user_agent'),
+  streamed:          boolean('streamed').notNull().default(false),
+  errorMessage:      text('error_message'),
+  /** JSON-as-text detail blobs (superadmin-only). */
+  requestShape:      text('request_shape'),
+  candidateChain:    text('candidate_chain'),
+  attempts:          text('attempts'),       // [{ model, vendor, status, kind, durationMs, error }]
+  requestBody:       text('request_body'),    // full messages (verbatim, builder-side only)
+  responseBody:      text('response_body'),   // final completion or error envelope
+  callerMetadata:    text('caller_metadata'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+});
+
 export const projectInsightEvents = pgTable('project_insight_events', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),

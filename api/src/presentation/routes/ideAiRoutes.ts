@@ -8,7 +8,8 @@ import { Hono } from 'hono';
 import type { HonoEnv } from '../../env';
 import type { ProjectService } from '../../application/project/ProjectService';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { ideProxy } from '../../application/llm/LlmProxyService';
+import { ideProxy, newTraceId } from '../../application/llm/LlmProxyService';
+import { logTrace } from '../../application/llm/traceLogger';
 
 const IDE_PREFIX = 'ide/';
 
@@ -98,19 +99,34 @@ export function createIdeAiRoutes(projectService: ProjectService): Hono<HonoEnv>
       }
     }
 
-    const result = await ideProxy(c.env).complete({
-      messages,
-      stream: true,
+    const traceId = newTraceId();
+    const requestBody = { messages, stream: true } as const;
+    const result = await ideProxy(c.env).complete(requestBody, undefined, traceId);
+
+    // Full diagnostic trace (builder-side only). Surface is `ide-chat` so the
+    // superadmin trace view can tell in-IDE assistant calls apart from gateway
+    // API traffic. Tenant comes from the auth middleware; no end-user id here.
+    logTrace(c.env, c.executionCtx, {
+      traceId, surface: 'ide-chat',
+      tenantId: c.get('tenantId') ?? null,
+      userId: c.get('userId') ?? null,
+      result, streamed: true,
+      requestIp: c.req.header('cf-connecting-ip') ?? null,
+      origin: c.req.header('Origin') ?? null,
+      userAgent: c.req.header('User-Agent') ?? null,
+      requestBody: requestBody as unknown as Record<string, unknown>,
+      responseBody: null, errorMessage: null,
     });
 
     if (!result.response.body) {
-      return c.json({ error: 'No stream body' }, 502);
+      return c.json({ error: 'No stream body', traceId }, 502);
     }
     return new Response(result.response.body, {
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Transfer-Encoding': 'chunked',
+        'x-builderforce-trace-id': traceId,
       },
     });
   });

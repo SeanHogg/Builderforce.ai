@@ -57,7 +57,7 @@ import {
   type ProxyEnv,
 } from '../../application/llm/LlmProxyService';
 import { getAllVendorIds, vendorForModel, type VendorId } from '../../application/llm/vendors';
-import { llmFailoverLog, llmHealthProbes } from '../../infrastructure/database/schema';
+import { llmFailoverLog, llmHealthProbes, llmTraces } from '../../infrastructure/database/schema';
 import { probeVendor, type VendorProbeResult } from '../../application/llm/vendorHealthProbe';
 import {
   mintTenantApiKey,
@@ -1504,6 +1504,98 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       byModel:    enrichVendor(byModel.rows as Array<{ model: string }>),
       daily:      daily.rows,
       failovers:  enrichVendor(failovers.rows as Array<{ model: string }>),
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/llm/traces — search/list recent LLM diagnostic traces.
+  //   ?q=  trace id / consumer request id (substring)   ?tenantId=  ?model=
+  //   ?success=true|false   ?outcome=   ?days= (def 7, max 90)   ?limit= ?page=
+  // Summary columns only; full bodies come from the single-trace endpoint.
+  // Everything here is builder-side / superadmin-only.
+  // -------------------------------------------------------------------------
+  router.get('/llm/traces', async (c) => {
+    const db = buildDatabase(c.env);
+    const q        = c.req.query('q')?.trim() || null;
+    const tenantId = parseTenantId(c.req.query('tenantId'));
+    const model    = c.req.query('model')?.trim() || null;
+    const successQ = c.req.query('success');
+    const outcome  = c.req.query('outcome')?.trim() || null;
+    const days     = Math.min(parsePositiveInt(c.req.query('days'), 7), 90);
+    const limit    = Math.min(parsePositiveInt(c.req.query('limit'), 50), 200);
+    const page     = Math.max(parsePositiveInt(c.req.query('page'), 1), 1);
+    const offset   = (page - 1) * limit;
+    const successFilter = successQ === 'true' ? true : successQ === 'false' ? false : null;
+
+    const result = await db.execute(sql`
+      SELECT
+        trace_id            AS "traceId",
+        created_at::text    AS "createdAt",
+        tenant_id           AS "tenantId",
+        user_id             AS "userId",
+        surface,
+        llm_product         AS "llmProduct",
+        resolved_model      AS "resolvedModel",
+        resolved_vendor     AS "resolvedVendor",
+        status,
+        success,
+        outcome,
+        classification,
+        attempt_count       AS "attemptCount",
+        retries,
+        schema_retries      AS "schemaRetries",
+        duration_ms         AS "durationMs",
+        total_tokens        AS "totalTokens",
+        use_case            AS "useCase",
+        consumer_request_id AS "consumerRequestId",
+        streamed,
+        error_message       AS "errorMessage"
+      FROM llm_traces
+      WHERE created_at >= now() - (${days} || ' days')::interval
+        AND (${q === null}             OR trace_id ILIKE ${'%' + (q ?? '') + '%'} OR consumer_request_id ILIKE ${'%' + (q ?? '') + '%'})
+        AND (${tenantId === null}      OR tenant_id = ${tenantId ?? 0})
+        AND (${model === null}         OR resolved_model ILIKE ${'%' + (model ?? '') + '%'})
+        AND (${successFilter === null} OR success = ${successFilter ?? false})
+        AND (${outcome === null}       OR outcome = ${outcome ?? ''})
+      ORDER BY created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `);
+
+    return c.json({ traces: result.rows, page, limit, days });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/llm/traces/:traceId — full single trace, JSON blobs parsed.
+  // The screen a superadmin lands on after a customer quotes their trace id:
+  // who called, how long, every model attempt, every exception, the candidate
+  // chain, and the full request/response bodies.
+  // -------------------------------------------------------------------------
+  router.get('/llm/traces/:traceId', async (c) => {
+    const db = buildDatabase(c.env);
+    const traceId = c.req.param('traceId');
+    const [row] = await db
+      .select()
+      .from(llmTraces)
+      .where(eq(llmTraces.traceId, traceId))
+      .limit(1);
+    if (!row) return c.json({ error: 'Trace not found' }, 404);
+
+    const parse = (v: string | null): unknown => {
+      if (v == null) return null;
+      try { return JSON.parse(v); } catch { return v; }
+    };
+
+    return c.json({
+      trace: {
+        ...row,
+        createdAt:      row.createdAt ? row.createdAt.toISOString() : null,
+        requestShape:   parse(row.requestShape),
+        candidateChain: parse(row.candidateChain),
+        attempts:       parse(row.attempts),
+        requestBody:    parse(row.requestBody),
+        responseBody:   parse(row.responseBody),
+        callerMetadata: parse(row.callerMetadata),
+      },
     });
   });
 
