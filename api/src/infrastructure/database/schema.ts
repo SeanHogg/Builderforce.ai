@@ -530,6 +530,7 @@ export const projects = pgTable('projects', {
   githubRepoOwner: varchar('github_repo_owner', { length: 255 }),
   githubRepoName:  varchar('github_repo_name', { length: 255 }),
   governance:      text('governance'),
+  modality:        text('modality').notNull().default('designer'),
   createdAt:       timestamp('created_at').notNull().defaultNow(),
   updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 });

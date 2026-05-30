@@ -132,6 +132,12 @@ export function StudioPanel({
     const abort = new AbortController();
     abortRef.current = abort;
 
+    // Single progress sink — engine emits one label per phase + per denoise
+    // step, the UI just reflects it. The engine ALSO console.info's each
+    // message, so devtools shows the full timeline whether or not the UI
+    // re-render keeps up.
+    const handleProgress = (label: string) => setProgressLabel(label);
+
     try {
       if (!engineRef.current) {
         const engine = await VideoEngine.create({
@@ -141,6 +147,7 @@ export function StudioPanel({
           mambaState: initialMambaState,
           width: DEFAULT_WIDTH,
           height: DEFAULT_HEIGHT,
+          onProgress: handleProgress,
         });
         if (!engine) {
           throw new Error('Engine refused to start on this device.');
@@ -148,7 +155,6 @@ export function StudioPanel({
         engineRef.current = engine;
       }
 
-      setProgressLabel('Expanding prompt via Builderforce LLM…');
       const generated = await engineRef.current.generate({
         prompt,
         frames,
@@ -156,13 +162,10 @@ export function StudioPanel({
         coherence: coherenceMode,
         coherenceStrength,
         signal: abort.signal,
-        onPromptExpanded: (expanded) => {
-          setExpandedPrompt(expanded);
-          setProgressLabel('Generating frames…');
-        },
-        onFrame: (idx, bitmap) => {
+        onPromptExpanded: setExpandedPrompt,
+        onProgress: handleProgress,
+        onFrame: (_idx, bitmap) => {
           setPreviewFrames((prev) => [...prev, bitmap]);
-          setProgressLabel(`Frame ${idx + 1} / ${frames}`);
         },
       });
 

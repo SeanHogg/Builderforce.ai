@@ -22,6 +22,8 @@ export interface ProjectProps {
   githubRepoOwner: string | null;
   githubRepoName:  string | null;
   governance:      string | null;
+  /** IDE: active modality for this project ('designer' | 'video' | 'llm'). */
+  modality:        string | null;
   createdAt:       Date;
   updatedAt:       Date;
 }
@@ -88,6 +90,7 @@ export class Project {
   get githubRepoOwner(): string | null { return this.props.githubRepoOwner; }
   get githubRepoName(): string | null { return this.props.githubRepoName; }
   get governance(): string | null { return this.props.governance; }
+  get modality(): string | null { return this.props.modality; }
   get createdAt(): Date { return this.props.createdAt; }
   get updatedAt(): Date { return this.props.updatedAt; }
 
@@ -113,6 +116,7 @@ export class Project {
         | 'githubRepoOwner'
         | 'githubRepoName'
         | 'governance'
+        | 'modality'
       >
     >,
   ): Project {

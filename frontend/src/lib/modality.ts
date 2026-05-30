@@ -79,11 +79,10 @@ export const MODALITIES: ModalityDef[] = [
     id: 'llm',
     label: 'LLM',
     icon: '🧠',
-    comingSoon: true,
     brainSystemPrompt:
       'You are assisting with building and training a custom LLM inside Builderforce.ai. Help the user design datasets, choose architectures, and reason about training runs.',
     brainPlaceholder: 'Ask about building or training your model…',
-    brainEmptyState: 'LLM modality is coming soon — build and train models here.',
+    brainEmptyState: 'Design your dataset and training run here — then fine-tune in the Train tab and ship from Publish.',
     rightTabs: ['files', 'train', 'publish', 'state'],
     showRunButton: false,
   },

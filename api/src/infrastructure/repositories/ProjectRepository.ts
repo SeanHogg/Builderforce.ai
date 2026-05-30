@@ -69,6 +69,7 @@ export class ProjectRepository implements IProjectRepository {
         githubRepoOwner: plain.githubRepoOwner ?? undefined,
         githubRepoName:  plain.githubRepoName ?? undefined,
         governance:     plain.governance ?? undefined,
+        modality:        plain.modality ?? undefined,
       })
       .returning();
     if (!inserted) throw new Error('Insert returned no rows');
@@ -93,6 +94,7 @@ export class ProjectRepository implements IProjectRepository {
         githubRepoOwner: plain.githubRepoOwner ?? undefined,
         githubRepoName:  plain.githubRepoName ?? undefined,
         governance:     plain.governance ?? undefined,
+        modality:        plain.modality ?? undefined,
         updatedAt:       plain.updatedAt,
       })
       .where(eq(projectsTable.id, plain.id))
@@ -131,6 +133,7 @@ function toDomain(row: Row): Project {
     githubRepoOwner: row.githubRepoOwner ?? null,
     githubRepoName:  row.githubRepoName ?? null,
     governance:      row.governance ?? null,
+    modality:        row.modality ?? 'designer',
     createdAt:       row.createdAt,
     updatedAt:       row.updatedAt,
   });

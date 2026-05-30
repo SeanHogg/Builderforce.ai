@@ -10,6 +10,7 @@ import { ProjectAIChat } from './ProjectAIChat';
 import { AITrainingPanel } from './AITrainingPanel';
 import { AgentPublishPanel } from './AgentPublishPanel';
 import { AgentStateViewer } from './AgentStateViewer';
+import { LlmStudioPanel } from './LlmStudioPanel';
 import { PreviewFrame } from './PreviewFrame';
 import { ProjectsSlideOutPanel } from './ProjectsSlideOutPanel';
 import { useWebContainer } from '@/hooks/useWebContainer';
@@ -641,6 +642,10 @@ export default defineConfig({
                 promptValue={videoPrompt}
                 onPromptChange={setVideoPrompt}
               />
+            </div>
+          ) : modality === 'llm' ? (
+            <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+              <LlmStudioPanel projectId={project.id} onGoToTab={setRightTab} />
             </div>
           ) : (
           <>

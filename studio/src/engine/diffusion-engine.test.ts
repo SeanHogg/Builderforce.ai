@@ -85,6 +85,29 @@ describe('MODEL_REGISTRY × UNet input contract', () => {
   });
 });
 
+describe('reportProgress (no-silent-phase invariant)', () => {
+  // The regression this guards: the engine would set "Generating frames…" then
+  // do minutes of model downloads + session creation + denoise without emitting
+  // anything else, so the UI looked frozen. Every long phase must report.
+  it('fans out to both console.info and the consumer callback', async () => {
+    const { reportProgress } = await import('./diffusion-engine');
+    const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const sink = vi.fn();
+    reportProgress('hello', sink);
+    expect(sink).toHaveBeenCalledWith('hello');
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('hello'));
+    consoleSpy.mockRestore();
+  });
+
+  it('handles a missing callback without throwing (console.info still fires)', async () => {
+    const { reportProgress } = await import('./diffusion-engine');
+    const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    expect(() => reportProgress('no-sink', undefined)).not.toThrow();
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+});
+
 describe('materializeTensor produces a Tensor of the requested dtype', () => {
   const raw = { data: new Float32Array([1, 2, 3]), shape: [3] as const };
 
