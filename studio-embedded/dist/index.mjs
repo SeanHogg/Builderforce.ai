@@ -1,5 +1,5 @@
 // src/components/StudioPanel.tsx
-import { useCallback, useEffect as useEffect3, useRef as useRef2, useState as useState2 } from "react";
+import { useCallback, useEffect as useEffect3, useRef as useRef3, useState as useState2 } from "react";
 import {
   VideoEngine
 } from "@seanhogg/builderforce-studio";
@@ -110,14 +110,23 @@ function VideoPreview({ frames, videoUrl, width, height }) {
 }
 
 // src/components/useEngineStatus.ts
-import { useEffect as useEffect2, useState } from "react";
+import { useEffect as useEffect2, useRef as useRef2, useState } from "react";
 import { probeDevice } from "@seanhogg/builderforce-studio";
 function useEngineStatus() {
   const [status, setStatus] = useState({ state: "probing" });
+  const probedRef = useRef2(null);
   useEffect2(() => {
     let cancelled = false;
     probeDevice("auto").then((device) => {
-      if (cancelled) return;
+      if (cancelled) {
+        if (device?.kind === "webgpu" && device.gpuDevice) {
+          try {
+            device.gpuDevice.destroy();
+          } catch {
+          }
+        }
+        return;
+      }
       if (!device) {
         setStatus({
           state: "unsupported",
@@ -125,6 +134,7 @@ function useEngineStatus() {
         });
         return;
       }
+      probedRef.current = device;
       setStatus({ state: "ready", device });
     }).catch((err) => {
       if (cancelled) return;
@@ -135,6 +145,14 @@ function useEngineStatus() {
     });
     return () => {
       cancelled = true;
+      const probed = probedRef.current;
+      if (probed?.kind === "webgpu" && probed.gpuDevice) {
+        try {
+          probed.gpuDevice.destroy();
+        } catch {
+        }
+      }
+      probedRef.current = null;
     };
   }, []);
   return status;
@@ -160,8 +178,8 @@ function StudioPanel({
 }) {
   const token = authToken ?? apiKey ?? "";
   const status = useEngineStatus();
-  const engineRef = useRef2(null);
-  const abortRef = useRef2(null);
+  const engineRef = useRef3(null);
+  const abortRef = useRef3(null);
   const [prompt, setPrompt] = useState2("");
   const [model, setModel] = useState2(defaultModel);
   const [resolution, setResolution] = useState2(DEFAULT_RESOLUTION);
@@ -170,7 +188,7 @@ function StudioPanel({
   const [frames, setFrames] = useState2(defaultFrames);
   const [fps, setFps] = useState2(defaultFps);
   useEffect3(() => {
-    engineRef.current = null;
+    disposeEngineAndOutputs();
   }, [model, resolution]);
   const [isGenerating, setIsGenerating] = useState2(false);
   const [progressLabel, setProgressLabel] = useState2("");
@@ -184,11 +202,55 @@ function StudioPanel({
       setPrompt(promptValue);
     }
   }, [promptValue]);
+  const previewFramesRef = useRef3([]);
+  const resultRef = useRef3(null);
+  const videoUrlRef = useRef3(null);
+  useEffect3(() => {
+    previewFramesRef.current = previewFrames;
+  }, [previewFrames]);
+  useEffect3(() => {
+    resultRef.current = result;
+  }, [result]);
+  useEffect3(() => {
+    videoUrlRef.current = videoUrl;
+  }, [videoUrl]);
+  const releaseVideoOutputs = useCallback(() => {
+    for (const bm of previewFramesRef.current) {
+      try {
+        bm.close();
+      } catch {
+      }
+    }
+    previewFramesRef.current = [];
+    setPreviewFrames([]);
+    const r = resultRef.current;
+    if (r) {
+      for (const bm of r.frames) {
+        try {
+          bm.close();
+        } catch {
+        }
+      }
+    }
+    resultRef.current = null;
+    setResult(null);
+    if (videoUrlRef.current) {
+      URL.revokeObjectURL(videoUrlRef.current);
+      videoUrlRef.current = null;
+    }
+    setVideoUrl(null);
+  }, []);
+  const disposeEngineAndOutputs = useCallback(() => {
+    releaseVideoOutputs();
+    const engine = engineRef.current;
+    engineRef.current = null;
+    if (engine) void engine.dispose();
+  }, [releaseVideoOutputs]);
   useEffect3(() => {
     return () => {
-      if (videoUrl) URL.revokeObjectURL(videoUrl);
+      disposeEngineAndOutputs();
     };
-  }, [videoUrl]);
+  }, [disposeEngineAndOutputs]);
   const handleGenerate = useCallback(async () => {
     if (status.state !== "ready") return;
     if (!prompt.trim()) {
@@ -202,12 +264,7 @@ function StudioPanel({
     setError(null);
     setIsGenerating(true);
     setProgressLabel("Initialising engine\u2026");
-    setPreviewFrames([]);
-    if (videoUrl) {
-      URL.revokeObjectURL(videoUrl);
-      setVideoUrl(null);
-    }
-    setResult(null);
+    releaseVideoOutputs();
     const abort = new AbortController();
     abortRef.current = abort;
     const handleProgress = (label) => setProgressLabel(label);

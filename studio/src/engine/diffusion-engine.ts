@@ -294,6 +294,7 @@ export class DiffusionEngine {
   private textEncoderSession: ort.InferenceSession | null = null;
   private unetSession: ort.InferenceSession | null = null;
   private vaeSession: ort.InferenceSession | null = null;
+  private disposed = false;
 
   constructor(private readonly opts: DiffusionEngineOptions) {}
 
@@ -354,6 +355,49 @@ export class DiffusionEngine {
   // -------------------------------------------------------------------------
   // Public surface
   // -------------------------------------------------------------------------
+
+  /**
+   * Release ORT sessions + destroy the engine's GPU device. Idempotent and
+   * safe to await even on a never-fully-init'd engine. After dispose() the
+   * engine cannot be reused — create a new one.
+   *
+   * ORT sessions hold large WASM heaps + WebGPU buffers (the LCM UNet
+   * alone is ~1.7 GB). Without release(), those stay allocated even after
+   * the React tree unmounts — exactly the leak the user surfaced.
+   */
+  async dispose(): Promise<void> {
+    if (this.disposed) return;
+    this.disposed = true;
+
+    // ORT sessions: release the WASM heap + GPU buffers each one allocated.
+    const sessions = [this.textEncoderSession, this.unetSession, this.vaeSession];
+    this.textEncoderSession = null;
+    this.unetSession = null;
+    this.vaeSession = null;
+    this.tokenizer = null;
+
+    await Promise.all(
+      sessions.map(async (s) => {
+        if (!s) return;
+        try {
+          await s.release();
+        } catch {
+          // release() can throw if the session was never fully created;
+          // we still want to continue tearing down the other resources.
+        }
+      }),
+    );
+
+    // GPUDevice owns the WebGPU command queue + uploaded weights buffers.
+    // destroy() is sync, idempotent, and releases everything immediately.
+    if (this.opts.probed.kind === 'webgpu' && this.opts.probed.gpuDevice) {
+      try {
+        this.opts.probed.gpuDevice.destroy();
+      } catch {
+        // device may already be lost (TDR) — destroy is a no-op then
+      }
+    }
+  }
 
   get descriptor(): ModelDescriptor {
     return MODEL_REGISTRY[this.opts.model];

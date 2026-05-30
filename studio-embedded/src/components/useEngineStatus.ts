@@ -5,7 +5,7 @@
  * detection branching (DRY) and matches the project's "no canX prop" rule.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { probeDevice, type ProbedDevice } from '@seanhogg/builderforce-studio';
 
 export type EngineStatus =
@@ -15,12 +15,22 @@ export type EngineStatus =
 
 export function useEngineStatus(): EngineStatus {
   const [status, setStatus] = useState<EngineStatus>({ state: 'probing' });
+  // Hold the probed device in a ref so the unmount cleanup can destroy()
+  // its GPUDevice without going through React state. Without this the
+  // probe-time WebGPU device leaks every time StudioPanel unmounts.
+  const probedRef = useRef<ProbedDevice | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     probeDevice('auto')
       .then((device) => {
-        if (cancelled) return;
+        if (cancelled) {
+          // Probe completed after unmount — release the device we just took.
+          if (device?.kind === 'webgpu' && device.gpuDevice) {
+            try { device.gpuDevice.destroy(); } catch { /* already lost */ }
+          }
+          return;
+        }
         if (!device) {
           setStatus({
             state: 'unsupported',
@@ -29,6 +39,7 @@ export function useEngineStatus(): EngineStatus {
           });
           return;
         }
+        probedRef.current = device;
         setStatus({ state: 'ready', device });
       })
       .catch((err: unknown) => {
@@ -40,6 +51,11 @@ export function useEngineStatus(): EngineStatus {
       });
     return () => {
       cancelled = true;
+      const probed = probedRef.current;
+      if (probed?.kind === 'webgpu' && probed.gpuDevice) {
+        try { probed.gpuDevice.destroy(); } catch { /* already lost */ }
+      }
+      probedRef.current = null;
     };
   }, []);
 

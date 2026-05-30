@@ -92,10 +92,12 @@ export function StudioPanel({
   const [fps, setFps] = useState(defaultFps);
 
   // Changing model OR resolution invalidates the cached engine — the engine
-  // is bound to both at create time. Drop the ref so the next generate
-  // re-creates with the new params (weights load from IDB cache, so it's fast).
+  // is bound to both at create time. Dispose the old engine (releases
+  // multi-GB ORT sessions + GPUDevice) so the next generate re-creates with
+  // the new params. Weights stay in IndexedDB so re-init is fast.
   useEffect(() => {
-    engineRef.current = null;
+    disposeEngineAndOutputs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model, resolution]);
 
   const [isGenerating, setIsGenerating] = useState(false);
@@ -114,12 +116,57 @@ export function StudioPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [promptValue]);
 
-  // Revoke object URLs on unmount so we don't leak blob references.
+  // Mirror state into refs so the unmount cleanup can release resources
+  // without depending on stale closures.
+  const previewFramesRef = useRef<ImageBitmap[]>([]);
+  const resultRef = useRef<GenerateResult | null>(null);
+  const videoUrlRef = useRef<string | null>(null);
+  useEffect(() => { previewFramesRef.current = previewFrames; }, [previewFrames]);
+  useEffect(() => { resultRef.current = result; }, [result]);
+  useEffect(() => { videoUrlRef.current = videoUrl; }, [videoUrl]);
+
+  // Single resource-release sink — used at the start of every regenerate AND
+  // on unmount. Closes ImageBitmaps (each holds GPU/CPU memory until close()),
+  // revokes the MP4 blob URL, and clears the result holding the Blob.
+  const releaseVideoOutputs = useCallback(() => {
+    for (const bm of previewFramesRef.current) {
+      try { bm.close(); } catch { /* already closed */ }
+    }
+    previewFramesRef.current = [];
+    setPreviewFrames([]);
+
+    const r = resultRef.current;
+    if (r) {
+      for (const bm of r.frames) {
+        try { bm.close(); } catch { /* already closed */ }
+      }
+    }
+    resultRef.current = null;
+    setResult(null);
+
+    if (videoUrlRef.current) {
+      URL.revokeObjectURL(videoUrlRef.current);
+      videoUrlRef.current = null;
+    }
+    setVideoUrl(null);
+  }, []);
+
+  // Releases all video resources AND disposes the engine (the big one —
+  // multi-GB ORT sessions + GPUDevice). Fires on unmount (modality switch
+  // away from video, route change) and on model/resolution change.
+  const disposeEngineAndOutputs = useCallback(() => {
+    releaseVideoOutputs();
+    const engine = engineRef.current;
+    engineRef.current = null;
+    if (engine) void engine.dispose();
+  }, [releaseVideoOutputs]);
+
+  // Unmount cleanup — runs once when the StudioPanel leaves the tree.
   useEffect(() => {
     return () => {
-      if (videoUrl) URL.revokeObjectURL(videoUrl);
+      disposeEngineAndOutputs();
     };
-  }, [videoUrl]);
+  }, [disposeEngineAndOutputs]);
 
   const handleGenerate = useCallback(async () => {
     if (status.state !== 'ready') return;
@@ -135,12 +182,10 @@ export function StudioPanel({
     setError(null);
     setIsGenerating(true);
     setProgressLabel('Initialising engine…');
-    setPreviewFrames([]);
-    if (videoUrl) {
-      URL.revokeObjectURL(videoUrl);
-      setVideoUrl(null);
-    }
-    setResult(null);
+    // Release outputs from any prior run (closes ImageBitmaps, revokes the
+    // previous MP4 blob URL, clears the cached result). The ENGINE is kept
+    // alive so we don't re-download multi-GB weights between runs.
+    releaseVideoOutputs();
 
     const abort = new AbortController();
     abortRef.current = abort;

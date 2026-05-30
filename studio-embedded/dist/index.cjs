@@ -147,10 +147,19 @@ var import_react2 = require("react");
 var import_builderforce_studio2 = require("@seanhogg/builderforce-studio");
 function useEngineStatus() {
   const [status, setStatus] = (0, import_react2.useState)({ state: "probing" });
+  const probedRef = (0, import_react2.useRef)(null);
   (0, import_react2.useEffect)(() => {
     let cancelled = false;
     (0, import_builderforce_studio2.probeDevice)("auto").then((device) => {
-      if (cancelled) return;
+      if (cancelled) {
+        if (device?.kind === "webgpu" && device.gpuDevice) {
+          try {
+            device.gpuDevice.destroy();
+          } catch {
+          }
+        }
+        return;
+      }
       if (!device) {
         setStatus({
           state: "unsupported",
@@ -158,6 +167,7 @@ function useEngineStatus() {
         });
         return;
       }
+      probedRef.current = device;
       setStatus({ state: "ready", device });
     }).catch((err) => {
       if (cancelled) return;
@@ -168,6 +178,14 @@ function useEngineStatus() {
     });
     return () => {
       cancelled = true;
+      const probed = probedRef.current;
+      if (probed?.kind === "webgpu" && probed.gpuDevice) {
+        try {
+          probed.gpuDevice.destroy();
+        } catch {
+        }
+      }
+      probedRef.current = null;
     };
   }, []);
   return status;
@@ -203,7 +221,7 @@ function StudioPanel({
   const [frames, setFrames] = (0, import_react3.useState)(defaultFrames);
   const [fps, setFps] = (0, import_react3.useState)(defaultFps);
   (0, import_react3.useEffect)(() => {
-    engineRef.current = null;
+    disposeEngineAndOutputs();
   }, [model, resolution]);
   const [isGenerating, setIsGenerating] = (0, import_react3.useState)(false);
   const [progressLabel, setProgressLabel] = (0, import_react3.useState)("");
@@ -217,11 +235,55 @@ function StudioPanel({
       setPrompt(promptValue);
     }
   }, [promptValue]);
+  const previewFramesRef = (0, import_react3.useRef)([]);
+  const resultRef = (0, import_react3.useRef)(null);
+  const videoUrlRef = (0, import_react3.useRef)(null);
+  (0, import_react3.useEffect)(() => {
+    previewFramesRef.current = previewFrames;
+  }, [previewFrames]);
+  (0, import_react3.useEffect)(() => {
+    resultRef.current = result;
+  }, [result]);
+  (0, import_react3.useEffect)(() => {
+    videoUrlRef.current = videoUrl;
+  }, [videoUrl]);
+  const releaseVideoOutputs = (0, import_react3.useCallback)(() => {
+    for (const bm of previewFramesRef.current) {
+      try {
+        bm.close();
+      } catch {
+      }
+    }
+    previewFramesRef.current = [];
+    setPreviewFrames([]);
+    const r = resultRef.current;
+    if (r) {
+      for (const bm of r.frames) {
+        try {
+          bm.close();
+        } catch {
+        }
+      }
+    }
+    resultRef.current = null;
+    setResult(null);
+    if (videoUrlRef.current) {
+      URL.revokeObjectURL(videoUrlRef.current);
+      videoUrlRef.current = null;
+    }
+    setVideoUrl(null);
+  }, []);
+  const disposeEngineAndOutputs = (0, import_react3.useCallback)(() => {
+    releaseVideoOutputs();
+    const engine = engineRef.current;
+    engineRef.current = null;
+    if (engine) void engine.dispose();
+  }, [releaseVideoOutputs]);
   (0, import_react3.useEffect)(() => {
     return () => {
-      if (videoUrl) URL.revokeObjectURL(videoUrl);
+      disposeEngineAndOutputs();
     };
-  }, [videoUrl]);
+  }, [disposeEngineAndOutputs]);
   const handleGenerate = (0, import_react3.useCallback)(async () => {
     if (status.state !== "ready") return;
     if (!prompt.trim()) {
@@ -235,12 +297,7 @@ function StudioPanel({
     setError(null);
     setIsGenerating(true);
     setProgressLabel("Initialising engine\u2026");
-    setPreviewFrames([]);
-    if (videoUrl) {
-      URL.revokeObjectURL(videoUrl);
-      setVideoUrl(null);
-    }
-    setResult(null);
+    releaseVideoOutputs();
     const abort = new AbortController();
     abortRef.current = abort;
     const handleProgress = (label) => setProgressLabel(label);

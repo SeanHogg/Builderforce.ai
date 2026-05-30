@@ -33,6 +33,7 @@ import {
   buildOrtSessionOptions,
   checkMemoryForModel,
   explainSessionCreateError,
+  DiffusionEngine,
 } from './diffusion-engine';
 
 describe('MODEL_REGISTRY × UNet input contract', () => {
@@ -282,6 +283,81 @@ describe('explainSessionCreateError (opaque ORT crash → actionable message)', 
       expect(wrapped.message, `'${id}' must not be recommended when it just OOM'd`)
         .not.toMatch(new RegExp(`Try a lighter model.*\\b${id}\\b`));
     }
+  });
+});
+
+describe('DiffusionEngine.dispose (memory-leak guard)', () => {
+  // The bug this guards: ORT sessions hold multi-GB WASM heaps + WebGPU buffers
+  // that don't get GC'd when the React tree unmounts. dispose() MUST call
+  // release() on every session AND destroy() on the GPUDevice — otherwise
+  // switching IDE modality leaves the studio holding 1.7+ GB indefinitely.
+  function makeEngine() {
+    const release = vi.fn(async () => {});
+    const destroy = vi.fn();
+    const engine = new DiffusionEngine({
+      model: 'sd-turbo',
+      probed: {
+        kind: 'webgpu',
+        label: 'mock',
+        approxMemoryMb: null,
+        gpuDevice: { destroy } as unknown as GPUDevice,
+      },
+      apiKey: '',
+      weightSources: ['huggingface-cdn'],
+      width: 512,
+      height: 512,
+    });
+    const fakeSession = { release } as unknown as Parameters<typeof Promise.resolve>[0];
+    // Inject mock sessions directly (init() does heavy real work we don't need here).
+    (engine as unknown as Record<string, unknown>).textEncoderSession = fakeSession;
+    (engine as unknown as Record<string, unknown>).unetSession = fakeSession;
+    (engine as unknown as Record<string, unknown>).vaeSession = fakeSession;
+    return { engine, release, destroy };
+  }
+
+  it('releases every ORT session and destroys the GPUDevice', async () => {
+    const { engine, release, destroy } = makeEngine();
+    await engine.dispose();
+    expect(release).toHaveBeenCalledTimes(3); // text_encoder + unet + vae
+    expect(destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('is idempotent — calling dispose twice does not double-release', async () => {
+    const { engine, release, destroy } = makeEngine();
+    await engine.dispose();
+    await engine.dispose();
+    expect(release).toHaveBeenCalledTimes(3);
+    expect(destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('nulls the session refs so accidental reuse is a clear error, not a stale call', async () => {
+    const { engine } = makeEngine();
+    await engine.dispose();
+    const inner = engine as unknown as Record<string, unknown>;
+    expect(inner.textEncoderSession).toBeNull();
+    expect(inner.unetSession).toBeNull();
+    expect(inner.vaeSession).toBeNull();
+  });
+
+  it('swallows release() errors so one bad session does not prevent the others from releasing', async () => {
+    const goodRelease = vi.fn(async () => {});
+    const badRelease = vi.fn(async () => { throw new Error('release threw'); });
+    const destroy = vi.fn();
+    const engine = new DiffusionEngine({
+      model: 'sd-turbo',
+      probed: { kind: 'webgpu', label: 'mock', approxMemoryMb: null, gpuDevice: { destroy } as unknown as GPUDevice },
+      apiKey: '',
+      weightSources: ['huggingface-cdn'],
+      width: 512,
+      height: 512,
+    });
+    (engine as unknown as Record<string, unknown>).textEncoderSession = { release: goodRelease };
+    (engine as unknown as Record<string, unknown>).unetSession = { release: badRelease };
+    (engine as unknown as Record<string, unknown>).vaeSession = { release: goodRelease };
+    await expect(engine.dispose()).resolves.toBeUndefined();
+    expect(goodRelease).toHaveBeenCalledTimes(2);
+    expect(badRelease).toHaveBeenCalledTimes(1);
+    expect(destroy).toHaveBeenCalledTimes(1);
   });
 });
 
