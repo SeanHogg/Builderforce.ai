@@ -11,6 +11,7 @@ import { and, eq, gte, sql, sum } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
 import {
   llmProxyForPlan,
+  newTraceId,
   productNameForPlan,
   modelPoolForPlan,
   FREE_MODEL_POOL,
@@ -18,6 +19,7 @@ import {
   type ChatCompletionRequest,
   type LlmUsage,
 } from '../../application/llm/LlmProxyService';
+import { logTrace } from '../../application/llm/traceLogger';
 import { callOpenRouterEmbeddings } from '../../application/llm/vendors';
 import {
   imageProxyForPlan,
@@ -579,14 +581,21 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       }, 503);
     }
 
+    const traceId = newTraceId();
+    const consumerRequestId = c.req.header('x-request-id') ?? c.req.header('x-correlation-id') ?? null;
+    const requestIp = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null;
+    const reqOrigin = c.req.header('Origin') ?? null;
+    const reqUserAgent = c.req.header('User-Agent') ?? null;
+
     const service = llmProxyForPlan(c.env, access.effectivePlan, access.premiumOverride);
-    const result = await service.complete(body);
+    const result = await service.complete(body, undefined, traceId);
 
     // Clone upstream headers we care about
     const upstreamHeaders = new Headers();
     const contentType = result.response.headers.get('content-type');
     if (contentType) upstreamHeaders.set('content-type', contentType);
     upstreamHeaders.set('x-builderforce-model', result.resolvedModel);
+    upstreamHeaders.set('x-builderforce-trace-id', traceId);
     upstreamHeaders.set('x-builderforce-vendor', result.resolvedVendor);
     upstreamHeaders.set('x-builderforce-retries', String(result.retries));
     upstreamHeaders.set('x-builderforce-product', llmProduct);
@@ -607,6 +616,19 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
       // Log any failovers that happened before this successful model
       logFailovers(c.env, c.executionCtx, result.failovers);
+
+      // Full diagnostic trace (builder-side only). For streams the completion
+      // body isn't captured here; identity, timing, attempts, and the chain are.
+      logTrace(c.env, c.executionCtx, {
+        traceId, surface: 'chat',
+        tenantId: access.tenantId, userId: access.userId, clawId: access.clawId,
+        tenantApiKeyId: access.tenantApiKeyId, llmProduct,
+        effectivePlan: access.effectivePlan, premiumOverride: access.premiumOverride,
+        result, streamed: true, useCase: callerUseCase, idempotencyKey,
+        consumerRequestId, requestIp, origin: reqOrigin, userAgent: reqUserAgent,
+        requestBody: body as unknown as Record<string, unknown>, callerMetadata,
+        responseBody: null, errorMessage: null,
+      });
 
       // Wrap the stream to capture usage from the final SSE chunk
       const instrumentedStream = wrapStreamForUsage(
@@ -645,10 +667,34 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       access.tenantApiKeyId,
     );
 
+    // Surface the trace id inside the error envelope too, so a consumer hitting
+    // a failure can quote `error.details.correlationId` straight back for a
+    // superadmin lookup. Full diagnostics stay builder-side.
+    const upstreamErr = (upstream as { error?: { message?: unknown; details?: Record<string, unknown> } }).error;
+    const traceErrorMessage = upstreamErr ? String(upstreamErr.message ?? '') : null;
+    if (upstreamErr) {
+      upstreamErr.details = { ...(upstreamErr.details ?? {}), correlationId: traceId, traceId };
+    }
+
+    // Full diagnostic trace (builder-side only).
+    logTrace(c.env, c.executionCtx, {
+      traceId, surface: 'chat',
+      tenantId: access.tenantId, userId: access.userId, clawId: access.clawId,
+      tenantApiKeyId: access.tenantApiKeyId, llmProduct,
+      effectivePlan: access.effectivePlan, premiumOverride: access.premiumOverride,
+      result, streamed: false,
+      usage: result.usage ?? null,
+      useCase: callerUseCase, idempotencyKey,
+      consumerRequestId, requestIp, origin: reqOrigin, userAgent: reqUserAgent,
+      requestBody: body as unknown as Record<string, unknown>, callerMetadata,
+      responseBody: upstream, errorMessage: traceErrorMessage,
+    });
+
     return c.json(
       {
         ...upstream,
         _builderforce: {
+          traceId,
           resolvedModel:  result.resolvedModel,
           resolvedVendor: result.resolvedVendor,
           retries:        result.retries,

@@ -1,6 +1,6 @@
 # @seanhogg/builderforce-sdk
 
-Typed TypeScript SDK for the [Builderforce.ai](https://builderforce.ai) LLM gateway. OpenAI-compatible chat completions with tool calling and structured output, embeddings, image generation (Together → FluxAPI cascade), model registry, and usage analytics — all behind a single tenant API key. Vendor failover (OpenRouter / Cerebras / Ollama / Claude / GPT / Gemini / Grok / Flux) is handled server-side so your code only knows about Builderforce.
+Typed TypeScript SDK for the [Builderforce.ai](https://builderforce.ai) LLM gateway. OpenAI-compatible chat completions with tool calling and structured output, embeddings, image generation (Together → FluxAPI cascade), model registry, and usage analytics — all behind a single tenant API key. Vendor failover (OpenRouter / Cerebras / Ollama / Claude / GPT / Gemini / Grok / Flux) is handled server-side so your code only knows about Builderforce. Every call returns a **trace ID** for one-step server-side diagnostics — see [Diagnostics — trace IDs](#diagnostics--trace-ids).
 
 - **Vanilla `fetch` / `AbortController` / `ReadableStream` / `TextDecoder`** — runs on Node 18+, Cloudflare Workers, browsers, edge runtimes.
 - **Zero runtime dependencies.** ~34 kB compressed, ~154 kB unpacked.
@@ -346,7 +346,7 @@ try {
 | 401 | `missing_api_key` | Auth issues |
 | 403 | (varied) | Wrong scope / wrong tenant for the URL |
 
-`error.requestId` comes from the gateway's `x-request-id` header — quote it in support tickets. Map gateway 429s to your own 503 + alerting (it's an ops issue, not a user issue).
+`error.requestId` comes from the gateway's `x-request-id` header — quote it in support tickets. For a **full server-side diagnostic** of a failed call (every model attempt, every upstream exception, the candidate chain, timings), quote the **trace ID** instead — see [Diagnostics — trace IDs](#diagnostics--trace-ids) below. Map gateway 429s to your own 503 + alerting (it's an ops issue, not a user issue).
 
 ### Don't retry terminal errors
 
@@ -369,6 +369,52 @@ async function callWithFallback(profile: Array<{ model: string; ... }>) {
 ```
 
 `error.retryAfter` (seconds) accompanies cap-exhaustion errors so you can sleep precisely until the next UTC midnight reset rather than polling. The same value is on the `Retry-After` response header.
+
+## Diagnostics — trace IDs
+
+Every call through the gateway is recorded server-side with a full diagnostic trace: who made it, how long it ran, every model the cascade attempted, every upstream exception, status codes, and the request/response bodies. **That detail never crosses the wire** — the SDK only ever receives a short **trace ID** (`llm-…`). Hand that ID to Builderforce support (or paste it into the superadmin console) to pull up the complete picture of what happened.
+
+The trace ID surfaces in three places, so you can capture it on both the success and failure paths:
+
+```ts
+// 1. Success path — on the response envelope:
+const res = await client.chat.completions.create({ messages: [...] });
+console.log(res._builderforce?.traceId);   // 'llm-7a1c2422-4e06-4d62-bc90-1c4171e53acc'
+
+// 2. Failure path — on the error's details (also surfaced as `correlationId`):
+try {
+  await client.chat.completions.create({ messages: [...] });
+} catch (err) {
+  if (err instanceof BuilderforceApiError) {
+    const details = err.details as { correlationId?: string; traceId?: string } | undefined;
+    const traceId = details?.correlationId ?? details?.traceId;
+    console.error(`AI call failed — trace ${traceId}`);  // log it, show it to the user, page on-call
+  }
+}
+
+// 3. Response header (works even when you only have the raw Response, e.g. streaming):
+//    x-builderforce-trace-id: llm-7a1c2422-…
+```
+
+`error.details.correlationId` and `_builderforce.traceId` are the **same value** — `correlationId` is just the name it carries inside the OpenAI-style error envelope. Capturing it on every failed call (in your logs, your error tracker, or the message you show the user) means a customer report becomes a one-step lookup instead of a guessing game.
+
+### Coarser per-attempt timing (no support round-trip needed)
+
+For lighter triage you don't need to quote the trace ID at all — the failover breakdown the gateway returns inline now carries per-attempt **timing** and a coarse **failure class**:
+
+```ts
+for (const f of res._builderforce?.failovers ?? []) {
+  console.log(f.vendor, f.model, f.code, f.kind, `${f.durationMs}ms`);
+  // e.g.  openrouter  qwen/qwen3-coder:free  429  rate_limit  1034ms
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `durationMs` | Wall-clock time the gateway spent on that attempt. A `25000`-ish value with `kind: 'timeout'` means the vendor hung. |
+| `kind` | `'rate_limit' \| 'timeout' \| 'auth' \| 'server_error' \| 'client_error' \| 'network' \| 'skipped'`. Roll these up to spot single-vendor saturation vs a broad outage. |
+
+The **full upstream error text** for each attempt is deliberately *not* included in `failovers` — it can contain raw provider payloads. It's recorded against the trace and is only visible server-side; quote the trace ID to see it.
 
 ## Models and usage
 
@@ -444,7 +490,7 @@ client.chat.completions.create({
 });
 
 // Response carries the echo:
-// { ..., _builderforce: { useCase: 'studio_storyboard', metadata: {...}, requestId: 'req_...' } }
+// { ..., _builderforce: { traceId: 'llm-...', useCase: 'studio_storyboard', metadata: {...}, requestId: 'req_...' } }
 ```
 
 ## License

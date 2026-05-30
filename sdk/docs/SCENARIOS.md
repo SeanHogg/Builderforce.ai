@@ -6,6 +6,7 @@ Two complementary attribution fields:
 
 - **`useCase`** — opaque telemetry slug, free-form. Persisted to `llm_usage_log.use_case`, echoed back in `_builderforce.useCase`. Use for per-feature spend dashboards.
 - **`metadata`** — free-form key/value pairs for richer trace-back (`{ accountId, userId, sessionId, runner, ... }`). Persisted to `llm_usage_log.metadata` JSONB, echoed back in `_builderforce.metadata`.
+- **`traceId`** — returned on every response (`_builderforce.traceId`) and on failures (`error.details.correlationId`). Hand it to Builderforce support for a full server-side diagnostic of the call. See [Diagnosing a failed call](#diagnosing-a-failed-call-trace-ids).
 
 Neither affects routing. The examples below show both in context.
 
@@ -380,6 +381,47 @@ try {
 ```
 
 Today the gateway returns 409 on replay but does **not** cache and replay the original response body — true response-cache replay requires a Cloudflare KV namespace and is logged as a follow-up in the project Gap Register.
+
+---
+
+## Diagnosing a failed call (trace IDs)
+
+Every call is recorded server-side with the full picture — who called, how long it ran, every model the cascade attempted, every upstream exception, the candidate chain, and the request/response bodies. The SDK only receives a short **trace ID** (`llm-…`); the detail stays builder-side and is pulled up by support / superadmin from that ID. Capture it on both paths so any user-reported failure becomes a one-step lookup.
+
+```ts
+async function tracedCall(params: ChatCompletionCreateParams) {
+  try {
+    const res = await client.chat.completions.create(params);
+    // Stash on success too — useful when the *output* was wrong, not the call.
+    logger.info('ai_ok', {
+      traceId: res._builderforce?.traceId,
+      model:   res._builderforce?.resolvedModel,
+    });
+    return res;
+  } catch (err) {
+    if (err instanceof BuilderforceApiError) {
+      // Same value carried as `correlationId` inside the error envelope.
+      const d = err.details as { correlationId?: string; traceId?: string } | undefined;
+      const traceId = d?.correlationId ?? d?.traceId;
+      logger.error('ai_call_failed', { code: err.code, status: err.status, traceId });
+      // Show it to the user so they can quote it in a support ticket:
+      throw new Error(`AI is temporarily unavailable. Reference: ${traceId ?? 'n/a'}`);
+    }
+    throw err;
+  }
+}
+```
+
+For lighter, no-support-needed triage, the inline failover breakdown carries per-attempt timing + a coarse class — no trace lookup required:
+
+```ts
+for (const f of res._builderforce?.failovers ?? []) {
+  metrics.timing(`llm.attempt.${f.vendor}`, f.durationMs ?? 0, { kind: f.kind, code: f.code });
+  // e.g.  openrouter/qwen3-coder:free  429  rate_limit  1034ms
+}
+```
+
+`f.kind` is one of `rate_limit | timeout | auth | server_error | client_error | network | skipped`. The **raw per-attempt error text is not in `failovers`** (it can contain raw provider payloads) — it lives only on the server-side trace. Quote the trace ID to see it.
 
 ---
 

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { useEmulation } from '@/lib/EmulationContext';
 import { getStoredWebToken } from '@/lib/auth';
+import { LlmTracesPanel } from './LlmTracesPanel';
 import {
   adminApi,
   type AdminHealth,
@@ -57,6 +58,7 @@ type AdminTab =
   | 'impsessions'
   | 'auditlog'
   | 'errors'
+  | 'traces'
   | 'token';
 
 const TABS: AdminTab[] = [
@@ -77,10 +79,12 @@ const TABS: AdminTab[] = [
   'impsessions',
   'auditlog',
   'errors',
+  'traces',
   'token',
 ];
 
 const TAB_LABELS: Partial<Record<AdminTab, string>> = {
+  traces: 'LLM Traces',
   impsessions: 'Imp. Sessions',
   auditlog: 'Audit Log',
   apikeys: 'API Keys',
@@ -1257,6 +1261,8 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
+
+            {tab === 'traces' && <LlmTracesPanel />}
 
             {tab === 'errors' && (
               <div>
