@@ -76,6 +76,16 @@ export interface ModelDescriptor {
     unet: OnnxFile;
     vaeDecoder: OnnxFile;
   };
+  /** Exact UNet input tensor names this model expects. The engine iterates this
+   *  list to build feeds; any name missing a registered builder fails the
+   *  registry-contract unit test before it can fail at runtime as
+   *  "input 'X' is missing in 'feeds'". */
+  unetInputNames: readonly string[];
+  /** LCM consistency-model guidance-scale embedding dimension. Set on LCM
+   *  exports (aislamov/* uses 256). When set, the engine produces a
+   *  `timestep_cond` feed of shape [1, dim]. Leave undefined for non-LCM
+   *  UNets (SD / SD-Turbo). */
+  lcmGuidanceEmbedDim?: number;
 }
 
 export interface VideoEngineOptions {

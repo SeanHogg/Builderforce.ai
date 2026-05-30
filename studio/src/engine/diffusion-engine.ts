@@ -55,6 +55,8 @@ export const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor> = {
       unet: { model: 'unet/model.onnx', externalData: 'unet/model.onnx_data' },
       vaeDecoder: { model: 'vae_decoder/model.onnx', externalData: 'vae_decoder/model.onnx_data' },
     },
+    unetInputNames: ['sample', 'timestep', 'encoder_hidden_states', 'timestep_cond'],
+    lcmGuidanceEmbedDim: 256, // standard for LCM-LoRA-derived exports
   },
   'sd-turbo': {
     id: 'sd-turbo',
@@ -72,8 +74,66 @@ export const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor> = {
       unet: { model: 'unet/model.onnx' },
       vaeDecoder: { model: 'vae_decoder/model.onnx' },
     },
+    unetInputNames: ['sample', 'timestep', 'encoder_hidden_states'],
   },
 };
+
+// ---------------------------------------------------------------------------
+// UNet input builders — single registry of "this is how you compute each
+// declared input." A model whose `unetInputNames` references a name not in
+// this registry fails the [contract unit test](./diffusion-engine.test.ts),
+// catching the missing-feed regression before it can throw at runtime.
+// ---------------------------------------------------------------------------
+
+interface UnetInputContext {
+  descriptor: ModelDescriptor;
+  sample: Float32Array;
+  condEmbedding: Float32Array;
+  timestep: number;
+  guidance: number;
+  latentShape: [number, number, number, number];
+}
+
+type UnetInputBuilder = (ctx: UnetInputContext) => ort.Tensor;
+
+const UNET_INPUT_BUILDERS: Record<string, UnetInputBuilder> = {
+  sample: (ctx) => new ort.Tensor('float32', ctx.sample, ctx.latentShape),
+  timestep: (ctx) =>
+    new ort.Tensor('int64', BigInt64Array.from([BigInt(ctx.timestep)]), [1]),
+  encoder_hidden_states: (ctx) =>
+    new ort.Tensor('float32', ctx.condEmbedding, [
+      1,
+      ctx.descriptor.sequenceLength,
+      ctx.descriptor.textEmbedDim,
+    ]),
+  timestep_cond: (ctx) => {
+    // LCM consistency-model guidance-scale embedding. Diffusers convention:
+    // embed (w - 1) where w is the CFG scale. w=1 (LCM default) → all zeros.
+    const dim = ctx.descriptor.lcmGuidanceEmbedDim ?? 256;
+    const data = guidanceScaleEmbedding(ctx.guidance - 1, dim);
+    return new ort.Tensor('float32', data, [1, dim]);
+  },
+};
+
+/** Names the engine knows how to build. Exported so the registry contract test
+ *  can assert every model's `unetInputNames` is a subset of this. */
+export const KNOWN_UNET_INPUTS: ReadonlySet<string> = new Set(
+  Object.keys(UNET_INPUT_BUILDERS),
+);
+
+/** Sinusoidal guidance-scale embedding (diffusers parity). */
+function guidanceScaleEmbedding(w: number, dim: number): Float32Array {
+  const half = Math.floor(dim / 2);
+  const out = new Float32Array(dim);
+  const logBase = Math.log(10000) / Math.max(1, half - 1);
+  const wScaled = w * 1000;
+  for (let i = 0; i < half; i++) {
+    const freq = Math.exp(-logBase * i);
+    out[i] = Math.sin(wScaled * freq);
+    if (half + i < dim) out[half + i] = Math.cos(wScaled * freq);
+  }
+  return out;
+}
 
 // ---------------------------------------------------------------------------
 // DDPM noise schedule — precomputed alpha_cumprod for the standard SD beta
@@ -315,6 +375,35 @@ export class DiffusionEngine {
     });
   }
 
+  private buildUnetFeeds(args: {
+    sample: Float32Array;
+    condEmbedding: Float32Array;
+    timestep: number;
+    guidance: number;
+    latentShape: [number, number, number, number];
+  }): Record<string, ort.Tensor> {
+    const ctx: UnetInputContext = {
+      descriptor: this.descriptor,
+      sample: args.sample,
+      condEmbedding: args.condEmbedding,
+      timestep: args.timestep,
+      guidance: args.guidance,
+      latentShape: args.latentShape,
+    };
+    const feeds: Record<string, ort.Tensor> = {};
+    for (const name of this.descriptor.unetInputNames) {
+      const builder = UNET_INPUT_BUILDERS[name];
+      if (!builder) {
+        throw new Error(
+          `Model '${this.descriptor.id}' declares UNet input '${name}' but no builder is registered. ` +
+            `Add it to UNET_INPUT_BUILDERS in diffusion-engine.ts.`,
+        );
+      }
+      feeds[name] = builder(ctx);
+    }
+    return feeds;
+  }
+
   private async runUnet(args: {
     sample: Float32Array;
     condEmbedding: Float32Array;
@@ -324,20 +413,14 @@ export class DiffusionEngine {
     latentShape: [number, number, number, number];
   }): Promise<Float32Array> {
     const session = this.unetSession!;
-    const { textEmbedDim, sequenceLength } = this.descriptor;
-    const sampleTensor = new ort.Tensor('float32', args.sample, args.latentShape);
-    const tsTensor = new ort.Tensor('int64', BigInt64Array.from([BigInt(args.timestep)]), [1]);
-    const condTensor = new ort.Tensor(
-      'float32',
-      args.condEmbedding,
-      [1, sequenceLength, textEmbedDim],
-    );
-
-    const condOut = await session.run({
-      sample: sampleTensor,
-      timestep: tsTensor,
-      encoder_hidden_states: condTensor,
+    const condFeeds = this.buildUnetFeeds({
+      sample: args.sample,
+      condEmbedding: args.condEmbedding,
+      timestep: args.timestep,
+      guidance: args.guidance,
+      latentShape: args.latentShape,
     });
+    const condOut = await session.run(condFeeds);
     const condNoise = pickFirstFloat32(condOut);
     if (!condNoise) throw new Error('UNet returned no Float32 output');
 
@@ -345,16 +428,14 @@ export class DiffusionEngine {
       return condNoise;
     }
 
-    const uncondTensor = new ort.Tensor(
-      'float32',
-      args.uncondEmbedding,
-      [1, sequenceLength, textEmbedDim],
-    );
-    const uncondOut = await session.run({
-      sample: sampleTensor,
-      timestep: tsTensor,
-      encoder_hidden_states: uncondTensor,
+    const uncondFeeds = this.buildUnetFeeds({
+      sample: args.sample,
+      condEmbedding: args.uncondEmbedding,
+      timestep: args.timestep,
+      guidance: args.guidance,
+      latentShape: args.latentShape,
     });
+    const uncondOut = await session.run(uncondFeeds);
     const uncondNoise = pickFirstFloat32(uncondOut);
     if (!uncondNoise) throw new Error('UNet unconditional pass returned no Float32 output');
 
