@@ -141,6 +141,12 @@ describe('buildOrtSessionOptions (graph-fusion crash guard)', () => {
     expect(buildOrtSessionOptions('webnn').executionProviders).toEqual(['webnn', 'wasm']);
     expect(buildOrtSessionOptions('cpu').executionProviders).toEqual(['wasm']);
   });
+
+  it("suppresses ORT warnings (logSeverityLevel: 3) — they're informational and spam the console per session", () => {
+    for (const device of ['webgpu', 'webnn', 'cpu'] as const) {
+      expect(buildOrtSessionOptions(device).logSeverityLevel).toBe(3);
+    }
+  });
 });
 
 describe('checkMemoryForModel (pre-flight OOM guard)', () => {
