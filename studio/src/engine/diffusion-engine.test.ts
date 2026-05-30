@@ -24,6 +24,9 @@ vi.mock('@huggingface/transformers', () => ({
   env: { allowLocalModels: true, backends: { onnx: { wasm: {} } } },
   AutoTokenizer: { from_pretrained: vi.fn() },
 }));
+vi.mock('./weight-cache', () => ({
+  getOrFetchWeight: vi.fn(async () => new ArrayBuffer(16)),
+}));
 
 import {
   MODEL_REGISTRY,
@@ -358,6 +361,71 @@ describe('DiffusionEngine.dispose (memory-leak guard)', () => {
     expect(goodRelease).toHaveBeenCalledTimes(2);
     expect(badRelease).toHaveBeenCalledTimes(1);
     expect(destroy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('DiffusionEngine.init session-create serialisation (external-data race guard)', () => {
+  // The bug this guards: ORT-web mounts external-data sidecars on a GLOBAL Map
+  // (`f.Xc`) on the wasm Module, and the `finally` block of every session
+  // create calls `unmountExternalData()` which wipes that map. Three concurrent
+  // `Promise.all` creates with sidecars therefore race: the first session's
+  // finally wipes the data the second is still mid-deserialize. Symptom is
+  //   "Failed to load external data file 'model.onnx_data',
+  //    error: Module.MountedFiles is not available."
+  // The fix is to download all weights in parallel but create ORT sessions
+  // SERIALLY. This test locks that invariant by detecting any temporal overlap
+  // between InferenceSession.create invocations during init().
+  it('runs InferenceSession.create calls sequentially (no overlap)', async () => {
+    const ort = await import('onnxruntime-web');
+    const transformers = await import('@huggingface/transformers');
+
+    // Stub the tokenizer so init() doesn't reach the network.
+    (transformers.AutoTokenizer.from_pretrained as ReturnType<typeof vi.fn>).mockResolvedValue(
+      Object.assign(async () => ({ input_ids: { data: new BigInt64Array(77) } }), {})
+    );
+
+    // Track create overlaps. Each call increments `inFlight`; if it ever
+    // exceeds 1, two creates overlapped → the global mountedFiles Map would
+    // race in real ORT-web.
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const createMock = ort.InferenceSession.create as ReturnType<typeof vi.fn>;
+    createMock.mockReset();
+    createMock.mockImplementation(async () => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      // Yield to the microtask queue so a buggy `Promise.all` actually does
+      // overlap (without the await, every call would complete synchronously
+      // and the in-flight counter would never exceed 1 even when racing).
+      await new Promise<void>((r) => setTimeout(r, 5));
+      inFlight--;
+      // Minimal session-shape stub for assertSessionMatchesSpec.
+      return {
+        inputNames: ['sample', 'timestep', 'encoder_hidden_states', 'input_ids', 'timestep_cond'],
+        release: async () => {},
+      } as unknown as Awaited<ReturnType<typeof ort.InferenceSession.create>>;
+    });
+
+    const engine = new DiffusionEngine({
+      // Pick lcm-dreamshaper-v7 — both unet and vae_decoder have external-data
+      // sidecars, so a buggy parallel implementation would race.
+      model: 'lcm-dreamshaper-v7',
+      probed: { kind: 'wasm', label: 'mock', approxMemoryMb: null },
+      apiKey: '',
+      weightSources: ['huggingface-cdn'],
+      width: 512,
+      height: 512,
+    });
+
+    await engine.init();
+
+    expect(createMock).toHaveBeenCalledTimes(3); // text_encoder + unet + vae
+    expect(
+      maxInFlight,
+      `InferenceSession.create overlapped (max in-flight ${maxInFlight}). ` +
+        `ORT-web's external-data Map is global — concurrent creates corrupt each other. ` +
+        `Keep the per-session create sequential in DiffusionEngine.init().`,
+    ).toBe(1);
   });
 });
 

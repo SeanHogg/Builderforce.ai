@@ -289,6 +289,12 @@ export interface DenoiseResult {
   pixels: Float32Array;
 }
 
+interface SessionBuffers {
+  label: string;
+  modelBuf: ArrayBuffer;
+  externalData: { name: string; buf: ArrayBuffer } | null;
+}
+
 export class DiffusionEngine {
   private tokenizer: PreTrainedTokenizer | null = null;
   private textEncoderSession: ort.InferenceSession | null = null;
@@ -337,11 +343,26 @@ export class DiffusionEngine {
     reportProgress('Tokenizer ready.', onProgress);
 
     reportProgress(`Loading ${d.id} weights (UNet + text-encoder + VAE)…`, onProgress);
-    [this.textEncoderSession, this.unetSession, this.vaeSession] = await Promise.all([
-      this.createSession(d.files.textEncoder, sessionOptions, 'text_encoder'),
-      this.createSession(d.files.unet, sessionOptions, 'unet'),
-      this.createSession(d.files.vaeDecoder, sessionOptions, 'vae_decoder'),
+
+    // Phase 1: download all model + sidecar weights in parallel (network-bound).
+    const downloads = await Promise.all([
+      this.fetchSessionBuffers(d.files.textEncoder, 'text_encoder'),
+      this.fetchSessionBuffers(d.files.unet, 'unet'),
+      this.fetchSessionBuffers(d.files.vaeDecoder, 'vae_decoder'),
     ]);
+
+    // Phase 2: create ORT sessions SERIALLY. ORT-web mounts external-data
+    // sidecars on a GLOBAL Map (`f.Xc`) on the wasm Module, and the `finally`
+    // block of every session create calls `unmountExternalData()` which wipes
+    // that map. Three concurrent `Promise.all` creates with sidecars therefore
+    // race: the first session's finally wipes the data the second is still
+    // mid-deserialize. Symptom is "Module.MountedFiles is not available" on a
+    // tensor like `up_blocks.2.resnets.1.conv2.weight`.
+    // The runSessionCreatesSequentially regression test in diffusion-engine.test.ts
+    // locks this invariant — do not switch back to Promise.all here.
+    this.textEncoderSession = await this.createSessionFromBuffers(downloads[0], sessionOptions);
+    this.unetSession = await this.createSessionFromBuffers(downloads[1], sessionOptions);
+    this.vaeSession = await this.createSessionFromBuffers(downloads[2], sessionOptions);
     reportProgress('All ORT sessions created.', onProgress);
 
     // Validate the loaded models' input names match what the registry declares.
@@ -531,37 +552,55 @@ export class DiffusionEngine {
     return buildOrtSessionOptions(this.opts.probed.kind);
   }
 
-  /** Create an ORT session for one model file, attaching its external-data
-   *  sidecar when the export splits weights into a `.onnx_data` blob.
-   *  Emits per-file phase progress so the user sees which model is loading. */
-  private async createSession(
+  /** Fetch the model + (optional) external-data buffers for one session.
+   *  Pure I/O — no ORT calls. Split from session creation so the engine can
+   *  parallelize downloads while still serialising the ORT create step. */
+  private async fetchSessionBuffers(
     file: OnnxFile,
-    baseOptions: ort.InferenceSession.SessionOptions,
     label: string,
-  ): Promise<ort.InferenceSession> {
+  ): Promise<SessionBuffers> {
     const onProgress = this.opts.onProgress;
     reportProgress(`Downloading ${label} (${file.model})…`, onProgress);
     const modelBuf = await this.fetchWeight(file.model);
-    const options: ort.InferenceSession.SessionOptions = { ...baseOptions };
-
+    let externalData: { name: string; buf: ArrayBuffer } | null = null;
     if (file.externalData) {
       reportProgress(`Downloading ${label} weight data (${file.externalData})…`, onProgress);
       const dataBuf = await this.fetchWeight(file.externalData);
+      externalData = { name: basename(file.externalData), buf: dataBuf };
+    }
+    return { label, modelBuf, externalData };
+  }
+
+  /** Create an ORT session from already-downloaded buffers. Caller MUST call
+   *  this serially across sessions when any of them carry external data —
+   *  ORT-web's external-data mount Map is global and the `finally` of every
+   *  session create unmounts it, so concurrent creates race. The init() call
+   *  site enforces serial creation. */
+  private async createSessionFromBuffers(
+    bufs: SessionBuffers,
+    baseOptions: ort.InferenceSession.SessionOptions,
+  ): Promise<ort.InferenceSession> {
+    const onProgress = this.opts.onProgress;
+    const options: ort.InferenceSession.SessionOptions = { ...baseOptions };
+    if (bufs.externalData) {
       // The .onnx graph references its sidecar by basename (e.g.
       // 'model.onnx_data'); ORT matches the externalData `path` against it.
       options.externalData = [
-        { path: basename(file.externalData), data: new Uint8Array(dataBuf) },
+        { path: bufs.externalData.name, data: new Uint8Array(bufs.externalData.buf) },
       ];
     }
-    reportProgress(`Creating ${label} ORT session…`, onProgress);
+    reportProgress(`Creating ${bufs.label} ORT session…`, onProgress);
     try {
-      const session = await ort.InferenceSession.create(new Uint8Array(modelBuf), options);
-      reportProgress(`${label} ready.`, onProgress);
+      const session = await ort.InferenceSession.create(
+        new Uint8Array(bufs.modelBuf),
+        options,
+      );
+      reportProgress(`${bufs.label} ready.`, onProgress);
       return session;
     } catch (err) {
       throw explainOrtError(
         err,
-        `${label} session create`,
+        `${bufs.label} session create`,
         this.descriptor.id,
         this.descriptor.minVramMb,
         this.opts.probed.approxMemoryMb,
