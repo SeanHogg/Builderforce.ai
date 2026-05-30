@@ -56,8 +56,13 @@ export interface StudioPanelProps {
   onPromptChange?: (prompt: string) => void;
 }
 
-const DEFAULT_WIDTH = 512;
-const DEFAULT_HEIGHT = 512;
+// Square resolutions only — every supported diffusion backbone trains square.
+// Ordered low → high so the lowest is always the safe default for weak GPUs
+// (avoids Windows D3D12 TDR on cards that can't finish a 512×512 UNet step
+// in ~2 s). Lower res = quadratically less compute per denoise step.
+const RESOLUTION_PRESETS = [256, 384, 512, 768] as const;
+type Resolution = (typeof RESOLUTION_PRESETS)[number];
+const DEFAULT_RESOLUTION: Resolution = 256;
 
 export function StudioPanel({
   authToken,
@@ -80,10 +85,18 @@ export function StudioPanel({
 
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState<DiffusionModelId>(defaultModel);
+  const [resolution, setResolution] = useState<Resolution>(DEFAULT_RESOLUTION);
   const [coherenceMode, setCoherenceMode] = useState<CoherenceMode>(defaultCoherence);
   const [coherenceStrength, setCoherenceStrength] = useState(0.5);
   const [frames, setFrames] = useState(defaultFrames);
   const [fps, setFps] = useState(defaultFps);
+
+  // Changing model OR resolution invalidates the cached engine — the engine
+  // is bound to both at create time. Drop the ref so the next generate
+  // re-creates with the new params (weights load from IDB cache, so it's fast).
+  useEffect(() => {
+    engineRef.current = null;
+  }, [model, resolution]);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [progressLabel, setProgressLabel] = useState('');
@@ -145,8 +158,8 @@ export function StudioPanel({
           baseUrl,
           model,
           mambaState: initialMambaState,
-          width: DEFAULT_WIDTH,
-          height: DEFAULT_HEIGHT,
+          width: resolution,
+          height: resolution,
           onProgress: handleProgress,
         });
         if (!engine) {
@@ -278,6 +291,39 @@ export function StudioPanel({
 
           <ModelPicker value={model} onChange={setModel} disabled={isGenerating} />
 
+          <div className="bfs-field">
+            <label className="bfs-label">Resolution</label>
+            <div className="bfs-radio-row">
+              {RESOLUTION_PRESETS.map((px) => {
+                const active = resolution === px;
+                return (
+                  <button
+                    key={px}
+                    type="button"
+                    onClick={() => setResolution(px)}
+                    disabled={isGenerating}
+                    className="bfs-btn bfs-btn-secondary"
+                    aria-pressed={active}
+                    style={{
+                      flex: 1,
+                      padding: '6px 8px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      background: active ? 'var(--bfs-accent)' : 'transparent',
+                      color: active ? 'white' : 'var(--bfs-fg)',
+                      borderColor: active ? 'var(--bfs-accent)' : 'var(--bfs-border)',
+                    }}
+                  >
+                    {px}×{px}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="bfs-hint">
+              Lower = faster + fits weaker GPUs (4× less compute per step at 256). Higher = sharper, more VRAM, may trip Windows GPU timeouts.
+            </p>
+          </div>
+
           <div className="bfs-row">
             <div className="bfs-field bfs-flex">
               <label className="bfs-label">Frames</label>
@@ -347,8 +393,8 @@ export function StudioPanel({
           <VideoPreview
             frames={previewFrames}
             videoUrl={videoUrl}
-            width={DEFAULT_WIDTH}
-            height={DEFAULT_HEIGHT}
+            width={resolution}
+            height={resolution}
           />
           {result && (
             <dl className="bfs-meta">

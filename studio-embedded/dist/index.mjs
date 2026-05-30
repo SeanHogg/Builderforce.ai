@@ -142,8 +142,8 @@ function useEngineStatus() {
 
 // src/components/StudioPanel.tsx
 import { jsx as jsx4, jsxs as jsxs4 } from "react/jsx-runtime";
-var DEFAULT_WIDTH = 512;
-var DEFAULT_HEIGHT = 512;
+var RESOLUTION_PRESETS = [256, 384, 512, 768];
+var DEFAULT_RESOLUTION = 256;
 function StudioPanel({
   authToken,
   apiKey,
@@ -164,10 +164,14 @@ function StudioPanel({
   const abortRef = useRef2(null);
   const [prompt, setPrompt] = useState2("");
   const [model, setModel] = useState2(defaultModel);
+  const [resolution, setResolution] = useState2(DEFAULT_RESOLUTION);
   const [coherenceMode, setCoherenceMode] = useState2(defaultCoherence);
   const [coherenceStrength, setCoherenceStrength] = useState2(0.5);
   const [frames, setFrames] = useState2(defaultFrames);
   const [fps, setFps] = useState2(defaultFps);
+  useEffect3(() => {
+    engineRef.current = null;
+  }, [model, resolution]);
   const [isGenerating, setIsGenerating] = useState2(false);
   const [progressLabel, setProgressLabel] = useState2("");
   const [expandedPrompt, setExpandedPrompt] = useState2("");
@@ -214,8 +218,8 @@ function StudioPanel({
           baseUrl,
           model,
           mambaState: initialMambaState,
-          width: DEFAULT_WIDTH,
-          height: DEFAULT_HEIGHT,
+          width: resolution,
+          height: resolution,
           onProgress: handleProgress
         });
         if (!engine) {
@@ -327,6 +331,38 @@ function StudioPanel({
           ] })
         ] }),
         /* @__PURE__ */ jsx4(ModelPicker, { value: model, onChange: setModel, disabled: isGenerating }),
+        /* @__PURE__ */ jsxs4("div", { className: "bfs-field", children: [
+          /* @__PURE__ */ jsx4("label", { className: "bfs-label", children: "Resolution" }),
+          /* @__PURE__ */ jsx4("div", { className: "bfs-radio-row", children: RESOLUTION_PRESETS.map((px) => {
+            const active = resolution === px;
+            return /* @__PURE__ */ jsxs4(
+              "button",
+              {
+                type: "button",
+                onClick: () => setResolution(px),
+                disabled: isGenerating,
+                className: "bfs-btn bfs-btn-secondary",
+                "aria-pressed": active,
+                style: {
+                  flex: 1,
+                  padding: "6px 8px",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  background: active ? "var(--bfs-accent)" : "transparent",
+                  color: active ? "white" : "var(--bfs-fg)",
+                  borderColor: active ? "var(--bfs-accent)" : "var(--bfs-border)"
+                },
+                children: [
+                  px,
+                  "\xD7",
+                  px
+                ]
+              },
+              px
+            );
+          }) }),
+          /* @__PURE__ */ jsx4("p", { className: "bfs-hint", children: "Lower = faster + fits weaker GPUs (4\xD7 less compute per step at 256). Higher = sharper, more VRAM, may trip Windows GPU timeouts." })
+        ] }),
         /* @__PURE__ */ jsxs4("div", { className: "bfs-row", children: [
           /* @__PURE__ */ jsxs4("div", { className: "bfs-field bfs-flex", children: [
             /* @__PURE__ */ jsx4("label", { className: "bfs-label", children: "Frames" }),
@@ -398,8 +434,8 @@ function StudioPanel({
           {
             frames: previewFrames,
             videoUrl,
-            width: DEFAULT_WIDTH,
-            height: DEFAULT_HEIGHT
+            width: resolution,
+            height: resolution
           }
         ),
         result && /* @__PURE__ */ jsxs4("dl", { className: "bfs-meta", children: [

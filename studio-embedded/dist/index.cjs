@@ -175,8 +175,8 @@ function useEngineStatus() {
 
 // src/components/StudioPanel.tsx
 var import_jsx_runtime4 = require("react/jsx-runtime");
-var DEFAULT_WIDTH = 512;
-var DEFAULT_HEIGHT = 512;
+var RESOLUTION_PRESETS = [256, 384, 512, 768];
+var DEFAULT_RESOLUTION = 256;
 function StudioPanel({
   authToken,
   apiKey,
@@ -197,10 +197,14 @@ function StudioPanel({
   const abortRef = (0, import_react3.useRef)(null);
   const [prompt, setPrompt] = (0, import_react3.useState)("");
   const [model, setModel] = (0, import_react3.useState)(defaultModel);
+  const [resolution, setResolution] = (0, import_react3.useState)(DEFAULT_RESOLUTION);
   const [coherenceMode, setCoherenceMode] = (0, import_react3.useState)(defaultCoherence);
   const [coherenceStrength, setCoherenceStrength] = (0, import_react3.useState)(0.5);
   const [frames, setFrames] = (0, import_react3.useState)(defaultFrames);
   const [fps, setFps] = (0, import_react3.useState)(defaultFps);
+  (0, import_react3.useEffect)(() => {
+    engineRef.current = null;
+  }, [model, resolution]);
   const [isGenerating, setIsGenerating] = (0, import_react3.useState)(false);
   const [progressLabel, setProgressLabel] = (0, import_react3.useState)("");
   const [expandedPrompt, setExpandedPrompt] = (0, import_react3.useState)("");
@@ -247,8 +251,8 @@ function StudioPanel({
           baseUrl,
           model,
           mambaState: initialMambaState,
-          width: DEFAULT_WIDTH,
-          height: DEFAULT_HEIGHT,
+          width: resolution,
+          height: resolution,
           onProgress: handleProgress
         });
         if (!engine) {
@@ -360,6 +364,38 @@ function StudioPanel({
           ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(ModelPicker, { value: model, onChange: setModel, disabled: isGenerating }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "bfs-field", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("label", { className: "bfs-label", children: "Resolution" }),
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "bfs-radio-row", children: RESOLUTION_PRESETS.map((px) => {
+            const active = resolution === px;
+            return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+              "button",
+              {
+                type: "button",
+                onClick: () => setResolution(px),
+                disabled: isGenerating,
+                className: "bfs-btn bfs-btn-secondary",
+                "aria-pressed": active,
+                style: {
+                  flex: 1,
+                  padding: "6px 8px",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  background: active ? "var(--bfs-accent)" : "transparent",
+                  color: active ? "white" : "var(--bfs-fg)",
+                  borderColor: active ? "var(--bfs-accent)" : "var(--bfs-border)"
+                },
+                children: [
+                  px,
+                  "\xD7",
+                  px
+                ]
+              },
+              px
+            );
+          }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "bfs-hint", children: "Lower = faster + fits weaker GPUs (4\xD7 less compute per step at 256). Higher = sharper, more VRAM, may trip Windows GPU timeouts." })
+        ] }),
         /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "bfs-row", children: [
           /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "bfs-field bfs-flex", children: [
             /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("label", { className: "bfs-label", children: "Frames" }),
@@ -431,8 +467,8 @@ function StudioPanel({
           {
             frames: previewFrames,
             videoUrl,
-            width: DEFAULT_WIDTH,
-            height: DEFAULT_HEIGHT
+            width: resolution,
+            height: resolution
           }
         ),
         result && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("dl", { className: "bfs-meta", children: [
