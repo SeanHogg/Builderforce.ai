@@ -7,8 +7,9 @@ interface ModelPickerProps {
 }
 
 const MODEL_LABELS: Record<DiffusionModelId, string> = {
-  'lcm-dreamshaper-v7': 'LCM Dreamshaper v7 — 4-step, balanced quality',
-  'sd-turbo': 'SD-Turbo — 1-step, fastest',
+  'lcm-tiny-sd': 'LCM Tiny SD — 4-step, lightest (~2 GB, fp16)',
+  'sd-turbo': 'SD-Turbo — 1-step, fastest (~4 GB)',
+  'lcm-dreamshaper-v7': 'LCM Dreamshaper v7 — 4-step, best quality (~6 GB)',
 };
 
 export function ModelPicker({ value, onChange, disabled }: ModelPickerProps) {

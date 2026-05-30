@@ -41,8 +41,9 @@ var import_builderforce_studio3 = require("@seanhogg/builderforce-studio");
 var import_builderforce_studio = require("@seanhogg/builderforce-studio");
 var import_jsx_runtime = require("react/jsx-runtime");
 var MODEL_LABELS = {
-  "lcm-dreamshaper-v7": "LCM Dreamshaper v7 \u2014 4-step, balanced quality",
-  "sd-turbo": "SD-Turbo \u2014 1-step, fastest"
+  "lcm-tiny-sd": "LCM Tiny SD \u2014 4-step, lightest (~2 GB, fp16)",
+  "sd-turbo": "SD-Turbo \u2014 1-step, fastest (~4 GB)",
+  "lcm-dreamshaper-v7": "LCM Dreamshaper v7 \u2014 4-step, best quality (~6 GB)"
 };
 function ModelPicker({ value, onChange, disabled }) {
   const entries = Object.keys(import_builderforce_studio.MODEL_REGISTRY);
@@ -180,7 +181,7 @@ function StudioPanel({
   authToken,
   apiKey,
   baseUrl,
-  defaultModel = "lcm-dreamshaper-v7",
+  defaultModel = "lcm-tiny-sd",
   defaultCoherence = "prompt-bias",
   defaultFrames = 16,
   defaultFps = 8,

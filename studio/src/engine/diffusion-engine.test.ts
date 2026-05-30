@@ -56,26 +56,35 @@ describe('MODEL_REGISTRY × UNet input contract', () => {
     });
   }
 
-  it("lcm-dreamshaper-v7 declares timestep_cond + lcmGuidanceEmbedDim (regression: missing-input feed)", () => {
-    const lcm = MODEL_REGISTRY['lcm-dreamshaper-v7'];
-    expect(lcm.unetInputs.map((s) => s.name)).toContain('timestep_cond');
-    expect(lcm.lcmGuidanceEmbedDim).toBeGreaterThan(0);
+  // Generalized contract: every LCM-family model (declares lcmGuidanceEmbedDim)
+  // MUST also declare timestep_cond in unetInputs, and vice versa. One assertion
+  // covers every current and future LCM model — no per-model maintenance.
+  it("LCM/non-LCM consistency: lcmGuidanceEmbedDim ⇔ timestep_cond in unetInputs", () => {
+    for (const [id, descriptor] of Object.entries(MODEL_REGISTRY)) {
+      const isLcm = descriptor.lcmGuidanceEmbedDim !== undefined;
+      const hasTimestepCond = descriptor.unetInputs.some((s) => s.name === 'timestep_cond');
+      expect(
+        isLcm,
+        `'${id}' inconsistent: lcmGuidanceEmbedDim is ${isLcm ? 'set' : 'unset'} but timestep_cond is ${hasTimestepCond ? 'declared' : 'absent'}`,
+      ).toBe(hasTimestepCond);
+    }
   });
 
-  it("lcm-dreamshaper-v7 timestep is float32 (regression: 'Unexpected input data type int64, expected float')", () => {
-    const ts = MODEL_REGISTRY['lcm-dreamshaper-v7'].unetInputs.find((s) => s.name === 'timestep');
-    expect(ts?.dtype).toBe('float32');
+  // Per-model timestep dtype — known exports differ:
+  //   LCM family (Dreamshaper, Tiny-SD)  → float32
+  //   Standard SD UNets (SD-Turbo etc.)  → int64
+  // Generalized: if it's an LCM family model, timestep must be float32.
+  it("LCM-family timestep is float32 (regression: 'Unexpected input data type')", () => {
+    for (const [id, descriptor] of Object.entries(MODEL_REGISTRY)) {
+      if (descriptor.lcmGuidanceEmbedDim === undefined) continue;
+      const ts = descriptor.unetInputs.find((s) => s.name === 'timestep');
+      expect(ts?.dtype, `LCM model '${id}' must declare timestep as float32`).toBe('float32');
+    }
   });
 
   it('sd-turbo timestep is int64 (standard SD UNet export — flipping it would break SD-Turbo)', () => {
     const ts = MODEL_REGISTRY['sd-turbo'].unetInputs.find((s) => s.name === 'timestep');
     expect(ts?.dtype).toBe('int64');
-  });
-
-  it('sd-turbo does NOT declare timestep_cond (non-LCM UNet)', () => {
-    const sdt = MODEL_REGISTRY['sd-turbo'];
-    expect(sdt.unetInputs.map((s) => s.name)).not.toContain('timestep_cond');
-    expect(sdt.lcmGuidanceEmbedDim).toBeUndefined();
   });
 
   it('every model declares the three base inputs sample / timestep / encoder_hidden_states', () => {
@@ -182,15 +191,21 @@ describe('checkMemoryForModel (pre-flight OOM guard)', () => {
   });
 
   it('never recommends a model that does not fit the reported available memory', () => {
-    // 2 GB device, sd-turbo (lightest, 4 GB) fails: the only other model
-    // (lcm, 6 GB) is heavier AND does not fit — so no model may be named.
-    const msg = checkMemoryForModel(2 * 1024, MODEL_REGISTRY['sd-turbo'].minVramMb, 'sd-turbo') ?? '';
+    // 1 GB device, lcm-tiny-sd (the lightest registered, 2 GB) fails: nothing
+    // in the registry is BOTH lighter than tiny-sd AND fits — so no model
+    // may be named. (Scenario auto-updates as the registry grows: it just
+    // exercises the "failing model is the lightest one" branch.)
+    const lightest = Object.values(MODEL_REGISTRY).reduce((a, b) =>
+      a.minVramMb <= b.minVramMb ? a : b,
+    );
+    const msg = checkMemoryForModel(lightest.minVramMb - 1024, lightest.minVramMb, lightest.id) ?? '';
     expect(msg).not.toMatch(/Try a lighter model/);
     expect(msg).toContain('No lighter model is available');
   });
 
   it('recommends the lighter model when it genuinely fits', () => {
-    // Device fits sd-turbo (4 GB) but not lcm (6 GB): lcm failing → suggest sd-turbo.
+    // Device fits sd-turbo (4 GB) but not lcm-dreamshaper-v7 (6 GB):
+    // dreamshaper failing → recommendation includes at least sd-turbo.
     const msg = checkMemoryForModel(4 * 1024, MODEL_REGISTRY['lcm-dreamshaper-v7'].minVramMb, 'lcm-dreamshaper-v7') ?? '';
     expect(msg).toMatch(/Try a lighter model.*\bsd-turbo\b/);
   });
@@ -208,6 +223,28 @@ describe('explainSessionCreateError (opaque ORT crash → actionable message)', 
     expect(wrapped.message).toContain('unet');
     expect(wrapped.message).toContain('lcm-dreamshaper-v7');
     expect(wrapped.message).toContain('6.0 GB');
+  });
+
+  it('rewraps a DXGI_ERROR_DEVICE_HUNG (Windows TDR) into a lower-resolution / lighter-model hint', () => {
+    const wrapped = explainSessionCreateError(
+      new Error('ID3D12Device::GetDeviceRemovedReason failed with DXGI_ERROR_DEVICE_HUNG (0x887A0006)'),
+      'unet (conditional) session run',
+      'lcm-tiny-sd',
+      2 * 1024,
+    );
+    expect(wrapped.message).toContain('GPU device was lost');
+    expect(wrapped.message).toContain('lcm-tiny-sd');
+    expect(wrapped.message).toMatch(/lower resolution|lighter model|CPU/);
+  });
+
+  it("rewraps a 'Device is lost' mapAsync failure", () => {
+    const wrapped = explainSessionCreateError(
+      new Error("Failed to execute 'mapAsync' on 'GPUBuffer': [Device] is lost."),
+      'unet session run',
+      'lcm-dreamshaper-v7',
+      6 * 1024,
+    );
+    expect(wrapped.message).toContain('GPU device was lost');
   });
 
   it('rewraps the SimplifiedLayerNormFusion crash into a graph-options hint', () => {

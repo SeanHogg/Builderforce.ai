@@ -63,7 +63,7 @@ export function StudioPanel({
   authToken,
   apiKey,
   baseUrl,
-  defaultModel = 'lcm-dreamshaper-v7',
+  defaultModel = 'lcm-tiny-sd',
   defaultCoherence = 'prompt-bias',
   defaultFrames = 16,
   defaultFps = 8,
