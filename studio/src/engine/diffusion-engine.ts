@@ -57,17 +57,17 @@ export const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor> = {
       unet: { model: 'unet/model.onnx', externalData: 'unet/model.onnx_data' },
       vaeDecoder: { model: 'vae_decoder/model.onnx', externalData: 'vae_decoder/model.onnx_data' },
     },
-    // Same I/O contract as other LCM exports (Diffusers ONNX convention).
-    // fp16 here refers to WEIGHTS, not I/O — exports typically keep
-    // sample/timestep/encoder_hidden_states as float32 for compatibility.
+    // The akameswa export carries a PLAIN SD UNet — no LCM `timestep_cond`
+    // input despite the repo name (the "LCM" aspect is just the 4-step
+    // scheduler, not the consistency-embedding). Verified via session.inputNames
+    // at init: [sample, timestep, encoder_hidden_states]. Declare exactly that.
     unetInputs: [
       { name: 'sample', dtype: 'float32' },
-      { name: 'timestep', dtype: 'float32' },
+      { name: 'timestep', dtype: 'int64' },
       { name: 'encoder_hidden_states', dtype: 'float32' },
-      { name: 'timestep_cond', dtype: 'float32' },
     ],
     textEncoderInputs: [{ name: 'input_ids', dtype: 'int32' }],
-    lcmGuidanceEmbedDim: 256,
+    // lcmGuidanceEmbedDim intentionally omitted — see the unetInputs comment.
   },
   'lcm-dreamshaper-v7': {
     id: 'lcm-dreamshaper-v7',
@@ -794,7 +794,15 @@ export const explainSessionCreateError = explainOrtError;
 export function buildOrtSessionOptions(
   device: ActiveDevice,
 ): ort.InferenceSession.SessionOptions {
-  const base: ort.InferenceSession.SessionOptions = { graphOptimizationLevel: 'basic' };
+  const base: ort.InferenceSession.SessionOptions = {
+    graphOptimizationLevel: 'basic',
+    // Drop ORT's `[W:` warnings (e.g. "VerifyEachNodeIsAssignedToAnEp: some
+    // nodes were not assigned to the preferred EP"). These are informational
+    // — every shape-op fallback to CPU logs one per session. With 3 sessions
+    // and per-frame reuse, the console becomes unreadable. Severity 3 = error,
+    // so real failures still log; warnings are silenced.
+    logSeverityLevel: 3,
+  };
   if (device === 'webnn') return { ...base, executionProviders: ['webnn', 'wasm'] };
   if (device === 'webgpu') return { ...base, executionProviders: ['webgpu', 'wasm'] };
   return { ...base, executionProviders: ['wasm'] };
