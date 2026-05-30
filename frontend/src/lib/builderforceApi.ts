@@ -162,6 +162,36 @@ export const brain = {
   uploadUrl: (key: string) => `${AUTH_API_URL}/api/brain/uploads/${key}`,
 };
 
+/** Structured error from the LLM gateway, with the fields callers branch on. */
+export type LlmError = Error & { status?: number; code?: string; body?: Record<string, unknown> };
+
+/**
+ * Parse a non-OK response from `/llm/v1/chat/completions` into an Error.
+ * Single source of truth shared by `llmChat` and `streamChatCompletion`.
+ *
+ * 402 (plan limit) becomes a `PlanLimitError` so callers can show the upgrade
+ * modal. Two other envelope shapes are handled and their structured fields
+ * preserved on the Error so callers can branch on `.code` / `.body`:
+ *   1. Gateway-side (e.g. plan_token_limit_exceeded, idempotent_replay,
+ *      cascade_exhausted): { error: "...message...", code, ...fields }
+ *   2. Upstream OpenAI-shaped passthrough: { error: { message, type, code } }
+ */
+export async function parseLlmError(res: Response): Promise<Error> {
+  if (res.status === 402) return planLimitErrorFromResponse(res);
+  const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+  const errVal = body.error;
+  const msg = typeof errVal === 'string'
+    ? errVal
+    : (errVal && typeof errVal === 'object' && 'message' in errVal
+        ? String((errVal as { message?: unknown }).message ?? '')
+        : '');
+  const err = new Error(msg || res.statusText || 'LLM request failed') as LlmError;
+  err.status = res.status;
+  err.code = typeof body.code === 'string' ? body.code : undefined;
+  err.body = body;
+  return err;
+}
+
 /** OpenAI-compatible chat completion (uses tenant JWT for billing).
  *  Default model is `openai/gpt-4o-mini` — cheap and fast for ambient calls.
  *  Pass `model` for tasks that need stronger instruction-following (e.g.
@@ -183,28 +213,7 @@ export async function llmChat(
     }),
   });
   checkUnauthorizedAndRedirect(res, hadToken);
-  if (!res.ok) {
-    // Two error envelope shapes can come back here:
-    //   1. Gateway-side (e.g. plan_token_limit_exceeded, idempotent_replay,
-    //      cascade_exhausted): { error: "...message...", code, ...fields }
-    //   2. Upstream OpenAI-shaped passthrough: { error: { message, type, code } }
-    // Parse both and preserve structured fields on the thrown Error so callers
-    // can branch on `.code` / `.body` for tailored UI handling.
-    const body = await res.json().catch(() => ({})) as Record<string, unknown>;
-    const errVal = body.error;
-    const msg = typeof errVal === 'string'
-      ? errVal
-      : (errVal && typeof errVal === 'object' && 'message' in errVal
-          ? String((errVal as { message?: unknown }).message ?? '')
-          : '');
-    const err = new Error(msg || res.statusText || 'LLM request failed') as Error & {
-      status?: number; code?: string; body?: Record<string, unknown>;
-    };
-    err.status = res.status;
-    err.code = typeof body.code === 'string' ? body.code : undefined;
-    err.body = body;
-    throw err;
-  }
+  if (!res.ok) throw await parseLlmError(res);
   const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
   const content = data.choices?.[0]?.message?.content?.trim() ?? '';
   return { content };

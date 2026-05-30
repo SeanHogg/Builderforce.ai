@@ -224,6 +224,19 @@ export interface DiffusionEngineOptions {
   width: number;
   height: number;
   onWeightProgress?: (file: string, loaded: number, total: number | null) => void;
+  /** Phase progress (downloads, session creation, denoise steps). */
+  onProgress?: (label: string) => void;
+}
+
+/** Single emit point: log to console AND fan out to the consumer callback.
+ *  No silent phases — if the engine is doing something, this fires. */
+export function reportProgress(
+  label: string,
+  onProgress: ((label: string) => void) | undefined,
+): void {
+  // eslint-disable-next-line no-console
+  console.info(`[builderforce-studio] ${label}`);
+  onProgress?.(label);
 }
 
 export interface DenoiseInputs {
@@ -239,6 +252,8 @@ export interface DenoiseInputs {
   guidance: number;
   /** Seed used for stochastic LCM noise injection between steps. */
   seed: number;
+  /** Optional per-step progress callback ("denoise step 2/4 for frame 3/24"). */
+  onStep?: (step: number, totalSteps: number) => void;
 }
 
 export interface DenoiseResult {
@@ -259,24 +274,26 @@ export class DiffusionEngine {
   async init(): Promise<void> {
     const d = this.descriptor;
     const sessionOptions = this.buildSessionOptions();
+    const onProgress = this.opts.onProgress;
 
-    // transformers.js does ONLY tokenization — the CLIP BPE tokenizer is the
-    // one piece we don't want to hand-roll. Everything else is raw ORT.
+    reportProgress(`Loading CLIP tokenizer (${d.tokenizerRepo})…`, onProgress);
     this.tokenizer = await AutoTokenizer.from_pretrained(d.tokenizerRepo);
+    reportProgress('Tokenizer ready.', onProgress);
 
-    // Text encoder, UNet, VAE decoder — all raw ORT sessions (with external
-    // data sidecars where the export splits weights >2GB).
+    reportProgress(`Loading ${d.id} weights (UNet + text-encoder + VAE)…`, onProgress);
     [this.textEncoderSession, this.unetSession, this.vaeSession] = await Promise.all([
-      this.createSession(d.files.textEncoder, sessionOptions),
-      this.createSession(d.files.unet, sessionOptions),
-      this.createSession(d.files.vaeDecoder, sessionOptions),
+      this.createSession(d.files.textEncoder, sessionOptions, 'text_encoder'),
+      this.createSession(d.files.unet, sessionOptions, 'unet'),
+      this.createSession(d.files.vaeDecoder, sessionOptions, 'vae_decoder'),
     ]);
+    reportProgress('All ORT sessions created.', onProgress);
 
     // Validate the loaded models' input names match what the registry declares.
     // Catches model-vs-registry drift at init time with a clear error instead
     // of an opaque "input 'X' is missing in 'feeds'" on the first run.
     assertSessionMatchesSpec('unet', this.unetSession, d.unetInputs);
     assertSessionMatchesSpec('text_encoder', this.textEncoderSession, d.textEncoderInputs);
+    reportProgress('Model graph contract verified — engine ready.', onProgress);
   }
 
   // -------------------------------------------------------------------------
@@ -362,6 +379,7 @@ export class DiffusionEngine {
     let sample = new Float32Array(inputs.latent);
 
     for (let i = 0; i < timesteps.length; i++) {
+      inputs.onStep?.(i + 1, timesteps.length);
       const t = timesteps[i];
       const alpha = ALPHAS_CUMPROD[t] ?? 0.001;
       const sqrtAlpha = Math.sqrt(alpha);
@@ -414,15 +432,20 @@ export class DiffusionEngine {
   }
 
   /** Create an ORT session for one model file, attaching its external-data
-   *  sidecar when the export splits weights into a `.onnx_data` blob. */
+   *  sidecar when the export splits weights into a `.onnx_data` blob.
+   *  Emits per-file phase progress so the user sees which model is loading. */
   private async createSession(
     file: OnnxFile,
     baseOptions: ort.InferenceSession.SessionOptions,
+    label: string,
   ): Promise<ort.InferenceSession> {
+    const onProgress = this.opts.onProgress;
+    reportProgress(`Downloading ${label} (${file.model})…`, onProgress);
     const modelBuf = await this.fetchWeight(file.model);
     const options: ort.InferenceSession.SessionOptions = { ...baseOptions };
 
     if (file.externalData) {
+      reportProgress(`Downloading ${label} weight data (${file.externalData})…`, onProgress);
       const dataBuf = await this.fetchWeight(file.externalData);
       // The .onnx graph references its sidecar by basename (e.g.
       // 'model.onnx_data'); ORT matches the externalData `path` against it.
@@ -430,7 +453,10 @@ export class DiffusionEngine {
         { path: basename(file.externalData), data: new Uint8Array(dataBuf) },
       ];
     }
-    return ort.InferenceSession.create(new Uint8Array(modelBuf), options);
+    reportProgress(`Creating ${label} ORT session…`, onProgress);
+    const session = await ort.InferenceSession.create(new Uint8Array(modelBuf), options);
+    reportProgress(`${label} ready.`, onProgress);
+    return session;
   }
 
   private async fetchWeight(file: string): Promise<ArrayBuffer> {

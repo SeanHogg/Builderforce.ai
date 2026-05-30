@@ -238,6 +238,7 @@ function StudioPanel({
     setResult(null);
     const abort = new AbortController();
     abortRef.current = abort;
+    const handleProgress = (label) => setProgressLabel(label);
     try {
       if (!engineRef.current) {
         const engine = await import_builderforce_studio3.VideoEngine.create({
@@ -246,14 +247,14 @@ function StudioPanel({
           model,
           mambaState: initialMambaState,
           width: DEFAULT_WIDTH,
-          height: DEFAULT_HEIGHT
+          height: DEFAULT_HEIGHT,
+          onProgress: handleProgress
         });
         if (!engine) {
           throw new Error("Engine refused to start on this device.");
         }
         engineRef.current = engine;
       }
-      setProgressLabel("Expanding prompt via Builderforce LLM\u2026");
       const generated = await engineRef.current.generate({
         prompt,
         frames,
@@ -261,13 +262,10 @@ function StudioPanel({
         coherence: coherenceMode,
         coherenceStrength,
         signal: abort.signal,
-        onPromptExpanded: (expanded) => {
-          setExpandedPrompt(expanded);
-          setProgressLabel("Generating frames\u2026");
-        },
-        onFrame: (idx, bitmap) => {
+        onPromptExpanded: setExpandedPrompt,
+        onProgress: handleProgress,
+        onFrame: (_idx, bitmap) => {
           setPreviewFrames((prev) => [...prev, bitmap]);
-          setProgressLabel(`Frame ${idx + 1} / ${frames}`);
         }
       });
       const url = URL.createObjectURL(generated.blob);

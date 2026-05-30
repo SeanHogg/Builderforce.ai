@@ -122,6 +122,10 @@ export interface VideoEngineOptions {
   /** Output dimensions. Defaults to 512x512. */
   width?: number;
   height?: number;
+  /** Fine-grained progress messages emitted during `VideoEngine.create` —
+   *  tokenizer / text-encoder / UNet / VAE downloads + ORT session creation.
+   *  Each message is also `console.info`'d so devtools shows the timeline. */
+  onProgress?: (label: string) => void;
 }
 
 export interface GenerateOptions {
@@ -149,6 +153,11 @@ export interface GenerateOptions {
   onFrame?: (frameIdx: number, bitmap: ImageBitmap, state: MambaStateSnapshot) => void;
   /** Called when prompt expansion finishes (before diffusion starts). */
   onPromptExpanded?: (expanded: string) => void;
+  /** Fine-grained progress messages emitted during generate — prompt expansion,
+   *  text encoding, each frame's denoise steps, decode, MP4 mux. Use this to
+   *  surface "what is the engine doing right now" between `onFrame` events
+   *  (which only fire once per completed frame). Mirrors to console.info. */
+  onProgress?: (label: string) => void;
   /** AbortSignal for cancelling generation mid-flight. */
   signal?: AbortSignal;
 }

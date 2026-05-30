@@ -19,6 +19,7 @@ export interface CreateProjectDto {
   sourceControlRepoUrl?: string | null;
   githubRepoUrl?: string | null;
   governance?:    string | null;
+  modality?:      string | null;
 }
 
 export interface UpdateProjectDto {
@@ -34,6 +35,7 @@ export interface UpdateProjectDto {
   sourceControlRepoUrl?: string | null;
   githubRepoUrl?: string | null;
   governance?: string | null;
+  modality?: string | null;
 }
 
 /**
@@ -87,6 +89,7 @@ export class ProjectService {
       githubRepoOwner,
       githubRepoName,
       governance: dto.governance ?? null,
+      modality: dto.modality ?? 'designer',
     });
 
     return this.projects.save(project);
@@ -125,6 +128,7 @@ export class ProjectService {
       githubRepoOwner,
       githubRepoName,
       governance: dto.governance,
+      modality: dto.modality,
     });
 
     return this.projects.update(updated);

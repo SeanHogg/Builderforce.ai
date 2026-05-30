@@ -661,6 +661,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       sourceControlRepoFullName?: string | null;
       sourceControlRepoUrl?: string | null;
       githubRepoUrl?: string | null;
+      modality?: string | null;
     }>();
 
     const existing = await projectService.getProject(rawId, tenantId);

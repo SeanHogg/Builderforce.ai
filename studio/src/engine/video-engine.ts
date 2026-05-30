@@ -29,7 +29,7 @@ import type {
   WeightSource,
 } from '../types';
 import { probeDevice } from './device-router';
-import { DiffusionEngine, MODEL_REGISTRY } from './diffusion-engine';
+import { DiffusionEngine, MODEL_REGISTRY, reportProgress } from './diffusion-engine';
 import {
   advanceState,
   applyToLatent,
@@ -59,8 +59,10 @@ export class VideoEngine {
    * unsupported state rather than try to recover.
    */
   static async create(options: VideoEngineOptions): Promise<VideoEngine | null> {
+    reportProgress(`Probing hardware (target: ${options.device ?? 'auto'})…`, options.onProgress);
     const probed = await probeDevice(options.device ?? 'auto');
     if (!probed) return null;
+    reportProgress(`Hardware ready: ${probed.label} (${probed.kind}).`, options.onProgress);
 
     const width = options.width ?? DEFAULT_WIDTH;
     const height = options.height ?? DEFAULT_HEIGHT;
@@ -74,6 +76,7 @@ export class VideoEngine {
       r2Base: deriveR2Base(options.baseUrl),
       width,
       height,
+      onProgress: options.onProgress,
     });
 
     await diffusion.init();
@@ -105,6 +108,11 @@ export class VideoEngine {
     const width = this.opts.width ?? DEFAULT_WIDTH;
     const height = this.opts.height ?? DEFAULT_HEIGHT;
 
+    const onProgress = args.onProgress;
+
+    if (!args.skipPromptExpansion) {
+      reportProgress('Expanding prompt via Builderforce LLM gateway…', onProgress);
+    }
     const resolvedPrompt = args.skipPromptExpansion
       ? args.prompt
       : await expandPrompt({
@@ -117,6 +125,7 @@ export class VideoEngine {
 
     args.onPromptExpanded?.(resolvedPrompt);
 
+    reportProgress('Encoding prompt with CLIP text encoder…', onProgress);
     const promptEmbedding = await this.diffusion.embedPrompt(resolvedPrompt);
     const negativeEmbedding = args.negativePrompt
       ? await this.diffusion.embedPrompt(args.negativePrompt)
@@ -150,6 +159,7 @@ export class VideoEngine {
         });
       }
 
+      reportProgress(`Frame ${frameIdx + 1}/${args.frames}: denoising…`, onProgress);
       const { pixels } = await this.diffusion.denoise({
         latent,
         condEmbedding: conditionedPrompt,
@@ -157,8 +167,14 @@ export class VideoEngine {
         timesteps,
         guidance,
         seed: seed + frameIdx,
+        onStep: (step, total) =>
+          reportProgress(
+            `Frame ${frameIdx + 1}/${args.frames}: denoise step ${step}/${total}…`,
+            onProgress,
+          ),
       });
 
+      reportProgress(`Frame ${frameIdx + 1}/${args.frames}: decoding VAE…`, onProgress);
       const rgba = pixelsToRgba(pixels, width, height);
       const imageData = new ImageData(
         rgba as Uint8ClampedArray<ArrayBuffer>,
@@ -174,12 +190,14 @@ export class VideoEngine {
       args.onFrame?.(frameIdx, bitmap, this.mambaState);
     }
 
+    reportProgress(`Encoding ${args.frames} frames to MP4…`, onProgress);
     const blob = await muxFramesToMp4(muxFrames, {
       width,
       height,
       fps: args.fps,
       signal: args.signal,
     });
+    reportProgress('MP4 ready.', onProgress);
 
     return {
       blob,
