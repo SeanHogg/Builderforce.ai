@@ -625,15 +625,32 @@ export function checkMemoryForModel(
     `Insufficient memory for ${modelId}: device reports ` +
     `~${(approxMemoryMb / 1024).toFixed(1)} GB available, ` +
     `model needs at least ~${(minVramMb / 1024).toFixed(1)} GB. ` +
-    `${lighterModelHint(modelId)}`
+    `${lighterModelHint(modelId, approxMemoryMb)}`
   );
 }
 
-/** Suggest a lighter model from the registry — never the failing one. */
-function lighterModelHint(failingModelId: string): string {
-  const alternatives = Object.keys(MODEL_REGISTRY).filter((id) => id !== failingModelId);
+/**
+ * Suggest a genuinely lighter model from the registry. A candidate qualifies
+ * only if it needs *strictly less* memory than the failing model AND — when the
+ * device's available memory is known — would actually fit. This avoids the
+ * self-defeating advice the naive "just exclude the failing id" version gave:
+ * when sd-turbo (the lightest at 4 GB) OOMs on a 2 GB device, the only other
+ * registry entry (lcm-dreamshaper-v7, 6 GB) is heavier and won't fit either, so
+ * recommending it just reproduces the failure. Never suggests the failing one.
+ *
+ * @param availableMb device memory if known, else null (OOM path can't measure
+ *   it) — when null we filter on "lighter than failing" alone.
+ */
+function lighterModelHint(failingModelId: string, availableMb: number | null): string {
+  const failingMin = MODEL_REGISTRY[failingModelId as DiffusionModelId]?.minVramMb ?? Infinity;
+  const alternatives = Object.values(MODEL_REGISTRY)
+    .filter((m) => m.id !== failingModelId)
+    .filter((m) => m.minVramMb < failingMin)
+    .filter((m) => availableMb === null || m.minVramMb <= availableMb)
+    .sort((a, b) => a.minVramMb - b.minVramMb)
+    .map((m) => m.id);
   if (alternatives.length === 0) {
-    return 'Close other GPU-heavy tabs and retry.';
+    return 'No lighter model is available — close other GPU-heavy tabs and retry.';
   }
   return `Try a lighter model (${alternatives.join(', ')}) or close other GPU-heavy tabs.`;
 }
@@ -654,7 +671,7 @@ export function explainSessionCreateError(
     return new Error(
       `Out of memory while creating the ${label} ORT session for ${modelId} ` +
         `(needs ~${(minVramMb / 1024).toFixed(1)} GB). ` +
-        `${lighterModelHint(modelId)} ` +
+        `${lighterModelHint(modelId, null)} ` +
         `Original error: ${message}`,
     );
   }

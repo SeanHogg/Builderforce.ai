@@ -164,6 +164,36 @@ describe('checkMemoryForModel (pre-flight OOM guard)', () => {
         .not.toMatch(new RegExp(`Try a lighter model.*\\b${id}\\b`));
     }
   });
+
+  // Regression: prior version recommended ANY other registry entry, including
+  // ones that are HEAVIER than (or equal to) the failing model and would OOM
+  // identically. The hint must only name models that are strictly lighter AND
+  // fit the reported memory — otherwise it's self-defeating advice.
+  it('never recommends a model that is not strictly lighter than the failing one', () => {
+    for (const failing of Object.values(MODEL_REGISTRY)) {
+      const msg = checkMemoryForModel(1, failing.minVramMb, failing.id) ?? '';
+      for (const other of Object.values(MODEL_REGISTRY)) {
+        if (other.minVramMb >= failing.minVramMb) {
+          expect(msg, `'${other.id}' (>= ${failing.id}'s VRAM) must not be recommended`)
+            .not.toMatch(new RegExp(`Try a lighter model.*\\b${other.id}\\b`));
+        }
+      }
+    }
+  });
+
+  it('never recommends a model that does not fit the reported available memory', () => {
+    // 2 GB device, sd-turbo (lightest, 4 GB) fails: the only other model
+    // (lcm, 6 GB) is heavier AND does not fit — so no model may be named.
+    const msg = checkMemoryForModel(2 * 1024, MODEL_REGISTRY['sd-turbo'].minVramMb, 'sd-turbo') ?? '';
+    expect(msg).not.toMatch(/Try a lighter model/);
+    expect(msg).toContain('No lighter model is available');
+  });
+
+  it('recommends the lighter model when it genuinely fits', () => {
+    // Device fits sd-turbo (4 GB) but not lcm (6 GB): lcm failing → suggest sd-turbo.
+    const msg = checkMemoryForModel(4 * 1024, MODEL_REGISTRY['lcm-dreamshaper-v7'].minVramMb, 'lcm-dreamshaper-v7') ?? '';
+    expect(msg).toMatch(/Try a lighter model.*\bsd-turbo\b/);
+  });
 });
 
 describe('explainSessionCreateError (opaque ORT crash → actionable message)', () => {
