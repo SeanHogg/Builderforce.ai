@@ -1,6 +1,6 @@
 import * as react_jsx_runtime from 'react/jsx-runtime';
-import { DiffusionModelId, CoherenceMode, MambaStateSnapshot, QualityMode, ProbedDevice, GenerateResult } from '@seanhogg/builderforce-studio';
-export { ActiveDevice, CoherenceMode, DeviceTarget, DiffusionModelId, GenerateOptions, GenerateResult, MODEL_REGISTRY, MambaStateSnapshot, ModelDescriptor, OnnxFile, OnnxRuntimeConfigOptions, ProbedDevice, QualityMode, VideoEngine, VideoEngineOptions, WeightSource, configureOnnxRuntime, hasWebGPUSupport, probeDevice } from '@seanhogg/builderforce-studio';
+import { DiffusionModelId, CoherenceMode, MambaStateSnapshot, QualityMode, ProbedDevice, GenerateResult, Storyboard, ShotValidation } from '@seanhogg/builderforce-studio';
+export { ActiveDevice, CAMERA_MOVES, CameraMove, CharacterBible, CoherenceMode, DeviceTarget, DiffusionModelId, FrameValidation, GenerateOptions, GenerateResult, InterpolationBackend, MODEL_REGISTRY, MambaStateSnapshot, ModelDescriptor, OnnxFile, OnnxRuntimeConfigOptions, PlannedShot, ProbedDevice, QualityMode, ScenePlanOptions, ShotValidation, Storyboard, StoryboardGenerateOptions, StoryboardGenerateResult, VideoEngine, VideoEngineOptions, WeightSource, configureOnnxRuntime, hasWebGPUSupport, planScene, probeDevice } from '@seanhogg/builderforce-studio';
 
 /** Parameters that fully describe ONE generated version, for the host to persist
  *  alongside the MP4 blob. Enough information to re-generate the same video AND
@@ -210,6 +210,18 @@ interface QualityTierPickerProps {
 }
 declare function QualityTierPicker({ value, onChange, disabled }: QualityTierPickerProps): react_jsx_runtime.JSX.Element;
 
+interface StoryboardEditorProps {
+    storyboard: Storyboard;
+    onChange: (next: Storyboard) => void;
+    onRender: () => void;
+    onReplan: () => void;
+    /** Validation verdicts keyed by shot id, shown as badges after a render. */
+    validations?: ShotValidation[];
+    /** True while planning or rendering — disables editing + buttons. */
+    busy?: boolean;
+}
+declare function StoryboardEditor({ storyboard, onChange, onRender, onReplan, validations, busy, }: StoryboardEditorProps): react_jsx_runtime.JSX.Element;
+
 /**
  * Shared engine-readiness hook — the single source of "can the host run the studio?"
  * Both StudioPanel and any third-party consumer using engine-only mode should
@@ -228,4 +240,4 @@ type EngineStatus = {
 };
 declare function useEngineStatus(): EngineStatus;
 
-export { CoherenceControls, DebugCopyButton, type DebugSnapshotProps, type EngineStatus, ModelPicker, ProgressFeedback, QUALITY_TIERS, QualityTierPicker, StudioPanel, type StudioPanelProps, VideoPreview, type VideoVersionEntry, type VideoVersionParams, resolveQualityTier, useEngineStatus };
+export { CoherenceControls, DebugCopyButton, type DebugSnapshotProps, type EngineStatus, ModelPicker, ProgressFeedback, QUALITY_TIERS, QualityTierPicker, StoryboardEditor, StudioPanel, type StudioPanelProps, VideoPreview, type VideoVersionEntry, type VideoVersionParams, resolveQualityTier, useEngineStatus };
