@@ -60,8 +60,8 @@ export const EMBED_VIEWS = {
 
   // Agile Survival (CTO)
   kanban:                { key: 'kanban',                label: 'Kanban',              pillar: 'agile',      available: true  },
-  poker:                 { key: 'poker',                 label: 'Planning Poker',      pillar: 'agile',      available: false },
-  retros:                { key: 'retros',                label: 'Retrospectives',      pillar: 'agile',      available: false },
+  poker:                 { key: 'poker',                 label: 'Planning Poker',      pillar: 'agile',      available: true  },
+  retros:                { key: 'retros',                label: 'Retrospectives',      pillar: 'agile',      available: true  },
   sprints:               { key: 'sprints',               label: 'Sprint Planning',     pillar: 'agile',      available: true  },
   velocity:              { key: 'velocity',              label: 'Velocity',            pillar: 'agile',      available: true  },
   capacity:              { key: 'capacity',              label: 'Capacity & Risk',     pillar: 'agile',      available: true  },
@@ -76,8 +76,8 @@ export const EMBED_VIEWS = {
   dpa:                   { key: 'dpa',                   label: 'DPA Management',      pillar: 'governance', available: true  },
   training:              { key: 'training',              label: 'Security Training',   pillar: 'governance', available: true  },
   'compliance-calendar': { key: 'compliance-calendar',   label: 'Compliance Calendar', pillar: 'governance', available: true  },
-  'access-reviews':      { key: 'access-reviews',        label: 'Access Reviews',      pillar: 'governance', available: false },
-  'vuln-scans':          { key: 'vuln-scans',            label: 'Vulnerability Scans', pillar: 'governance', available: false },
+  'access-reviews':      { key: 'access-reviews',        label: 'Access Reviews',      pillar: 'governance', available: true  },
+  'vuln-scans':          { key: 'vuln-scans',            label: 'Vulnerability Scans', pillar: 'governance', available: true  },
   // Data-privacy tools, scoped per-Segment (NOT identity/RBAC) — BuilderForce
   // provides these; BurnRateOS keeps its own platform-global shared-graph DSR.
   dsr:                   { key: 'dsr',                   label: 'Data Subject Requests', pillar: 'governance', available: true  },

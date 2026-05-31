@@ -224,6 +224,11 @@ select option {
 html {
   scroll-behavior: smooth;
   color-scheme: dark;
+  /* Clip horizontal overflow at the root so off-canvas fixed elements (e.g. the
+     marketing mobile menu parked at translateX(100%)) can't create a horizontal
+     scroll / page shift on mobile. `clip` (not `hidden`) avoids establishing a
+     scroll container, so `position: sticky` headers keep working. */
+  overflow-x: clip;
 }
 
 html[data-theme='light'] {

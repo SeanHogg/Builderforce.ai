@@ -146,7 +146,7 @@ export default function LoginPageClient() {
         <div style={{ width: '100%', maxWidth: 400 }}>
           {/* Logo + heading */}
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
-            <Image src="/claw.png" alt="" width={56} height={56} style={{ filter: 'drop-shadow(0 0 16px var(--logo-glow))', animation: 'float 4s ease-in-out infinite', marginBottom: 16 }} />
+            <Image src="/claw.png" alt="" width={56} height={56} className="auth-mascot" style={{ filter: 'drop-shadow(0 0 16px var(--logo-glow))', animation: 'float 4s ease-in-out infinite', marginBottom: 16 }} />
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.75rem', fontWeight: 700, marginBottom: 6, color: 'var(--text-primary)' }}>
               Welcome back
             </h1>
@@ -325,6 +325,10 @@ export default function LoginPageClient() {
         @media (min-width: 900px) {
           .auth-split-grid { grid-template-columns: 1fr 1fr !important; }
           .auth-marketing-panel { display: flex !important; }
+        }
+        /* The decorative claw mascot is hidden on mobile to save vertical space. */
+        @media (max-width: 640px) {
+          .auth-mascot { display: none !important; }
         }
       `}</style>
     </div>

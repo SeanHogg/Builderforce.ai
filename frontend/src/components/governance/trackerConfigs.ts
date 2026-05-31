@@ -122,6 +122,36 @@ export const TRACKER_CONFIGS: Record<string, TrackerSurfaceProps> = {
       { key: 'notes', label: 'Notes', type: 'textarea' },
     ],
   },
+  'access-reviews': {
+    title: 'Access Reviews',
+    apiBase: '/api/governance/access-reviews',
+    fields: [
+      { key: 'period', label: 'Period', required: true },
+      { key: 'scope', label: 'Scope', type: 'select', options: ['repo', 'segment', 'integration', 'board'] },
+      { key: 'scopeRef', label: 'Scope ref', inList: false },
+      { key: 'status', label: 'Status', type: 'select', options: ['open', 'in_progress', 'completed', 'overdue'] },
+      { key: 'reviewerId', label: 'Reviewer' },
+      { key: 'dueDate', label: 'Due', type: 'date' },
+      { key: 'completedAt', label: 'Completed', type: 'date', inList: false },
+      { key: 'findings', label: 'Findings (JSON)', type: 'textarea', inList: false },
+      { key: 'notes', label: 'Notes', type: 'textarea', inList: false },
+    ],
+  },
+  'vuln-scans': {
+    title: 'Vulnerability Scans',
+    apiBase: '/api/governance/vuln-scans',
+    fields: [
+      { key: 'scanType', label: 'Scan type', type: 'select', options: ['SAST', 'SCA', 'SECRET', 'IAC', 'CONTAINER'], required: true },
+      { key: 'repoRef', label: 'Repo' },
+      { key: 'ref', label: 'Branch/commit' },
+      { key: 'status', label: 'Status', type: 'select', options: ['queued', 'running', 'completed', 'failed'] },
+      { key: 'triggeredBy', label: 'Triggered by', inList: false },
+      { key: 'startedAt', label: 'Started', type: 'date', inList: false },
+      { key: 'finishedAt', label: 'Finished', type: 'date', inList: false },
+      { key: 'summary', label: 'Summary (JSON)', type: 'textarea', inList: false },
+      { key: 'notes', label: 'Notes', type: 'textarea', inList: false },
+    ],
+  },
 
   // ── Product Management ──────────────────────────────────────────────────────
   mvp: {

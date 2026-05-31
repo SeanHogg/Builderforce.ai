@@ -2026,3 +2026,130 @@ export const featureScores = pgTable('feature_scores', {
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// DevSecOps governance surfaces (doc 07 SEC-8/9; migration 0061). Segment-scoped.
+// ---------------------------------------------------------------------------
+
+export const accessReviews = pgTable('access_reviews', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  period:      varchar('period', { length: 120 }).notNull(),
+  scope:       varchar('scope', { length: 20 }),
+  scopeRef:    varchar('scope_ref', { length: 255 }),
+  status:      varchar('status', { length: 20 }).notNull().default('open'),
+  reviewerId:  varchar('reviewer_id', { length: 64 }),
+  dueDate:     timestamp('due_date'),
+  completedAt: timestamp('completed_at'),
+  findings:    text('findings'),
+  notes:       text('notes'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const vulnerabilityScans = pgTable('vulnerability_scans', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  repoRef:     varchar('repo_ref', { length: 255 }),
+  ref:         varchar('ref', { length: 255 }),
+  scanType:    varchar('scan_type', { length: 20 }).notNull(),
+  status:      varchar('status', { length: 20 }).notNull().default('queued'),
+  triggeredBy: varchar('triggered_by', { length: 64 }),
+  startedAt:   timestamp('started_at'),
+  finishedAt:  timestamp('finished_at'),
+  summary:     text('summary'),
+  notes:       text('notes'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const vulnerabilityFindings = pgTable('vulnerability_findings', {
+  id:                uuid('id').primaryKey().defaultRandom(),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:         uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  scanId:            uuid('scan_id').notNull().references(() => vulnerabilityScans.id, { onDelete: 'cascade' }),
+  severity:          varchar('severity', { length: 20 }).notNull(),
+  ruleId:            varchar('rule_id', { length: 120 }),
+  title:             varchar('title', { length: 255 }).notNull(),
+  filePath:          varchar('file_path', { length: 500 }),
+  line:              integer('line'),
+  packageName:       varchar('package_name', { length: 255 }),
+  vulnerableVersion: varchar('vulnerable_version', { length: 64 }),
+  fixedVersion:      varchar('fixed_version', { length: 64 }),
+  cwe:               varchar('cwe', { length: 40 }),
+  cve:               varchar('cve', { length: 40 }),
+  description:       text('description'),
+  remediation:       text('remediation'),
+  status:            varchar('status', { length: 20 }).notNull().default('open'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Planning Poker + Retrospectives (doc 03; migration 0062). Segment-scoped.
+// Nested session models (REST + client polling, no WebSocket infra).
+// ---------------------------------------------------------------------------
+
+export const pokerSessions = pgTable('poker_sessions', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  name:           varchar('name', { length: 255 }).notNull(),
+  votingSystem:   varchar('voting_system', { length: 20 }).notNull().default('fibonacci'),
+  status:         varchar('status', { length: 20 }).notNull().default('active'),
+  facilitatorId:  varchar('facilitator_id', { length: 64 }),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const pokerStories = pgTable('poker_stories', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  sessionId:     uuid('session_id').notNull().references(() => pokerSessions.id, { onDelete: 'cascade' }),
+  title:         varchar('title', { length: 500 }).notNull(),
+  description:   text('description'),
+  status:        varchar('status', { length: 20 }).notNull().default('pending'),
+  finalEstimate: varchar('final_estimate', { length: 20 }),
+  position:      integer('position').notNull().default(0),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const pokerVotes = pgTable('poker_votes', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  storyId:    uuid('story_id').notNull().references(() => pokerStories.id, { onDelete: 'cascade' }),
+  userId:     varchar('user_id', { length: 64 }).notNull(),
+  value:      varchar('value', { length: 20 }).notNull(),
+  isRevealed: boolean('is_revealed').notNull().default(false),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const retrospectives = pgTable('retrospectives', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  name:       varchar('name', { length: 255 }).notNull(),
+  template:   varchar('template', { length: 30 }).notNull().default('start_stop_continue'),
+  status:     varchar('status', { length: 20 }).notNull().default('active'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const retroItems = pgTable('retro_items', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  retroId:    uuid('retro_id').notNull().references(() => retrospectives.id, { onDelete: 'cascade' }),
+  category:   varchar('category', { length: 40 }).notNull(),
+  content:    text('content').notNull(),
+  authorId:   varchar('author_id', { length: 64 }),
+  votes:      integer('votes').notNull().default(0),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+});

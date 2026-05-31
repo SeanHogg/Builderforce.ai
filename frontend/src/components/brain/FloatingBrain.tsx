@@ -17,12 +17,17 @@ import Link from 'next/link';
 import { BrainPanel } from './BrainPanel';
 import { useBrainContext, takePendingPrompt } from '@/lib/brain';
 import { useAuth } from '@/lib/AuthContext';
+import { useModalDismiss } from '@/hooks/useModalDismiss';
 
 export function FloatingBrain() {
   const pathname = usePathname();
   const { hasTenant } = useAuth();
   const { open, setOpen, projectId, modality, extraSystem, initialChatId } = useBrainContext();
   const [initialPrompt, setInitialPrompt] = useState<string | undefined>(undefined);
+
+  // Lock background scroll + close on Escape while the drawer is open. Shared
+  // with the marketing mobile menu so every overlay dismisses the same way.
+  useModalDismiss(open, () => setOpen(false));
 
   // A prompt typed on the landing page before sign-in is replayed here once the
   // user is back inside the authenticated shell: open the drawer and let
@@ -84,27 +89,13 @@ export function FloatingBrain() {
             role="presentation"
             aria-hidden
             onClick={() => setOpen(false)}
-            style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.2)' }}
+            className="brain-drawer-backdrop"
           />
           <div
             role="dialog"
             aria-modal="true"
             aria-label="Brain assistant"
-            style={{
-              position: 'fixed',
-              top: 0,
-              right: 0,
-              bottom: 0,
-              width: 'min(440px, 96vw)',
-              maxWidth: '100%',
-              zIndex: 9999,
-              borderLeft: '1px solid var(--border-subtle)',
-              boxShadow: '-8px 0 24px rgba(0,0,0,0.2)',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              background: 'var(--bg-base)',
-            }}
+            className="brain-drawer"
           >
             {hasTenant ? (
               <BrainPanel
@@ -120,6 +111,40 @@ export function FloatingBrain() {
               <BrainSignInCTA onClose={() => setOpen(false)} />
             )}
           </div>
+          <style>{`
+            .brain-drawer-backdrop {
+              position: fixed;
+              inset: 0;
+              z-index: 9998;
+              background: rgba(0, 0, 0, 0.5);
+            }
+            .brain-drawer {
+              position: fixed;
+              top: 0;
+              right: 0;
+              bottom: 0;
+              width: min(440px, 96vw);
+              max-width: 100%;
+              z-index: 9999;
+              border-left: 1px solid var(--border-subtle);
+              box-shadow: -8px 0 24px rgba(0, 0, 0, 0.2);
+              display: flex;
+              flex-direction: column;
+              overflow: hidden;
+              background: var(--bg-base);
+            }
+            /* On mobile the drawer goes full-screen so the close control is
+               always reachable and the page can't show through / look cut off. */
+            @media (max-width: 640px) {
+              .brain-drawer {
+                left: 0;
+                right: 0;
+                width: 100%;
+                max-width: 100%;
+                border-left: none;
+              }
+            }
+          `}</style>
         </>
       )}
     </>

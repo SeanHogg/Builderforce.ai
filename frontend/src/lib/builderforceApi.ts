@@ -1444,3 +1444,31 @@ export function segmentTrackerClient(apiBase: string) {
     remove: (id: string) => request<{ deleted: string }>(`${apiBase}/${id}`, { method: 'DELETE' }),
   };
 }
+
+// Planning Poker + Retrospectives (nested session models; /api/agile/*).
+export interface PokerSession { id: string; name: string; votingSystem: string; status: string; }
+export interface PokerVote { userId: string; value: string | null; isRevealed: boolean; }
+export interface PokerStory { id: string; title: string; description: string | null; status: string; finalEstimate: string | null; position: number; votes: PokerVote[]; }
+export interface PokerSessionDetail extends PokerSession { stories: PokerStory[]; }
+export interface RetroItem { id: string; category: string; content: string; authorId: string | null; votes: number; }
+export interface Retrospective { id: string; name: string; template: string; status: string; }
+export interface RetroDetail extends Retrospective { items: RetroItem[]; }
+
+export const pokerApi = {
+  listSessions: () => request<PokerSession[]>('/api/agile/poker/sessions'),
+  createSession: (name: string, votingSystem?: string) => request<PokerSession>('/api/agile/poker/sessions', { method: 'POST', body: JSON.stringify({ name, votingSystem }) }),
+  getSession: (id: string) => request<PokerSessionDetail>(`/api/agile/poker/sessions/${id}`),
+  addStory: (sessionId: string, title: string, description?: string) => request<PokerStory>(`/api/agile/poker/sessions/${sessionId}/stories`, { method: 'POST', body: JSON.stringify({ title, description }) }),
+  vote: (storyId: string, value: string) => request<{ ok: boolean }>(`/api/agile/poker/stories/${storyId}/vote`, { method: 'POST', body: JSON.stringify({ value }) }),
+  reveal: (storyId: string) => request<{ ok: boolean }>(`/api/agile/poker/stories/${storyId}/reveal`, { method: 'POST' }),
+  patchStory: (storyId: string, body: { finalEstimate?: string; status?: string }) => request<PokerStory>(`/api/agile/poker/stories/${storyId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+};
+
+export const retroApi = {
+  list: () => request<Retrospective[]>('/api/agile/retros'),
+  create: (name: string, template?: string) => request<Retrospective>('/api/agile/retros', { method: 'POST', body: JSON.stringify({ name, template }) }),
+  get: (id: string) => request<RetroDetail>(`/api/agile/retros/${id}`),
+  addItem: (retroId: string, category: string, content: string) => request<RetroItem>(`/api/agile/retros/${retroId}/items`, { method: 'POST', body: JSON.stringify({ category, content }) }),
+  voteItem: (itemId: string) => request<RetroItem>(`/api/agile/retros/items/${itemId}/vote`, { method: 'POST' }),
+  deleteItem: (itemId: string) => request<{ deleted: string }>(`/api/agile/retros/items/${itemId}`, { method: 'DELETE' }),
+};
