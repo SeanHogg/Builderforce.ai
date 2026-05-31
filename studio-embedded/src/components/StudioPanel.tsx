@@ -24,7 +24,40 @@ import {
 import { ModelPicker } from './ModelPicker';
 import { CoherenceControls } from './CoherenceControls';
 import { VideoPreview } from './VideoPreview';
+import { ProgressFeedback } from './ProgressFeedback';
 import { useEngineStatus } from './useEngineStatus';
+
+/** Parameters that fully describe ONE generated version, for the host to persist
+ *  alongside the MP4 blob. Enough information to re-generate the same video AND
+ *  to seed an edit-on-top pass. */
+export interface VideoVersionParams {
+  prompt: string;
+  model: DiffusionModelId;
+  width: number;
+  height: number;
+  frames: number;
+  fps: number;
+  coherence: CoherenceMode;
+  coherenceStrength: number;
+  motionAmount: number;
+  imgToImgStrength: number;
+  cameraMotion: { dx: number; dy: number } | null;
+  mambaState: MambaStateSnapshot;
+  elapsedMs: number;
+  /** Set when this version was generated as an edit of an existing version. */
+  parentVersionId?: string;
+}
+
+/** Summary the host hands back so the panel can list prior versions. */
+export interface VideoVersionEntry {
+  id: string;
+  /** Human-readable label — typically "v1", "v2", or a timestamp. */
+  label: string;
+  /** Saved generation params (so "load version" can restore prompt + sliders). */
+  params: VideoVersionParams;
+  /** Optional thumbnail (first frame) bitmap URL. */
+  thumbnailUrl?: string;
+}
 
 export interface StudioPanelProps {
   /** Builderforce auth credential for the LLM gateway + R2 weight fetches.
@@ -54,6 +87,18 @@ export interface StudioPanelProps {
    *  the panel adopts it as the current prompt without auto-generating. */
   promptValue?: string;
   onPromptChange?: (prompt: string) => void;
+  /** Persist a finished video version. The host owns storage (project file
+   *  store, R2, IndexedDB — whatever fits). Called once per successful
+   *  `generate()`. When omitted, the panel still runs but skips versioning UI. */
+  onSaveVersion?: (blob: Blob, params: VideoVersionParams) => Promise<string> | string;
+  /** Existing versions the host has persisted, listed in the panel's right
+   *  column so the user can switch back / edit on top. Omit when versioning
+   *  isn't wired — the version list and "edit on top" affordance hide. */
+  versions?: VideoVersionEntry[];
+  /** Called when the user picks an existing version. The host should fetch
+   *  the saved MP4 blob and return it; the panel reloads its preview and
+   *  restores the saved params (prompt, sliders) so the user can edit on top. */
+  onLoadVersion?: (id: string) => Promise<Blob>;
 }
 
 // Square resolutions only — every supported diffusion backbone trains square.
@@ -77,6 +122,9 @@ export function StudioPanel({
   hideHeader = false,
   promptValue,
   onPromptChange,
+  onSaveVersion,
+  versions,
+  onLoadVersion,
 }: StudioPanelProps) {
   const token = authToken ?? apiKey ?? '';
   const status = useEngineStatus();
@@ -120,6 +168,9 @@ export function StudioPanel({
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [result, setResult] = useState<GenerateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Tracks which existing version is currently shown / used as the edit base
+  // so a new generate() saves with `parentVersionId: <currentVersionId>`.
+  const [currentVersionId, setCurrentVersionId] = useState<string | null>(null);
 
   // Adopt a host-supplied prompt (e.g. the IDE Brain hands one over).
   useEffect(() => {
@@ -249,6 +300,39 @@ export function StudioPanel({
       setVideoUrl(url);
       setResult(generated);
       onVideoGenerated?.(generated.blob, generated.mambaState);
+
+      // Persist this generation as a new version when the host wired the
+      // callback. The host owns where this lives (project files, R2, IDB).
+      if (onSaveVersion) {
+        try {
+          const params: VideoVersionParams = {
+            prompt,
+            model,
+            width: resolution,
+            height: resolution,
+            frames,
+            fps,
+            coherence: coherenceMode,
+            coherenceStrength,
+            motionAmount,
+            imgToImgStrength,
+            cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0)
+              ? { dx: cameraDx, dy: cameraDy }
+              : null,
+            mambaState: generated.mambaState,
+            elapsedMs: generated.elapsedMs,
+            parentVersionId: currentVersionId ?? undefined,
+          };
+          const newId = await onSaveVersion(generated.blob, params);
+          setCurrentVersionId(newId);
+        } catch (saveErr) {
+          // Versioning failure shouldn't surface as a generation error — the
+          // MP4 is fine, just unsaved. Append to progress so the user knows.
+          const m = saveErr instanceof Error ? saveErr.message : String(saveErr);
+          setProgressLabel((prev) => `${prev}  (version save failed: ${m})`);
+        }
+      }
+
       setProgressLabel(`Done in ${(generated.elapsedMs / 1000).toFixed(1)}s on ${generated.activeDevice.toUpperCase()}.`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -271,14 +355,17 @@ export function StudioPanel({
     imgToImgStrength,
     cameraDx,
     cameraDy,
+    currentVersionId,
     fps,
     frames,
     initialMambaState,
     model,
+    onSaveVersion,
     onVideoGenerated,
     prompt,
+    releaseVideoOutputs,
+    resolution,
     status.state,
-    videoUrl,
   ]);
 
   const handleCancel = useCallback(() => {
@@ -293,6 +380,46 @@ export function StudioPanel({
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }, [result]);
+
+  /**
+   * Load an existing version: pull its saved blob from the host, restore its
+   * params into the form (so any edit-and-regenerate starts from the same
+   * settings), and mark it as the current parent so the next save chains.
+   */
+  const handleLoadVersion = useCallback(async (entry: VideoVersionEntry) => {
+    if (!onLoadVersion) return;
+    setError(null);
+    setProgressLabel(`Loading ${entry.label}…`);
+    try {
+      const blob = await onLoadVersion(entry.id);
+      releaseVideoOutputs();
+      const url = URL.createObjectURL(blob);
+      setVideoUrl(url);
+      // Restore generation params so any subsequent re-generate / edit-on-top
+      // starts from the same controls. Resolution is gated to the supported
+      // preset list — fall back to the panel's current setting if the saved
+      // resolution isn't one of the four presets.
+      const p = entry.params;
+      setPrompt(p.prompt);
+      setModel(p.model);
+      const knownRes = RESOLUTION_PRESETS.find((r) => r === p.width) as Resolution | undefined;
+      if (knownRes) setResolution(knownRes);
+      setFrames(p.frames);
+      setFps(p.fps);
+      setCoherenceMode(p.coherence);
+      setCoherenceStrength(p.coherenceStrength);
+      setMotionAmount(p.motionAmount);
+      setImgToImgStrength(p.imgToImgStrength);
+      setCameraDx(p.cameraMotion?.dx ?? 0);
+      setCameraDy(p.cameraMotion?.dy ?? 0);
+      setCurrentVersionId(entry.id);
+      setProgressLabel(`Loaded ${entry.label} — adjust controls and Generate to make v${(versions?.length ?? 0) + 1}.`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(`Failed to load ${entry.label}: ${message}`);
+      setProgressLabel('');
+    }
+  }, [onLoadVersion, releaseVideoOutputs, versions]);
 
   if (status.state === 'probing') {
     return (
@@ -450,7 +577,9 @@ export function StudioPanel({
                 onClick={handleGenerate}
                 disabled={!prompt.trim()}
               >
-                Generate video
+                {currentVersionId
+                  ? `Generate v${(versions?.length ?? 0) + 1} (edit of current)`
+                  : 'Generate video'}
               </button>
             )}
             {result && !isGenerating && (
@@ -459,9 +588,6 @@ export function StudioPanel({
               </button>
             )}
           </div>
-
-          {progressLabel && <p className="bfs-progress">{progressLabel}</p>}
-          {error && <p className="bfs-error">{error}</p>}
         </section>
 
         <section className="bfs-preview-pane">
@@ -471,6 +597,13 @@ export function StudioPanel({
             width={resolution}
             height={resolution}
           />
+
+          {/* Single source of truth for in-flight feedback — the component
+              returns null when there is nothing to show, so the row collapses
+              cleanly. Moved here from under the Generate button per the
+              user's "feedback belongs by the preview" UX call. */}
+          <ProgressFeedback progressLabel={progressLabel} error={error} />
+
           {result && (
             <dl className="bfs-meta">
               <dt>Device</dt>
@@ -483,6 +616,58 @@ export function StudioPanel({
               <dd>{(result.elapsedMs / 1000).toFixed(2)}s</dd>
             </dl>
           )}
+
+          {/* Version history — only when the host wired persistence. The list
+              is the host's source of truth, so the panel just renders it. */}
+          {versions && versions.length > 0 ? (
+            <div className="bfs-field" style={{ marginTop: 16 }}>
+              <label className="bfs-label">Versions ({versions.length})</label>
+              <div className="bfs-version-list">
+                {versions.map((v) => {
+                  const isCurrent = v.id === currentVersionId;
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      className="bfs-btn bfs-btn-secondary"
+                      onClick={() => handleLoadVersion(v)}
+                      disabled={isGenerating || isCurrent}
+                      aria-pressed={isCurrent}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        textAlign: 'left',
+                        padding: '6px 10px',
+                        background: isCurrent ? 'var(--bfs-accent)' : 'transparent',
+                        color: isCurrent ? 'white' : 'var(--bfs-fg)',
+                      }}
+                    >
+                      {v.thumbnailUrl ? (
+                        <img
+                          src={v.thumbnailUrl}
+                          alt=""
+                          width={32}
+                          height={32}
+                          style={{ borderRadius: 4, objectFit: 'cover' }}
+                        />
+                      ) : null}
+                      <span style={{ flex: 1 }}>{v.label}</span>
+                      {v.params.parentVersionId ? (
+                        <span className="bfs-mono" style={{ fontSize: '0.7rem', opacity: 0.7 }}>
+                          ↪ edit
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="bfs-hint">
+                Click a version to load it as the base. Generating again creates
+                a new version with this one as parent (edit-on-top).
+              </p>
+            </div>
+          ) : null}
         </section>
       </div>
     </div>

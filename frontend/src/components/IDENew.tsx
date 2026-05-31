@@ -12,6 +12,7 @@ import { PreviewFrame } from './PreviewFrame';
 import { ProjectsSlideOutPanel } from './ProjectsSlideOutPanel';
 import { useWebContainer } from '@/hooks/useWebContainer';
 import { useCollaboration } from '@/hooks/useCollaboration';
+import { useVideoVersions } from '@/hooks/useVideoVersions';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
 import { saveFile, fetchFileContent, deleteFile, fetchFiles, updateProject } from '@/lib/api';
 import { useRegisterBrainActions, useBrainContext, savePrd, saveTasks, type BrainAction } from '@/lib/brain';
@@ -72,6 +73,9 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
 
   const { state: wcState, mountFiles, runCommand, runCommandAndWait, startShell, startDevServer, getOrBootWebContainer } = useWebContainer();
   const { doc: ydoc, connected: collabConnected } = useCollaboration(project.id, 'user-local');
+  // Video versions: hook owns the IDB-blob + project-file-sidecar persistence
+  // triad, so this component just hands the three values straight to <StudioPanel>.
+  const videoVersions = useVideoVersions(project.id, files);
 
   // Task 2: Boot WebContainer and spawn an interactive shell immediately on IDE load.
   // This makes the terminal live from the moment the IDE opens, not just after clicking Run.
@@ -728,6 +732,9 @@ export default defineConfig({
                 hideHeader
                 promptValue={videoPrompt}
                 onPromptChange={setVideoPrompt}
+                versions={videoVersions.versions}
+                onSaveVersion={videoVersions.onSaveVersion}
+                onLoadVersion={videoVersions.onLoadVersion}
               />
             </div>
           ) : modality === 'llm' ? (

@@ -205,6 +205,16 @@ function VideoPreview({ frames, videoUrl, width, height }) {
   ] });
 }
 
+// src/components/ProgressFeedback.tsx
+import { jsx as jsx4, jsxs as jsxs4 } from "react/jsx-runtime";
+function ProgressFeedback({ progressLabel, error }) {
+  if (!progressLabel && !error) return null;
+  return /* @__PURE__ */ jsxs4("div", { className: "bfs-progress-feedback", children: [
+    progressLabel ? /* @__PURE__ */ jsx4("p", { className: "bfs-progress", children: progressLabel }) : null,
+    error ? /* @__PURE__ */ jsx4("p", { className: "bfs-error", children: error }) : null
+  ] });
+}
+
 // src/components/useEngineStatus.ts
 import { useEffect as useEffect2, useRef as useRef2, useState } from "react";
 import { probeDevice } from "@seanhogg/builderforce-studio";
@@ -255,7 +265,7 @@ function useEngineStatus() {
 }
 
 // src/components/StudioPanel.tsx
-import { jsx as jsx4, jsxs as jsxs4 } from "react/jsx-runtime";
+import { jsx as jsx5, jsxs as jsxs5 } from "react/jsx-runtime";
 var RESOLUTION_PRESETS = [256, 384, 512, 768];
 var DEFAULT_RESOLUTION = 256;
 function StudioPanel({
@@ -270,7 +280,10 @@ function StudioPanel({
   initialMambaState,
   hideHeader = false,
   promptValue,
-  onPromptChange
+  onPromptChange,
+  onSaveVersion,
+  versions,
+  onLoadVersion
 }) {
   const token = authToken ?? apiKey ?? "";
   const status = useEngineStatus();
@@ -297,6 +310,7 @@ function StudioPanel({
   const [videoUrl, setVideoUrl] = useState2(null);
   const [result, setResult] = useState2(null);
   const [error, setError] = useState2(null);
+  const [currentVersionId, setCurrentVersionId] = useState2(null);
   useEffect3(() => {
     if (promptValue !== void 0 && promptValue !== prompt) {
       setPrompt(promptValue);
@@ -404,6 +418,31 @@ function StudioPanel({
       setVideoUrl(url);
       setResult(generated);
       onVideoGenerated?.(generated.blob, generated.mambaState);
+      if (onSaveVersion) {
+        try {
+          const params = {
+            prompt,
+            model,
+            width: resolution,
+            height: resolution,
+            frames,
+            fps,
+            coherence: coherenceMode,
+            coherenceStrength,
+            motionAmount,
+            imgToImgStrength,
+            cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0) ? { dx: cameraDx, dy: cameraDy } : null,
+            mambaState: generated.mambaState,
+            elapsedMs: generated.elapsedMs,
+            parentVersionId: currentVersionId ?? void 0
+          };
+          const newId = await onSaveVersion(generated.blob, params);
+          setCurrentVersionId(newId);
+        } catch (saveErr) {
+          const m = saveErr instanceof Error ? saveErr.message : String(saveErr);
+          setProgressLabel((prev) => `${prev}  (version save failed: ${m})`);
+        }
+      }
       setProgressLabel(`Done in ${(generated.elapsedMs / 1e3).toFixed(1)}s on ${generated.activeDevice.toUpperCase()}.`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -426,14 +465,17 @@ function StudioPanel({
     imgToImgStrength,
     cameraDx,
     cameraDy,
+    currentVersionId,
     fps,
     frames,
     initialMambaState,
     model,
+    onSaveVersion,
     onVideoGenerated,
     prompt,
-    status.state,
-    videoUrl
+    releaseVideoOutputs,
+    resolution,
+    status.state
   ]);
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
@@ -446,34 +488,64 @@ function StudioPanel({
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5e3);
   }, [result]);
+  const handleLoadVersion = useCallback(async (entry) => {
+    if (!onLoadVersion) return;
+    setError(null);
+    setProgressLabel(`Loading ${entry.label}\u2026`);
+    try {
+      const blob = await onLoadVersion(entry.id);
+      releaseVideoOutputs();
+      const url = URL.createObjectURL(blob);
+      setVideoUrl(url);
+      const p = entry.params;
+      setPrompt(p.prompt);
+      setModel(p.model);
+      const knownRes = RESOLUTION_PRESETS.find((r) => r === p.width);
+      if (knownRes) setResolution(knownRes);
+      setFrames(p.frames);
+      setFps(p.fps);
+      setCoherenceMode(p.coherence);
+      setCoherenceStrength(p.coherenceStrength);
+      setMotionAmount(p.motionAmount);
+      setImgToImgStrength(p.imgToImgStrength);
+      setCameraDx(p.cameraMotion?.dx ?? 0);
+      setCameraDy(p.cameraMotion?.dy ?? 0);
+      setCurrentVersionId(entry.id);
+      setProgressLabel(`Loaded ${entry.label} \u2014 adjust controls and Generate to make v${(versions?.length ?? 0) + 1}.`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(`Failed to load ${entry.label}: ${message}`);
+      setProgressLabel("");
+    }
+  }, [onLoadVersion, releaseVideoOutputs, versions]);
   if (status.state === "probing") {
-    return /* @__PURE__ */ jsxs4("div", { className: "bfs-root bfs-state-probing", children: [
-      /* @__PURE__ */ jsx4("div", { className: "bfs-spinner" }),
-      /* @__PURE__ */ jsx4("p", { children: "Probing hardware (WebNN \u2192 WebGPU \u2192 CPU)\u2026" })
+    return /* @__PURE__ */ jsxs5("div", { className: "bfs-root bfs-state-probing", children: [
+      /* @__PURE__ */ jsx5("div", { className: "bfs-spinner" }),
+      /* @__PURE__ */ jsx5("p", { children: "Probing hardware (WebNN \u2192 WebGPU \u2192 CPU)\u2026" })
     ] });
   }
   if (status.state === "unsupported") {
-    return /* @__PURE__ */ jsxs4("div", { className: "bfs-root bfs-state-unsupported", children: [
-      /* @__PURE__ */ jsx4("h2", { children: "AI Video Studio unavailable" }),
-      /* @__PURE__ */ jsx4("p", { children: status.reason }),
-      /* @__PURE__ */ jsx4("p", { className: "bfs-hint", children: "Open this page in Chrome 113+ or Edge 113+ with hardware acceleration enabled." })
+    return /* @__PURE__ */ jsxs5("div", { className: "bfs-root bfs-state-unsupported", children: [
+      /* @__PURE__ */ jsx5("h2", { children: "AI Video Studio unavailable" }),
+      /* @__PURE__ */ jsx5("p", { children: status.reason }),
+      /* @__PURE__ */ jsx5("p", { className: "bfs-hint", children: "Open this page in Chrome 113+ or Edge 113+ with hardware acceleration enabled." })
     ] });
   }
   const device = status.device;
-  return /* @__PURE__ */ jsxs4("div", { className: "bfs-root", children: [
-    !hideHeader && /* @__PURE__ */ jsx4("header", { className: "bfs-header", children: /* @__PURE__ */ jsxs4("div", { children: [
-      /* @__PURE__ */ jsx4("h1", { className: "bfs-title", children: "AI Video Studio" }),
-      /* @__PURE__ */ jsxs4("p", { className: "bfs-subtitle", children: [
+  return /* @__PURE__ */ jsxs5("div", { className: "bfs-root", children: [
+    !hideHeader && /* @__PURE__ */ jsx5("header", { className: "bfs-header", children: /* @__PURE__ */ jsxs5("div", { children: [
+      /* @__PURE__ */ jsx5("h1", { className: "bfs-title", children: "AI Video Studio" }),
+      /* @__PURE__ */ jsxs5("p", { className: "bfs-subtitle", children: [
         "Running on ",
-        /* @__PURE__ */ jsx4("strong", { children: device.label }),
+        /* @__PURE__ */ jsx5("strong", { children: device.label }),
         device.approxMemoryMb ? ` \xB7 ~${(device.approxMemoryMb / 1024).toFixed(1)} GB available` : ""
       ] })
     ] }) }),
-    /* @__PURE__ */ jsxs4("div", { className: "bfs-grid", children: [
-      /* @__PURE__ */ jsxs4("section", { className: "bfs-controls", children: [
-        /* @__PURE__ */ jsxs4("div", { className: "bfs-field", children: [
-          /* @__PURE__ */ jsx4("label", { className: "bfs-label", htmlFor: "bfs-prompt", children: "What video do you want to generate?" }),
-          /* @__PURE__ */ jsx4(
+    /* @__PURE__ */ jsxs5("div", { className: "bfs-grid", children: [
+      /* @__PURE__ */ jsxs5("section", { className: "bfs-controls", children: [
+        /* @__PURE__ */ jsxs5("div", { className: "bfs-field", children: [
+          /* @__PURE__ */ jsx5("label", { className: "bfs-label", htmlFor: "bfs-prompt", children: "What video do you want to generate?" }),
+          /* @__PURE__ */ jsx5(
             "textarea",
             {
               id: "bfs-prompt",
@@ -488,18 +560,18 @@ function StudioPanel({
               disabled: isGenerating
             }
           ),
-          expandedPrompt && /* @__PURE__ */ jsxs4("p", { className: "bfs-hint", children: [
-            /* @__PURE__ */ jsx4("strong", { children: "Expanded:" }),
+          expandedPrompt && /* @__PURE__ */ jsxs5("p", { className: "bfs-hint", children: [
+            /* @__PURE__ */ jsx5("strong", { children: "Expanded:" }),
             " ",
             expandedPrompt
           ] })
         ] }),
-        /* @__PURE__ */ jsx4(ModelPicker, { value: model, onChange: setModel, disabled: isGenerating }),
-        /* @__PURE__ */ jsxs4("div", { className: "bfs-field", children: [
-          /* @__PURE__ */ jsx4("label", { className: "bfs-label", children: "Resolution" }),
-          /* @__PURE__ */ jsx4("div", { className: "bfs-radio-row", children: RESOLUTION_PRESETS.map((px) => {
+        /* @__PURE__ */ jsx5(ModelPicker, { value: model, onChange: setModel, disabled: isGenerating }),
+        /* @__PURE__ */ jsxs5("div", { className: "bfs-field", children: [
+          /* @__PURE__ */ jsx5("label", { className: "bfs-label", children: "Resolution" }),
+          /* @__PURE__ */ jsx5("div", { className: "bfs-radio-row", children: RESOLUTION_PRESETS.map((px) => {
             const active = resolution === px;
-            return /* @__PURE__ */ jsxs4(
+            return /* @__PURE__ */ jsxs5(
               "button",
               {
                 type: "button",
@@ -525,12 +597,12 @@ function StudioPanel({
               px
             );
           }) }),
-          /* @__PURE__ */ jsx4("p", { className: "bfs-hint", children: "Lower = faster + fits weaker GPUs (4\xD7 less compute per step at 256). Higher = sharper, more VRAM, may trip Windows GPU timeouts." })
+          /* @__PURE__ */ jsx5("p", { className: "bfs-hint", children: "Lower = faster + fits weaker GPUs (4\xD7 less compute per step at 256). Higher = sharper, more VRAM, may trip Windows GPU timeouts." })
         ] }),
-        /* @__PURE__ */ jsxs4("div", { className: "bfs-row", children: [
-          /* @__PURE__ */ jsxs4("div", { className: "bfs-field bfs-flex", children: [
-            /* @__PURE__ */ jsx4("label", { className: "bfs-label", children: "Frames" }),
-            /* @__PURE__ */ jsx4(
+        /* @__PURE__ */ jsxs5("div", { className: "bfs-row", children: [
+          /* @__PURE__ */ jsxs5("div", { className: "bfs-field bfs-flex", children: [
+            /* @__PURE__ */ jsx5("label", { className: "bfs-label", children: "Frames" }),
+            /* @__PURE__ */ jsx5(
               "input",
               {
                 type: "number",
@@ -543,9 +615,9 @@ function StudioPanel({
               }
             )
           ] }),
-          /* @__PURE__ */ jsxs4("div", { className: "bfs-field bfs-flex", children: [
-            /* @__PURE__ */ jsx4("label", { className: "bfs-label", children: "FPS" }),
-            /* @__PURE__ */ jsx4(
+          /* @__PURE__ */ jsxs5("div", { className: "bfs-field bfs-flex", children: [
+            /* @__PURE__ */ jsx5("label", { className: "bfs-label", children: "FPS" }),
+            /* @__PURE__ */ jsx5(
               "input",
               {
                 type: "number",
@@ -558,15 +630,15 @@ function StudioPanel({
               }
             )
           ] }),
-          /* @__PURE__ */ jsxs4("div", { className: "bfs-field bfs-flex", children: [
-            /* @__PURE__ */ jsx4("label", { className: "bfs-label", children: "Duration" }),
-            /* @__PURE__ */ jsxs4("div", { className: "bfs-readout", children: [
+          /* @__PURE__ */ jsxs5("div", { className: "bfs-field bfs-flex", children: [
+            /* @__PURE__ */ jsx5("label", { className: "bfs-label", children: "Duration" }),
+            /* @__PURE__ */ jsxs5("div", { className: "bfs-readout", children: [
               (frames / fps).toFixed(2),
               "s"
             ] })
           ] })
         ] }),
-        /* @__PURE__ */ jsx4(
+        /* @__PURE__ */ jsx5(
           CoherenceControls,
           {
             mode: coherenceMode,
@@ -584,24 +656,22 @@ function StudioPanel({
             disabled: isGenerating
           }
         ),
-        /* @__PURE__ */ jsxs4("div", { className: "bfs-actions", children: [
-          isGenerating ? /* @__PURE__ */ jsx4("button", { type: "button", className: "bfs-btn bfs-btn-danger", onClick: handleCancel, children: "Cancel" }) : /* @__PURE__ */ jsx4(
+        /* @__PURE__ */ jsxs5("div", { className: "bfs-actions", children: [
+          isGenerating ? /* @__PURE__ */ jsx5("button", { type: "button", className: "bfs-btn bfs-btn-danger", onClick: handleCancel, children: "Cancel" }) : /* @__PURE__ */ jsx5(
             "button",
             {
               type: "button",
               className: "bfs-btn bfs-btn-primary",
               onClick: handleGenerate,
               disabled: !prompt.trim(),
-              children: "Generate video"
+              children: currentVersionId ? `Generate v${(versions?.length ?? 0) + 1} (edit of current)` : "Generate video"
             }
           ),
-          result && !isGenerating && /* @__PURE__ */ jsx4("button", { type: "button", className: "bfs-btn bfs-btn-secondary", onClick: handleDownload, children: "Download MP4" })
-        ] }),
-        progressLabel && /* @__PURE__ */ jsx4("p", { className: "bfs-progress", children: progressLabel }),
-        error && /* @__PURE__ */ jsx4("p", { className: "bfs-error", children: error })
+          result && !isGenerating && /* @__PURE__ */ jsx5("button", { type: "button", className: "bfs-btn bfs-btn-secondary", onClick: handleDownload, children: "Download MP4" })
+        ] })
       ] }),
-      /* @__PURE__ */ jsxs4("section", { className: "bfs-preview-pane", children: [
-        /* @__PURE__ */ jsx4(
+      /* @__PURE__ */ jsxs5("section", { className: "bfs-preview-pane", children: [
+        /* @__PURE__ */ jsx5(
           VideoPreview,
           {
             frames: previewFrames,
@@ -610,19 +680,65 @@ function StudioPanel({
             height: resolution
           }
         ),
-        result && /* @__PURE__ */ jsxs4("dl", { className: "bfs-meta", children: [
-          /* @__PURE__ */ jsx4("dt", { children: "Device" }),
-          /* @__PURE__ */ jsx4("dd", { children: result.activeDevice.toUpperCase() }),
-          /* @__PURE__ */ jsx4("dt", { children: "Frames" }),
-          /* @__PURE__ */ jsx4("dd", { children: result.frames.length }),
-          /* @__PURE__ */ jsx4("dt", { children: "Mamba step" }),
-          /* @__PURE__ */ jsx4("dd", { children: result.mambaState.step }),
-          /* @__PURE__ */ jsx4("dt", { children: "Elapsed" }),
-          /* @__PURE__ */ jsxs4("dd", { children: [
+        /* @__PURE__ */ jsx5(ProgressFeedback, { progressLabel, error }),
+        result && /* @__PURE__ */ jsxs5("dl", { className: "bfs-meta", children: [
+          /* @__PURE__ */ jsx5("dt", { children: "Device" }),
+          /* @__PURE__ */ jsx5("dd", { children: result.activeDevice.toUpperCase() }),
+          /* @__PURE__ */ jsx5("dt", { children: "Frames" }),
+          /* @__PURE__ */ jsx5("dd", { children: result.frames.length }),
+          /* @__PURE__ */ jsx5("dt", { children: "Mamba step" }),
+          /* @__PURE__ */ jsx5("dd", { children: result.mambaState.step }),
+          /* @__PURE__ */ jsx5("dt", { children: "Elapsed" }),
+          /* @__PURE__ */ jsxs5("dd", { children: [
             (result.elapsedMs / 1e3).toFixed(2),
             "s"
           ] })
-        ] })
+        ] }),
+        versions && versions.length > 0 ? /* @__PURE__ */ jsxs5("div", { className: "bfs-field", style: { marginTop: 16 }, children: [
+          /* @__PURE__ */ jsxs5("label", { className: "bfs-label", children: [
+            "Versions (",
+            versions.length,
+            ")"
+          ] }),
+          /* @__PURE__ */ jsx5("div", { className: "bfs-version-list", children: versions.map((v) => {
+            const isCurrent = v.id === currentVersionId;
+            return /* @__PURE__ */ jsxs5(
+              "button",
+              {
+                type: "button",
+                className: "bfs-btn bfs-btn-secondary",
+                onClick: () => handleLoadVersion(v),
+                disabled: isGenerating || isCurrent,
+                "aria-pressed": isCurrent,
+                style: {
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  textAlign: "left",
+                  padding: "6px 10px",
+                  background: isCurrent ? "var(--bfs-accent)" : "transparent",
+                  color: isCurrent ? "white" : "var(--bfs-fg)"
+                },
+                children: [
+                  v.thumbnailUrl ? /* @__PURE__ */ jsx5(
+                    "img",
+                    {
+                      src: v.thumbnailUrl,
+                      alt: "",
+                      width: 32,
+                      height: 32,
+                      style: { borderRadius: 4, objectFit: "cover" }
+                    }
+                  ) : null,
+                  /* @__PURE__ */ jsx5("span", { style: { flex: 1 }, children: v.label }),
+                  v.params.parentVersionId ? /* @__PURE__ */ jsx5("span", { className: "bfs-mono", style: { fontSize: "0.7rem", opacity: 0.7 }, children: "\u21AA edit" }) : null
+                ]
+              },
+              v.id
+            );
+          }) }),
+          /* @__PURE__ */ jsx5("p", { className: "bfs-hint", children: "Click a version to load it as the base. Generating again creates a new version with this one as parent (edit-on-top)." })
+        ] }) : null
       ] })
     ] })
   ] });
@@ -640,6 +756,7 @@ export {
   CoherenceControls,
   MODEL_REGISTRY2 as MODEL_REGISTRY,
   ModelPicker,
+  ProgressFeedback,
   StudioPanel,
   VideoEngine2 as VideoEngine,
   VideoPreview,
