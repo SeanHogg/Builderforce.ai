@@ -2,7 +2,8 @@
 import { useCallback as useCallback2, useEffect as useEffect3, useRef as useRef3, useState as useState4 } from "react";
 import {
   VideoEngine,
-  planScene
+  planScene,
+  storyboardFrameCount as storyboardFrameCount2
 } from "@seanhogg/builderforce-studio";
 
 // src/components/ModelPicker.tsx
@@ -576,7 +577,8 @@ function QualityTierPicker({ value, onChange, disabled }) {
 
 // src/components/StoryboardEditor.tsx
 import {
-  CAMERA_MOVES
+  CAMERA_MOVES,
+  storyboardFrameCount
 } from "@seanhogg/builderforce-studio";
 import { jsx as jsx7, jsxs as jsxs6 } from "react/jsx-runtime";
 function uniqueId(prefix, taken) {
@@ -593,7 +595,7 @@ function StoryboardEditor({
   busy
 }) {
   const { shots, characters } = storyboard;
-  const totalFrames = shots.reduce((a, s) => a + s.durationFrames, 0);
+  const totalFrames = storyboardFrameCount(storyboard);
   const validationByShot = new Map((validations ?? []).map((v) => [v.shotId, v.validation]));
   const updateShot = (idx, patch) => onChange({ ...storyboard, shots: shots.map((s, i) => i === idx ? { ...s, ...patch } : s) });
   const addShot = () => {
@@ -1635,7 +1637,16 @@ function StudioPanel({
             videoUrl,
             width: resolution,
             height: resolution,
-            loading: isGenerating ? { label: progressLabel || "Initialising\u2026", framesDone, framesTotal: frames } : null
+            loading: isGenerating ? {
+              label: progressLabel || "Initialising\u2026",
+              framesDone,
+              // Cinematic mode renders the storyboard's total (sum of every
+              // shot's durationFrames), NOT the single-clip `frames` input —
+              // the engine emits one onFrame per storyboard frame, so a 50-
+              // frame storyboard would otherwise read "28 / 16". Falls back
+              // to `frames` for the single-clip path / pre-plan phase.
+              framesTotal: cinematic && storyboard ? storyboardFrameCount2(storyboard) : frames
+            } : null
           }
         ),
         /* @__PURE__ */ jsx8(ProgressFeedback, { progressLabel, error }),

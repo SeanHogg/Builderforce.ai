@@ -631,7 +631,7 @@ function StoryboardEditor({
   busy
 }) {
   const { shots, characters } = storyboard;
-  const totalFrames = shots.reduce((a, s) => a + s.durationFrames, 0);
+  const totalFrames = (0, import_builderforce_studio2.storyboardFrameCount)(storyboard);
   const validationByShot = new Map((validations ?? []).map((v) => [v.shotId, v.validation]));
   const updateShot = (idx, patch) => onChange({ ...storyboard, shots: shots.map((s, i) => i === idx ? { ...s, ...patch } : s) });
   const addShot = () => {
@@ -1673,7 +1673,16 @@ function StudioPanel({
             videoUrl,
             width: resolution,
             height: resolution,
-            loading: isGenerating ? { label: progressLabel || "Initialising\u2026", framesDone, framesTotal: frames } : null
+            loading: isGenerating ? {
+              label: progressLabel || "Initialising\u2026",
+              framesDone,
+              // Cinematic mode renders the storyboard's total (sum of every
+              // shot's durationFrames), NOT the single-clip `frames` input —
+              // the engine emits one onFrame per storyboard frame, so a 50-
+              // frame storyboard would otherwise read "28 / 16". Falls back
+              // to `frames` for the single-clip path / pre-plan phase.
+              framesTotal: cinematic && storyboard ? (0, import_builderforce_studio4.storyboardFrameCount)(storyboard) : frames
+            } : null
           }
         ),
         /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ProgressFeedback, { progressLabel, error }),
