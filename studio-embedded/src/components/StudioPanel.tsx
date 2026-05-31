@@ -474,11 +474,9 @@ export function StudioPanel({
         signal,
         onProgress: handleProgress,
         onFrame: handleFrame,
-        onShot: (_i, _shot, v) => {
-          // Surface validation incrementally so badges appear per shot.
-          if (v) setValidations((prev) => [...prev]);
-        },
       });
+      // Badges appear once render completes — the engine returns one verdict per
+      // shot (first + last keyframe, after any self-healing retries).
       setValidations(sb.validations);
       return {
         blob: sb.blob,
