@@ -18,10 +18,13 @@ export type { BuilderForceEmbedProps } from './BuilderForceEmbed';
 export {
   EMBED_VIEWS,
   EMBED_VIEW_KEYS,
+  EMBED_CAPABILITIES,
   isEmbedView,
   embedViewsByPillar,
+  pillarToCapability,
+  capabilityForView,
 } from './views';
-export type { EmbedView, EmbedViewMeta, EmbedPillar } from './views';
+export type { EmbedView, EmbedViewMeta, EmbedPillar, EmbedCapability } from './views';
 
 // The cross-origin protocol — exported so the BuilderForce frame side imports
 // the SAME contract (single source of truth, no drift).

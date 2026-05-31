@@ -43,6 +43,8 @@ export function FloatingBrain() {
   // pages a "sign in to use Brain" CTA would be redundant with the form itself.
   if (pathname?.startsWith('/brainstorm')) return null;
   if (pathname === '/login' || pathname === '/register') return null;
+  // Embedded surfaces render bare inside a host iframe — no floating chrome.
+  if (pathname?.startsWith('/embed')) return null;
 
   return (
     <>

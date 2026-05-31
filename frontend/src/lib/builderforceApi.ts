@@ -1380,3 +1380,26 @@ export const tenantApiKeysApi = {
   },
 };
 
+
+// ---------------------------------------------------------------------------
+// Embed integration config (/api/embed/config)
+// ---------------------------------------------------------------------------
+
+export type EmbedCapabilityKey = 'product' | 'agile' | 'security';
+
+export interface EmbedConfigResult {
+  enabled: boolean;
+  capabilities: EmbedCapabilityKey[];
+  isolationMode: 'single' | 'segmented';
+}
+
+export const embedApi = {
+  /** Current tenant's embed enablement + capabilities (any member). */
+  getConfig: () => request<EmbedConfigResult>('/api/embed/config'),
+  /** Enable/disable + set capabilities (manager+). */
+  setConfig: (body: { enabled: boolean; capabilities: EmbedCapabilityKey[] }) =>
+    request<{ enabled: boolean; capabilities: EmbedCapabilityKey[] }>('/api/embed/config', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+};

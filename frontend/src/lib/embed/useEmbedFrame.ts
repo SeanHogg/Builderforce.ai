@@ -7,6 +7,7 @@ import {
   type EmbedTheme,
   type FrameToHostMessage,
 } from '@seanhogg/builderforce-embedded';
+import { setEmbedAuth } from '../auth';
 
 /**
  * The iframe (BuilderForce) half of the embed protocol — the mirror of
@@ -75,6 +76,9 @@ export function useEmbedFrame(): EmbedFrameState {
       if (!isHostToFrameMessage(msg)) return;
       if (msg.type === 'auth') {
         hostOriginRef.current = event.origin;
+        // Bridge the host-handed token into the app's auth path so every API
+        // call (and any resurfaced app component) authenticates unchanged.
+        setEmbedAuth(msg.token);
         setState({
           token: msg.token,
           accountId: msg.accountId,
@@ -87,10 +91,20 @@ export function useEmbedFrame(): EmbedFrameState {
         window.dispatchEvent(new CustomEvent('bfembed:navigate', { detail: msg.path }));
       }
     };
+    // If the app's auth path hit a 401, the token is stale — tell the host.
+    const onUnauthorized = () => {
+      setState((s) => ({ ...s, token: null, ready: false }));
+      reportError('Embed session expired — host must re-auth');
+    };
     window.addEventListener('message', onMessage);
+    window.addEventListener('bfembed:unauthorized', onUnauthorized);
     postToHost({ source: BFEMBED_SOURCE, type: 'ready' });
-    return () => window.removeEventListener('message', onMessage);
-  }, [postToHost]);
+    return () => {
+      window.removeEventListener('message', onMessage);
+      window.removeEventListener('bfembed:unauthorized', onUnauthorized);
+      setEmbedAuth(null); // exit embed mode when the frame unmounts
+    };
+  }, [postToHost, reportError]);
 
   // Auto-report content height so the host can size the iframe to fit.
   useEffect(() => {

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { handleFrameMessage } from './messageHandler';
 import { BFEMBED_SOURCE, isFrameToHostMessage, isHostToFrameMessage } from './protocol';
-import { isEmbedView, EMBED_VIEW_KEYS } from './views';
+import { isEmbedView, EMBED_VIEW_KEYS, EMBED_VIEWS, capabilityForView } from './views';
 
 const ORIGIN = 'https://app.builderforce.ai';
 
@@ -72,5 +72,19 @@ describe('view registry', () => {
 
   it('has a stable, non-empty set of views across all three pillars', () => {
     expect(EMBED_VIEW_KEYS.length).toBeGreaterThanOrEqual(20);
+  });
+
+  it('maps each view to a capability (governance ⇒ security)', () => {
+    expect(capabilityForView('kanban')).toBe('agile');
+    expect(capabilityForView('backlog')).toBe('product');
+    expect(capabilityForView('soc2')).toBe('security');
+    expect(capabilityForView('approvals')).toBe('security');
+  });
+
+  it('marks kanban + backlog available (wired today) and unbuilt views unavailable', () => {
+    expect(EMBED_VIEWS.kanban.available).toBe(true);
+    expect(EMBED_VIEWS.backlog.available).toBe(true);
+    expect(EMBED_VIEWS.soc2.available).toBe(false);
+    expect(EMBED_VIEWS.poker.available).toBe(false);
   });
 });
