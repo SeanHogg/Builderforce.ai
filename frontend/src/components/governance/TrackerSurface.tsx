@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { governanceTracker, type TrackerRow } from '@/lib/builderforceApi';
+import { segmentTrackerClient, type TrackerRow } from '@/lib/builderforceApi';
 
 /**
  * One generic CRUD surface for EVERY governance tracker (vendors, incidents, PII,
@@ -22,8 +22,8 @@ export interface TrackerField {
 
 export interface TrackerSurfaceProps {
   title: string;
-  /** API path under /api/governance, e.g. '/vendors'. */
-  path: string;
+  /** Full API route for this tracker, e.g. '/api/product/mvp'. */
+  apiBase: string;
   fields: TrackerField[];
 }
 
@@ -37,8 +37,8 @@ function fmt(field: TrackerField, value: unknown): string {
   return String(value);
 }
 
-export function TrackerSurface({ title, path, fields }: TrackerSurfaceProps) {
-  const api = useMemo(() => governanceTracker(path), [path]);
+export function TrackerSurface({ title, apiBase, fields }: TrackerSurfaceProps) {
+  const api = useMemo(() => segmentTrackerClient(apiBase), [apiBase]);
   const listFields = fields.filter((f) => f.inList !== false && f.type !== 'textarea').slice(0, 5);
 
   const [rows, setRows] = useState<TrackerRow[]>([]);

@@ -110,49 +110,49 @@ declare const EMBED_VIEWS: {
         readonly key: "mvp";
         readonly label: "MVP Scaffolding";
         readonly pillar: "product";
-        readonly available: false;
+        readonly available: true;
     };
     readonly validation: {
         readonly key: "validation";
         readonly label: "Validation Lab";
         readonly pillar: "product";
-        readonly available: false;
+        readonly available: true;
     };
     readonly roadmap: {
         readonly key: "roadmap";
         readonly label: "AI Roadmap";
         readonly pillar: "product";
-        readonly available: false;
+        readonly available: true;
     };
     readonly 'release-planning': {
         readonly key: "release-planning";
         readonly label: "Release Planning";
         readonly pillar: "product";
-        readonly available: false;
+        readonly available: true;
     };
     readonly changelog: {
         readonly key: "changelog";
         readonly label: "Changelog";
         readonly pillar: "product";
-        readonly available: false;
+        readonly available: true;
     };
     readonly 'feature-flags': {
         readonly key: "feature-flags";
         readonly label: "Feature Flags";
         readonly pillar: "product";
-        readonly available: false;
+        readonly available: true;
     };
     readonly 'feature-roi': {
         readonly key: "feature-roi";
         readonly label: "Feature ROI";
         readonly pillar: "product";
-        readonly available: false;
+        readonly available: true;
     };
     readonly 'business-value': {
         readonly key: "business-value";
         readonly label: "Business-Value Models";
         readonly pillar: "product";
-        readonly available: false;
+        readonly available: true;
     };
     readonly kanban: {
         readonly key: "kanban";
@@ -176,31 +176,31 @@ declare const EMBED_VIEWS: {
         readonly key: "sprints";
         readonly label: "Sprint Planning";
         readonly pillar: "agile";
-        readonly available: false;
+        readonly available: true;
     };
     readonly velocity: {
         readonly key: "velocity";
         readonly label: "Velocity";
         readonly pillar: "agile";
-        readonly available: false;
+        readonly available: true;
     };
     readonly capacity: {
         readonly key: "capacity";
         readonly label: "Capacity & Risk";
         readonly pillar: "agile";
-        readonly available: false;
+        readonly available: true;
     };
     readonly cost: {
         readonly key: "cost";
         readonly label: "Cost / Runway";
         readonly pillar: "agile";
-        readonly available: false;
+        readonly available: true;
     };
     readonly 'feature-scoring': {
         readonly key: "feature-scoring";
         readonly label: "Feature Scoring";
         readonly pillar: "agile";
-        readonly available: false;
+        readonly available: true;
     };
     readonly soc2: {
         readonly key: "soc2";
