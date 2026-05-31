@@ -64,9 +64,19 @@ declare function isHostToFrameMessage(data: unknown): data is HostToFrameMessage
  * it, the BuilderForce frame route resolves `[view]` against it, and host nav
  * can render menus from it. Adding a surface = one entry here.
  *
+ * `available` = the embed surface is wired to a real, working app component
+ * today (resurfaced, not reimplemented). `available: false` = the view is
+ * registered but renders a "coming soon" scaffold until its feature is built or
+ * wired. Host nav should show available views as active.
+ *
  * Keys match the `view="…"` values in specs/builderforce docs 05 §5.2 and 07 §7.
  */
 type EmbedPillar = 'product' | 'agile' | 'governance';
+/** The three capability areas a host SuperAdmin enables (governance ⇒ security). */
+type EmbedCapability = 'product' | 'agile' | 'security';
+declare const EMBED_CAPABILITIES: readonly EmbedCapability[];
+/** Map a surface's pillar to the capability that gates it. Single source of truth. */
+declare function pillarToCapability(pillar: EmbedPillar): EmbedCapability;
 interface EmbedViewMeta {
     /** URL-safe view key (the iframe loads `/embed/<key>`). */
     key: string;
@@ -74,128 +84,173 @@ interface EmbedViewMeta {
     label: string;
     /** Which product pillar the surface belongs to. */
     pillar: EmbedPillar;
+    /** True when the surface renders a real, working component today. */
+    available: boolean;
 }
 declare const EMBED_VIEWS: {
     readonly ideas: {
         readonly key: "ideas";
         readonly label: "Product Discovery";
         readonly pillar: "product";
+        readonly available: false;
     };
-    readonly mvp: {
-        readonly key: "mvp";
-        readonly label: "MVP Scaffolding";
+    readonly prd: {
+        readonly key: "prd";
+        readonly label: "PRDs & Specs";
         readonly pillar: "product";
+        readonly available: false;
     };
     readonly backlog: {
         readonly key: "backlog";
         readonly label: "Strategic Backlog";
         readonly pillar: "product";
+        readonly available: true;
+    };
+    readonly mvp: {
+        readonly key: "mvp";
+        readonly label: "MVP Scaffolding";
+        readonly pillar: "product";
+        readonly available: false;
     };
     readonly validation: {
         readonly key: "validation";
         readonly label: "Validation Lab";
         readonly pillar: "product";
+        readonly available: false;
     };
     readonly roadmap: {
         readonly key: "roadmap";
         readonly label: "AI Roadmap";
         readonly pillar: "product";
+        readonly available: false;
     };
     readonly 'feature-roi': {
         readonly key: "feature-roi";
         readonly label: "Feature ROI";
         readonly pillar: "product";
+        readonly available: false;
     };
     readonly kanban: {
         readonly key: "kanban";
         readonly label: "Kanban";
         readonly pillar: "agile";
+        readonly available: true;
     };
     readonly poker: {
         readonly key: "poker";
         readonly label: "Planning Poker";
         readonly pillar: "agile";
+        readonly available: false;
     };
     readonly retros: {
         readonly key: "retros";
         readonly label: "Retrospectives";
         readonly pillar: "agile";
+        readonly available: false;
     };
     readonly sprints: {
         readonly key: "sprints";
         readonly label: "Sprint Planning";
         readonly pillar: "agile";
+        readonly available: false;
     };
     readonly velocity: {
         readonly key: "velocity";
         readonly label: "Velocity";
         readonly pillar: "agile";
+        readonly available: false;
     };
     readonly 'feature-scoring': {
         readonly key: "feature-scoring";
         readonly label: "Feature Scoring";
         readonly pillar: "agile";
+        readonly available: false;
+    };
+    readonly security: {
+        readonly key: "security";
+        readonly label: "Sessions & Access";
+        readonly pillar: "governance";
+        readonly available: false;
+    };
+    readonly approvals: {
+        readonly key: "approvals";
+        readonly label: "Approvals";
+        readonly pillar: "governance";
+        readonly available: false;
     };
     readonly soc2: {
         readonly key: "soc2";
         readonly label: "SOC 2 Tracker";
         readonly pillar: "governance";
+        readonly available: false;
     };
     readonly vendors: {
         readonly key: "vendors";
         readonly label: "Vendor Register";
         readonly pillar: "governance";
+        readonly available: false;
     };
     readonly incidents: {
         readonly key: "incidents";
         readonly label: "Security Incidents";
         readonly pillar: "governance";
+        readonly available: false;
     };
     readonly 'data-inventory': {
         readonly key: "data-inventory";
         readonly label: "PII & Data Inventory";
         readonly pillar: "governance";
+        readonly available: false;
     };
     readonly dpa: {
         readonly key: "dpa";
         readonly label: "DPA Management";
         readonly pillar: "governance";
+        readonly available: false;
     };
     readonly training: {
         readonly key: "training";
         readonly label: "Security Training";
         readonly pillar: "governance";
+        readonly available: false;
     };
     readonly 'compliance-calendar': {
         readonly key: "compliance-calendar";
         readonly label: "Compliance Calendar";
         readonly pillar: "governance";
+        readonly available: false;
     };
     readonly 'access-reviews': {
         readonly key: "access-reviews";
         readonly label: "Access Reviews";
         readonly pillar: "governance";
+        readonly available: false;
     };
     readonly 'vuln-scans': {
         readonly key: "vuln-scans";
         readonly label: "Vulnerability Scans";
         readonly pillar: "governance";
+        readonly available: false;
     };
     readonly dsr: {
         readonly key: "dsr";
         readonly label: "Data Subject Requests";
         readonly pillar: "governance";
+        readonly available: false;
     };
     readonly suppression: {
         readonly key: "suppression";
         readonly label: "Suppression List";
         readonly pillar: "governance";
+        readonly available: false;
     };
 };
 type EmbedView = keyof typeof EMBED_VIEWS;
 declare const EMBED_VIEW_KEYS: EmbedView[];
 declare function isEmbedView(value: string): value is EmbedView;
 declare function embedViewsByPillar(pillar: EmbedPillar): EmbedViewMeta[];
+/** The capability that gates a given view (for host nav + frame self-gating). */
+declare function capabilityForView(view: EmbedView): EmbedCapability;
 
 interface BuilderForceEmbedProps {
     /** Which BuilderForce surface to mount (see EMBED_VIEWS). */
@@ -245,4 +300,4 @@ interface FrameMessageHandlers {
 }
 declare function handleFrameMessage(event: MessageEvent, h: FrameMessageHandlers): void;
 
-export { BFEMBED_SOURCE, BuilderForceEmbed, type BuilderForceEmbedProps, EMBED_VIEWS, EMBED_VIEW_KEYS, type EmbedPillar, type EmbedTheme, type EmbedView, type EmbedViewMeta, type FrameMessageHandlers, type FrameToHostMessage, type HostToFrameMessage, embedViewsByPillar, handleFrameMessage, isEmbedView, isFrameToHostMessage, isHostToFrameMessage };
+export { BFEMBED_SOURCE, BuilderForceEmbed, type BuilderForceEmbedProps, EMBED_CAPABILITIES, EMBED_VIEWS, EMBED_VIEW_KEYS, type EmbedCapability, type EmbedPillar, type EmbedTheme, type EmbedView, type EmbedViewMeta, type FrameMessageHandlers, type FrameToHostMessage, type HostToFrameMessage, capabilityForView, embedViewsByPillar, handleFrameMessage, isEmbedView, isFrameToHostMessage, isHostToFrameMessage, pillarToCapability };

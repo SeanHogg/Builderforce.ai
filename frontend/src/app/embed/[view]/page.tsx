@@ -1,30 +1,48 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { isEmbedView, EMBED_VIEWS } from '@seanhogg/builderforce-embedded';
-import { useEmbedFrame, type EmbedFrameState } from '../../../lib/embed/useEmbedFrame';
+import { isEmbedView, EMBED_VIEWS, capabilityForView, type EmbedCapability } from '@seanhogg/builderforce-embedded';
+import { useEmbedFrame } from '../../../lib/embed/useEmbedFrame';
+import { embedApi } from '../../../lib/builderforceApi';
+import { TaskMgmtContent } from '../../../components/TaskMgmtContent';
 
 /**
  * The framed BuilderForce surface. ONE dynamic route serves every embeddable
- * view (DRY) — `/embed/<view>` is mounted inside an <BuilderForceEmbed> on the
- * host (e.g. BurnRateOS). It completes the postMessage handshake (token, resize,
- * deep links) via useEmbedFrame, then renders the surface for `view`.
+ * view (DRY) — `/embed/<view>` is mounted inside <BuilderForceEmbed> on the host
+ * (e.g. BurnRateOS). It completes the postMessage handshake (token, resize, deep
+ * links) via useEmbedFrame, SELF-GATES on the host's enabled embed capabilities,
+ * then RESURFACES the existing app component for `view`.
  *
- * Feature surfaces (kanban board, SOC 2 tracker, …) register in `renderSurface`
- * as they are built against the `/v1` API; until then a view shows a connected
- * scaffold so the embed transport can be wired end-to-end from the host today.
+ * Wired today (resurfaced, not reimplemented): kanban + backlog → TaskMgmtContent.
+ * Views marked `available: false` in EMBED_VIEWS show a scaffold until their
+ * feature/component is wired.
  */
 export default function EmbedViewPage() {
   const params = useParams<{ view: string }>();
   const view = params?.view ?? '';
   const frame = useEmbedFrame();
+  const [config, setConfig] = useState<{ enabled: boolean; capabilities: EmbedCapability[] } | null>(null);
+  const [configError, setConfigError] = useState(false);
+
+  useEffect(() => {
+    if (!frame.ready) return;
+    let cancelled = false;
+    embedApi
+      .getConfig()
+      .then((cfg) => !cancelled && setConfig({ enabled: cfg.enabled, capabilities: cfg.capabilities }))
+      .catch(() => !cancelled && setConfigError(true));
+    return () => {
+      cancelled = true;
+    };
+  }, [frame.ready]);
 
   const wrap = (children: React.ReactNode) => (
     <div
       data-theme={frame.theme}
       style={{
         minHeight: '100vh',
-        padding: 24,
+        padding: 16,
         font: '14px system-ui, -apple-system, sans-serif',
         background: frame.theme === 'dark' ? '#0b1220' : '#ffffff',
         color: frame.theme === 'dark' ? '#e2e8f0' : '#0f172a',
@@ -35,56 +53,55 @@ export default function EmbedViewPage() {
     </div>
   );
 
+  const notice = (msg: string, tone: 'muted' | 'error' = 'muted') => (
+    <div style={{ color: tone === 'error' ? '#dc2626' : '#64748b', padding: 8 }} role={tone === 'error' ? 'alert' : undefined}>
+      {msg}
+    </div>
+  );
+
   if (!isEmbedView(view)) {
     frame.reportError(`Unknown embed view: ${view}`);
-    return wrap(<strong role="alert">Unknown BuilderForce view: {view}</strong>);
+    return wrap(notice(`Unknown BuilderForce view: ${view}`, 'error'));
   }
 
   const meta = EMBED_VIEWS[view];
 
-  if (!frame.ready) {
+  if (!frame.ready) return wrap(notice(`Connecting to BuilderForce — ${meta.label}…`));
+  if (configError) return wrap(notice('Could not load embed configuration.', 'error'));
+  if (!config) return wrap(notice('Loading…'));
+
+  // Self-gating: the surface decides its own visibility from the host's enabled
+  // capabilities — no prop-drilled flags. governance views ⇒ 'security' capability.
+  const capability = capabilityForView(view);
+  if (!config.enabled) {
+    return wrap(notice('This integration is not enabled. A workspace administrator can enable it in BuilderForce → Settings → Integration.'));
+  }
+  if (!config.capabilities.includes(capability)) {
+    return wrap(notice(`The "${capability}" capability is not enabled for this workspace.`));
+  }
+
+  if (!meta.available) {
     return wrap(
-      <div style={{ color: '#64748b' }}>Connecting to BuilderForce — {meta.label}…</div>,
+      <div>
+        <div style={{ fontSize: 16, fontWeight: 600 }}>{meta.label}</div>
+        <div style={{ color: '#64748b', marginTop: 6 }}>
+          This surface is coming soon — the embed transport, auth, and gating are wired; the {meta.label} UI lands with its API.
+        </div>
+      </div>,
     );
   }
 
-  return wrap(renderSurface(view, frame, meta.label, meta.pillar));
+  return wrap(renderSurface(view));
 }
 
-/**
- * Surface registry seam. Replace a branch with the real feature component once
- * its `/v1` API exists — the host, transport, and auth are already done.
- */
-function renderSurface(
-  view: string,
-  frame: EmbedFrameState,
-  label: string,
-  pillar: string,
-): React.ReactNode {
-  // (future) switch (view) { case 'kanban': return <KanbanBoard frame={frame} />; … }
-  void view;
-  const segment = frame.accountId && frame.companyId
-    ? `${frame.accountId} / ${frame.companyId}`
-    : 'default segment';
-  return (
-    <div>
-      <div style={{ fontSize: 18, fontWeight: 600 }}>{label}</div>
-      <div style={{ color: '#64748b', marginTop: 4, textTransform: 'capitalize' }}>{pillar} surface</div>
-      <div
-        style={{
-          marginTop: 20,
-          padding: 16,
-          borderRadius: 8,
-          border: '1px solid #e2e8f0',
-          background: frame.theme === 'dark' ? '#111a2e' : '#f8fafc',
-        }}
-      >
-        <div>✓ Embedded and authenticated (segment: {segment}).</div>
-        <div style={{ color: '#64748b', marginTop: 6 }}>
-          The {label} surface renders here once its <code>/v1</code> API lands. The host embed,
-          token handoff, resize, and deep-link sync are wired.
-        </div>
-      </div>
-    </div>
-  );
+/** Resurface the existing app component for a wired view (DRY — reuse, don't rebuild). */
+function renderSurface(view: string): React.ReactNode {
+  switch (view) {
+    case 'kanban':
+    case 'backlog':
+      // The same task feature the app uses at /tasks — board + list, full CRUD.
+      return <TaskMgmtContent />;
+    default:
+      return null;
+  }
 }

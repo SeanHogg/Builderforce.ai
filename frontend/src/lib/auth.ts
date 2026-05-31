@@ -34,7 +34,29 @@ export function getStoredWebToken(): string | null {
   return localStorage.getItem(WEB_TOKEN_KEY);
 }
 
+// ---------------------------------------------------------------------------
+// Embed-mode auth bridge
+//
+// When BuilderForce runs inside an <BuilderForceEmbed> iframe, the tenant JWT is
+// handed over by the host via postMessage (never localStorage). useEmbedFrame
+// calls setEmbedAuth(token); the rest of the auth path is unchanged because
+// getStoredTenantToken() + handleApiUnauthorized() consult this override here —
+// one place, so embedded and standalone modes share a single auth flow.
+// ---------------------------------------------------------------------------
+
+let embedTenantToken: string | null = null;
+
+/** Set/clear the embed-handed tenant token. Passing null exits embed mode. */
+export function setEmbedAuth(token: string | null): void {
+  embedTenantToken = token;
+}
+
+export function isEmbedMode(): boolean {
+  return embedTenantToken !== null;
+}
+
 export function getStoredTenantToken(): string | null {
+  if (embedTenantToken) return embedTenantToken;
   if (!isBrowser()) return null;
   return localStorage.getItem(TENANT_TOKEN_KEY);
 }
@@ -136,6 +158,13 @@ export function clearSession(): void {
  * Use only in the browser; throws on server.
  */
 export function handleApiUnauthorized(): never {
+  // In an embed iframe we can't redirect to /login (cross-origin). Drop the
+  // stale token and ask the host to re-auth; the embed page surfaces this.
+  if (embedTenantToken !== null) {
+    embedTenantToken = null;
+    if (isBrowser()) window.dispatchEvent(new CustomEvent('bfembed:unauthorized'));
+    throw new Error('Embed session expired');
+  }
   if (!isBrowser()) {
     throw new Error('Unauthorized');
   }

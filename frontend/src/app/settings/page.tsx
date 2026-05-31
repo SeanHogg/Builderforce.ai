@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { mySessionsApi, myAdminAccessApi, type MySession, type MyAdminAccessSession } from '@/lib/builderforceApi';
+import { EmbedIntegrationSettings } from '@/components/settings/EmbedIntegrationSettings';
 import {
   getStoredUser,
   getStoredTenant,
@@ -209,6 +210,11 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* Embedded Integration (self-gates to owner/manager) */}
+      <div style={{ marginBottom: 20 }}>
+        <EmbedIntegrationSettings />
+      </div>
 
       {/* Connected Accounts */}
       <div style={{ ...cardStyle, marginBottom: 20 }}>

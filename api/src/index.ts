@@ -37,6 +37,7 @@ import { createProjectRoutes }     from './presentation/routes/projectRoutes';
 import { createTaskRoutes }        from './presentation/routes/taskRoutes';
 import { createTenantRoutes }      from './presentation/routes/tenantRoutes';
 import { createSegmentRoutes }     from './presentation/routes/segmentRoutes';
+import { createEmbedRoutes }       from './presentation/routes/embedRoutes';
 import { createTenantApiKeyRoutes } from './presentation/routes/tenantApiKeyRoutes';
 import { createMcpExtensionRoutes } from './presentation/routes/mcpExtensionRoutes';
 import { createAuthRoutes }        from './presentation/routes/authRoutes';
@@ -221,6 +222,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/tasks',    createTaskRoutes(taskService, db));
   app.route('/api/tenants',  createTenantRoutes(tenantService, db));
   app.route('/api/segments', createSegmentRoutes(db));
+  app.route('/api/embed',    createEmbedRoutes(db));
   app.route('/api/tenants/:tenantId/api-keys', createTenantApiKeyRoutes(db));
   app.route('/api/tenants/:tenantId/mcp-extensions', createMcpExtensionRoutes(db));
   app.route('/api/agents',   createAgentRoutes(agentService));
