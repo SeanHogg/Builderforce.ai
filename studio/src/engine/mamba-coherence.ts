@@ -168,6 +168,59 @@ export function shiftLatent(
 }
 
 /**
+ * Center-anchored zoom of an NCHW latent with edge-replicate padding + bilinear
+ * sampling. Used by `VideoEngine` for dolly camera moves: `scale > 1` magnifies
+ * the central region (camera pushing IN), `scale < 1` shrinks it (pulling OUT).
+ *
+ * For each destination pixel we sample the source at
+ *   src = center + (dst - center) / scale
+ * so scale>1 reads a smaller window (zoom in) and scale<1 a larger one. Out-of-
+ * bounds reads clamp to the edge (replicate) — the same choice as `shiftLatent`,
+ * for the same reason: zero-fill leaves a black border the truncated img2img
+ * denoise can't clean up. Bilinear (not nearest) avoids the blocky aliasing a
+ * pure-integer resample would compound frame-to-frame. Locked by the
+ * scaleLatentZoomsAboutCenter / scaleLatentClampsToEdge tests.
+ *
+ * Layout: NCHW packed as [c, y, x], one batch — the diffusion engine's contract.
+ */
+export function scaleLatent(
+  latent: Float32Array,
+  shape: { channels: number; height: number; width: number },
+  scale: number,
+): Float32Array {
+  const { channels, height, width } = shape;
+  if (latent.length !== channels * height * width) {
+    throw new Error(
+      `scaleLatent: length ${latent.length} doesn't match shape ${channels}x${height}x${width}=${channels * height * width}`,
+    );
+  }
+  if (scale === 1 || !Number.isFinite(scale) || scale <= 0) return new Float32Array(latent);
+  const out = new Float32Array(latent.length);
+  const cx = (width - 1) / 2;
+  const cy = (height - 1) / 2;
+  const idx = (c: number, y: number, x: number) => c * (height * width) + y * width + x;
+  const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
+  for (let c = 0; c < channels; c++) {
+    for (let y = 0; y < height; y++) {
+      const srcYf = cy + (y - cy) / scale;
+      const y0 = clamp(Math.floor(srcYf), 0, height - 1);
+      const y1 = clamp(y0 + 1, 0, height - 1);
+      const wy = srcYf - Math.floor(srcYf);
+      for (let x = 0; x < width; x++) {
+        const srcXf = cx + (x - cx) / scale;
+        const x0 = clamp(Math.floor(srcXf), 0, width - 1);
+        const x1 = clamp(x0 + 1, 0, width - 1);
+        const wx = srcXf - Math.floor(srcXf);
+        const top = latent[idx(c, y0, x0)] * (1 - wx) + latent[idx(c, y0, x1)] * wx;
+        const bot = latent[idx(c, y1, x0)] * (1 - wx) + latent[idx(c, y1, x1)] * wx;
+        out[idx(c, y, x)] = top * (1 - wy) + bot * wy;
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * Gate for latent-residual Mamba bias application. Returns true only when the
  * user picked the mode AND the engine is on the fresh-noise (anchor-walk) path.
  *

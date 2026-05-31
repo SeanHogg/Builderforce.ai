@@ -36,6 +36,8 @@ import {
   buildOrtSessionOptions,
   checkMemoryForModel,
   explainSessionCreateError,
+  lcmGuidanceCondEmbedding,
+  DEFAULT_LCM_GUIDANCE_SCALE,
   DiffusionEngine,
 } from './diffusion-engine';
 
@@ -93,6 +95,32 @@ describe('MODEL_REGISTRY × UNet input contract', () => {
   it('sd-turbo timestep is int64 (standard SD UNet export — flipping it would break SD-Turbo)', () => {
     const ts = MODEL_REGISTRY['sd-turbo'].unetInputs.find((s) => s.name === 'timestep');
     expect(ts?.dtype).toBe('int64');
+  });
+
+  // Regression: the LCM `timestep_cond` guidance embedding must encode the
+  // model's DISTILLATION guidance scale (~8.5 → w=7.5), NOT the runtime cond/
+  // uncond mix scale (`defaultGuidance` ~1 → w=0). Embedding w=0 yields a
+  // degenerate all-[sin0=0, cos1=1] vector that under-conditions the UNet and
+  // produced the washed / distorted two-pass refinement output. This locks the
+  // embedding non-degenerate for every model carrying a timestep_cond input.
+  it("LCM timestep_cond embeds the distillation scale (non-degenerate, w≠0)", () => {
+    for (const [id, descriptor] of Object.entries(MODEL_REGISTRY)) {
+      if (descriptor.lcmGuidanceEmbedDim === undefined) continue;
+      const emb = lcmGuidanceCondEmbedding(descriptor);
+      const dim = descriptor.lcmGuidanceEmbedDim;
+      expect(emb.length, `${id} timestep_cond width`).toBe(dim);
+      // First half is sin(w*1000*freq). With w=0 every entry is sin(0)=0; a
+      // correct distillation scale (w>0) makes at least one of them non-zero.
+      const sinHalf = emb.subarray(0, Math.floor(dim / 2));
+      const anyNonZero = sinHalf.some((v) => Math.abs(v) > 1e-6);
+      expect(anyNonZero, `${id} timestep_cond is degenerate (embedded w=0 — the bug)`).toBe(true);
+    }
+  });
+
+  it("lcm-dreamshaper-v7 declares a distillation guidance scale (defaults otherwise)", () => {
+    const d = MODEL_REGISTRY['lcm-dreamshaper-v7'];
+    // Either an explicit scale or the shared default — both are >1 so w>0.
+    expect((d.lcmGuidanceScale ?? DEFAULT_LCM_GUIDANCE_SCALE)).toBeGreaterThan(1);
   });
 
   it('every model declares the three base inputs sample / timestep / encoder_hidden_states', () => {

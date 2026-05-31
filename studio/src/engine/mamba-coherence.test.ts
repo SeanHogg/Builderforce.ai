@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   blendNoise,
+  scaleLatent,
   shiftLatent,
   shouldApplyLatentResidualBias,
 } from './mamba-coherence';
@@ -144,6 +145,39 @@ describe('shiftLatent (img2img camera-motion primitive)', () => {
     const out = shiftLatent(fixture(), shape, 99, 0);
     expect(Array.from(out.slice(0, 9))).toEqual([1, 1, 1, 4, 4, 4, 7, 7, 7]);
     expect(Array.from(out.slice(9))).toEqual([11, 11, 11, 14, 14, 14, 17, 17, 17]);
+  });
+});
+
+describe('scaleLatent (dolly / latent-zoom primitive)', () => {
+  const shape = { channels: 1, height: 4, width: 4 };
+
+  it('scale = 1 returns the latent unchanged', () => {
+    const l = Float32Array.from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+    expect(Array.from(scaleLatent(l, shape, 1))).toEqual(Array.from(l));
+  });
+
+  it('zooming in stays finite and within the source value range (edge-clamped, no overshoot)', () => {
+    const l = Float32Array.from([
+      0, 1, 2, 3,
+      0, 1, 2, 3,
+      0, 1, 2, 3,
+      0, 1, 2, 3,
+    ]);
+    const zoomed = scaleLatent(l, shape, 2);
+    expect(zoomed.every((v) => Number.isFinite(v))).toBe(true);
+    // Bilinear + edge-clamp can never produce a value outside the source range.
+    expect(Math.min(...zoomed)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...zoomed)).toBeLessThanOrEqual(3);
+  });
+
+  it('clamps out-of-bounds reads to the edge when zooming out (no black border)', () => {
+    const l = new Float32Array(16).fill(5);
+    const out = scaleLatent(l, shape, 0.5);
+    expect(out.every((v) => Math.abs(v - 5) < 1e-6)).toBe(true);
+  });
+
+  it('throws on shape/length mismatch', () => {
+    expect(() => scaleLatent(new Float32Array(10), shape, 2)).toThrow(/doesn't match shape/);
   });
 });
 

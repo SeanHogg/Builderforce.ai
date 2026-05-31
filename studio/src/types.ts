@@ -48,6 +48,9 @@ export type QualityMode = 'fast' | 'balanced' | 'refined';
 /** Mamba-state-driven coherence mode. */
 export type CoherenceMode = 'prompt-bias' | 'latent-residual';
 
+/** Keyframe-interpolation backend. See `GenerateOptions.interpolationBackend`. */
+export type InterpolationBackend = 'latent-slerp' | 'motion';
+
 /** Source for fetching model weights. The engine falls back across these in order. */
 export type WeightSource = 'r2-proxy' | 'huggingface-cdn';
 
@@ -106,6 +109,15 @@ export interface ModelDescriptor {
    *  `timestep_cond` feed of shape [1, dim]. Leave undefined for non-LCM
    *  UNets (SD / SD-Turbo). */
   lcmGuidanceEmbedDim?: number;
+  /** Classifier-free-guidance scale the LCM UNet was DISTILLED with — the value
+   *  embedded into `timestep_cond`. This is NOT `defaultGuidance` (the runtime
+   *  cond/uncond MIX scale, ~1 for LCM): LCM bakes guidance into the consistency
+   *  model via this embedding, so the embedded scale must match the distillation
+   *  scale (diffusers `LatentConsistencyModelPipeline` default 8.5). Embedding
+   *  the mix scale instead conditions the UNet as if guidance≈1 → washed,
+   *  out-of-range latents. Only meaningful when `lcmGuidanceEmbedDim` is set;
+   *  defaults to `DEFAULT_LCM_GUIDANCE_SCALE` when omitted. */
+  lcmGuidanceScale?: number;
 }
 
 /** Supported ONNX tensor dtypes the engine knows how to build feeds for. */
@@ -201,13 +213,15 @@ export interface GenerateOptions {
    */
   imgToImgStrength?: number;
   /**
-   * Per-frame directional shift applied to the prior latent BEFORE re-noising,
-   * in latent-pixel units (1 latent pixel = 8 output pixels via the VAE
-   * down-factor). Simulates camera motion: dy=-1 looks like the camera
+   * Per-frame camera transform applied to the prior latent BEFORE re-noising.
+   * `dx`/`dy` are a directional shift in latent-pixel units (1 latent pixel =
+   * 8 output pixels via the VAE down-factor): dy=-1 looks like the camera
    * tilting up; dx=1 looks like the world panning right (camera moving left).
-   * Only consulted when `imgToImgStrength > 0`. Default omitted = no shift.
+   * `zoom` is a center-anchored scale (dolly): >1 pushes in, <1 pulls out,
+   * omitted/1 = no zoom. Only consulted when `imgToImgStrength > 0`. Default
+   * omitted = no transform.
    */
-  cameraMotion?: { dx: number; dy: number };
+  cameraMotion?: { dx: number; dy: number; zoom?: number };
   /**
    * Refinement-pass strength used when the engine runs the quality-tier
    * second pass. Each finished frame from the draft model is fed back into
@@ -235,6 +249,16 @@ export interface GenerateOptions {
    * tracked in the Consolidated Gap Register.
    */
   interpolationFactor?: number;
+  /**
+   * Which interpolation backend fills the frames between keyframes (only used
+   * when `interpolationFactor > 1`):
+   *   'latent-slerp' (default) → spherical interp of the two keyframe latents +
+   *      one VAE decode. Smooth, but a morph — no notion of motion.
+   *   'motion' → block optical-flow estimate between the decoded keyframes,
+   *      then motion-compensated warp. Real displacement (a panning subject
+   *      slides), at the cost of an extra decode per keyframe + the flow search.
+   */
+  interpolationBackend?: InterpolationBackend;
   /** Called once per finished frame. */
   onFrame?: (frameIdx: number, bitmap: ImageBitmap, state: MambaStateSnapshot) => void;
   /** Called when prompt expansion finishes (before diffusion starts). */
@@ -405,14 +429,22 @@ export interface StoryboardGenerateOptions {
   motionAmount?: number;
   /** Keyframe interpolation factor applied within each shot. See GenerateOptions. */
   interpolationFactor?: number;
+  /** Interpolation backend for the tween frames. See GenerateOptions. */
+  interpolationBackend?: InterpolationBackend;
   /** Seed base. Each shot derives a distinct seed from this. Defaults to Date.now(). */
   seed?: number;
-  /** When true, run the VLM frame validator on each shot's first keyframe. */
+  /** When true, run the VLM frame validator on each shot's first + last keyframe. */
   validate?: boolean;
   /** Vision-capable gateway model for validation. */
   validatorModel?: string;
   /** Score below which a frame validation is flagged. Defaults to 0.6. */
   passThreshold?: number;
+  /**
+   * Self-healing: when `validate` is on and a shot's validation fails, re-render
+   * it with a fresh seed up to this many times, keeping the highest-scoring
+   * attempt. 0 = validate but never retry (advisory only). Defaults to 1.
+   */
+  maxValidationRetries?: number;
   /** Per-frame callback (global frame index across all shots). */
   onFrame?: (frameIdx: number, bitmap: ImageBitmap, state: MambaStateSnapshot) => void;
   /** Fired when each shot finishes generating. */

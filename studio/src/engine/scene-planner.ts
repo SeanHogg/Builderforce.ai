@@ -38,7 +38,9 @@ import type {
  *  fails over if it's cooled. Override via `ScenePlanOptions.plannerModel`. */
 const DEFAULT_PLANNER_MODEL = 'googleai/gemini-2.5-flash';
 
-const CAMERA_MOVES: readonly CameraMove[] = [
+/** The canonical camera-move vocabulary. Exported so UIs (the storyboard
+ *  editor) offer exactly the moves the planner + engine understand. */
+export const CAMERA_MOVES: readonly CameraMove[] = [
   'static',
   'pan-left',
   'pan-right',
@@ -194,17 +196,18 @@ export async function shotPlannerPass(
 
 /**
  * Map a planned camera move to the engine's motion knobs. Camera motion in the
- * engine is a latent-space pan/tilt fed into img2img recursion, so a move
- * implies BOTH a directional shift AND a non-zero img2img strength (otherwise
- * the shift has no recursion path to ride on). `static` → no motion.
+ * engine is a latent-space pan/tilt/zoom fed into img2img recursion, so a move
+ * implies BOTH a transform AND a non-zero img2img strength (otherwise the
+ * transform has no recursion path to ride on). `static` → no motion.
  *
- * dx/dy are in latent pixels (1 = 8 output px). dolly is simulated as a small
- * symmetric pan placeholder until a true zoom (latent scale) lands — logged in
- * the Consolidated Gap Register.
+ * dx/dy are in latent pixels (1 = 8 output px). `zoom` is a per-keyframe scale
+ * factor applied about the frame centre: >1 pushes in (dolly-in), <1 pulls out
+ * (dolly-out). 1.04 ≈ a 4 %/keyframe push, gentle enough that img2img can keep
+ * the scene coherent while still reading as a dolly.
  */
 export function cameraMoveToMotion(
   move: CameraMove,
-): { cameraMotion?: { dx: number; dy: number }; imgToImgStrength: number } {
+): { cameraMotion?: { dx: number; dy: number; zoom?: number }; imgToImgStrength: number } {
   switch (move) {
     case 'pan-left':
       return { cameraMotion: { dx: -1, dy: 0 }, imgToImgStrength: 0.6 };
@@ -215,10 +218,9 @@ export function cameraMoveToMotion(
     case 'tilt-down':
       return { cameraMotion: { dx: 0, dy: 1 }, imgToImgStrength: 0.6 };
     case 'dolly-in':
+      return { cameraMotion: { dx: 0, dy: 0, zoom: 1.04 }, imgToImgStrength: 0.55 };
     case 'dolly-out':
-      // No latent-zoom primitive yet — carry scene content with img2img and a
-      // tiny drift so the shot still evolves rather than freezing.
-      return { cameraMotion: { dx: 0, dy: move === 'dolly-in' ? -1 : 1 }, imgToImgStrength: 0.5 };
+      return { cameraMotion: { dx: 0, dy: 0, zoom: 1 / 1.04 }, imgToImgStrength: 0.55 };
     case 'static':
     default:
       return { imgToImgStrength: 0 };

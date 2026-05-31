@@ -20,8 +20,11 @@ import {
   type CoherenceMode,
   type DiffusionModelId,
   type GenerateResult,
+  type InterpolationBackend,
   type MambaStateSnapshot,
   type QualityMode,
+  type ShotValidation,
+  type Storyboard,
 } from '@seanhogg/builderforce-studio';
 import { ModelPicker } from './ModelPicker';
 import { CoherenceControls } from './CoherenceControls';
@@ -29,6 +32,7 @@ import { VideoPreview } from './VideoPreview';
 import { ProgressFeedback } from './ProgressFeedback';
 import { DebugCopyButton } from './DebugCopyButton';
 import { QualityTierPicker, resolveQualityTier } from './QualityTierPicker';
+import { StoryboardEditor } from './StoryboardEditor';
 import { useEngineStatus } from './useEngineStatus';
 
 /** Parameters that fully describe ONE generated version, for the host to persist
@@ -185,6 +189,17 @@ export function StudioPanel({
   // the engine renders each shot with its own camera move and threads character
   // consistency + Mamba state across shots. Off = the classic single-clip path.
   const [cinematic, setCinematic] = useState(false);
+  // The planned (and user-edited) storyboard, set after the PLAN phase of
+  // cinematic mode. Rendering reads from this, so edits in the StoryboardEditor
+  // take effect. Cleared when cinematic is toggled off or a fresh plan starts.
+  const [storyboard, setStoryboard] = useState<Storyboard | null>(null);
+  // Per-shot VLM verdicts from the last storyboard render (badges in the editor).
+  const [validations, setValidations] = useState<ShotValidation[]>([]);
+  // Run the VLM frame validator (+ self-healing retry) on each shot.
+  const [validate, setValidate] = useState(false);
+  // Which interpolation backend fills tween frames when interpolation is on.
+  const [interpolationBackend, setInterpolationBackend] =
+    useState<InterpolationBackend>('latent-slerp');
 
   // Changing quality OR resolution invalidates the cached engine — the engine
   // is bound to both at create time. Dispose the old engine (releases
@@ -270,140 +285,56 @@ export function StudioPanel({
     };
   }, [disposeEngineAndOutputs]);
 
-  const handleGenerate = useCallback(async () => {
-    if (status.state !== 'ready') return;
-    if (!prompt.trim()) {
-      setError('Enter a prompt before generating.');
-      return;
-    }
-    if (!token) {
-      setError('Missing Builderforce auth token (pass authToken).');
-      return;
-    }
+  const handleProgress = useCallback((label: string) => setProgressLabel(label), []);
 
-    setError(null);
-    setIsGenerating(true);
-    setFramesDone(0);
-    setProgressLabel('Initialising engine…');
-    // Release outputs from any prior run (closes ImageBitmaps, revokes the
-    // previous MP4 blob URL, clears the cached result). The ENGINE is kept
-    // alive so we don't re-download multi-GB weights between runs.
-    releaseVideoOutputs();
+  // Per-frame sink shared by every render path. The engine emits one onFrame
+  // per finished frame (global index across shots in cinematic mode); the
+  // loading bar tracks completed-frame count.
+  const handleFrame = useCallback((idx: number, bitmap: ImageBitmap) => {
+    setPreviewFrames((prev) => [...prev, bitmap]);
+    setFramesDone(idx + 1);
+  }, []);
 
-    const abort = new AbortController();
-    abortRef.current = abort;
+  // Lazily create the engine, bound to the current quality tier + resolution.
+  // Source of truth for tier → model id lives in QualityTierPicker.
+  const ensureEngine = useCallback(async (): Promise<VideoEngine> => {
+    if (engineRef.current) return engineRef.current;
+    const tier = resolveQualityTier(quality);
+    const engine = await VideoEngine.create({
+      apiKey: token,
+      baseUrl,
+      model: showAdvanced ? model : tier.primary,
+      refinementModel: showAdvanced ? undefined : tier.refinement,
+      mambaState: initialMambaState,
+      width: resolution,
+      height: resolution,
+      onProgress: handleProgress,
+    });
+    if (!engine) throw new Error('Engine refused to start on this device.');
+    engineRef.current = engine;
+    return engine;
+  }, [token, baseUrl, quality, showAdvanced, model, initialMambaState, resolution, handleProgress]);
 
-    // Single progress sink — engine emits one label per phase + per denoise
-    // step, the UI just reflects it. The engine ALSO console.info's each
-    // message, so devtools shows the full timeline whether or not the UI
-    // re-render keeps up.
-    const handleProgress = (label: string) => setProgressLabel(label);
-
-    try {
-      if (!engineRef.current) {
-        // Resolve the user-facing quality tier to the actual (primary,
-        // refinement) model pair. Source of truth for tier → model id lives
-        // in QualityTierPicker so this component never hardcodes the mapping.
-        const tier = resolveQualityTier(quality);
-        const engine = await VideoEngine.create({
-          apiKey: token,
-          baseUrl,
-          model: showAdvanced ? model : tier.primary,
-          refinementModel: showAdvanced ? undefined : tier.refinement,
-          mambaState: initialMambaState,
-          width: resolution,
-          height: resolution,
-          onProgress: handleProgress,
-        });
-        if (!engine) {
-          throw new Error('Engine refused to start on this device.');
-        }
-        engineRef.current = engine;
-      }
-
-      // Shared per-frame sink for both paths. The engine emits one onFrame per
-      // finished frame (global index across shots in cinematic mode); the
-      // loading bar tracks completed-frame count.
-      const onFrame = (idx: number, bitmap: ImageBitmap) => {
-        setPreviewFrames((prev) => [...prev, bitmap]);
-        setFramesDone(idx + 1);
-      };
-
-      let generated: GenerateResult;
-      if (cinematic) {
-        // Director / Shot-Planner pipeline: prompt → storyboard → multi-shot
-        // render with per-shot camera moves + cross-shot character/Mamba
-        // continuity. resolvedPrompt is reported as the Director's treatment.
-        setProgressLabel('Planning storyboard via Director + Shot Planner…');
-        const storyboard = await planScene({
-          apiKey: token,
-          baseUrl,
-          request: prompt,
-          totalFrames: frames,
-          signal: abort.signal,
-        });
-        setExpandedPrompt(storyboard.treatment);
-        const sb = await engineRef.current.generateStoryboard({
-          storyboard,
-          fps,
-          coherence: coherenceMode,
-          coherenceStrength,
-          motionAmount,
-          interpolationFactor,
-          signal: abort.signal,
-          onProgress: handleProgress,
-          onFrame,
-        });
-        generated = {
-          blob: sb.blob,
-          mambaState: sb.mambaState,
-          frames: sb.frames,
-          activeDevice: sb.activeDevice,
-          resolvedPrompt: storyboard.treatment,
-          elapsedMs: sb.elapsedMs,
-        };
-      } else {
-        generated = await engineRef.current.generate({
-          prompt,
-          frames,
-          fps,
-          coherence: coherenceMode,
-          coherenceStrength,
-          motionAmount,
-          imgToImgStrength,
-          interpolationFactor,
-          cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0)
-            ? { dx: cameraDx, dy: cameraDy }
-            : undefined,
-          signal: abort.signal,
-          onPromptExpanded: setExpandedPrompt,
-          onProgress: handleProgress,
-          onFrame,
-        });
-      }
-
+  // Single post-generation sink (DRY across single-clip + storyboard paths):
+  // publish the video, reconcile previewFrames onto the canonical final set,
+  // notify the host, and persist a version.
+  const finishGeneration = useCallback(
+    async (generated: GenerateResult, wasCinematic: boolean) => {
       const url = URL.createObjectURL(generated.blob);
       setVideoUrl(url);
       setResult(generated);
       // Collapse the live-accumulated previewFrames onto the canonical final
-      // set. Required for the two-pass "Refined" tier: there onFrame fires once
-      // per draft frame AND once per refined frame, so previewFrames holds 2N
-      // bitmaps — and the engine closes the N draft bitmaps after refining, so
-      // VideoPreview's thumbnail loop would drawImage() a closed bitmap and
-      // throw. generated.frames is exactly the final N (refined when two-pass,
-      // draft otherwise); the refined bitmaps are the same objects already in
-      // previewFrames, so no double-close hazard on release. Single-pass: this
-      // is a no-op (same N objects).
+      // set. Required for the two-pass "Refined" tier (and cinematic retries):
+      // onFrame fires more times than there are final frames, and the engine
+      // closes the superseded bitmaps — so previewFrames can hold closed
+      // bitmaps that VideoPreview's thumbnail loop would drawImage() and throw.
+      // generated.frames is exactly the final set.
       setPreviewFrames(generated.frames);
       onVideoGenerated?.(generated.blob, generated.mambaState);
 
-      // Persist this generation as a new version when the host wired the
-      // callback. The host owns where this lives (project files, R2, IDB).
       if (onSaveVersion) {
         try {
-          // Record the RESOLVED model pair (not the stale picker default): in
-          // simple mode the engine ran tier.primary [+ tier.refinement], so
-          // that's what reproduces this version. Advanced mode used `model`.
+          // Record the RESOLVED model pair (not the stale picker default).
           const tier = resolveQualityTier(quality);
           const params: VideoVersionParams = {
             prompt,
@@ -415,7 +346,7 @@ export function StudioPanel({
             frames,
             fps,
             interpolationFactor,
-            cinematic,
+            cinematic: wasCinematic,
             coherence: coherenceMode,
             coherenceStrength,
             motionAmount,
@@ -430,55 +361,215 @@ export function StudioPanel({
           const newId = await onSaveVersion(generated.blob, params);
           setCurrentVersionId(newId);
         } catch (saveErr) {
-          // Versioning failure shouldn't surface as a generation error — the
-          // MP4 is fine, just unsaved. Append to progress so the user knows.
           const m = saveErr instanceof Error ? saveErr.message : String(saveErr);
           setProgressLabel((prev) => `${prev}  (version save failed: ${m})`);
         }
       }
+      setProgressLabel(
+        `Done in ${(generated.elapsedMs / 1000).toFixed(1)}s on ${generated.activeDevice.toUpperCase()}.`,
+      );
+    },
+    [
+      onVideoGenerated, onSaveVersion, quality, showAdvanced, model, resolution, prompt,
+      frames, fps, interpolationFactor, coherenceMode, coherenceStrength, motionAmount,
+      imgToImgStrength, cameraDx, cameraDy, currentVersionId,
+    ],
+  );
 
-      setProgressLabel(`Done in ${(generated.elapsedMs / 1000).toFixed(1)}s on ${generated.activeDevice.toUpperCase()}.`);
+  // Shared scaffolding for any render: guards, reset, abort wiring, engine
+  // create, the post-finish handler, and uniform error/cancel handling. The
+  // `produce` callback is the only thing that differs between paths.
+  const runGeneration = useCallback(
+    async (
+      produce: (engine: VideoEngine, signal: AbortSignal) => Promise<GenerateResult>,
+      wasCinematic: boolean,
+    ) => {
+      if (status.state !== 'ready' || !token) {
+        if (!token) setError('Missing Builderforce auth token (pass authToken).');
+        return;
+      }
+      setError(null);
+      setIsGenerating(true);
+      setFramesDone(0);
+      setProgressLabel('Initialising engine…');
+      releaseVideoOutputs();
+      const abort = new AbortController();
+      abortRef.current = abort;
+      try {
+        const engine = await ensureEngine();
+        const generated = await produce(engine, abort.signal);
+        await finishGeneration(generated, wasCinematic);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message === 'Generation aborted' || message === 'Mux aborted') {
+          setProgressLabel('Cancelled.');
+        } else {
+          setError(message);
+          setProgressLabel('');
+        }
+      } finally {
+        setIsGenerating(false);
+        abortRef.current = null;
+      }
+    },
+    [status.state, token, releaseVideoOutputs, ensureEngine, finishGeneration],
+  );
+
+  // PLAN phase of cinematic mode: run the Director / Shot-Planner only and show
+  // the editable storyboard. Rendering is a separate, explicit step so the user
+  // can review/edit the plan before spending GPU time.
+  const handlePlan = useCallback(async () => {
+    if (status.state !== 'ready') return;
+    if (!prompt.trim()) {
+      setError('Enter a prompt before planning.');
+      return;
+    }
+    if (!token) {
+      setError('Missing Builderforce auth token (pass authToken).');
+      return;
+    }
+    setError(null);
+    setIsGenerating(true);
+    setStoryboard(null);
+    setValidations([]);
+    setProgressLabel('Planning storyboard via Director + Shot Planner…');
+    const abort = new AbortController();
+    abortRef.current = abort;
+    try {
+      const planned = await planScene({
+        apiKey: token,
+        baseUrl,
+        request: prompt,
+        totalFrames: frames,
+        signal: abort.signal,
+      });
+      setStoryboard(planned);
+      setExpandedPrompt(planned.treatment);
+      setProgressLabel(`Storyboard ready — ${planned.shots.length} shots. Review, then Render.`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (message === 'Generation aborted' || message === 'Mux aborted') {
-        setProgressLabel('Cancelled.');
-      } else {
-        setError(message);
-        setProgressLabel('');
-      }
+      setError(message);
+      setProgressLabel('');
     } finally {
       setIsGenerating(false);
       abortRef.current = null;
     }
+  }, [status.state, prompt, token, baseUrl, frames]);
+
+  // RENDER phase of cinematic mode: render the (possibly edited) storyboard.
+  const handleRenderStoryboard = useCallback(async () => {
+    if (!storyboard) return;
+    setValidations([]);
+    await runGeneration(async (engine, signal) => {
+      const sb = await engine.generateStoryboard({
+        storyboard,
+        fps,
+        coherence: coherenceMode,
+        coherenceStrength,
+        motionAmount,
+        interpolationFactor,
+        interpolationBackend,
+        validate,
+        validatorModel: undefined,
+        signal,
+        onProgress: handleProgress,
+        onFrame: handleFrame,
+        onShot: (_i, _shot, v) => {
+          // Surface validation incrementally so badges appear per shot.
+          if (v) setValidations((prev) => [...prev]);
+        },
+      });
+      setValidations(sb.validations);
+      return {
+        blob: sb.blob,
+        mambaState: sb.mambaState,
+        frames: sb.frames,
+        activeDevice: sb.activeDevice,
+        resolvedPrompt: sb.storyboard.treatment,
+        elapsedMs: sb.elapsedMs,
+      };
+    }, true);
   }, [
-    token,
-    baseUrl,
-    coherenceMode,
-    coherenceStrength,
-    motionAmount,
-    imgToImgStrength,
-    cameraDx,
-    cameraDy,
-    currentVersionId,
-    fps,
-    frames,
-    interpolationFactor,
-    cinematic,
-    initialMambaState,
-    model,
-    quality,
-    showAdvanced,
-    onSaveVersion,
-    onVideoGenerated,
-    prompt,
-    releaseVideoOutputs,
-    resolution,
-    status.state,
+    storyboard, runGeneration, fps, coherenceMode, coherenceStrength, motionAmount,
+    interpolationFactor, interpolationBackend, validate, handleProgress, handleFrame,
+  ]);
+
+  // Main Generate button. In cinematic mode it PLANS (then the editor renders);
+  // otherwise it generates a single clip directly.
+  const handleGenerate = useCallback(async () => {
+    if (cinematic) {
+      await handlePlan();
+      return;
+    }
+    if (!prompt.trim()) {
+      setError('Enter a prompt before generating.');
+      return;
+    }
+    await runGeneration(
+      (engine, signal) =>
+        engine.generate({
+          prompt,
+          frames,
+          fps,
+          coherence: coherenceMode,
+          coherenceStrength,
+          motionAmount,
+          imgToImgStrength,
+          interpolationFactor,
+          interpolationBackend,
+          cameraMotion:
+            imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0)
+              ? { dx: cameraDx, dy: cameraDy }
+              : undefined,
+          signal,
+          onPromptExpanded: setExpandedPrompt,
+          onProgress: handleProgress,
+          onFrame: handleFrame,
+        }),
+      false,
+    );
+  }, [
+    cinematic, handlePlan, prompt, runGeneration, frames, fps, coherenceMode,
+    coherenceStrength, motionAmount, imgToImgStrength, interpolationFactor,
+    interpolationBackend, cameraDx, cameraDy, handleProgress, handleFrame,
   ]);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
   }, []);
+
+  /**
+   * Start a fresh video project: wipe the in-session continuity ("memory") and
+   * working state, but KEEP saved versions on disk. Disposing the engine drops
+   * its accumulated Mamba state, so the next generate re-creates from empty
+   * continuity (the IDE passes no `initialMambaState`). Detaching
+   * `currentVersionId` means the next save starts a new lineage with no parent,
+   * instead of chaining onto whatever version was last loaded.
+   *
+   * Non-destructive by design: the version list (videos/v*.json + IDB blobs) is
+   * the host's source of truth and is untouched here.
+   */
+  const handleNewProject = useCallback(() => {
+    if (isGenerating) return;
+    // Guard against nuking unsaved typed work / a just-generated clip.
+    if (
+      (prompt.trim() || result) &&
+      typeof window !== 'undefined' &&
+      !window.confirm(
+        'Start a new video project? This clears the current prompt, preview, and continuity memory. Saved versions are kept.',
+      )
+    ) {
+      return;
+    }
+    disposeEngineAndOutputs();
+    setPrompt('');
+    onPromptChange?.('');
+    setExpandedPrompt('');
+    setError(null);
+    setCurrentVersionId(null);
+    setFramesDone(0);
+    setProgressLabel('New project — continuity memory cleared. Enter a prompt to generate v1.');
+  }, [isGenerating, prompt, result, disposeEngineAndOutputs, onPromptChange]);
 
   const handleDownload = useCallback(() => {
     if (!result) return;
@@ -573,6 +664,25 @@ export function StudioPanel({
 
       <div className="bfs-grid">
         <section className="bfs-controls">
+          {/* New-project / clear-memory affordance. Always visible (even when
+              the host hides the header) so the user can start a fresh project —
+              wiping continuity memory + working state but keeping saved versions —
+              at any point. */}
+          <div
+            style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}
+          >
+            <button
+              type="button"
+              className="bfs-btn bfs-btn-secondary"
+              onClick={handleNewProject}
+              disabled={isGenerating}
+              title="Clear the current prompt, preview, and continuity (Mamba) memory and start a fresh project. Saved versions are kept."
+              style={{ fontSize: '0.8rem', padding: '4px 10px' }}
+            >
+              ＋ New project
+            </button>
+          </div>
+
           <div className="bfs-field">
             <label className="bfs-label" htmlFor="bfs-prompt">
               What video do you want to generate?
@@ -612,7 +722,14 @@ export function StudioPanel({
             <input
               type="checkbox"
               checked={cinematic}
-              onChange={(e) => setCinematic(e.target.checked)}
+              onChange={(e) => {
+                setCinematic(e.target.checked);
+                // Toggling off clears the planned storyboard so the editor hides.
+                if (!e.target.checked) {
+                  setStoryboard(null);
+                  setValidations([]);
+                }
+              }}
               disabled={isGenerating}
               style={{ marginTop: 3 }}
             />
@@ -625,6 +742,19 @@ export function StudioPanel({
               </span>
             </span>
           </label>
+
+          {/* The planned storyboard — editable before render, with per-shot VLM
+              validation badges after. Only shown once a plan exists. */}
+          {cinematic && storyboard && (
+            <StoryboardEditor
+              storyboard={storyboard}
+              onChange={setStoryboard}
+              onRender={handleRenderStoryboard}
+              onReplan={handlePlan}
+              validations={validations}
+              busy={isGenerating}
+            />
+          )}
 
           {/* Advanced disclosure — power-user controls collapsed by default
               to keep the simple-mode flow uncluttered. Toggle persists per
@@ -748,9 +878,72 @@ export function StudioPanel({
               </div>
               <p className="bfs-hint">
                 Off = every frame fully generated (sharpest, slowest). 2×/4× generate keyframes and
-                interpolate the rest in latent space — roughly N× fewer denoise passes for smooth motion.
+                interpolate the rest — roughly N× fewer denoise passes for smooth motion.
               </p>
             </div>
+
+            {interpolationFactor > 1 && (
+              <div className="bfs-field" style={{ marginTop: 12 }}>
+                <label className="bfs-label">Interpolation backend</label>
+                <div className="bfs-radio-row">
+                  {([
+                    ['latent-slerp', 'Latent (smooth)'],
+                    ['motion', 'Motion (optical flow)'],
+                  ] as const).map(([id, lbl]) => {
+                    const active = interpolationBackend === id;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setInterpolationBackend(id)}
+                        disabled={isGenerating}
+                        className="bfs-btn bfs-btn-secondary"
+                        aria-pressed={active}
+                        style={{
+                          flex: 1,
+                          padding: '6px 8px',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          background: active ? 'var(--bfs-accent)' : 'transparent',
+                          color: active ? 'white' : 'var(--bfs-fg)',
+                          borderColor: active ? 'var(--bfs-accent)' : 'var(--bfs-border)',
+                        }}
+                      >
+                        {lbl}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="bfs-hint">
+                  Latent = morph between keyframes (smooth, no motion). Motion = block optical-flow warp
+                  so moving subjects actually slide between keyframes.
+                </p>
+              </div>
+            )}
+
+            {cinematic && (
+              <label
+                className="bfs-field"
+                style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', marginTop: 12 }}
+              >
+                <input
+                  type="checkbox"
+                  checked={validate}
+                  onChange={(e) => setValidate(e.target.checked)}
+                  disabled={isGenerating}
+                  style={{ marginTop: 3 }}
+                />
+                <span>
+                  <span className="bfs-label" style={{ display: 'block' }}>
+                    Validate shots (VLM) + self-heal
+                  </span>
+                  <span className="bfs-hint">
+                    Checks each shot's first/last keyframe against the prompt + characters via a vision
+                    model, and re-renders a failing shot once with a fresh seed.
+                  </span>
+                </span>
+              </label>
+            )}
 
             <CoherenceControls
               mode={coherenceMode}
@@ -781,9 +974,11 @@ export function StudioPanel({
                 onClick={handleGenerate}
                 disabled={!prompt.trim()}
               >
-                {currentVersionId
-                  ? `Generate v${(versions?.length ?? 0) + 1} (edit of current)`
-                  : 'Generate video'}
+                {cinematic
+                  ? 'Plan storyboard'
+                  : currentVersionId
+                    ? `Generate v${(versions?.length ?? 0) + 1} (edit of current)`
+                    : 'Generate video'}
               </button>
             )}
             {result && !isGenerating && (

@@ -23,6 +23,7 @@ export { ProgressFeedback } from './components/ProgressFeedback';
 export { DebugCopyButton } from './components/DebugCopyButton';
 export type { DebugSnapshotProps } from './components/DebugCopyButton';
 export { QualityTierPicker, QUALITY_TIERS, resolveQualityTier } from './components/QualityTierPicker';
+export { StoryboardEditor } from './components/StoryboardEditor';
 export { useEngineStatus } from './components/useEngineStatus';
 export type { EngineStatus } from './components/useEngineStatus';
 
@@ -33,6 +34,8 @@ export {
   hasWebGPUSupport,
   configureOnnxRuntime,
   MODEL_REGISTRY,
+  planScene,
+  CAMERA_MOVES,
 } from '@seanhogg/builderforce-studio';
 export type {
   MambaStateSnapshot,
@@ -41,6 +44,7 @@ export type {
   ProbedDevice,
   DiffusionModelId,
   CoherenceMode,
+  InterpolationBackend,
   QualityMode,
   WeightSource,
   ModelDescriptor,
@@ -49,4 +53,13 @@ export type {
   GenerateOptions,
   GenerateResult,
   OnnxRuntimeConfigOptions,
+  CameraMove,
+  CharacterBible,
+  PlannedShot,
+  Storyboard,
+  ScenePlanOptions,
+  ShotValidation,
+  StoryboardGenerateOptions,
+  StoryboardGenerateResult,
+  FrameValidation,
 } from '@seanhogg/builderforce-studio';
