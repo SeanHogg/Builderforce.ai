@@ -1,5 +1,5 @@
 import * as react_jsx_runtime from 'react/jsx-runtime';
-import { DiffusionModelId, CoherenceMode, MambaStateSnapshot, ProbedDevice, GenerateResult, QualityMode } from '@seanhogg/builderforce-studio';
+import { DiffusionModelId, CoherenceMode, MambaStateSnapshot, QualityMode, ProbedDevice, GenerateResult } from '@seanhogg/builderforce-studio';
 export { ActiveDevice, CoherenceMode, DeviceTarget, DiffusionModelId, GenerateOptions, GenerateResult, MODEL_REGISTRY, MambaStateSnapshot, ModelDescriptor, OnnxFile, OnnxRuntimeConfigOptions, ProbedDevice, QualityMode, VideoEngine, VideoEngineOptions, WeightSource, configureOnnxRuntime, hasWebGPUSupport, probeDevice } from '@seanhogg/builderforce-studio';
 
 /** Parameters that fully describe ONE generated version, for the host to persist
@@ -7,11 +7,24 @@ export { ActiveDevice, CoherenceMode, DeviceTarget, DiffusionModelId, GenerateOp
  *  to seed an edit-on-top pass. */
 interface VideoVersionParams {
     prompt: string;
+    /** The quality tier the user picked (simple mode). Source of truth for the
+     *  model pair — `model`/`refinementModel` below are the RESOLVED ids it maps
+     *  to, recorded so a saved version reproduces exactly even if the tier→model
+     *  mapping changes later. */
+    quality: QualityMode;
+    /** Resolved primary model (tier.primary in simple mode, or the explicit
+     *  Advanced override). NOT the stale picker default. */
     model: DiffusionModelId;
+    /** Resolved refinement model for the two-pass tier, else null. */
+    refinementModel: DiffusionModelId | null;
     width: number;
     height: number;
     frames: number;
     fps: number;
+    /** Keyframe interpolation factor used (1 = every frame fully generated). */
+    interpolationFactor: number;
+    /** True when this version was generated via the cinematic auto-storyboard path. */
+    cinematic: boolean;
     coherence: CoherenceMode;
     coherenceStrength: number;
     motionAmount: number;

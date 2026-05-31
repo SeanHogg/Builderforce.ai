@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   VideoEngine,
+  planScene,
   type CoherenceMode,
   type DiffusionModelId,
   type GenerateResult,
@@ -35,11 +36,24 @@ import { useEngineStatus } from './useEngineStatus';
  *  to seed an edit-on-top pass. */
 export interface VideoVersionParams {
   prompt: string;
+  /** The quality tier the user picked (simple mode). Source of truth for the
+   *  model pair — `model`/`refinementModel` below are the RESOLVED ids it maps
+   *  to, recorded so a saved version reproduces exactly even if the tier→model
+   *  mapping changes later. */
+  quality: QualityMode;
+  /** Resolved primary model (tier.primary in simple mode, or the explicit
+   *  Advanced override). NOT the stale picker default. */
   model: DiffusionModelId;
+  /** Resolved refinement model for the two-pass tier, else null. */
+  refinementModel: DiffusionModelId | null;
   width: number;
   height: number;
   frames: number;
   fps: number;
+  /** Keyframe interpolation factor used (1 = every frame fully generated). */
+  interpolationFactor: number;
+  /** True when this version was generated via the cinematic auto-storyboard path. */
+  cinematic: boolean;
   coherence: CoherenceMode;
   coherenceStrength: number;
   motionAmount: number;
@@ -162,6 +176,15 @@ export function StudioPanel({
   const [cameraDy, setCameraDy] = useState(0);
   const [frames, setFrames] = useState(defaultFrames);
   const [fps, setFps] = useState(defaultFps);
+  // Keyframe interpolation: 1 = generate every frame (slow, sharpest motion),
+  // 2/4 = generate keyframes and slerp-interpolate the rest (≈Nx fewer denoise
+  // passes). The feedback's "generate major scene states, interpolate between".
+  const [interpolationFactor, setInterpolationFactor] = useState(1);
+  // Cinematic mode: instead of one prompt → one clip, the prompt is sent to the
+  // Director / Shot-Planner (planScene) which returns a multi-shot storyboard;
+  // the engine renders each shot with its own camera move and threads character
+  // consistency + Mamba state across shots. Off = the classic single-clip path.
+  const [cinematic, setCinematic] = useState(false);
 
   // Changing quality OR resolution invalidates the cached engine — the engine
   // is bound to both at create time. Dispose the old engine (releases
@@ -298,29 +321,66 @@ export function StudioPanel({
         engineRef.current = engine;
       }
 
-      const generated = await engineRef.current.generate({
-        prompt,
-        frames,
-        fps,
-        coherence: coherenceMode,
-        coherenceStrength,
-        motionAmount,
-        imgToImgStrength,
-        cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0)
-          ? { dx: cameraDx, dy: cameraDy }
-          : undefined,
-        signal: abort.signal,
-        onPromptExpanded: setExpandedPrompt,
-        onProgress: handleProgress,
-        onFrame: (idx, bitmap) => {
-          setPreviewFrames((prev) => [...prev, bitmap]);
-          // Drive the loading bar by completed-frame count; the engine emits
-          // one onFrame per finished frame (and one per refined frame in
-          // two-pass mode, so the bar can briefly run past N then reset —
-          // acceptable cosmetic, indicates the second pass started).
-          setFramesDone(idx + 1);
-        },
-      });
+      // Shared per-frame sink for both paths. The engine emits one onFrame per
+      // finished frame (global index across shots in cinematic mode); the
+      // loading bar tracks completed-frame count.
+      const onFrame = (idx: number, bitmap: ImageBitmap) => {
+        setPreviewFrames((prev) => [...prev, bitmap]);
+        setFramesDone(idx + 1);
+      };
+
+      let generated: GenerateResult;
+      if (cinematic) {
+        // Director / Shot-Planner pipeline: prompt → storyboard → multi-shot
+        // render with per-shot camera moves + cross-shot character/Mamba
+        // continuity. resolvedPrompt is reported as the Director's treatment.
+        setProgressLabel('Planning storyboard via Director + Shot Planner…');
+        const storyboard = await planScene({
+          apiKey: token,
+          baseUrl,
+          request: prompt,
+          totalFrames: frames,
+          signal: abort.signal,
+        });
+        setExpandedPrompt(storyboard.treatment);
+        const sb = await engineRef.current.generateStoryboard({
+          storyboard,
+          fps,
+          coherence: coherenceMode,
+          coherenceStrength,
+          motionAmount,
+          interpolationFactor,
+          signal: abort.signal,
+          onProgress: handleProgress,
+          onFrame,
+        });
+        generated = {
+          blob: sb.blob,
+          mambaState: sb.mambaState,
+          frames: sb.frames,
+          activeDevice: sb.activeDevice,
+          resolvedPrompt: storyboard.treatment,
+          elapsedMs: sb.elapsedMs,
+        };
+      } else {
+        generated = await engineRef.current.generate({
+          prompt,
+          frames,
+          fps,
+          coherence: coherenceMode,
+          coherenceStrength,
+          motionAmount,
+          imgToImgStrength,
+          interpolationFactor,
+          cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0)
+            ? { dx: cameraDx, dy: cameraDy }
+            : undefined,
+          signal: abort.signal,
+          onPromptExpanded: setExpandedPrompt,
+          onProgress: handleProgress,
+          onFrame,
+        });
+      }
 
       const url = URL.createObjectURL(generated.blob);
       setVideoUrl(url);
@@ -341,13 +401,21 @@ export function StudioPanel({
       // callback. The host owns where this lives (project files, R2, IDB).
       if (onSaveVersion) {
         try {
+          // Record the RESOLVED model pair (not the stale picker default): in
+          // simple mode the engine ran tier.primary [+ tier.refinement], so
+          // that's what reproduces this version. Advanced mode used `model`.
+          const tier = resolveQualityTier(quality);
           const params: VideoVersionParams = {
             prompt,
-            model,
+            quality,
+            model: showAdvanced ? model : tier.primary,
+            refinementModel: showAdvanced ? null : tier.refinement ?? null,
             width: resolution,
             height: resolution,
             frames,
             fps,
+            interpolationFactor,
+            cinematic,
             coherence: coherenceMode,
             coherenceStrength,
             motionAmount,
@@ -394,6 +462,8 @@ export function StudioPanel({
     currentVersionId,
     fps,
     frames,
+    interpolationFactor,
+    cinematic,
     initialMambaState,
     model,
     quality,
@@ -440,6 +510,11 @@ export function StudioPanel({
       const p = entry.params;
       setPrompt(p.prompt);
       setModel(p.model);
+      // Fields added after the first release — guard for legacy sidecars that
+      // predate them (`?? default`), so loading an old version doesn't crash.
+      if (p.quality) setQuality(p.quality);
+      setInterpolationFactor(p.interpolationFactor ?? 1);
+      setCinematic(p.cinematic ?? false);
       const knownRes = RESOLUTION_PRESETS.find((r) => r === p.width) as Resolution | undefined;
       if (knownRes) setResolution(knownRes);
       setFrames(p.frames);
@@ -525,6 +600,31 @@ export function StudioPanel({
               picks "Fast / Balanced / Refined" and the engine resolves it to a
               concrete model (or two for the Refined two-pass chain). */}
           <QualityTierPicker value={quality} onChange={setQuality} disabled={isGenerating} />
+
+          {/* Cinematic mode — routes the prompt through the Director / Shot-
+              Planner (planScene) into a multi-shot storyboard with per-shot
+              camera moves and cross-shot character + Mamba continuity, instead
+              of one prompt → one static-camera clip. */}
+          <label
+            className="bfs-field"
+            style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}
+          >
+            <input
+              type="checkbox"
+              checked={cinematic}
+              onChange={(e) => setCinematic(e.target.checked)}
+              disabled={isGenerating}
+              style={{ marginTop: 3 }}
+            />
+            <span>
+              <span className="bfs-label" style={{ display: 'block' }}>
+                Cinematic (auto-storyboard)
+              </span>
+              <span className="bfs-hint">
+                Plans a multi-shot scene with characters and camera moves, then renders each shot.
+              </span>
+            </span>
+          </label>
 
           {/* Advanced disclosure — power-user controls collapsed by default
               to keep the simple-mode flow uncluttered. Toggle persists per
@@ -616,6 +716,40 @@ export function StudioPanel({
                 <label className="bfs-label">Duration</label>
                 <div className="bfs-readout">{(frames / fps).toFixed(2)}s</div>
               </div>
+            </div>
+
+            <div className="bfs-field" style={{ marginTop: 12 }}>
+              <label className="bfs-label">Keyframe interpolation</label>
+              <div className="bfs-radio-row">
+                {[1, 2, 4].map((f) => {
+                  const active = interpolationFactor === f;
+                  return (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setInterpolationFactor(f)}
+                      disabled={isGenerating}
+                      className="bfs-btn bfs-btn-secondary"
+                      aria-pressed={active}
+                      style={{
+                        flex: 1,
+                        padding: '6px 8px',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        background: active ? 'var(--bfs-accent)' : 'transparent',
+                        color: active ? 'white' : 'var(--bfs-fg)',
+                        borderColor: active ? 'var(--bfs-accent)' : 'var(--bfs-border)',
+                      }}
+                    >
+                      {f === 1 ? 'Off' : `${f}×`}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="bfs-hint">
+                Off = every frame fully generated (sharpest, slowest). 2×/4× generate keyframes and
+                interpolate the rest in latent space — roughly N× fewer denoise passes for smooth motion.
+              </p>
             </div>
 
             <CoherenceControls
