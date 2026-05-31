@@ -17,7 +17,11 @@ import { Hono, type Context } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { socControls, socEvidence } from '../../infrastructure/database/schema';
+import {
+  socControls, socEvidence,
+  securityVendors, securityIncidents, piiDataAssets, securityDpas,
+  securityTrainings, complianceEvents, dataSubjectRequests, dataSuppressionList,
+} from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -62,6 +66,99 @@ const SOC2_BASELINE: Array<{ controlRef: string; category: string; name: string;
 function scope(c: Context<HonoEnv>): { tenantId: number; segmentId: string } {
   return { tenantId: c.get('tenantId'), segmentId: c.get('segmentId') as string };
 }
+
+// ── Generic segment-scoped tracker CRUD (DRY: one factory for every tracker) ──
+
+interface TrackerOpts {
+  /** Drizzle field names accepted on create/update (whitelist). */
+  fields: string[];
+  /** Subset of `fields` required (non-empty) on create. */
+  required?: string[];
+}
+
+/** Coerce JSON values to column types: ISO strings for *At/*Date fields → Date. */
+function coerce(field: string, value: unknown): unknown {
+  if (typeof value === 'string' && /(At|Date)$/.test(field) && !Number.isNaN(Date.parse(value))) {
+    return new Date(value);
+  }
+  return value;
+}
+
+function pick(body: Record<string, unknown>, fields: string[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of fields) if (body[f] !== undefined) out[f] = coerce(f, body[f]);
+  return out;
+}
+
+/**
+ * Segment-scoped CRUD for a tracker table. The table MUST have id/tenantId/
+ * segmentId columns; typed loosely because the factory is generic over many
+ * tables (the field whitelist + DB constraints + tests are the contract).
+ * Auth + role gating: list is read for any member; mutations require manager+.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function createTrackerRoutes(db: Db, table: any, opts: TrackerOpts): Hono<HonoEnv> {
+  const router = new Hono<HonoEnv>();
+
+  router.get('/', async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const rows = await db.select().from(table)
+      .where(and(eq(table.tenantId, tenantId), eq(table.segmentId, segmentId)));
+    return c.json(rows);
+  });
+
+  router.post('/', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const body = await c.req.json<Record<string, unknown>>();
+    for (const r of opts.required ?? []) {
+      const v = body[r];
+      if (v === undefined || v === null || (typeof v === 'string' && !v.trim())) {
+        return c.json({ error: `${r} is required` }, 400);
+      }
+    }
+    const rows = (await db.insert(table)
+      .values({ ...pick(body, opts.fields), tenantId, segmentId })
+      .returning()) as unknown[];
+    return c.json(rows[0], 201);
+  });
+
+  router.patch('/:id', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const id = c.req.param('id');
+    const patch = pick(await c.req.json<Record<string, unknown>>(), opts.fields);
+    if (Object.keys(patch).length === 0) return c.json({ error: 'nothing to update' }, 400);
+    patch.updatedAt = new Date();
+    const rows = (await db.update(table).set(patch)
+      .where(and(eq(table.id, id), eq(table.tenantId, tenantId), eq(table.segmentId, segmentId)))
+      .returning()) as unknown[];
+    if (!rows[0]) return c.json({ error: 'not found' }, 404);
+    return c.json(rows[0]);
+  });
+
+  router.delete('/:id', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const id = c.req.param('id');
+    const rows = (await db.delete(table)
+      .where(and(eq(table.id, id), eq(table.tenantId, tenantId), eq(table.segmentId, segmentId)))
+      .returning()) as Array<{ id: string }>;
+    if (!rows[0]) return c.json({ error: 'not found' }, 404);
+    return c.json({ deleted: rows[0].id });
+  });
+
+  return router;
+}
+
+/** Field whitelists per tracker — the one place each tracker's editable shape lives. */
+const TRACKERS: Array<{ path: string; table: unknown; opts: TrackerOpts }> = [
+  { path: '/vendors', table: securityVendors, opts: { fields: ['name', 'purpose', 'region', 'dataClasses', 'isSubprocessor', 'dpaStatus', 'dpaUrl', 'renewalDate', 'contactEmail', 'website', 'notes'], required: ['name'] } },
+  { path: '/incidents', table: securityIncidents, opts: { fields: ['title', 'severity', 'status', 'detectionSource', 'impact', 'rootCause', 'postmortemUrl', 'reportedBy', 'assignedTo', 'resolvedAt', 'sourceRef'], required: ['title'] } },
+  { path: '/data-inventory', table: piiDataAssets, opts: { fields: ['name', 'classification', 'dataCategories', 'storageLocation', 'retentionDays', 'legalBasis', 'ownerTeam', 'lastReviewedAt', 'notes'], required: ['name'] } },
+  { path: '/dpa', table: securityDpas, opts: { fields: ['counterpartyName', 'counterpartyType', 'status', 'signedAt', 'effectiveDate', 'renewalDate', 'dpaUrl', 'sccVersion', 'notes'], required: ['counterpartyName'] } },
+  { path: '/training', table: securityTrainings, opts: { fields: ['userId', 'userName', 'userEmail', 'trainingType', 'trainingName', 'completedAt', 'dueDate', 'status', 'certificateUrl', 'notes'], required: ['userName', 'trainingType', 'trainingName'] } },
+  { path: '/compliance-calendar', table: complianceEvents, opts: { fields: ['title', 'framework', 'eventType', 'dueDate', 'status', 'assignedTo', 'isRecurring', 'recurringEvery', 'notes', 'completedAt'], required: ['title', 'framework', 'dueDate'] } },
+  { path: '/dsr', table: dataSubjectRequests, opts: { fields: ['requestType', 'subjectEmail', 'jurisdiction', 'notes', 'status', 'rejectionReason'], required: ['requestType', 'subjectEmail'] } },
+  { path: '/suppression', table: dataSuppressionList, opts: { fields: ['identifierType', 'identifierValue', 'reason', 'notes'], required: ['identifierType', 'identifierValue', 'reason'] } },
+];
 
 export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -146,6 +243,11 @@ export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
       .returning();
     return c.json(evidence, 201);
   });
+
+  // Every other tracker is the same segment-scoped CRUD — one factory, mounted N times.
+  for (const t of TRACKERS) {
+    router.route(t.path, createTrackerRoutes(db, t.table, t.opts));
+  }
 
   return router;
 }

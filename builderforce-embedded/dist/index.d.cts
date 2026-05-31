@@ -206,7 +206,7 @@ declare const EMBED_VIEWS: {
         readonly key: "soc2";
         readonly label: "SOC 2 Tracker";
         readonly pillar: "governance";
-        readonly available: false;
+        readonly available: true;
     };
     readonly vendors: {
         readonly key: "vendors";

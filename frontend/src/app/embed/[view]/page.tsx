@@ -10,6 +10,7 @@ import { embedApi } from '../../../lib/builderforceApi';
 import { TaskMgmtContent } from '../../../components/TaskMgmtContent';
 import { BrainPanel } from '../../../components/brain/BrainPanel';
 import { EmbedPrdSurface } from '../../../components/embed/EmbedPrdSurface';
+import { Soc2Content } from '../../../components/governance/Soc2Content';
 
 /**
  * The framed BuilderForce surface. ONE dynamic route serves every embeddable
@@ -111,6 +112,9 @@ function renderSurface(view: string): React.ReactNode {
     case 'prd':
       // PRDs & specs, project-scoped via a picker.
       return <EmbedPrdSurface />;
+    case 'soc2':
+      // SOC 2 Control Tracker — the first Security-pillar surface (doc 07 SEC-1).
+      return <Soc2Content />;
     default:
       return null;
   }
