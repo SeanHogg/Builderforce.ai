@@ -325,6 +325,16 @@ export function StudioPanel({
       const url = URL.createObjectURL(generated.blob);
       setVideoUrl(url);
       setResult(generated);
+      // Collapse the live-accumulated previewFrames onto the canonical final
+      // set. Required for the two-pass "Refined" tier: there onFrame fires once
+      // per draft frame AND once per refined frame, so previewFrames holds 2N
+      // bitmaps — and the engine closes the N draft bitmaps after refining, so
+      // VideoPreview's thumbnail loop would drawImage() a closed bitmap and
+      // throw. generated.frames is exactly the final N (refined when two-pass,
+      // draft otherwise); the refined bitmaps are the same objects already in
+      // previewFrames, so no double-close hazard on release. Single-pass: this
+      // is a no-op (same N objects).
+      setPreviewFrames(generated.frames);
       onVideoGenerated?.(generated.blob, generated.mambaState);
 
       // Persist this generation as a new version when the host wired the
