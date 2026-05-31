@@ -6,8 +6,9 @@ import AppFooter from './AppFooter';
 import TopBar from './TopBar';
 import OnboardingGate from './OnboardingGate';
 import { useAuth } from '@/lib/AuthContext';
-import { BrainActionsProvider, BrainContextProvider } from '@/lib/brain';
+import { BrainActionsProvider, BrainContextProvider, BrainProvider, brainConfig } from '@/lib/brain';
 import { FloatingBrain } from './brain/FloatingBrain';
+import { McpExtensionsBridge } from './brain/McpExtensionsBridge';
 
 const APP_SHELL_PATHS = ['/dashboard', '/ide', '/training', '/tenants'];
 
@@ -71,7 +72,8 @@ function PublicBrowseShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function ConditionalAppShell({ children }: { children: React.ReactNode }) {
+/** Pick the shell chrome for the current route (no Brain — that's mounted globally below). */
+function useShellContent(children: React.ReactNode): React.ReactNode {
   const showShell = useShowAppShell();
   const showFooterOnly = useShowFooterOnly();
   const pathname = usePathname();
@@ -84,20 +86,13 @@ export default function ConditionalAppShell({ children }: { children: React.Reac
   }
 
   if (showShell) {
-    // The Brain (global AI assistant) is available across every app-shell route.
-    // Providers wrap the whole shell so pages can register actions / publish
-    // context; the floating drawer mounts once and hides itself on /brainstorm.
     return (
-      <BrainActionsProvider>
-        <BrainContextProvider>
-          <OnboardingGate renderShell={(gated) => <AppShell>{gated}</AppShell>}>
-            {children}
-          </OnboardingGate>
-          <FloatingBrain />
-        </BrainContextProvider>
-      </BrainActionsProvider>
+      <OnboardingGate renderShell={(gated) => <AppShell>{gated}</AppShell>}>
+        {children}
+      </OnboardingGate>
     );
   }
+
   if (showFooterOnly) {
     return (
       <div
@@ -124,5 +119,29 @@ export default function ConditionalAppShell({ children }: { children: React.Reac
       </div>
     );
   }
+
   return <>{children}</>;
+}
+
+export default function ConditionalAppShell({ children }: { children: React.ReactNode }) {
+  const content = useShellContent(children);
+  const { hasTenant } = useAuth();
+
+  // The Brain (global AI assistant) is available on EVERY route — marketing,
+  // blog, and app pages alike. The providers wrap the whole app so any page can
+  // register actions / publish context; the floating launcher mounts once and
+  // decides its own visibility and auth-gated content (full panel when signed
+  // in, a sign-in CTA otherwise). See FloatingBrain.
+  return (
+    <BrainProvider config={brainConfig}>
+      <BrainActionsProvider>
+        <BrainContextProvider>
+          {content}
+          <FloatingBrain />
+          {/* Register the tenant's server-side MCP extension tools (auth only). */}
+          {hasTenant && <McpExtensionsBridge />}
+        </BrainContextProvider>
+      </BrainActionsProvider>
+    </BrainProvider>
+  );
 }

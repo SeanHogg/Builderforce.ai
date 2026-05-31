@@ -11,16 +11,38 @@
  * without prop-drilling.
  */
 
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { BrainPanel } from './BrainPanel';
-import { useBrainContext } from '@/lib/brain';
+import { useBrainContext, takePendingPrompt } from '@/lib/brain';
+import { useAuth } from '@/lib/AuthContext';
 
 export function FloatingBrain() {
   const pathname = usePathname();
+  const { hasTenant } = useAuth();
   const { open, setOpen, projectId, modality, extraSystem, initialChatId } = useBrainContext();
+  const [initialPrompt, setInitialPrompt] = useState<string | undefined>(undefined);
 
-  // On the full Brain Storm page the docked Brain is redundant.
+  // A prompt typed on the landing page before sign-in is replayed here once the
+  // user is back inside the authenticated shell: open the drawer and let
+  // BrainPanel auto-send it. takePendingPrompt reads AND clears storage, so it
+  // MUST only run once the user is authenticated — otherwise the launcher (now
+  // mounted on marketing pages too) would consume the saved prompt before the
+  // visitor ever signs in, breaking the landing→auth→replay handoff.
+  useEffect(() => {
+    if (!hasTenant) return;
+    const p = takePendingPrompt();
+    if (p) {
+      setInitialPrompt(p);
+      setOpen(true);
+    }
+  }, [hasTenant, setOpen]);
+
+  // On the full Brain Storm page the docked Brain is redundant; on the auth
+  // pages a "sign in to use Brain" CTA would be redundant with the form itself.
   if (pathname?.startsWith('/brainstorm')) return null;
+  if (pathname === '/login' || pathname === '/register') return null;
 
   return (
     <>
@@ -82,17 +104,91 @@ export function FloatingBrain() {
               background: 'var(--bg-base)',
             }}
           >
-            <BrainPanel
-              variant="docked"
-              pinnedProjectId={projectId}
-              modality={modality}
-              extraSystem={extraSystem}
-              initialChatId={initialChatId}
-              onClose={() => setOpen(false)}
-            />
+            {hasTenant ? (
+              <BrainPanel
+                variant="docked"
+                pinnedProjectId={projectId}
+                modality={modality}
+                extraSystem={extraSystem}
+                initialChatId={initialChatId}
+                initialPrompt={initialPrompt}
+                onClose={() => setOpen(false)}
+              />
+            ) : (
+              <BrainSignInCTA onClose={() => setOpen(false)} />
+            )}
           </div>
         </>
       )}
     </>
+  );
+}
+
+/**
+ * Gated panel shown when the visitor isn't signed in (no workspace token). The
+ * Brain is visible everywhere, but it can't call the gateway without auth, so
+ * instead of a chat input we surface a sign-in / sign-up call to action. No
+ * input means no anonymous gateway traffic.
+ */
+function BrainSignInCTA({ onClose }: { onClose: () => void }) {
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
+      <div
+        style={{
+          flexShrink: 0,
+          padding: '10px 14px',
+          borderBottom: '1px solid var(--border-subtle)',
+          background: 'var(--bg-elevated)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          🧠 Brain
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close Brain"
+          style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}
+        >
+          ×
+        </button>
+      </div>
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 14,
+          padding: 24,
+          textAlign: 'center',
+        }}
+      >
+        <div style={{ fontSize: 44 }}>🧠</div>
+        <div style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)' }}>Meet Brain</div>
+        <div style={{ fontSize: 14, color: 'var(--text-muted)', maxWidth: 280, lineHeight: 1.5 }}>
+          Your AI co-builder for planning projects, generating specs, and shipping faster. Sign in to start a conversation.
+        </div>
+        <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+          <Link
+            href="/login"
+            style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', borderRadius: 10, textDecoration: 'none' }}
+          >
+            Sign in
+          </Link>
+          <Link
+            href="/register"
+            style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 10, textDecoration: 'none' }}
+          >
+            Create account
+          </Link>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -1,28 +1,39 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
+import React from 'react';
 import { useBrainConversation } from './useBrainConversation';
 import { streamChatCompletion, type StreamChatResult } from './streamChatCompletion';
-import { brain } from '../builderforceApi';
+import { BrainProvider, type BrainConfig, type BrainPersistenceAdapter } from './config';
 
 // --- Mocks -----------------------------------------------------------------
 
+// BrainProvider builds its `stream` from this module fn, so mocking it here
+// lets us drive the agent loop deterministically through the injection seam.
 vi.mock('./streamChatCompletion', () => ({
   streamChatCompletion: vi.fn(),
 }));
 
 let seq = 0;
-vi.mock('../builderforceApi', () => ({
-  brain: {
-    getMessages: vi.fn(async () => []),
-    // Echo each sent message back with a fresh id, as the real API does.
-    sendMessages: vi.fn(async (_chatId: number, msgs: Array<{ role: string; content: string; metadata?: string }>) =>
-      msgs.map((m) => ({ id: ++seq, role: m.role, content: m.content, metadata: m.metadata ?? null, seq, createdAt: '' })),
-    ),
-    setMessageFeedback: vi.fn(async () => ({ ok: true })),
-    upload: vi.fn(),
-    uploadUrl: (key: string) => `https://x/${key}`,
-  },
-}));
+const persistence = {
+  getMessages: vi.fn(async () => []),
+  // Echo each sent message back with a fresh id, as the real API does.
+  sendMessages: vi.fn(async (_chatId: number, msgs: Array<{ role: string; content: string; metadata?: string }>) =>
+    msgs.map((m) => ({ id: ++seq, role: m.role, content: m.content, metadata: m.metadata ?? null, seq, createdAt: '' })),
+  ),
+  setMessageFeedback: vi.fn(async () => ({ ok: true })),
+  upload: vi.fn(),
+  uploadUrl: (key: string) => `https://x/${key}`,
+} as unknown as BrainPersistenceAdapter;
+
+const config: BrainConfig = {
+  transport: { baseUrl: 'https://gw.example', getToken: () => null },
+  persistence,
+  resolveSystemPrompt: () => 'You are Brain.',
+};
+
+const wrapper = ({ children }: { children: React.ReactNode }) => (
+  <BrainProvider config={config}>{children}</BrainProvider>
+);
 
 const mockStream = vi.mocked(streamChatCompletion);
 
@@ -38,15 +49,16 @@ const TOOL = {
 beforeEach(() => {
   seq = 0;
   mockStream.mockReset();
-  vi.mocked(brain.sendMessages).mockClear();
+  vi.mocked(persistence.sendMessages).mockClear();
 });
 
-describe('useBrainConversation agent loop', () => {
+describe('useBrainConversation agent loop (injected transport + persistence)', () => {
   it('text-only reply: persists user + final assistant once, no tools', async () => {
     mockStream.mockResolvedValueOnce(result({ text: 'hello there' }));
-    const { rerender, result: hook } = renderHook((props: { chatId: number }) =>
-      useBrainConversation({ chatId: props.chatId, toolSpecs: [], runTool: vi.fn() }),
-      { initialProps: { chatId: 1 } },
+    const { rerender, result: hook } = renderHook(
+      (props: { chatId: number }) =>
+        useBrainConversation({ chatId: props.chatId, toolSpecs: [], runTool: vi.fn() }),
+      { initialProps: { chatId: 1 }, wrapper },
     );
     rerender({ chatId: 1 });
 
@@ -54,7 +66,7 @@ describe('useBrainConversation agent loop', () => {
 
     expect(mockStream).toHaveBeenCalledTimes(1);
     // user + assistant persisted
-    expect(brain.sendMessages).toHaveBeenCalledTimes(2);
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(2);
     await waitFor(() => {
       expect(hook.current.messages.map((m) => m.content)).toEqual(['hi', 'hello there']);
     });
@@ -66,8 +78,9 @@ describe('useBrainConversation agent loop', () => {
       .mockResolvedValueOnce(result({ text: 'done' }));
     const runTool = vi.fn(async () => ({ ok: true }));
 
-    const { result: hook } = renderHook(() =>
-      useBrainConversation({ chatId: 1, toolSpecs: [TOOL], runTool }),
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 1, toolSpecs: [TOOL], runTool }),
+      { wrapper },
     );
 
     await act(async () => { await hook.current.send('go'); });
@@ -84,7 +97,7 @@ describe('useBrainConversation agent loop', () => {
     expect(toolMsg?.content).toContain('"ok":true');
 
     // Only user + final assistant persisted (tool turns stay in-memory).
-    expect(brain.sendMessages).toHaveBeenCalledTimes(2);
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(2);
     await waitFor(() => {
       expect(hook.current.messages.map((m) => m.content)).toEqual(['go', 'done']);
     });
@@ -95,8 +108,9 @@ describe('useBrainConversation agent loop', () => {
       result({ toolCalls: [{ id: 'c', name: 'do_thing', args: '{}' }], finishReason: 'tool_calls' }),
     );
     const runTool = vi.fn(async () => ({ ok: true }));
-    const { result: hook } = renderHook(() =>
-      useBrainConversation({ chatId: 1, toolSpecs: [TOOL], runTool }),
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 1, toolSpecs: [TOOL], runTool }),
+      { wrapper },
     );
 
     await act(async () => { await hook.current.send('loop'); });
@@ -105,7 +119,7 @@ describe('useBrainConversation agent loop', () => {
     expect(mockStream).toHaveBeenCalledTimes(5);
     expect(runTool).toHaveBeenCalledTimes(5);
     // user persisted, but no final assistant text.
-    expect(brain.sendMessages).toHaveBeenCalledTimes(1);
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(hook.current.error).toMatch(/kept calling tools/i));
   });
 });

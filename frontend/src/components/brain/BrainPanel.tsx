@@ -8,7 +8,7 @@
  * is chrome (two-column page vs. collapsible drawer).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ChatInput } from '@/components/ChatInput';
 import { ChatMessageBubble } from '@/components/ChatMessageBubble';
@@ -16,11 +16,11 @@ import { ChatMessageActions } from '@/components/ChatMessageActions';
 import { ThemeSelect } from '@/components/ThemeSelect';
 import { fetchProjects, createProject } from '@/lib/api';
 import type { Project } from '@/lib/types';
-import { type ProjectModality } from '@/lib/modality';
 import {
   useBrainChats,
   useBrainConversation,
   useBrainActions,
+  type BrainModality,
 } from '@/lib/brain';
 import type { BrainChat, BrainMessage } from '@/lib/builderforceApi';
 
@@ -39,13 +39,18 @@ export interface BrainPanelProps {
   /** Lock the Brain to one project (docked-in-IDE / project pages). */
   pinnedProjectId?: number | null;
   /** Active modality — drives the docked Brain's persona. */
-  modality?: ProjectModality;
+  modality?: BrainModality;
   /** Extra system-prompt context (e.g. the IDE's open file). */
   extraSystem?: string;
   /** Deep-link: select this chat on mount. */
   initialChatId?: number | null;
   /** Brain Storm: pre-select a project filter (from ?projectId=). */
   initialFilterProjectId?: string | null;
+  /**
+   * One-shot prompt to auto-send on mount (e.g. a landing-page prompt replayed
+   * after auth). Sent exactly once; `conv.send` creates+selects a chat on demand.
+   */
+  initialPrompt?: string;
   /** Docked only: close handler for the drawer chrome. */
   onClose?: () => void;
 }
@@ -57,6 +62,7 @@ export function BrainPanel({
   extraSystem,
   initialChatId,
   initialFilterProjectId,
+  initialPrompt,
   onClose,
 }: BrainPanelProps) {
   const isPage = variant === 'page';
@@ -171,6 +177,17 @@ export function BrainPanel({
     setInput('');
     await conv.send(text);
   }, [input, conv]);
+
+  // Auto-send a one-shot prompt (e.g. a landing-page prompt replayed after auth).
+  // `conv.send` creates+selects a chat on demand, so the conversation renders and
+  // streams a reply. Ref-guarded so re-renders never re-send.
+  const initialPromptSentRef = useRef(false);
+  useEffect(() => {
+    const text = initialPrompt?.trim();
+    if (!text || initialPromptSentRef.current) return;
+    initialPromptSentRef.current = true;
+    void conv.send(text);
+  }, [initialPrompt, conv]);
 
   const error = chats.error || conv.error;
 

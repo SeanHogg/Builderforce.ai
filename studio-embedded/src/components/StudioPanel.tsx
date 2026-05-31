@@ -57,8 +57,17 @@ export interface VideoVersionParams {
   fps: number;
   /** Keyframe interpolation factor used (1 = every frame fully generated). */
   interpolationFactor: number;
+  /** Interpolation backend used for tween frames — round-tripped so a saved
+   *  'motion' version doesn't reload as 'latent-slerp'. */
+  interpolationBackend: InterpolationBackend;
   /** True when this version was generated via the cinematic auto-storyboard path. */
   cinematic: boolean;
+  /** The (possibly edited) storyboard a cinematic version rendered. Persisted so
+   *  loading the version reproduces the exact shot list / cast / camera / order
+   *  instead of re-planning from scratch. Null for single-clip versions. */
+  storyboard: Storyboard | null;
+  /** Whether VLM shot validation + self-heal was on (cinematic). */
+  validate: boolean;
   coherence: CoherenceMode;
   coherenceStrength: number;
   motionAmount: number;
@@ -347,7 +356,12 @@ export function StudioPanel({
             frames,
             fps,
             interpolationFactor,
+            interpolationBackend,
             cinematic: wasCinematic,
+            // Persist the rendered storyboard so a cinematic version reloads its
+            // exact edited shot list rather than re-planning.
+            storyboard: wasCinematic ? storyboard : null,
+            validate,
             coherence: coherenceMode,
             coherenceStrength,
             motionAmount,
@@ -372,8 +386,8 @@ export function StudioPanel({
     },
     [
       onVideoGenerated, onSaveVersion, quality, showAdvanced, model, resolution, prompt,
-      frames, fps, interpolationFactor, coherenceMode, coherenceStrength, motionAmount,
-      imgToImgStrength, cameraDx, cameraDy, currentVersionId,
+      frames, fps, interpolationFactor, interpolationBackend, coherenceMode, coherenceStrength,
+      motionAmount, imgToImgStrength, cameraDx, cameraDy, currentVersionId, storyboard, validate,
     ],
   );
 
@@ -604,7 +618,13 @@ export function StudioPanel({
       // predate them (`?? default`), so loading an old version doesn't crash.
       if (p.quality) setQuality(p.quality);
       setInterpolationFactor(p.interpolationFactor ?? 1);
+      setInterpolationBackend(p.interpolationBackend ?? 'latent-slerp');
       setCinematic(p.cinematic ?? false);
+      setValidate(p.validate ?? false);
+      // Restore the edited storyboard for cinematic versions so the editor shows
+      // the exact plan that was rendered (re-render reproduces, not re-plans).
+      setStoryboard(p.storyboard ?? null);
+      setValidations([]);
       const knownRes = RESOLUTION_PRESETS.find((r) => r === p.width) as Resolution | undefined;
       if (knownRes) setResolution(knownRes);
       setFrames(p.frames);

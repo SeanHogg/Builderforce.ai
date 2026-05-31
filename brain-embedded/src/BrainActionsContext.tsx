@@ -1,23 +1,23 @@
 'use client';
 
 /**
- * MCP-style page-action registry.
+ * MCP-style page-action registry — the client-side extension contract.
  *
  * Any page or component declares the capabilities it exposes to the Brain by
  * calling `useRegisterBrainActions([...])`. Each action becomes an OpenAI tool
  * spec the Brain sends to the model; when the model calls it, the Brain runs the
  * matching `run(args)` handler and feeds the result back into the conversation.
  *
- * Pages never touch the LLM — they only declare what the Brain can do while
+ * Consumers never touch the LLM — they only declare what the Brain can do while
  * they are mounted. The registry is the single seam between the shared Brain
- * and page-specific behaviour, so adding a capability never means editing the
- * Brain itself.
+ * and consumer-specific behaviour, so adding a capability never means editing
+ * the Brain itself.
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { BrainToolSpec } from './streamChatCompletion';
 
-/** A capability a page exposes to the Brain. */
+/** A capability a consumer exposes to the Brain (the MCP extension unit). */
 export interface BrainAction<A = unknown, R = unknown> {
   /** Globally-unique, flat snake_case (no dots) so it round-trips through the gateway. */
   name: string;

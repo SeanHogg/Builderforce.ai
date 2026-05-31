@@ -7,6 +7,7 @@ import type { HonoEnv } from '../../env';
 const mocks = vi.hoisted(() => ({
   hashSecret: vi.fn(),
   verifyJwt:  vi.fn(),
+  signJwt:    vi.fn(),
   buildDatabase: vi.fn(),
 }));
 
@@ -14,7 +15,10 @@ vi.mock('../../infrastructure/auth/HashService', () => ({
   hashSecret: mocks.hashSecret,
   generateApiKey: vi.fn(() => 'bfk_test'),
 }));
-vi.mock('../../infrastructure/auth/JwtService', () => ({ verifyJwt: mocks.verifyJwt }));
+vi.mock('../../infrastructure/auth/JwtService', () => ({
+  verifyJwt: mocks.verifyJwt,
+  signJwt: mocks.signJwt,
+}));
 vi.mock('../../infrastructure/database/connection', () => ({ buildDatabase: mocks.buildDatabase }));
 
 // Imports must follow the vi.mock calls above so the mocks are in place.
@@ -241,6 +245,7 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
   beforeEach(() => {
     mocks.hashSecret.mockReset();
     mocks.verifyJwt.mockReset();
+    mocks.signJwt.mockReset();
     mocks.buildDatabase.mockReset();
   });
 
@@ -294,5 +299,70 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
 
     expect(res.status).not.toBe(403);
     expect(res.status).toBe(503); // missing OPENROUTER_API_KEY_PRO
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /v1/embed-session — server-to-server relay token mint
+// ---------------------------------------------------------------------------
+
+function embedSessionRequest(token = 'bfk_embed') {
+  // No Origin header — this is the server-to-server call a customer's backend
+  // makes. A server-only bfk_* key (allowedOrigins null) passes originAllowed.
+  return new Request('http://test.local/v1/embed-session', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+  });
+}
+
+describe('POST /v1/embed-session', () => {
+  beforeEach(() => {
+    mocks.hashSecret.mockReset();
+    mocks.verifyJwt.mockReset();
+    mocks.signJwt.mockReset();
+    mocks.buildDatabase.mockReset();
+  });
+
+  it('mints a short-lived embed token from a valid bfk_* key (server-to-server)', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.signJwt.mockResolvedValue('embed.jwt.token');
+    const db = mockDb({
+      keyRow:    { id: 'kid-7', tenantId: 42, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 42, plan: 'pro', billingStatus: 'active' },
+    });
+    mocks.buildDatabase.mockReturnValue(db);
+
+    const app = buildApp();
+    const res = await app.request(embedSessionRequest(), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { token: string; expiresInSeconds: number; expiresAt: string };
+    expect(body.token).toBe('embed.jwt.token');
+    expect(body.expiresInSeconds).toBe(600);
+    expect(typeof body.expiresAt).toBe('string');
+
+    // Token must be scoped to the key's tenant and tagged `embed:<keyId>`.
+    const [payload, , ttl] = mocks.signJwt.mock.calls[0]!;
+    expect(payload).toMatchObject({ sub: 'embed:kid-7', tid: 42 });
+    expect(ttl).toBe(600);
+  });
+
+  it('rejects a server-only bfk_* key presented from a browser Origin', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    const db = mockDb({
+      keyRow:    { id: 'kid', tenantId: 42, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 42, plan: 'pro', billingStatus: 'active' },
+    });
+    mocks.buildDatabase.mockReturnValue(db);
+
+    const app = buildApp();
+    const req = new Request('http://test.local/v1/embed-session', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_embed', Origin: 'https://evil.example' },
+    });
+    const res = await app.request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    expect(res.status).toBe(403);
+    expect(mocks.signJwt).not.toHaveBeenCalled();
   });
 });

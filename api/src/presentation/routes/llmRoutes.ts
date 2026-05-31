@@ -31,9 +31,10 @@ import {
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, coderclawInstances, tenantApiKeys, users } from '../../infrastructure/database/schema';
 import { originAllowed } from '../../application/llm/tenantApiKeyService';
+import { listToolsForTenant, callMcpTool } from '../../application/llm/mcpExtensionService';
 import { resolveKeyCached } from '../../infrastructure/auth/keyResolutionCache';
 import type { FailoverEvent } from '../../application/llm/LlmProxyService';
-import { verifyJwt } from '../../infrastructure/auth/JwtService';
+import { verifyJwt, signJwt } from '../../infrastructure/auth/JwtService';
 import { hashSecret } from '../../infrastructure/auth/HashService';
 import { TenantRole, TenantPlan } from '../../domain/shared/types';
 import { getLimits } from '../../domain/tenant/PlanLimits';
@@ -330,14 +331,19 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
     throw new Error('Workspace token is required');
   }
 
+  // Service tokens carry no real user: claw instances (`claw:*`) and short-lived
+  // embed-session tokens (`embed:*`) minted server-to-server from a bfk_* key.
+  // Neither has a tenant_members row, so both skip the membership check.
   const isClawToken = payload.sub.startsWith('claw:');
+  const isEmbedToken = payload.sub.startsWith('embed:');
+  const isServiceToken = isClawToken || isEmbedToken;
   // Join `users.isSuperadmin` into the membership check so we don't depend on
   // the JWT carrying `sa: true`. Old JWTs minted before the `sa` claim was
   // added still grant superadmin bypass — no re-login required. New JWTs that
   // already carry the claim still benefit (the join is one DB round trip the
   // membership check was already paying for).
   let dbIsSuperadmin = false;
-  if (!isClawToken) {
+  if (!isServiceToken) {
     const db = buildDatabase(c.env);
     const [membership] = await db
       .select({
@@ -360,7 +366,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
   }
 
   return {
-    userId: isClawToken ? null : payload.sub,
+    userId: isServiceToken ? null : payload.sub,
     tenantId: payload.tid,
     clawId: null,
     clawTokenDailyLimit: null,
@@ -368,8 +374,8 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
     role: payload.role,
     // `users.isSuperadmin` (joined into the membership query above) is the
     // sole source of truth — fresh on every call, instant revocation.
-    // Claw-issued JWTs are never superadmin.
-    isSuperadmin: !isClawToken && dbIsSuperadmin,
+    // Service tokens (claw / embed) are never superadmin.
+    isSuperadmin: !isServiceToken && dbIsSuperadmin,
     ...(await resolveTenantPlan(c, payload.tid)),
   };
 }
@@ -425,6 +431,100 @@ function wrapStreamForUsage(
 
 export function createLlmRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+
+  // -----------------------------------------------------------------------
+  // POST /v1/embed-session
+  // -----------------------------------------------------------------------
+  // Server-to-server relay token mint. A customer's backend calls this with its
+  // `bfk_*` key (no browser Origin — requireTenantAccess enforces the origin
+  // allowlist, so a server-only key is rejected from a browser) and receives a
+  // SHORT-LIVED tenant-scoped JWT. The customer hands that token to its browser,
+  // which then calls the gateway directly — the bfk_* secret never leaves the
+  // server. The minted token's `sub` is `embed:<keyId>`, recognised as a
+  // service token by requireTenantAccess (no tenant_members row required).
+  const EMBED_SESSION_TTL_SECONDS = 600; // 10 minutes; the relay refreshes.
+  router.post('/v1/embed-session', async (c) => {
+    let access: TenantAccess;
+    try {
+      access = await requireTenantAccess(c);
+    } catch (err) {
+      return respondToAccessError(c, err);
+    }
+
+    // Only a tenant API key may mint embed sessions. A JWT (web/claw/embed)
+    // can't — that would let a browser token bootstrap fresh tokens forever.
+    if (!access.tenantApiKeyId) {
+      return c.json(
+        {
+          error: 'embed-session requires a tenant API key (bfk_*) sent server-to-server.',
+          code: 'embed_requires_api_key',
+        },
+        403,
+      );
+    }
+
+    const token = await signJwt(
+      { sub: `embed:${access.tenantApiKeyId}`, tid: access.tenantId, role: TenantRole.DEVELOPER },
+      c.env.JWT_SECRET,
+      EMBED_SESSION_TTL_SECONDS,
+    );
+    return c.json({
+      token,
+      expiresInSeconds: EMBED_SESSION_TTL_SECONDS,
+      expiresAt: new Date(Date.now() + EMBED_SESSION_TTL_SECONDS * 1000).toISOString(),
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // GET /v1/mcp/tools — advertise the caller's tenant MCP extension tools
+  // -----------------------------------------------------------------------
+  // The Brain's tool loop runs client-side, so it fetches the tenant's enabled
+  // MCP tools here and registers each as a BrainAction whose run() posts to
+  // /v1/mcp/call below. The customer's MCP secret is decrypted + used only
+  // server-side (in listToolsForTenant / callMcpTool) — never sent to the browser.
+  router.get('/v1/mcp/tools', async (c) => {
+    let access: TenantAccess;
+    try {
+      access = await requireTenantAccess(c);
+    } catch (err) {
+      return respondToAccessError(c, err);
+    }
+    const db = buildDatabase(c.env);
+    const tools = await listToolsForTenant(db, access.tenantId, c.env.JWT_SECRET);
+    return c.json({ tools });
+  });
+
+  // -----------------------------------------------------------------------
+  // POST /v1/mcp/call — relay one MCP tool call server-to-server
+  // -----------------------------------------------------------------------
+  router.post('/v1/mcp/call', async (c) => {
+    let access: TenantAccess;
+    try {
+      access = await requireTenantAccess(c);
+    } catch (err) {
+      return respondToAccessError(c, err);
+    }
+    const body = await c.req
+      .json<{ extensionId?: string; tool?: string; arguments?: unknown }>()
+      .catch(() => ({} as { extensionId?: string; tool?: string; arguments?: unknown }));
+    if (!body.extensionId || !body.tool) {
+      return c.json({ error: 'extensionId and tool are required' }, 400);
+    }
+    const db = buildDatabase(c.env);
+    try {
+      const result = await callMcpTool(db, {
+        tenantId: access.tenantId,
+        extensionId: body.extensionId,
+        tool: body.tool,
+        arguments: body.arguments,
+        keyMaterial: c.env.JWT_SECRET,
+      });
+      return c.json({ result });
+    } catch (e) {
+      // Recoverable: hand the model a tool-error result, don't 500 the loop.
+      return c.json({ error: e instanceof Error ? e.message : 'MCP call failed' }, 502);
+    }
+  });
 
   // -----------------------------------------------------------------------
   // POST /v1/chat/completions
