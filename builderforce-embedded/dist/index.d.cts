@@ -164,13 +164,13 @@ declare const EMBED_VIEWS: {
         readonly key: "poker";
         readonly label: "Planning Poker";
         readonly pillar: "agile";
-        readonly available: false;
+        readonly available: true;
     };
     readonly retros: {
         readonly key: "retros";
         readonly label: "Retrospectives";
         readonly pillar: "agile";
-        readonly available: false;
+        readonly available: true;
     };
     readonly sprints: {
         readonly key: "sprints";
@@ -248,13 +248,13 @@ declare const EMBED_VIEWS: {
         readonly key: "access-reviews";
         readonly label: "Access Reviews";
         readonly pillar: "governance";
-        readonly available: false;
+        readonly available: true;
     };
     readonly 'vuln-scans': {
         readonly key: "vuln-scans";
         readonly label: "Vulnerability Scans";
         readonly pillar: "governance";
-        readonly available: false;
+        readonly available: true;
     };
     readonly dsr: {
         readonly key: "dsr";

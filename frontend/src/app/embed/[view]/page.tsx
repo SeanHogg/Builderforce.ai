@@ -13,6 +13,8 @@ import { EmbedPrdSurface } from '../../../components/embed/EmbedPrdSurface';
 import { Soc2Content } from '../../../components/governance/Soc2Content';
 import { TrackerSurface } from '../../../components/governance/TrackerSurface';
 import { TRACKER_CONFIGS } from '../../../components/governance/trackerConfigs';
+import { PokerSurface } from '../../../components/agile/PokerSurface';
+import { RetroSurface } from '../../../components/agile/RetroSurface';
 
 /**
  * The framed BuilderForce surface. ONE dynamic route serves every embeddable
@@ -117,6 +119,10 @@ function renderSurface(view: string): React.ReactNode {
     case 'soc2':
       // SOC 2 Control Tracker — bespoke (readiness scoreboard + baseline seed).
       return <Soc2Content />;
+    case 'poker':
+      return <PokerSurface />;
+    case 'retros':
+      return <RetroSurface />;
     default: {
       // Every other governance tracker is the one generic CRUD surface (DRY).
       const cfg = TRACKER_CONFIGS[view];

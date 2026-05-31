@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
+import { useModalDismiss } from '@/hooks/useModalDismiss';
 
 export interface MarketingNavLink {
   label: string;
@@ -40,19 +41,7 @@ export default function MarketingHeader({
   const isActive = (href: string) => href.startsWith('/') && pathname === href;
 
   // Lock body scroll + close on Escape while the menu is open.
-  useEffect(() => {
-    if (!open) return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  useModalDismiss(open, () => setOpen(false));
 
   return (
     <header className="mh-nav" aria-label="Main navigation">

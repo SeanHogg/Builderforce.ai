@@ -22,6 +22,7 @@ import {
   socControls, socEvidence,
   securityVendors, securityIncidents, piiDataAssets, securityDpas,
   securityTrainings, complianceEvents, dataSubjectRequests, dataSuppressionList,
+  accessReviews, vulnerabilityScans,
 } from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -73,6 +74,8 @@ const TRACKERS: Array<{ path: string; table: unknown; opts: TrackerOpts }> = [
   { path: '/compliance-calendar', table: complianceEvents, opts: { fields: ['title', 'framework', 'eventType', 'dueDate', 'status', 'assignedTo', 'isRecurring', 'recurringEvery', 'notes', 'completedAt'], required: ['title', 'framework', 'dueDate'] } },
   { path: '/dsr', table: dataSubjectRequests, opts: { fields: ['requestType', 'subjectEmail', 'jurisdiction', 'notes', 'status', 'rejectionReason'], required: ['requestType', 'subjectEmail'] } },
   { path: '/suppression', table: dataSuppressionList, opts: { fields: ['identifierType', 'identifierValue', 'reason', 'notes'], required: ['identifierType', 'identifierValue', 'reason'] } },
+  { path: '/access-reviews', table: accessReviews, opts: { fields: ['period', 'scope', 'scopeRef', 'status', 'reviewerId', 'dueDate', 'completedAt', 'findings', 'notes'], required: ['period'] } },
+  { path: '/vuln-scans', table: vulnerabilityScans, opts: { fields: ['repoRef', 'ref', 'scanType', 'status', 'triggeredBy', 'startedAt', 'finishedAt', 'summary', 'notes'], required: ['scanType'] } },
 ];
 
 export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
