@@ -119,18 +119,23 @@ export function blendNoise(anchor: Float32Array, frame: Float32Array, alpha: num
 }
 
 /**
- * 2D spatial shift on an NCHW latent (zero-fill at the boundary). Used by
- * `VideoEngine.generate` to add directional camera motion to img2img-recursion
- * frames: shifting the prior latent down/right before re-noising simulates the
- * camera panning up/left (the world flows in the opposite direction). One
- * latent pixel = 8 output pixels (VAE down-factor of 8), so dx=1 in latent
- * space is an 8-pixel pan in the rendered frame.
+ * 2D spatial shift on an NCHW latent with edge-replicate (clamp) padding.
+ * Used by `VideoEngine.generate` to add directional camera motion to
+ * img2img-recursion frames: shifting the prior latent down/right before
+ * re-noising simulates the camera panning up/left (the world flows in the
+ * opposite direction). One latent pixel = 8 output pixels (VAE down-factor
+ * of 8), so dx=1 in latent space is an 8-pixel pan in the rendered frame.
+ *
+ * Out-of-bounds source coordinates clamp to the nearest in-bounds pixel
+ * (replicate / edge padding) rather than zero-filling. Zero-fill produced
+ * a black band on every shifted frame that the (typically truncated)
+ * img2img denoise couldn't clean up — `shiftLatentClampsToEdge` test in
+ * mamba-coherence.test.ts locks this so a future "optimization" back to
+ * zero-fill is caught instead of shipping as edge artifacts.
  *
  * Layout assumption: NCHW packed as [c, y, x] with one batch (the diffusion
  * engine's shape contract — see `latentShape: [1, 4, h, w]` in
- * `DiffusionEngine.denoise`). Out-of-bounds samples become zero — the next
- * denoise pass cleans up the edge band where the prior latent ran off the
- * frame.
+ * `DiffusionEngine.denoise`).
  */
 export function shiftLatent(
   latent: Float32Array,
@@ -145,21 +150,40 @@ export function shiftLatent(
     );
   }
   if (dx === 0 && dy === 0) return new Float32Array(latent);
-  const out = new Float32Array(latent.length); // zero-filled
+  const out = new Float32Array(latent.length);
   const idx = (c: number, y: number, x: number) =>
     c * (height * width) + y * width + x;
+  const clamp = (v: number, lo: number, hi: number) =>
+    v < lo ? lo : v > hi ? hi : v;
   for (let c = 0; c < channels; c++) {
     for (let y = 0; y < height; y++) {
-      const srcY = y - dy;
-      if (srcY < 0 || srcY >= height) continue;
+      const srcY = clamp(y - dy, 0, height - 1);
       for (let x = 0; x < width; x++) {
-        const srcX = x - dx;
-        if (srcX < 0 || srcX >= width) continue;
+        const srcX = clamp(x - dx, 0, width - 1);
         out[idx(c, y, x)] = latent[idx(c, srcY, srcX)];
       }
     }
   }
   return out;
+}
+
+/**
+ * Gate for latent-residual Mamba bias application. Returns true only when the
+ * user picked the mode AND the engine is on the fresh-noise (anchor-walk) path.
+ *
+ * Skipped under img2img recursion because `applyToLatent` adds a per-channel
+ * broadcast constant offset, which was designed for unit-variance Gaussian
+ * noise (frame 0 / anchor-walk). On a partially-denoised img2img latent the
+ * same offset shifts the signal distribution out of the UNet's trained range
+ * and produces catastrophic disfigurement that compounds frame-to-frame as
+ * Mamba state accumulates. Locked by a unit test so a future refactor can't
+ * silently re-enable both at once.
+ */
+export function shouldApplyLatentResidualBias(
+  mode: CoherenceMode,
+  useImg2Img: boolean,
+): boolean {
+  return mode === 'latent-residual' && !useImg2Img;
 }
 
 /**

@@ -37,6 +37,7 @@ import {
   blendNoise,
   emptyState,
   shiftLatent,
+  shouldApplyLatentResidualBias,
 } from './mamba-coherence';
 import { expandPrompt } from './llm-bridge';
 import { muxFramesToMp4, pixelsToRgba, type MuxFrame } from './webcodecs-muxer';
@@ -211,7 +212,9 @@ export class VideoEngine {
         latent = blendNoise(anchorLatent, frameNoise, motionAmount);
         frameTimesteps = timesteps;
       }
-      if (coherenceMode === 'latent-residual') {
+      // Gate via the shared helper so the rule has one source of truth and
+      // is unit-testable. See `shouldApplyLatentResidualBias` for the why.
+      if (shouldApplyLatentResidualBias(coherenceMode, useImg2Img)) {
         latent = applyToLatent({
           ctx: { mode: coherenceMode, strength: coherenceStrength, state: this.mambaState },
           latent,
