@@ -149,6 +149,18 @@ export interface GenerateOptions {
   coherence?: CoherenceMode;
   /** 0 = no coherence (pure i.i.d. frames), 1 = maximum lock to previous frame. */
   coherenceStrength?: number;
+  /**
+   * How much fresh noise per frame is mixed into the shared anchor latent.
+   * Diffusion outputs are dominated by initial noise, so sampling fresh noise
+   * per frame produces visually unrelated stills. The engine instead picks one
+   * anchor latent per clip and blends each frame as
+   *   `latent = sqrt(1-motion) * anchor + sqrt(motion) * frameNoise`
+   * Defaults to 0.15 — small enough for stable colors / composition across
+   * frames, large enough to leave room for evolution. Set to 1 to opt out
+   * (each frame becomes a fresh interpretation of the prompt — the old
+   * behaviour that fails on "this should be a continuation" prompts).
+   */
+  motionAmount?: number;
   /** Called once per finished frame. */
   onFrame?: (frameIdx: number, bitmap: ImageBitmap, state: MambaStateSnapshot) => void;
   /** Called when prompt expansion finishes (before diffusion starts). */

@@ -85,6 +85,40 @@ export function applyToPrompt(args: ApplyToPromptArgs): Float32Array {
 }
 
 /**
+ * Variance-preserving blend of two unit-Gaussian noise samples.
+ *
+ *   out = sqrt(1 - alpha) * anchor + sqrt(alpha) * frame
+ *
+ * Used by `VideoEngine.generate` to walk one anchor latent across frames
+ * instead of sampling i.i.d. noise per frame — which is the standard
+ * Deforum / Stable-WarpFusion technique for video continuity. The diffusion
+ * process is dominated by initial noise; without an anchor, each frame is
+ * a totally fresh interpretation of the prompt (different composition,
+ * different colors) even when the prompt is identical.
+ *
+ *   alpha = 0   → exactly anchor (no motion at all)
+ *   alpha = 0.15 → "slight motion" — colors and composition stable across frames
+ *   alpha = 1   → exactly frame (back to i.i.d. — the broken baseline)
+ *
+ * The sqrt(1-α) / sqrt(α) coefficients keep the result unit-variance, which
+ * the diffusion scheduler expects from its initial noise.
+ */
+export function blendNoise(anchor: Float32Array, frame: Float32Array, alpha: number): Float32Array {
+  if (anchor.length !== frame.length) {
+    throw new Error(`blendNoise: length mismatch (${anchor.length} vs ${frame.length})`);
+  }
+  if (alpha <= 0) return new Float32Array(anchor);
+  if (alpha >= 1) return new Float32Array(frame);
+  const a = Math.sqrt(1 - alpha);
+  const b = Math.sqrt(alpha);
+  const out = new Float32Array(anchor.length);
+  for (let i = 0; i < anchor.length; i++) {
+    out[i] = a * anchor[i] + b * frame[i];
+  }
+  return out;
+}
+
+/**
  * Latent-residual mode: add the projected state (broadcast across spatial
  * positions) to the initial noise latent. Strength scales the additive bias.
  */
