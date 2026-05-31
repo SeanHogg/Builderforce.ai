@@ -106,9 +106,6 @@ var EMBED_VIEW_KEYS = Object.keys(EMBED_VIEWS);
 function isEmbedView(value) {
   return Object.prototype.hasOwnProperty.call(EMBED_VIEWS, value);
 }
-function embedViewsByPillar(pillar) {
-  return EMBED_VIEW_KEYS.map((k) => EMBED_VIEWS[k]).filter((v) => v.pillar === pillar);
-}
 function capabilityForView(view) {
   return pillarToCapability(EMBED_VIEWS[view].pillar);
 }
@@ -232,7 +229,6 @@ export {
   EMBED_VIEWS,
   EMBED_VIEW_KEYS,
   capabilityForView,
-  embedViewsByPillar,
   handleFrameMessage,
   isEmbedView,
   isFrameToHostMessage,

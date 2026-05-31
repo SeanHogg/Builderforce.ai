@@ -1,8 +1,9 @@
 /**
  * Planning Poker + Retrospectives (doc 03). Nested session models with
  * vote/reveal actions — not flat trackers, so custom (but still fully
- * segment-scoped) routes. The "live" feel comes from the client polling the
- * session-detail GET. Mounted under /api/agile by agileRoutes.
+ * segment-scoped) routes. Live updates are pushed over WebSocket: each `/ws`
+ * route relays to a SessionRoomDO, and every mutation POSTs `/broadcast` so
+ * connected clients re-fetch. Mounted under /api/agile by agileRoutes.
  */
 
 import { Hono } from 'hono';
@@ -16,8 +17,30 @@ import {
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
+/** Push a `changed` frame to everyone watching a room, so clients re-fetch (no polling). */
+async function broadcastRoom(ns: DurableObjectNamespace | undefined, room: string): Promise<void> {
+  if (!ns) return;
+  try { await ns.get(ns.idFromName(room)).fetch('https://session-room/broadcast', { method: 'POST' }); }
+  catch { /* best-effort; the surface still works without live push */ }
+}
+
+/** Resolve a story's parent session (to know which room to broadcast to). */
+async function sessionIdForStory(db: Db, storyId: string, tenantId: number, segmentId: string): Promise<string | null> {
+  const [s] = await db.select({ sessionId: pokerStories.sessionId }).from(pokerStories)
+    .where(and(eq(pokerStories.id, storyId), eq(pokerStories.tenantId, tenantId), eq(pokerStories.segmentId, segmentId))).limit(1);
+  return s?.sessionId ?? null;
+}
+
 export function createPokerRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
+
+  // Live channel: clients hold this WebSocket and re-fetch on each `changed` push.
+  r.get('/sessions/:id/ws', (c) => {
+    if (c.req.header('Upgrade') !== 'websocket') return c.text('Expected WebSocket', 426);
+    const ns = c.env?.SESSION_ROOM;
+    if (!ns) return c.text('Realtime unavailable', 503);
+    return ns.get(ns.idFromName(`poker:${c.req.param('id')}`)).fetch(c.req.raw);
+  });
 
   r.get('/sessions', async (c) => {
     const { tenantId, segmentId } = scope(c);
@@ -74,6 +97,7 @@ export function createPokerRoutes(db: Db): Hono<HonoEnv> {
     const [row] = await db.insert(pokerStories).values({
       tenantId, segmentId, sessionId, title: body.title.trim(), description: body.description ?? null, position: counted[0]?.count ?? 0,
     }).returning();
+    await broadcastRoom(c.env?.SESSION_ROOM, `poker:${sessionId}`);
     return c.json(row, 201);
   });
 
@@ -86,6 +110,8 @@ export function createPokerRoutes(db: Db): Hono<HonoEnv> {
     if (!body.value?.trim()) return c.json({ error: 'value is required' }, 400);
     await db.insert(pokerVotes).values({ tenantId, segmentId, storyId, userId, value: body.value.trim() })
       .onConflictDoUpdate({ target: [pokerVotes.storyId, pokerVotes.userId], set: { value: body.value.trim(), updatedAt: new Date() } });
+    const sessionId = await sessionIdForStory(db, storyId, tenantId, segmentId);
+    if (sessionId) await broadcastRoom(c.env?.SESSION_ROOM, `poker:${sessionId}`);
     return c.json({ ok: true });
   });
 
@@ -96,6 +122,8 @@ export function createPokerRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(pokerVotes.storyId, storyId), eq(pokerVotes.tenantId, tenantId), eq(pokerVotes.segmentId, segmentId)));
     await db.update(pokerStories).set({ status: 'revealed', updatedAt: new Date() })
       .where(and(eq(pokerStories.id, storyId), eq(pokerStories.tenantId, tenantId), eq(pokerStories.segmentId, segmentId)));
+    const sessionId = await sessionIdForStory(db, storyId, tenantId, segmentId);
+    if (sessionId) await broadcastRoom(c.env?.SESSION_ROOM, `poker:${sessionId}`);
     return c.json({ ok: true });
   });
 
@@ -109,6 +137,7 @@ export function createPokerRoutes(db: Db): Hono<HonoEnv> {
     const [row] = await db.update(pokerStories).set(patch)
       .where(and(eq(pokerStories.id, id), eq(pokerStories.tenantId, tenantId), eq(pokerStories.segmentId, segmentId))).returning();
     if (!row) return c.json({ error: 'not found' }, 404);
+    await broadcastRoom(c.env?.SESSION_ROOM, `poker:${row.sessionId}`);
     return c.json(row);
   });
 
@@ -117,6 +146,14 @@ export function createPokerRoutes(db: Db): Hono<HonoEnv> {
 
 export function createRetroRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
+
+  // Live channel (see poker).
+  r.get('/:id/ws', (c) => {
+    if (c.req.header('Upgrade') !== 'websocket') return c.text('Expected WebSocket', 426);
+    const ns = c.env?.SESSION_ROOM;
+    if (!ns) return c.text('Realtime unavailable', 503);
+    return ns.get(ns.idFromName(`retro:${c.req.param('id')}`)).fetch(c.req.raw);
+  });
 
   r.get('/', async (c) => {
     const { tenantId, segmentId } = scope(c);
@@ -154,6 +191,7 @@ export function createRetroRoutes(db: Db): Hono<HonoEnv> {
     const [row] = await db.insert(retroItems).values({
       tenantId, segmentId, retroId, category: body.category.trim(), content: body.content.trim(), authorId: c.get('userId'),
     }).returning();
+    await broadcastRoom(c.env?.SESSION_ROOM, `retro:${retroId}`);
     return c.json(row, 201);
   });
 
@@ -164,6 +202,7 @@ export function createRetroRoutes(db: Db): Hono<HonoEnv> {
     const [row] = await db.update(retroItems).set({ votes: sql`${retroItems.votes} + 1`, updatedAt: new Date() })
       .where(and(eq(retroItems.id, id), eq(retroItems.tenantId, tenantId), eq(retroItems.segmentId, segmentId))).returning();
     if (!row) return c.json({ error: 'not found' }, 404);
+    await broadcastRoom(c.env?.SESSION_ROOM, `retro:${row.retroId}`);
     return c.json(row);
   });
 
@@ -173,6 +212,7 @@ export function createRetroRoutes(db: Db): Hono<HonoEnv> {
     const [row] = await db.delete(retroItems)
       .where(and(eq(retroItems.id, id), eq(retroItems.tenantId, tenantId), eq(retroItems.segmentId, segmentId))).returning();
     if (!row) return c.json({ error: 'not found' }, 404);
+    await broadcastRoom(c.env?.SESSION_ROOM, `retro:${row.retroId}`);
     return c.json({ deleted: row.id });
   });
 

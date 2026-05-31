@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { retroApi, type Retrospective, type RetroDetail } from '@/lib/builderforceApi';
+import { useRealtimeRoom } from '@/lib/embed/useRealtimeRoom';
 
 /**
  * Retrospectives embed surface. Retro → columns (by template) → items with
@@ -30,16 +31,13 @@ export function RetroSurface() {
   }, []);
   useEffect(loadRetros, [loadRetros]);
 
-  useEffect(() => {
-    if (!selected) { setDetail(null); return; }
-    let active = true;
-    const tick = () => retroApi.get(selected).then((d) => active && setDetail(d)).catch(() => {});
-    tick();
-    const iv = setInterval(tick, 2000);
-    return () => { active = false; clearInterval(iv); };
+  const refresh = useCallback(() => {
+    if (selected) retroApi.get(selected).then(setDetail).catch(() => {});
   }, [selected]);
 
-  const refresh = () => { if (selected) retroApi.get(selected).then(setDetail).catch(() => {}); };
+  // Initial load on open + live updates over WebSocket (no polling).
+  useEffect(() => { if (!selected) setDetail(null); else refresh(); }, [selected, refresh]);
+  useRealtimeRoom(selected ? `/api/agile/retros/${selected}/ws` : null, refresh);
 
   const createRetro = async () => {
     if (!name.trim()) return;

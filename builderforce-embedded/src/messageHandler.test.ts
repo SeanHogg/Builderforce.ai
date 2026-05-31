@@ -81,10 +81,8 @@ describe('view registry', () => {
     expect(capabilityForView('incidents')).toBe('security');
   });
 
-  it('marks kanban + backlog available (wired today) and unbuilt views unavailable', () => {
-    expect(EMBED_VIEWS.kanban.available).toBe(true);
-    expect(EMBED_VIEWS.backlog.available).toBe(true);
-    expect(EMBED_VIEWS.soc2.available).toBe(false);
-    expect(EMBED_VIEWS.poker.available).toBe(false);
+  it('has every registered view wired (available) — full coverage', () => {
+    const unavailable = EMBED_VIEW_KEYS.filter((k) => !EMBED_VIEWS[k].available);
+    expect(unavailable).toEqual([]);
   });
 });

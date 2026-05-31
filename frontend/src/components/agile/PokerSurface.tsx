@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { pokerApi, type PokerSession, type PokerSessionDetail } from '@/lib/builderforceApi';
+import { useRealtimeRoom } from '@/lib/embed/useRealtimeRoom';
 
 /**
  * Planning Poker embed surface. Sessions → stories → votes, with reveal. The
@@ -23,19 +24,13 @@ export function PokerSurface() {
   }, []);
   useEffect(loadSessions, [loadSessions]);
 
-  // Poll the open session for live votes/reveals.
-  useEffect(() => {
-    if (!selected) { setDetail(null); return; }
-    let active = true;
-    const tick = () => pokerApi.getSession(selected).then((d) => active && setDetail(d)).catch(() => {});
-    tick();
-    const iv = setInterval(tick, 2000);
-    return () => { active = false; clearInterval(iv); };
-  }, [selected]);
-
   const refresh = useCallback(() => {
     if (selected) pokerApi.getSession(selected).then(setDetail).catch(() => {});
   }, [selected]);
+
+  // Initial load on open + live updates pushed over WebSocket (no polling).
+  useEffect(() => { if (!selected) setDetail(null); else refresh(); }, [selected, refresh]);
+  useRealtimeRoom(selected ? `/api/agile/poker/sessions/${selected}/ws` : null, refresh);
 
   const createSession = async () => {
     if (!name.trim()) return;

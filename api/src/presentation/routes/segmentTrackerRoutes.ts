@@ -45,7 +45,7 @@ function pick(body: Record<string, unknown>, fields: string[]): Record<string, u
  * List is read for any member; mutations require manager+.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function createTrackerRoutes(db: Db, table: any, opts: TrackerOpts): Hono<HonoEnv> {
+function createTrackerRoutes(db: Db, table: any, opts: TrackerOpts): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
   router.get('/', async (c) => {

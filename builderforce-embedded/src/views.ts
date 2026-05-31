@@ -92,10 +92,6 @@ export function isEmbedView(value: string): value is EmbedView {
   return Object.prototype.hasOwnProperty.call(EMBED_VIEWS, value);
 }
 
-export function embedViewsByPillar(pillar: EmbedPillar): EmbedViewMeta[] {
-  return EMBED_VIEW_KEYS.map((k) => EMBED_VIEWS[k]).filter((v) => v.pillar === pillar);
-}
-
 /** The capability that gates a given view (for host nav + frame self-gating). */
 export function capabilityForView(view: EmbedView): EmbedCapability {
   return pillarToCapability(EMBED_VIEWS[view].pillar);

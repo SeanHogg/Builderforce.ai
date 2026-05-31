@@ -98,6 +98,7 @@ import { emulationMiddleware } from './presentation/middleware/emulationMiddlewa
 
 // Durable Objects (must be re-exported so the Workers runtime can instantiate them)
 export { ClawRelayDO } from './infrastructure/relay/ClawRelayDO';
+export { SessionRoomDO } from './infrastructure/relay/SessionRoomDO';
 export { TenantRateLimiterDO } from './infrastructure/ratelimit/TenantRateLimiterDO';
 
 // ---------------------------------------------------------------------------

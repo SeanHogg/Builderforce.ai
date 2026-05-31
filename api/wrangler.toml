@@ -25,6 +25,10 @@ NOTIFICATION_EMAIL_FROM = "Builderforce <notifications@builderforce.ai>"
 name = "CLAW_RELAY"
 class_name = "ClawRelayDO"
 
+[[durable_objects.bindings]]
+name = "SESSION_ROOM"
+class_name = "SessionRoomDO"
+
 [[r2_buckets]]
 binding = "UPLOADS"
 bucket_name = "builderforce-uploads"
@@ -39,6 +43,10 @@ id = "ce66c3418ad64952b6847227962429d0"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ClawRelayDO"]
+
+[[migrations]]
+tag = "v2"
+new_classes = ["SessionRoomDO"]
 
 # Cron triggers — see scheduled() in src/index.ts
 # 09:00 UTC daily: probe every registered LLM vendor and email superadmins on status change.
