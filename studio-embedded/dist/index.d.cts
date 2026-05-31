@@ -44,12 +44,18 @@ interface CoherenceControlsProps {
     mode: CoherenceMode;
     strength: number;
     motionAmount: number;
+    imgToImgStrength: number;
+    cameraDx: number;
+    cameraDy: number;
     onModeChange: (mode: CoherenceMode) => void;
     onStrengthChange: (strength: number) => void;
     onMotionAmountChange: (amount: number) => void;
+    onImgToImgStrengthChange: (strength: number) => void;
+    onCameraDxChange: (dx: number) => void;
+    onCameraDyChange: (dy: number) => void;
     disabled?: boolean;
 }
-declare function CoherenceControls({ mode, strength, motionAmount, onModeChange, onStrengthChange, onMotionAmountChange, disabled, }: CoherenceControlsProps): react_jsx_runtime.JSX.Element;
+declare function CoherenceControls({ mode, strength, motionAmount, imgToImgStrength, cameraDx, cameraDy, onModeChange, onStrengthChange, onMotionAmountChange, onImgToImgStrengthChange, onCameraDxChange, onCameraDyChange, disabled, }: CoherenceControlsProps): react_jsx_runtime.JSX.Element;
 
 interface VideoPreviewProps {
     frames: ImageBitmap[];

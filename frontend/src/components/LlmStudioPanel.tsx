@@ -16,16 +16,26 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { listDatasets, listTrainingJobs } from '@/lib/api';
-import type { Dataset, TrainingJob } from '@/lib/types';
+import type { Dataset, FileEntry, TrainingJob } from '@/lib/types';
+import { getFileName } from '@/lib/utils';
 import type { RightTab } from '@/lib/modality';
 
 interface LlmStudioPanelProps {
   projectId: number | string;
+  /** Project files — used to surface dataset-like files (.json/.jsonl) the Brain wrote. */
+  files?: FileEntry[];
   /** Switch the right-panel tab — used by the pipeline CTAs to jump to Train / Publish. */
   onGoToTab?: (tab: RightTab) => void;
+  /** Open a project file in the center code view (e.g. inspect a dataset). */
+  onOpenFile?: (path: string) => void;
 }
 
-export function LlmStudioPanel({ projectId, onGoToTab }: LlmStudioPanelProps) {
+/** A project file that looks like a training dataset the Brain or user produced. */
+function isDatasetFile(path: string): boolean {
+  return /\.(jsonl|json)$/i.test(path);
+}
+
+export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }: LlmStudioPanelProps) {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [jobs, setJobs] = useState<TrainingJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +63,13 @@ export function LlmStudioPanel({ projectId, onGoToTab }: LlmStudioPanelProps) {
   // "Trained" = a job that produced a downloadable LoRA artifact in R2.
   const trainedCount = jobs.filter((j) => !!j.r2_artifact_key).length;
 
+  // Dataset-like project files (what the Brain writes via "Create file"). These
+  // live in the file store, separate from the dataset API, so surface both: the
+  // count drives step 1 and the list lets the user open one in the code view.
+  const datasetFiles = files.filter((f) => f.type === 'file' && isDatasetFile(f.path));
+  // Total distinct datasets the user has, from either source.
+  const datasetTotal = datasets.length + datasetFiles.length;
+
   const steps: Array<{
     n: number;
     icon: string;
@@ -66,7 +83,7 @@ export function LlmStudioPanel({ projectId, onGoToTab }: LlmStudioPanelProps) {
       icon: '📝',
       title: 'Design your dataset',
       body: 'Use the Brain on the left to draft instruction/response pairs and reason about architecture. Datasets are stored per-project and feed training.',
-      metric: `${datasets.length} dataset${datasets.length === 1 ? '' : 's'}`,
+      metric: `${datasetTotal} dataset${datasetTotal === 1 ? '' : 's'}`,
       cta: { label: 'Open Files', tab: 'files' },
     },
     {
@@ -180,6 +197,35 @@ export function LlmStudioPanel({ projectId, onGoToTab }: LlmStudioPanelProps) {
                   >
                     {step.cta.label} →
                   </button>
+                )}
+
+                {/* Step 1: surface dataset files the Brain wrote so the user can
+                    open/select them — bridges the file store to this step. */}
+                {step.n === 1 && datasetFiles.length > 0 && (
+                  <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {datasetFiles.map((f) => (
+                      <button
+                        key={f.path}
+                        type="button"
+                        onClick={() => onOpenFile?.(f.path)}
+                        disabled={!onOpenFile}
+                        title={onOpenFile ? `Open ${f.path}` : f.path}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left',
+                          fontFamily: "'JetBrains Mono', monospace", fontSize: '0.74rem',
+                          background: 'var(--bg-deep)', color: 'var(--text-primary)',
+                          border: '1px solid var(--border-subtle)', borderRadius: 8,
+                          padding: '6px 10px', cursor: onOpenFile ? 'pointer' : 'default',
+                          width: '100%',
+                        }}
+                      >
+                        <span>📋</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {getFileName(f.path)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>

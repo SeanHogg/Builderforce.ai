@@ -36,6 +36,7 @@ import {
   applyToPrompt,
   blendNoise,
   emptyState,
+  shiftLatent,
 } from './mamba-coherence';
 import { expandPrompt } from './llm-bridge';
 import { muxFramesToMp4, pixelsToRgba, type MuxFrame } from './webcodecs-muxer';
@@ -141,6 +142,10 @@ export class VideoEngine {
 
     const timesteps = trimTimesteps(descriptor.defaultTimesteps, steps);
     const motionAmount = clamp01(args.motionAmount ?? DEFAULT_MOTION_AMOUNT);
+    const imgToImgStrength = clamp01(args.imgToImgStrength ?? 0);
+    const cameraMotion = args.cameraMotion;
+    const latentH = height / 8;
+    const latentW = width / 8;
 
     // One anchor latent for the whole clip; each frame blends fresh noise into
     // it via blendNoise(). Sampling i.i.d. noise per frame (the previous code)
@@ -148,9 +153,17 @@ export class VideoEngine {
     // interpretation of the same prompt because diffusion is dominated by
     // initial noise. The anchor locks colors and composition across frames;
     // motionAmount controls how much per-frame variation is allowed on top.
-    // The latentWalkSharesAnchor regression test in video-engine.test.ts locks
-    // this — do not go back to sampling fresh noise per frame here.
+    // The latentWalkSharesAnchor regression test locks this — do not go back
+    // to sampling fresh noise per frame here.
     const anchorLatent = this.diffusion.sampleInitialLatent(seed);
+
+    // Img2img recursion: when imgToImgStrength > 0, frames N+1+ start from
+    // frame N's clean latent (optionally shifted by cameraMotion to simulate
+    // camera movement) re-noised partway through the schedule. This is the
+    // only path inside the existing model weights that produces actual
+    // scene PROGRESSION (camera moving, content flowing) rather than just
+    // "same shot wobbling" that the pure anchor-walk delivers.
+    let prevLatent: Float32Array | null = null;
 
     const frames: ImageBitmap[] = [];
     const muxFrames: MuxFrame[] = [];
@@ -170,8 +183,34 @@ export class VideoEngine {
             })
           : promptEmbedding;
 
-      const frameNoise = this.diffusion.sampleInitialLatent(seed + 1 + frameIdx);
-      let latent = blendNoise(anchorLatent, frameNoise, motionAmount);
+      const useImg2Img = imgToImgStrength > 0 && prevLatent !== null;
+      let latent: Float32Array;
+      let frameTimesteps: number[];
+      if (useImg2Img) {
+        // Carry frame N's clean latent forward, optionally pan it for camera
+        // motion, then re-noise to a partial timestep so the remaining
+        // denoise iterations refine (not redraw) the scene.
+        const shifted = cameraMotion
+          ? shiftLatent(
+              prevLatent!,
+              { channels: 4, height: latentH, width: latentW },
+              cameraMotion.dx,
+              cameraMotion.dy,
+            )
+          : prevLatent!;
+        const skipCount = Math.floor(timesteps.length * (1 - imgToImgStrength));
+        const truncated = timesteps.slice(skipCount);
+        frameTimesteps = truncated.length > 0 ? truncated : [timesteps[timesteps.length - 1]];
+        latent = this.diffusion.addNoiseToLatent(
+          shifted,
+          frameTimesteps[0],
+          seed + frameIdx,
+        );
+      } else {
+        const frameNoise = this.diffusion.sampleInitialLatent(seed + 1 + frameIdx);
+        latent = blendNoise(anchorLatent, frameNoise, motionAmount);
+        frameTimesteps = timesteps;
+      }
       if (coherenceMode === 'latent-residual') {
         latent = applyToLatent({
           ctx: { mode: coherenceMode, strength: coherenceStrength, state: this.mambaState },
@@ -179,12 +218,15 @@ export class VideoEngine {
         });
       }
 
-      reportProgress(`Frame ${frameIdx + 1}/${args.frames}: denoising…`, onProgress);
-      const { pixels } = await this.diffusion.denoise({
+      reportProgress(
+        `Frame ${frameIdx + 1}/${args.frames}: ${useImg2Img ? `img2img (${frameTimesteps.length}/${timesteps.length} steps)` : 'denoising'}…`,
+        onProgress,
+      );
+      const { pixels, latent: finalLatent } = await this.diffusion.denoise({
         latent,
         condEmbedding: conditionedPrompt,
         uncondEmbedding: negativeEmbedding,
-        timesteps,
+        timesteps: frameTimesteps,
         guidance,
         seed: seed + frameIdx,
         onStep: (step, total) =>
@@ -193,6 +235,7 @@ export class VideoEngine {
             onProgress,
           ),
       });
+      prevLatent = finalLatent;
 
       reportProgress(`Frame ${frameIdx + 1}/${args.frames}: decoding VAE…`, onProgress);
       const rgba = pixelsToRgba(pixels, width, height);

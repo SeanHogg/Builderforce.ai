@@ -433,6 +433,82 @@ describe('DiffusionEngine.init session-create serialisation (external-data race 
   });
 });
 
+describe('DiffusionEngine.addNoiseToLatent (img2img forward-diffusion primitive)', () => {
+  // The bug this guards: img2img recursion in VideoEngine.generate carries a
+  // clean latent forward across frames; if addNoiseToLatent silently produces
+  // a non-unit-variance result, the downstream UNet denoise step gets noise
+  // at the wrong magnitude and outputs garbage. The DDPM forward-diffusion
+  // formula is `sqrt(alpha) * clean + sqrt(1-alpha) * noise`; with unit-
+  // variance clean and noise, the output is unit-variance regardless of t.
+  function makeEngine() {
+    return new DiffusionEngine({
+      model: 'sd-turbo',
+      probed: { kind: 'webgpu', label: 'mock', approxMemoryMb: null, gpuDevice: { destroy: () => {} } as unknown as GPUDevice },
+      apiKey: '',
+      weightSources: ['huggingface-cdn'],
+      width: 512,
+      height: 512,
+    });
+  }
+
+  function variance(a: Float32Array): number {
+    let mean = 0;
+    for (let i = 0; i < a.length; i++) mean += a[i];
+    mean /= a.length;
+    let v = 0;
+    for (let i = 0; i < a.length; i++) v += (a[i] - mean) * (a[i] - mean);
+    return v / a.length;
+  }
+
+  it('preserves unit variance across the schedule (any t)', () => {
+    const engine = makeEngine();
+    const clean = engine.sampleInitialLatent(42); // unit-variance gaussian
+    for (const t of [999, 759, 519, 259, 0]) {
+      const out = engine.addNoiseToLatent(clean, t, 7);
+      const v = variance(out);
+      expect(
+        Math.abs(v - 1),
+        `t=${t} produced variance ${v.toFixed(3)} (want ~1.0)`,
+      ).toBeLessThan(0.15);
+    }
+  });
+
+  it('higher t adds more noise (latent diverges further from clean)', () => {
+    // Cosine similarity to the clean latent should DECREASE as t increases.
+    // At t=0 alpha≈1 so output ≈ clean; at t=999 alpha is small so output ≈ noise.
+    const engine = makeEngine();
+    const clean = engine.sampleInitialLatent(42);
+    const lowT = engine.addNoiseToLatent(clean, 100, 7);
+    const highT = engine.addNoiseToLatent(clean, 900, 7);
+    const cosLow = cosineSim(lowT, clean);
+    const cosHigh = cosineSim(highT, clean);
+    expect(
+      cosLow,
+      `low-t output should stay close to clean (cos=${cosLow.toFixed(3)})`,
+    ).toBeGreaterThan(cosHigh);
+  });
+
+  it('deterministic for a given (clean, t, seed)', () => {
+    const engine = makeEngine();
+    const clean = engine.sampleInitialLatent(42);
+    const a = engine.addNoiseToLatent(clean, 500, 7);
+    const b = engine.addNoiseToLatent(clean, 500, 7);
+    for (let i = 0; i < a.length; i++) expect(a[i]).toBe(b[i]);
+  });
+});
+
+function cosineSim(a: Float32Array, b: Float32Array): number {
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
+}
+
 describe('materializeTensor produces a Tensor of the requested dtype', () => {
   const raw = { data: new Float32Array([1, 2, 3]), shape: [3] as const };
 

@@ -104,11 +104,18 @@ function CoherenceControls({
   mode,
   strength,
   motionAmount,
+  imgToImgStrength,
+  cameraDx,
+  cameraDy,
   onModeChange,
   onStrengthChange,
   onMotionAmountChange,
+  onImgToImgStrengthChange,
+  onCameraDxChange,
+  onCameraDyChange,
   disabled
 }) {
+  const img2imgOn = imgToImgStrength > 0;
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "bfs-field", children: [
     /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("label", { className: "bfs-label", children: "Temporal coherence (Mamba state)" }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "bfs-radio-row", children: ["prompt-bias", "latent-residual"].map((m) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: "bfs-radio", children: [
@@ -143,17 +150,71 @@ function CoherenceControls({
     /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
       LabeledRange,
       {
-        label: "Motion amount",
+        label: `Motion amount${img2imgOn ? " (ignored \u2014 img2img on)" : ""}`,
         value: motionAmount,
         min: 0,
         max: 1,
         step: 0.05,
         marginTop: 12,
-        disabled,
+        disabled: disabled || img2imgOn,
         onChange: onMotionAmountChange,
-        hint: "Per-frame noise mixed into the shared anchor latent. 0 = a still image looped \xB7 0.15 = subtle motion, stable colors (default) \xB7 1 = each frame is a fresh interpretation of the prompt (no continuity)."
+        hint: "Per-frame noise mixed into the shared anchor latent. 0 = a still image looped \xB7 0.15 = subtle motion, stable colors (default) \xB7 1 = each frame is a fresh interpretation of the prompt (no continuity). Disabled when img2img recursion is on."
       }
-    )
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+      LabeledRange,
+      {
+        label: "Img2img recursion",
+        value: imgToImgStrength,
+        min: 0,
+        max: 1,
+        step: 0.05,
+        marginTop: 12,
+        disabled,
+        onChange: onImgToImgStrengthChange,
+        hint: "Frames > 0 start from the previous frame's clean latent re-noised partway through the schedule. 0 = off (anchor-walk only, no scene progression) \xB7 0.5 = strong continuity, slow evolution \xB7 0.7 = moderate continuity, more evolution. Use this for 'walking through a scene' prompts that anchor-walk alone can't deliver. Drifts/blurs after ~30 frames."
+      }
+    ),
+    img2imgOn ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_jsx_runtime2.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("label", { className: "bfs-label", style: { marginTop: 12 }, children: "Camera motion (latent shift, 1 unit = 8 pixels)" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "bfs-row", style: { gap: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: "bfs-label", style: { flex: 1 }, children: [
+          "dx ",
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "bfs-mono", children: cameraDx }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+            "input",
+            {
+              type: "number",
+              value: cameraDx,
+              min: -8,
+              max: 8,
+              step: 1,
+              onChange: (e) => onCameraDxChange(Number(e.target.value) | 0),
+              disabled,
+              className: "bfs-input"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: "bfs-label", style: { flex: 1 }, children: [
+          "dy ",
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "bfs-mono", children: cameraDy }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+            "input",
+            {
+              type: "number",
+              value: cameraDy,
+              min: -8,
+              max: 8,
+              step: 1,
+              onChange: (e) => onCameraDyChange(Number(e.target.value) | 0),
+              disabled,
+              className: "bfs-input"
+            }
+          )
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "bfs-hint", children: 'Per-frame shift on the prior latent before re-noising. For "walking forward on a path" try dy = -1 (slight upward tilt) or dy = 1 (looking slightly down at the ground passing under).' })
+    ] }) : null
   ] });
 }
 
@@ -254,6 +315,9 @@ function StudioPanel({
   const [coherenceMode, setCoherenceMode] = (0, import_react3.useState)(defaultCoherence);
   const [coherenceStrength, setCoherenceStrength] = (0, import_react3.useState)(0.5);
   const [motionAmount, setMotionAmount] = (0, import_react3.useState)(0.15);
+  const [imgToImgStrength, setImgToImgStrength] = (0, import_react3.useState)(0);
+  const [cameraDx, setCameraDx] = (0, import_react3.useState)(0);
+  const [cameraDy, setCameraDy] = (0, import_react3.useState)(0);
   const [frames, setFrames] = (0, import_react3.useState)(defaultFrames);
   const [fps, setFps] = (0, import_react3.useState)(defaultFps);
   (0, import_react3.useEffect)(() => {
@@ -360,6 +424,8 @@ function StudioPanel({
         coherence: coherenceMode,
         coherenceStrength,
         motionAmount,
+        imgToImgStrength,
+        cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0) ? { dx: cameraDx, dy: cameraDy } : void 0,
         signal: abort.signal,
         onPromptExpanded: setExpandedPrompt,
         onProgress: handleProgress,
@@ -390,6 +456,9 @@ function StudioPanel({
     coherenceMode,
     coherenceStrength,
     motionAmount,
+    imgToImgStrength,
+    cameraDx,
+    cameraDy,
     fps,
     frames,
     initialMambaState,
@@ -536,9 +605,15 @@ function StudioPanel({
             mode: coherenceMode,
             strength: coherenceStrength,
             motionAmount,
+            imgToImgStrength,
+            cameraDx,
+            cameraDy,
             onModeChange: setCoherenceMode,
             onStrengthChange: setCoherenceStrength,
             onMotionAmountChange: setMotionAmount,
+            onImgToImgStrengthChange: setImgToImgStrength,
+            onCameraDxChange: setCameraDx,
+            onCameraDyChange: setCameraDy,
             disabled: isGenerating
           }
         ),

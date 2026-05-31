@@ -119,6 +119,50 @@ export function blendNoise(anchor: Float32Array, frame: Float32Array, alpha: num
 }
 
 /**
+ * 2D spatial shift on an NCHW latent (zero-fill at the boundary). Used by
+ * `VideoEngine.generate` to add directional camera motion to img2img-recursion
+ * frames: shifting the prior latent down/right before re-noising simulates the
+ * camera panning up/left (the world flows in the opposite direction). One
+ * latent pixel = 8 output pixels (VAE down-factor of 8), so dx=1 in latent
+ * space is an 8-pixel pan in the rendered frame.
+ *
+ * Layout assumption: NCHW packed as [c, y, x] with one batch (the diffusion
+ * engine's shape contract — see `latentShape: [1, 4, h, w]` in
+ * `DiffusionEngine.denoise`). Out-of-bounds samples become zero — the next
+ * denoise pass cleans up the edge band where the prior latent ran off the
+ * frame.
+ */
+export function shiftLatent(
+  latent: Float32Array,
+  shape: { channels: number; height: number; width: number },
+  dx: number,
+  dy: number,
+): Float32Array {
+  const { channels, height, width } = shape;
+  if (latent.length !== channels * height * width) {
+    throw new Error(
+      `shiftLatent: length ${latent.length} doesn't match shape ${channels}x${height}x${width}=${channels * height * width}`,
+    );
+  }
+  if (dx === 0 && dy === 0) return new Float32Array(latent);
+  const out = new Float32Array(latent.length); // zero-filled
+  const idx = (c: number, y: number, x: number) =>
+    c * (height * width) + y * width + x;
+  for (let c = 0; c < channels; c++) {
+    for (let y = 0; y < height; y++) {
+      const srcY = y - dy;
+      if (srcY < 0 || srcY >= height) continue;
+      for (let x = 0; x < width; x++) {
+        const srcX = x - dx;
+        if (srcX < 0 || srcX >= width) continue;
+        out[idx(c, y, x)] = latent[idx(c, srcY, srcX)];
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * Latent-residual mode: add the projected state (broadcast across spatial
  * positions) to the initial noise latent. Strength scales the additive bias.
  */
