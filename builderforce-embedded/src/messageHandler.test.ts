@@ -78,7 +78,7 @@ describe('view registry', () => {
     expect(capabilityForView('kanban')).toBe('agile');
     expect(capabilityForView('backlog')).toBe('product');
     expect(capabilityForView('soc2')).toBe('security');
-    expect(capabilityForView('approvals')).toBe('security');
+    expect(capabilityForView('incidents')).toBe('security');
   });
 
   it('marks kanban + backlog available (wired today) and unbuilt views unavailable', () => {

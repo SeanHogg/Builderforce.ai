@@ -66,24 +66,28 @@ function pillarToCapability(pillar) {
   return pillar === "governance" ? "security" : pillar;
 }
 var EMBED_VIEWS = {
-  // Product Management
-  ideas: { key: "ideas", label: "Product Discovery", pillar: "product", available: false },
-  prd: { key: "prd", label: "PRDs & Specs", pillar: "product", available: false },
+  // Product Management (CPO/PMO)
+  ideas: { key: "ideas", label: "Product Discovery", pillar: "product", available: true },
+  prd: { key: "prd", label: "PRDs & Specs", pillar: "product", available: true },
   backlog: { key: "backlog", label: "Strategic Backlog", pillar: "product", available: true },
   mvp: { key: "mvp", label: "MVP Scaffolding", pillar: "product", available: false },
   validation: { key: "validation", label: "Validation Lab", pillar: "product", available: false },
   roadmap: { key: "roadmap", label: "AI Roadmap", pillar: "product", available: false },
+  "release-planning": { key: "release-planning", label: "Release Planning", pillar: "product", available: false },
+  changelog: { key: "changelog", label: "Changelog", pillar: "product", available: false },
+  "feature-flags": { key: "feature-flags", label: "Feature Flags", pillar: "product", available: false },
   "feature-roi": { key: "feature-roi", label: "Feature ROI", pillar: "product", available: false },
-  // Agile Survival
+  "business-value": { key: "business-value", label: "Business-Value Models", pillar: "product", available: false },
+  // Agile Survival (CTO)
   kanban: { key: "kanban", label: "Kanban", pillar: "agile", available: true },
   poker: { key: "poker", label: "Planning Poker", pillar: "agile", available: false },
   retros: { key: "retros", label: "Retrospectives", pillar: "agile", available: false },
   sprints: { key: "sprints", label: "Sprint Planning", pillar: "agile", available: false },
   velocity: { key: "velocity", label: "Velocity", pillar: "agile", available: false },
+  capacity: { key: "capacity", label: "Capacity & Risk", pillar: "agile", available: false },
+  cost: { key: "cost", label: "Cost / Runway", pillar: "agile", available: false },
   "feature-scoring": { key: "feature-scoring", label: "Feature Scoring", pillar: "agile", available: false },
-  // Security, Governance & Compliance (governance ⇒ 'security' capability)
-  security: { key: "security", label: "Sessions & Access", pillar: "governance", available: false },
-  approvals: { key: "approvals", label: "Approvals", pillar: "governance", available: false },
+  // Governance & Security — POSTURE ONLY (governance ⇒ 'security' capability)
   soc2: { key: "soc2", label: "SOC 2 Tracker", pillar: "governance", available: false },
   vendors: { key: "vendors", label: "Vendor Register", pillar: "governance", available: false },
   incidents: { key: "incidents", label: "Security Incidents", pillar: "governance", available: false },
@@ -93,6 +97,8 @@ var EMBED_VIEWS = {
   "compliance-calendar": { key: "compliance-calendar", label: "Compliance Calendar", pillar: "governance", available: false },
   "access-reviews": { key: "access-reviews", label: "Access Reviews", pillar: "governance", available: false },
   "vuln-scans": { key: "vuln-scans", label: "Vulnerability Scans", pillar: "governance", available: false },
+  // Data-privacy tools, scoped per-Segment (NOT identity/RBAC) — BuilderForce
+  // provides these; BurnRateOS keeps its own platform-global shared-graph DSR.
   dsr: { key: "dsr", label: "Data Subject Requests", pillar: "governance", available: false },
   suppression: { key: "suppression", label: "Suppression List", pillar: "governance", available: false }
 };

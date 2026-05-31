@@ -92,13 +92,13 @@ declare const EMBED_VIEWS: {
         readonly key: "ideas";
         readonly label: "Product Discovery";
         readonly pillar: "product";
-        readonly available: false;
+        readonly available: true;
     };
     readonly prd: {
         readonly key: "prd";
         readonly label: "PRDs & Specs";
         readonly pillar: "product";
-        readonly available: false;
+        readonly available: true;
     };
     readonly backlog: {
         readonly key: "backlog";
@@ -124,9 +124,33 @@ declare const EMBED_VIEWS: {
         readonly pillar: "product";
         readonly available: false;
     };
+    readonly 'release-planning': {
+        readonly key: "release-planning";
+        readonly label: "Release Planning";
+        readonly pillar: "product";
+        readonly available: false;
+    };
+    readonly changelog: {
+        readonly key: "changelog";
+        readonly label: "Changelog";
+        readonly pillar: "product";
+        readonly available: false;
+    };
+    readonly 'feature-flags': {
+        readonly key: "feature-flags";
+        readonly label: "Feature Flags";
+        readonly pillar: "product";
+        readonly available: false;
+    };
     readonly 'feature-roi': {
         readonly key: "feature-roi";
         readonly label: "Feature ROI";
+        readonly pillar: "product";
+        readonly available: false;
+    };
+    readonly 'business-value': {
+        readonly key: "business-value";
+        readonly label: "Business-Value Models";
         readonly pillar: "product";
         readonly available: false;
     };
@@ -160,22 +184,22 @@ declare const EMBED_VIEWS: {
         readonly pillar: "agile";
         readonly available: false;
     };
+    readonly capacity: {
+        readonly key: "capacity";
+        readonly label: "Capacity & Risk";
+        readonly pillar: "agile";
+        readonly available: false;
+    };
+    readonly cost: {
+        readonly key: "cost";
+        readonly label: "Cost / Runway";
+        readonly pillar: "agile";
+        readonly available: false;
+    };
     readonly 'feature-scoring': {
         readonly key: "feature-scoring";
         readonly label: "Feature Scoring";
         readonly pillar: "agile";
-        readonly available: false;
-    };
-    readonly security: {
-        readonly key: "security";
-        readonly label: "Sessions & Access";
-        readonly pillar: "governance";
-        readonly available: false;
-    };
-    readonly approvals: {
-        readonly key: "approvals";
-        readonly label: "Approvals";
-        readonly pillar: "governance";
         readonly available: false;
     };
     readonly soc2: {

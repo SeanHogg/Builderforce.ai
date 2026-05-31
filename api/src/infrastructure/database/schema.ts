@@ -1639,3 +1639,77 @@ export const userPermissionOverrides = pgTable('user_permission_overrides', {
   createdBy:  varchar('created_by', { length: 36 }).notNull().references(() => users.id),
   createdAt:  timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+// ---------------------------------------------------------------------------
+// Governance & Security compliance trackers (doc 07, Phase 2; migration 0057).
+// Segment-scoped like every business entity. segment_id is NOT NULL in the DB
+// (auto-filled by the 0056 default-segment trigger); optional in TS so writes
+// need no change in single-tenant mode.
+// ---------------------------------------------------------------------------
+
+export const socControls = pgTable('soc_controls', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  controlRef:  varchar('control_ref', { length: 50 }).notNull(),
+  category:    varchar('category', { length: 20 }).notNull(),
+  name:        varchar('name', { length: 255 }).notNull(),
+  requirement: text('requirement'),
+  status:      varchar('status', { length: 20 }).notNull().default('not_started'),
+  ownerId:     varchar('owner_id', { length: 64 }),
+  notes:       text('notes'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const socEvidence = pgTable('soc_evidence', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  controlId:    uuid('control_id').notNull().references(() => socControls.id, { onDelete: 'cascade' }),
+  title:        varchar('title', { length: 255 }).notNull(),
+  evidenceType: varchar('evidence_type', { length: 20 }).notNull(),
+  url:          varchar('url', { length: 1000 }),
+  note:         text('note'),
+  uploadedBy:   varchar('uploaded_by', { length: 64 }),
+  sourceRef:    text('source_ref'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+});
+
+export const securityVendors = pgTable('security_vendors', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  name:           varchar('name', { length: 255 }).notNull(),
+  purpose:        text('purpose'),
+  region:         varchar('region', { length: 100 }),
+  dataClasses:    text('data_classes'),
+  isSubprocessor: boolean('is_subprocessor').notNull().default(false),
+  dpaStatus:      varchar('dpa_status', { length: 20 }).notNull().default('pending'),
+  dpaUrl:         varchar('dpa_url', { length: 1000 }),
+  renewalDate:    timestamp('renewal_date'),
+  contactEmail:   varchar('contact_email', { length: 255 }),
+  website:        varchar('website', { length: 500 }),
+  notes:          text('notes'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const securityIncidents = pgTable('security_incidents', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:       uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  title:           varchar('title', { length: 255 }).notNull(),
+  severity:        varchar('severity', { length: 20 }).notNull().default('low'),
+  status:          varchar('status', { length: 20 }).notNull().default('open'),
+  discoveredAt:    timestamp('discovered_at').notNull().defaultNow(),
+  resolvedAt:      timestamp('resolved_at'),
+  detectionSource: varchar('detection_source', { length: 40 }),
+  impact:          text('impact'),
+  rootCause:       text('root_cause'),
+  postmortemUrl:   varchar('postmortem_url', { length: 1000 }),
+  reportedBy:      varchar('reported_by', { length: 64 }),
+  assignedTo:      varchar('assigned_to', { length: 64 }),
+  sourceRef:       text('source_ref'),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+});
