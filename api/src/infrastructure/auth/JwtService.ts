@@ -11,6 +11,11 @@ export interface JwtPayload {
   sv?:  number;       // session_version — for fast force-logout without a blocklist
   jti?: string;
   sid?: string;
+  // Federated-tenancy claims (present on tokens for 'segmented' tenants whose
+  // IdP is an external host, e.g. BurnRateOS). resolveSegment() maps these to a
+  // Segment. Absent on 'single'/direct tenants → default segment is used.
+  acct?: string;      // external account id (host coordinate)
+  co?:   string;      // external company id (host coordinate)
   iat:  number;
   exp:  number;
 }
