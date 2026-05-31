@@ -574,6 +574,144 @@ function QualityTierPicker({ value, onChange, disabled }) {
   ] });
 }
 
+// src/components/StoryboardEditor.tsx
+import {
+  CAMERA_MOVES
+} from "@seanhogg/builderforce-studio";
+import { jsx as jsx7, jsxs as jsxs6 } from "react/jsx-runtime";
+function StoryboardEditor({
+  storyboard,
+  onChange,
+  onRender,
+  onReplan,
+  validations,
+  busy
+}) {
+  const totalFrames = storyboard.shots.reduce((a, s) => a + s.durationFrames, 0);
+  const validationByShot = new Map((validations ?? []).map((v) => [v.shotId, v.validation]));
+  const updateShot = (idx, patch) => {
+    const shots = storyboard.shots.map((s, i) => i === idx ? { ...s, ...patch } : s);
+    onChange({ ...storyboard, shots });
+  };
+  return /* @__PURE__ */ jsxs6("div", { className: "bfs-field", style: { border: "1px solid var(--bfs-border)", borderRadius: 8, padding: 12 }, children: [
+    /* @__PURE__ */ jsxs6("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }, children: [
+      /* @__PURE__ */ jsx7("strong", { style: { fontSize: "0.9rem" }, children: "Storyboard" }),
+      /* @__PURE__ */ jsxs6("span", { className: "bfs-hint", style: { margin: 0 }, children: [
+        storyboard.shots.length,
+        " shots \xB7 ",
+        totalFrames,
+        " frames"
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxs6("p", { className: "bfs-hint", style: { marginTop: 6 }, children: [
+      /* @__PURE__ */ jsx7("strong", { children: "Treatment:" }),
+      " ",
+      storyboard.treatment
+    ] }),
+    storyboard.characters.length > 0 && /* @__PURE__ */ jsxs6("p", { className: "bfs-hint", style: { marginTop: 0 }, children: [
+      /* @__PURE__ */ jsx7("strong", { children: "Cast:" }),
+      " ",
+      storyboard.characters.map((c) => `${c.name} (${c.appearance})`).join(" \xB7 ")
+    ] }),
+    /* @__PURE__ */ jsx7("div", { style: { display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }, children: storyboard.shots.map((shot, idx) => {
+      const verdict = validationByShot.get(shot.id);
+      return /* @__PURE__ */ jsxs6(
+        "div",
+        {
+          style: {
+            border: "1px solid var(--bfs-border)",
+            borderRadius: 6,
+            padding: 8,
+            display: "flex",
+            flexDirection: "column",
+            gap: 6
+          },
+          children: [
+            /* @__PURE__ */ jsxs6("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+              /* @__PURE__ */ jsxs6("span", { style: { fontWeight: 600, fontSize: "0.8rem" }, children: [
+                "Shot ",
+                idx + 1
+              ] }),
+              verdict && /* @__PURE__ */ jsx7(ValidationBadge, { ok: verdict.ok, score: verdict.score })
+            ] }),
+            /* @__PURE__ */ jsx7(
+              "textarea",
+              {
+                className: "bfs-prompt",
+                rows: 2,
+                value: shot.prompt,
+                onChange: (e) => updateShot(idx, { prompt: e.target.value }),
+                disabled: busy,
+                style: { fontSize: "0.8rem" }
+              }
+            ),
+            /* @__PURE__ */ jsxs6("div", { className: "bfs-row", children: [
+              /* @__PURE__ */ jsxs6("div", { className: "bfs-field bfs-flex", style: { margin: 0 }, children: [
+                /* @__PURE__ */ jsx7("label", { className: "bfs-label", children: "Camera" }),
+                /* @__PURE__ */ jsx7(
+                  "select",
+                  {
+                    className: "bfs-input",
+                    value: shot.camera,
+                    onChange: (e) => updateShot(idx, { camera: e.target.value }),
+                    disabled: busy,
+                    children: CAMERA_MOVES.map((m) => /* @__PURE__ */ jsx7("option", { value: m, children: m }, m))
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ jsxs6("div", { className: "bfs-field bfs-flex", style: { margin: 0 }, children: [
+                /* @__PURE__ */ jsx7("label", { className: "bfs-label", children: "Frames" }),
+                /* @__PURE__ */ jsx7(
+                  "input",
+                  {
+                    type: "number",
+                    className: "bfs-input",
+                    min: 1,
+                    max: 120,
+                    value: shot.durationFrames,
+                    onChange: (e) => updateShot(idx, {
+                      durationFrames: Math.max(1, Math.min(120, Number(e.target.value) || 1))
+                    }),
+                    disabled: busy
+                  }
+                )
+              ] })
+            ] }),
+            verdict && verdict.issues.length > 0 && /* @__PURE__ */ jsx7("p", { className: "bfs-hint", style: { margin: 0 }, children: verdict.issues.map((i) => `${i.kind}: ${i.detail}`).join(" \xB7 ") })
+          ]
+        },
+        shot.id
+      );
+    }) }),
+    /* @__PURE__ */ jsxs6("div", { className: "bfs-actions", style: { marginTop: 10 }, children: [
+      /* @__PURE__ */ jsx7("button", { type: "button", className: "bfs-btn bfs-btn-secondary", onClick: onReplan, disabled: busy, children: "Re-plan" }),
+      /* @__PURE__ */ jsx7("button", { type: "button", className: "bfs-btn bfs-btn-primary", onClick: onRender, disabled: busy, children: "Render storyboard" })
+    ] })
+  ] });
+}
+function ValidationBadge({ ok, score }) {
+  return /* @__PURE__ */ jsxs6(
+    "span",
+    {
+      style: {
+        fontSize: "0.7rem",
+        fontWeight: 700,
+        padding: "2px 6px",
+        borderRadius: 4,
+        color: "white",
+        background: ok ? "#16a34a" : "#dc2626"
+      },
+      title: `VLM score ${score.toFixed(2)}`,
+      children: [
+        ok ? "\u2713" : "\u2717",
+        " ",
+        (score * 100).toFixed(0),
+        "%"
+      ]
+    }
+  );
+}
+
 // src/components/useEngineStatus.ts
 import { useEffect as useEffect2, useRef as useRef2, useState as useState3 } from "react";
 import { probeDevice } from "@seanhogg/builderforce-studio";
@@ -624,7 +762,7 @@ function useEngineStatus() {
 }
 
 // src/components/StudioPanel.tsx
-import { jsx as jsx7, jsxs as jsxs6 } from "react/jsx-runtime";
+import { jsx as jsx8, jsxs as jsxs7 } from "react/jsx-runtime";
 var RESOLUTION_PRESETS = [256, 384, 512, 768];
 var DEFAULT_RESOLUTION = 256;
 function StudioPanel({
@@ -663,6 +801,10 @@ function StudioPanel({
   const [fps, setFps] = useState4(defaultFps);
   const [interpolationFactor, setInterpolationFactor] = useState4(1);
   const [cinematic, setCinematic] = useState4(false);
+  const [storyboard, setStoryboard] = useState4(null);
+  const [validations, setValidations] = useState4([]);
+  const [validate, setValidate] = useState4(false);
+  const [interpolationBackend, setInterpolationBackend] = useState4("latent-slerp");
   useEffect3(() => {
     disposeEngineAndOutputs();
   }, [quality, resolution]);
@@ -729,93 +871,30 @@ function StudioPanel({
       disposeEngineAndOutputs();
     };
   }, [disposeEngineAndOutputs]);
-  const handleGenerate = useCallback2(async () => {
-    if (status.state !== "ready") return;
-    if (!prompt.trim()) {
-      setError("Enter a prompt before generating.");
-      return;
-    }
-    if (!token) {
-      setError("Missing Builderforce auth token (pass authToken).");
-      return;
-    }
-    setError(null);
-    setIsGenerating(true);
-    setFramesDone(0);
-    setProgressLabel("Initialising engine\u2026");
-    releaseVideoOutputs();
-    const abort = new AbortController();
-    abortRef.current = abort;
-    const handleProgress = (label) => setProgressLabel(label);
-    try {
-      if (!engineRef.current) {
-        const tier = resolveQualityTier(quality);
-        const engine = await VideoEngine.create({
-          apiKey: token,
-          baseUrl,
-          model: showAdvanced ? model : tier.primary,
-          refinementModel: showAdvanced ? void 0 : tier.refinement,
-          mambaState: initialMambaState,
-          width: resolution,
-          height: resolution,
-          onProgress: handleProgress
-        });
-        if (!engine) {
-          throw new Error("Engine refused to start on this device.");
-        }
-        engineRef.current = engine;
-      }
-      const onFrame = (idx, bitmap) => {
-        setPreviewFrames((prev) => [...prev, bitmap]);
-        setFramesDone(idx + 1);
-      };
-      let generated;
-      if (cinematic) {
-        setProgressLabel("Planning storyboard via Director + Shot Planner\u2026");
-        const storyboard = await planScene({
-          apiKey: token,
-          baseUrl,
-          request: prompt,
-          totalFrames: frames,
-          signal: abort.signal
-        });
-        setExpandedPrompt(storyboard.treatment);
-        const sb = await engineRef.current.generateStoryboard({
-          storyboard,
-          fps,
-          coherence: coherenceMode,
-          coherenceStrength,
-          motionAmount,
-          interpolationFactor,
-          signal: abort.signal,
-          onProgress: handleProgress,
-          onFrame
-        });
-        generated = {
-          blob: sb.blob,
-          mambaState: sb.mambaState,
-          frames: sb.frames,
-          activeDevice: sb.activeDevice,
-          resolvedPrompt: storyboard.treatment,
-          elapsedMs: sb.elapsedMs
-        };
-      } else {
-        generated = await engineRef.current.generate({
-          prompt,
-          frames,
-          fps,
-          coherence: coherenceMode,
-          coherenceStrength,
-          motionAmount,
-          imgToImgStrength,
-          interpolationFactor,
-          cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0) ? { dx: cameraDx, dy: cameraDy } : void 0,
-          signal: abort.signal,
-          onPromptExpanded: setExpandedPrompt,
-          onProgress: handleProgress,
-          onFrame
-        });
-      }
+  const handleProgress = useCallback2((label) => setProgressLabel(label), []);
+  const handleFrame = useCallback2((idx, bitmap) => {
+    setPreviewFrames((prev) => [...prev, bitmap]);
+    setFramesDone(idx + 1);
+  }, []);
+  const ensureEngine = useCallback2(async () => {
+    if (engineRef.current) return engineRef.current;
+    const tier = resolveQualityTier(quality);
+    const engine = await VideoEngine.create({
+      apiKey: token,
+      baseUrl,
+      model: showAdvanced ? model : tier.primary,
+      refinementModel: showAdvanced ? void 0 : tier.refinement,
+      mambaState: initialMambaState,
+      width: resolution,
+      height: resolution,
+      onProgress: handleProgress
+    });
+    if (!engine) throw new Error("Engine refused to start on this device.");
+    engineRef.current = engine;
+    return engine;
+  }, [token, baseUrl, quality, showAdvanced, model, initialMambaState, resolution, handleProgress]);
+  const finishGeneration = useCallback2(
+    async (generated, wasCinematic) => {
       const url = URL.createObjectURL(generated.blob);
       setVideoUrl(url);
       setResult(generated);
@@ -834,7 +913,7 @@ function StudioPanel({
             frames,
             fps,
             interpolationFactor,
-            cinematic,
+            cinematic: wasCinematic,
             coherence: coherenceMode,
             coherenceStrength,
             motionAmount,
@@ -851,47 +930,208 @@ function StudioPanel({
           setProgressLabel((prev) => `${prev}  (version save failed: ${m})`);
         }
       }
-      setProgressLabel(`Done in ${(generated.elapsedMs / 1e3).toFixed(1)}s on ${generated.activeDevice.toUpperCase()}.`);
+      setProgressLabel(
+        `Done in ${(generated.elapsedMs / 1e3).toFixed(1)}s on ${generated.activeDevice.toUpperCase()}.`
+      );
+    },
+    [
+      onVideoGenerated,
+      onSaveVersion,
+      quality,
+      showAdvanced,
+      model,
+      resolution,
+      prompt,
+      frames,
+      fps,
+      interpolationFactor,
+      coherenceMode,
+      coherenceStrength,
+      motionAmount,
+      imgToImgStrength,
+      cameraDx,
+      cameraDy,
+      currentVersionId
+    ]
+  );
+  const runGeneration = useCallback2(
+    async (produce, wasCinematic) => {
+      if (status.state !== "ready" || !token) {
+        if (!token) setError("Missing Builderforce auth token (pass authToken).");
+        return;
+      }
+      setError(null);
+      setIsGenerating(true);
+      setFramesDone(0);
+      setProgressLabel("Initialising engine\u2026");
+      releaseVideoOutputs();
+      const abort = new AbortController();
+      abortRef.current = abort;
+      try {
+        const engine = await ensureEngine();
+        const generated = await produce(engine, abort.signal);
+        await finishGeneration(generated, wasCinematic);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message === "Generation aborted" || message === "Mux aborted") {
+          setProgressLabel("Cancelled.");
+        } else {
+          setError(message);
+          setProgressLabel("");
+        }
+      } finally {
+        setIsGenerating(false);
+        abortRef.current = null;
+      }
+    },
+    [status.state, token, releaseVideoOutputs, ensureEngine, finishGeneration]
+  );
+  const handlePlan = useCallback2(async () => {
+    if (status.state !== "ready") return;
+    if (!prompt.trim()) {
+      setError("Enter a prompt before planning.");
+      return;
+    }
+    if (!token) {
+      setError("Missing Builderforce auth token (pass authToken).");
+      return;
+    }
+    setError(null);
+    setIsGenerating(true);
+    setStoryboard(null);
+    setValidations([]);
+    setProgressLabel("Planning storyboard via Director + Shot Planner\u2026");
+    const abort = new AbortController();
+    abortRef.current = abort;
+    try {
+      const planned = await planScene({
+        apiKey: token,
+        baseUrl,
+        request: prompt,
+        totalFrames: frames,
+        signal: abort.signal
+      });
+      setStoryboard(planned);
+      setExpandedPrompt(planned.treatment);
+      setProgressLabel(`Storyboard ready \u2014 ${planned.shots.length} shots. Review, then Render.`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (message === "Generation aborted" || message === "Mux aborted") {
-        setProgressLabel("Cancelled.");
-      } else {
-        setError(message);
-        setProgressLabel("");
-      }
+      setError(message);
+      setProgressLabel("");
     } finally {
       setIsGenerating(false);
       abortRef.current = null;
     }
+  }, [status.state, prompt, token, baseUrl, frames]);
+  const handleRenderStoryboard = useCallback2(async () => {
+    if (!storyboard) return;
+    setValidations([]);
+    await runGeneration(async (engine, signal) => {
+      const sb = await engine.generateStoryboard({
+        storyboard,
+        fps,
+        coherence: coherenceMode,
+        coherenceStrength,
+        motionAmount,
+        interpolationFactor,
+        interpolationBackend,
+        validate,
+        validatorModel: void 0,
+        signal,
+        onProgress: handleProgress,
+        onFrame: handleFrame,
+        onShot: (_i, _shot, v) => {
+          if (v) setValidations((prev) => [...prev]);
+        }
+      });
+      setValidations(sb.validations);
+      return {
+        blob: sb.blob,
+        mambaState: sb.mambaState,
+        frames: sb.frames,
+        activeDevice: sb.activeDevice,
+        resolvedPrompt: sb.storyboard.treatment,
+        elapsedMs: sb.elapsedMs
+      };
+    }, true);
   }, [
-    token,
-    baseUrl,
+    storyboard,
+    runGeneration,
+    fps,
+    coherenceMode,
+    coherenceStrength,
+    motionAmount,
+    interpolationFactor,
+    interpolationBackend,
+    validate,
+    handleProgress,
+    handleFrame
+  ]);
+  const handleGenerate = useCallback2(async () => {
+    if (cinematic) {
+      await handlePlan();
+      return;
+    }
+    if (!prompt.trim()) {
+      setError("Enter a prompt before generating.");
+      return;
+    }
+    await runGeneration(
+      (engine, signal) => engine.generate({
+        prompt,
+        frames,
+        fps,
+        coherence: coherenceMode,
+        coherenceStrength,
+        motionAmount,
+        imgToImgStrength,
+        interpolationFactor,
+        interpolationBackend,
+        cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0) ? { dx: cameraDx, dy: cameraDy } : void 0,
+        signal,
+        onPromptExpanded: setExpandedPrompt,
+        onProgress: handleProgress,
+        onFrame: handleFrame
+      }),
+      false
+    );
+  }, [
+    cinematic,
+    handlePlan,
+    prompt,
+    runGeneration,
+    frames,
+    fps,
     coherenceMode,
     coherenceStrength,
     motionAmount,
     imgToImgStrength,
+    interpolationFactor,
+    interpolationBackend,
     cameraDx,
     cameraDy,
-    currentVersionId,
-    fps,
-    frames,
-    interpolationFactor,
-    cinematic,
-    initialMambaState,
-    model,
-    quality,
-    showAdvanced,
-    onSaveVersion,
-    onVideoGenerated,
-    prompt,
-    releaseVideoOutputs,
-    resolution,
-    status.state
+    handleProgress,
+    handleFrame
   ]);
   const handleCancel = useCallback2(() => {
     abortRef.current?.abort();
   }, []);
+  const handleNewProject = useCallback2(() => {
+    if (isGenerating) return;
+    if ((prompt.trim() || result) && typeof window !== "undefined" && !window.confirm(
+      "Start a new video project? This clears the current prompt, preview, and continuity memory. Saved versions are kept."
+    )) {
+      return;
+    }
+    disposeEngineAndOutputs();
+    setPrompt("");
+    onPromptChange?.("");
+    setExpandedPrompt("");
+    setError(null);
+    setCurrentVersionId(null);
+    setFramesDone(0);
+    setProgressLabel("New project \u2014 continuity memory cleared. Enter a prompt to generate v1.");
+  }, [isGenerating, prompt, result, disposeEngineAndOutputs, onPromptChange]);
   const handleDownload = useCallback2(() => {
     if (!result) return;
     const a = document.createElement("a");
@@ -934,33 +1174,51 @@ function StudioPanel({
     }
   }, [onLoadVersion, releaseVideoOutputs, versions]);
   if (status.state === "probing") {
-    return /* @__PURE__ */ jsxs6("div", { className: "bfs-root bfs-state-probing", children: [
-      /* @__PURE__ */ jsx7("div", { className: "bfs-spinner" }),
-      /* @__PURE__ */ jsx7("p", { children: "Probing hardware (WebNN \u2192 WebGPU \u2192 CPU)\u2026" })
+    return /* @__PURE__ */ jsxs7("div", { className: "bfs-root bfs-state-probing", children: [
+      /* @__PURE__ */ jsx8("div", { className: "bfs-spinner" }),
+      /* @__PURE__ */ jsx8("p", { children: "Probing hardware (WebNN \u2192 WebGPU \u2192 CPU)\u2026" })
     ] });
   }
   if (status.state === "unsupported") {
-    return /* @__PURE__ */ jsxs6("div", { className: "bfs-root bfs-state-unsupported", children: [
-      /* @__PURE__ */ jsx7("h2", { children: "AI Video Studio unavailable" }),
-      /* @__PURE__ */ jsx7("p", { children: status.reason }),
-      /* @__PURE__ */ jsx7("p", { className: "bfs-hint", children: "Open this page in Chrome 113+ or Edge 113+ with hardware acceleration enabled." })
+    return /* @__PURE__ */ jsxs7("div", { className: "bfs-root bfs-state-unsupported", children: [
+      /* @__PURE__ */ jsx8("h2", { children: "AI Video Studio unavailable" }),
+      /* @__PURE__ */ jsx8("p", { children: status.reason }),
+      /* @__PURE__ */ jsx8("p", { className: "bfs-hint", children: "Open this page in Chrome 113+ or Edge 113+ with hardware acceleration enabled." })
     ] });
   }
   const device = status.device;
-  return /* @__PURE__ */ jsxs6("div", { className: "bfs-root", children: [
-    !hideHeader && /* @__PURE__ */ jsx7("header", { className: "bfs-header", children: /* @__PURE__ */ jsxs6("div", { children: [
-      /* @__PURE__ */ jsx7("h1", { className: "bfs-title", children: "AI Video Studio" }),
-      /* @__PURE__ */ jsxs6("p", { className: "bfs-subtitle", children: [
+  return /* @__PURE__ */ jsxs7("div", { className: "bfs-root", children: [
+    !hideHeader && /* @__PURE__ */ jsx8("header", { className: "bfs-header", children: /* @__PURE__ */ jsxs7("div", { children: [
+      /* @__PURE__ */ jsx8("h1", { className: "bfs-title", children: "AI Video Studio" }),
+      /* @__PURE__ */ jsxs7("p", { className: "bfs-subtitle", children: [
         "Running on ",
-        /* @__PURE__ */ jsx7("strong", { children: device.label }),
+        /* @__PURE__ */ jsx8("strong", { children: device.label }),
         device.approxMemoryMb ? ` \xB7 ~${(device.approxMemoryMb / 1024).toFixed(1)} GB available` : ""
       ] })
     ] }) }),
-    /* @__PURE__ */ jsxs6("div", { className: "bfs-grid", children: [
-      /* @__PURE__ */ jsxs6("section", { className: "bfs-controls", children: [
-        /* @__PURE__ */ jsxs6("div", { className: "bfs-field", children: [
-          /* @__PURE__ */ jsx7("label", { className: "bfs-label", htmlFor: "bfs-prompt", children: "What video do you want to generate?" }),
-          /* @__PURE__ */ jsx7(
+    /* @__PURE__ */ jsxs7("div", { className: "bfs-grid", children: [
+      /* @__PURE__ */ jsxs7("section", { className: "bfs-controls", children: [
+        /* @__PURE__ */ jsx8(
+          "div",
+          {
+            style: { display: "flex", justifyContent: "flex-end", marginBottom: 4 },
+            children: /* @__PURE__ */ jsx8(
+              "button",
+              {
+                type: "button",
+                className: "bfs-btn bfs-btn-secondary",
+                onClick: handleNewProject,
+                disabled: isGenerating,
+                title: "Clear the current prompt, preview, and continuity (Mamba) memory and start a fresh project. Saved versions are kept.",
+                style: { fontSize: "0.8rem", padding: "4px 10px" },
+                children: "\uFF0B New project"
+              }
+            )
+          }
+        ),
+        /* @__PURE__ */ jsxs7("div", { className: "bfs-field", children: [
+          /* @__PURE__ */ jsx8("label", { className: "bfs-label", htmlFor: "bfs-prompt", children: "What video do you want to generate?" }),
+          /* @__PURE__ */ jsx8(
             "textarea",
             {
               id: "bfs-prompt",
@@ -975,44 +1233,61 @@ function StudioPanel({
               disabled: isGenerating
             }
           ),
-          expandedPrompt && /* @__PURE__ */ jsxs6("p", { className: "bfs-hint", children: [
-            /* @__PURE__ */ jsx7("strong", { children: "Expanded:" }),
+          expandedPrompt && /* @__PURE__ */ jsxs7("p", { className: "bfs-hint", children: [
+            /* @__PURE__ */ jsx8("strong", { children: "Expanded:" }),
             " ",
             expandedPrompt
           ] })
         ] }),
-        /* @__PURE__ */ jsx7(QualityTierPicker, { value: quality, onChange: setQuality, disabled: isGenerating }),
-        /* @__PURE__ */ jsxs6(
+        /* @__PURE__ */ jsx8(QualityTierPicker, { value: quality, onChange: setQuality, disabled: isGenerating }),
+        /* @__PURE__ */ jsxs7(
           "label",
           {
             className: "bfs-field",
             style: { display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer" },
             children: [
-              /* @__PURE__ */ jsx7(
+              /* @__PURE__ */ jsx8(
                 "input",
                 {
                   type: "checkbox",
                   checked: cinematic,
-                  onChange: (e) => setCinematic(e.target.checked),
+                  onChange: (e) => {
+                    setCinematic(e.target.checked);
+                    if (!e.target.checked) {
+                      setStoryboard(null);
+                      setValidations([]);
+                    }
+                  },
                   disabled: isGenerating,
                   style: { marginTop: 3 }
                 }
               ),
-              /* @__PURE__ */ jsxs6("span", { children: [
-                /* @__PURE__ */ jsx7("span", { className: "bfs-label", style: { display: "block" }, children: "Cinematic (auto-storyboard)" }),
-                /* @__PURE__ */ jsx7("span", { className: "bfs-hint", children: "Plans a multi-shot scene with characters and camera moves, then renders each shot." })
+              /* @__PURE__ */ jsxs7("span", { children: [
+                /* @__PURE__ */ jsx8("span", { className: "bfs-label", style: { display: "block" }, children: "Cinematic (auto-storyboard)" }),
+                /* @__PURE__ */ jsx8("span", { className: "bfs-hint", children: "Plans a multi-shot scene with characters and camera moves, then renders each shot." })
               ] })
             ]
           }
         ),
-        /* @__PURE__ */ jsxs6(
+        cinematic && storyboard && /* @__PURE__ */ jsx8(
+          StoryboardEditor,
+          {
+            storyboard,
+            onChange: setStoryboard,
+            onRender: handleRenderStoryboard,
+            onReplan: handlePlan,
+            validations,
+            busy: isGenerating
+          }
+        ),
+        /* @__PURE__ */ jsxs7(
           "details",
           {
             className: "bfs-field",
             open: showAdvanced,
             onToggle: (e) => setShowAdvanced(e.target.open),
             children: [
-              /* @__PURE__ */ jsx7(
+              /* @__PURE__ */ jsx8(
                 "summary",
                 {
                   style: {
@@ -1025,15 +1300,15 @@ function StudioPanel({
                   children: "Advanced controls"
                 }
               ),
-              /* @__PURE__ */ jsxs6("div", { style: { marginTop: 12 }, children: [
-                /* @__PURE__ */ jsx7(ModelPicker, { value: model, onChange: setModel, disabled: isGenerating }),
-                /* @__PURE__ */ jsx7("p", { className: "bfs-hint", children: "Overrides the Quality preset above. When this is set, the engine uses this model directly (no refinement pass)." })
+              /* @__PURE__ */ jsxs7("div", { style: { marginTop: 12 }, children: [
+                /* @__PURE__ */ jsx8(ModelPicker, { value: model, onChange: setModel, disabled: isGenerating }),
+                /* @__PURE__ */ jsx8("p", { className: "bfs-hint", children: "Overrides the Quality preset above. When this is set, the engine uses this model directly (no refinement pass)." })
               ] }),
-              /* @__PURE__ */ jsxs6("div", { className: "bfs-field", style: { marginTop: 12 }, children: [
-                /* @__PURE__ */ jsx7("label", { className: "bfs-label", children: "Resolution" }),
-                /* @__PURE__ */ jsx7("div", { className: "bfs-radio-row", children: RESOLUTION_PRESETS.map((px) => {
+              /* @__PURE__ */ jsxs7("div", { className: "bfs-field", style: { marginTop: 12 }, children: [
+                /* @__PURE__ */ jsx8("label", { className: "bfs-label", children: "Resolution" }),
+                /* @__PURE__ */ jsx8("div", { className: "bfs-radio-row", children: RESOLUTION_PRESETS.map((px) => {
                   const active = resolution === px;
-                  return /* @__PURE__ */ jsxs6(
+                  return /* @__PURE__ */ jsxs7(
                     "button",
                     {
                       type: "button",
@@ -1059,12 +1334,12 @@ function StudioPanel({
                     px
                   );
                 }) }),
-                /* @__PURE__ */ jsx7("p", { className: "bfs-hint", children: "Lower = faster + fits weaker GPUs (4\xD7 less compute per step at 256). Higher = sharper, more VRAM, may trip Windows GPU timeouts." })
+                /* @__PURE__ */ jsx8("p", { className: "bfs-hint", children: "Lower = faster + fits weaker GPUs (4\xD7 less compute per step at 256). Higher = sharper, more VRAM, may trip Windows GPU timeouts." })
               ] }),
-              /* @__PURE__ */ jsxs6("div", { className: "bfs-row", style: { marginTop: 12 }, children: [
-                /* @__PURE__ */ jsxs6("div", { className: "bfs-field bfs-flex", children: [
-                  /* @__PURE__ */ jsx7("label", { className: "bfs-label", children: "Frames" }),
-                  /* @__PURE__ */ jsx7(
+              /* @__PURE__ */ jsxs7("div", { className: "bfs-row", style: { marginTop: 12 }, children: [
+                /* @__PURE__ */ jsxs7("div", { className: "bfs-field bfs-flex", children: [
+                  /* @__PURE__ */ jsx8("label", { className: "bfs-label", children: "Frames" }),
+                  /* @__PURE__ */ jsx8(
                     "input",
                     {
                       type: "number",
@@ -1077,9 +1352,9 @@ function StudioPanel({
                     }
                   )
                 ] }),
-                /* @__PURE__ */ jsxs6("div", { className: "bfs-field bfs-flex", children: [
-                  /* @__PURE__ */ jsx7("label", { className: "bfs-label", children: "FPS" }),
-                  /* @__PURE__ */ jsx7(
+                /* @__PURE__ */ jsxs7("div", { className: "bfs-field bfs-flex", children: [
+                  /* @__PURE__ */ jsx8("label", { className: "bfs-label", children: "FPS" }),
+                  /* @__PURE__ */ jsx8(
                     "input",
                     {
                       type: "number",
@@ -1092,19 +1367,19 @@ function StudioPanel({
                     }
                   )
                 ] }),
-                /* @__PURE__ */ jsxs6("div", { className: "bfs-field bfs-flex", children: [
-                  /* @__PURE__ */ jsx7("label", { className: "bfs-label", children: "Duration" }),
-                  /* @__PURE__ */ jsxs6("div", { className: "bfs-readout", children: [
+                /* @__PURE__ */ jsxs7("div", { className: "bfs-field bfs-flex", children: [
+                  /* @__PURE__ */ jsx8("label", { className: "bfs-label", children: "Duration" }),
+                  /* @__PURE__ */ jsxs7("div", { className: "bfs-readout", children: [
                     (frames / fps).toFixed(2),
                     "s"
                   ] })
                 ] })
               ] }),
-              /* @__PURE__ */ jsxs6("div", { className: "bfs-field", style: { marginTop: 12 }, children: [
-                /* @__PURE__ */ jsx7("label", { className: "bfs-label", children: "Keyframe interpolation" }),
-                /* @__PURE__ */ jsx7("div", { className: "bfs-radio-row", children: [1, 2, 4].map((f) => {
+              /* @__PURE__ */ jsxs7("div", { className: "bfs-field", style: { marginTop: 12 }, children: [
+                /* @__PURE__ */ jsx8("label", { className: "bfs-label", children: "Keyframe interpolation" }),
+                /* @__PURE__ */ jsx8("div", { className: "bfs-radio-row", children: [1, 2, 4].map((f) => {
                   const active = interpolationFactor === f;
-                  return /* @__PURE__ */ jsx7(
+                  return /* @__PURE__ */ jsx8(
                     "button",
                     {
                       type: "button",
@@ -1126,9 +1401,63 @@ function StudioPanel({
                     f
                   );
                 }) }),
-                /* @__PURE__ */ jsx7("p", { className: "bfs-hint", children: "Off = every frame fully generated (sharpest, slowest). 2\xD7/4\xD7 generate keyframes and interpolate the rest in latent space \u2014 roughly N\xD7 fewer denoise passes for smooth motion." })
+                /* @__PURE__ */ jsx8("p", { className: "bfs-hint", children: "Off = every frame fully generated (sharpest, slowest). 2\xD7/4\xD7 generate keyframes and interpolate the rest \u2014 roughly N\xD7 fewer denoise passes for smooth motion." })
               ] }),
-              /* @__PURE__ */ jsx7(
+              interpolationFactor > 1 && /* @__PURE__ */ jsxs7("div", { className: "bfs-field", style: { marginTop: 12 }, children: [
+                /* @__PURE__ */ jsx8("label", { className: "bfs-label", children: "Interpolation backend" }),
+                /* @__PURE__ */ jsx8("div", { className: "bfs-radio-row", children: [
+                  ["latent-slerp", "Latent (smooth)"],
+                  ["motion", "Motion (optical flow)"]
+                ].map(([id, lbl]) => {
+                  const active = interpolationBackend === id;
+                  return /* @__PURE__ */ jsx8(
+                    "button",
+                    {
+                      type: "button",
+                      onClick: () => setInterpolationBackend(id),
+                      disabled: isGenerating,
+                      className: "bfs-btn bfs-btn-secondary",
+                      "aria-pressed": active,
+                      style: {
+                        flex: 1,
+                        padding: "6px 8px",
+                        fontSize: "0.8rem",
+                        fontWeight: 600,
+                        background: active ? "var(--bfs-accent)" : "transparent",
+                        color: active ? "white" : "var(--bfs-fg)",
+                        borderColor: active ? "var(--bfs-accent)" : "var(--bfs-border)"
+                      },
+                      children: lbl
+                    },
+                    id
+                  );
+                }) }),
+                /* @__PURE__ */ jsx8("p", { className: "bfs-hint", children: "Latent = morph between keyframes (smooth, no motion). Motion = block optical-flow warp so moving subjects actually slide between keyframes." })
+              ] }),
+              cinematic && /* @__PURE__ */ jsxs7(
+                "label",
+                {
+                  className: "bfs-field",
+                  style: { display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", marginTop: 12 },
+                  children: [
+                    /* @__PURE__ */ jsx8(
+                      "input",
+                      {
+                        type: "checkbox",
+                        checked: validate,
+                        onChange: (e) => setValidate(e.target.checked),
+                        disabled: isGenerating,
+                        style: { marginTop: 3 }
+                      }
+                    ),
+                    /* @__PURE__ */ jsxs7("span", { children: [
+                      /* @__PURE__ */ jsx8("span", { className: "bfs-label", style: { display: "block" }, children: "Validate shots (VLM) + self-heal" }),
+                      /* @__PURE__ */ jsx8("span", { className: "bfs-hint", children: "Checks each shot's first/last keyframe against the prompt + characters via a vision model, and re-renders a failing shot once with a fresh seed." })
+                    ] })
+                  ]
+                }
+              ),
+              /* @__PURE__ */ jsx8(
                 CoherenceControls,
                 {
                   mode: coherenceMode,
@@ -1149,22 +1478,22 @@ function StudioPanel({
             ]
           }
         ),
-        /* @__PURE__ */ jsxs6("div", { className: "bfs-actions", children: [
-          isGenerating ? /* @__PURE__ */ jsx7("button", { type: "button", className: "bfs-btn bfs-btn-danger", onClick: handleCancel, children: "Cancel" }) : /* @__PURE__ */ jsx7(
+        /* @__PURE__ */ jsxs7("div", { className: "bfs-actions", children: [
+          isGenerating ? /* @__PURE__ */ jsx8("button", { type: "button", className: "bfs-btn bfs-btn-danger", onClick: handleCancel, children: "Cancel" }) : /* @__PURE__ */ jsx8(
             "button",
             {
               type: "button",
               className: "bfs-btn bfs-btn-primary",
               onClick: handleGenerate,
               disabled: !prompt.trim(),
-              children: currentVersionId ? `Generate v${(versions?.length ?? 0) + 1} (edit of current)` : "Generate video"
+              children: cinematic ? "Plan storyboard" : currentVersionId ? `Generate v${(versions?.length ?? 0) + 1} (edit of current)` : "Generate video"
             }
           ),
-          result && !isGenerating && /* @__PURE__ */ jsx7("button", { type: "button", className: "bfs-btn bfs-btn-secondary", onClick: handleDownload, children: "Download MP4" })
+          result && !isGenerating && /* @__PURE__ */ jsx8("button", { type: "button", className: "bfs-btn bfs-btn-secondary", onClick: handleDownload, children: "Download MP4" })
         ] })
       ] }),
-      /* @__PURE__ */ jsxs6("section", { className: "bfs-preview-pane", children: [
-        /* @__PURE__ */ jsx7(
+      /* @__PURE__ */ jsxs7("section", { className: "bfs-preview-pane", children: [
+        /* @__PURE__ */ jsx8(
           VideoPreview,
           {
             frames: previewFrames,
@@ -1174,8 +1503,8 @@ function StudioPanel({
             loading: isGenerating ? { label: progressLabel || "Initialising\u2026", framesDone, framesTotal: frames } : null
           }
         ),
-        /* @__PURE__ */ jsx7(ProgressFeedback, { progressLabel, error }),
-        /* @__PURE__ */ jsx7("div", { style: { marginTop: 12 }, children: /* @__PURE__ */ jsx7(
+        /* @__PURE__ */ jsx8(ProgressFeedback, { progressLabel, error }),
+        /* @__PURE__ */ jsx8("div", { style: { marginTop: 12 }, children: /* @__PURE__ */ jsx8(
           DebugCopyButton,
           {
             prompt,
@@ -1197,28 +1526,28 @@ function StudioPanel({
             currentVersionId
           }
         ) }),
-        result && /* @__PURE__ */ jsxs6("dl", { className: "bfs-meta", children: [
-          /* @__PURE__ */ jsx7("dt", { children: "Device" }),
-          /* @__PURE__ */ jsx7("dd", { children: result.activeDevice.toUpperCase() }),
-          /* @__PURE__ */ jsx7("dt", { children: "Frames" }),
-          /* @__PURE__ */ jsx7("dd", { children: result.frames.length }),
-          /* @__PURE__ */ jsx7("dt", { children: "Mamba step" }),
-          /* @__PURE__ */ jsx7("dd", { children: result.mambaState.step }),
-          /* @__PURE__ */ jsx7("dt", { children: "Elapsed" }),
-          /* @__PURE__ */ jsxs6("dd", { children: [
+        result && /* @__PURE__ */ jsxs7("dl", { className: "bfs-meta", children: [
+          /* @__PURE__ */ jsx8("dt", { children: "Device" }),
+          /* @__PURE__ */ jsx8("dd", { children: result.activeDevice.toUpperCase() }),
+          /* @__PURE__ */ jsx8("dt", { children: "Frames" }),
+          /* @__PURE__ */ jsx8("dd", { children: result.frames.length }),
+          /* @__PURE__ */ jsx8("dt", { children: "Mamba step" }),
+          /* @__PURE__ */ jsx8("dd", { children: result.mambaState.step }),
+          /* @__PURE__ */ jsx8("dt", { children: "Elapsed" }),
+          /* @__PURE__ */ jsxs7("dd", { children: [
             (result.elapsedMs / 1e3).toFixed(2),
             "s"
           ] })
         ] }),
-        versions && versions.length > 0 ? /* @__PURE__ */ jsxs6("div", { className: "bfs-field", style: { marginTop: 16 }, children: [
-          /* @__PURE__ */ jsxs6("label", { className: "bfs-label", children: [
+        versions && versions.length > 0 ? /* @__PURE__ */ jsxs7("div", { className: "bfs-field", style: { marginTop: 16 }, children: [
+          /* @__PURE__ */ jsxs7("label", { className: "bfs-label", children: [
             "Versions (",
             versions.length,
             ")"
           ] }),
-          /* @__PURE__ */ jsx7("div", { className: "bfs-version-list", children: versions.map((v) => {
+          /* @__PURE__ */ jsx8("div", { className: "bfs-version-list", children: versions.map((v) => {
             const isCurrent = v.id === currentVersionId;
-            return /* @__PURE__ */ jsxs6(
+            return /* @__PURE__ */ jsxs7(
               "button",
               {
                 type: "button",
@@ -1236,7 +1565,7 @@ function StudioPanel({
                   color: isCurrent ? "white" : "var(--bfs-fg)"
                 },
                 children: [
-                  v.thumbnailUrl ? /* @__PURE__ */ jsx7(
+                  v.thumbnailUrl ? /* @__PURE__ */ jsx8(
                     "img",
                     {
                       src: v.thumbnailUrl,
@@ -1246,14 +1575,14 @@ function StudioPanel({
                       style: { borderRadius: 4, objectFit: "cover" }
                     }
                   ) : null,
-                  /* @__PURE__ */ jsx7("span", { style: { flex: 1 }, children: v.label }),
-                  v.params.parentVersionId ? /* @__PURE__ */ jsx7("span", { className: "bfs-mono", style: { fontSize: "0.7rem", opacity: 0.7 }, children: "\u21AA edit" }) : null
+                  /* @__PURE__ */ jsx8("span", { style: { flex: 1 }, children: v.label }),
+                  v.params.parentVersionId ? /* @__PURE__ */ jsx8("span", { className: "bfs-mono", style: { fontSize: "0.7rem", opacity: 0.7 }, children: "\u21AA edit" }) : null
                 ]
               },
               v.id
             );
           }) }),
-          /* @__PURE__ */ jsx7("p", { className: "bfs-hint", children: "Click a version to load it as the base. Generating again creates a new version with this one as parent (edit-on-top)." })
+          /* @__PURE__ */ jsx8("p", { className: "bfs-hint", children: "Click a version to load it as the base. Generating again creates a new version with this one as parent (edit-on-top)." })
         ] }) : null
       ] })
     ] })
@@ -1266,9 +1595,12 @@ import {
   probeDevice as probeDevice2,
   hasWebGPUSupport,
   configureOnnxRuntime,
-  MODEL_REGISTRY as MODEL_REGISTRY2
+  MODEL_REGISTRY as MODEL_REGISTRY2,
+  planScene as planScene2,
+  CAMERA_MOVES as CAMERA_MOVES2
 } from "@seanhogg/builderforce-studio";
 export {
+  CAMERA_MOVES2 as CAMERA_MOVES,
   CoherenceControls,
   DebugCopyButton,
   MODEL_REGISTRY2 as MODEL_REGISTRY,
@@ -1276,11 +1608,13 @@ export {
   ProgressFeedback,
   QUALITY_TIERS,
   QualityTierPicker,
+  StoryboardEditor,
   StudioPanel,
   VideoEngine2 as VideoEngine,
   VideoPreview,
   configureOnnxRuntime,
   hasWebGPUSupport,
+  planScene2 as planScene,
   probeDevice2 as probeDevice,
   resolveQualityTier,
   useEngineStatus
