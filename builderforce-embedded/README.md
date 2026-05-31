@@ -35,7 +35,13 @@ One DRY rail — hosts never build per-view embeds. The component:
 
 ## Available views
 
-`EMBED_VIEWS` is the single source of truth. Product: `ideas`, `mvp`, `backlog`, `validation`, `roadmap`, `feature-roi`. Agile: `kanban`, `poker`, `retros`, `sprints`, `velocity`, `feature-scoring`. Governance (Phase 2): `soc2`, `vendors`, `incidents`, `data-inventory`, `dpa`, `training`, `compliance-calendar`, `access-reviews`, `vuln-scans`, `dsr`, `suppression`.
+`EMBED_VIEWS` is the single source of truth, scoped to the BurnRateOS→BuilderForce extraction inventory (Product Management, Agile Survival, and Governance & Security **posture only**). Each view has an `available` flag (`true` = resurfaces a real component today; `false` = registered but scaffolded). `capabilityForView()` maps a view to the capability a host enables (`product` | `agile` | `security`; governance ⇒ security).
+
+- **Product:** `ideas`, `prd`, `backlog`✓, `mvp`, `validation`, `roadmap`, `release-planning`, `changelog`, `feature-flags`, `feature-roi`, `business-value`
+- **Agile:** `kanban`✓, `poker`, `retros`, `sprints`, `velocity`, `capacity`, `cost`, `feature-scoring`
+- **Governance & Security:** `soc2`, `vendors`, `incidents`, `data-inventory`, `dpa`, `training`, `compliance-calendar`, `access-reviews`, `vuln-scans`, `dsr`, `suppression`
+
+(✓ = wired today.) BuilderForce provides the full security toolset EXCEPT identity — only RBAC + centralized authentication (sessions, MFA/account-security, approval workflows, identity/login audit) stay in the host. Functional surfaces, not 1-1 page ports — e.g. action items and calendars are served by the tasks surface, not separate views.
 
 ## The frame side
 

@@ -8,6 +8,8 @@ import { isEmbedView, EMBED_VIEWS, capabilityForView, type EmbedCapability } fro
 import { useEmbedFrame } from '../../../lib/embed/useEmbedFrame';
 import { embedApi } from '../../../lib/builderforceApi';
 import { TaskMgmtContent } from '../../../components/TaskMgmtContent';
+import { BrainPanel } from '../../../components/brain/BrainPanel';
+import { EmbedPrdSurface } from '../../../components/embed/EmbedPrdSurface';
 
 /**
  * The framed BuilderForce surface. ONE dynamic route serves every embeddable
@@ -103,6 +105,12 @@ function renderSurface(view: string): React.ReactNode {
     case 'backlog':
       // The same task feature the app uses at /tasks — board + list, full CRUD.
       return <TaskMgmtContent />;
+    case 'ideas':
+      // The full-page Brain (ideation) — same component as /brainstorm.
+      return <BrainPanel variant="page" />;
+    case 'prd':
+      // PRDs & specs, project-scoped via a picker.
+      return <EmbedPrdSurface />;
     default:
       return null;
   }
