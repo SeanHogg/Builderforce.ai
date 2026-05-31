@@ -364,6 +364,56 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   // -------------------------------------------------------------------------
+  // PATCH /api/admin/legal/:docType  — amend the currently-active doc in place
+  // (edit title/content without minting a new version; version optional)
+  // -------------------------------------------------------------------------
+  router.patch('/legal/:docType', async (c) => {
+    const db = buildDatabase(c.env);
+    const docType = c.req.param('docType');
+    if (docType !== 'terms' && docType !== 'privacy') {
+      return c.json({ error: 'docType must be "terms" or "privacy"' }, 400);
+    }
+    const docLabel = docType === 'terms' ? 'Terms of Use' : 'Privacy Policy';
+    const body = await c.req.json<{ version?: string; title?: string; content: string }>();
+    const version = body.version?.trim();
+    const content = body.content?.trim();
+    const title = body.title?.trim() || docLabel;
+
+    if (!content) return c.json({ error: 'content is required' }, 400);
+
+    const [active] = await db
+      .select({ id: legalDocuments.id, version: legalDocuments.version })
+      .from(legalDocuments)
+      .where(and(eq(legalDocuments.documentType, docType), eq(legalDocuments.isActive, true)))
+      .orderBy(desc(legalDocuments.publishedAt))
+      .limit(1);
+
+    if (!active) {
+      return c.json({ error: `No active ${docLabel} to amend` }, 404);
+    }
+
+    // If the version is being changed, make sure it doesn't collide with another row.
+    if (version && version !== active.version) {
+      const [clash] = await db
+        .select({ id: legalDocuments.id })
+        .from(legalDocuments)
+        .where(and(eq(legalDocuments.documentType, docType), eq(legalDocuments.version, version)))
+        .limit(1);
+      if (clash) {
+        return c.json({ error: `${docLabel} version ${version} already exists` }, 409);
+      }
+    }
+
+    await db
+      .update(legalDocuments)
+      .set({ title, content, version: version || active.version, updatedAt: sql`now()` })
+      .where(eq(legalDocuments.id, active.id));
+
+    const document = await getActiveLegalDoc(db, docType);
+    return c.json({ document });
+  });
+
+  // -------------------------------------------------------------------------
   // GET /api/admin/newsletter/subscribers
   // -------------------------------------------------------------------------
   router.get('/newsletter/subscribers', async (c) => {

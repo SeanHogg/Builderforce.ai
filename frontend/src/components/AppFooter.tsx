@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { ChatMessageContent } from '@/components/ChatMessageContent';
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || '—';
 const AUTH_API_URL = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
@@ -132,19 +133,11 @@ export default function AppFooter() {
                 padding: 24,
               }}
             >
-              <pre
-                style={{
-                  margin: 0,
-                  fontSize: '0.875rem',
-                  lineHeight: 1.6,
-                  color: 'var(--text-secondary)',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word',
-                  fontFamily: 'var(--font-body)',
-                }}
-              >
-                {doc?.content ?? 'Loading…'}
-              </pre>
+              {doc?.content ? (
+                <ChatMessageContent content={doc.content} />
+              ) : (
+                <p style={{ margin: 0, color: 'var(--text-muted)' }}>Loading…</p>
+              )}
             </div>
             <div
               style={{
