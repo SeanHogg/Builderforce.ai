@@ -2,12 +2,11 @@
 
 import { use } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ThemeToggleButton } from '@/app/ThemeProvider';
 import { getPostBySlug } from '@/lib/blogData';
 import JsonLd from '@/components/JsonLd';
+import MarketingHeader from '@/components/MarketingHeader';
 import { blogPostSchema } from '@/lib/structured-data';
 
 export default function BlogPostClient({ params }: { params: Promise<{ slug: string }> }) {
@@ -23,84 +22,6 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
           min-height: 100vh;
           display: flex;
           flex-direction: column;
-        }
-
-        /* ── NAV ── */
-        .bpost-nav {
-          position: sticky;
-          top: 0;
-          z-index: 100;
-          border-bottom: 1px solid var(--border-subtle);
-          background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-        }
-        .bpost-nav-inner {
-          max-width: 1100px;
-          margin: 0 auto;
-          padding: 0 24px;
-          height: 62px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 16px;
-        }
-        .bpost-nav-logo {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          text-decoration: none;
-          font-family: var(--font-display);
-          font-weight: 700;
-          font-size: 1.1rem;
-          color: var(--text-primary);
-        }
-        .bpost-nav-logo img {
-          width: 32px;
-          height: 32px;
-          object-fit: contain;
-          filter: drop-shadow(0 0 10px var(--logo-glow));
-          transition: filter 0.3s ease, transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
-        }
-        .bpost-nav-logo:hover img {
-          filter: drop-shadow(0 0 18px var(--logo-glow-hover));
-          transform: scale(1.12) rotate(-6deg);
-        }
-        .bpost-nav-right {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-        .bpost-nav-link {
-          font-size: 0.875rem;
-          color: var(--text-secondary);
-          text-decoration: none;
-          padding: 6px 12px;
-          border-radius: 8px;
-          transition: color 0.2s ease, background 0.2s ease;
-        }
-        .bpost-nav-link:hover {
-          color: var(--text-primary);
-          background: var(--surface-interactive);
-        }
-        .bpost-nav-cta {
-          display: inline-flex;
-          align-items: center;
-          gap: 7px;
-          padding: 8px 18px;
-          border-radius: 10px;
-          background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark));
-          color: #fff;
-          font-family: var(--font-display);
-          font-weight: 600;
-          font-size: 0.875rem;
-          text-decoration: none;
-          box-shadow: 0 4px 14px var(--shadow-coral-mid);
-          transition: all 0.25s ease;
-        }
-        .bpost-nav-cta:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 22px var(--shadow-coral-strong);
         }
 
         /* ── ARTICLE ── */
@@ -320,23 +241,13 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
 
       <div className="bpost-page">
         {/* ── Nav ── */}
-        <nav className="bpost-nav" aria-label="Main navigation">
-          <div className="bpost-nav-inner">
-            <Link href="/" className="bpost-nav-logo">
-              <Image src="/claw.png" alt="" width={32} height={32} priority />
-              Builderforce.ai
-            </Link>
-            <div className="bpost-nav-right">
-              <Link href="/workforce" className="bpost-nav-link">Workforce</Link>
-              <Link href="/blog" className="bpost-nav-link">Blog</Link>
-              <Link href="/login" className="bpost-nav-link">Sign In</Link>
-              <ThemeToggleButton />
-              <Link href="/register" className="bpost-nav-cta">
-                Get Started Free →
-              </Link>
-            </div>
-          </div>
-        </nav>
+        <MarketingHeader
+          links={[
+            { label: 'Workforce', href: '/workforce' },
+            { label: 'Blog', href: '/blog' },
+            { label: 'Sign In', href: '/login' },
+          ]}
+        />
 
         {/* ── Content ── */}
         <main className="bpost-main">
