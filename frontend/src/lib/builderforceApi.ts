@@ -1403,3 +1403,31 @@ export const embedApi = {
       body: JSON.stringify(body),
     }),
 };
+
+// ---------------------------------------------------------------------------
+// Governance & Security (/api/governance/*) — SOC 2 Control Tracker (doc 07 SEC-1)
+// ---------------------------------------------------------------------------
+
+export interface SocControl {
+  id: string;
+  controlRef: string;
+  category: string;
+  name: string;
+  requirement: string | null;
+  status: 'not_started' | 'in_progress' | 'ready' | 'out_of_scope';
+  ownerId: string | null;
+  notes: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export const governanceApi = {
+  soc2: {
+    listControls: () => request<SocControl[]>('/api/governance/soc2/controls'),
+    seed: () => request<{ seeded: number; message?: string }>('/api/governance/soc2/seed', { method: 'POST' }),
+    patchControl: (id: string, body: { status?: SocControl['status']; ownerId?: string; notes?: string }) =>
+      request<SocControl>(`/api/governance/soc2/controls/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    addEvidence: (id: string, body: { title: string; evidenceType: string; url?: string; note?: string }) =>
+      request<{ id: string }>(`/api/governance/soc2/controls/${id}/evidence`, { method: 'POST', body: JSON.stringify(body) }),
+  },
+};

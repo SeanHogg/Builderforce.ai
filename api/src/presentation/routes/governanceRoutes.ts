@@ -1,0 +1,151 @@
+/**
+ * Governance & Security — /api/governance/*
+ *
+ * The security TOOLSET surfaces (doc 07). This first slice is the SOC 2 Control
+ * Tracker (SEC-1). Unlike the legacy tables that lean on the default-segment
+ * trigger, governance is fully Segment-THREADED: every read and write scopes by
+ * BOTH (tenantId, segmentId) from request context, so it is correct for
+ * segmented tenants too — the model the whole platform is migrating toward.
+ *
+ * GET   /api/governance/soc2/controls          – list this segment's controls
+ * POST  /api/governance/soc2/seed              – seed the CC1–CC9 baseline once (manager+)
+ * PATCH /api/governance/soc2/controls/:id      – update a control's status (manager+)
+ * POST  /api/governance/soc2/controls/:id/evidence – attach evidence (manager+)
+ */
+
+import { Hono, type Context } from 'hono';
+import { and, eq } from 'drizzle-orm';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { TenantRole } from '../../domain/shared/types';
+import { socControls, socEvidence } from '../../infrastructure/database/schema';
+import type { HonoEnv } from '../../env';
+import type { Db } from '../../infrastructure/database/connection';
+
+const CONTROL_STATUSES = ['not_started', 'in_progress', 'ready', 'out_of_scope'] as const;
+type ControlStatus = (typeof CONTROL_STATUSES)[number];
+const isControlStatus = (v: unknown): v is ControlStatus =>
+  typeof v === 'string' && (CONTROL_STATUSES as readonly string[]).includes(v);
+
+/** SOC 2 Common Criteria baseline (seeded on first use). */
+const SOC2_BASELINE: Array<{ controlRef: string; category: string; name: string; requirement: string }> = [
+  { controlRef: 'CC1.1', category: 'CC1', name: 'Integrity & ethical values', requirement: 'The entity demonstrates a commitment to integrity and ethical values.' },
+  { controlRef: 'CC1.2', category: 'CC1', name: 'Board independence & oversight', requirement: 'The board exercises oversight independent of management.' },
+  { controlRef: 'CC1.3', category: 'CC1', name: 'Structures & reporting lines', requirement: 'Management establishes structures, reporting lines, authorities and responsibilities.' },
+  { controlRef: 'CC1.4', category: 'CC1', name: 'Commitment to competence', requirement: 'The entity attracts, develops and retains competent individuals.' },
+  { controlRef: 'CC2.1', category: 'CC2', name: 'Quality information', requirement: 'The entity obtains and uses relevant, quality information.' },
+  { controlRef: 'CC2.2', category: 'CC2', name: 'Internal communication', requirement: 'The entity internally communicates information needed for controls.' },
+  { controlRef: 'CC2.3', category: 'CC2', name: 'External communication', requirement: 'The entity communicates with external parties about controls.' },
+  { controlRef: 'CC3.1', category: 'CC3', name: 'Objectives & risk', requirement: 'The entity specifies objectives to enable identification of risks.' },
+  { controlRef: 'CC3.2', category: 'CC3', name: 'Risk identification', requirement: 'The entity identifies and analyzes risks to its objectives.' },
+  { controlRef: 'CC3.3', category: 'CC3', name: 'Fraud risk', requirement: 'The entity considers the potential for fraud in assessing risks.' },
+  { controlRef: 'CC3.4', category: 'CC3', name: 'Change risk', requirement: 'The entity identifies and assesses changes that could impact controls.' },
+  { controlRef: 'CC4.1', category: 'CC4', name: 'Control monitoring', requirement: 'The entity selects, develops and performs evaluations of controls.' },
+  { controlRef: 'CC4.2', category: 'CC4', name: 'Deficiency communication', requirement: 'The entity evaluates and communicates control deficiencies.' },
+  { controlRef: 'CC5.1', category: 'CC5', name: 'Control activities', requirement: 'The entity selects and develops control activities that mitigate risk.' },
+  { controlRef: 'CC5.2', category: 'CC5', name: 'Technology controls', requirement: 'The entity selects and develops general control activities over technology.' },
+  { controlRef: 'CC5.3', category: 'CC5', name: 'Policies & procedures', requirement: 'The entity deploys control activities through policies and procedures.' },
+  { controlRef: 'CC6.1', category: 'CC6', name: 'Logical access', requirement: 'The entity implements logical access security over protected information assets.' },
+  { controlRef: 'CC6.2', category: 'CC6', name: 'Access provisioning', requirement: 'Access is registered, authorized and de-provisioned in a timely manner.' },
+  { controlRef: 'CC6.3', category: 'CC6', name: 'Access removal', requirement: 'The entity removes access to protected assets when no longer required.' },
+  { controlRef: 'CC6.6', category: 'CC6', name: 'External threats', requirement: 'The entity implements controls to protect against external threats.' },
+  { controlRef: 'CC6.7', category: 'CC6', name: 'Data transmission', requirement: 'The entity restricts the transmission/movement of information.' },
+  { controlRef: 'CC7.1', category: 'CC7', name: 'Vulnerability detection', requirement: 'The entity uses detection/monitoring to identify vulnerabilities.' },
+  { controlRef: 'CC7.2', category: 'CC7', name: 'Security monitoring', requirement: 'The entity monitors system components for anomalies.' },
+  { controlRef: 'CC7.3', category: 'CC7', name: 'Incident evaluation', requirement: 'The entity evaluates security events to determine a response.' },
+  { controlRef: 'CC7.4', category: 'CC7', name: 'Incident response', requirement: 'The entity responds to identified security incidents.' },
+  { controlRef: 'CC8.1', category: 'CC8', name: 'Change management', requirement: 'The entity authorizes, designs, tests and approves changes.' },
+  { controlRef: 'CC9.1', category: 'CC9', name: 'Risk mitigation', requirement: 'The entity identifies and develops risk mitigation activities.' },
+  { controlRef: 'CC9.2', category: 'CC9', name: 'Vendor risk', requirement: 'The entity assesses and manages risks from vendors and partners.' },
+];
+
+/** The (tenantId, segmentId) scope every governance query filters by. */
+function scope(c: Context<HonoEnv>): { tenantId: number; segmentId: string } {
+  return { tenantId: c.get('tenantId'), segmentId: c.get('segmentId') as string };
+}
+
+export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
+  const router = new Hono<HonoEnv>();
+  router.use('*', authMiddleware);
+
+  // List controls for the active segment.
+  router.get('/soc2/controls', async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const rows = await db
+      .select()
+      .from(socControls)
+      .where(and(eq(socControls.tenantId, tenantId), eq(socControls.segmentId, segmentId)));
+    return c.json(rows);
+  });
+
+  // Seed the CC1–CC9 baseline once per segment.
+  router.post('/soc2/seed', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const existing = await db
+      .select({ id: socControls.id })
+      .from(socControls)
+      .where(and(eq(socControls.tenantId, tenantId), eq(socControls.segmentId, segmentId)))
+      .limit(1);
+    if (existing.length > 0) {
+      return c.json({ seeded: 0, message: 'Baseline already present' });
+    }
+    await db.insert(socControls).values(
+      SOC2_BASELINE.map((ctl) => ({ ...ctl, tenantId, segmentId })),
+    );
+    return c.json({ seeded: SOC2_BASELINE.length }, 201);
+  });
+
+  // Update a control's status.
+  router.patch('/soc2/controls/:id', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const id = c.req.param('id');
+    const body = await c.req.json<{ status?: string; ownerId?: string; notes?: string }>();
+    if (body.status !== undefined && !isControlStatus(body.status)) {
+      return c.json({ error: `status must be one of ${CONTROL_STATUSES.join(', ')}` }, 400);
+    }
+    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.status !== undefined) patch.status = body.status;
+    if (body.ownerId !== undefined) patch.ownerId = body.ownerId;
+    if (body.notes !== undefined) patch.notes = body.notes;
+
+    const [updated] = await db
+      .update(socControls)
+      .set(patch)
+      .where(and(eq(socControls.id, id), eq(socControls.tenantId, tenantId), eq(socControls.segmentId, segmentId)))
+      .returning();
+    if (!updated) return c.json({ error: 'control not found' }, 404);
+    return c.json(updated);
+  });
+
+  // Attach evidence to a control.
+  router.post('/soc2/controls/:id/evidence', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const controlId = c.req.param('id');
+    const body = await c.req.json<{ title?: string; evidenceType?: string; url?: string; note?: string }>();
+    if (!body.title?.trim() || !body.evidenceType?.trim()) {
+      return c.json({ error: 'title and evidenceType are required' }, 400);
+    }
+    // Ensure the control belongs to this segment before attaching.
+    const [ctl] = await db
+      .select({ id: socControls.id })
+      .from(socControls)
+      .where(and(eq(socControls.id, controlId), eq(socControls.tenantId, tenantId), eq(socControls.segmentId, segmentId)))
+      .limit(1);
+    if (!ctl) return c.json({ error: 'control not found' }, 404);
+
+    const [evidence] = await db
+      .insert(socEvidence)
+      .values({
+        tenantId,
+        segmentId,
+        controlId,
+        title: body.title.trim(),
+        evidenceType: body.evidenceType.trim(),
+        url: body.url ?? null,
+        note: body.note ?? null,
+      })
+      .returning();
+    return c.json(evidence, 201);
+  });
+
+  return router;
+}

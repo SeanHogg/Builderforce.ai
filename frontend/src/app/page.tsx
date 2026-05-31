@@ -3,9 +3,9 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { ThemeToggleButton } from './ThemeProvider';
 import { useState } from 'react';
 import JsonLd from '@/components/JsonLd';
+import MarketingHeader from '@/components/MarketingHeader';
 import { homepageSchema } from '@/lib/structured-data';
 import { HOMEPAGE_FAQ } from '@/lib/content';
 import { savePendingPrompt } from '@/lib/brain';
@@ -62,84 +62,6 @@ export default function LandingPage() {
           min-height: 100vh;
           display: flex;
           flex-direction: column;
-        }
-
-        /* ════════════════════ NAV ════════════════════ */
-        .lp-nav {
-          position: sticky;
-          top: 0;
-          z-index: 100;
-          border-bottom: 1px solid var(--border-subtle);
-          background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-        }
-        .lp-nav-inner {
-          max-width: 1100px;
-          margin: 0 auto;
-          padding: 0 24px;
-          height: 62px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 16px;
-        }
-        .lp-nav-logo {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          text-decoration: none;
-          font-family: var(--font-display);
-          font-weight: 700;
-          font-size: 1.1rem;
-          color: var(--text-primary);
-        }
-        .lp-nav-logo img {
-          width: 32px;
-          height: 32px;
-          object-fit: contain;
-          filter: drop-shadow(0 0 10px var(--logo-glow));
-          transition: filter 0.3s ease, transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
-        }
-        .lp-nav-logo:hover img {
-          filter: drop-shadow(0 0 18px var(--logo-glow-hover));
-          transform: scale(1.12) rotate(-6deg);
-        }
-        .lp-nav-right {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-        .lp-nav-link {
-          font-size: 0.875rem;
-          color: var(--text-secondary);
-          text-decoration: none;
-          padding: 6px 12px;
-          border-radius: 8px;
-          transition: color 0.2s ease, background 0.2s ease;
-        }
-        .lp-nav-link:hover {
-          color: var(--text-primary);
-          background: var(--surface-interactive);
-        }
-        .lp-nav-cta {
-          display: inline-flex;
-          align-items: center;
-          gap: 7px;
-          padding: 8px 18px;
-          border-radius: 10px;
-          background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark));
-          color: #fff;
-          font-family: var(--font-display);
-          font-weight: 600;
-          font-size: 0.875rem;
-          text-decoration: none;
-          box-shadow: 0 4px 14px var(--shadow-coral-mid);
-          transition: all 0.25s ease;
-        }
-        .lp-nav-cta:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 22px var(--shadow-coral-strong);
         }
 
         /* ════════════════════ HERO ════════════════════ */
@@ -567,26 +489,16 @@ export default function LandingPage() {
       <div className="lp">
 
         {/* ── Nav ── */}
-        <nav className="lp-nav" aria-label="Main navigation">
-          <div className="lp-nav-inner">
-            <Link href="/" className="lp-nav-logo">
-              <Image src="/claw.png" alt="" width={32} height={32} priority />
-              Builderforce.ai
-            </Link>
-            <div className="lp-nav-right">
-              <Link href="/marketplace" className="lp-nav-link">Workforce</Link>
-              <Link href="/coderclaw" className="lp-nav-link">CoderClaw</Link>
-              <Link href="/blog" className="lp-nav-link">Blog</Link>
-              <a href="#features" className="lp-nav-link">Features</a>
-              <a href="#pricing" className="lp-nav-link">Pricing</a>
-              <Link href="/login" className="lp-nav-link">Sign In</Link>
-              <ThemeToggleButton />
-              <Link href="/register" className="lp-nav-cta">
-                Get Started Free →
-              </Link>
-            </div>
-          </div>
-        </nav>
+        <MarketingHeader
+          links={[
+            { label: 'Workforce', href: '/marketplace' },
+            { label: 'CoderClaw', href: '/coderclaw' },
+            { label: 'Blog', href: '/blog' },
+            { label: 'Features', href: '#features' },
+            { label: 'Pricing', href: '#pricing' },
+            { label: 'Sign In', href: '/login' },
+          ]}
+        />
 
         <main>
         {/* ── Hero ── */}
