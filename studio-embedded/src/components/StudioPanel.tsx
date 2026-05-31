@@ -25,6 +25,7 @@ import { ModelPicker } from './ModelPicker';
 import { CoherenceControls } from './CoherenceControls';
 import { VideoPreview } from './VideoPreview';
 import { ProgressFeedback } from './ProgressFeedback';
+import { DebugCopyButton } from './DebugCopyButton';
 import { useEngineStatus } from './useEngineStatus';
 
 /** Parameters that fully describe ONE generated version, for the host to persist
@@ -603,6 +604,37 @@ export function StudioPanel({
               cleanly. Moved here from under the Generate button per the
               user's "feedback belongs by the preview" UX call. */}
           <ProgressFeedback progressLabel={progressLabel} error={error} />
+
+          {/* One-click "copy everything I'd need to debug this generation"
+              snapshot — prompt + every slider + device info + result stats +
+              base64 thumbnails of first/mid/last preview frames. Always
+              visible so the user can grab the current config even before a
+              first run completes. */}
+          <div style={{ marginTop: 12 }}>
+            <DebugCopyButton
+              prompt={prompt}
+              expandedPrompt={expandedPrompt}
+              model={model}
+              resolution={resolution}
+              frames={frames}
+              fps={fps}
+              coherenceMode={coherenceMode}
+              coherenceStrength={coherenceStrength}
+              motionAmount={motionAmount}
+              imgToImgStrength={imgToImgStrength}
+              cameraMotion={
+                imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0)
+                  ? { dx: cameraDx, dy: cameraDy }
+                  : null
+              }
+              device={status.state === 'ready' ? status.device : null}
+              progressLabel={progressLabel}
+              error={error}
+              result={result}
+              previewFrames={previewFrames}
+              currentVersionId={currentVersionId}
+            />
+          </div>
 
           {result && (
             <dl className="bfs-meta">

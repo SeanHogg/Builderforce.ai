@@ -1,5 +1,5 @@
 import * as react_jsx_runtime from 'react/jsx-runtime';
-import { DiffusionModelId, CoherenceMode, MambaStateSnapshot, ProbedDevice } from '@seanhogg/builderforce-studio';
+import { DiffusionModelId, CoherenceMode, MambaStateSnapshot, ProbedDevice, GenerateResult } from '@seanhogg/builderforce-studio';
 export { ActiveDevice, CoherenceMode, DeviceTarget, DiffusionModelId, GenerateOptions, GenerateResult, MODEL_REGISTRY, MambaStateSnapshot, ModelDescriptor, OnnxFile, OnnxRuntimeConfigOptions, ProbedDevice, VideoEngine, VideoEngineOptions, WeightSource, configureOnnxRuntime, hasWebGPUSupport, probeDevice } from '@seanhogg/builderforce-studio';
 
 /** Parameters that fully describe ONE generated version, for the host to persist
@@ -135,6 +135,32 @@ interface ProgressFeedbackProps {
 }
 declare function ProgressFeedback({ progressLabel, error }: ProgressFeedbackProps): react_jsx_runtime.JSX.Element | null;
 
+interface DebugSnapshotProps {
+    prompt: string;
+    expandedPrompt: string;
+    model: DiffusionModelId;
+    resolution: number;
+    frames: number;
+    fps: number;
+    coherenceMode: CoherenceMode;
+    coherenceStrength: number;
+    motionAmount: number;
+    imgToImgStrength: number;
+    cameraMotion: {
+        dx: number;
+        dy: number;
+    } | null;
+    device: ProbedDevice | null;
+    progressLabel: string;
+    error: string | null;
+    result: GenerateResult | null;
+    previewFrames: ImageBitmap[];
+    currentVersionId: string | null;
+    /** Set true to write JSON instead of markdown — useful for machine ingest. */
+    asJson?: boolean;
+}
+declare function DebugCopyButton(props: DebugSnapshotProps): react_jsx_runtime.JSX.Element;
+
 /**
  * Shared engine-readiness hook — the single source of "can the host run the studio?"
  * Both StudioPanel and any third-party consumer using engine-only mode should
@@ -153,4 +179,4 @@ type EngineStatus = {
 };
 declare function useEngineStatus(): EngineStatus;
 
-export { CoherenceControls, type EngineStatus, ModelPicker, ProgressFeedback, StudioPanel, type StudioPanelProps, VideoPreview, type VideoVersionEntry, type VideoVersionParams, useEngineStatus };
+export { CoherenceControls, DebugCopyButton, type DebugSnapshotProps, type EngineStatus, ModelPicker, ProgressFeedback, StudioPanel, type StudioPanelProps, VideoPreview, type VideoVersionEntry, type VideoVersionParams, useEngineStatus };
