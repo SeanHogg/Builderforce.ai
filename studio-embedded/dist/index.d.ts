@@ -2,6 +2,39 @@ import * as react_jsx_runtime from 'react/jsx-runtime';
 import { DiffusionModelId, CoherenceMode, MambaStateSnapshot, ProbedDevice } from '@seanhogg/builderforce-studio';
 export { ActiveDevice, CoherenceMode, DeviceTarget, DiffusionModelId, GenerateOptions, GenerateResult, MODEL_REGISTRY, MambaStateSnapshot, ModelDescriptor, OnnxFile, OnnxRuntimeConfigOptions, ProbedDevice, VideoEngine, VideoEngineOptions, WeightSource, configureOnnxRuntime, hasWebGPUSupport, probeDevice } from '@seanhogg/builderforce-studio';
 
+/** Parameters that fully describe ONE generated version, for the host to persist
+ *  alongside the MP4 blob. Enough information to re-generate the same video AND
+ *  to seed an edit-on-top pass. */
+interface VideoVersionParams {
+    prompt: string;
+    model: DiffusionModelId;
+    width: number;
+    height: number;
+    frames: number;
+    fps: number;
+    coherence: CoherenceMode;
+    coherenceStrength: number;
+    motionAmount: number;
+    imgToImgStrength: number;
+    cameraMotion: {
+        dx: number;
+        dy: number;
+    } | null;
+    mambaState: MambaStateSnapshot;
+    elapsedMs: number;
+    /** Set when this version was generated as an edit of an existing version. */
+    parentVersionId?: string;
+}
+/** Summary the host hands back so the panel can list prior versions. */
+interface VideoVersionEntry {
+    id: string;
+    /** Human-readable label — typically "v1", "v2", or a timestamp. */
+    label: string;
+    /** Saved generation params (so "load version" can restore prompt + sliders). */
+    params: VideoVersionParams;
+    /** Optional thumbnail (first frame) bitmap URL. */
+    thumbnailUrl?: string;
+}
 interface StudioPanelProps {
     /** Builderforce auth credential for the LLM gateway + R2 weight fetches.
      *  Accepts either a minted `bfk_*` API key (external npm consumers) or a
@@ -30,8 +63,20 @@ interface StudioPanelProps {
      *  the panel adopts it as the current prompt without auto-generating. */
     promptValue?: string;
     onPromptChange?: (prompt: string) => void;
+    /** Persist a finished video version. The host owns storage (project file
+     *  store, R2, IndexedDB — whatever fits). Called once per successful
+     *  `generate()`. When omitted, the panel still runs but skips versioning UI. */
+    onSaveVersion?: (blob: Blob, params: VideoVersionParams) => Promise<string> | string;
+    /** Existing versions the host has persisted, listed in the panel's right
+     *  column so the user can switch back / edit on top. Omit when versioning
+     *  isn't wired — the version list and "edit on top" affordance hide. */
+    versions?: VideoVersionEntry[];
+    /** Called when the user picks an existing version. The host should fetch
+     *  the saved MP4 blob and return it; the panel reloads its preview and
+     *  restores the saved params (prompt, sliders) so the user can edit on top. */
+    onLoadVersion?: (id: string) => Promise<Blob>;
 }
-declare function StudioPanel({ authToken, apiKey, baseUrl, defaultModel, defaultCoherence, defaultFrames, defaultFps, onVideoGenerated, initialMambaState, hideHeader, promptValue, onPromptChange, }: StudioPanelProps): react_jsx_runtime.JSX.Element;
+declare function StudioPanel({ authToken, apiKey, baseUrl, defaultModel, defaultCoherence, defaultFrames, defaultFps, onVideoGenerated, initialMambaState, hideHeader, promptValue, onPromptChange, onSaveVersion, versions, onLoadVersion, }: StudioPanelProps): react_jsx_runtime.JSX.Element;
 
 interface ModelPickerProps {
     value: DiffusionModelId;
@@ -74,6 +119,23 @@ interface VideoPreviewProps {
 declare function VideoPreview({ frames, videoUrl, width, height }: VideoPreviewProps): react_jsx_runtime.JSX.Element;
 
 /**
+ * ProgressFeedback — single rendering site for the studio's per-phase progress
+ * label + per-run error message.
+ *
+ * Self-gating per DRY rule: returns `null` when there is nothing to show, so
+ * consumers do not branch on `{progress || error ? <ProgressFeedback .../> : null}`
+ * — they just always mount it. One source of truth for "what does in-flight
+ * feedback look like in this panel," used wherever feedback needs to surface
+ * (today: right-column under the video preview; previously: left column under
+ * Generate Video; future: a status toast).
+ */
+interface ProgressFeedbackProps {
+    progressLabel: string;
+    error: string | null;
+}
+declare function ProgressFeedback({ progressLabel, error }: ProgressFeedbackProps): react_jsx_runtime.JSX.Element | null;
+
+/**
  * Shared engine-readiness hook — the single source of "can the host run the studio?"
  * Both StudioPanel and any third-party consumer using engine-only mode should
  * read engine status through this hook. Eliminates duplicated WebGPU/WebNN
@@ -91,4 +153,4 @@ type EngineStatus = {
 };
 declare function useEngineStatus(): EngineStatus;
 
-export { CoherenceControls, type EngineStatus, ModelPicker, StudioPanel, type StudioPanelProps, VideoPreview, useEngineStatus };
+export { CoherenceControls, type EngineStatus, ModelPicker, ProgressFeedback, StudioPanel, type StudioPanelProps, VideoPreview, type VideoVersionEntry, type VideoVersionParams, useEngineStatus };
