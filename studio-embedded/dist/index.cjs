@@ -1077,10 +1077,7 @@ function StudioPanel({
         validatorModel: void 0,
         signal,
         onProgress: handleProgress,
-        onFrame: handleFrame,
-        onShot: (_i, _shot, v) => {
-          if (v) setValidations((prev) => [...prev]);
-        }
+        onFrame: handleFrame
       });
       setValidations(sb.validations);
       return {
