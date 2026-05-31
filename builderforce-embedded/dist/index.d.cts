@@ -272,7 +272,6 @@ declare const EMBED_VIEWS: {
 type EmbedView = keyof typeof EMBED_VIEWS;
 declare const EMBED_VIEW_KEYS: EmbedView[];
 declare function isEmbedView(value: string): value is EmbedView;
-declare function embedViewsByPillar(pillar: EmbedPillar): EmbedViewMeta[];
 /** The capability that gates a given view (for host nav + frame self-gating). */
 declare function capabilityForView(view: EmbedView): EmbedCapability;
 
@@ -324,4 +323,4 @@ interface FrameMessageHandlers {
 }
 declare function handleFrameMessage(event: MessageEvent, h: FrameMessageHandlers): void;
 
-export { BFEMBED_SOURCE, BuilderForceEmbed, type BuilderForceEmbedProps, EMBED_CAPABILITIES, EMBED_VIEWS, EMBED_VIEW_KEYS, type EmbedCapability, type EmbedPillar, type EmbedTheme, type EmbedView, type EmbedViewMeta, type FrameMessageHandlers, type FrameToHostMessage, type HostToFrameMessage, capabilityForView, embedViewsByPillar, handleFrameMessage, isEmbedView, isFrameToHostMessage, isHostToFrameMessage, pillarToCapability };
+export { BFEMBED_SOURCE, BuilderForceEmbed, type BuilderForceEmbedProps, EMBED_CAPABILITIES, EMBED_VIEWS, EMBED_VIEW_KEYS, type EmbedCapability, type EmbedPillar, type EmbedTheme, type EmbedView, type EmbedViewMeta, type FrameMessageHandlers, type FrameToHostMessage, type HostToFrameMessage, capabilityForView, handleFrameMessage, isEmbedView, isFrameToHostMessage, isHostToFrameMessage, pillarToCapability };

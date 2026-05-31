@@ -62,6 +62,13 @@ export interface Env {
    *  Bind in wrangler.toml:  [[durable_objects.bindings]]  name = "TENANT_RATE_LIMITER" */
   TENANT_RATE_LIMITER?: DurableObjectNamespace;
 
+  /** Durable Object namespace for collaborative session rooms (poker/retros).
+   *  One instance per room (`poker:<id>` / `retro:<id>`); fans out a `changed`
+   *  push to connected WebSocket clients after a mutation. Optional: when unset
+   *  the surfaces still work (no live push). Bind in wrangler.toml:
+   *    [[durable_objects.bindings]] name = "SESSION_ROOM" class_name = "SessionRoomDO" */
+  SESSION_ROOM?: DurableObjectNamespace;
+
   /**
    * Optional KV namespace caching API-key → tenant resolutions for ~60s.
    * Without it, every chat-completion call hits the DB to validate `bfk_*` /

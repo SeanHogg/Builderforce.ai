@@ -20,7 +20,6 @@ export {
   EMBED_VIEW_KEYS,
   EMBED_CAPABILITIES,
   isEmbedView,
-  embedViewsByPillar,
   pillarToCapability,
   capabilityForView,
 } from './views';
