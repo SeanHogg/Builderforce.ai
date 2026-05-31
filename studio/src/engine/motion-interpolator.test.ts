@@ -71,6 +71,40 @@ describe('estimateBlockMotion (block optical flow)', () => {
     const field = estimateBlockMotion(a, a, W, H, { blockSize: 8, searchRadius: 6 });
     expect(Array.from(field.vec).every((v) => v === 0)).toBe(true);
   });
+
+  it('recovers LARGE motion via the coarse stage that a single-level fine search would miss', () => {
+    // Shift +10px — far beyond the ±2 full-res refine radius. Only the
+    // coarse-to-fine pyramid (default levels:3) can land near it.
+    const a = frameWithSquare(4, 12);
+    const b = frameWithSquare(14, 12);
+    const field = estimateBlockMotion(a, b, W, H, { blockSize: 8, searchRadius: 8 });
+    const bx = Math.floor(7 / 8);
+    const by = Math.floor(14 / 8);
+    const bi = (by * field.cols + bx) * 2;
+    expect(field.vec[bi]).toBeGreaterThanOrEqual(8);
+    expect(Math.abs(field.vec[bi + 1])).toBeLessThanOrEqual(1);
+  });
+
+  it('produces sub-pixel (fractional) motion vectors, not just integers', () => {
+    // A gradient ramp shifted by a non-integer-friendly amount yields a field
+    // with at least one fractional component (parabolic sub-pixel refinement).
+    const ramp = (shift: number) => {
+      const f = new Float32Array(3 * N);
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const v = Math.sin((x - shift) * 0.5); // smooth, sub-pixel-sensitive
+          const p = y * W + x;
+          f[p] = v;
+          f[N + p] = v;
+          f[2 * N + p] = v;
+        }
+      }
+      return f;
+    };
+    const field = estimateBlockMotion(ramp(0), ramp(3), W, H, { blockSize: 8, searchRadius: 6 });
+    const hasFractional = Array.from(field.vec).some((v) => v !== 0 && !Number.isInteger(v));
+    expect(hasFractional).toBe(true);
+  });
 });
 
 describe('interpolateFrames (motion-compensated tween)', () => {
