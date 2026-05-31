@@ -88,6 +88,10 @@ export function StudioPanel({
   const [resolution, setResolution] = useState<Resolution>(DEFAULT_RESOLUTION);
   const [coherenceMode, setCoherenceMode] = useState<CoherenceMode>(defaultCoherence);
   const [coherenceStrength, setCoherenceStrength] = useState(0.5);
+  // 0.15 mirrors the engine's DEFAULT_MOTION_AMOUNT — small enough that color
+  // palette + composition stay locked across frames, large enough that frames
+  // still evolve (subtle motion). Keep this in sync with VideoEngine's default.
+  const [motionAmount, setMotionAmount] = useState(0.15);
   const [frames, setFrames] = useState(defaultFrames);
   const [fps, setFps] = useState(defaultFps);
 
@@ -219,6 +223,7 @@ export function StudioPanel({
         fps,
         coherence: coherenceMode,
         coherenceStrength,
+        motionAmount,
         signal: abort.signal,
         onPromptExpanded: setExpandedPrompt,
         onProgress: handleProgress,
@@ -249,6 +254,7 @@ export function StudioPanel({
     baseUrl,
     coherenceMode,
     coherenceStrength,
+    motionAmount,
     fps,
     frames,
     initialMambaState,
@@ -403,8 +409,10 @@ export function StudioPanel({
           <CoherenceControls
             mode={coherenceMode}
             strength={coherenceStrength}
+            motionAmount={motionAmount}
             onModeChange={setCoherenceMode}
             onStrengthChange={setCoherenceStrength}
+            onMotionAmountChange={setMotionAmount}
             disabled={isGenerating}
           />
 

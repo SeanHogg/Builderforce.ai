@@ -34,6 +34,7 @@ import {
   advanceState,
   applyToLatent,
   applyToPrompt,
+  blendNoise,
   emptyState,
 } from './mamba-coherence';
 import { expandPrompt } from './llm-bridge';
@@ -44,6 +45,13 @@ const DEFAULT_HEIGHT = 512;
 const DEFAULT_WEIGHT_SOURCES: WeightSource[] = ['r2-proxy', 'huggingface-cdn'];
 const DEFAULT_COHERENCE: CoherenceMode = 'prompt-bias';
 const DEFAULT_COHERENCE_STRENGTH = 0.5;
+/**
+ * Fraction of fresh noise per frame mixed into the shared anchor latent.
+ * 0.15 was chosen empirically: small enough that color palette and composition
+ * stay locked across frames (the bug this fixes), large enough that frames
+ * still evolve so the result reads as motion, not as a static image looped.
+ */
+const DEFAULT_MOTION_AMOUNT = 0.15;
 
 export class VideoEngine {
   private constructor(
@@ -132,6 +140,17 @@ export class VideoEngine {
       : null;
 
     const timesteps = trimTimesteps(descriptor.defaultTimesteps, steps);
+    const motionAmount = clamp01(args.motionAmount ?? DEFAULT_MOTION_AMOUNT);
+
+    // One anchor latent for the whole clip; each frame blends fresh noise into
+    // it via blendNoise(). Sampling i.i.d. noise per frame (the previous code)
+    // produced visually unrelated stills — each frame is a totally fresh
+    // interpretation of the same prompt because diffusion is dominated by
+    // initial noise. The anchor locks colors and composition across frames;
+    // motionAmount controls how much per-frame variation is allowed on top.
+    // The latentWalkSharesAnchor regression test in video-engine.test.ts locks
+    // this — do not go back to sampling fresh noise per frame here.
+    const anchorLatent = this.diffusion.sampleInitialLatent(seed);
 
     const frames: ImageBitmap[] = [];
     const muxFrames: MuxFrame[] = [];
@@ -151,7 +170,8 @@ export class VideoEngine {
             })
           : promptEmbedding;
 
-      let latent = this.diffusion.sampleInitialLatent(seed + frameIdx);
+      const frameNoise = this.diffusion.sampleInitialLatent(seed + 1 + frameIdx);
+      let latent = blendNoise(anchorLatent, frameNoise, motionAmount);
       if (coherenceMode === 'latent-residual') {
         latent = applyToLatent({
           ctx: { mode: coherenceMode, strength: coherenceStrength, state: this.mambaState },
@@ -224,6 +244,13 @@ export class VideoEngine {
   async dispose(): Promise<void> {
     await this.diffusion.dispose();
   }
+}
+
+function clamp01(x: number): number {
+  if (!Number.isFinite(x)) return DEFAULT_MOTION_AMOUNT;
+  if (x < 0) return 0;
+  if (x > 1) return 1;
+  return x;
 }
 
 function deriveR2Base(baseUrl: string | undefined): string | undefined {

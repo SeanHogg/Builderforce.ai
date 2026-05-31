@@ -77,11 +77,36 @@ var MODE_DESCRIPTIONS = {
   "prompt-bias": "Mamba state biases the prompt embedding. Lightweight, works with any U-Net.",
   "latent-residual": "Mamba state biases the initial latent noise. Stronger temporal lock, slightly more compute."
 };
+function LabeledRange(props) {
+  return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_jsx_runtime2.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: "bfs-label", style: props.marginTop ? { marginTop: props.marginTop } : void 0, children: [
+      props.label,
+      ": ",
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "bfs-mono", children: props.value.toFixed(2) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+      "input",
+      {
+        type: "range",
+        min: props.min,
+        max: props.max,
+        step: props.step,
+        value: props.value,
+        onChange: (e) => props.onChange(Number(e.target.value)),
+        disabled: props.disabled,
+        className: "bfs-range"
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "bfs-hint", children: props.hint })
+  ] });
+}
 function CoherenceControls({
   mode,
   strength,
+  motionAmount,
   onModeChange,
   onStrengthChange,
+  onMotionAmountChange,
   disabled
 }) {
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "bfs-field", children: [
@@ -101,24 +126,34 @@ function CoherenceControls({
       /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: m === "prompt-bias" ? "Prompt bias" : "Latent residual" })
     ] }, m)) }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "bfs-hint", children: MODE_DESCRIPTIONS[mode] }),
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: "bfs-label", style: { marginTop: 12 }, children: [
-      "Coherence strength: ",
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "bfs-mono", children: strength.toFixed(2) })
-    ] }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-      "input",
+      LabeledRange,
       {
-        type: "range",
+        label: "Coherence strength",
+        value: strength,
         min: 0,
         max: 1,
         step: 0.05,
-        value: strength,
-        onChange: (e) => onStrengthChange(Number(e.target.value)),
+        marginTop: 12,
         disabled,
-        className: "bfs-range"
+        onChange: onStrengthChange,
+        hint: "0 = i.i.d. frames \xB7 1 = maximum lock to previous frame."
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "bfs-hint", children: "0 = i.i.d. frames \xB7 1 = maximum lock to previous frame." })
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+      LabeledRange,
+      {
+        label: "Motion amount",
+        value: motionAmount,
+        min: 0,
+        max: 1,
+        step: 0.05,
+        marginTop: 12,
+        disabled,
+        onChange: onMotionAmountChange,
+        hint: "Per-frame noise mixed into the shared anchor latent. 0 = a still image looped \xB7 0.15 = subtle motion, stable colors (default) \xB7 1 = each frame is a fresh interpretation of the prompt (no continuity)."
+      }
+    )
   ] });
 }
 
@@ -218,6 +253,7 @@ function StudioPanel({
   const [resolution, setResolution] = (0, import_react3.useState)(DEFAULT_RESOLUTION);
   const [coherenceMode, setCoherenceMode] = (0, import_react3.useState)(defaultCoherence);
   const [coherenceStrength, setCoherenceStrength] = (0, import_react3.useState)(0.5);
+  const [motionAmount, setMotionAmount] = (0, import_react3.useState)(0.15);
   const [frames, setFrames] = (0, import_react3.useState)(defaultFrames);
   const [fps, setFps] = (0, import_react3.useState)(defaultFps);
   (0, import_react3.useEffect)(() => {
@@ -323,6 +359,7 @@ function StudioPanel({
         fps,
         coherence: coherenceMode,
         coherenceStrength,
+        motionAmount,
         signal: abort.signal,
         onPromptExpanded: setExpandedPrompt,
         onProgress: handleProgress,
@@ -352,6 +389,7 @@ function StudioPanel({
     baseUrl,
     coherenceMode,
     coherenceStrength,
+    motionAmount,
     fps,
     frames,
     initialMambaState,
@@ -497,8 +535,10 @@ function StudioPanel({
           {
             mode: coherenceMode,
             strength: coherenceStrength,
+            motionAmount,
             onModeChange: setCoherenceMode,
             onStrengthChange: setCoherenceStrength,
+            onMotionAmountChange: setMotionAmount,
             disabled: isGenerating
           }
         ),
