@@ -78,6 +78,8 @@ vi.mock('./useEngineStatus', () => ({
 vi.mock('@seanhogg/builderforce-studio', () => ({
   VideoEngine: h.VideoEngineMock,
   planScene: vi.fn(),
+  storyboardFrameCount: (sb: { shots: { durationFrames: number }[] }) =>
+    sb.shots.reduce((a, s) => a + s.durationFrames, 0),
   // ModelPicker reads Object.keys(MODEL_REGISTRY); the values are irrelevant
   // here (the picker lives in the collapsed Advanced section).
   MODEL_REGISTRY: {

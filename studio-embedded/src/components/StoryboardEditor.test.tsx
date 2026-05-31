@@ -1,9 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
-// StoryboardEditor imports CAMERA_MOVES (runtime) + types from the engine.
+// StoryboardEditor imports CAMERA_MOVES + storyboardFrameCount (runtime) + types.
 vi.mock('@seanhogg/builderforce-studio', () => ({
   CAMERA_MOVES: ['static', 'pan-left', 'pan-right', 'tilt-up', 'tilt-down', 'dolly-in', 'dolly-out'],
+  storyboardFrameCount: (sb: { shots: { durationFrames: number }[] }) =>
+    sb.shots.reduce((a, s) => a + s.durationFrames, 0),
 }));
 
 import { StoryboardEditor } from './StoryboardEditor';
