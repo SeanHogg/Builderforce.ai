@@ -69,7 +69,7 @@ export const EMBED_VIEWS = {
   'feature-scoring':     { key: 'feature-scoring',       label: 'Feature Scoring',     pillar: 'agile',      available: false },
 
   // Governance & Security — POSTURE ONLY (governance ⇒ 'security' capability)
-  soc2:                  { key: 'soc2',                  label: 'SOC 2 Tracker',       pillar: 'governance', available: false },
+  soc2:                  { key: 'soc2',                  label: 'SOC 2 Tracker',       pillar: 'governance', available: true  },
   vendors:               { key: 'vendors',               label: 'Vendor Register',     pillar: 'governance', available: false },
   incidents:             { key: 'incidents',             label: 'Security Incidents',  pillar: 'governance', available: false },
   'data-inventory':      { key: 'data-inventory',        label: 'PII & Data Inventory', pillar: 'governance', available: false },

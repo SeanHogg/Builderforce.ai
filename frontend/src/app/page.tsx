@@ -74,11 +74,31 @@ export default function LandingPage() {
           gap: 0;
         }
 
-        /* Claw mascot */
+        /* Prompt + mascot row. The prompt is the left column; the claw mascot
+           sits in a right column on tablet/desktop and is hidden on mobile. */
+        .lp-prompt-row {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 32px;
+          width: 100%;
+        }
+        .lp-prompt-col {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          flex: 1 1 auto;
+          width: 100%;
+          max-width: 640px;
+        }
+
+        /* Claw mascot — hidden on mobile, shown as the right column ≥820px */
         .lp-hero-mascot {
-          width: clamp(160px, 28vw, 240px);
+          display: none;
+          width: clamp(180px, 22vw, 260px);
           height: auto;
-          margin-bottom: 28px;
+          flex: 0 0 auto;
           animation: float 4s ease-in-out infinite;
           filter: drop-shadow(0 0 28px var(--logo-glow));
           transition: filter 0.3s ease;
@@ -86,6 +106,10 @@ export default function LandingPage() {
         .lp-hero-mascot:hover {
           animation-play-state: paused;
           filter: drop-shadow(0 0 44px var(--logo-glow-hover));
+        }
+        @media (min-width: 820px) {
+          .lp-prompt-row { flex-direction: row; align-items: center; gap: 48px; }
+          .lp-hero-mascot { display: block; }
         }
         @keyframes float {
           0%, 100% { transform: translateY(0); }
@@ -503,16 +527,6 @@ export default function LandingPage() {
         <main>
         {/* ── Hero ── */}
         <section className="lp-hero">
-          {/* Floating claw mascot */}
-          <Image
-            src="/claw.png"
-            alt="Builderforce AI"
-            width={240}
-            height={240}
-            priority
-            className="lp-hero-mascot"
-          />
-
           <div className="lp-badge">
             <span className="lp-badge-dot" />
             AI CTO · CIO · Security Officer
@@ -529,29 +543,43 @@ export default function LandingPage() {
             an audit trail. Tell it what you need; it gets to work.
           </p>
 
-          {/* Prompt input — the primary action */}
-          <form onSubmit={handlePromptSubmit} className="lp-prompt">
-            <textarea
-              className="lp-prompt-input"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handlePromptSubmit(e); }
-              }}
-              placeholder="Describe what you want your AI workforce to do…"
-              rows={3}
-              aria-label="Describe what you want your AI workforce to do"
+          {/* Prompt input (primary action) + claw mascot as a right-hand
+              column on tablet/desktop; the mascot is hidden on mobile. */}
+          <div className="lp-prompt-row">
+            <div className="lp-prompt-col">
+              <form onSubmit={handlePromptSubmit} className="lp-prompt">
+                <textarea
+                  className="lp-prompt-input"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handlePromptSubmit(e); }
+                  }}
+                  placeholder="Describe what you want your AI workforce to do…"
+                  rows={3}
+                  aria-label="Describe what you want your AI workforce to do"
+                />
+                <button type="submit" className="lp-prompt-send" disabled={!prompt.trim()}>
+                  Get started →
+                </button>
+              </form>
+              <div className="lp-prompt-examples">
+                {HERO_PROMPT_EXAMPLES.map((ex) => (
+                  <button key={ex} type="button" className="lp-chip" onClick={() => setPrompt(ex)}>
+                    {ex}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Image
+              src="/claw.png"
+              alt="Builderforce AI"
+              width={240}
+              height={240}
+              priority
+              className="lp-hero-mascot"
             />
-            <button type="submit" className="lp-prompt-send" disabled={!prompt.trim()}>
-              Get started →
-            </button>
-          </form>
-          <div className="lp-prompt-examples">
-            {HERO_PROMPT_EXAMPLES.map((ex) => (
-              <button key={ex} type="button" className="lp-chip" onClick={() => setPrompt(ex)}>
-                {ex}
-              </button>
-            ))}
           </div>
 
           <div className="lp-actions">

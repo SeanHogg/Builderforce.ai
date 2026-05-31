@@ -1431,3 +1431,16 @@ export const governanceApi = {
       request<{ id: string }>(`/api/governance/soc2/controls/${id}/evidence`, { method: 'POST', body: JSON.stringify(body) }),
   },
 };
+
+// Generic segment-scoped governance tracker client (one factory for every tracker).
+export type TrackerRow = Record<string, unknown> & { id: string };
+
+export function governanceTracker(path: string) {
+  const base = `/api/governance${path}`;
+  return {
+    list:   () => request<TrackerRow[]>(base),
+    create: (body: Record<string, unknown>) => request<TrackerRow>(base, { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: string, body: Record<string, unknown>) => request<TrackerRow>(`${base}/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    remove: (id: string) => request<{ deleted: string }>(`${base}/${id}`, { method: 'DELETE' }),
+  };
+}

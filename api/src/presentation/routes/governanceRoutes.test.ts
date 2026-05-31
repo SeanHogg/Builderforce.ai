@@ -20,7 +20,7 @@ function whereResult(awaited: unknown[], limited: unknown[]) {
   return p;
 }
 
-function makeDb(opts: { controls?: unknown[]; existing?: unknown[]; updateRows?: unknown[]; insertReturn?: unknown[] } = {}) {
+function makeDb(opts: { controls?: unknown[]; existing?: unknown[]; updateRows?: unknown[]; insertReturn?: unknown[]; deleteRows?: unknown[] } = {}) {
   const captured: { insertValues?: any; updateSet?: any } = {};
   const db = {
     select: () => ({ from: () => ({ where: () => whereResult(opts.controls ?? [], opts.existing ?? []) }) }),
@@ -38,6 +38,7 @@ function makeDb(opts: { controls?: unknown[]; existing?: unknown[]; updateRows?:
         return { where: () => ({ returning: async () => opts.updateRows ?? [] }) };
       },
     }),
+    delete: () => ({ where: () => ({ returning: async () => opts.deleteRows ?? [] }) }),
   };
   return { db: db as any, captured };
 }
@@ -96,5 +97,47 @@ describe('governanceRoutes /soc2', () => {
     const { db } = makeDb({ existing: [{ id: 'c1' }] });
     const res = await createGovernanceRoutes(db).request('/soc2/controls/c1/evidence', body('POST', { url: 'x' }));
     expect(res.status).toBe(400);
+  });
+});
+
+// The generic tracker factory, exercised via a mounted tracker (/vendors).
+describe('governanceRoutes tracker factory (/vendors)', () => {
+  it('lists rows scoped to the segment', async () => {
+    const rows = [{ id: 'v1', name: 'Acme' }];
+    const { db } = makeDb({ controls: rows });
+    const res = await createGovernanceRoutes(db).request('/vendors');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(rows);
+  });
+
+  it('creates with tenant+segment stamped and whitelisted fields only', async () => {
+    const { db, captured } = makeDb({ insertReturn: [{ id: 'v1' }] });
+    const res = await createGovernanceRoutes(db).request(
+      '/vendors',
+      body('POST', { name: 'Acme', region: 'us', isSubprocessor: true, bogus: 'drop-me' }),
+    );
+    expect(res.status).toBe(201);
+    expect(captured.insertValues.tenantId).toBe(TENANT);
+    expect(captured.insertValues.segmentId).toBe(SEGMENT);
+    expect(captured.insertValues.name).toBe('Acme');
+    expect('bogus' in captured.insertValues).toBe(false); // not in the whitelist
+  });
+
+  it('rejects create without the required field', async () => {
+    const { db } = makeDb();
+    const res = await createGovernanceRoutes(db).request('/vendors', body('POST', { region: 'us' }));
+    expect(res.status).toBe(400);
+  });
+
+  it('coerces *Date fields to Date objects', async () => {
+    const { db, captured } = makeDb({ insertReturn: [{ id: 'v1' }] });
+    await createGovernanceRoutes(db).request('/vendors', body('POST', { name: 'Acme', renewalDate: '2027-01-01T00:00:00.000Z' }));
+    expect(captured.insertValues.renewalDate instanceof Date).toBe(true);
+  });
+
+  it('404s deleting a row not in this segment', async () => {
+    const { db } = makeDb({ deleteRows: [] });
+    const res = await createGovernanceRoutes(db).request('/vendors/x', { method: 'DELETE' });
+    expect(res.status).toBe(404);
   });
 });
