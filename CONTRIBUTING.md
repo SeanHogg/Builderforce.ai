@@ -3,7 +3,7 @@
 ## Quick Links
 
 - **GitHub:** https://github.com/SeanHogg/Builderforce.ai
-- **Documentation:** [docs.coderclaw.ai](https://docs.coderclaw.ai) — CoderClaw core docs. For the orchestration/API layer (auth, tenants, projects, tasks, claws, runtime, marketplace) that Builderforce.ai’s API follows, see [docs.coderclaw.ai/link/](https://docs.coderclaw.ai/link/) (getting started, architecture, API reference, multi-agent, pricing).
+- **Documentation:** [builderforce.ai/docs](https://builderforce.ai/docs) — Builderforce.ai core docs. For the orchestration/API layer (auth, tenants, projects, tasks, claws, runtime, marketplace) that Builderforce.ai’s API follows, see [builderforce.ai/docs/link/](https://builderforce.ai/docs/link/) (getting started, architecture, API reference, multi-agent, pricing).
 - **Cloudflare Workers documentation:** https://developers.cloudflare.com/workers/
 - **Discord:** https://discord.gg/qkhbAGHRBT (use #setup-help for questions)
 

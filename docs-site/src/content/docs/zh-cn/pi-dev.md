@@ -73,5 +73,5 @@ scripts/pi/run-tests.sh --live
 
 ## 参考资料
 
-- https://docs.coderclaw.ai/testing
-- https://docs.coderclaw.ai/start/getting-started
+- https://builderforce.ai/docs/testing
+- https://builderforce.ai/docs/start/getting-started

@@ -56,7 +56,7 @@ coderclaw browser --browser-profile work tabs
 
 ```bash
 coderclaw browser tabs
-coderclaw browser open https://docs.coderclaw.ai
+coderclaw browser open https://builderforce.ai/docs
 coderclaw browser focus <targetId>
 coderclaw browser close <targetId>
 ```

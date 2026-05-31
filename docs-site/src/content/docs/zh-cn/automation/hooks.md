@@ -133,7 +133,7 @@ Hook 包可以附带依赖；它们将安装在 `~/.coderclaw/hooks/<id>` 下。
 ---
 name: my-hook
 description: "Short description of what this hook does"
-homepage: https://docs.coderclaw.ai/automation/hooks#my-hook
+homepage: https://builderforce.ai/docs/automation/hooks#my-hook
 metadata:
   { "coderclaw": { "emoji": "🔗", "events": ["command:new"], "requires": { "bins": ["node"] } } }
 ---

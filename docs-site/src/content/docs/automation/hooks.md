@@ -134,7 +134,7 @@ The `HOOK.md` file contains metadata in YAML frontmatter plus Markdown documenta
 ---
 name: my-hook
 description: "Short description of what this hook does"
-homepage: https://docs.coderclaw.ai/automation/hooks#my-hook
+homepage: https://builderforce.ai/docs/automation/hooks#my-hook
 metadata:
   { "coderclaw": { "emoji": "🔗", "events": ["command:new"], "requires": { "bins": ["node"] } } }
 ---

@@ -39,7 +39,7 @@ Status:              301 Moved Permanently
 Preserve path/query: yes
 ```
 
-This is a **manual one-time step** in the Cloudflare dashboard — there is no source-controlled config for zone-level bulk redirects. Once configured, the old `docs.coderclaw.ai` Pages project can be retired.
+This is a **manual one-time step** in the Cloudflare dashboard — there is no source-controlled config for zone-level bulk redirects. The `docs.coderclaw.ai` domain is being **decommissioned**: docs are now served exclusively at `https://builderforce.ai/docs`. Once the redirect is confirmed working, remove the old `coderclaw-docs` / `docs.coderclaw.ai` Pages custom domain from the Cloudflare dashboard.
 
 ## In-site short-link redirects
 

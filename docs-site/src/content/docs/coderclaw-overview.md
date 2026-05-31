@@ -237,7 +237,7 @@ coderclaw onboard --install-daemon
 coderclaw gateway --port 18789
 ```
 
-Documentation: [docs.coderclaw.ai](https://docs.coderclaw.ai)
+Documentation: [docs.coderclaw.ai](https://builderforce.ai/docs)
 
 ### Enabling Enterprise Features
 
@@ -302,4 +302,4 @@ Choose your setup based on requirements:
 
 ---
 
-_This guide is maintained by the CoderClaw project. For questions, see [docs.coderclaw.ai](https://docs.coderclaw.ai)._
+_This guide is maintained by the CoderClaw project. For questions, see [docs.coderclaw.ai](https://builderforce.ai/docs)._
