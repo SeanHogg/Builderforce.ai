@@ -24,6 +24,18 @@ export type {
   VideoEngineOptions,
   GenerateOptions,
   GenerateResult,
+  CameraMove,
+  CharacterBible,
+  PlannedShot,
+  Storyboard,
+  ScenePlanOptions,
+  FrameIssueKind,
+  FrameValidationIssue,
+  FrameValidation,
+  ValidateFrameOptions,
+  ShotValidation,
+  StoryboardGenerateOptions,
+  StoryboardGenerateResult,
 } from './types';
 
 export { VideoEngine } from './engine/video-engine';
@@ -32,3 +44,18 @@ export type { ProbedDevice } from './engine/device-router';
 export { MODEL_REGISTRY } from './engine/diffusion-engine';
 export { configureOnnxRuntime } from './engine/onnx-runtime-config';
 export type { OnnxRuntimeConfigOptions } from './engine/onnx-runtime-config';
+export {
+  planScene,
+  directorPass,
+  shotPlannerPass,
+  composeShotPrompt,
+  cameraMoveToMotion,
+  normaliseShotBudget,
+} from './engine/scene-planner';
+export { validateFrame } from './engine/frame-validator';
+export {
+  slerp,
+  planKeyframeIndices,
+  buildInterpolatedSequence,
+} from './engine/frame-interpolator';
+export type { Keyframe, InterpolatedSlot } from './engine/frame-interpolator';

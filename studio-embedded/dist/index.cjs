@@ -698,6 +698,8 @@ function StudioPanel({
   const [cameraDy, setCameraDy] = (0, import_react4.useState)(0);
   const [frames, setFrames] = (0, import_react4.useState)(defaultFrames);
   const [fps, setFps] = (0, import_react4.useState)(defaultFps);
+  const [interpolationFactor, setInterpolationFactor] = (0, import_react4.useState)(1);
+  const [cinematic, setCinematic] = (0, import_react4.useState)(false);
   (0, import_react4.useEffect)(() => {
     disposeEngineAndOutputs();
   }, [quality, resolution]);
@@ -800,36 +802,76 @@ function StudioPanel({
         }
         engineRef.current = engine;
       }
-      const generated = await engineRef.current.generate({
-        prompt,
-        frames,
-        fps,
-        coherence: coherenceMode,
-        coherenceStrength,
-        motionAmount,
-        imgToImgStrength,
-        cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0) ? { dx: cameraDx, dy: cameraDy } : void 0,
-        signal: abort.signal,
-        onPromptExpanded: setExpandedPrompt,
-        onProgress: handleProgress,
-        onFrame: (idx, bitmap) => {
-          setPreviewFrames((prev) => [...prev, bitmap]);
-          setFramesDone(idx + 1);
-        }
-      });
+      const onFrame = (idx, bitmap) => {
+        setPreviewFrames((prev) => [...prev, bitmap]);
+        setFramesDone(idx + 1);
+      };
+      let generated;
+      if (cinematic) {
+        setProgressLabel("Planning storyboard via Director + Shot Planner\u2026");
+        const storyboard = await (0, import_builderforce_studio3.planScene)({
+          apiKey: token,
+          baseUrl,
+          request: prompt,
+          totalFrames: frames,
+          signal: abort.signal
+        });
+        setExpandedPrompt(storyboard.treatment);
+        const sb = await engineRef.current.generateStoryboard({
+          storyboard,
+          fps,
+          coherence: coherenceMode,
+          coherenceStrength,
+          motionAmount,
+          interpolationFactor,
+          signal: abort.signal,
+          onProgress: handleProgress,
+          onFrame
+        });
+        generated = {
+          blob: sb.blob,
+          mambaState: sb.mambaState,
+          frames: sb.frames,
+          activeDevice: sb.activeDevice,
+          resolvedPrompt: storyboard.treatment,
+          elapsedMs: sb.elapsedMs
+        };
+      } else {
+        generated = await engineRef.current.generate({
+          prompt,
+          frames,
+          fps,
+          coherence: coherenceMode,
+          coherenceStrength,
+          motionAmount,
+          imgToImgStrength,
+          interpolationFactor,
+          cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0) ? { dx: cameraDx, dy: cameraDy } : void 0,
+          signal: abort.signal,
+          onPromptExpanded: setExpandedPrompt,
+          onProgress: handleProgress,
+          onFrame
+        });
+      }
       const url = URL.createObjectURL(generated.blob);
       setVideoUrl(url);
       setResult(generated);
+      setPreviewFrames(generated.frames);
       onVideoGenerated?.(generated.blob, generated.mambaState);
       if (onSaveVersion) {
         try {
+          const tier = resolveQualityTier(quality);
           const params = {
             prompt,
-            model,
+            quality,
+            model: showAdvanced ? model : tier.primary,
+            refinementModel: showAdvanced ? null : tier.refinement ?? null,
             width: resolution,
             height: resolution,
             frames,
             fps,
+            interpolationFactor,
+            cinematic,
             coherence: coherenceMode,
             coherenceStrength,
             motionAmount,
@@ -871,6 +913,8 @@ function StudioPanel({
     currentVersionId,
     fps,
     frames,
+    interpolationFactor,
+    cinematic,
     initialMambaState,
     model,
     quality,
@@ -905,6 +949,9 @@ function StudioPanel({
       const p = entry.params;
       setPrompt(p.prompt);
       setModel(p.model);
+      if (p.quality) setQuality(p.quality);
+      setInterpolationFactor(p.interpolationFactor ?? 1);
+      setCinematic(p.cinematic ?? false);
       const knownRes = RESOLUTION_PRESETS.find((r) => r === p.width);
       if (knownRes) setResolution(knownRes);
       setFrames(p.frames);
@@ -972,6 +1019,29 @@ function StudioPanel({
           ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(QualityTierPicker, { value: quality, onChange: setQuality, disabled: isGenerating }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
+          "label",
+          {
+            className: "bfs-field",
+            style: { display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer" },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+                "input",
+                {
+                  type: "checkbox",
+                  checked: cinematic,
+                  onChange: (e) => setCinematic(e.target.checked),
+                  disabled: isGenerating,
+                  style: { marginTop: 3 }
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { children: [
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bfs-label", style: { display: "block" }, children: "Cinematic (auto-storyboard)" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bfs-hint", children: "Plans a multi-shot scene with characters and camera moves, then renders each shot." })
+              ] })
+            ]
+          }
+        ),
         /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
           "details",
           {
@@ -1066,6 +1136,34 @@ function StudioPanel({
                     "s"
                   ] })
                 ] })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bfs-field", style: { marginTop: 12 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("label", { className: "bfs-label", children: "Keyframe interpolation" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bfs-radio-row", children: [1, 2, 4].map((f) => {
+                  const active = interpolationFactor === f;
+                  return /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+                    "button",
+                    {
+                      type: "button",
+                      onClick: () => setInterpolationFactor(f),
+                      disabled: isGenerating,
+                      className: "bfs-btn bfs-btn-secondary",
+                      "aria-pressed": active,
+                      style: {
+                        flex: 1,
+                        padding: "6px 8px",
+                        fontSize: "0.8rem",
+                        fontWeight: 600,
+                        background: active ? "var(--bfs-accent)" : "transparent",
+                        color: active ? "white" : "var(--bfs-fg)",
+                        borderColor: active ? "var(--bfs-accent)" : "var(--bfs-border)"
+                      },
+                      children: f === 1 ? "Off" : `${f}\xD7`
+                    },
+                    f
+                  );
+                }) }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "bfs-hint", children: "Off = every frame fully generated (sharpest, slowest). 2\xD7/4\xD7 generate keyframes and interpolate the rest in latent space \u2014 roughly N\xD7 fewer denoise passes for smooth motion." })
               ] }),
               /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
                 CoherenceControls,

@@ -573,6 +573,29 @@ export class DiffusionEngine {
     return out;
   }
 
+  /**
+   * VAE-decode a clean latent to RGB pixels ([-1..1], layout [3, h, w]) WITHOUT
+   * running the UNet denoise loop. This is the cheap half of `denoise()` and is
+   * what makes keyframe interpolation worthwhile: the FrameInterpolator slerps
+   * two keyframe latents into a tween latent, and the engine turns that tween
+   * into a frame with one VAE decode instead of a full multi-step denoise.
+   */
+  async decodeLatent(latent: Float32Array): Promise<Float32Array> {
+    if (!this.vaeSession) {
+      throw new Error('DiffusionEngine.init() not called');
+    }
+    const latentH = this.opts.height / 8;
+    const latentW = this.opts.width / 8;
+    const expected = 4 * latentH * latentW;
+    if (latent.length !== expected) {
+      throw new Error(
+        `decodeLatent: latent length ${latent.length} != expected ${expected} ` +
+          `for ${this.opts.width}x${this.opts.height}.`,
+      );
+    }
+    return this.runVaeDecode(latent, latentH, latentW);
+  }
+
   // -------------------------------------------------------------------------
   // Internals
   // -------------------------------------------------------------------------

@@ -379,3 +379,56 @@ export interface GenerateResult {
   /** Total wall-clock generation time in milliseconds. */
   elapsedMs: number;
 }
+
+/** Per-shot validation verdict returned by `generateStoryboard` when validation
+ *  is enabled — pairs a shot id with the VLM's verdict on its first keyframe. */
+export interface ShotValidation {
+  shotId: string;
+  /** Output frame index (global across the clip) that was validated. */
+  frameIndex: number;
+  validation: FrameValidation;
+}
+
+export interface StoryboardGenerateOptions {
+  /** The storyboard to render — usually the output of `planScene`. */
+  storyboard: Storyboard;
+  /** Playback framerate of the output MP4. */
+  fps: number;
+  /** Override denoising steps (defaults to the model's defaultSteps). */
+  steps?: number;
+  /** Override classifier-free-guidance scale. */
+  guidance?: number;
+  /** How the Mamba state biases each frame. Carried across shots for continuity. */
+  coherence?: CoherenceMode;
+  coherenceStrength?: number;
+  /** Fresh-noise blend per frame for shots without camera motion. See GenerateOptions. */
+  motionAmount?: number;
+  /** Keyframe interpolation factor applied within each shot. See GenerateOptions. */
+  interpolationFactor?: number;
+  /** Seed base. Each shot derives a distinct seed from this. Defaults to Date.now(). */
+  seed?: number;
+  /** When true, run the VLM frame validator on each shot's first keyframe. */
+  validate?: boolean;
+  /** Vision-capable gateway model for validation. */
+  validatorModel?: string;
+  /** Score below which a frame validation is flagged. Defaults to 0.6. */
+  passThreshold?: number;
+  /** Per-frame callback (global frame index across all shots). */
+  onFrame?: (frameIdx: number, bitmap: ImageBitmap, state: MambaStateSnapshot) => void;
+  /** Fired when each shot finishes generating. */
+  onShot?: (shotIndex: number, shot: PlannedShot, validation: FrameValidation | null) => void;
+  onProgress?: (label: string) => void;
+  signal?: AbortSignal;
+}
+
+export interface StoryboardGenerateResult {
+  blob: Blob;
+  mambaState: MambaStateSnapshot;
+  frames: ImageBitmap[];
+  activeDevice: ActiveDevice;
+  /** The storyboard that was rendered. */
+  storyboard: Storyboard;
+  /** Validation verdicts, one per shot, when `validate` was true (else empty). */
+  validations: ShotValidation[];
+  elapsedMs: number;
+}
