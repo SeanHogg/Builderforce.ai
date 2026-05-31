@@ -97,6 +97,7 @@ export const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor> = {
     ],
     textEncoderInputs: [{ name: 'input_ids', dtype: 'int32' }],
     lcmGuidanceEmbedDim: 256, // standard for LCM-LoRA-derived exports
+    lcmGuidanceScale: 8.5, // diffusers LCM default — embedded into timestep_cond (NOT defaultGuidance)
   },
   'sd-turbo': {
     id: 'sd-turbo',
@@ -157,15 +158,16 @@ const UNET_INPUT_BUILDERS: Record<string, UnetInputBuilder> = {
     data: ctx.condEmbedding,
     shape: [1, ctx.descriptor.sequenceLength, ctx.descriptor.textEmbedDim],
   }),
-  timestep_cond: (ctx) => {
-    // LCM consistency-model guidance-scale embedding. Diffusers convention:
-    // embed (w - 1) where w is the CFG scale. w=1 (LCM default) → all zeros.
-    const dim = ctx.descriptor.lcmGuidanceEmbedDim ?? 256;
-    return {
-      data: guidanceScaleEmbedding(ctx.guidance - 1, dim),
-      shape: [1, dim],
-    };
-  },
+  timestep_cond: (ctx) => ({
+    // LCM consistency-model guidance-scale embedding. The embedded scale is the
+    // model's DISTILLATION guidance scale (descriptor.lcmGuidanceScale, diffusers
+    // default 8.5), NOT the runtime cond/uncond mix `ctx.guidance` (~1 for LCM).
+    // Embedding the mix scale gave w = 1 - 1 = 0 → a degenerate all-[sin0=0,cos0=1]
+    // vector, conditioning the UNet as if guidance≈1 and producing washed,
+    // out-of-range latents on the refinement pass. See lcmGuidanceCondEmbedding.
+    data: lcmGuidanceCondEmbedding(ctx.descriptor),
+    shape: [1, ctx.descriptor.lcmGuidanceEmbedDim ?? 256],
+  }),
 };
 
 /** Names the engine knows how to build. Exported so the registry contract test
@@ -203,6 +205,31 @@ export function materializeTensor(
   }
   // Exhaustive on OrtTensorDtype — adding a new dtype to the type forces this.
   throw new Error(`Unsupported dtype: ${dtype satisfies never}`);
+}
+
+/**
+ * Default LCM distillation guidance scale embedded into `timestep_cond` when a
+ * model descriptor doesn't override it. Matches diffusers
+ * `LatentConsistencyModelPipeline`'s default `guidance_scale = 8.5` (the embedded
+ * `w` is `guidance_scale - 1`). This is the scale the UNet was DISTILLED with —
+ * unrelated to the runtime cond/uncond mix scale (`defaultGuidance`, ~1 for LCM).
+ */
+export const DEFAULT_LCM_GUIDANCE_SCALE = 8.5;
+
+/**
+ * Build the `timestep_cond` guidance-scale embedding feed for an LCM model.
+ * Embeds `(descriptor.lcmGuidanceScale ?? DEFAULT_LCM_GUIDANCE_SCALE) - 1` — the
+ * DISTILLATION scale — into a `lcmGuidanceEmbedDim`-wide sinusoidal vector.
+ *
+ * Exported so the registry contract test can lock that the embedded scale is
+ * non-degenerate (w ≠ 0). The prior code embedded `runtimeGuidance - 1` which is
+ * 0 for LCM's CFG≈1, yielding an all-[0…,1…] vector that under-conditions the
+ * UNet — the root cause of the washed / distorted two-pass refinement output.
+ */
+export function lcmGuidanceCondEmbedding(descriptor: ModelDescriptor): Float32Array {
+  const dim = descriptor.lcmGuidanceEmbedDim ?? 256;
+  const w = (descriptor.lcmGuidanceScale ?? DEFAULT_LCM_GUIDANCE_SCALE) - 1;
+  return guidanceScaleEmbedding(w, dim);
 }
 
 /** Sinusoidal guidance-scale embedding (diffusers parity). */

@@ -25,6 +25,7 @@ import type {
   CoherenceMode,
   FrameValidation,
   GenerateOptions,
+  InterpolationBackend,
   GenerateResult,
   MambaStateSnapshot,
   PlannedShot,
@@ -42,6 +43,7 @@ import {
   applyToPrompt,
   blendNoise,
   emptyState,
+  scaleLatent,
   shiftLatent,
   shouldApplyLatentResidualBias,
 } from './mamba-coherence';
@@ -50,6 +52,7 @@ import {
   planKeyframeIndices,
   type Keyframe,
 } from './frame-interpolator';
+import { estimateBlockMotion, interpolateFrames, type MotionField } from './motion-interpolator';
 import { cameraMoveToMotion, composeShotPrompt } from './scene-planner';
 import { validateFrame } from './frame-validator';
 import { expandPrompt } from './llm-bridge';
@@ -182,6 +185,7 @@ export class VideoEngine {
       imgToImgStrength: clamp01(args.imgToImgStrength ?? 0),
       cameraMotion: args.cameraMotion,
       interpolationFactor: normaliseFactor(args.interpolationFactor),
+      interpolationBackend: args.interpolationBackend ?? 'latent-slerp',
       width,
       height,
       label: 'Frame',
@@ -264,7 +268,9 @@ export class VideoEngine {
     const { storyboard } = args;
     const allFrames: ImageBitmap[] = [];
     const allMuxFrames: MuxFrame[] = [];
+    let allLatents: Float32Array[] = [];
     const validations: ShotValidation[] = [];
+    const maxRetries = args.validate ? Math.max(0, Math.floor(args.maxValidationRetries ?? 1)) : 0;
     let globalIdx = 0;
 
     for (let s = 0; s < storyboard.shots.length; s++) {
@@ -276,57 +282,70 @@ export class VideoEngine {
         onProgress,
       );
       const shotEmbedding = await this.diffusion.embedPrompt(shotPrompt);
-      const motion = cameraMoveToMotion(shot.camera);
 
-      const clip = await this.produceClip({
-        frameCount: shot.durationFrames,
-        promptEmbedding: shotEmbedding,
-        negativeEmbedding: null,
+      const { clip, validation } = await this.renderShot({
+        shot,
+        characters: storyboard.characters,
+        shotEmbedding,
+        shotIndex: s,
+        shotCount: storyboard.shots.length,
+        baseSeed: seedBase + s * 100003,
         timesteps,
         guidance,
         coherenceMode,
         coherenceStrength,
-        // Distinct, deterministic seed per shot so shots don't all share one
-        // anchor latent (which would make every shot the same composition).
-        seed: seedBase + s * 100003,
         motionAmount: clamp01(args.motionAmount ?? DEFAULT_MOTION_AMOUNT),
-        imgToImgStrength: motion.imgToImgStrength,
-        cameraMotion: motion.cameraMotion,
         interpolationFactor,
+        interpolationBackend: args.interpolationBackend ?? 'latent-slerp',
         width,
         height,
-        label: `Shot ${s + 1}`,
         frameOffset: globalIdx,
+        validate: Boolean(args.validate),
+        validatorModel: args.validatorModel,
+        passThreshold: args.passThreshold,
+        maxRetries,
         onProgress,
         onFrame: args.onFrame,
         signal: args.signal,
       });
 
-      let shotValidation: FrameValidation | null = null;
-      if (args.validate && clip.muxFrames.length > 0) {
-        shotValidation = await this.validateShotKeyframe(clip.muxFrames[0], {
-          shot,
-          characters: storyboard.characters,
-          width,
-          height,
-          validatorModel: args.validatorModel,
-          passThreshold: args.passThreshold,
-          signal: args.signal,
-          onProgress,
-        });
-        if (shotValidation) {
-          validations.push({ shotId: shot.id, frameIndex: globalIdx, validation: shotValidation });
-        }
+      if (validation) {
+        validations.push({ shotId: shot.id, frameIndex: globalIdx, validation });
       }
-
       allFrames.push(...clip.frames);
       allMuxFrames.push(...clip.muxFrames);
+      allLatents.push(...clip.latents);
       globalIdx += clip.frames.length;
-      args.onShot?.(s, shot, shotValidation);
+      args.onShot?.(s, shot, validation);
     }
 
-    reportProgress(`Encoding ${allFrames.length} frames to MP4…`, onProgress);
-    const blob = await muxFramesToMp4(allMuxFrames, {
+    // Two-pass refinement for the WHOLE scene: generate every shot with the
+    // draft model first, then run ONE refinement pass over all collected
+    // latents after a single model swap — so the Refined tier works for
+    // cinematic output without reloading weights per shot.
+    let finalFrames = allFrames;
+    let finalMuxFrames = allMuxFrames;
+    if (this.opts.refinementModel && this.opts.refinementModel !== this.opts.model) {
+      const refined = await this.refinementPass(allLatents, {
+        resolvedPrompt: storyboard.treatment,
+        seed: seedBase,
+        width,
+        height,
+        refinementStrength: clamp01(DEFAULT_REFINEMENT_STRENGTH),
+        onProgress,
+        onFrame: args.onFrame,
+        signal: args.signal,
+      });
+      for (const bm of allFrames) {
+        try { bm.close(); } catch { /* already closed */ }
+      }
+      finalFrames = refined.frames;
+      finalMuxFrames = refined.muxFrames;
+      allLatents = refined.latents;
+    }
+
+    reportProgress(`Encoding ${finalFrames.length} frames to MP4…`, onProgress);
+    const blob = await muxFramesToMp4(finalMuxFrames, {
       width,
       height,
       fps: args.fps,
@@ -337,12 +356,119 @@ export class VideoEngine {
     return {
       blob,
       mambaState: this.mambaState,
-      frames: allFrames,
+      frames: finalFrames,
       activeDevice: this.activeDevice,
       storyboard,
       validations,
       elapsedMs: performance.now() - start,
     };
+  }
+
+  /**
+   * Render one storyboard shot, with self-healing validation retries. Generates
+   * the clip, validates its first + last keyframe, and — if validation fails and
+   * retries remain — re-renders with a fresh seed, keeping the highest-scoring
+   * attempt. The Mamba state is snapshotted before each attempt and restored, so
+   * a discarded attempt doesn't pollute cross-shot continuity; the kept
+   * attempt's state is committed on return.
+   */
+  private async renderShot(args: {
+    shot: PlannedShot;
+    characters: CharacterBible[];
+    shotEmbedding: Float32Array;
+    shotIndex: number;
+    shotCount: number;
+    baseSeed: number;
+    timesteps: number[];
+    guidance: number;
+    coherenceMode: CoherenceMode;
+    coherenceStrength: number;
+    motionAmount: number;
+    interpolationFactor: number;
+    interpolationBackend: InterpolationBackend;
+    width: number;
+    height: number;
+    frameOffset: number;
+    validate: boolean;
+    validatorModel?: string;
+    passThreshold?: number;
+    maxRetries: number;
+    onProgress?: (label: string) => void;
+    onFrame?: GenerateOptions['onFrame'];
+    signal?: AbortSignal;
+  }): Promise<{ clip: ProducedClip; validation: FrameValidation | null }> {
+    const motion = cameraMoveToMotion(args.shot.camera);
+    const stateBefore = this.mambaState;
+    let best: {
+      clip: ProducedClip;
+      validation: FrameValidation | null;
+      state: MambaStateSnapshot;
+    } | null = null;
+
+    for (let attempt = 0; attempt <= args.maxRetries; attempt++) {
+      if (args.signal?.aborted) throw new DOMException('Generation aborted', 'AbortError');
+      // Each attempt starts from the same pre-shot state so retries don't stack
+      // Mamba drift; vary the seed so the re-render actually differs.
+      this.mambaState = stateBefore;
+      if (attempt > 0) {
+        reportProgress(
+          `Shot ${args.shotIndex + 1}/${args.shotCount}: validation retry ${attempt}/${args.maxRetries}…`,
+          args.onProgress,
+        );
+      }
+      const clip = await this.produceClip({
+        frameCount: args.shot.durationFrames,
+        promptEmbedding: args.shotEmbedding,
+        negativeEmbedding: null,
+        timesteps: args.timesteps,
+        guidance: args.guidance,
+        coherenceMode: args.coherenceMode,
+        coherenceStrength: args.coherenceStrength,
+        seed: args.baseSeed + attempt * 7919,
+        motionAmount: args.motionAmount,
+        imgToImgStrength: motion.imgToImgStrength,
+        cameraMotion: motion.cameraMotion,
+        interpolationFactor: args.interpolationFactor,
+        interpolationBackend: args.interpolationBackend,
+        width: args.width,
+        height: args.height,
+        label: `Shot ${args.shotIndex + 1}`,
+        frameOffset: args.frameOffset,
+        onProgress: args.onProgress,
+        onFrame: args.onFrame,
+        signal: args.signal,
+      });
+
+      const validation = args.validate
+        ? await this.validateShot(clip, {
+            shot: args.shot,
+            characters: args.characters,
+            width: args.width,
+            height: args.height,
+            validatorModel: args.validatorModel,
+            passThreshold: args.passThreshold,
+            signal: args.signal,
+            onProgress: args.onProgress,
+          })
+        : null;
+
+      const score = validation?.score ?? 1;
+      const prevBestScore = best?.validation?.score ?? -1;
+      if (!best || score > prevBestScore) {
+        // New best — close the previous best's bitmaps (it's discarded).
+        if (best) closeClip(best.clip);
+        best = { clip, validation, state: this.mambaState };
+      } else {
+        closeClip(clip); // worse attempt — release its bitmaps
+      }
+
+      // Stop early once a validated attempt passes (or validation is off).
+      if (!validation || validation.ok) break;
+    }
+
+    // Commit the kept attempt's Mamba state for cross-shot continuity.
+    this.mambaState = best!.state;
+    return { clip: best!.clip, validation: best!.validation };
   }
 
   /**
@@ -370,6 +496,7 @@ export class VideoEngine {
       imgToImgStrength,
       cameraMotion,
       interpolationFactor,
+      interpolationBackend,
       width,
       height,
       label,
@@ -392,7 +519,13 @@ export class VideoEngine {
     let prevLatent: Float32Array | null = null;
     const keyframes: Keyframe[] = [];
     // Decoded keyframe outputs, parallel to `keyframes`, reused at assembly time.
-    const keyframeOutputs: { rgba: Uint8ClampedArray; bitmap: ImageBitmap }[] = [];
+    // `pixels` (planar RGB [-1..1]) is kept for the motion backend, which warps
+    // between decoded keyframes rather than slerping their latents.
+    const keyframeOutputs: {
+      rgba: Uint8ClampedArray;
+      bitmap: ImageBitmap;
+      pixels: Float32Array;
+    }[] = [];
 
     for (let k = 0; k < keyframeIndices.length; k++) {
       if (signal?.aborted) throw new DOMException('Generation aborted', 'AbortError');
@@ -412,17 +545,19 @@ export class VideoEngine {
       let latent: Float32Array;
       let frameTimesteps: number[];
       if (useImg2Img) {
-        // Carry the prior keyframe's clean latent forward, optionally pan it for
-        // camera motion, then re-noise to a partial timestep so the remaining
-        // denoise steps refine (not redraw) the scene.
-        const shifted = cameraMotion
-          ? shiftLatent(
-              prevLatent!,
-              { channels: 4, height: latentH, width: latentW },
-              cameraMotion.dx,
-              cameraMotion.dy,
-            )
-          : prevLatent!;
+        // Carry the prior keyframe's clean latent forward, optionally pan +
+        // zoom it for camera motion, then re-noise to a partial timestep so the
+        // remaining denoise steps refine (not redraw) the scene. Zoom (dolly)
+        // is applied after the shift so a combined move composes naturally.
+        let transformed = prevLatent!;
+        const latentShape = { channels: 4, height: latentH, width: latentW };
+        if (cameraMotion && (cameraMotion.dx !== 0 || cameraMotion.dy !== 0)) {
+          transformed = shiftLatent(transformed, latentShape, cameraMotion.dx, cameraMotion.dy);
+        }
+        if (cameraMotion?.zoom && cameraMotion.zoom !== 1) {
+          transformed = scaleLatent(transformed, latentShape, cameraMotion.zoom);
+        }
+        const shifted = transformed;
         const skipCount = Math.floor(timesteps.length * (1 - imgToImgStrength));
         const truncated = timesteps.slice(skipCount);
         frameTimesteps = truncated.length > 0 ? truncated : [timesteps[timesteps.length - 1]];
@@ -463,7 +598,7 @@ export class VideoEngine {
       );
       this.mambaState = advanceState(this.mambaState, pixels);
       keyframes.push({ outputIndex: frameIdx, latent: finalLatent });
-      keyframeOutputs.push({ rgba, bitmap });
+      keyframeOutputs.push({ rgba, bitmap, pixels });
       // Emit each keyframe as it finishes so the consumer's preview / progress
       // bar advances during the expensive denoise loop rather than jumping at
       // the end. Tweens emit below as they're decoded. previewFrames is
@@ -472,32 +607,70 @@ export class VideoEngine {
       onFrame?.(frameOffset + frameIdx, bitmap, this.mambaState);
     }
 
-    // Expand the sparse keyframes into the full ordered sequence; decode each
-    // interpolated tween latent (keyframes are already decoded above).
+    // Expand the sparse keyframes into the full ordered sequence. The `latents`
+    // array is ALWAYS the slerp expansion (one latent per frame) so the
+    // refinement pass has a latent for every slot regardless of backend. The
+    // displayed PIXELS for a tween come from the selected backend:
+    //   latent-slerp → VAE-decode the slerped latent.
+    //   motion       → block optical-flow warp between the two decoded keyframes.
     const slots = buildInterpolatedSequence(keyframes);
     const frames: ImageBitmap[] = new Array(frameCount);
     const muxFrames: MuxFrame[] = new Array(frameCount);
     const latents: Float32Array[] = new Array(frameCount);
+    const useMotion = interpolationBackend === 'motion' && keyframes.length > 1;
+    // Lazily-estimated motion field per keyframe gap (keyed by left keyframe
+    // array index), so each gap's flow is computed once and shared by its tweens.
+    const motionFields = new Map<number, MotionField>();
+    let leftKi = 0; // updated as we pass each keyframe slot; brackets the tweens
 
     for (const slot of slots) {
       if (signal?.aborted) throw new DOMException('Generation aborted', 'AbortError');
-      if (slot.isTween) {
-        reportProgress(`${label} ${slot.outputIndex + 1}/${frameCount}: interpolating…`, onProgress);
-        const pixels = await this.diffusion.decodeLatent(slot.latent!);
-        const rgba = pixelsToRgba(pixels, width, height);
-        const bitmap = await createImageBitmap(
-          new ImageData(rgba as Uint8ClampedArray<ArrayBuffer>, width, height),
-        );
-        frames[slot.outputIndex] = bitmap;
-        muxFrames[slot.outputIndex] = { rgba };
-        latents[slot.outputIndex] = slot.latent!;
-        onFrame?.(frameOffset + slot.outputIndex, bitmap, this.mambaState);
-      } else {
+      if (!slot.isTween) {
         const ki = slot.keyframeIndex!;
+        leftKi = ki;
         frames[slot.outputIndex] = keyframeOutputs[ki].bitmap;
         muxFrames[slot.outputIndex] = { rgba: keyframeOutputs[ki].rgba };
         latents[slot.outputIndex] = keyframes[ki].latent;
+        continue;
       }
+
+      latents[slot.outputIndex] = slot.latent!;
+      let pixels: Float32Array;
+      if (useMotion && leftKi + 1 < keyframes.length) {
+        const k0 = keyframes[leftKi];
+        const k1 = keyframes[leftKi + 1];
+        const span = k1.outputIndex - k0.outputIndex;
+        const t = span > 0 ? (slot.outputIndex - k0.outputIndex) / span : 0.5;
+        reportProgress(`${label} ${slot.outputIndex + 1}/${frameCount}: motion-warp…`, onProgress);
+        let field = motionFields.get(leftKi);
+        if (!field) {
+          field = estimateBlockMotion(
+            keyframeOutputs[leftKi].pixels,
+            keyframeOutputs[leftKi + 1].pixels,
+            width,
+            height,
+          );
+          motionFields.set(leftKi, field);
+        }
+        pixels = interpolateFrames(
+          keyframeOutputs[leftKi].pixels,
+          keyframeOutputs[leftKi + 1].pixels,
+          width,
+          height,
+          t,
+          field,
+        );
+      } else {
+        reportProgress(`${label} ${slot.outputIndex + 1}/${frameCount}: interpolating…`, onProgress);
+        pixels = await this.diffusion.decodeLatent(slot.latent!);
+      }
+      const rgba = pixelsToRgba(pixels, width, height);
+      const bitmap = await createImageBitmap(
+        new ImageData(rgba as Uint8ClampedArray<ArrayBuffer>, width, height),
+      );
+      frames[slot.outputIndex] = bitmap;
+      muxFrames[slot.outputIndex] = { rgba };
+      onFrame?.(frameOffset + slot.outputIndex, bitmap, this.mambaState);
     }
 
     return { frames, muxFrames, latents };
@@ -580,13 +753,53 @@ export class VideoEngine {
   }
 
   /**
-   * Validate one shot's keyframe through the VLM. Encodes the raw RGBA frame to
-   * a JPEG data URL (via OffscreenCanvas) and asks the gateway's vision model
-   * whether it matches the shot + character bible. Advisory: any failure
-   * (no OffscreenCanvas, gateway down) returns null and generation continues.
+   * Validate a shot through the VLM by checking its FIRST and LAST keyframe
+   * (mid-shot drift is invisible to a single-frame check). Returns the merged
+   * verdict: `ok` only if both ends pass, `score` is the worse of the two, and
+   * issues are concatenated. Returns null when validation can't run at all (no
+   * OffscreenCanvas / both calls failed) so the caller treats it as advisory.
    */
-  private async validateShotKeyframe(
+  private async validateShot(
+    clip: ProducedClip,
+    ctx: {
+      shot: PlannedShot;
+      characters: CharacterBible[];
+      width: number;
+      height: number;
+      validatorModel?: string;
+      passThreshold?: number;
+      signal?: AbortSignal;
+      onProgress?: (label: string) => void;
+    },
+  ): Promise<FrameValidation | null> {
+    if (clip.muxFrames.length === 0) return null;
+    const lastIdx = clip.muxFrames.length - 1;
+    // First + last (deduped when the shot is a single frame).
+    const indices = lastIdx === 0 ? [0] : [0, lastIdx];
+    const verdicts = (
+      await Promise.all(
+        indices.map((i) =>
+          this.validateOneFrame(clip.muxFrames[i], `frame ${i + 1}`, ctx),
+        ),
+      )
+    ).filter((v): v is FrameValidation => v !== null);
+    if (verdicts.length === 0) return null;
+    return {
+      ok: verdicts.every((v) => v.ok),
+      score: Math.min(...verdicts.map((v) => v.score)),
+      issues: verdicts.flatMap((v) => v.issues),
+    };
+  }
+
+  /**
+   * Validate ONE frame of a shot through the VLM. Encodes the raw RGBA to a
+   * JPEG data URL (via OffscreenCanvas) and asks the gateway's vision model
+   * whether it matches the shot + character bible. Advisory: any failure
+   * (no OffscreenCanvas, gateway down) returns null.
+   */
+  private async validateOneFrame(
     frame: MuxFrame,
+    frameLabel: string,
     ctx: {
       shot: PlannedShot;
       characters: CharacterBible[];
@@ -599,7 +812,7 @@ export class VideoEngine {
     },
   ): Promise<FrameValidation | null> {
     try {
-      reportProgress(`Validating shot "${ctx.shot.id}" keyframe via VLM…`, ctx.onProgress);
+      reportProgress(`Validating shot "${ctx.shot.id}" ${frameLabel} via VLM…`, ctx.onProgress);
       const dataUrl = await rgbaToDataUrl(frame.rgba, ctx.width, ctx.height);
       if (!dataUrl) return null;
       const present = ctx.shot.characterIds
@@ -651,8 +864,9 @@ interface ClipSpec {
   seed: number;
   motionAmount: number;
   imgToImgStrength: number;
-  cameraMotion?: { dx: number; dy: number };
+  cameraMotion?: { dx: number; dy: number; zoom?: number };
   interpolationFactor: number;
+  interpolationBackend: InterpolationBackend;
   width: number;
   height: number;
   /** Progress-label prefix, e.g. "Frame" or "Shot 2". */
@@ -677,6 +891,14 @@ function clamp01(x: number): number {
   if (x < 0) return 0;
   if (x > 1) return 1;
   return x;
+}
+
+/** Close every bitmap in a produced clip — used to release a discarded
+ *  validation-retry attempt's GPU-backed handles. Idempotent per bitmap. */
+function closeClip(clip: ProducedClip): void {
+  for (const bm of clip.frames) {
+    try { bm.close(); } catch { /* already closed */ }
+  }
 }
 
 /** Normalise an interpolation factor to an integer ≥ 1 (1 = no interpolation). */

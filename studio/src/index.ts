@@ -15,6 +15,7 @@ export type {
   ActiveDevice,
   DiffusionModelId,
   CoherenceMode,
+  InterpolationBackend,
   QualityMode,
   WeightSource,
   ModelDescriptor,
@@ -51,6 +52,7 @@ export {
   composeShotPrompt,
   cameraMoveToMotion,
   normaliseShotBudget,
+  CAMERA_MOVES,
 } from './engine/scene-planner';
 export { validateFrame } from './engine/frame-validator';
 export {
@@ -59,3 +61,9 @@ export {
   buildInterpolatedSequence,
 } from './engine/frame-interpolator';
 export type { Keyframe, InterpolatedSlot } from './engine/frame-interpolator';
+export {
+  luma,
+  estimateBlockMotion,
+  interpolateFrames,
+} from './engine/motion-interpolator';
+export type { MotionField, MotionOptions } from './engine/motion-interpolator';
