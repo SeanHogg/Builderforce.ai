@@ -20,6 +20,8 @@ export { ModelPicker } from './components/ModelPicker';
 export { CoherenceControls } from './components/CoherenceControls';
 export { VideoPreview } from './components/VideoPreview';
 export { ProgressFeedback } from './components/ProgressFeedback';
+export { DebugCopyButton } from './components/DebugCopyButton';
+export type { DebugSnapshotProps } from './components/DebugCopyButton';
 export { useEngineStatus } from './components/useEngineStatus';
 export type { EngineStatus } from './components/useEngineStatus';
 
