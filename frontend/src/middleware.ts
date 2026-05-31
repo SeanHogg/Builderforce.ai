@@ -21,6 +21,22 @@ import type { NextRequest } from 'next/server';
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Embedded surfaces (/embed/*) are framed cross-origin by host apps (e.g.
+  // BurnRateOS). They authenticate via postMessage (not cookies), so we must NOT
+  // auth-redirect them, AND we must allow the configured hosts to frame them via
+  // a `frame-ancestors` CSP (the single NEXT_PUBLIC_EMBED_ALLOWED_HOST_ORIGINS
+  // allowlist also gates the client-side postMessage trust check in useEmbedFrame).
+  if (pathname === '/embed' || pathname.startsWith('/embed/')) {
+    const res = NextResponse.next();
+    const allowed = (process.env.NEXT_PUBLIC_EMBED_ALLOWED_HOST_ORIGINS ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    res.headers.set('Content-Security-Policy', `frame-ancestors 'self' ${allowed.join(' ')}`.trim());
+    res.headers.delete('X-Frame-Options');
+    return res;
+  }
+
   // Redirect legacy routes to Observability
   if (pathname === '/logs' || pathname.startsWith('/logs/')) {
     const url = request.nextUrl.clone();
@@ -87,6 +103,7 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/embed/:path*',
     '/logs/:path*',
     '/timeline/:path*',
     '/dashboard/:path*',
