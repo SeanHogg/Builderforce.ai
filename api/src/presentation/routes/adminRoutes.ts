@@ -311,16 +311,21 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   // -------------------------------------------------------------------------
-  // POST /api/admin/legal/terms/publish
+  // POST /api/admin/legal/:docType/publish  (docType: terms | privacy)
   // -------------------------------------------------------------------------
-  router.post('/legal/terms/publish', async (c) => {
+  router.post('/legal/:docType/publish', async (c) => {
     const db = buildDatabase(c.env);
     const actorUserId = c.get('userId') as string;
+    const docType = c.req.param('docType');
+    if (docType !== 'terms' && docType !== 'privacy') {
+      return c.json({ error: 'docType must be "terms" or "privacy"' }, 400);
+    }
+    const docLabel = docType === 'terms' ? 'Terms of Use' : 'Privacy Policy';
     const body = await c.req.json<{ version: string; title?: string; content: string }>();
 
     const version = body.version?.trim();
     const content = body.content?.trim();
-    const title = body.title?.trim() || 'Terms of Use';
+    const title = body.title?.trim() || docLabel;
 
     if (!version) return c.json({ error: 'version is required' }, 400);
     if (!content) return c.json({ error: 'content is required' }, 400);
@@ -330,23 +335,23 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .from(legalDocuments)
       .where(
         and(
-          eq(legalDocuments.documentType, 'terms'),
+          eq(legalDocuments.documentType, docType),
           eq(legalDocuments.version, version),
         ),
       )
       .limit(1);
 
     if (existing) {
-      return c.json({ error: `Terms version ${version} already exists` }, 409);
+      return c.json({ error: `${docLabel} version ${version} already exists` }, 409);
     }
 
     await db
       .update(legalDocuments)
       .set({ isActive: false, updatedAt: sql`now()` })
-      .where(and(eq(legalDocuments.documentType, 'terms'), eq(legalDocuments.isActive, true)));
+      .where(and(eq(legalDocuments.documentType, docType), eq(legalDocuments.isActive, true)));
 
     await db.insert(legalDocuments).values({
-      documentType: 'terms',
+      documentType: docType,
       version,
       title,
       content,
@@ -354,8 +359,8 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       publishedBy: actorUserId,
     });
 
-    const terms = await getActiveLegalDoc(db, 'terms');
-    return c.json({ terms }, 201);
+    const document = await getActiveLegalDoc(db, docType);
+    return c.json({ document }, 201);
   });
 
   // -------------------------------------------------------------------------

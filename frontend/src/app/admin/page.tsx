@@ -37,6 +37,7 @@ import { llmChat } from '@/lib/builderforceApi';
 import { BUILTIN_PERSONAS, type Persona } from '@/lib/marketplaceData';
 import UserDetailDrawer from '@/components/UserDetailDrawer';
 import { TenantApiKeysAdminTab } from '@/components/admin/TenantApiKeysAdminTab';
+import { LegalEditorDrawer, type LegalEditorContext } from '@/components/admin/LegalEditorDrawer';
 import { TenantTokenLimitOverrideEditor } from '@/components/admin/TenantTokenLimitOverrideEditor';
 import { TenantPremiumOverrideEditor } from '@/components/admin/TenantPremiumOverrideEditor';
 
@@ -267,10 +268,7 @@ export default function AdminPage() {
   const [securityUserId, setSecurityUserId] = useState<string | null>(null);
   const [securityDetails, setSecurityDetails] = useState<AdminSecurityDetails | null>(null);
 
-  const [legalPublishVersion, setLegalPublishVersion] = useState('');
-  const [legalPublishTitle, setLegalPublishTitle] = useState('Terms of Use');
-  const [legalPublishContent, setLegalPublishContent] = useState('');
-  const [legalPublishing, setLegalPublishing] = useState(false);
+  const [legalEditor, setLegalEditor] = useState<LegalEditorContext | null>(null);
 
   const [llmPoolTab, setLlmPoolTab] = useState<'free' | 'pro'>('free');
   const [expandedErrorId, setExpandedErrorId] = useState<number | null>(null);
@@ -599,27 +597,12 @@ export default function AdminPage() {
       .finally(() => setLoading(false));
   };
 
-  const handlePublishTerms = async () => {
-    if (!legalPublishVersion.trim() || !legalPublishContent.trim()) {
-      setErrorMsg('Version and content are required.');
-      return;
-    }
-    setLegalPublishing(true);
-    setErrorMsg('');
-    try {
-      await adminApi.publishTerms({
-        version: legalPublishVersion.trim(),
-        title: legalPublishTitle.trim() || 'Terms of Use',
-        content: legalPublishContent.trim(),
-      });
-      setLegalCurrent(await adminApi.legalCurrent());
-      setLegalPublishVersion('');
-      setLegalPublishContent('');
-    } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLegalPublishing(false);
-    }
+  const refreshLegal = async () => {
+    setLegalCurrent(await adminApi.legalCurrent());
+  };
+
+  const openLegalEditor = (docType: 'terms' | 'privacy', mode: 'edit' | 'new') => {
+    setLegalEditor({ docType, mode, current: legalCurrent ? legalCurrent[docType] : null });
   };
 
   const runUsageAiAnalysis = async () => {
@@ -2133,23 +2116,28 @@ export default function AdminPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                 {legalCurrent && (
                   <>
-                    <div className="health-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
-                      <div className="health-card" style={{ padding: 16 }}>
-                        <div className="health-label">Terms version</div>
-                        <div className="health-value" style={{ fontSize: 16 }}>v{legalCurrent.terms.version}</div>
-                        <div style={{ fontSize: 12 }}>{legalCurrent.terms.title}</div>
-                        <div className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>
-                          Published {legalCurrent.terms.publishedAt ? fmtDateTime(legalCurrent.terms.publishedAt) : '—'}
-                        </div>
-                      </div>
-                      <div className="health-card" style={{ padding: 16 }}>
-                        <div className="health-label">Privacy version</div>
-                        <div className="health-value" style={{ fontSize: 16 }}>v{legalCurrent.privacy.version}</div>
-                        <div style={{ fontSize: 12 }}>{legalCurrent.privacy.title}</div>
-                        <div className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>
-                          Published {legalCurrent.privacy.publishedAt ? fmtDateTime(legalCurrent.privacy.publishedAt) : '—'}
-                        </div>
-                      </div>
+                    <div className="health-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+                      {(['terms', 'privacy'] as const).map((dt) => {
+                        const doc = legalCurrent[dt];
+                        return (
+                          <div key={dt} className="health-card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <div className="health-label">{dt === 'terms' ? 'Terms version' : 'Privacy version'}</div>
+                            <div className="health-value" style={{ fontSize: 16 }}>v{doc.version}</div>
+                            <div style={{ fontSize: 12 }}>{doc.title}</div>
+                            <div className="text-muted" style={{ fontSize: 11 }}>
+                              Published {doc.publishedAt ? fmtDateTime(doc.publishedAt) : '—'}
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                              <button type="button" className="btn-ghost" onClick={() => openLegalEditor(dt, 'edit')}>
+                                ✎ Edit
+                              </button>
+                              <button type="button" className="admin-tab active" onClick={() => openLegalEditor(dt, 'new')}>
+                                + New version
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                     <div className="health-card" style={{ padding: 16 }}>
                       <div className="health-label">Current Terms (full text)</div>
@@ -2171,40 +2159,6 @@ export default function AdminPage() {
                     </div>
                   </>
                 )}
-                <div className="health-card" style={{ padding: 16 }}>
-                  <div className="health-label">Publish new Terms</div>
-                  <input
-                    type="text"
-                    placeholder="Version (e.g. 1.0.1)"
-                    value={legalPublishVersion}
-                    onChange={(e) => setLegalPublishVersion(e.target.value)}
-                    className="admin-select"
-                    style={{ width: '100%', marginBottom: 8 }}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Title"
-                    value={legalPublishTitle}
-                    onChange={(e) => setLegalPublishTitle(e.target.value)}
-                    className="admin-select"
-                    style={{ width: '100%', marginBottom: 8 }}
-                  />
-                  <textarea
-                    placeholder="Content (full text)"
-                    value={legalPublishContent}
-                    onChange={(e) => setLegalPublishContent(e.target.value)}
-                    className="admin-token-textarea"
-                    style={{ minHeight: 120, marginBottom: 8 }}
-                  />
-                  <button
-                    type="button"
-                    className="admin-tab active"
-                    onClick={handlePublishTerms}
-                    disabled={legalPublishing || !legalPublishVersion.trim() || !legalPublishContent.trim()}
-                  >
-                    {legalPublishing ? 'Publishing…' : 'Publish'}
-                  </button>
-                </div>
               </div>
             )}
 
@@ -3390,6 +3344,13 @@ export default function AdminPage() {
           onStartImpersonate={(u) => { setDrawerUser(null); startImpersonate(u); }}
         />
       )}
+
+      {/* Legal editor slide-out */}
+      <LegalEditorDrawer
+        context={legalEditor}
+        onClose={() => setLegalEditor(null)}
+        onPublished={refreshLegal}
+      />
     </div>
   );
 }
