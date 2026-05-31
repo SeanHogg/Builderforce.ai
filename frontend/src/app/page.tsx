@@ -2,18 +2,38 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { ThemeToggleButton } from './ThemeProvider';
 import { useState } from 'react';
 import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
 import { HOMEPAGE_FAQ } from '@/lib/content';
+import { savePendingPrompt } from '@/lib/brain';
 
 // register CoderClaw quickstart web component
 import '../components/ccl-quickstart';
 
+const HERO_PROMPT_EXAMPLES = [
+  'Audit my repo for security issues',
+  'Connect Jira and summarize this sprint',
+  'Build & train a customer-support agent',
+];
+
 export default function LandingPage() {
+  const router = useRouter();
+  const [prompt, setPrompt] = useState('');
   const [nlEmail, setNlEmail] = useState('');
   const [nlStatus, setNlStatus] = useState<'idle'|'sending'|'ok'|'error'>('idle');
+
+  function handlePromptSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const text = prompt.trim();
+    if (!text) return;
+    // Stash the prompt, send the visitor through auth; the Brain replays it
+    // once they're inside the app (see lib/brain/pendingPrompt + FloatingBrain).
+    savePendingPrompt(text);
+    router.push('/register');
+  }
 
   async function handleNewsletterSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -281,6 +301,82 @@ export default function LandingPage() {
           box-shadow: 0 12px 32px var(--shadow-coral-soft);
         }
 
+        /* ════════ HERO PROMPT INPUT ════════ */
+        .lp-prompt {
+          width: 100%;
+          max-width: 640px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          padding: 14px;
+          border-radius: 18px;
+          border: 1px solid var(--border-accent);
+          background: var(--surface-card);
+          backdrop-filter: blur(12px);
+          box-shadow: 0 12px 40px var(--shadow-coral-soft), inset 0 1px 0 var(--surface-inset-highlight);
+          animation: fadeInUp 0.9s ease-out 0.45s both;
+        }
+        .lp-prompt-input {
+          width: 100%;
+          resize: vertical;
+          min-height: 64px;
+          border: none;
+          background: transparent;
+          color: var(--text-primary);
+          font-family: inherit;
+          font-size: 1rem;
+          line-height: 1.6;
+          outline: none;
+        }
+        .lp-prompt-input::placeholder { color: var(--text-muted); }
+        .lp-prompt-send {
+          align-self: flex-end;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 26px;
+          border: none;
+          border-radius: 12px;
+          background: linear-gradient(135deg, var(--coral-bright) 0%, var(--coral-dark) 100%);
+          color: #fff;
+          font-family: var(--font-display);
+          font-weight: 600;
+          font-size: 0.95rem;
+          cursor: pointer;
+          box-shadow: 0 6px 22px var(--shadow-coral-mid);
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .lp-prompt-send:hover:not(:disabled) {
+          transform: translateY(-2px);
+          box-shadow: 0 12px 32px var(--shadow-coral-strong);
+        }
+        .lp-prompt-send:disabled { opacity: 0.5; cursor: not-allowed; }
+        .lp-prompt-examples {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: 8px;
+          max-width: 640px;
+          margin: 16px 0 4px;
+          animation: fadeInUp 0.9s ease-out 0.55s both;
+        }
+        .lp-chip {
+          padding: 7px 14px;
+          border-radius: 999px;
+          border: 1px solid var(--border-subtle);
+          background: var(--surface-card);
+          color: var(--text-secondary);
+          font-size: 0.82rem;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+        .lp-chip:hover {
+          border-color: var(--border-accent);
+          color: var(--text-primary);
+          background: var(--surface-interactive);
+        }
+        .lp-actions { margin-top: 28px; }
+
         /* ════════ STATS STRIP ════════ */
         .lp-stats {
           max-width: 900px;
@@ -507,22 +603,47 @@ export default function LandingPage() {
 
           <div className="lp-badge">
             <span className="lp-badge-dot" />
-            AI Agent Training Platform
+            AI CTO · CIO · Security Officer
           </div>
 
           <h1 className="lp-title">Builderforce.ai</h1>
 
-          <p className="lp-tagline">Build · Train · Deploy AI Agents</p>
+          <p className="lp-tagline">Your AI CTO, CIO &amp; Security Officer</p>
 
           <p className="lp-desc">
-            The end-to-end platform for creating custom AI agents.
-            Generate datasets, run in-browser LoRA training with WebGPU,
-            evaluate with AI judges, and publish to the global Workforce
-            Registry — all from a single IDE.
+            One AI brain that runs your technology like an executive team —
+            it builds, trains and deploys your AI agent workforce, connects to
+            your systems and data, and governs every action with approvals and
+            an audit trail. Tell it what you need; it gets to work.
           </p>
 
+          {/* Prompt input — the primary action */}
+          <form onSubmit={handlePromptSubmit} className="lp-prompt">
+            <textarea
+              className="lp-prompt-input"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handlePromptSubmit(e); }
+              }}
+              placeholder="Describe what you want your AI workforce to do…"
+              rows={3}
+              aria-label="Describe what you want your AI workforce to do"
+            />
+            <button type="submit" className="lp-prompt-send" disabled={!prompt.trim()}>
+              Get started →
+            </button>
+          </form>
+          <div className="lp-prompt-examples">
+            {HERO_PROMPT_EXAMPLES.map((ex) => (
+              <button key={ex} type="button" className="lp-chip" onClick={() => setPrompt(ex)}>
+                {ex}
+              </button>
+            ))}
+          </div>
+
           <div className="lp-actions">
-            <Link href="/register" className="lp-btn-primary">
+            <Link href="/register" className="lp-btn-secondary">
               🚀 Start Building Free
             </Link>
             <Link href="/marketplace" className="lp-btn-secondary">
@@ -616,10 +737,13 @@ export default function LandingPage() {
         {/* ── Features ── */}
         <section className="lp-features" id="features">
           <h2 className="section-title">
-            <span className="claw-accent">⟩</span> What You Can Build
+            <span className="claw-accent">⟩</span> Your AI executive team
           </h2>
           <div className="lp-grid">
             {[
+              { icon: '🧠', title: 'AI CTO', desc: 'Builds, trains and deploys your AI agent workforce — in-browser WebGPU LoRA fine-tuning, evaluation, and one-click publish to the Workforce Registry.' },
+              { icon: '🔗', title: 'AI CIO', desc: 'Connects to your systems — GitHub, Jira, Confluence and more via encrypted credentials — and orchestrates work through the Brain’s tool registry.' },
+              { icon: '🛡️', title: 'AI Security Officer', desc: 'Governs every action: human-in-the-loop approval gates, a full audit trail, per-tenant isolation, and AES-256-GCM encrypted secrets.' },
               { icon: '🗂️', title: 'AI Dataset Generation', desc: 'Generate instruction-tuning datasets from a single capability prompt using any OpenRouter model. Export as JSONL, stored in R2.' },
               { icon: '🧠', title: 'In-Browser LoRA Training', desc: 'Fine-tune models up to 2B parameters directly in Chrome with WebGPU. No cloud GPU bills, zero round-trips, total privacy.' },
               { icon: '🔬', title: 'AI Evaluation Engine', desc: 'Score your model outputs with an independent AI judge. Get structured quality metrics: correctness, reasoning, hallucination rate.' },
@@ -708,10 +832,11 @@ export default function LandingPage() {
         {/* ── Bottom CTA ── */}
         <section className="lp-cta-section">
           <div className="lp-cta-box">
-            <h2 className="lp-cta-title">Ready to train your first agent?</h2>
+            <h2 className="lp-cta-title">Put your AI CTO to work</h2>
             <p className="lp-cta-desc">
-              Create a project, generate a dataset, run LoRA training in your
-              browser, and publish to the Workforce in minutes — no credit card required.
+              Describe what you need, sign in, and your AI brain gets to work —
+              building agents, connecting your systems, and governing every
+              action. No credit card required.
             </p>
             <div className="lp-actions">
               <Link href="/register" className="lp-btn-primary">⚡ Get Started Free</Link>

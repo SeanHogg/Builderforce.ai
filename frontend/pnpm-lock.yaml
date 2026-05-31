@@ -17,6 +17,9 @@ importers:
       '@monaco-editor/react':
         specifier: ^4.6.0
         version: 4.7.0(monaco-editor@0.55.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@seanhogg/builderforce-brain-embedded':
+        specifier: link:../brain-embedded
+        version: link:../brain-embedded
       '@seanhogg/builderforce-sdk':
         specifier: link:../sdk
         version: link:../sdk

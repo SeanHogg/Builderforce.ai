@@ -70,6 +70,25 @@ export const tenantBillingStatusEnum = pgEnum('tenant_billing_status', [
   'none', 'pending', 'active', 'past_due', 'cancelled',
 ]);
 
+// Segment tier (see README "Segment tier"): the isolation level between tenant
+// and entity for tenants that are themselves multi-tenant.
+export const segmentStatusEnum = pgEnum('segment_status', [
+  'active', 'suspended', 'archived',
+]);
+
+// How a tenant authenticates users: 'direct' = BuilderForce is the IdP
+// (local/OAuth/magic-link, the current model); 'embedded' = an external host is
+// the OIDC IdP and identity arrives as claims.
+export const tenantKindEnum = pgEnum('tenant_kind', [
+  'embedded', 'direct',
+]);
+
+// Whether a tenant sub-divides into segments. 'single' tenants are pinned to one
+// default segment; 'segmented' tenants get one segment per end-client.
+export const tenantIsolationModeEnum = pgEnum('tenant_isolation_mode', [
+  'single', 'segmented',
+]);
+
 export const sourceControlProviderEnum = pgEnum('source_control_provider', [
   'github', 'bitbucket',
 ]);
@@ -488,6 +507,27 @@ export const tenantApiKeys = pgTable('tenant_api_keys', {
   createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Tenant-registered MCP extensions — the server-side half of the Brain's
+ * extension contract. A tenant registers a custom MCP server (URL + optional
+ * bearer secret); the gateway advertises its tools to the Brain and relays tool
+ * calls SERVER-TO-SERVER, so the MCP secret never reaches the browser. The
+ * secret is encrypted at rest with JWT_SECRET (AES-GCM, same as MFA secrets).
+ */
+export const tenantMcpExtensions = pgTable('tenant_mcp_extensions', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  name:             varchar('name', { length: 255 }).notNull(),
+  /** Base URL of the customer's MCP server (the gateway calls {server_url}/tools and {server_url}/call). */
+  serverUrl:        text('server_url').notNull(),
+  /** AES-GCM-encrypted bearer secret sent to the MCP server. NULL = no auth. */
+  secretEnc:        text('secret_enc'),
+  enabled:          boolean('enabled').notNull().default(true),
+  createdByUserId:  varchar('created_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  lastUsedAt:       timestamp('last_used_at', { withTimezone: true }),
+  createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ---------------------------------------------------------------------------
 // Orchestration tables
 // ---------------------------------------------------------------------------
@@ -522,8 +562,40 @@ export const tenants = pgTable('tenants', {
    * for comped / beta access without flipping the billing plan.
    */
   premiumOverride:        boolean('premium_override').notNull().default(false),
+  // Segment tier / identity federation (migration 0054).
+  kind:                   tenantKindEnum('kind').notNull().default('direct'),
+  idpIssuer:              varchar('idp_issuer', { length: 500 }),
+  isolationMode:          tenantIsolationModeEnum('isolation_mode').notNull().default('single'),
+  settings:               text('settings'),   // JSON-as-text (jsonb avoided per existing convention)
   createdAt:              timestamp('created_at').notNull().defaultNow(),
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),
+});
+
+/**
+ * Segment — the isolation tier BETWEEN tenant and entity. For a multi-tenant
+ * integrator (isolationMode='segmented') there is one segment per end-client
+ * (account, company) so no client data bleeds. For a single-tenant customer
+ * (isolationMode='single') there is exactly ONE auto-created default segment
+ * (isDefault=true) they never see — so every business entity can carry a
+ * NOT NULL segment_id and both modes share one query path. See README
+ * "Segment tier" and migration 0054.
+ */
+export const segments = pgTable('segments', {
+  id:                uuid('id').primaryKey().defaultRandom(),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  // Host coordinates of a federated end-client. NULL on the tenant's default segment.
+  externalAccountId: varchar('external_account_id', { length: 255 }),
+  externalCompanyId: varchar('external_company_id', { length: 255 }),
+  displayName:       varchar('display_name', { length: 255 }).notNull(),
+  slug:              varchar('slug', { length: 255 }).notNull(),
+  plan:              varchar('plan', { length: 50 }).notNull().default('free'),
+  status:            segmentStatusEnum('status').notNull().default('active'),
+  settings:          text('settings'),
+  isDefault:         boolean('is_default').notNull().default(false),
+  provisionedAt:     timestamp('provisioned_at').notNull().defaultNow(),
+  lastActiveAt:      timestamp('last_active_at'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
 
 export const tenantMembers = pgTable('tenant_members', {

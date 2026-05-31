@@ -1,5 +1,5 @@
 import * as react_jsx_runtime from 'react/jsx-runtime';
-import { DiffusionModelId, CoherenceMode, MambaStateSnapshot, QualityMode, ProbedDevice, GenerateResult, Storyboard, ShotValidation } from '@seanhogg/builderforce-studio';
+import { DiffusionModelId, CoherenceMode, MambaStateSnapshot, QualityMode, InterpolationBackend, Storyboard, ProbedDevice, GenerateResult, ShotValidation } from '@seanhogg/builderforce-studio';
 export { ActiveDevice, CAMERA_MOVES, CameraMove, CharacterBible, CoherenceMode, DeviceTarget, DiffusionModelId, FrameValidation, GenerateOptions, GenerateResult, InterpolationBackend, MODEL_REGISTRY, MambaStateSnapshot, ModelDescriptor, OnnxFile, OnnxRuntimeConfigOptions, PlannedShot, ProbedDevice, QualityMode, ScenePlanOptions, ShotValidation, Storyboard, StoryboardGenerateOptions, StoryboardGenerateResult, VideoEngine, VideoEngineOptions, WeightSource, configureOnnxRuntime, hasWebGPUSupport, planScene, probeDevice } from '@seanhogg/builderforce-studio';
 
 /** Parameters that fully describe ONE generated version, for the host to persist
@@ -23,8 +23,17 @@ interface VideoVersionParams {
     fps: number;
     /** Keyframe interpolation factor used (1 = every frame fully generated). */
     interpolationFactor: number;
+    /** Interpolation backend used for tween frames — round-tripped so a saved
+     *  'motion' version doesn't reload as 'latent-slerp'. */
+    interpolationBackend: InterpolationBackend;
     /** True when this version was generated via the cinematic auto-storyboard path. */
     cinematic: boolean;
+    /** The (possibly edited) storyboard a cinematic version rendered. Persisted so
+     *  loading the version reproduces the exact shot list / cast / camera / order
+     *  instead of re-planning from scratch. Null for single-clip versions. */
+    storyboard: Storyboard | null;
+    /** Whether VLM shot validation + self-heal was on (cinematic). */
+    validate: boolean;
     coherence: CoherenceMode;
     coherenceStrength: number;
     motionAmount: number;

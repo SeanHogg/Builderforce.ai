@@ -3,11 +3,9 @@
 /**
  * The heart of the Brain: messages + send + the tool-call agent loop.
  *
- * Subsumes the message logic that was duplicated across the Brain Storm page
- * (`send` / auto-reply) and the IDE's `AIChat.sendMessage`. Standardizes on the
- * `brain` client for persistence and on `streamChatCompletion` for replies, and
- * adds the agentic loop: when the model requests tools, the registered handlers
- * run and their results are fed back until the model produces final text.
+ * Persistence and the streaming client are injected via BrainProvider. When the
+ * model requests tools, the registered handlers run and their results are fed
+ * back until the model produces final text.
  *
  * Persistence note: only the user message and the FINAL assistant text are
  * persisted (the chat tables have no tool columns). Intermediate
@@ -16,14 +14,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { brain, type BrainMessage } from '../builderforceApi';
-import { getModality, type ProjectModality } from '../modality';
-import {
-  streamChatCompletion,
-  type BrainToolSpec,
-  type ChatCompletionMessage,
-} from './streamChatCompletion';
-import type { ChatInputAttachment } from '../../components/ChatInput';
+import { useBrainConfig } from './config';
+import type { BrainMessage, BrainModality, ChatInputAttachment } from './types';
+import type { BrainToolSpec, ChatCompletionMessage } from './streamChatCompletion';
 
 /** Max agent-loop iterations before we stop chaining tool calls (runaway guard). */
 const MAX_TOOL_ITERATIONS = 5;
@@ -32,10 +25,10 @@ const HISTORY_WINDOW = 80;
 
 export interface UseBrainConversationOptions {
   chatId: number | null;
-  modality?: ProjectModality;
-  /** Extra system-prompt context (e.g. the IDE's open file + content). */
+  modality?: BrainModality;
+  /** Extra system-prompt context (e.g. an IDE's open file + content). */
   extraSystem?: string;
-  /** Override the system prompt entirely (Brain Storm uses a fixed persona). */
+  /** Override the system prompt entirely (e.g. a fixed Brain Storm persona). */
   systemPrompt?: string;
   /** Tool specs from the page-action registry. */
   toolSpecs?: BrainToolSpec[];
@@ -75,6 +68,7 @@ function parseArgs(raw: string): unknown {
 }
 
 export function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation {
+  const { persistence, resolveSystemPrompt, stream } = useBrainConfig();
   const {
     chatId,
     modality = 'designer',
@@ -106,7 +100,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     }
     setLoadingMessages(true);
     setError('');
-    brain
+    persistence
       .getMessages(chatId)
       .then((list) => {
         if (!cancelled) setMessages(list);
@@ -118,7 +112,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         if (!cancelled) setLoadingMessages(false);
       });
     return () => { cancelled = true; };
-  }, [chatId]);
+  }, [persistence, chatId]);
 
   // Derive feedback state from persisted message metadata.
   useEffect(() => {
@@ -134,9 +128,9 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   }, [messages]);
 
   const resolvedSystemPrompt = useMemo(() => {
-    const base = systemPrompt ?? getModality(modality).brainSystemPrompt;
+    const base = systemPrompt ?? resolveSystemPrompt(modality);
     return extraSystem ? `${base}\n${extraSystem}` : base;
-  }, [systemPrompt, modality, extraSystem]);
+  }, [resolveSystemPrompt, systemPrompt, modality, extraSystem]);
 
   /**
    * Run the tool-call agent loop against a working message array and persist
@@ -156,7 +150,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
 
       for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
         setStreamingText('');
-        const result = await streamChatCompletion(
+        const result = await stream(
           { messages: working, tools, tool_choice: tools ? 'auto' : undefined },
           { onTextDelta: (d) => setStreamingText((s) => s + d) },
         );
@@ -182,7 +176,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
 
         // Final text — persist and finish.
         const finalText = result.text.trim() || 'No response.';
-        const [assistantMsg] = await brain.sendMessages(id, [{ role: 'assistant', content: finalText }]);
+        const [assistantMsg] = await persistence.sendMessages(id, [{ role: 'assistant', content: finalText }]);
         setMessages((prev) => [...prev, assistantMsg]);
         setStreamingText('');
         onActivity?.(id);
@@ -192,7 +186,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       setStreamingText('');
       setError('The assistant kept calling tools without finishing. Try rephrasing.');
     },
-    [resolvedSystemPrompt, toolSpecs, runTool, onActivity],
+    [persistence, stream, resolvedSystemPrompt, toolSpecs, runTool, onActivity],
   );
 
   const send = useCallback(
@@ -220,13 +214,13 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
 
       let content = trimmed;
       if (attachments.length > 0) {
-        const refs = attachments.map((a) => `[Attached: ${a.name}](${brain.uploadUrl(a.key)})`).join('\n');
+        const refs = attachments.map((a) => `[Attached: ${a.name}](${persistence.uploadUrl(a.key)})`).join('\n');
         content = `${trimmed}\n\n${refs}`;
       }
       const metadata = attachments.length > 0 ? JSON.stringify({ attachments }) : undefined;
 
       try {
-        const [userMsg] = await brain.sendMessages(id, [{ role: 'user', content, metadata }]);
+        const [userMsg] = await persistence.sendMessages(id, [{ role: 'user', content, metadata }]);
         setMessages((prev) => [...prev, userMsg]);
         await runAgentLoop(id, [...messages, userMsg]);
       } catch (e) {
@@ -235,7 +229,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         setSending(false);
       }
     },
-    [chatId, sending, pendingAttachments, messages, ensureChatId, runAgentLoop],
+    [persistence, chatId, sending, pendingAttachments, messages, ensureChatId, runAgentLoop],
   );
 
   // Auto-reply when a chat loads with a trailing unanswered user message
@@ -271,21 +265,21 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       return copy;
     });
     try {
-      await brain.setMessageFeedback(msg.id, next);
+      await persistence.setMessageFeedback(msg.id, next);
     } catch { /* best-effort */ }
-  }, [feedbackMap]);
+  }, [persistence, feedbackMap]);
 
   const attach = useCallback(async (file: File) => {
     setUploading(true);
     try {
-      const result = await brain.upload(file);
+      const result = await persistence.upload(file);
       setPendingAttachments((prev) => [...prev, { key: result.key, name: result.name, type: result.type }]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed');
     } finally {
       setUploading(false);
     }
-  }, []);
+  }, [persistence]);
 
   const removeAttachment = useCallback((key: string) => {
     setPendingAttachments((prev) => prev.filter((a) => a.key !== key));

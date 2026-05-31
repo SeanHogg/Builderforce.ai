@@ -1,26 +1,26 @@
 'use client';
 
 /**
- * Ambient page context for the global Brain drawer.
+ * Ambient page context for the Brain.
  *
- * The floating Brain is mounted once, app-wide, but its behaviour depends on
- * what the user is looking at: which project, which modality, and any extra
- * system context (e.g. the file currently open in the IDE). Pages publish that
- * context here via `setContext(...)`; the drawer reads it. This keeps the Brain
- * decoupled from any single page — no prop-drilling through the app shell.
+ * The Brain is mounted once, app-wide, but its behaviour depends on what the
+ * user is looking at: which project, which modality, and any extra system
+ * context (e.g. the file currently open in an IDE). Pages publish that context
+ * here via `setContext(...)`; the Brain reads it. This keeps the Brain decoupled
+ * from any single page — no prop-drilling through the app shell.
  *
  * Separate from `BrainActionsContext` (which holds executable tools) on purpose:
- * this is passive context data, that is executable capability.
+ * this is passive context data, not executable capability.
  */
 
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import type { ProjectModality } from '../modality';
+import type { BrainModality } from './types';
 
 export interface BrainPageContext {
   /** Active project, when the current page is project-scoped (IDE, project pages). */
   projectId: number | null;
   /** Active modality — drives the Brain's system prompt/persona. */
-  modality: ProjectModality;
+  modality: BrainModality;
   /** Extra system-prompt context appended for this page (e.g. the open file + content). */
   extraSystem?: string;
   /** Deep-link: open the drawer on this chat. */

@@ -10,7 +10,7 @@
 export const BRAND = {
   name: 'Builderforce.ai',
   legalName: 'Builderforce',
-  tagline: 'Build · Train · Deploy AI Agents',
+  tagline: 'Your AI CTO, CIO & Security Officer',
   url: 'https://builderforce.ai',
   founder: { name: 'Sean Hogg', url: 'https://myvideoresu.me/resumes/seanhogg' },
   year: 2026,
@@ -33,6 +33,7 @@ export const STATS = {
   ],
   /** Quotable one-liners for AI citability */
   quotable: {
+    aiExecutiveTeam: 'Builderforce.ai acts as your AI CTO, CIO and Security Officer — building your AI agent workforce, connecting your systems, and governing every action with approvals and an audit trail.',
     freeForever: 'Free plan is $0/month forever, no credit card required.',
     zeroGpuBills: 'All training runs on your local WebGPU device — zero cloud GPU bills.',
     browserNative: 'Fine-tune models up to 2 billion parameters directly in Chrome with WebGPU.',
@@ -51,6 +52,24 @@ export interface Feature {
 }
 
 export const FEATURES: Feature[] = [
+  {
+    icon: '🧠',
+    title: 'AI CTO',
+    shortDesc: 'Builds, trains & deploys your AI workforce.',
+    longDesc: 'Your AI CTO builds, trains and deploys your AI agent workforce — in-browser WebGPU LoRA fine-tuning, AI evaluation, and one-click publish to the Workforce Registry.',
+  },
+  {
+    icon: '🔗',
+    title: 'AI CIO',
+    shortDesc: 'Connects & orchestrates your systems.',
+    longDesc: 'Your AI CIO connects to your systems — GitHub, Jira, Confluence and more via encrypted credentials — and orchestrates work through the Brain assistant’s tool registry.',
+  },
+  {
+    icon: '🛡️',
+    title: 'AI Security Officer',
+    shortDesc: 'Governs every action with approvals & audit.',
+    longDesc: 'Your AI Security Officer governs every action: human-in-the-loop approval gates, a full audit trail, per-tenant isolation, and AES-256-GCM encrypted credentials.',
+  },
   {
     icon: '🗂️',
     title: 'AI Dataset Generation',
@@ -225,7 +244,7 @@ export interface FaqItem {
 export const HOMEPAGE_FAQ: FaqItem[] = [
   {
     question: 'What is Builderforce.ai?',
-    answer: 'Builderforce.ai is an end-to-end platform for building, training, and deploying custom AI agents entirely in the browser. Generate datasets, run LoRA training with WebGPU, evaluate with AI judges, and publish agents to the Workforce Registry.',
+    answer: 'Builderforce.ai is an AI platform that acts as your AI CTO, CIO and Security Officer. It builds, trains and deploys a custom AI agent workforce entirely in the browser (dataset generation, WebGPU LoRA training, AI evaluation, and the Workforce Registry), connects to your systems and data, and governs every action with approval gates and an audit trail.',
   },
   {
     question: 'Is Builderforce free?',

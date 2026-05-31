@@ -1053,7 +1053,12 @@ function StudioPanel({
             frames,
             fps,
             interpolationFactor,
+            interpolationBackend,
             cinematic: wasCinematic,
+            // Persist the rendered storyboard so a cinematic version reloads its
+            // exact edited shot list rather than re-planning.
+            storyboard: wasCinematic ? storyboard : null,
+            validate,
             coherence: coherenceMode,
             coherenceStrength,
             motionAmount,
@@ -1085,13 +1090,16 @@ function StudioPanel({
       frames,
       fps,
       interpolationFactor,
+      interpolationBackend,
       coherenceMode,
       coherenceStrength,
       motionAmount,
       imgToImgStrength,
       cameraDx,
       cameraDy,
-      currentVersionId
+      currentVersionId,
+      storyboard,
+      validate
     ]
   );
   const runGeneration = useCallback2(
@@ -1291,7 +1299,11 @@ function StudioPanel({
       setModel(p.model);
       if (p.quality) setQuality(p.quality);
       setInterpolationFactor(p.interpolationFactor ?? 1);
+      setInterpolationBackend(p.interpolationBackend ?? "latent-slerp");
       setCinematic(p.cinematic ?? false);
+      setValidate(p.validate ?? false);
+      setStoryboard(p.storyboard ?? null);
+      setValidations([]);
       const knownRes = RESOLUTION_PRESETS.find((r) => r === p.width);
       if (knownRes) setResolution(knownRes);
       setFrames(p.frames);

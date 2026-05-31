@@ -1,38 +1,58 @@
-/** Barrel for the shared Brain layer (logic, contexts, and the streaming client). */
+/**
+ * Barrel for the shared Brain layer.
+ *
+ * The core (streaming client, contexts, MCP action registry, conversation/chat
+ * hooks, pending-prompt handoff) now lives in the embeddable npm package
+ * @seanhogg/builderforce-brain-embedded and is re-exported here so existing
+ * app imports (`@/lib/brain`) keep working. The app-specific wiring is in
+ * `runtime.ts` (the BrainProvider config) and `projectArtifacts.ts` (PRD/Tasks
+ * generation, which depends on the app's specs/tasks APIs and stays host-owned).
+ */
 
 export {
   streamChatCompletion,
-  type BrainToolSpec,
-  type ChatCompletionMessage,
-  type StreamHandlers,
-  type StreamChatOptions,
-  type StreamChatResult,
-  type AssembledToolCall,
-} from './streamChatCompletion';
-
-export {
   BrainActionsProvider,
   useBrainActions,
   useRegisterBrainActions,
-  type BrainAction,
-  type BrainActionsContextValue,
-} from './BrainActionsContext';
-
-export {
   BrainContextProvider,
   useBrainContext,
   useOptionalBrainContext,
-  type BrainContextValue,
-  type BrainPageContext,
-} from './BrainContext';
-
-export { useBrainChats, type UseBrainChats, type UseBrainChatsOptions } from './useBrainChats';
-export {
+  useBrainChats,
   useBrainConversation,
-  type UseBrainConversation,
-  type UseBrainConversationOptions,
-} from './useBrainConversation';
+  savePendingPrompt,
+  takePendingPrompt,
+  BrainProvider,
+  useBrainConfig,
+  useMcpExtensions,
+} from '@seanhogg/builderforce-brain-embedded';
 
+export type {
+  BrainToolSpec,
+  ChatCompletionMessage,
+  StreamHandlers,
+  StreamChatOptions,
+  StreamChatResult,
+  AssembledToolCall,
+  BrainTransport,
+  BrainAction,
+  BrainActionsContextValue,
+  BrainContextValue,
+  BrainPageContext,
+  UseBrainChats,
+  UseBrainChatsOptions,
+  UseBrainConversation,
+  UseBrainConversationOptions,
+  BrainConfig,
+  BrainRuntime,
+  BrainPersistenceAdapter,
+  BrainChat,
+  BrainMessage,
+  BrainModality,
+  ChatInputAttachment,
+} from '@seanhogg/builderforce-brain-embedded';
+
+// App-specific brain pieces (not part of the portable package).
+export { brainConfig } from './runtime';
 export {
   generatePrd,
   savePrd,
