@@ -1,6 +1,6 @@
 import * as react_jsx_runtime from 'react/jsx-runtime';
-import { DiffusionModelId, CoherenceMode, MambaStateSnapshot, ProbedDevice, GenerateResult } from '@seanhogg/builderforce-studio';
-export { ActiveDevice, CoherenceMode, DeviceTarget, DiffusionModelId, GenerateOptions, GenerateResult, MODEL_REGISTRY, MambaStateSnapshot, ModelDescriptor, OnnxFile, OnnxRuntimeConfigOptions, ProbedDevice, VideoEngine, VideoEngineOptions, WeightSource, configureOnnxRuntime, hasWebGPUSupport, probeDevice } from '@seanhogg/builderforce-studio';
+import { DiffusionModelId, CoherenceMode, MambaStateSnapshot, ProbedDevice, GenerateResult, QualityMode } from '@seanhogg/builderforce-studio';
+export { ActiveDevice, CoherenceMode, DeviceTarget, DiffusionModelId, GenerateOptions, GenerateResult, MODEL_REGISTRY, MambaStateSnapshot, ModelDescriptor, OnnxFile, OnnxRuntimeConfigOptions, ProbedDevice, QualityMode, VideoEngine, VideoEngineOptions, WeightSource, configureOnnxRuntime, hasWebGPUSupport, probeDevice } from '@seanhogg/builderforce-studio';
 
 /** Parameters that fully describe ONE generated version, for the host to persist
  *  alongside the MP4 blob. Enough information to re-generate the same video AND
@@ -107,16 +107,31 @@ interface VideoPreviewProps {
     videoUrl: string | null;
     width: number;
     height: number;
+    /** Renders the loading state (progress bar + label) during generation. When
+     *  null, the preview shows either the final video or the empty hint. */
+    loading?: {
+        label: string;
+        framesDone: number;
+        framesTotal: number;
+    } | null;
 }
 /**
- * Live preview canvas + final-video player.
- * - During generation: renders the most recent ImageBitmap onto a canvas.
- * - After generation: shows an HTML5 <video> bound to the muxed MP4 URL.
+ * Three states, one component (DRY — consumer never branches on which one):
  *
- * Single component handles both states so we don't end up with two parallel
- * "render frames" code paths.
+ *   1. loading != null            → progress bar + label, no per-frame preview.
+ *                                    Per-frame canvas was visually noisy
+ *                                    (frames pop in at varying quality during
+ *                                    LCM denoise, looks like a glitch). The
+ *                                    progress bar reads as "the engine is
+ *                                    working" without distracting noise.
+ *   2. videoUrl set               → <video> player + clickable thumbnail strip
+ *                                    so the user can scrub the result.
+ *   3. neither                    → empty hint.
+ *
+ * Click a thumbnail → seeks the video to that frame. Lets the user inspect
+ * any single frame without scrubbing the timeline pixel-perfectly.
  */
-declare function VideoPreview({ frames, videoUrl, width, height }: VideoPreviewProps): react_jsx_runtime.JSX.Element;
+declare function VideoPreview({ frames, videoUrl, width, height, loading }: VideoPreviewProps): react_jsx_runtime.JSX.Element;
 
 /**
  * ProgressFeedback — single rendering site for the studio's per-phase progress
@@ -161,6 +176,27 @@ interface DebugSnapshotProps {
 }
 declare function DebugCopyButton(props: DebugSnapshotProps): react_jsx_runtime.JSX.Element;
 
+interface QualityTierDef {
+    id: QualityMode;
+    label: string;
+    primary: DiffusionModelId;
+    refinement?: DiffusionModelId;
+    description: string;
+}
+declare const QUALITY_TIERS: readonly QualityTierDef[];
+/** Resolve a tier id to (primary, refinement) so the consumer can pass them
+ *  to `VideoEngine.create`. Falls back to fast if the id is unknown. */
+declare function resolveQualityTier(tier: QualityMode): {
+    primary: DiffusionModelId;
+    refinement: DiffusionModelId | undefined;
+};
+interface QualityTierPickerProps {
+    value: QualityMode;
+    onChange: (mode: QualityMode) => void;
+    disabled?: boolean;
+}
+declare function QualityTierPicker({ value, onChange, disabled }: QualityTierPickerProps): react_jsx_runtime.JSX.Element;
+
 /**
  * Shared engine-readiness hook — the single source of "can the host run the studio?"
  * Both StudioPanel and any third-party consumer using engine-only mode should
@@ -179,4 +215,4 @@ type EngineStatus = {
 };
 declare function useEngineStatus(): EngineStatus;
 
-export { CoherenceControls, DebugCopyButton, type DebugSnapshotProps, type EngineStatus, ModelPicker, ProgressFeedback, StudioPanel, type StudioPanelProps, VideoPreview, type VideoVersionEntry, type VideoVersionParams, useEngineStatus };
+export { CoherenceControls, DebugCopyButton, type DebugSnapshotProps, type EngineStatus, ModelPicker, ProgressFeedback, QUALITY_TIERS, QualityTierPicker, StudioPanel, type StudioPanelProps, VideoPreview, type VideoVersionEntry, type VideoVersionParams, resolveQualityTier, useEngineStatus };

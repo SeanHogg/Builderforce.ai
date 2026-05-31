@@ -20,12 +20,14 @@ import {
   type DiffusionModelId,
   type GenerateResult,
   type MambaStateSnapshot,
+  type QualityMode,
 } from '@seanhogg/builderforce-studio';
 import { ModelPicker } from './ModelPicker';
 import { CoherenceControls } from './CoherenceControls';
 import { VideoPreview } from './VideoPreview';
 import { ProgressFeedback } from './ProgressFeedback';
 import { DebugCopyButton } from './DebugCopyButton';
+import { QualityTierPicker, resolveQualityTier } from './QualityTierPicker';
 import { useEngineStatus } from './useEngineStatus';
 
 /** Parameters that fully describe ONE generated version, for the host to persist
@@ -133,7 +135,15 @@ export function StudioPanel({
   const abortRef = useRef<AbortController | null>(null);
 
   const [prompt, setPrompt] = useState('');
+  // Quality is the primary user-facing knob in simple mode. The picker maps
+  // to (primary model, optional refinement model) via QUALITY_TIERS, so the
+  // user picks "Refined" without knowing it means lcm-tiny-sd → dreamshaper.
+  const [quality, setQuality] = useState<QualityMode>('fast');
   const [model, setModel] = useState<DiffusionModelId>(defaultModel);
+  // Whether to expose the Advanced controls (model picker, sliders, coherence
+  // mode, camera motion). Collapsed by default to deliver the "user just enters
+  // a prompt" experience.
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [resolution, setResolution] = useState<Resolution>(DEFAULT_RESOLUTION);
   const [coherenceMode, setCoherenceMode] = useState<CoherenceMode>(defaultCoherence);
   const [coherenceStrength, setCoherenceStrength] = useState(0.5);
@@ -153,17 +163,21 @@ export function StudioPanel({
   const [frames, setFrames] = useState(defaultFrames);
   const [fps, setFps] = useState(defaultFps);
 
-  // Changing model OR resolution invalidates the cached engine — the engine
+  // Changing quality OR resolution invalidates the cached engine — the engine
   // is bound to both at create time. Dispose the old engine (releases
   // multi-GB ORT sessions + GPUDevice) so the next generate re-creates with
   // the new params. Weights stay in IndexedDB so re-init is fast.
   useEffect(() => {
     disposeEngineAndOutputs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model, resolution]);
+  }, [quality, resolution]);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [progressLabel, setProgressLabel] = useState('');
+  // Frames completed in the current generation — drives the LoadingState bar
+  // inside VideoPreview. Separate from previewFrames.length so we can update
+  // it without forcing a bitmap render.
+  const [framesDone, setFramesDone] = useState(0);
   const [expandedPrompt, setExpandedPrompt] = useState('');
   const [previewFrames, setPreviewFrames] = useState<ImageBitmap[]>([]);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -246,6 +260,7 @@ export function StudioPanel({
 
     setError(null);
     setIsGenerating(true);
+    setFramesDone(0);
     setProgressLabel('Initialising engine…');
     // Release outputs from any prior run (closes ImageBitmaps, revokes the
     // previous MP4 blob URL, clears the cached result). The ENGINE is kept
@@ -263,10 +278,15 @@ export function StudioPanel({
 
     try {
       if (!engineRef.current) {
+        // Resolve the user-facing quality tier to the actual (primary,
+        // refinement) model pair. Source of truth for tier → model id lives
+        // in QualityTierPicker so this component never hardcodes the mapping.
+        const tier = resolveQualityTier(quality);
         const engine = await VideoEngine.create({
           apiKey: token,
           baseUrl,
-          model,
+          model: showAdvanced ? model : tier.primary,
+          refinementModel: showAdvanced ? undefined : tier.refinement,
           mambaState: initialMambaState,
           width: resolution,
           height: resolution,
@@ -292,8 +312,13 @@ export function StudioPanel({
         signal: abort.signal,
         onPromptExpanded: setExpandedPrompt,
         onProgress: handleProgress,
-        onFrame: (_idx, bitmap) => {
+        onFrame: (idx, bitmap) => {
           setPreviewFrames((prev) => [...prev, bitmap]);
+          // Drive the loading bar by completed-frame count; the engine emits
+          // one onFrame per finished frame (and one per refined frame in
+          // two-pass mode, so the bar can briefly run past N then reset —
+          // acceptable cosmetic, indicates the second pass started).
+          setFramesDone(idx + 1);
         },
       });
 
@@ -361,6 +386,8 @@ export function StudioPanel({
     frames,
     initialMambaState,
     model,
+    quality,
+    showAdvanced,
     onSaveVersion,
     onVideoGenerated,
     prompt,
@@ -484,87 +511,119 @@ export function StudioPanel({
             )}
           </div>
 
-          <ModelPicker value={model} onChange={setModel} disabled={isGenerating} />
+          {/* Simple mode: Quality preset is the only required choice. The user
+              picks "Fast / Balanced / Refined" and the engine resolves it to a
+              concrete model (or two for the Refined two-pass chain). */}
+          <QualityTierPicker value={quality} onChange={setQuality} disabled={isGenerating} />
 
-          <div className="bfs-field">
-            <label className="bfs-label">Resolution</label>
-            <div className="bfs-radio-row">
-              {RESOLUTION_PRESETS.map((px) => {
-                const active = resolution === px;
-                return (
-                  <button
-                    key={px}
-                    type="button"
-                    onClick={() => setResolution(px)}
-                    disabled={isGenerating}
-                    className="bfs-btn bfs-btn-secondary"
-                    aria-pressed={active}
-                    style={{
-                      flex: 1,
-                      padding: '6px 8px',
-                      fontSize: '0.8rem',
-                      fontWeight: 600,
-                      background: active ? 'var(--bfs-accent)' : 'transparent',
-                      color: active ? 'white' : 'var(--bfs-fg)',
-                      borderColor: active ? 'var(--bfs-accent)' : 'var(--bfs-border)',
-                    }}
-                  >
-                    {px}×{px}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="bfs-hint">
-              Lower = faster + fits weaker GPUs (4× less compute per step at 256). Higher = sharper, more VRAM, may trip Windows GPU timeouts.
-            </p>
-          </div>
+          {/* Advanced disclosure — power-user controls collapsed by default
+              to keep the simple-mode flow uncluttered. Toggle persists per
+              session via local state; could promote to a prop later. */}
+          <details
+            className="bfs-field"
+            open={showAdvanced}
+            onToggle={(e) => setShowAdvanced((e.target as HTMLDetailsElement).open)}
+          >
+            <summary
+              style={{
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '0.85rem',
+                padding: '8px 0',
+                userSelect: 'none',
+              }}
+            >
+              Advanced controls
+            </summary>
 
-          <div className="bfs-row">
-            <div className="bfs-field bfs-flex">
-              <label className="bfs-label">Frames</label>
-              <input
-                type="number"
-                className="bfs-input"
-                min={1}
-                max={120}
-                value={frames}
-                onChange={(e) => setFrames(Math.max(1, Math.min(120, Number(e.target.value) || 1)))}
-                disabled={isGenerating}
-              />
+            <div style={{ marginTop: 12 }}>
+              <ModelPicker value={model} onChange={setModel} disabled={isGenerating} />
+              <p className="bfs-hint">
+                Overrides the Quality preset above. When this is set, the engine
+                uses this model directly (no refinement pass).
+              </p>
             </div>
-            <div className="bfs-field bfs-flex">
-              <label className="bfs-label">FPS</label>
-              <input
-                type="number"
-                className="bfs-input"
-                min={1}
-                max={60}
-                value={fps}
-                onChange={(e) => setFps(Math.max(1, Math.min(60, Number(e.target.value) || 1)))}
-                disabled={isGenerating}
-              />
-            </div>
-            <div className="bfs-field bfs-flex">
-              <label className="bfs-label">Duration</label>
-              <div className="bfs-readout">{(frames / fps).toFixed(2)}s</div>
-            </div>
-          </div>
 
-          <CoherenceControls
-            mode={coherenceMode}
-            strength={coherenceStrength}
-            motionAmount={motionAmount}
-            imgToImgStrength={imgToImgStrength}
-            cameraDx={cameraDx}
-            cameraDy={cameraDy}
-            onModeChange={setCoherenceMode}
-            onStrengthChange={setCoherenceStrength}
-            onMotionAmountChange={setMotionAmount}
-            onImgToImgStrengthChange={setImgToImgStrength}
-            onCameraDxChange={setCameraDx}
-            onCameraDyChange={setCameraDy}
-            disabled={isGenerating}
-          />
+            <div className="bfs-field" style={{ marginTop: 12 }}>
+              <label className="bfs-label">Resolution</label>
+              <div className="bfs-radio-row">
+                {RESOLUTION_PRESETS.map((px) => {
+                  const active = resolution === px;
+                  return (
+                    <button
+                      key={px}
+                      type="button"
+                      onClick={() => setResolution(px)}
+                      disabled={isGenerating}
+                      className="bfs-btn bfs-btn-secondary"
+                      aria-pressed={active}
+                      style={{
+                        flex: 1,
+                        padding: '6px 8px',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        background: active ? 'var(--bfs-accent)' : 'transparent',
+                        color: active ? 'white' : 'var(--bfs-fg)',
+                        borderColor: active ? 'var(--bfs-accent)' : 'var(--bfs-border)',
+                      }}
+                    >
+                      {px}×{px}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="bfs-hint">
+                Lower = faster + fits weaker GPUs (4× less compute per step at 256). Higher = sharper, more VRAM, may trip Windows GPU timeouts.
+              </p>
+            </div>
+
+            <div className="bfs-row" style={{ marginTop: 12 }}>
+              <div className="bfs-field bfs-flex">
+                <label className="bfs-label">Frames</label>
+                <input
+                  type="number"
+                  className="bfs-input"
+                  min={1}
+                  max={120}
+                  value={frames}
+                  onChange={(e) => setFrames(Math.max(1, Math.min(120, Number(e.target.value) || 1)))}
+                  disabled={isGenerating}
+                />
+              </div>
+              <div className="bfs-field bfs-flex">
+                <label className="bfs-label">FPS</label>
+                <input
+                  type="number"
+                  className="bfs-input"
+                  min={1}
+                  max={60}
+                  value={fps}
+                  onChange={(e) => setFps(Math.max(1, Math.min(60, Number(e.target.value) || 1)))}
+                  disabled={isGenerating}
+                />
+              </div>
+              <div className="bfs-field bfs-flex">
+                <label className="bfs-label">Duration</label>
+                <div className="bfs-readout">{(frames / fps).toFixed(2)}s</div>
+              </div>
+            </div>
+
+            <CoherenceControls
+              mode={coherenceMode}
+              strength={coherenceStrength}
+              motionAmount={motionAmount}
+              imgToImgStrength={imgToImgStrength}
+              cameraDx={cameraDx}
+              cameraDy={cameraDy}
+              onModeChange={setCoherenceMode}
+              onStrengthChange={setCoherenceStrength}
+              onMotionAmountChange={setMotionAmount}
+              onImgToImgStrengthChange={setImgToImgStrength}
+              onCameraDxChange={setCameraDx}
+              onCameraDyChange={setCameraDy}
+              disabled={isGenerating}
+            />
+          </details>
 
           <div className="bfs-actions">
             {isGenerating ? (
@@ -597,6 +656,11 @@ export function StudioPanel({
             videoUrl={videoUrl}
             width={resolution}
             height={resolution}
+            loading={
+              isGenerating
+                ? { label: progressLabel || 'Initialising…', framesDone, framesTotal: frames }
+                : null
+            }
           />
 
           {/* Single source of truth for in-flight feedback — the component
