@@ -15,6 +15,7 @@ export type {
   ActiveDevice,
   DiffusionModelId,
   CoherenceMode,
+  QualityMode,
   WeightSource,
   ModelDescriptor,
   OnnxFile,

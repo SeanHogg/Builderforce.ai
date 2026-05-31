@@ -54,14 +54,26 @@ const DEFAULT_COHERENCE_STRENGTH = 0.5;
  * still evolve so the result reads as motion, not as a static image looped.
  */
 const DEFAULT_MOTION_AMOUNT = 0.15;
+/** Default refinement-pass img2img strength when the engine runs a two-pass
+ *  quality chain. 0.4 = preserves the draft's composition while letting the
+ *  refinement model rewrite ~40 % of the noise schedule's worth of detail. */
+const DEFAULT_REFINEMENT_STRENGTH = 0.4;
 
 export class VideoEngine {
+  /** Track the probed device so we can lazy-create a refinement-pass engine
+   *  later with the same hardware target — needed for the two-pass quality
+   *  chain (draft model → dispose → refinement model). */
+  private readonly probed: import('./device-router').ProbedDevice;
+
   private constructor(
     private readonly opts: Required<Pick<VideoEngineOptions, 'apiKey' | 'model'>> & VideoEngineOptions,
-    private readonly diffusion: DiffusionEngine,
+    private diffusion: DiffusionEngine,
     private mambaState: MambaStateSnapshot,
-    public readonly activeDevice: ActiveDevice
-  ) {}
+    public readonly activeDevice: ActiveDevice,
+    probed: import('./device-router').ProbedDevice,
+  ) {
+    this.probed = probed;
+  }
 
   /**
    * Construct an engine bound to the host's best available hardware. Returns
@@ -98,7 +110,8 @@ export class VideoEngine {
       { ...options, weightSources, width, height },
       diffusion,
       state,
-      probed.kind
+      probed.kind,
+      probed,
     );
   }
 
@@ -168,6 +181,10 @@ export class VideoEngine {
 
     const frames: ImageBitmap[] = [];
     const muxFrames: MuxFrame[] = [];
+    // Only kept when a refinement pass is wired — saves the per-frame clean
+    // latent so model B can re-noise + partial-denoise it without ever doing
+    // a (currently un-shipped) VAE encode of the decoded pixels.
+    const draftLatents: Float32Array[] = [];
 
     for (let frameIdx = 0; frameIdx < args.frames; frameIdx++) {
       if (args.signal?.aborted) {
@@ -253,11 +270,93 @@ export class VideoEngine {
 
       frames.push(bitmap);
       muxFrames.push({ rgba });
+      // Cache the clean latent for the refinement pass — model B's UNet can
+      // act on it directly because SD1.5-family models share a VAE latent
+      // space. Skip when refinement is off (saves ~64 KB per frame).
+      if (this.opts.refinementModel) {
+        draftLatents.push(new Float32Array(finalLatent));
+      }
       args.onFrame?.(frameIdx, bitmap, this.mambaState);
     }
 
-    reportProgress(`Encoding ${args.frames} frames to MP4…`, onProgress);
-    const blob = await muxFramesToMp4(muxFrames, {
+    // Two-pass refinement: if a refinementModel was wired at create time,
+    // swap to it (dispose draft engine → load refinement engine → re-noise
+    // each draft latent and run partial denoise through the refinement UNet).
+    // VRAM stays at max(draft, refinement) not draft+refinement because the
+    // swap is sequential. Only safe across SD1.5-family models (shared VAE
+    // latent space) — enforced at the quality-tier preset level.
+    let refinedFrames: ImageBitmap[] | null = null;
+    let refinedMuxFrames: MuxFrame[] | null = null;
+    if (this.opts.refinementModel && this.opts.refinementModel !== this.opts.model) {
+      const refinementStrength = clamp01(args.refinementStrength ?? DEFAULT_REFINEMENT_STRENGTH);
+      reportProgress(
+        `Refinement pass: swapping ${this.opts.model} → ${this.opts.refinementModel} (sequential, no VRAM cost)…`,
+        onProgress,
+      );
+      await this.diffusion.dispose();
+      this.diffusion = new DiffusionEngine({
+        model: this.opts.refinementModel,
+        probed: this.probed,
+        apiKey: this.opts.apiKey,
+        weightSources: this.opts.weightSources ?? DEFAULT_WEIGHT_SOURCES,
+        r2Base: deriveR2Base(this.opts.baseUrl),
+        width,
+        height,
+        onProgress,
+      });
+      await this.diffusion.init();
+      // Re-embed the prompt under the refinement model's text encoder.
+      // (LCM family is consistent on dims, but the encoder weights differ.)
+      const refinedCondEmbedding = await this.diffusion.embedPrompt(resolvedPrompt);
+      const refinedDescriptor = MODEL_REGISTRY[this.opts.refinementModel];
+      const refinedTimesteps = trimTimesteps(refinedDescriptor.defaultTimesteps, refinedDescriptor.defaultSteps);
+      const skipCount = Math.floor(refinedTimesteps.length * (1 - refinementStrength));
+      const partialTimesteps =
+        skipCount < refinedTimesteps.length
+          ? refinedTimesteps.slice(skipCount)
+          : [refinedTimesteps[refinedTimesteps.length - 1]];
+
+      refinedFrames = [];
+      refinedMuxFrames = [];
+      for (let i = 0; i < draftLatents.length; i++) {
+        if (args.signal?.aborted) {
+          throw new DOMException('Generation aborted', 'AbortError');
+        }
+        reportProgress(`Refinement pass: frame ${i + 1}/${draftLatents.length}…`, onProgress);
+        const noised = this.diffusion.addNoiseToLatent(draftLatents[i], partialTimesteps[0], seed + i);
+        const { pixels: refinedPixels } = await this.diffusion.denoise({
+          latent: noised,
+          condEmbedding: refinedCondEmbedding,
+          uncondEmbedding: null,
+          timesteps: partialTimesteps,
+          guidance: refinedDescriptor.defaultGuidance,
+          seed: seed + i,
+        });
+        const refinedRgba = pixelsToRgba(refinedPixels, width, height);
+        const refinedImageData = new ImageData(
+          refinedRgba as Uint8ClampedArray<ArrayBuffer>,
+          width,
+          height,
+        );
+        const refinedBitmap = await createImageBitmap(refinedImageData);
+        refinedFrames.push(refinedBitmap);
+        refinedMuxFrames.push({ rgba: refinedRgba });
+        args.onFrame?.(i, refinedBitmap, this.mambaState);
+      }
+      // Close the draft bitmaps now that we have the refined replacements —
+      // they're GPU-backed handles, not cheap. Without this each two-pass
+      // run leaks ~bitmaps × resolution² bytes until the engine disposes.
+      for (const bm of frames) {
+        try { bm.close(); } catch { /* already closed */ }
+      }
+      reportProgress(`Refinement pass complete (${draftLatents.length} frames refined).`, onProgress);
+    }
+
+    const finalFrames = refinedFrames ?? frames;
+    const finalMuxFrames = refinedMuxFrames ?? muxFrames;
+
+    reportProgress(`Encoding ${finalFrames.length} frames to MP4…`, onProgress);
+    const blob = await muxFramesToMp4(finalMuxFrames, {
       width,
       height,
       fps: args.fps,
@@ -268,7 +367,7 @@ export class VideoEngine {
     return {
       blob,
       mambaState: this.mambaState,
-      frames,
+      frames: finalFrames,
       activeDevice: this.activeDevice,
       resolvedPrompt,
       elapsedMs: performance.now() - start,

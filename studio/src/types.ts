@@ -30,6 +30,21 @@ export type ActiveDevice = 'webnn' | 'webgpu' | 'cpu';
 /** Diffusion backbone. Ordered roughly smallest → largest VRAM footprint. */
 export type DiffusionModelId = 'lcm-tiny-sd' | 'sd-turbo' | 'lcm-dreamshaper-v7';
 
+/**
+ * Quality preset — the simple-mode user picks this instead of a specific model
+ * and a stack of sliders. Maps onto a draft model + (optional) a refinement
+ * model that runs each frame through img2img at low strength.
+ *   fast      → single-pass lcm-tiny-sd (4 steps, ~2 GB, fastest to first frame)
+ *   balanced  → single-pass lcm-dreamshaper-v7 (4 steps, ~6 GB, sharper)
+ *   refined   → TWO PASSES: draft through lcm-tiny-sd, then refinement pass
+ *               through lcm-dreamshaper-v7 via img2img at strength 0.4.
+ *               Sequential model load (no 2× VRAM cost) — slower wall-clock
+ *               but combines the tiny model's speed for composition with the
+ *               larger model's detail for finishing. Answers the user's
+ *               "why don't we use two LLMs?" question — this IS that.
+ */
+export type QualityMode = 'fast' | 'balanced' | 'refined';
+
 /** Mamba-state-driven coherence mode. */
 export type CoherenceMode = 'prompt-bias' | 'latent-residual';
 
@@ -113,6 +128,15 @@ export interface VideoEngineOptions {
   promptModel?: string;
   /** Which diffusion backbone to use. */
   model: DiffusionModelId;
+  /**
+   * Optional second-pass model. When set, `VideoEngine` runs two passes
+   * per frame: the primary `model` produces a draft, then `refinementModel`
+   * runs over each frame via img2img to add detail. The two models are
+   * loaded SEQUENTIALLY (draft first, refinement second) so VRAM cost
+   * stays at max(draft, refinement), not draft + refinement. Matches the
+   * quality-tier `'refined'` preset surfaced in the embedded panel.
+   */
+  refinementModel?: DiffusionModelId;
   /** Hardware target. */
   device?: DeviceTarget;
   /** Weight source preference order. Defaults to ['r2-proxy', 'huggingface-cdn']. */
@@ -184,6 +208,15 @@ export interface GenerateOptions {
    * Only consulted when `imgToImgStrength > 0`. Default omitted = no shift.
    */
   cameraMotion?: { dx: number; dy: number };
+  /**
+   * Refinement-pass strength used when the engine runs the quality-tier
+   * second pass. Each finished frame from the draft model is fed back into
+   * the refinement model via img2img at this strength. Lower = preserves the
+   * draft's composition more faithfully (less change); higher = lets the
+   * refinement model rewrite more detail. Defaults to 0.4. Only consulted
+   * when `VideoEngine.create` was given two models (refined quality tier).
+   */
+  refinementStrength?: number;
   /** Called once per finished frame. */
   onFrame?: (frameIdx: number, bitmap: ImageBitmap, state: MambaStateSnapshot) => void;
   /** Called when prompt expansion finishes (before diffusion starts). */
