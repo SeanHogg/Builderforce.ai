@@ -110,6 +110,23 @@ describe('composeShotPrompt (character-consistency threading)', () => {
   });
 });
 
+describe('storyboardFrameCount (cinematic progress denominator)', () => {
+  const shotOf = (id: string, durationFrames: number): PlannedShot => ({
+    id, prompt: id, characterIds: [], camera: 'static', action: '', durationFrames,
+  });
+
+  it('sums durationFrames across shots — the real total the engine renders', () => {
+    const sb = { treatment: '', characters: [], shots: [shotOf('a', 10), shotOf('b', 12), shotOf('c', 14), shotOf('d', 14)] };
+    // The exact bug from the field report: input `frames` was 16 but the edited
+    // storyboard sums to 50 — the progress bar must use THIS, not the input.
+    expect(storyboardFrameCount(sb)).toBe(50);
+  });
+
+  it('is zero for an empty storyboard (no shots)', () => {
+    expect(storyboardFrameCount({ treatment: '', characters: [], shots: [] })).toBe(0);
+  });
+});
+
 describe('cameraMoveToMotion', () => {
   it('static yields no motion and no img2img recursion', () => {
     expect(cameraMoveToMotion('static')).toEqual({ imgToImgStrength: 0 });
