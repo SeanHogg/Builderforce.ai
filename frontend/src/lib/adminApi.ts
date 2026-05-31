@@ -589,8 +589,11 @@ export const adminApi = {
   async legalCurrent(): Promise<AdminLegalCurrent> {
     return adminRequest<AdminLegalCurrent>('/api/admin/legal/current');
   },
-  async publishTerms(data: { version: string; title?: string; content: string }): Promise<{ terms: LegalDocument }> {
-    return adminRequest('/api/admin/legal/terms/publish', {
+  async publishLegal(
+    docType: 'terms' | 'privacy',
+    data: { version: string; title?: string; content: string },
+  ): Promise<{ document: LegalDocument }> {
+    return adminRequest(`/api/admin/legal/${docType}/publish`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
