@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { blendNoise, shiftLatent } from './mamba-coherence';
+import {
+  blendNoise,
+  shiftLatent,
+  shouldApplyLatentResidualBias,
+} from './mamba-coherence';
 
 /**
  * blendNoise is the latent-walk primitive VideoEngine.generate uses to keep
@@ -112,16 +116,19 @@ describe('shiftLatent (img2img camera-motion primitive)', () => {
     expect(out).not.toBe(src); // a copy, not the same reference
   });
 
-  it('dx=1 shifts content one column right, leftmost column zero-filled', () => {
+  it('dx=1 shifts content one column right, leftmost column replicates the left edge (no black band)', () => {
+    // Edge-replicate: output column 0 mirrors input column 0 instead of zero.
+    // This was the bug — zero-filled edges produced a black band on every
+    // img2img-recursion frame that the truncated denoise couldn't repair.
     const out = shiftLatent(fixture(), shape, 1, 0);
-    expect(Array.from(out.slice(0, 9))).toEqual([0, 1, 2, 0, 4, 5, 0, 7, 8]);
-    expect(Array.from(out.slice(9))).toEqual([0, 11, 12, 0, 14, 15, 0, 17, 18]);
+    expect(Array.from(out.slice(0, 9))).toEqual([1, 1, 2, 4, 4, 5, 7, 7, 8]);
+    expect(Array.from(out.slice(9))).toEqual([11, 11, 12, 14, 14, 15, 17, 17, 18]);
   });
 
-  it('dy=-1 shifts content one row up, bottom row zero-filled (camera tilts up)', () => {
+  it('dy=-1 shifts content one row up, bottom row replicates the bottom edge', () => {
     const out = shiftLatent(fixture(), shape, 0, -1);
-    expect(Array.from(out.slice(0, 9))).toEqual([4, 5, 6, 7, 8, 9, 0, 0, 0]);
-    expect(Array.from(out.slice(9))).toEqual([14, 15, 16, 17, 18, 19, 0, 0, 0]);
+    expect(Array.from(out.slice(0, 9))).toEqual([4, 5, 6, 7, 8, 9, 7, 8, 9]);
+    expect(Array.from(out.slice(9))).toEqual([14, 15, 16, 17, 18, 19, 17, 18, 19]);
   });
 
   it('throws on length/shape mismatch (engine ⇄ helper drift catcher)', () => {
@@ -130,9 +137,38 @@ describe('shiftLatent (img2img camera-motion primitive)', () => {
     );
   });
 
-  it('shift larger than the frame zero-fills the entire output', () => {
+  it('shift larger than the frame replicates the corner pixel everywhere (clamp behaviour)', () => {
+    // With clamp padding, a giant rightward shift means every output pixel
+    // samples from the leftmost source column. So channel 0's plane fills
+    // with [1,1,1, 4,4,4, 7,7,7] (column 0 replicated across all output cols).
     const out = shiftLatent(fixture(), shape, 99, 0);
-    expect(out.every((v) => v === 0)).toBe(true);
+    expect(Array.from(out.slice(0, 9))).toEqual([1, 1, 1, 4, 4, 4, 7, 7, 7]);
+    expect(Array.from(out.slice(9))).toEqual([11, 11, 11, 14, 14, 14, 17, 17, 17]);
+  });
+});
+
+describe('shouldApplyLatentResidualBias (img2img disfigurement guard)', () => {
+  // The bug this guards: a user with `coherenceMode='latent-residual'` AND
+  // `imgToImgStrength > 0` reported frame 0 was crisp but every subsequent
+  // frame was progressively disfigured. Root cause: applyToLatent adds a
+  // constant per-channel offset broadcast to every pixel — designed for
+  // unit-variance noise (frame 0 / anchor-walk). On a partially-denoised
+  // img2img latent, the same constant shift moves the signal out of the
+  // UNet's trained distribution and compounds frame-to-frame as Mamba state
+  // accumulates. This helper is the SINGLE place the engine decides whether
+  // to apply that bias; this suite locks the rule.
+
+  it('applies bias under latent-residual + fresh-noise (the original use case)', () => {
+    expect(shouldApplyLatentResidualBias('latent-residual', false)).toBe(true);
+  });
+
+  it('SKIPS bias under latent-residual + img2img (the bug fix)', () => {
+    expect(shouldApplyLatentResidualBias('latent-residual', true)).toBe(false);
+  });
+
+  it('never applies bias under prompt-bias (mode is a no-op on the latent path)', () => {
+    expect(shouldApplyLatentResidualBias('prompt-bias', false)).toBe(false);
+    expect(shouldApplyLatentResidualBias('prompt-bias', true)).toBe(false);
   });
 });
 

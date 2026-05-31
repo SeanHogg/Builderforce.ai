@@ -76,8 +76,8 @@ function ModelPicker({ value, onChange, disabled }) {
 // src/components/CoherenceControls.tsx
 var import_jsx_runtime2 = require("react/jsx-runtime");
 var MODE_DESCRIPTIONS = {
-  "prompt-bias": "Mamba state biases the prompt embedding. Lightweight, works with any U-Net.",
-  "latent-residual": "Mamba state biases the initial latent noise. Stronger temporal lock, slightly more compute."
+  "prompt-bias": "Mamba state biases the prompt embedding. Lightweight, works with any U-Net. Compatible with img2img.",
+  "latent-residual": "Mamba state biases the initial latent noise. Stronger temporal lock, slightly more compute. AUTO-SKIPPED when img2img recursion is on \u2014 broadcast bias on a partially-denoised latent disfigures the image."
 };
 function LabeledRange(props) {
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_jsx_runtime2.Fragment, { children: [
@@ -138,13 +138,13 @@ function CoherenceControls({
     /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
       LabeledRange,
       {
-        label: "Coherence strength",
+        label: `Coherence strength${mode === "latent-residual" && img2imgOn ? " (auto-skipped \u2014 img2img on)" : ""}`,
         value: strength,
         min: 0,
         max: 1,
         step: 0.05,
         marginTop: 12,
-        disabled,
+        disabled: disabled || mode === "latent-residual" && img2imgOn,
         onChange: onStrengthChange,
         hint: "0 = i.i.d. frames \xB7 1 = maximum lock to previous frame."
       }

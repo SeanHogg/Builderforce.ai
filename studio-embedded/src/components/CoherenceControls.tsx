@@ -18,9 +18,9 @@ interface CoherenceControlsProps {
 
 const MODE_DESCRIPTIONS: Record<CoherenceMode, string> = {
   'prompt-bias':
-    'Mamba state biases the prompt embedding. Lightweight, works with any U-Net.',
+    'Mamba state biases the prompt embedding. Lightweight, works with any U-Net. Compatible with img2img.',
   'latent-residual':
-    'Mamba state biases the initial latent noise. Stronger temporal lock, slightly more compute.',
+    'Mamba state biases the initial latent noise. Stronger temporal lock, slightly more compute. AUTO-SKIPPED when img2img recursion is on — broadcast bias on a partially-denoised latent disfigures the image.',
 };
 
 /** Inline labeled range slider — used for every numeric coherence control so
@@ -93,13 +93,15 @@ export function CoherenceControls({
       <p className="bfs-hint">{MODE_DESCRIPTIONS[mode]}</p>
 
       <LabeledRange
-        label="Coherence strength"
+        label={`Coherence strength${
+          mode === 'latent-residual' && img2imgOn ? ' (auto-skipped — img2img on)' : ''
+        }`}
         value={strength}
         min={0}
         max={1}
         step={0.05}
         marginTop={12}
-        disabled={disabled}
+        disabled={disabled || (mode === 'latent-residual' && img2imgOn)}
         onChange={onStrengthChange}
         hint="0 = i.i.d. frames · 1 = maximum lock to previous frame."
       />
