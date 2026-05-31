@@ -18,6 +18,7 @@
     "@huggingface/transformers": "^3.8.1",
     "@monaco-editor/react": "^4.6.0",
     "@seanhogg/builderforce-brain-embedded": "link:../brain-embedded",
+    "@seanhogg/builderforce-embedded": "link:../builderforce-embedded",
     "@seanhogg/builderforce-sdk": "link:../sdk",
     "@seanhogg/builderforce-studio": "link:../studio",
     "@seanhogg/builderforce-studio-embedded": "link:../studio-embedded",
