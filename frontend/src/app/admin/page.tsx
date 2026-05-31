@@ -38,6 +38,7 @@ import { BUILTIN_PERSONAS, type Persona } from '@/lib/marketplaceData';
 import UserDetailDrawer from '@/components/UserDetailDrawer';
 import { TenantApiKeysAdminTab } from '@/components/admin/TenantApiKeysAdminTab';
 import { LegalEditorDrawer, type LegalEditorContext } from '@/components/admin/LegalEditorDrawer';
+import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { TenantTokenLimitOverrideEditor } from '@/components/admin/TenantTokenLimitOverrideEditor';
 import { TenantPremiumOverrideEditor } from '@/components/admin/TenantPremiumOverrideEditor';
 
@@ -2139,24 +2140,16 @@ export default function AdminPage() {
                         );
                       })}
                     </div>
-                    <div className="health-card" style={{ padding: 16 }}>
-                      <div className="health-label">Current Terms (full text)</div>
-                      <textarea
-                        readOnly
-                        value={legalCurrent.terms.content}
-                        className="admin-token-textarea"
-                        style={{ minHeight: 200, fontSize: 12 }}
-                      />
-                    </div>
-                    <div className="health-card" style={{ padding: 16 }}>
-                      <div className="health-label">Current Privacy (full text)</div>
-                      <textarea
-                        readOnly
-                        value={legalCurrent.privacy.content}
-                        className="admin-token-textarea"
-                        style={{ minHeight: 200, fontSize: 12 }}
-                      />
-                    </div>
+                    {(['terms', 'privacy'] as const).map((dt) => (
+                      <div key={dt} className="health-card" style={{ padding: 16 }}>
+                        <div className="health-label" style={{ marginBottom: 8 }}>
+                          Current {dt === 'terms' ? 'Terms' : 'Privacy'} · v{legalCurrent[dt].version}
+                        </div>
+                        <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+                          <ChatMessageContent content={legalCurrent[dt].content} />
+                        </div>
+                      </div>
+                    ))}
                   </>
                 )}
               </div>

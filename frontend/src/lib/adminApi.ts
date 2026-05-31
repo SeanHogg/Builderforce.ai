@@ -598,6 +598,15 @@ export const adminApi = {
       body: JSON.stringify(data),
     });
   },
+  async amendLegal(
+    docType: 'terms' | 'privacy',
+    data: { version?: string; title?: string; content: string },
+  ): Promise<{ document: LegalDocument }> {
+    return adminRequest(`/api/admin/legal/${docType}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
 
   // Newsletter
   async newsletterSubscribers(params?: {

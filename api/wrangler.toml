@@ -46,7 +46,9 @@ new_sqlite_classes = ["ClawRelayDO"]
 
 [[migrations]]
 tag = "v2"
-new_classes = ["SessionRoomDO"]
+# Free-plan Durable Objects must be backed by SQLite storage; `new_classes`
+# (the legacy KV-backed variant) is rejected with error 10097 on the free plan.
+new_sqlite_classes = ["SessionRoomDO"]
 
 # Cron triggers — see scheduled() in src/index.ts
 # 09:00 UTC daily: probe every registered LLM vendor and email superadmins on status change.
