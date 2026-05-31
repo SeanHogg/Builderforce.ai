@@ -92,6 +92,15 @@ export function StudioPanel({
   // palette + composition stay locked across frames, large enough that frames
   // still evolve (subtle motion). Keep this in sync with VideoEngine's default.
   const [motionAmount, setMotionAmount] = useState(0.15);
+  // Img2img recursion — off by default. When > 0, frames > 0 start from the
+  // previous frame's clean latent re-noised partway through the schedule. The
+  // only path inside the existing UNet weights that produces actual scene
+  // PROGRESSION (camera moving, content flowing) rather than just "same shot
+  // wobbling" — anchor-walk alone can't deliver "walking forward through a
+  // forest path" because the model has no temporal training.
+  const [imgToImgStrength, setImgToImgStrength] = useState(0);
+  const [cameraDx, setCameraDx] = useState(0);
+  const [cameraDy, setCameraDy] = useState(0);
   const [frames, setFrames] = useState(defaultFrames);
   const [fps, setFps] = useState(defaultFps);
 
@@ -224,6 +233,10 @@ export function StudioPanel({
         coherence: coherenceMode,
         coherenceStrength,
         motionAmount,
+        imgToImgStrength,
+        cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0)
+          ? { dx: cameraDx, dy: cameraDy }
+          : undefined,
         signal: abort.signal,
         onPromptExpanded: setExpandedPrompt,
         onProgress: handleProgress,
@@ -255,6 +268,9 @@ export function StudioPanel({
     coherenceMode,
     coherenceStrength,
     motionAmount,
+    imgToImgStrength,
+    cameraDx,
+    cameraDy,
     fps,
     frames,
     initialMambaState,
@@ -410,9 +426,15 @@ export function StudioPanel({
             mode={coherenceMode}
             strength={coherenceStrength}
             motionAmount={motionAmount}
+            imgToImgStrength={imgToImgStrength}
+            cameraDx={cameraDx}
+            cameraDy={cameraDy}
             onModeChange={setCoherenceMode}
             onStrengthChange={setCoherenceStrength}
             onMotionAmountChange={setMotionAmount}
+            onImgToImgStrengthChange={setImgToImgStrength}
+            onCameraDxChange={setCameraDx}
+            onCameraDyChange={setCameraDy}
             disabled={isGenerating}
           />
 

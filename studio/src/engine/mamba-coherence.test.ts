@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { blendNoise } from './mamba-coherence';
+import { blendNoise, shiftLatent } from './mamba-coherence';
 
 /**
  * blendNoise is the latent-walk primitive VideoEngine.generate uses to keep
@@ -92,6 +92,47 @@ describe('blendNoise (latent-walk continuity primitive)', () => {
     expect(() => blendNoise(new Float32Array(10), new Float32Array(20), 0.5)).toThrow(
       /length mismatch/,
     );
+  });
+});
+
+describe('shiftLatent (img2img camera-motion primitive)', () => {
+  // NCHW layout: 2 channels, 3 rows, 3 cols. Channel 0 = 1..9, channel 1 = 11..19.
+  function fixture(): Float32Array {
+    return new Float32Array([
+      1, 2, 3, 4, 5, 6, 7, 8, 9,
+      11, 12, 13, 14, 15, 16, 17, 18, 19,
+    ]);
+  }
+  const shape = { channels: 2, height: 3, width: 3 };
+
+  it('dx=0, dy=0 returns a copy of the input (no-op)', () => {
+    const src = fixture();
+    const out = shiftLatent(src, shape, 0, 0);
+    expect(Array.from(out)).toEqual(Array.from(src));
+    expect(out).not.toBe(src); // a copy, not the same reference
+  });
+
+  it('dx=1 shifts content one column right, leftmost column zero-filled', () => {
+    const out = shiftLatent(fixture(), shape, 1, 0);
+    expect(Array.from(out.slice(0, 9))).toEqual([0, 1, 2, 0, 4, 5, 0, 7, 8]);
+    expect(Array.from(out.slice(9))).toEqual([0, 11, 12, 0, 14, 15, 0, 17, 18]);
+  });
+
+  it('dy=-1 shifts content one row up, bottom row zero-filled (camera tilts up)', () => {
+    const out = shiftLatent(fixture(), shape, 0, -1);
+    expect(Array.from(out.slice(0, 9))).toEqual([4, 5, 6, 7, 8, 9, 0, 0, 0]);
+    expect(Array.from(out.slice(9))).toEqual([14, 15, 16, 17, 18, 19, 0, 0, 0]);
+  });
+
+  it('throws on length/shape mismatch (engine ⇄ helper drift catcher)', () => {
+    expect(() => shiftLatent(new Float32Array(10), shape, 0, 0)).toThrow(
+      /doesn't match shape/,
+    );
+  });
+
+  it('shift larger than the frame zero-fills the entire output', () => {
+    const out = shiftLatent(fixture(), shape, 99, 0);
+    expect(out.every((v) => v === 0)).toBe(true);
   });
 });
 

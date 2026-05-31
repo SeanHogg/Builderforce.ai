@@ -159,8 +159,31 @@ export interface GenerateOptions {
    * frames, large enough to leave room for evolution. Set to 1 to opt out
    * (each frame becomes a fresh interpretation of the prompt — the old
    * behaviour that fails on "this should be a continuation" prompts).
+   * Ignored when `imgToImgStrength > 0` for frames > 0 (img2img path takes over).
    */
   motionAmount?: number;
+  /**
+   * Img2img recursion strength for frames > 0. When 0 (default), every frame
+   * starts from the shared anchor + per-frame noise (continuity but no scene
+   * progression — the "same shot wobbling" failure mode). When > 0, frame
+   * N+1 starts from frame N's clean latent re-noised partway through the
+   * schedule: only the last `floor(steps * strength)` denoise steps run,
+   * carrying scene content forward. Typical useful range: 0.4–0.7.
+   *   0.5 → start halfway through the schedule (strong continuity, slow evolution)
+   *   0.7 → start at 30 %  (moderate continuity, more evolution)
+   *   1.0 → start at the beginning  (≈ pure anchor walk, same as 0)
+   * Long clips (~30+ frames) drift / blur — refresh by setting back to 0 on
+   * a periodic frame, or split into multiple short calls.
+   */
+  imgToImgStrength?: number;
+  /**
+   * Per-frame directional shift applied to the prior latent BEFORE re-noising,
+   * in latent-pixel units (1 latent pixel = 8 output pixels via the VAE
+   * down-factor). Simulates camera motion: dy=-1 looks like the camera
+   * tilting up; dx=1 looks like the world panning right (camera moving left).
+   * Only consulted when `imgToImgStrength > 0`. Default omitted = no shift.
+   */
+  cameraMotion?: { dx: number; dy: number };
   /** Called once per finished frame. */
   onFrame?: (frameIdx: number, bitmap: ImageBitmap, state: MambaStateSnapshot) => void;
   /** Called when prompt expansion finishes (before diffusion starts). */

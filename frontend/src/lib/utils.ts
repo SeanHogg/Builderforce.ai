@@ -64,7 +64,10 @@ export function buildTree(files: FileEntry[]): TreeNode[] {
   const map: Record<string, TreeNode> = {};
 
   for (const file of files) {
-    const parts = file.path.split('/');
+    // Drop empty segments so a stray leading/trailing/double slash never
+    // produces a blank-named tree node (e.g. "foo//bar.json" or "/x.json").
+    const parts = file.path.split('/').filter(Boolean);
+    if (parts.length === 0) continue;
     let current = root;
     let currentPath = '';
 

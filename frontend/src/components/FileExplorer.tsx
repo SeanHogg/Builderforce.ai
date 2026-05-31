@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { buildTree } from '@/lib/utils';
+import { buildTree, getFileName } from '@/lib/utils';
 import type { TreeNode } from '@/lib/utils';
 import type { FileEntry } from '@/lib/types';
 
@@ -85,8 +85,8 @@ function TreeNodeComponent({
       onClick={() => onFileSelect(node.path)}
     >
       <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-        <span style={{ fontSize: '0.72rem' }}>{fileIcon(node.name)}</span>
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem' }}>{node.name}</span>
+        <span style={{ fontSize: '0.72rem' }}>{fileIcon(node.name || node.path)}</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem' }}>{node.name || getFileName(node.path) || '(untitled)'}</span>
       </span>
       {hovered && (
         <button

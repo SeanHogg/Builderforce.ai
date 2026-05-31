@@ -289,6 +289,10 @@ export interface DenoiseInputs {
 export interface DenoiseResult {
   /** Final decoded RGB pixel data, [-1..1] range, layout [3, height, width]. */
   pixels: Float32Array;
+  /** Final clean (post-last-step) latent before VAE decode. Used by VideoEngine
+   *  for img2img recursion — frame N+1 starts from this latent re-noised partway
+   *  through the schedule instead of from fresh anchor noise. */
+  latent: Float32Array;
 }
 
 interface SessionBuffers {
@@ -543,7 +547,30 @@ export class DiffusionEngine {
     }
 
     const pixels = await this.runVaeDecode(sample, latentH, latentW);
-    return { pixels };
+    return { pixels, latent: sample };
+  }
+
+  /**
+   * Forward-noise a clean latent to the noise level corresponding to `timestep`.
+   * Used by VideoEngine's img2img recursion: take the previous frame's clean
+   * latent, re-noise it to a partial-schedule timestep, then run the remaining
+   * denoise steps. Result is scene-content carried forward + prompt-driven
+   * evolution, instead of "fresh interpretation per frame".
+   *
+   *   noised = sqrt(alpha_cumprod[t]) * clean + sqrt(1 - alpha_cumprod[t]) * noise
+   *
+   * — the standard DDPM forward diffusion at timestep t.
+   */
+  addNoiseToLatent(clean: Float32Array, timestep: number, seed: number): Float32Array {
+    const alpha = ALPHAS_CUMPROD[timestep] ?? 0.001;
+    const sqrtAlpha = Math.sqrt(alpha);
+    const sqrtOneMinusAlpha = Math.sqrt(1 - alpha);
+    const noise = gaussianNoise(clean.length, seed);
+    const out = new Float32Array(clean.length);
+    for (let i = 0; i < clean.length; i++) {
+      out[i] = sqrtAlpha * clean[i] + sqrtOneMinusAlpha * noise[i];
+    }
+    return out;
   }
 
   // -------------------------------------------------------------------------

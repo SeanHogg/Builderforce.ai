@@ -2,8 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { FileExplorer } from './FileExplorer';
-import { EditorTabs } from './EditorTabs';
-import { CodeEditor } from './CodeEditor';
+import { CodePane } from './CodePane';
 import { Terminal } from './Terminal';
 import { AITrainingPanel } from './AITrainingPanel';
 import { AgentPublishPanel } from './AgentPublishPanel';
@@ -732,9 +731,26 @@ export default defineConfig({
               />
             </div>
           ) : modality === 'llm' ? (
-            <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-              <LlmStudioPanel projectId={project.id} onGoToTab={setRightTab} />
-            </div>
+            activeFile ? (
+              <CodePane
+                openFiles={openFiles}
+                activeFile={activeFile}
+                fileContents={fileContents}
+                onTabSelect={setActiveFile}
+                onTabClose={closeTab}
+                onChange={handleEditorChange}
+                ydoc={ydoc}
+              />
+            ) : (
+              <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+                <LlmStudioPanel
+                  projectId={project.id}
+                  files={files}
+                  onGoToTab={setRightTab}
+                  onOpenFile={openFile}
+                />
+              </div>
+            )
           ) : (
           <>
           {/* Preview/Code toggle */}
@@ -773,21 +789,15 @@ export default defineConfig({
 
             {/* Code Editor */}
             <div style={{ position: 'absolute', inset: 0, visibility: centerView === 'code' ? 'visible' : 'hidden', pointerEvents: centerView === 'code' ? 'auto' : 'none', display: 'flex', flexDirection: 'column' }}>
-              <EditorTabs
+              <CodePane
                 openFiles={openFiles}
                 activeFile={activeFile}
+                fileContents={fileContents}
                 onTabSelect={setActiveFile}
                 onTabClose={closeTab}
+                onChange={handleEditorChange}
+                ydoc={ydoc}
               />
-              <div style={{ flex: 1, overflow: 'hidden' }}>
-                <CodeEditor
-                  key={activeFile ?? 'none'}
-                  filePath={activeFile}
-                  content={activeFile ? (fileContents[activeFile] ?? '') : ''}
-                  onChange={handleEditorChange}
-                  ydoc={ydoc}
-                />
-              </div>
             </div>
           </div>
 

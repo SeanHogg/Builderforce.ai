@@ -171,4 +171,30 @@ describe('buildTree', () => {
     const tree = buildTree([file('index.ts')]);
     expect(tree[0].children).toBeUndefined();
   });
+
+  // Regression: a stray leading/trailing/double slash must not create a
+  // blank-named node (was rendering as an empty row in the Files panel for
+  // Brain-written dataset files).
+  it('never produces a blank-named node from messy paths', () => {
+    const tree = buildTree([
+      file('/leading.json'),
+      file('dir//double.jsonl'),
+      file('trailing/'),
+    ]);
+    const names: string[] = [];
+    const walk = (nodes: ReturnType<typeof buildTree>) => {
+      for (const n of nodes) {
+        names.push(n.name);
+        if (n.children) walk(n.children);
+      }
+    };
+    walk(tree);
+    expect(names.every((n) => n.length > 0)).toBe(true);
+    expect(names).toContain('leading.json');
+    expect(names).toContain('double.jsonl');
+  });
+
+  it('drops a fully-empty path instead of creating a blank node', () => {
+    expect(buildTree([file('')])).toEqual([]);
+  });
 });
