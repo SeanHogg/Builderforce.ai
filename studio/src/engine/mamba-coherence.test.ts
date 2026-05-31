@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  anchorWalkLatent,
   blendNoise,
   scaleLatent,
   shiftLatent,
@@ -97,6 +98,58 @@ describe('blendNoise (latent-walk continuity primitive)', () => {
     expect(() => blendNoise(new Float32Array(10), new Float32Array(20), 0.5)).toThrow(
       /length mismatch/,
     );
+  });
+});
+
+describe('anchorWalkLatent (smooth-motion trajectory primitive)', () => {
+  // Deterministic, well-separated endpoint noises so the arc is non-degenerate.
+  const N = 64;
+  function ramp(scale: number, phase: number): Float32Array {
+    const a = new Float32Array(N);
+    for (let i = 0; i < N; i++) a[i] = Math.sin((i + phase) * scale);
+    return a;
+  }
+  const anchor = ramp(0.10, 0);
+  const walkStart = ramp(0.30, 1);
+  const walkEnd = ramp(0.07, 9);
+
+  function dist(a: Float32Array, b: Float32Array): number {
+    let s = 0;
+    for (let i = 0; i < a.length; i++) s += (a[i] - b[i]) * (a[i] - b[i]);
+    return Math.sqrt(s);
+  }
+
+  // THE invariant this whole change exists to deliver: consecutive frames must
+  // be CLOSER to each other than far-apart frames. The pre-fix i.i.d.-per-frame
+  // path failed this (frame k↔k+1 was as far as k↔k+10), which read as flicker.
+  it('consecutive frames are nearer than distant frames (incremental motion)', () => {
+    const total = 16;
+    const f = (i: number) => anchorWalkLatent(anchor, walkStart, walkEnd, i, total, 0.15);
+    const adjacent = dist(f(7), f(8));
+    const distant = dist(f(0), f(15));
+    expect(adjacent).toBeLessThan(distant);
+    // And the very next frame is a small step, not a random jump near the full span.
+    expect(adjacent).toBeLessThan(distant / 3);
+  });
+
+  it('step size shrinks as frame count grows (more frames = smoother)', () => {
+    const stepAt = (total: number) =>
+      dist(
+        anchorWalkLatent(anchor, walkStart, walkEnd, 0, total, 0.15),
+        anchorWalkLatent(anchor, walkStart, walkEnd, 1, total, 0.15),
+      );
+    expect(stepAt(32)).toBeLessThan(stepAt(8));
+  });
+
+  it('motionAmount = 0 collapses to the pure anchor (no motion)', () => {
+    const out = anchorWalkLatent(anchor, walkStart, walkEnd, 5, 16, 0);
+    expect(Array.from(out)).toEqual(Array.from(anchor));
+  });
+
+  it('single-frame clip is well-defined (t=0, no divide-by-zero)', () => {
+    const out = anchorWalkLatent(anchor, walkStart, walkEnd, 0, 1, 0.15);
+    expect(out.length).toBe(N);
+    expect(out.every((v) => Number.isFinite(v))).toBe(true);
   });
 });
 

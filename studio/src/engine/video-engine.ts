@@ -39,9 +39,9 @@ import { probeDevice } from './device-router';
 import { DiffusionEngine, MODEL_REGISTRY, reportProgress } from './diffusion-engine';
 import {
   advanceState,
+  anchorWalkLatent,
   applyToLatent,
   applyToPrompt,
-  blendNoise,
   emptyState,
   scaleLatent,
   shiftLatent,
@@ -203,7 +203,9 @@ export class VideoEngine {
     // whole clip uniformly.
     let refined: ProducedClip | null = null;
     if (this.opts.refinementModel && this.opts.refinementModel !== this.opts.model) {
-      refined = await this.refinementPass(clip.latents, {
+      // refinementPass owns the draft bitmaps' lifecycle (closes the ones it
+      // replaces, reuses the motion-tweens it carries through).
+      refined = await this.refinementPass(clip, {
         resolvedPrompt,
         seed,
         width,
@@ -213,11 +215,6 @@ export class VideoEngine {
         onFrame: args.onFrame,
         signal: args.signal,
       });
-      // Close the draft bitmaps now that we have refined replacements — they're
-      // GPU-backed handles, not cheap.
-      for (const bm of clip.frames) {
-        try { bm.close(); } catch { /* already closed */ }
-      }
     }
 
     const finalFrames = refined?.frames ?? clip.frames;
@@ -268,7 +265,7 @@ export class VideoEngine {
     const { storyboard } = args;
     const allFrames: ImageBitmap[] = [];
     const allMuxFrames: MuxFrame[] = [];
-    let allLatents: Float32Array[] = [];
+    let allLatents: (Float32Array | null)[] = [];
     const validations: ShotValidation[] = [];
     const maxRetries = args.validate ? Math.max(0, Math.floor(args.maxValidationRetries ?? 1)) : 0;
     let globalIdx = 0;
@@ -326,19 +323,21 @@ export class VideoEngine {
     let finalFrames = allFrames;
     let finalMuxFrames = allMuxFrames;
     if (this.opts.refinementModel && this.opts.refinementModel !== this.opts.model) {
-      const refined = await this.refinementPass(allLatents, {
-        resolvedPrompt: storyboard.treatment,
-        seed: seedBase,
-        width,
-        height,
-        refinementStrength: clamp01(DEFAULT_REFINEMENT_STRENGTH),
-        onProgress,
-        onFrame: args.onFrame,
-        signal: args.signal,
-      });
-      for (const bm of allFrames) {
-        try { bm.close(); } catch { /* already closed */ }
-      }
+      // refinementPass owns the draft bitmaps' lifecycle (closes replaced ones,
+      // carries motion-tweens through). One pass over the whole concatenated clip.
+      const refined = await this.refinementPass(
+        { frames: allFrames, muxFrames: allMuxFrames, latents: allLatents },
+        {
+          resolvedPrompt: storyboard.treatment,
+          seed: seedBase,
+          width,
+          height,
+          refinementStrength: clamp01(DEFAULT_REFINEMENT_STRENGTH),
+          onProgress,
+          onFrame: args.onFrame,
+          signal: args.signal,
+        },
+      );
       finalFrames = refined.frames;
       finalMuxFrames = refined.muxFrames;
       allLatents = refined.latents;
@@ -509,11 +508,17 @@ export class VideoEngine {
     const latentH = height / 8;
     const latentW = width / 8;
 
-    // One anchor latent for the whole clip; each keyframe blends fresh noise
-    // into it via blendNoise(). Sampling i.i.d. noise per frame produced
-    // visually unrelated stills (diffusion is dominated by initial noise). The
-    // anchor locks colors/composition; motionAmount controls per-frame drift.
+    // One anchor latent for the whole clip locks colors/composition; the
+    // per-frame drift walks a SMOOTH great-circle arc between two fixed endpoint
+    // noises (walkStart → walkEnd) so consecutive frames are adjacent. Sampling
+    // i.i.d. noise per frame produced visually unrelated stills (diffusion is
+    // dominated by initial noise) — and even blended with the anchor it jittered
+    // because each frame drifted in a random direction. anchorWalkLatent() makes
+    // the drift monotonic so the sequence reads as incremental motion, not
+    // flicker. motionAmount scales how far each step pulls from the anchor.
     const anchorLatent = this.diffusion.sampleInitialLatent(seed);
+    const walkStart = this.diffusion.sampleInitialLatent(seed + 1);
+    const walkEnd = this.diffusion.sampleInitialLatent(seed + 2);
 
     const keyframeIndices = planKeyframeIndices(frameCount, interpolationFactor);
     let prevLatent: Float32Array | null = null;
@@ -563,8 +568,7 @@ export class VideoEngine {
         frameTimesteps = truncated.length > 0 ? truncated : [timesteps[timesteps.length - 1]];
         latent = this.diffusion.addNoiseToLatent(shifted, frameTimesteps[0], seed + frameIdx);
       } else {
-        const frameNoise = this.diffusion.sampleInitialLatent(seed + 1 + frameIdx);
-        latent = blendNoise(anchorLatent, frameNoise, motionAmount);
+        latent = anchorWalkLatent(anchorLatent, walkStart, walkEnd, frameIdx, frameCount, motionAmount);
         frameTimesteps = timesteps;
       }
       // Gate via the shared helper so the rule has one source of truth and is
@@ -616,7 +620,7 @@ export class VideoEngine {
     const slots = buildInterpolatedSequence(keyframes);
     const frames: ImageBitmap[] = new Array(frameCount);
     const muxFrames: MuxFrame[] = new Array(frameCount);
-    const latents: Float32Array[] = new Array(frameCount);
+    const latents: (Float32Array | null)[] = new Array(frameCount);
     const useMotion = interpolationBackend === 'motion' && keyframes.length > 1;
     // Lazily-estimated motion field per keyframe gap (keyed by left keyframe
     // array index), so each gap's flow is computed once and shared by its tweens.
@@ -634,7 +638,6 @@ export class VideoEngine {
         continue;
       }
 
-      latents[slot.outputIndex] = slot.latent!;
       let pixels: Float32Array;
       if (useMotion && leftKi + 1 < keyframes.length) {
         const k0 = keyframes[leftKi];
@@ -660,9 +663,13 @@ export class VideoEngine {
           t,
           field,
         );
+        // No true latent — the refinement pass carries this warped frame through
+        // unchanged rather than re-rendering it from a stand-in latent.
+        latents[slot.outputIndex] = null;
       } else {
         reportProgress(`${label} ${slot.outputIndex + 1}/${frameCount}: interpolating…`, onProgress);
         pixels = await this.diffusion.decodeLatent(slot.latent!);
+        latents[slot.outputIndex] = slot.latent!;
       }
       const rgba = pixelsToRgba(pixels, width, height);
       const bitmap = await createImageBitmap(
@@ -677,14 +684,20 @@ export class VideoEngine {
   }
 
   /**
-   * Second pass over an already-produced clip's latents through a different
-   * (usually larger) model. Disposes the draft engine, loads the refinement
-   * engine, re-noises each latent to a partial timestep and finishes the
-   * denoise. Sequential load → VRAM stays at max(draft, refinement). Only safe
-   * across SD1.5-family models (shared VAE latent space).
+   * Second pass over an already-produced clip through a different (usually
+   * larger) model. Disposes the draft engine, loads the refinement engine, and
+   * for each frame WITH a true latent re-noises it to a partial timestep and
+   * finishes the denoise. Frames with a `null` latent (motion-backend tweens)
+   * are carried through UNCHANGED — refining them from a stand-in latent would
+   * discard their optical-flow warp. Sequential load → VRAM stays at
+   * max(draft, refinement). Only safe across SD1.5-family models.
+   *
+   * Owns the lifecycle of the draft clip's bitmaps: refined frames replace and
+   * CLOSE their drafts; carried-through frames are reused (not closed). The
+   * caller must NOT close the draft clip afterwards.
    */
   private async refinementPass(
-    latents: Float32Array[],
+    clip: ProducedClip,
     opts: {
       resolvedPrompt: string;
       seed: number;
@@ -697,6 +710,7 @@ export class VideoEngine {
     },
   ): Promise<ProducedClip> {
     const { onProgress } = opts;
+    const { latents } = clip;
     reportProgress(
       `Refinement pass: swapping ${this.opts.model} → ${this.opts.refinementModel} (sequential, no VRAM cost)…`,
       onProgress,
@@ -724,14 +738,23 @@ export class VideoEngine {
         ? refinedTimesteps.slice(skipCount)
         : [refinedTimesteps[refinedTimesteps.length - 1]];
 
-    const frames: ImageBitmap[] = [];
-    const muxFrames: MuxFrame[] = [];
-    const outLatents: Float32Array[] = [];
+    const frames: ImageBitmap[] = new Array(latents.length);
+    const muxFrames: MuxFrame[] = new Array(latents.length);
+    const outLatents: (Float32Array | null)[] = new Array(latents.length);
+    let refinedCount = 0;
     for (let i = 0; i < latents.length; i++) {
       if (opts.signal?.aborted) throw new DOMException('Generation aborted', 'AbortError');
+      const latent = latents[i];
+      if (latent === null) {
+        // Motion-warp tween — carry the draft frame through untouched.
+        frames[i] = clip.frames[i];
+        muxFrames[i] = clip.muxFrames[i];
+        outLatents[i] = null;
+        continue;
+      }
       reportProgress(`Refinement pass: frame ${i + 1}/${latents.length}…`, onProgress);
-      const noised = this.diffusion.addNoiseToLatent(latents[i], partialTimesteps[0], opts.seed + i);
-      const { pixels, latent } = await this.diffusion.denoise({
+      const noised = this.diffusion.addNoiseToLatent(latent, partialTimesteps[0], opts.seed + i);
+      const { pixels, latent: refinedLatent } = await this.diffusion.denoise({
         latent: noised,
         condEmbedding: refinedCondEmbedding,
         uncondEmbedding: null,
@@ -743,12 +766,15 @@ export class VideoEngine {
       const bitmap = await createImageBitmap(
         new ImageData(rgba as Uint8ClampedArray<ArrayBuffer>, opts.width, opts.height),
       );
-      frames.push(bitmap);
-      muxFrames.push({ rgba });
-      outLatents.push(latent);
+      // Replace + close the draft bitmap this refined frame supersedes.
+      try { clip.frames[i].close(); } catch { /* already closed */ }
+      frames[i] = bitmap;
+      muxFrames[i] = { rgba };
+      outLatents[i] = refinedLatent;
+      refinedCount++;
       opts.onFrame?.(i, bitmap, this.mambaState);
     }
-    reportProgress(`Refinement pass complete (${latents.length} frames refined).`, onProgress);
+    reportProgress(`Refinement pass complete (${refinedCount}/${latents.length} frames refined).`, onProgress);
     return { frames, muxFrames, latents: outLatents };
   }
 
@@ -879,11 +905,14 @@ interface ClipSpec {
 }
 
 /** Output of `produceClip` / `refinementPass` — frames in output order plus
- *  each frame's clean latent (consumed by the refinement pass). */
+ *  each frame's clean latent (consumed by the refinement pass). A `null` latent
+ *  marks a frame with no true latent (a MOTION-backend tween, whose pixels are
+ *  an optical-flow warp, not a decode): the refinement pass carries such frames
+ *  through unchanged rather than re-rendering them from a stand-in latent. */
 interface ProducedClip {
   frames: ImageBitmap[];
   muxFrames: MuxFrame[];
-  latents: Float32Array[];
+  latents: (Float32Array | null)[];
 }
 
 function clamp01(x: number): number {

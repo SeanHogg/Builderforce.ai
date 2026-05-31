@@ -17,6 +17,7 @@
  */
 
 import type { CoherenceMode, MambaStateSnapshot } from '../types';
+import { slerp } from './frame-interpolator';
 
 export interface CoherenceContext {
   mode: CoherenceMode;
@@ -116,6 +117,41 @@ export function blendNoise(anchor: Float32Array, frame: Float32Array, alpha: num
     out[i] = a * anchor[i] + b * frame[i];
   }
   return out;
+}
+
+/**
+ * Per-frame initial latent for the anchor-walk path, sampled along a SMOOTH
+ * trajectory so consecutive frames are adjacent (incremental motion) instead of
+ * jittering randomly around the anchor.
+ *
+ * The bug this fixes: the original path drew i.i.d. noise per frame
+ * (`sampleInitialLatent(seed + frameIdx)`) and blended each independently with
+ * the anchor. Every frame then sat the same `motionAmount` distance from the
+ * anchor but in a RANDOM direction, so frame k and k+1 were no closer than frame
+ * k and k+10 — the sequence read as flicker, not motion (the "render more frames
+ * that are incremental" feedback).
+ *
+ * Here the drift follows a single great-circle arc between two fixed endpoint
+ * noises (`walkStart` → `walkEnd`): frame at `t = frameIdx / (frameCount - 1)`
+ * slerps along that arc, so the per-frame noise advances monotonically and
+ * neighbouring frames differ by ≈ arc/frameCount. slerp preserves unit norm, so
+ * `blendNoise`'s variance contract still holds. Raising the frame count makes
+ * the steps finer (smoother) rather than denser-but-still-random.
+ *
+ * `motionAmount = 0` collapses to the pure anchor (no motion); higher values let
+ * the walk pull the composition further from the anchor each step.
+ */
+export function anchorWalkLatent(
+  anchor: Float32Array,
+  walkStart: Float32Array,
+  walkEnd: Float32Array,
+  frameIdx: number,
+  frameCount: number,
+  motionAmount: number,
+): Float32Array {
+  const t = frameCount > 1 ? frameIdx / (frameCount - 1) : 0;
+  const frameNoise = slerp(walkStart, walkEnd, t);
+  return blendNoise(anchor, frameNoise, motionAmount);
 }
 
 /**

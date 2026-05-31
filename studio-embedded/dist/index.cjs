@@ -617,6 +617,11 @@ function QualityTierPicker({ value, onChange, disabled }) {
 // src/components/StoryboardEditor.tsx
 var import_builderforce_studio2 = require("@seanhogg/builderforce-studio");
 var import_jsx_runtime7 = require("react/jsx-runtime");
+function uniqueId(prefix, taken) {
+  let n = 1;
+  while (taken.has(`${prefix}-${n}`)) n++;
+  return `${prefix}-${n}`;
+}
 function StoryboardEditor({
   storyboard,
   onChange,
@@ -625,17 +630,65 @@ function StoryboardEditor({
   validations,
   busy
 }) {
-  const totalFrames = storyboard.shots.reduce((a, s) => a + s.durationFrames, 0);
+  const { shots, characters } = storyboard;
+  const totalFrames = shots.reduce((a, s) => a + s.durationFrames, 0);
   const validationByShot = new Map((validations ?? []).map((v) => [v.shotId, v.validation]));
-  const updateShot = (idx, patch) => {
-    const shots = storyboard.shots.map((s, i) => i === idx ? { ...s, ...patch } : s);
-    onChange({ ...storyboard, shots });
+  const updateShot = (idx, patch) => onChange({ ...storyboard, shots: shots.map((s, i) => i === idx ? { ...s, ...patch } : s) });
+  const addShot = () => {
+    const id = uniqueId("shot", new Set(shots.map((s) => s.id)));
+    const newShot = {
+      id,
+      prompt: "",
+      characterIds: [],
+      camera: "static",
+      action: "",
+      durationFrames: 4
+    };
+    onChange({ ...storyboard, shots: [...shots, newShot] });
+  };
+  const removeShot = (idx) => onChange({ ...storyboard, shots: shots.filter((_, i) => i !== idx) });
+  const moveShot = (idx, dir) => {
+    const j = idx + dir;
+    if (j < 0 || j >= shots.length) return;
+    const next = shots.slice();
+    [next[idx], next[j]] = [next[j], next[idx]];
+    onChange({ ...storyboard, shots: next });
+  };
+  const toggleShotCharacter = (idx, charId) => {
+    const has = shots[idx].characterIds.includes(charId);
+    const characterIds = has ? shots[idx].characterIds.filter((c) => c !== charId) : [...shots[idx].characterIds, charId];
+    updateShot(idx, { characterIds });
+  };
+  const updateCharacter = (idx, patch) => onChange({
+    ...storyboard,
+    characters: characters.map((c, i) => i === idx ? { ...c, ...patch } : c)
+  });
+  const addCharacter = () => {
+    const id = uniqueId("char", new Set(characters.map((c) => c.id)));
+    onChange({
+      ...storyboard,
+      characters: [...characters, { id, name: "New character", appearance: "" }]
+    });
+  };
+  const removeCharacter = (idx) => {
+    const removedId = characters[idx].id;
+    onChange({
+      ...storyboard,
+      characters: characters.filter((_, i) => i !== idx),
+      // Drop the removed character from every shot's cast so no shot references
+      // a deleted id (the engine would otherwise just ignore it, but the UI
+      // should stay consistent).
+      shots: shots.map((s) => ({
+        ...s,
+        characterIds: s.characterIds.filter((cid) => cid !== removedId)
+      }))
+    });
   };
   return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bfs-field", style: { border: "1px solid var(--bfs-border)", borderRadius: 8, padding: 12 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { style: { fontSize: "0.9rem" }, children: "Storyboard" }),
       /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { className: "bfs-hint", style: { margin: 0 }, children: [
-        storyboard.shots.length,
+        shots.length,
         " shots \xB7 ",
         totalFrames,
         " frames"
@@ -646,12 +699,60 @@ function StoryboardEditor({
       " ",
       storyboard.treatment
     ] }),
-    storyboard.characters.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: "bfs-hint", style: { marginTop: 0 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: "Cast:" }),
-      " ",
-      storyboard.characters.map((c) => `${c.name} (${c.appearance})`).join(" \xB7 ")
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { style: { marginTop: 8 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bfs-label", children: "Cast" }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+          "button",
+          {
+            type: "button",
+            className: "bfs-btn bfs-btn-secondary",
+            onClick: addCharacter,
+            disabled: busy,
+            style: { fontSize: "0.75rem", padding: "2px 8px" },
+            children: "+ Character"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }, children: characters.map((c, i) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bfs-row", style: { alignItems: "center" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+          "input",
+          {
+            className: "bfs-input",
+            style: { flex: "0 0 30%", fontSize: "0.8rem" },
+            value: c.name,
+            onChange: (e) => updateCharacter(i, { name: e.target.value }),
+            disabled: busy,
+            "aria-label": `Character ${i + 1} name`
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+          "input",
+          {
+            className: "bfs-input",
+            style: { flex: 1, fontSize: "0.8rem" },
+            placeholder: "locked appearance (age, build, hair, wardrobe, palette)",
+            value: c.appearance,
+            onChange: (e) => updateCharacter(i, { appearance: e.target.value }),
+            disabled: busy,
+            "aria-label": `Character ${i + 1} appearance`
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+          "button",
+          {
+            type: "button",
+            className: "bfs-btn bfs-btn-secondary",
+            onClick: () => removeCharacter(i),
+            disabled: busy,
+            title: "Remove character",
+            style: { fontSize: "0.75rem", padding: "2px 8px" },
+            children: "\u2715"
+          }
+        )
+      ] }, c.id)) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }, children: storyboard.shots.map((shot, idx) => {
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }, children: shots.map((shot, idx) => {
       const verdict = validationByShot.get(shot.id);
       return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
         "div",
@@ -670,7 +771,11 @@ function StoryboardEditor({
                 "Shot ",
                 idx + 1
               ] }),
-              verdict && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(ValidationBadge, { ok: verdict.ok, score: verdict.score })
+              verdict && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(ValidationBadge, { ok: verdict.ok, score: verdict.score }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { style: { flex: 1 } }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", className: "bfs-btn bfs-btn-secondary", onClick: () => moveShot(idx, -1), disabled: busy || idx === 0, title: "Move up", style: { fontSize: "0.75rem", padding: "2px 6px" }, children: "\u2191" }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", className: "bfs-btn bfs-btn-secondary", onClick: () => moveShot(idx, 1), disabled: busy || idx === shots.length - 1, title: "Move down", style: { fontSize: "0.75rem", padding: "2px 6px" }, children: "\u2193" }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", className: "bfs-btn bfs-btn-secondary", onClick: () => removeShot(idx), disabled: busy, title: "Delete shot", style: { fontSize: "0.75rem", padding: "2px 6px" }, children: "\u2715" })
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
               "textarea",
@@ -680,7 +785,8 @@ function StoryboardEditor({
                 value: shot.prompt,
                 onChange: (e) => updateShot(idx, { prompt: e.target.value }),
                 disabled: busy,
-                style: { fontSize: "0.8rem" }
+                style: { fontSize: "0.8rem" },
+                "aria-label": `Shot ${idx + 1} prompt`
               }
             ),
             /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bfs-row", children: [
@@ -715,15 +821,47 @@ function StoryboardEditor({
                 )
               ] })
             ] }),
+            characters.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 }, children: characters.map((c) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 4, fontSize: "0.75rem", cursor: "pointer" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+                "input",
+                {
+                  type: "checkbox",
+                  checked: shot.characterIds.includes(c.id),
+                  onChange: () => toggleShotCharacter(idx, c.id),
+                  disabled: busy
+                }
+              ),
+              c.name
+            ] }, c.id)) }),
             verdict && verdict.issues.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "bfs-hint", style: { margin: 0 }, children: verdict.issues.map((i) => `${i.kind}: ${i.detail}`).join(" \xB7 ") })
           ]
         },
         shot.id
       );
     }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+      "button",
+      {
+        type: "button",
+        className: "bfs-btn bfs-btn-secondary",
+        onClick: addShot,
+        disabled: busy,
+        style: { marginTop: 8, fontSize: "0.8rem" },
+        children: "+ Add shot"
+      }
+    ),
     /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bfs-actions", style: { marginTop: 10 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", className: "bfs-btn bfs-btn-secondary", onClick: onReplan, disabled: busy, children: "Re-plan" }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", className: "bfs-btn bfs-btn-primary", onClick: onRender, disabled: busy, children: "Render storyboard" })
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+        "button",
+        {
+          type: "button",
+          className: "bfs-btn bfs-btn-primary",
+          onClick: onRender,
+          disabled: busy || shots.length === 0,
+          children: "Render storyboard"
+        }
+      )
     ] })
   ] });
 }

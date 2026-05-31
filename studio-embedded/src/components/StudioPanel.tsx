@@ -17,6 +17,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   VideoEngine,
   planScene,
+  storyboardFrameCount,
   type CoherenceMode,
   type DiffusionModelId,
   type GenerateResult,
@@ -995,7 +996,17 @@ export function StudioPanel({
             height={resolution}
             loading={
               isGenerating
-                ? { label: progressLabel || 'Initialising…', framesDone, framesTotal: frames }
+                ? {
+                    label: progressLabel || 'Initialising…',
+                    framesDone,
+                    // Cinematic mode renders the storyboard's total (sum of every
+                    // shot's durationFrames), NOT the single-clip `frames` input —
+                    // the engine emits one onFrame per storyboard frame, so a 50-
+                    // frame storyboard would otherwise read "28 / 16". Falls back
+                    // to `frames` for the single-clip path / pre-plan phase.
+                    framesTotal:
+                      cinematic && storyboard ? storyboardFrameCount(storyboard) : frames,
+                  }
                 : null
             }
           />
