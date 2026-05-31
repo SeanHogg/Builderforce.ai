@@ -52,6 +52,7 @@ export {
   composeShotPrompt,
   cameraMoveToMotion,
   normaliseShotBudget,
+  storyboardFrameCount,
   CAMERA_MOVES,
 } from './engine/scene-planner';
 export { validateFrame } from './engine/frame-validator';

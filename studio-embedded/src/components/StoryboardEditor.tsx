@@ -2,19 +2,23 @@
  * StoryboardEditor — the review/edit surface for the Director's plan.
  *
  * Cinematic mode is a two-phase flow: PLAN (planScene → Storyboard) then RENDER
- * (generateStoryboard). This component is phase 1's UI: it shows the treatment
- * and character bible, and an EDITABLE shot list (prompt, camera, action,
- * frames) so the user can adjust the director's plan before committing GPU time
- * to render it. After render, each shot carries a validation badge (the VLM's
- * verdict on that shot's keyframes).
+ * (generateStoryboard). This component is phase 1's UI. It exposes FULL editing
+ * of the plan before any GPU time is spent:
+ *   • character bible — edit name/appearance, add, remove (removal also drops the
+ *     character from every shot's cast).
+ *   • shots — edit prompt/camera/frames, toggle which characters appear, add a
+ *     shot, delete a shot, reorder (move up/down).
+ * After render, each shot carries a VLM validation badge.
  *
  * Owns all storyboard-editing logic (DRY): the consumer passes the storyboard +
- * an onChange and never reaches into individual shot fields.
+ * one onChange and never reaches into individual fields.
  */
 
 import {
   CAMERA_MOVES,
+  storyboardFrameCount,
   type CameraMove,
+  type CharacterBible,
   type PlannedShot,
   type ShotValidation,
   type Storyboard,
@@ -31,6 +35,14 @@ interface StoryboardEditorProps {
   busy?: boolean;
 }
 
+/** First `prefix-N` id not already used in `taken` — stable + collision-free
+ *  without needing Date.now()/random (keeps the component deterministic). */
+function uniqueId(prefix: string, taken: Set<string>): string {
+  let n = 1;
+  while (taken.has(`${prefix}-${n}`)) n++;
+  return `${prefix}-${n}`;
+}
+
 export function StoryboardEditor({
   storyboard,
   onChange,
@@ -39,12 +51,74 @@ export function StoryboardEditor({
   validations,
   busy,
 }: StoryboardEditorProps) {
-  const totalFrames = storyboard.shots.reduce((a, s) => a + s.durationFrames, 0);
+  const { shots, characters } = storyboard;
+  const totalFrames = storyboardFrameCount(storyboard);
   const validationByShot = new Map((validations ?? []).map((v) => [v.shotId, v.validation]));
 
-  const updateShot = (idx: number, patch: Partial<PlannedShot>) => {
-    const shots = storyboard.shots.map((s, i) => (i === idx ? { ...s, ...patch } : s));
-    onChange({ ...storyboard, shots });
+  // ── shot mutations ────────────────────────────────────────────────────────
+  const updateShot = (idx: number, patch: Partial<PlannedShot>) =>
+    onChange({ ...storyboard, shots: shots.map((s, i) => (i === idx ? { ...s, ...patch } : s)) });
+
+  const addShot = () => {
+    const id = uniqueId('shot', new Set(shots.map((s) => s.id)));
+    const newShot: PlannedShot = {
+      id,
+      prompt: '',
+      characterIds: [],
+      camera: 'static',
+      action: '',
+      durationFrames: 4,
+    };
+    onChange({ ...storyboard, shots: [...shots, newShot] });
+  };
+
+  const removeShot = (idx: number) =>
+    onChange({ ...storyboard, shots: shots.filter((_, i) => i !== idx) });
+
+  const moveShot = (idx: number, dir: -1 | 1) => {
+    const j = idx + dir;
+    if (j < 0 || j >= shots.length) return;
+    const next = shots.slice();
+    [next[idx], next[j]] = [next[j], next[idx]];
+    onChange({ ...storyboard, shots: next });
+  };
+
+  const toggleShotCharacter = (idx: number, charId: string) => {
+    const has = shots[idx].characterIds.includes(charId);
+    const characterIds = has
+      ? shots[idx].characterIds.filter((c) => c !== charId)
+      : [...shots[idx].characterIds, charId];
+    updateShot(idx, { characterIds });
+  };
+
+  // ── character bible mutations ─────────────────────────────────────────────
+  const updateCharacter = (idx: number, patch: Partial<CharacterBible>) =>
+    onChange({
+      ...storyboard,
+      characters: characters.map((c, i) => (i === idx ? { ...c, ...patch } : c)),
+    });
+
+  const addCharacter = () => {
+    const id = uniqueId('char', new Set(characters.map((c) => c.id)));
+    onChange({
+      ...storyboard,
+      characters: [...characters, { id, name: 'New character', appearance: '' }],
+    });
+  };
+
+  const removeCharacter = (idx: number) => {
+    const removedId = characters[idx].id;
+    onChange({
+      ...storyboard,
+      characters: characters.filter((_, i) => i !== idx),
+      // Drop the removed character from every shot's cast so no shot references
+      // a deleted id (the engine would otherwise just ignore it, but the UI
+      // should stay consistent).
+      shots: shots.map((s) => ({
+        ...s,
+        characterIds: s.characterIds.filter((cid) => cid !== removedId),
+      })),
+    });
   };
 
   return (
@@ -52,7 +126,7 @@ export function StoryboardEditor({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <strong style={{ fontSize: '0.9rem' }}>Storyboard</strong>
         <span className="bfs-hint" style={{ margin: 0 }}>
-          {storyboard.shots.length} shots · {totalFrames} frames
+          {shots.length} shots · {totalFrames} frames
         </span>
       </div>
 
@@ -60,15 +134,58 @@ export function StoryboardEditor({
         <strong>Treatment:</strong> {storyboard.treatment}
       </p>
 
-      {storyboard.characters.length > 0 && (
-        <p className="bfs-hint" style={{ marginTop: 0 }}>
-          <strong>Cast:</strong>{' '}
-          {storyboard.characters.map((c) => `${c.name} (${c.appearance})`).join(' · ')}
-        </p>
-      )}
+      {/* ── Character bible (editable) ── */}
+      <div style={{ marginTop: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span className="bfs-label">Cast</span>
+          <button
+            type="button"
+            className="bfs-btn bfs-btn-secondary"
+            onClick={addCharacter}
+            disabled={busy}
+            style={{ fontSize: '0.75rem', padding: '2px 8px' }}
+          >
+            + Character
+          </button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+          {characters.map((c, i) => (
+            <div key={c.id} className="bfs-row" style={{ alignItems: 'center' }}>
+              <input
+                className="bfs-input"
+                style={{ flex: '0 0 30%', fontSize: '0.8rem' }}
+                value={c.name}
+                onChange={(e) => updateCharacter(i, { name: e.target.value })}
+                disabled={busy}
+                aria-label={`Character ${i + 1} name`}
+              />
+              <input
+                className="bfs-input"
+                style={{ flex: 1, fontSize: '0.8rem' }}
+                placeholder="locked appearance (age, build, hair, wardrobe, palette)"
+                value={c.appearance}
+                onChange={(e) => updateCharacter(i, { appearance: e.target.value })}
+                disabled={busy}
+                aria-label={`Character ${i + 1} appearance`}
+              />
+              <button
+                type="button"
+                className="bfs-btn bfs-btn-secondary"
+                onClick={() => removeCharacter(i)}
+                disabled={busy}
+                title="Remove character"
+                style={{ fontSize: '0.75rem', padding: '2px 8px' }}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
-        {storyboard.shots.map((shot, idx) => {
+      {/* ── Shots (editable + reorderable) ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+        {shots.map((shot, idx) => {
           const verdict = validationByShot.get(shot.id);
           return (
             <div
@@ -85,6 +202,10 @@ export function StoryboardEditor({
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontWeight: 600, fontSize: '0.8rem' }}>Shot {idx + 1}</span>
                 {verdict && <ValidationBadge ok={verdict.ok} score={verdict.score} />}
+                <span style={{ flex: 1 }} />
+                <button type="button" className="bfs-btn bfs-btn-secondary" onClick={() => moveShot(idx, -1)} disabled={busy || idx === 0} title="Move up" style={{ fontSize: '0.75rem', padding: '2px 6px' }}>↑</button>
+                <button type="button" className="bfs-btn bfs-btn-secondary" onClick={() => moveShot(idx, 1)} disabled={busy || idx === shots.length - 1} title="Move down" style={{ fontSize: '0.75rem', padding: '2px 6px' }}>↓</button>
+                <button type="button" className="bfs-btn bfs-btn-secondary" onClick={() => removeShot(idx)} disabled={busy} title="Delete shot" style={{ fontSize: '0.75rem', padding: '2px 6px' }}>✕</button>
               </div>
 
               <textarea
@@ -94,6 +215,7 @@ export function StoryboardEditor({
                 onChange={(e) => updateShot(idx, { prompt: e.target.value })}
                 disabled={busy}
                 style={{ fontSize: '0.8rem' }}
+                aria-label={`Shot ${idx + 1} prompt`}
               />
 
               <div className="bfs-row">
@@ -130,6 +252,24 @@ export function StoryboardEditor({
                 </div>
               </div>
 
+              {/* Cast assignment — which characters appear in this shot. Their
+                  locked appearance is appended to the shot prompt at render. */}
+              {characters.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {characters.map((c) => (
+                    <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={shot.characterIds.includes(c.id)}
+                        onChange={() => toggleShotCharacter(idx, c.id)}
+                        disabled={busy}
+                      />
+                      {c.name}
+                    </label>
+                  ))}
+                </div>
+              )}
+
               {verdict && verdict.issues.length > 0 && (
                 <p className="bfs-hint" style={{ margin: 0 }}>
                   {verdict.issues.map((i) => `${i.kind}: ${i.detail}`).join(' · ')}
@@ -140,11 +280,26 @@ export function StoryboardEditor({
         })}
       </div>
 
+      <button
+        type="button"
+        className="bfs-btn bfs-btn-secondary"
+        onClick={addShot}
+        disabled={busy}
+        style={{ marginTop: 8, fontSize: '0.8rem' }}
+      >
+        + Add shot
+      </button>
+
       <div className="bfs-actions" style={{ marginTop: 10 }}>
         <button type="button" className="bfs-btn bfs-btn-secondary" onClick={onReplan} disabled={busy}>
           Re-plan
         </button>
-        <button type="button" className="bfs-btn bfs-btn-primary" onClick={onRender} disabled={busy}>
+        <button
+          type="button"
+          className="bfs-btn bfs-btn-primary"
+          onClick={onRender}
+          disabled={busy || shots.length === 0}
+        >
           Render storyboard
         </button>
       </div>

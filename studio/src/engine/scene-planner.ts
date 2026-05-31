@@ -243,6 +243,18 @@ export function composeShotPrompt(shot: PlannedShot, characters: CharacterBible[
   return `${shot.prompt}. ${appearances.join('. ')}`;
 }
 
+/**
+ * Total FINAL frame count a storyboard renders — the sum of every shot's
+ * `durationFrames`. Single source of truth for "how many frames will this
+ * storyboard produce", so the editor's "N shots · M frames" label and the
+ * progress bar's denominator can't drift from each other (or from the actual
+ * number of `onFrame` callbacks the engine emits). In cinematic mode this — NOT
+ * the single-clip `frames` input — is the real total.
+ */
+export function storyboardFrameCount(storyboard: Storyboard): number {
+  return storyboard.shots.reduce((sum, s) => sum + s.durationFrames, 0);
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Internals
 // ───────────────────────────────────────────────────────────────────────────

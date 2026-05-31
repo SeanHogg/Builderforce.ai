@@ -4,6 +4,7 @@ import {
   cameraMoveToMotion,
   composeShotPrompt,
   normaliseShotBudget,
+  storyboardFrameCount,
 } from './scene-planner';
 import type { BuilderforceClient } from '@seanhogg/builderforce-sdk';
 import type { CharacterBible, PlannedShot } from '../types';
