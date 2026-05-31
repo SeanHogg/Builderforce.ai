@@ -10,6 +10,7 @@ import {
   primaryKey,
   serial,
   varchar,
+  real,
   unique,
 } from 'drizzle-orm/pg-core';
 
@@ -1817,4 +1818,211 @@ export const dataSuppressionList = pgTable('data_suppression_list', {
   notes:           text('notes'),
   createdAt:       timestamp('created_at').notNull().defaultNow(),
   updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Product Management net-new features (doc 02; migration 0059). Segment-scoped.
+// ---------------------------------------------------------------------------
+
+export const mvpScenarios = pgTable('mvp_scenarios', {
+  id:                 uuid('id').primaryKey().defaultRandom(),
+  tenantId:           integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:          uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  name:               varchar('name', { length: 255 }).notNull(),
+  description:        text('description'),
+  pricingModel:       varchar('pricing_model', { length: 40 }),
+  targetRevenue:      real('target_revenue'),
+  timelineConstraint: integer('timeline_constraint'),
+  budgetConstraint:   real('budget_constraint'),
+  teamSize:           integer('team_size'),
+  status:             varchar('status', { length: 20 }).notNull().default('draft'),
+  notes:              text('notes'),
+  createdAt:          timestamp('created_at').notNull().defaultNow(),
+  updatedAt:          timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const validationResults = pgTable('validation_results', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  hypothesis:     text('hypothesis').notNull(),
+  validationType: varchar('validation_type', { length: 20 }),
+  method:         varchar('method', { length: 255 }),
+  result:         varchar('result', { length: 20 }).notNull().default('in_progress'),
+  metrics:        text('metrics'),
+  learnings:      text('learnings'),
+  nextSteps:      text('next_steps'),
+  notes:          text('notes'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const roadmapItems = pgTable('roadmap_items', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  title:      varchar('title', { length: 255 }).notNull(),
+  horizon:    varchar('horizon', { length: 10 }).notNull().default('now'),
+  status:     varchar('status', { length: 20 }).notNull().default('planned'),
+  theme:      varchar('theme', { length: 120 }),
+  targetDate: timestamp('target_date'),
+  priority:   varchar('priority', { length: 20 }),
+  notes:      text('notes'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const productReleases = pgTable('product_releases', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  name:        varchar('name', { length: 255 }).notNull(),
+  version:     varchar('version', { length: 50 }),
+  releaseDate: timestamp('release_date'),
+  status:      varchar('status', { length: 20 }).notNull().default('planned'),
+  notes:       text('notes'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const changelogEntries = pgTable('changelog_entries', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  version:    varchar('version', { length: 50 }).notNull(),
+  title:      varchar('title', { length: 255 }),
+  body:       text('body'),
+  releasedAt: timestamp('released_at'),
+  status:     varchar('status', { length: 20 }).notNull().default('draft'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const featureFlags = pgTable('feature_flags', {
+  id:                uuid('id').primaryKey().defaultRandom(),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:         uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  key:               varchar('key', { length: 120 }).notNull(),
+  name:              varchar('name', { length: 255 }),
+  status:            varchar('status', { length: 20 }).notNull().default('disabled'),
+  rolloutPercentage: integer('rollout_percentage'),
+  description:       text('description'),
+  notes:             text('notes'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const businessValueConfigs = pgTable('business_value_configs', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:        uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  name:             varchar('name', { length: 255 }).notNull(),
+  valueType:        varchar('value_type', { length: 20 }).notNull().default('REVENUE'),
+  displayMode:      varchar('display_mode', { length: 20 }).notNull().default('REVENUE'),
+  rewardMultiplier: real('reward_multiplier').notNull().default(1),
+  isActive:         boolean('is_active').notNull().default(true),
+  notes:            text('notes'),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const featureRoi = pgTable('feature_roi', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  featureName: varchar('feature_name', { length: 255 }).notNull(),
+  featureType: varchar('feature_type', { length: 20 }),
+  category:    varchar('category', { length: 120 }),
+  status:      varchar('status', { length: 20 }).notNull().default('TRACKING'),
+  metrics:     text('metrics'),
+  notes:       text('notes'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Agile Survival net-new CRUD features (doc 03; migration 0060). Segment-scoped.
+// ---------------------------------------------------------------------------
+
+export const sprints = pgTable('sprints', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  name:         varchar('name', { length: 255 }).notNull(),
+  goal:         text('goal'),
+  startDate:    timestamp('start_date'),
+  endDate:      timestamp('end_date'),
+  capacity:     integer('capacity'),
+  status:       varchar('status', { length: 20 }).notNull().default('planning'),
+  runwayBudget: real('runway_budget'),
+  actualBurn:   real('actual_burn'),
+  notes:        text('notes'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const teamVelocity = pgTable('team_velocity', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:       uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  period:          varchar('period', { length: 120 }).notNull(),
+  teamId:          varchar('team_id', { length: 64 }),
+  periodStart:     timestamp('period_start'),
+  periodEnd:       timestamp('period_end'),
+  committedPoints: integer('committed_points'),
+  completedPoints: integer('completed_points'),
+  velocityScore:   real('velocity_score'),
+  trend:           varchar('trend', { length: 20 }),
+  notes:           text('notes'),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const capacityPlanning = pgTable('capacity_planning', {
+  id:                uuid('id').primaryKey().defaultRandom(),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:         uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  planningPeriod:    varchar('planning_period', { length: 120 }).notNull(),
+  teamId:            varchar('team_id', { length: 64 }),
+  totalCapacity:     real('total_capacity'),
+  allocatedCapacity: real('allocated_capacity'),
+  availableCapacity: real('available_capacity'),
+  utilizationRate:   real('utilization_rate'),
+  teamSize:          integer('team_size'),
+  notes:             text('notes'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const costCalculations = pgTable('cost_calculations', {
+  id:                 uuid('id').primaryKey().defaultRandom(),
+  tenantId:           integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:          uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  label:              varchar('label', { length: 255 }).notNull(),
+  calculationType:    varchar('calculation_type', { length: 40 }),
+  laborCost:          real('labor_cost'),
+  overheadCost:       real('overhead_cost'),
+  toolingCost:        real('tooling_cost'),
+  infrastructureCost: real('infrastructure_cost'),
+  totalCost:          real('total_cost'),
+  runwayImpactDays:   integer('runway_impact_days'),
+  notes:              text('notes'),
+  createdAt:          timestamp('created_at').notNull().defaultNow(),
+  updatedAt:          timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const featureScores = pgTable('feature_scores', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  name:       varchar('name', { length: 255 }).notNull(),
+  reach:      real('reach'),
+  impact:     real('impact'),
+  confidence: real('confidence'),
+  effort:     real('effort'),
+  score:      real('score'),
+  status:     varchar('status', { length: 20 }).notNull().default('draft'),
+  notes:      text('notes'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 });

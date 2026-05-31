@@ -1,14 +1,16 @@
 import type { TrackerSurfaceProps } from './TrackerSurface';
 
 /**
- * The field schema for every generic governance tracker — one entry drives the
- * whole CRUD surface (list + form). Field whitelists mirror the backend
- * (governanceRoutes TRACKERS); keep the two in sync.
+ * The field schema for every generic tracker surface (governance + product).
+ * One entry drives the whole CRUD surface (list + form). `apiBase` is the full
+ * route; field whitelists mirror the backend (governanceRoutes / productRoutes
+ * TRACKERS) — keep the two in sync. Keyed by embed view.
  */
 export const TRACKER_CONFIGS: Record<string, TrackerSurfaceProps> = {
+  // ── Governance & Security ──────────────────────────────────────────────────
   vendors: {
     title: 'Vendor / Subprocessor Register',
-    path: '/vendors',
+    apiBase: '/api/governance/vendors',
     fields: [
       { key: 'name', label: 'Vendor', required: true },
       { key: 'purpose', label: 'Purpose', type: 'textarea' },
@@ -25,7 +27,7 @@ export const TRACKER_CONFIGS: Record<string, TrackerSurfaceProps> = {
   },
   incidents: {
     title: 'Security Incident Register',
-    path: '/incidents',
+    apiBase: '/api/governance/incidents',
     fields: [
       { key: 'title', label: 'Incident', required: true },
       { key: 'severity', label: 'Severity', type: 'select', options: ['critical', 'high', 'medium', 'low'] },
@@ -41,7 +43,7 @@ export const TRACKER_CONFIGS: Record<string, TrackerSurfaceProps> = {
   },
   'data-inventory': {
     title: 'PII & Data Inventory',
-    path: '/data-inventory',
+    apiBase: '/api/governance/data-inventory',
     fields: [
       { key: 'name', label: 'Asset', required: true },
       { key: 'classification', label: 'Classification', type: 'select', options: ['public', 'internal', 'confidential', 'restricted'] },
@@ -56,7 +58,7 @@ export const TRACKER_CONFIGS: Record<string, TrackerSurfaceProps> = {
   },
   dpa: {
     title: 'DPA Management',
-    path: '/dpa',
+    apiBase: '/api/governance/dpa',
     fields: [
       { key: 'counterpartyName', label: 'Counterparty', required: true },
       { key: 'counterpartyType', label: 'Type', type: 'select', options: ['vendor', 'customer', 'subprocessor'] },
@@ -71,7 +73,7 @@ export const TRACKER_CONFIGS: Record<string, TrackerSurfaceProps> = {
   },
   training: {
     title: 'Security Training Tracker',
-    path: '/training',
+    apiBase: '/api/governance/training',
     fields: [
       { key: 'userName', label: 'Person', required: true },
       { key: 'userEmail', label: 'Email', inList: false },
@@ -86,7 +88,7 @@ export const TRACKER_CONFIGS: Record<string, TrackerSurfaceProps> = {
   },
   'compliance-calendar': {
     title: 'Compliance Calendar',
-    path: '/compliance-calendar',
+    apiBase: '/api/governance/compliance-calendar',
     fields: [
       { key: 'title', label: 'Event', required: true },
       { key: 'framework', label: 'Framework', type: 'select', options: ['soc2', 'gdpr', 'ccpa', 'sox', 'hipaa', 'custom'], required: true },
@@ -101,7 +103,7 @@ export const TRACKER_CONFIGS: Record<string, TrackerSurfaceProps> = {
   },
   dsr: {
     title: 'Data Subject Requests',
-    path: '/dsr',
+    apiBase: '/api/governance/dsr',
     fields: [
       { key: 'requestType', label: 'Type', type: 'select', options: ['access', 'erasure', 'rectification', 'portability', 'objection', 'opt_out'], required: true },
       { key: 'subjectEmail', label: 'Subject email', required: true },
@@ -112,12 +114,187 @@ export const TRACKER_CONFIGS: Record<string, TrackerSurfaceProps> = {
   },
   suppression: {
     title: 'Suppression List',
-    path: '/suppression',
+    apiBase: '/api/governance/suppression',
     fields: [
       { key: 'identifierType', label: 'Type', type: 'select', options: ['email', 'linkedin_url', 'github_login', 'phone_e164', 'domain'], required: true },
       { key: 'identifierValue', label: 'Identifier', required: true },
       { key: 'reason', label: 'Reason', type: 'select', options: ['erasure_request', 'user_opt_out', 'hard_bounce', 'spam_complaint', 'manual_admin_add'], required: true },
       { key: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+  },
+
+  // ── Product Management ──────────────────────────────────────────────────────
+  mvp: {
+    title: 'MVP Scaffolding',
+    apiBase: '/api/product/mvp',
+    fields: [
+      { key: 'name', label: 'Scenario', required: true },
+      { key: 'description', label: 'Description', type: 'textarea' },
+      { key: 'pricingModel', label: 'Pricing', type: 'select', options: ['SAAS', 'FREEMIUM', 'SUBSCRIPTION_TIERS', 'TRANSACTIONAL'] },
+      { key: 'targetRevenue', label: 'Target revenue', type: 'number' },
+      { key: 'budgetConstraint', label: 'Budget', type: 'number', inList: false },
+      { key: 'timelineConstraint', label: 'Timeline (days)', type: 'number', inList: false },
+      { key: 'teamSize', label: 'Team size', type: 'number', inList: false },
+      { key: 'status', label: 'Status', type: 'select', options: ['draft', 'analyzing', 'ready', 'approved', 'in_progress', 'completed'] },
+      { key: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+  },
+  validation: {
+    title: 'Validation Lab',
+    apiBase: '/api/product/validation',
+    fields: [
+      { key: 'hypothesis', label: 'Hypothesis', type: 'textarea', required: true },
+      { key: 'validationType', label: 'Type', type: 'select', options: ['problem', 'solution', 'market', 'pricing', 'channel'] },
+      { key: 'method', label: 'Method' },
+      { key: 'result', label: 'Result', type: 'select', options: ['in_progress', 'validated', 'invalidated', 'inconclusive'] },
+      { key: 'learnings', label: 'Learnings', type: 'textarea' },
+      { key: 'nextSteps', label: 'Next steps', type: 'textarea', inList: false },
+      { key: 'notes', label: 'Notes', type: 'textarea', inList: false },
+    ],
+  },
+  roadmap: {
+    title: 'Roadmap',
+    apiBase: '/api/product/roadmap',
+    fields: [
+      { key: 'title', label: 'Item', required: true },
+      { key: 'horizon', label: 'Horizon', type: 'select', options: ['now', 'next', 'later'] },
+      { key: 'status', label: 'Status', type: 'select', options: ['planned', 'in_progress', 'shipped', 'cancelled'] },
+      { key: 'theme', label: 'Theme' },
+      { key: 'priority', label: 'Priority', type: 'select', options: ['low', 'medium', 'high', 'critical'] },
+      { key: 'targetDate', label: 'Target', type: 'date' },
+      { key: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+  },
+  'release-planning': {
+    title: 'Release Planning',
+    apiBase: '/api/product/release-planning',
+    fields: [
+      { key: 'name', label: 'Release', required: true },
+      { key: 'version', label: 'Version' },
+      { key: 'releaseDate', label: 'Date', type: 'date' },
+      { key: 'status', label: 'Status', type: 'select', options: ['planned', 'in_progress', 'released', 'cancelled'] },
+      { key: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+  },
+  changelog: {
+    title: 'Changelog',
+    apiBase: '/api/product/changelog',
+    fields: [
+      { key: 'version', label: 'Version', required: true },
+      { key: 'title', label: 'Title' },
+      { key: 'status', label: 'Status', type: 'select', options: ['draft', 'published'] },
+      { key: 'releasedAt', label: 'Released', type: 'date' },
+      { key: 'body', label: 'Notes', type: 'textarea' },
+    ],
+  },
+  'feature-flags': {
+    title: 'Feature Flags',
+    apiBase: '/api/product/feature-flags',
+    fields: [
+      { key: 'key', label: 'Key', required: true },
+      { key: 'name', label: 'Name' },
+      { key: 'status', label: 'Status', type: 'select', options: ['disabled', 'enabled', 'percentage_rollout', 'user_targeting'] },
+      { key: 'rolloutPercentage', label: 'Rollout %', type: 'number' },
+      { key: 'description', label: 'Description', type: 'textarea', inList: false },
+      { key: 'notes', label: 'Notes', type: 'textarea', inList: false },
+    ],
+  },
+  'business-value': {
+    title: 'Business-Value Models',
+    apiBase: '/api/product/business-value',
+    fields: [
+      { key: 'name', label: 'Model', required: true },
+      { key: 'valueType', label: 'Value type', type: 'select', options: ['REVENUE', 'CUSTOMER_KPI', 'BOTH'] },
+      { key: 'displayMode', label: 'Display', type: 'select', options: ['REVENUE', 'CUSTOMER_KPI', 'COMBINED'] },
+      { key: 'rewardMultiplier', label: 'Reward ×', type: 'number' },
+      { key: 'isActive', label: 'Active', type: 'bool' },
+      { key: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+  },
+  'feature-roi': {
+    title: 'Feature ROI Portfolio',
+    apiBase: '/api/product/feature-roi',
+    fields: [
+      { key: 'featureName', label: 'Feature', required: true },
+      { key: 'featureType', label: 'Type', type: 'select', options: ['FEATURE', 'PAGE', 'COMPONENT', 'FLOW', 'INTEGRATION'] },
+      { key: 'category', label: 'Category' },
+      { key: 'status', label: 'Status', type: 'select', options: ['TRACKING', 'COMPLETED', 'ARCHIVED'] },
+      { key: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+  },
+
+  // ── Agile Survival ──────────────────────────────────────────────────────────
+  sprints: {
+    title: 'Sprint Planning',
+    apiBase: '/api/agile/sprints',
+    fields: [
+      { key: 'name', label: 'Sprint', required: true },
+      { key: 'goal', label: 'Goal', type: 'textarea' },
+      { key: 'status', label: 'Status', type: 'select', options: ['planning', 'active', 'completed', 'archived'] },
+      { key: 'startDate', label: 'Start', type: 'date' },
+      { key: 'endDate', label: 'End', type: 'date' },
+      { key: 'capacity', label: 'Capacity (pts)', type: 'number' },
+      { key: 'runwayBudget', label: 'Runway budget', type: 'number', inList: false },
+      { key: 'actualBurn', label: 'Actual burn', type: 'number', inList: false },
+      { key: 'notes', label: 'Notes', type: 'textarea', inList: false },
+    ],
+  },
+  velocity: {
+    title: 'Velocity Tracking',
+    apiBase: '/api/agile/velocity',
+    fields: [
+      { key: 'period', label: 'Period', required: true },
+      { key: 'teamId', label: 'Team', inList: false },
+      { key: 'committedPoints', label: 'Committed', type: 'number' },
+      { key: 'completedPoints', label: 'Completed', type: 'number' },
+      { key: 'velocityScore', label: 'Velocity', type: 'number' },
+      { key: 'trend', label: 'Trend', type: 'select', options: ['up', 'flat', 'down'] },
+      { key: 'periodStart', label: 'Start', type: 'date', inList: false },
+      { key: 'periodEnd', label: 'End', type: 'date', inList: false },
+      { key: 'notes', label: 'Notes', type: 'textarea', inList: false },
+    ],
+  },
+  capacity: {
+    title: 'Capacity & Risk',
+    apiBase: '/api/agile/capacity',
+    fields: [
+      { key: 'planningPeriod', label: 'Period', required: true },
+      { key: 'teamId', label: 'Team', inList: false },
+      { key: 'totalCapacity', label: 'Total', type: 'number' },
+      { key: 'allocatedCapacity', label: 'Allocated', type: 'number' },
+      { key: 'availableCapacity', label: 'Available', type: 'number' },
+      { key: 'utilizationRate', label: 'Utilization', type: 'number' },
+      { key: 'teamSize', label: 'Team size', type: 'number', inList: false },
+      { key: 'notes', label: 'Notes', type: 'textarea', inList: false },
+    ],
+  },
+  cost: {
+    title: 'Cost / Runway',
+    apiBase: '/api/agile/cost',
+    fields: [
+      { key: 'label', label: 'Calculation', required: true },
+      { key: 'calculationType', label: 'Type' },
+      { key: 'laborCost', label: 'Labor', type: 'number' },
+      { key: 'overheadCost', label: 'Overhead', type: 'number' },
+      { key: 'toolingCost', label: 'Tooling', type: 'number', inList: false },
+      { key: 'infrastructureCost', label: 'Infra', type: 'number', inList: false },
+      { key: 'totalCost', label: 'Total', type: 'number' },
+      { key: 'runwayImpactDays', label: 'Runway days', type: 'number', inList: false },
+      { key: 'notes', label: 'Notes', type: 'textarea', inList: false },
+    ],
+  },
+  'feature-scoring': {
+    title: 'Feature Scoring (RICE)',
+    apiBase: '/api/agile/feature-scoring',
+    fields: [
+      { key: 'name', label: 'Feature', required: true },
+      { key: 'reach', label: 'Reach', type: 'number' },
+      { key: 'impact', label: 'Impact', type: 'number' },
+      { key: 'confidence', label: 'Confidence', type: 'number' },
+      { key: 'effort', label: 'Effort', type: 'number' },
+      { key: 'score', label: 'RICE score', type: 'number' },
+      { key: 'status', label: 'Status', type: 'select', options: ['draft', 'scored', 'prioritized'] },
+      { key: 'notes', label: 'Notes', type: 'textarea', inList: false },
     ],
   },
 };

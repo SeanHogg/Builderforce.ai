@@ -1432,15 +1432,15 @@ export const governanceApi = {
   },
 };
 
-// Generic segment-scoped governance tracker client (one factory for every tracker).
+// Generic segment-scoped tracker client — one factory for every tracker surface
+// (governance + product). `apiBase` is the full route, e.g. '/api/product/mvp'.
 export type TrackerRow = Record<string, unknown> & { id: string };
 
-export function governanceTracker(path: string) {
-  const base = `/api/governance${path}`;
+export function segmentTrackerClient(apiBase: string) {
   return {
-    list:   () => request<TrackerRow[]>(base),
-    create: (body: Record<string, unknown>) => request<TrackerRow>(base, { method: 'POST', body: JSON.stringify(body) }),
-    update: (id: string, body: Record<string, unknown>) => request<TrackerRow>(`${base}/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-    remove: (id: string) => request<{ deleted: string }>(`${base}/${id}`, { method: 'DELETE' }),
+    list:   () => request<TrackerRow[]>(apiBase),
+    create: (body: Record<string, unknown>) => request<TrackerRow>(apiBase, { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: string, body: Record<string, unknown>) => request<TrackerRow>(`${apiBase}/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    remove: (id: string) => request<{ deleted: string }>(`${apiBase}/${id}`, { method: 'DELETE' }),
   };
 }
