@@ -77,10 +77,14 @@ describe('MODEL_REGISTRY × UNet input contract', () => {
   // Per-model timestep dtype — known exports differ:
   //   LCM family (Dreamshaper, Tiny-SD)  → float32
   //   Standard SD UNets (SD-Turbo etc.)  → int64
-  // Generalized: if it's an LCM family model, timestep must be float32.
+  // Classify by id prefix, NOT by lcmGuidanceEmbedDim — akameswa's lcm-tiny-sd
+  // is an LCM scheduler model (so timestep is float32) but its export drops the
+  // `timestep_cond` input (so lcmGuidanceEmbedDim is unset). Bucketing on
+  // lcmGuidanceEmbedDim would skip it and let the original
+  // "Unexpected input data type (int64 vs float)" bug ship again.
   it("LCM-family timestep is float32 (regression: 'Unexpected input data type')", () => {
     for (const [id, descriptor] of Object.entries(MODEL_REGISTRY)) {
-      if (descriptor.lcmGuidanceEmbedDim === undefined) continue;
+      if (!id.startsWith('lcm-')) continue;
       const ts = descriptor.unetInputs.find((s) => s.name === 'timestep');
       expect(ts?.dtype, `LCM model '${id}' must declare timestep as float32`).toBe('float32');
     }

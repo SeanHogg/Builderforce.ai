@@ -57,13 +57,15 @@ export const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor> = {
       unet: { model: 'unet/model.onnx', externalData: 'unet/model.onnx_data' },
       vaeDecoder: { model: 'vae_decoder/model.onnx', externalData: 'vae_decoder/model.onnx_data' },
     },
-    // The akameswa export carries a PLAIN SD UNet — no LCM `timestep_cond`
-    // input despite the repo name (the "LCM" aspect is just the 4-step
-    // scheduler, not the consistency-embedding). Verified via session.inputNames
-    // at init: [sample, timestep, encoder_hidden_states]. Declare exactly that.
+    // The akameswa export omits the LCM `timestep_cond` input (the "LCM" aspect
+    // here is just the 4-step scheduler, not the consistency-embedding), but
+    // it DOES keep the LCM-family float32 timestep — declaring int64 here
+    // surfaces at first denoise as "Unexpected input data type. Actual:
+    // (tensor(int64)), expected: (tensor(float))". The lcmFamilyTimestepIsFloat32
+    // test in diffusion-engine.test.ts locks both LCM-family models on float32.
     unetInputs: [
       { name: 'sample', dtype: 'float32' },
-      { name: 'timestep', dtype: 'int64' },
+      { name: 'timestep', dtype: 'float32' },
       { name: 'encoder_hidden_states', dtype: 'float32' },
     ],
     textEncoderInputs: [{ name: 'input_ids', dtype: 'int32' }],
