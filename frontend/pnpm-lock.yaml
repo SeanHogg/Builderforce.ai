@@ -20,6 +20,9 @@ importers:
       '@seanhogg/builderforce-brain-embedded':
         specifier: link:../brain-embedded
         version: link:../brain-embedded
+      '@seanhogg/builderforce-embedded':
+        specifier: link:../builderforce-embedded
+        version: link:../builderforce-embedded
       '@seanhogg/builderforce-sdk':
         specifier: link:../sdk
         version: link:../sdk
