@@ -96,7 +96,7 @@ Details:
   Source: coderclaw-bundled
   Path: /path/to/coderclaw/hooks/bundled/session-memory/HOOK.md
   Handler: /path/to/coderclaw/hooks/bundled/session-memory/handler.ts
-  Homepage: https://docs.coderclaw.ai/automation/hooks#session-memory
+  Homepage: https://builderforce.ai/docs/automation/hooks#session-memory
   Events: command:new
 
 Requirements:

@@ -89,18 +89,18 @@ var EMBED_VIEWS = {
   "feature-scoring": { key: "feature-scoring", label: "Feature Scoring", pillar: "agile", available: false },
   // Governance & Security — POSTURE ONLY (governance ⇒ 'security' capability)
   soc2: { key: "soc2", label: "SOC 2 Tracker", pillar: "governance", available: true },
-  vendors: { key: "vendors", label: "Vendor Register", pillar: "governance", available: false },
-  incidents: { key: "incidents", label: "Security Incidents", pillar: "governance", available: false },
-  "data-inventory": { key: "data-inventory", label: "PII & Data Inventory", pillar: "governance", available: false },
-  dpa: { key: "dpa", label: "DPA Management", pillar: "governance", available: false },
-  training: { key: "training", label: "Security Training", pillar: "governance", available: false },
-  "compliance-calendar": { key: "compliance-calendar", label: "Compliance Calendar", pillar: "governance", available: false },
+  vendors: { key: "vendors", label: "Vendor Register", pillar: "governance", available: true },
+  incidents: { key: "incidents", label: "Security Incidents", pillar: "governance", available: true },
+  "data-inventory": { key: "data-inventory", label: "PII & Data Inventory", pillar: "governance", available: true },
+  dpa: { key: "dpa", label: "DPA Management", pillar: "governance", available: true },
+  training: { key: "training", label: "Security Training", pillar: "governance", available: true },
+  "compliance-calendar": { key: "compliance-calendar", label: "Compliance Calendar", pillar: "governance", available: true },
   "access-reviews": { key: "access-reviews", label: "Access Reviews", pillar: "governance", available: false },
   "vuln-scans": { key: "vuln-scans", label: "Vulnerability Scans", pillar: "governance", available: false },
   // Data-privacy tools, scoped per-Segment (NOT identity/RBAC) — BuilderForce
   // provides these; BurnRateOS keeps its own platform-global shared-graph DSR.
-  dsr: { key: "dsr", label: "Data Subject Requests", pillar: "governance", available: false },
-  suppression: { key: "suppression", label: "Suppression List", pillar: "governance", available: false }
+  dsr: { key: "dsr", label: "Data Subject Requests", pillar: "governance", available: true },
+  suppression: { key: "suppression", label: "Suppression List", pillar: "governance", available: true }
 };
 var EMBED_VIEW_KEYS = Object.keys(EMBED_VIEWS);
 function isEmbedView(value) {

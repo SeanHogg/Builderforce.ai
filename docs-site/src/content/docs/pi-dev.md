@@ -66,5 +66,5 @@ If you only want to reset sessions, delete `agents/<agentId>/sessions/` and `age
 
 ## References
 
-- [https://docs.coderclaw.ai/testing](https://docs.coderclaw.ai/testing)
-- [https://docs.coderclaw.ai/start/getting-started](https://docs.coderclaw.ai/start/getting-started)
+- [https://builderforce.ai/docs/testing](https://builderforce.ai/docs/testing)
+- [https://builderforce.ai/docs/start/getting-started](https://builderforce.ai/docs/start/getting-started)

@@ -11,6 +11,8 @@ import { TaskMgmtContent } from '../../../components/TaskMgmtContent';
 import { BrainPanel } from '../../../components/brain/BrainPanel';
 import { EmbedPrdSurface } from '../../../components/embed/EmbedPrdSurface';
 import { Soc2Content } from '../../../components/governance/Soc2Content';
+import { TrackerSurface } from '../../../components/governance/TrackerSurface';
+import { TRACKER_CONFIGS } from '../../../components/governance/trackerConfigs';
 
 /**
  * The framed BuilderForce surface. ONE dynamic route serves every embeddable
@@ -113,9 +115,12 @@ function renderSurface(view: string): React.ReactNode {
       // PRDs & specs, project-scoped via a picker.
       return <EmbedPrdSurface />;
     case 'soc2':
-      // SOC 2 Control Tracker — the first Security-pillar surface (doc 07 SEC-1).
+      // SOC 2 Control Tracker — bespoke (readiness scoreboard + baseline seed).
       return <Soc2Content />;
-    default:
-      return null;
+    default: {
+      // Every other governance tracker is the one generic CRUD surface (DRY).
+      const cfg = TRACKER_CONFIGS[view];
+      return cfg ? <TrackerSurface {...cfg} /> : null;
+    }
   }
 }

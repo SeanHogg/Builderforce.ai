@@ -212,37 +212,37 @@ declare const EMBED_VIEWS: {
         readonly key: "vendors";
         readonly label: "Vendor Register";
         readonly pillar: "governance";
-        readonly available: false;
+        readonly available: true;
     };
     readonly incidents: {
         readonly key: "incidents";
         readonly label: "Security Incidents";
         readonly pillar: "governance";
-        readonly available: false;
+        readonly available: true;
     };
     readonly 'data-inventory': {
         readonly key: "data-inventory";
         readonly label: "PII & Data Inventory";
         readonly pillar: "governance";
-        readonly available: false;
+        readonly available: true;
     };
     readonly dpa: {
         readonly key: "dpa";
         readonly label: "DPA Management";
         readonly pillar: "governance";
-        readonly available: false;
+        readonly available: true;
     };
     readonly training: {
         readonly key: "training";
         readonly label: "Security Training";
         readonly pillar: "governance";
-        readonly available: false;
+        readonly available: true;
     };
     readonly 'compliance-calendar': {
         readonly key: "compliance-calendar";
         readonly label: "Compliance Calendar";
         readonly pillar: "governance";
-        readonly available: false;
+        readonly available: true;
     };
     readonly 'access-reviews': {
         readonly key: "access-reviews";
@@ -260,13 +260,13 @@ declare const EMBED_VIEWS: {
         readonly key: "dsr";
         readonly label: "Data Subject Requests";
         readonly pillar: "governance";
-        readonly available: false;
+        readonly available: true;
     };
     readonly suppression: {
         readonly key: "suppression";
         readonly label: "Suppression List";
         readonly pillar: "governance";
-        readonly available: false;
+        readonly available: true;
     };
 };
 type EmbedView = keyof typeof EMBED_VIEWS;

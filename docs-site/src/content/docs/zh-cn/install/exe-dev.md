@@ -37,7 +37,7 @@ x-i18n:
 Shelley，[exe.dev](https://exe.dev) 的智能体，可以使用我们的提示立即安装 CoderClaw。使用的提示如下：
 
 ```
-Set up CoderClaw (https://docs.coderclaw.ai/install) on this VM. Use the non-interactive and accept-risk flags for coderclaw onboarding. Add the supplied auth or token as needed. Configure nginx to forward from the default port 18789 to the root location on the default enabled site config, making sure to enable Websocket support. Pairing is done by "coderclaw devices list" and "coderclaw device approve <request id>". Make sure the dashboard shows that CoderClaw's health is OK. exe.dev handles forwarding from port 8000 to port 80/443 and HTTPS for us, so the final "reachable" should be <vm-name>.exe.xyz, without port specification.
+Set up CoderClaw (https://builderforce.ai/docs/install) on this VM. Use the non-interactive and accept-risk flags for coderclaw onboarding. Add the supplied auth or token as needed. Configure nginx to forward from the default port 18789 to the root location on the default enabled site config, making sure to enable Websocket support. Pairing is done by "coderclaw devices list" and "coderclaw device approve <request id>". Make sure the dashboard shows that CoderClaw's health is OK. exe.dev handles forwarding from port 8000 to port 80/443 and HTTPS for us, so the final "reachable" should be <vm-name>.exe.xyz, without port specification.
 ```
 
 ## 手动安装

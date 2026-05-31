@@ -43,7 +43,7 @@ Every user-facing change must have a changelog entry. Add it to `CHANGELOG.md` u
 Format:
 
 ```
-- Feature/fix short description. (#PR_NUMBER) Thanks @yourhandle. https://docs.coderclaw.ai/...
+- Feature/fix short description. (#PR_NUMBER) Thanks @yourhandle. https://builderforce.ai/docs/...
 ```
 
 If there's a relevant docs URL, include it. If there isn't one yet, leave it out.

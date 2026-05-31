@@ -368,7 +368,7 @@ show_install_plan() {
 }
 
 show_footer_links() {
-    local faq_url="https://docs.coderclaw.ai/start/faq"
+    local faq_url="https://builderforce.ai/docs/start/faq"
     if [[ -n "$GUM" ]]; then
         local content
         content="$(printf '%s\n%s' "Need help?" "FAQ: ${faq_url}")"
