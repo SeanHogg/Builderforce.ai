@@ -51,6 +51,18 @@
    Analytics / Release Planning / Changelog / Feature-Flag surfaces, investor-milestone seams,
    validation experiment templates). **Read this with docs 02–05 — it extends them.**
 
+8. **[07 — PRD (Phase 2): Security, Governance & Compliance + DevSecOps Agents](./07-prd-security-compliance-phase2.md)**
+   Ships **after** Phase 1. Moves the full CISO Governance & Compliance program to BuilderForce
+   *except identity* (SOC 2, vendor register, incidents, PII inventory, DPA, training, compliance
+   calendar, per-Segment DSR + suppression) plus build-new Access Reviews + Vulnerability Scans,
+   and adds DevSecOps agents (auto-scan + security-review gate on agent PRs, auto SOC 2 evidence).
+   RBAC/SSO/multi-tenant accounts stay in BurnRateOS (it's the IdP).
+
+> **Decision log.** PM + Agile = Phase 1 (BuilderForce owns data, autonomous dev agents, thin
+> embed shells, Tenant→Segment isolation with BurnRateOS as IdP). Security/Governance = Phase 2
+> (doc 07), same model. DSR/suppression re-home per-Segment; BurnRateOS keeps its own
+> platform-global shared-contact-graph DSR.
+
 ## Source-of-truth provenance
 
 Every entity and route in these docs was reverse-engineered from the live BurnRateOS codebase

@@ -3,6 +3,7 @@ import type { HonoEnv } from '../../env';
 import { TenantRole, hasMinRole } from '../../domain/shared/types';
 import { UnauthorizedError, ForbiddenError } from '../../domain/shared/errors';
 import { verifyJwt } from '../../infrastructure/auth/JwtService';
+import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { authTokens, authUserSessions, users } from '../../infrastructure/database/schema';
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
@@ -132,6 +133,13 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   c.set('tenantId', payload.tid);
   c.set('role',     payload.role);
   if (payload.sid) c.set('sessionId', payload.sid);
+
+  // Resolve the active segment (the isolation tier below the tenant). For a
+  // 'single' tenant this is its default segment; for a 'segmented' tenant the
+  // token's account/company claims map to the end-client segment. This is the
+  // sole entry point that establishes (tenantId, segmentId) request scope.
+  const segDb = buildDatabase(c.env);
+  c.set('segmentId', await resolveSegment(segDb, payload.tid, { accountId: payload.acct, companyId: payload.co }));
 
   await next();
 };

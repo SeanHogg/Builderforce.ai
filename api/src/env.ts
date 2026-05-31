@@ -161,6 +161,14 @@ export interface Env {
 export interface Vars {
   userId:   string;
   tenantId: number;
+  /**
+   * Active segment id (the isolation tier below the tenant). Resolved once per
+   * request by the auth middleware via resolveSegment(): a 'single' tenant maps
+   * to its default segment; a 'segmented' tenant maps to the end-client segment
+   * carried by the token's account/company claims. Business writes/reads scope
+   * to this. Optional only because some unauthenticated/claw paths skip it.
+   */
+  segmentId?: string;
   role:     TenantRole;
   sessionId?: string;
   tokenJti?: string;

@@ -404,6 +404,7 @@ export const llmTraces = pgTable('llm_traces', {
 export const projectInsightEvents = pgTable('project_insight_events', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   projectId:   integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   userId:      varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   executionId: integer('execution_id').references(() => executions.id, { onDelete: 'set null' }),
@@ -631,6 +632,7 @@ export const managedClawRequests = pgTable('managed_claw_requests', {
 export const sourceControlIntegrations = pgTable('source_control_integrations', {
   id:                serial('id').primaryKey(),
   tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   provider:          sourceControlProviderEnum('provider').notNull(),
   name:              varchar('name', { length: 255 }).notNull(),
   accountIdentifier: varchar('account_identifier', { length: 255 }).notNull(),
@@ -644,6 +646,7 @@ export const projects = pgTable('projects', {
   id:              serial('id').primaryKey(),
   publicId:        uuid('public_id').notNull().defaultRandom(),
   tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   key:             varchar('key', { length: 50 }).notNull().unique(),
   name:            varchar('name', { length: 255 }).notNull(),
   description:     text('description'),
@@ -667,6 +670,7 @@ export const projects = pgTable('projects', {
 export const tasks = pgTable('tasks', {
   id:                serial('id').primaryKey(),
   projectId:         integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   key:               varchar('key', { length: 100 }).notNull().unique(),
   title:             varchar('title', { length: 500 }).notNull(),
   description:       text('description'),
@@ -689,6 +693,7 @@ export const tasks = pgTable('tasks', {
 export const agents = pgTable('agents', {
   id:         serial('id').primaryKey(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   name:       varchar('name', { length: 255 }).notNull(),
   type:       agentTypeEnum('type').notNull(),
   endpoint:   varchar('endpoint', { length: 500 }).notNull(),
@@ -717,6 +722,7 @@ export const skills = pgTable('skills', {
 export const coderclawInstances = pgTable('coderclaw_instances', {
   id:           serial('id').primaryKey(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   name:         varchar('name', { length: 255 }).notNull(),
   slug:         varchar('slug', { length: 255 }).notNull(),
   apiKeyHash:   varchar('api_key_hash', { length: 64 }).notNull(),
@@ -748,6 +754,7 @@ export const executions = pgTable('executions', {
   agentId:      integer('agent_id').references(() => agents.id),
   clawId:       integer('claw_id').references(() => coderclawInstances.id, { onDelete: 'set null' }),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   submittedBy:  varchar('submitted_by', { length: 36 }).notNull(),
   sessionId:    varchar('session_id', { length: 128 }),
   status:       executionStatusEnum('status').notNull().default('pending'),
@@ -859,6 +866,7 @@ export const platformPersonas = pgTable('platform_personas', {
 export const clawProjects = pgTable('claw_projects', {
   id:        serial('id').primaryKey(),
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   clawId:    integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
   projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   role:      varchar('role', { length: 64 }).notNull().default('default'),
@@ -871,6 +879,7 @@ export const clawProjects = pgTable('claw_projects', {
 export const clawDirectories = pgTable('claw_directories', {
   id:           serial('id').primaryKey(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   clawId:       integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
   projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   absPath:      text('abs_path').notNull(),
@@ -889,6 +898,7 @@ export const clawDirectories = pgTable('claw_directories', {
 export const clawDirectoryFiles = pgTable('claw_directory_files', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   clawId:      integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
   directoryId: integer('directory_id').notNull().references(() => clawDirectories.id, { onDelete: 'cascade' }),
   relPath:     text('rel_path').notNull(),
@@ -907,6 +917,7 @@ export const clawDirectoryFiles = pgTable('claw_directory_files', {
 export const clawSyncHistory = pgTable('claw_sync_history', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   clawId:      integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
   directoryId: integer('directory_id').references(() => clawDirectories.id, { onDelete: 'set null' }),
   triggeredBy: varchar('triggered_by', { length: 32 }).notNull().default('startup'),
@@ -924,6 +935,7 @@ export const clawSyncHistory = pgTable('claw_sync_history', {
 export const chatSessions = pgTable('chat_sessions', {
   id:         serial('id').primaryKey(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   clawId:     integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
   sessionKey: varchar('session_key', { length: 255 }).notNull(),
   projectId:  integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
@@ -936,6 +948,7 @@ export const chatSessions = pgTable('chat_sessions', {
 export const chatMessages = pgTable('chat_messages', {
   id:        serial('id').primaryKey(),
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   clawId:    integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
   sessionId: integer('session_id').notNull().references(() => chatSessions.id, { onDelete: 'cascade' }),
   role:      varchar('role', { length: 16 }).notNull(),
@@ -952,6 +965,7 @@ export const chatMessages = pgTable('chat_messages', {
 export const specs = pgTable('specs', {
   id:          uuid('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   clawId:      integer('claw_id').references(() => coderclawInstances.id, { onDelete: 'set null' }),
   goal:        text('goal').notNull(),
@@ -970,6 +984,7 @@ export const specs = pgTable('specs', {
 export const workflows = pgTable('workflows', {
   id:           uuid('id').primaryKey(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   clawId:       integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
   specId:       uuid('spec_id').references(() => specs.id, { onDelete: 'set null' }),
   workflowType: workflowTypeEnum('workflow_type').notNull().default('custom'),
@@ -1003,6 +1018,7 @@ export const workflowTasks = pgTable('workflow_tasks', {
 export const usageSnapshots = pgTable('usage_snapshots', {
   id:               serial('id').primaryKey(),
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   clawId:           integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
   sessionKey:       varchar('session_key', { length: 255 }).notNull(),
   inputTokens:      integer('input_tokens').notNull().default(0),
@@ -1021,6 +1037,7 @@ export const usageSnapshots = pgTable('usage_snapshots', {
 export const toolAuditEvents = pgTable('tool_audit_events', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   clawId:      integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
   runId:       varchar('run_id', { length: 255 }),
   sessionKey:  varchar('session_key', { length: 255 }),
@@ -1041,6 +1058,7 @@ export const toolAuditEvents = pgTable('tool_audit_events', {
 export const telemetrySpans = pgTable('telemetry_spans', {
   id:               serial('id').primaryKey(),
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   clawId:           integer('claw_id').references(() => coderclawInstances.id, { onDelete: 'set null' }),
   traceId:          varchar('trace_id', { length: 32 }).notNull(),
   workflowId:       varchar('workflow_id', { length: 36 }),
@@ -1065,6 +1083,7 @@ export const telemetrySpans = pgTable('telemetry_spans', {
 export const approvals = pgTable('approvals', {
   id:          uuid('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   clawId:      integer('claw_id').references(() => coderclawInstances.id, { onDelete: 'set null' }),
   requestedBy: varchar('requested_by', { length: 36 }),   // claw ID or user ID as string
   actionType:  varchar('action_type', { length: 255 }).notNull(),
@@ -1085,6 +1104,7 @@ export const approvals = pgTable('approvals', {
 export const approvalRules = pgTable('approval_rules', {
   id:                 uuid('id').primaryKey().defaultRandom(),
   tenantId:           integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   name:               varchar('name', { length: 255 }).notNull(),
   /** Null = matches all action types */
   actionType:         varchar('action_type', { length: 255 }),
@@ -1105,6 +1125,7 @@ export const approvalRules = pgTable('approval_rules', {
 export const brainChats = pgTable('brain_chats', {
   id:         serial('id').primaryKey(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   userId:     varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
   projectId:  integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   title:      varchar('title', { length: 500 }).notNull().default('New chat'),
@@ -1130,6 +1151,7 @@ export const brainMessages = pgTable('brain_messages', {
 export const chatMemories = pgTable('chat_memories', {
   id:             serial('id').primaryKey(),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   chatId:         integer('chat_id').references(() => brainChats.id, { onDelete: 'cascade' }).unique(),
   clawSessionId:  integer('claw_session_id').references(() => chatSessions.id, { onDelete: 'cascade' }).unique(),
   projectId:      integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
@@ -1145,6 +1167,7 @@ export const chatMemories = pgTable('chat_memories', {
 export const projectMemories = pgTable('project_memories', {
   id:                   serial('id').primaryKey(),
   tenantId:             integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   projectId:            integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }).unique(),
   consolidatedSummary:  text('consolidated_summary').notNull().default(''),
   createdAt:            timestamp('created_at').notNull().defaultNow(),
@@ -1160,6 +1183,7 @@ export const ideProjectChats = pgTable('ide_project_chats', {
   id:        serial('id').primaryKey(),
   projectId: integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   userId:    varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   origin:     varchar('origin', { length: 32 }).notNull().default('ide'),
   title:      varchar('title', { length: 500 }).notNull().default('New chat'),
@@ -1176,6 +1200,7 @@ export const ideProjectChats = pgTable('ide_project_chats', {
 export const cronJobs = pgTable('cron_jobs', {
   id:          uuid('id').primaryKey().defaultRandom(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   clawId:      integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
   projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   name:        varchar('name', { length: 255 }).notNull(),
@@ -1258,6 +1283,7 @@ export const integrationSyncStatusEnum = pgEnum('integration_sync_status', [
 export const integrationCredentials = pgTable('integration_credentials', {
   id:             uuid('id').primaryKey().defaultRandom(),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   provider:       integrationProviderEnum('provider').notNull(),
   /** Display label, e.g. "Production Jira" */
   name:           varchar('name', { length: 255 }).notNull(),
@@ -1281,6 +1307,7 @@ export const integrationCredentials = pgTable('integration_credentials', {
 export const integrationSyncLogs = pgTable('integration_sync_logs', {
   id:              serial('id').primaryKey(),
   tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   credentialId:    uuid('credential_id').notNull().references(() => integrationCredentials.id, { onDelete: 'cascade' }),
   status:          integrationSyncStatusEnum('status').notNull().default('syncing'),
   itemsProcessed:  integer('items_processed').notNull().default(0),
@@ -1304,6 +1331,7 @@ export const integrationSyncLogs = pgTable('integration_sync_logs', {
 export const contributors = pgTable('contributors', {
   id:            serial('id').primaryKey(),
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   displayName:   varchar('display_name', { length: 255 }).notNull(),
   email:         varchar('email', { length: 255 }),
   avatarUrl:     varchar('avatar_url', { length: 500 }),
@@ -1327,6 +1355,7 @@ export const contributorIdentities = pgTable('contributor_identities', {
   id:            serial('id').primaryKey(),
   contributorId: integer('contributor_id').notNull().references(() => contributors.id, { onDelete: 'cascade' }),
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   provider:      integrationProviderEnum('provider').notNull(),
   externalId:    varchar('external_id', { length: 255 }).notNull(), // GitHub login, Jira account ID, etc.
   externalEmail: varchar('external_email', { length: 255 }),
@@ -1353,6 +1382,7 @@ export const activityEventTypeEnum = pgEnum('activity_event_type', [
 export const activityEvents = pgTable('activity_events', {
   id:             serial('id').primaryKey(),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   contributorId:  integer('contributor_id').references(() => contributors.id, { onDelete: 'set null' }),
   credentialId:   uuid('credential_id').references(() => integrationCredentials.id, { onDelete: 'set null' }),
   provider:       integrationProviderEnum('provider').notNull(),
@@ -1383,6 +1413,7 @@ export const activityEvents = pgTable('activity_events', {
 export const contributorDailyMetrics = pgTable('contributor_daily_metrics', {
   id:              serial('id').primaryKey(),
   tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   contributorId:   integer('contributor_id').notNull().references(() => contributors.id, { onDelete: 'cascade' }),
   date:            timestamp('date').notNull(),   // date truncated to day (UTC midnight)
   commits:         integer('commits').notNull().default(0),
@@ -1411,6 +1442,7 @@ export const contributorDailyMetrics = pgTable('contributor_daily_metrics', {
 export const devTeams = pgTable('dev_teams', {
   id:            serial('id').primaryKey(),
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   name:          varchar('name', { length: 255 }).notNull(),
   description:   text('description'),
   parentTeamId:  integer('parent_team_id'), // self-reference: child → parent
@@ -1445,6 +1477,7 @@ export const reportScheduleEnum = pgEnum('report_schedule', [
 export const reportSchedules = pgTable('report_schedules', {
   id:           uuid('id').primaryKey().defaultRandom(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   reportType:   reportTypeEnum('report_type').notNull(),
   schedule:     reportScheduleEnum('schedule').notNull(),
   /** UTC hour to deliver (0–23) */
@@ -1461,6 +1494,7 @@ export const reportSchedules = pgTable('report_schedules', {
 export const reportSubscriptions = pgTable('report_subscriptions', {
   id:            serial('id').primaryKey(),
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   userId:        varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
   reportType:    reportTypeEnum('report_type').notNull(),
   isSubscribed:  boolean('is_subscribed').notNull().default(true),
@@ -1476,6 +1510,7 @@ export const reportSubscriptions = pgTable('report_subscriptions', {
 export const teamMemory = pgTable('team_memory', {
   id:        uuid('id').primaryKey().defaultRandom(),
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   /** Numeric claw ID stored as string for flexibility. */
   clawId:    varchar('claw_id', { length: 64 }).notNull(),
   runId:     varchar('run_id', { length: 64 }).notNull(),
