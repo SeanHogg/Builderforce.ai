@@ -21,6 +21,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { segments } from '../../infrastructure/database/schema';
+import { invalidateSegment } from '../../infrastructure/auth/segmentResolver';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -112,6 +113,8 @@ export function createSegmentRoutes(db: Db): Hono<HonoEnv> {
       .returning();
 
     if (!updated) return c.json({ error: 'segment not found, not yours, or is the default segment' }, 404);
+    // Drop the warm-isolate mapping so a status/plan change takes effect now.
+    invalidateSegment(updated.id);
     return c.json(updated);
   });
 

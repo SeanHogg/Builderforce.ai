@@ -12,13 +12,48 @@ import { segments } from '../database/schema';
  *    external host): the matching Segment, lazy-created on first sight.
  *
  * Resolved ids are stable, so they are cached per (tenant, account, company) in
- * the isolate to avoid a DB round-trip on every request.
+ * the isolate to avoid a DB round-trip on every request. The cache is:
+ *  - BOUNDED (FIFO eviction past MAX_CACHE_ENTRIES) so a long-lived isolate seeing
+ *    many federated (account, company) pairs can't grow it without limit;
+ *  - INVALIDATED on segment mutate/delete (see invalidateSegment / invalidateTenant)
+ *    so a suspended/archived/erased segment stops resolving inside a warm isolate.
  */
+
+/** Cap on cached (tenant, account, company) → segmentId entries per isolate. */
+const MAX_CACHE_ENTRIES = 10_000;
 
 const cache = new Map<string, string>();
 
 function keyFor(tenantId: number, accountId?: string, companyId?: string): string {
   return `${tenantId}|${accountId ?? ''}|${companyId ?? ''}`;
+}
+
+function cacheSet(key: string, segmentId: string): void {
+  // Map preserves insertion order — evict the oldest entry when over the bound.
+  if (cache.size >= MAX_CACHE_ENTRIES) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+  cache.set(key, segmentId);
+}
+
+/**
+ * Drop every cached mapping that resolves to `segmentId`. Call after any change
+ * that alters or removes a segment (status flip, plan change, deletion) so the
+ * isolate stops serving a stale id without waiting for a recycle.
+ */
+export function invalidateSegment(segmentId: string): void {
+  for (const [key, value] of cache) {
+    if (value === segmentId) cache.delete(key);
+  }
+}
+
+/** Drop every cached mapping for a tenant (e.g. tenant-wide erasure). */
+export function invalidateTenant(tenantId: number): void {
+  const prefix = `${tenantId}|`;
+  for (const key of cache.keys()) {
+    if (key.startsWith(prefix)) cache.delete(key);
+  }
 }
 
 export interface SegmentClaims {
@@ -40,7 +75,7 @@ export async function resolveSegment(
     ? await resolveFederated(db, tenantId, accountId, companyId)
     : await resolveDefault(db, tenantId);
 
-  cache.set(cacheKey, id);
+  cacheSet(cacheKey, id);
   return id;
 }
 

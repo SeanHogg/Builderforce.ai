@@ -30,6 +30,7 @@ const mainNav: NavItem[] = [
     activePaths: ['/ide'],
   },
   { href: '/tasks', label: 'Task Mgmt', icon: '☑' },
+  { href: '/contributors', label: 'Contributors', icon: '📈' },
   { href: '/training', label: 'Training', icon: '🎓' },
 ];
 
@@ -41,6 +42,7 @@ const extensionsNav: NavItem[] = [
   { href: '/content-manager', label: 'Content Manager', icon: '✎' },
   { href: '/skills', label: 'Skills', icon: '⭐' },
   { href: '/personas', label: 'Personas', icon: '👤' },
+  { href: '/prompts', label: 'Prompt Library', icon: '📚' },
 ];
 
 const systemNav: NavItem[] = [

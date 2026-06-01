@@ -21,7 +21,7 @@ function isProjectIdPage(pathname: string): boolean {
 
 /** Routes that are fully public (no auth needed) but still show the TopBar */
 function isPublicBrowsePath(pathname: string): boolean {
-  return pathname.startsWith('/marketplace');
+  return pathname.startsWith('/marketplace') || pathname.startsWith('/prompts');
 }
 
 function useShowAppShell(): boolean {
@@ -33,6 +33,8 @@ function useShowAppShell(): boolean {
   if (pathname.startsWith('/projects')) return true;
   if (pathname.startsWith('/tasks')) return true;
   if (pathname.startsWith('/workforce')) return true;
+  if (pathname.startsWith('/contributors')) return true;
+  if (pathname.startsWith('/prompts')) return true;
   if (pathname.startsWith('/marketplace')) return true;
   if (pathname.startsWith('/chats')) return true;
   if (pathname.startsWith('/brainstorm')) return true;
