@@ -7,6 +7,7 @@ import TopBar from './TopBar';
 import AppFooter from './AppFooter';
 import EmulationBar from './EmulationBar';
 import PermissionDebuggerPanel from './PermissionDebuggerPanel';
+import QaTelemetry from './QaTelemetry';
 import { useEmulation } from '@/lib/EmulationContext';
 
 const SIDEBAR_COLLAPSED_KEY = 'builderforce-sidebar-collapsed';
@@ -54,6 +55,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <>
       <EmulationBar />
       <PermissionDebuggerPanel />
+      <QaTelemetry />
       <div
         className={`shell ${navCollapsed ? 'nav-collapsed' : ''}${emulation ? ' emulation-active' : ''}`}
         style={{ position: 'relative' }}
