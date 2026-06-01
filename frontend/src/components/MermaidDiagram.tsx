@@ -61,7 +61,6 @@ export function MermaidDiagram({ code }: { code: string }) {
       ref={containerRef}
       className="mermaid-diagram"
       style={{ margin: '12px 0', textAlign: 'center', overflowX: 'auto' }}
-      // eslint-disable-next-line react/no-danger
       dangerouslySetInnerHTML={svg ? { __html: svg } : undefined}
     >
       {svg ? undefined : <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Rendering diagram…</span>}

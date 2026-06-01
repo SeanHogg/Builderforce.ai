@@ -63,28 +63,12 @@ export default function ArchitectPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, hasTenant]);
 
-  // Load the latest run for the selected project.
-  useEffect(() => {
-    if (projectId == null) return;
-    setRun(null);
-    setArtifacts([]);
-    setBodyByKind({});
-    setActiveKind(null);
-    setNoRepo(false);
-    fetchRepoAnalysisRuns(projectId)
-      .then(({ runs }) => {
-        if (runs[0]) void loadRun(runs[0].id);
-      })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
-
-  const stopPolling = () => {
+  const stopPolling = useCallback(() => {
     if (pollRef.current) {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
-  };
+  }, []);
 
   const loadRun = useCallback(async (runId: string) => {
     const { run: r, artifacts: a } = await fetchRepoAnalysisRun(runId);
@@ -104,9 +88,24 @@ export default function ArchitectPage() {
         }
       }, 3000);
     }
-  }, []);
+  }, [stopPolling]);
 
-  useEffect(() => stopPolling, []);
+  // Load the latest run for the selected project.
+  useEffect(() => {
+    if (projectId == null) return;
+    setRun(null);
+    setArtifacts([]);
+    setBodyByKind({});
+    setActiveKind(null);
+    setNoRepo(false);
+    fetchRepoAnalysisRuns(projectId)
+      .then(({ runs }) => {
+        if (runs[0]) void loadRun(runs[0].id);
+      })
+      .catch(() => {});
+  }, [projectId, loadRun]);
+
+  useEffect(() => stopPolling, [stopPolling]);
 
   const onRun = async () => {
     if (projectId == null) return;

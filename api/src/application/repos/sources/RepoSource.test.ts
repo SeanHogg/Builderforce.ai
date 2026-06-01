@@ -112,10 +112,10 @@ describe('GitLabRepoSource', () => {
     const fetchFn: FetchLike = vi.fn(async (url: string) => {
       if (/\/projects\/o%2Fr$/.test(url)) return jsonResponse({ default_branch: 'main' });
       if (url.includes('/repository/tree')) {
-        if (url.includes('page=1')) {
+        if (url.includes('&page=1')) {
           return jsonResponse([{ path: 'a.ts', type: 'blob' }], 200, { 'x-next-page': '2' });
         }
-        return jsonResponse([{ path: 'b.ts', type: 'blob' }], 200, { 'x-next-page': '' });
+        return jsonResponse([{ path: 'b.ts', type: 'blob' }], 200); // no x-next-page → last page
       }
       if (url.includes('/repository/files/')) {
         return jsonResponse({ encoding: 'base64', size: 5, content: b64('hello') });
@@ -132,7 +132,7 @@ describe('GitLabRepoSource', () => {
 describe('BitbucketRepoSource', () => {
   it('reads mainbranch, src listing, raw file, and commits', async () => {
     const fetchFn: FetchLike = vi.fn(async (url: string) => {
-      if (/\/repositories\/o%2Fr$/.test(url)) return jsonResponse({ mainbranch: { name: 'trunk' } });
+      if (/\/repositories\/o\/r$/.test(url)) return jsonResponse({ mainbranch: { name: 'trunk' } });
       if (url.includes('/src/') && url.includes('max_depth')) {
         return jsonResponse({
           values: [
