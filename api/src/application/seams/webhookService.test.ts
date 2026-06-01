@@ -82,9 +82,9 @@ describe('emitWebhookEvent', () => {
 
     expect(count).toBe(1); // only s1 matched
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchImpl.mock.calls[0]!;
+    const [url, init] = (fetchImpl.mock.calls as any[])[0] as [string, RequestInit];
     expect(url).toBe('https://host/wh');
-    const headers = init!.headers as Record<string, string>;
+    const headers = init.headers as Record<string, string>;
     expect(headers[WEBHOOK_ID_HEADER]).toBe('deliv-1');
     expect(headers[WEBHOOK_TIMESTAMP_HEADER]).toBe('1234');
     expect(headers[WEBHOOK_SIGNATURE_HEADER]).toMatch(/^sha256=[0-9a-f]{64}$/);

@@ -3,6 +3,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
+import { MermaidDiagram } from './MermaidDiagram';
 
 export interface ChatMessageContentProps {
   /** Message body (markdown). */
@@ -39,6 +40,10 @@ export function ChatMessageContent({
         const match = /language-([\w./-]+)/.exec(className ?? '');
         const lang = match ? match[1] : '';
         const code = String(children).replace(/\n$/, '');
+        // Render Mermaid fences as diagrams (benefits Brain/IDE chat too).
+        if (lang === 'mermaid') {
+          return <MermaidDiagram code={code} />;
+        }
         const pathLike = isFilePathLike(lang);
         return (
           <div style={{ position: 'relative', margin: '8px 0', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>

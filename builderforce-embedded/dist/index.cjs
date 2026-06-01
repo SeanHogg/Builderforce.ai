@@ -23,6 +23,7 @@ __export(src_exports, {
   BFEMBED_SOURCE: () => BFEMBED_SOURCE,
   BuilderForceEmbed: () => BuilderForceEmbed,
   EMBED_CAPABILITIES: () => EMBED_CAPABILITIES,
+  EMBED_CONSENT_VERSION: () => EMBED_CONSENT_VERSION,
   EMBED_VIEWS: () => EMBED_VIEWS,
   EMBED_VIEW_KEYS: () => EMBED_VIEW_KEYS,
   capabilityForView: () => capabilityForView,
@@ -92,6 +93,7 @@ function handleFrameMessage(event, h) {
 
 // src/views.ts
 var EMBED_CAPABILITIES = ["product", "agile", "security"];
+var EMBED_CONSENT_VERSION = 1;
 function pillarToCapability(pillar) {
   return pillar === "governance" ? "security" : pillar;
 }
@@ -257,6 +259,7 @@ function BuilderForceEmbed({
   BFEMBED_SOURCE,
   BuilderForceEmbed,
   EMBED_CAPABILITIES,
+  EMBED_CONSENT_VERSION,
   EMBED_VIEWS,
   EMBED_VIEW_KEYS,
   capabilityForView,

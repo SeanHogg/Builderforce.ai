@@ -428,3 +428,78 @@ export async function hireAgent(agentId: string): Promise<PublishedAgent> {
 export async function fetchAgentPackage(agentId: string): Promise<AgentPackage> {
   return apiRequest<AgentPackage>(`${IDE}/agents/${agentId}/package`);
 }
+
+// ---------------------------------------------------------------------------
+// Repo analysis — the Architect / Digital-Transformation tool (/api/repo-analysis)
+// ---------------------------------------------------------------------------
+
+export type RepoAnalysisStatus =
+  | 'queued' | 'fetching' | 'analyzing' | 'writing_back' | 'completed' | 'partial' | 'failed';
+
+export type RepoAnalysisKind =
+  | 'diagnostic' | 'recommendation' | 'business' | 'arch_4plus1' | 'antipatterns' | 'principles';
+
+export interface RepoAnalysisRun {
+  id: string;
+  projectId: number;
+  status: RepoAnalysisStatus;
+  stage: string | null;
+  progress: number;
+  recommendation: 'brownfield' | 'greenfield' | 'parallel' | null;
+  effectivePlan: string | null;
+  tokensUsed: number;
+  error: string | null;
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+export interface RepoAnalysisArtifactMeta {
+  id: string;
+  kind: RepoAnalysisKind;
+  title: string | null;
+  status: 'complete' | 'skipped' | 'failed';
+  model: string | null;
+  tokens: number | null;
+  updatedAt: string;
+}
+
+export interface RepoAnalysisEvidenceMeta {
+  id: string;
+  repoId: string;
+  provider: string | null;
+  defaultBranch: string | null;
+  status: 'complete' | 'partial' | 'failed';
+  tokenEstimate: number | null;
+}
+
+export interface RepoAnalysisArtifact extends RepoAnalysisArtifactMeta {
+  bodyMd: string | null;
+  dataJson: string | null;
+}
+
+export async function startRepoAnalysis(projectId: number | string): Promise<{ run: RepoAnalysisRun }> {
+  return apiRequest<{ run: RepoAnalysisRun }>(`/api/repo-analysis/projects/${projectId}/runs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+}
+
+export async function fetchRepoAnalysisRuns(projectId: number | string): Promise<{ runs: RepoAnalysisRun[]; total: number }> {
+  return apiRequest<{ runs: RepoAnalysisRun[]; total: number }>(`/api/repo-analysis/projects/${projectId}/runs`);
+}
+
+export async function fetchRepoAnalysisRun(runId: string): Promise<{
+  run: RepoAnalysisRun;
+  artifacts: RepoAnalysisArtifactMeta[];
+  evidence: RepoAnalysisEvidenceMeta[];
+}> {
+  return apiRequest(`/api/repo-analysis/runs/${runId}`);
+}
+
+export async function fetchRepoAnalysisArtifact(
+  runId: string,
+  kind: RepoAnalysisKind,
+): Promise<{ artifact: RepoAnalysisArtifact }> {
+  return apiRequest<{ artifact: RepoAnalysisArtifact }>(`/api/repo-analysis/runs/${runId}/artifacts/${kind}`);
+}

@@ -2689,6 +2689,75 @@ export const pullRequests = pgTable('pull_requests', {
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
 
+// ---------------------------------------------------------------------------
+// Digital Transformation / Architect repo-analysis tool (migration 0072).
+// Cloud-only LLM analysis of a project's mapped repos, driven by
+// AnalysisRunnerDO one stage per alarm() tick. See repoAnalysisRoutes +
+// ArchitectAnalysisService + the RepoSource provider clients.
+// ---------------------------------------------------------------------------
+
+/** One analysis invocation — the job + state-machine mirror the UI polls. */
+export const repoAnalysisRuns = pgTable('repo_analysis_runs', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  // queued | fetching | analyzing | writing_back | completed | partial | failed
+  status:         varchar('status', { length: 24 }).notNull().default('queued'),
+  stage:          varchar('stage', { length: 40 }),
+  progress:       integer('progress').notNull().default(0),
+  // brownfield | greenfield | parallel (headline from the recommendation artifact)
+  recommendation: varchar('recommendation', { length: 24 }),
+  effectivePlan:  varchar('effective_plan', { length: 8 }),
+  tokenBudget:    integer('token_budget'),
+  tokensUsed:     integer('tokens_used').notNull().default(0),
+  error:          text('error'),
+  triggeredBy:    varchar('triggered_by', { length: 36 }),
+  startedAt:      timestamp('started_at'),
+  finishedAt:     timestamp('finished_at'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+});
+
+/** One generated output per run (6 kinds). Unique (run_id, kind) → upsert on retry. */
+export const repoAnalysisArtifacts = pgTable('repo_analysis_artifacts', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  runId:     uuid('run_id').notNull().references(() => repoAnalysisRuns.id, { onDelete: 'cascade' }),
+  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  // diagnostic | business | arch_4plus1 | antipatterns | principles | recommendation
+  kind:      varchar('kind', { length: 32 }).notNull(),
+  title:     varchar('title', { length: 255 }),
+  bodyMd:    text('body_md'),       // human Markdown (Mermaid in fences)
+  dataJson:  text('data_json'),     // structured strict-schema output (agent-consumable)
+  model:     varchar('model', { length: 255 }),
+  tokens:    integer('tokens'),
+  status:    varchar('status', { length: 16 }).notNull().default('complete'),  // complete | skipped | failed
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  // Unique (run_id, kind) enforced by migration 0072.
+});
+
+/** One repo per run: the sampled snapshot the LLM calls were grounded on. */
+export const repoAnalysisEvidence = pgTable('repo_analysis_evidence', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  runId:         uuid('run_id').notNull().references(() => repoAnalysisRuns.id, { onDelete: 'cascade' }),
+  repoId:        uuid('repo_id').notNull().references(() => projectRepositories.id, { onDelete: 'cascade' }),
+  provider:      varchar('provider', { length: 16 }),
+  defaultBranch: varchar('default_branch', { length: 255 }),
+  languages:     text('languages'),       // JSON { lang: bytes }
+  treeSummary:   text('tree_summary'),     // JSON { topDirs, fileCount, totalBytes, truncated }
+  sampledFiles:  text('sampled_files'),    // JSON [{ path, bytes, truncated, content }]
+  commitSummary: text('commit_summary'),   // JSON { recent, hotspots }
+  tokenEstimate: integer('token_estimate'),
+  status:        varchar('status', { length: 16 }).notNull().default('complete'),  // complete | partial | failed
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  // Unique (run_id, repo_id) enforced by migration 0072.
+});
+
 // ── Slice 5: Runtime-agnostic agent dispatch (claw OR cloud OR browser) ──────
 
 /**
