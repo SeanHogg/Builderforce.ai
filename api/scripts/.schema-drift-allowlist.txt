@@ -1,19 +1,18 @@
-Column 'claw_projects.abs_path' is declared in schema.ts but never created/added by any migration.
-Column 'claw_projects.bytes_total' is declared in schema.ts but never created/added by any migration.
-Column 'claw_projects.content' is declared in schema.ts but never created/added by any migration.
-Column 'claw_projects.content_hash' is declared in schema.ts but never created/added by any migration.
-Column 'claw_projects.directory_id' is declared in schema.ts but never created/added by any migration.
-Column 'claw_projects.error_message' is declared in schema.ts but never created/added by any migration.
-Column 'claw_projects.error_msg' is declared in schema.ts but never created/added by any migration.
-Column 'claw_projects.file_count' is declared in schema.ts but never created/added by any migration.
-Column 'claw_projects.last_seen_at' is declared in schema.ts but never created/added by any migration.
-Column 'claw_projects.last_synced_at' is declared in schema.ts but never created/added by any migration.
-Column 'claw_projects.metadata' is declared in schema.ts but never created/added by any migration.
-Column 'claw_projects.path_hash' is declared in schema.ts but never created/added by any migration.
-Column 'claw_projects.rel_path' is declared in schema.ts but never created/added by any migration.
-Column 'claw_projects.size_bytes' is declared in schema.ts but never created/added by any migration.
-Column 'claw_projects.status' is declared in schema.ts but never created/added by any migration.
-Column 'claw_projects.triggered_by' is declared in schema.ts but never created/added by any migration.
+# Schema-drift allowlist — deliberately grandfathered drift.
+#
+# Each non-comment line is an exact drift message that check-schema-drift.mjs
+# will tolerate. Everything here is a table (or column on a table) that exists
+# in schema.ts + runtime but was created via an early `drizzle-kit push`
+# baseline rather than a tracked migration in api/migrations/. The deploy model
+# is: push the schema baseline, then apply migrations/*.sql for incremental
+# repairs/ALTERs. These entries grandfather that historical push-only state.
+#
+# NOTE: this list was rebuilt after the pgTable-block regex in
+# check-schema-drift.mjs was fixed (it previously could not close a
+# `}, (t) => [...]` table block and merged adjacent tables, fabricating ~96
+# phantom column entries that have now been removed). Do not re-add mis-
+# attributed columns; if a real table/column is missing a migration, add the
+# migration instead of grandfathering it.
 Column 'coderclaw_instances.api_key_hash' is declared in schema.ts but never created/added by any migration.
 Column 'coderclaw_instances.created_at' is declared in schema.ts but never created/added by any migration.
 Column 'coderclaw_instances.id' is declared in schema.ts but never created/added by any migration.
@@ -50,10 +49,6 @@ Column 'marketplace_skills.slug' is declared in schema.ts but never created/adde
 Column 'marketplace_skills.tags' is declared in schema.ts but never created/added by any migration.
 Column 'marketplace_skills.updated_at' is declared in schema.ts but never created/added by any migration.
 Column 'marketplace_skills.version' is declared in schema.ts but never created/added by any migration.
-Column 'oauth_accounts.expires_at' is declared in schema.ts but never created/added by any migration.
-Column 'oauth_accounts.redirect' is declared in schema.ts but never created/added by any migration.
-Column 'oauth_accounts.token' is declared in schema.ts but never created/added by any migration.
-Column 'oauth_accounts.used' is declared in schema.ts but never created/added by any migration.
 Column 'projects.created_at' is declared in schema.ts but never created/added by any migration.
 Column 'projects.description' is declared in schema.ts but never created/added by any migration.
 Column 'projects.github_repo_name' is declared in schema.ts but never created/added by any migration.
@@ -76,10 +71,6 @@ Column 'tenants.id' is declared in schema.ts but never created/added by any migr
 Column 'tenants.name' is declared in schema.ts but never created/added by any migration.
 Column 'tenants.slug' is declared in schema.ts but never created/added by any migration.
 Column 'tenants.updated_at' is declared in schema.ts but never created/added by any migration.
-Column 'user_legal_acceptances.code_hash' is declared in schema.ts but never created/added by any migration.
-Column 'user_legal_acceptances.created_at' is declared in schema.ts but never created/added by any migration.
-Column 'user_legal_acceptances.id' is declared in schema.ts but never created/added by any migration.
-Column 'user_legal_acceptances.used_at' is declared in schema.ts but never created/added by any migration.
 Column 'users.api_key_hash' is declared in schema.ts but never created/added by any migration.
 Column 'users.avatar_url' is declared in schema.ts but never created/added by any migration.
 Column 'users.bio' is declared in schema.ts but never created/added by any migration.
@@ -90,21 +81,13 @@ Column 'users.id' is declared in schema.ts but never created/added by any migrat
 Column 'users.password_hash' is declared in schema.ts but never created/added by any migration.
 Column 'users.updated_at' is declared in schema.ts but never created/added by any migration.
 Column 'users.username' is declared in schema.ts but never created/added by any migration.
-Table 'agents' is declared in schema.ts but never created by any migration.
-Table 'approval_rules' is declared in schema.ts but never created by any migration.
 Table 'audit_events' is declared in schema.ts but never created by any migration.
-Table 'contributor_identities' is declared in schema.ts but never created by any migration.
-Table 'contributors' is declared in schema.ts but never created by any migration.
-Table 'dev_team_members' is declared in schema.ts but never created by any migration.
 Table 'managed_claw_requests' is declared in schema.ts but never created by any migration.
 Table 'marketplace_skill_likes' is declared in schema.ts but never created by any migration.
-Table 'report_subscriptions' is declared in schema.ts but never created by any migration.
 Table 'skills' is declared in schema.ts but never created by any migration.
-Table 'telemetry_spans' is declared in schema.ts but never created by any migration.
 Table 'tenant_members' is declared in schema.ts but never created by any migration.
 Table 'tenant_skill_assignments' is declared in schema.ts but never created by any migration.
-
-# Converted table-level grandfather to column-level for 7 push-created tables that gained a tracked segment_id column in 0055 (segment_id itself is properly migrated, not grandfathered).
+Table 'claw_skill_assignments' is declared in schema.ts but never created by any migration.
 Column 'agents.id' is declared in schema.ts but never created/added by any migration.
 Column 'agents.tenant_id' is declared in schema.ts but never created/added by any migration.
 Column 'agents.name' is declared in schema.ts but never created/added by any migration.
@@ -140,75 +123,3 @@ Column 'approval_rules.max_files_changed' is declared in schema.ts but never cre
 Column 'approval_rules.is_enabled' is declared in schema.ts but never created/added by any migration.
 Column 'approval_rules.created_at' is declared in schema.ts but never created/added by any migration.
 Column 'approval_rules.updated_at' is declared in schema.ts but never created/added by any migration.
-# integration_credentials + integration_sync_logs are now created by
-# 0064_integration_credentials.sql, so their own columns are no longer drift.
-# These remaining entries are integration_sync_logs columns that the drift
-# checker mis-attributes to integration_credentials: its pgTable regex
-# (check-schema-drift.mjs) cannot close the integrationCredentials block because
-# of the `}, (t) => [ unique(...) ]` trailing form, so it merges both tables'
-# columns under the first table name. Until that regex is fixed, these stay.
-Column 'integration_credentials.credential_id' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.status' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.items_processed' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.items_errored' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.error_message' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.duration_ms' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.cursor_after' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.started_at' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.completed_at' is declared in schema.ts but never created/added by any migration.
-Column 'contributors.id' is declared in schema.ts but never created/added by any migration.
-Column 'contributors.tenant_id' is declared in schema.ts but never created/added by any migration.
-Column 'contributors.display_name' is declared in schema.ts but never created/added by any migration.
-Column 'contributors.email' is declared in schema.ts but never created/added by any migration.
-Column 'contributors.avatar_url' is declared in schema.ts but never created/added by any migration.
-Column 'contributors.job_title' is declared in schema.ts but never created/added by any migration.
-Column 'contributors.role_type' is declared in schema.ts but never created/added by any migration.
-Column 'contributors.exclude_from_metrics' is declared in schema.ts but never created/added by any migration.
-Column 'contributors.user_id' is declared in schema.ts but never created/added by any migration.
-Column 'contributors.is_active' is declared in schema.ts but never created/added by any migration.
-Column 'contributors.created_at' is declared in schema.ts but never created/added by any migration.
-Column 'contributors.updated_at' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.id' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.contributor_id' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.tenant_id' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.external_id' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.external_email' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.display_name' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.avatar_url' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.created_at' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.activity_event_type' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.credential_id' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.repository_name' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.repository_full_name' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.title' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.url' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.lines_added' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.lines_removed' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.files_changed' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.cycle_time_hours' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.occurred_at' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.date' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.commits' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.prs_opened' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.prs_merged' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.prs_reviewed' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.issues_created' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.issues_resolved' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.activity_score' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.is_active_day' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.updated_at' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.name' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.description' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.parent_team_id' is declared in schema.ts but never created/added by any migration.
-Column 'contributor_identities.manager_id' is declared in schema.ts but never created/added by any migration.
-Column 'report_subscriptions.id' is declared in schema.ts but never created/added by any migration.
-Column 'report_subscriptions.tenant_id' is declared in schema.ts but never created/added by any migration.
-Column 'report_subscriptions.user_id' is declared in schema.ts but never created/added by any migration.
-Column 'report_subscriptions.is_subscribed' is declared in schema.ts but never created/added by any migration.
-Column 'report_subscriptions.updated_at' is declared in schema.ts but never created/added by any migration.
-Column 'report_subscriptions.claw_id' is declared in schema.ts but never created/added by any migration.
-Column 'report_subscriptions.run_id' is declared in schema.ts but never created/added by any migration.
-Column 'report_subscriptions.summary' is declared in schema.ts but never created/added by any migration.
-Column 'report_subscriptions.tags' is declared in schema.ts but never created/added by any migration.
-Column 'report_subscriptions.timestamp' is declared in schema.ts but never created/added by any migration.
-Column 'report_subscriptions.created_at' is declared in schema.ts but never created/added by any migration.
