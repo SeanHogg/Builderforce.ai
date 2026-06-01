@@ -51,7 +51,14 @@ const allowlist = existsSync(allowlistFile)
 const schemaText = readFileSync(schemaFile, 'utf8');
 
 const drizzleTables = []; // [{ table, cols: Set<string> }]
-const tableRe = /pgTable\(\s*'([^']+)'\s*,\s*\{([\s\S]*?)\n\}\)/g;
+// The column object closes with a `}` at column 0 (start of line). A table with
+// no second argument closes the pgTable() call immediately: `\n})`. A table that
+// passes a constraints/indexes callback closes the object with a comma first:
+// `\n}, (t) => [ ... ])`. Match either form (`}` followed by `)` or `,`) so the
+// non-greedy capture stops at THIS table's object and does not bleed into the
+// next table's declaration. (Nested inline config objects are always indented,
+// so their closing braces never sit at column 0 and cannot terminate the match.)
+const tableRe = /pgTable\(\s*'([^']+)'\s*,\s*\{([\s\S]*?)\n\}\s*[,)]/g;
 
 for (const match of schemaText.matchAll(tableRe)) {
   const table = match[1];
