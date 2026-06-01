@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/react';
-import { AgentWorker } from './page';
+import { AgentWorker } from './AgentWorker';
 import type { BrowserRuntimeTransport, ClaimedDispatch } from '@/lib/browserRuntime/runner';
 
 const dispatch: ClaimedDispatch = {
