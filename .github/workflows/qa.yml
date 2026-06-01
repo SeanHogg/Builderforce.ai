@@ -8,7 +8,11 @@ on:
   workflow_dispatch:
     inputs:
       base_url:
-        description: "App URL under test (overrides BF_BASE_URL secret)"
+        description: "Self-test: app URL under test (overrides BF_BASE_URL secret)"
+        required: false
+        type: string
+      project_id:
+        description: "Project mode: Builderforce project id to test (reads its target + personas)"
         required: false
         type: string
   schedule:
@@ -42,6 +46,9 @@ jobs:
           BF_QA_EMAIL: ${{ secrets.BF_QA_EMAIL }}
           BF_QA_PASSWORD: ${{ secrets.BF_QA_PASSWORD }}
           BF_QA_TENANT_ID: ${{ secrets.BF_QA_TENANT_ID }}
+          # Project mode: set to test a customer project's site with its persona
+          # library instead of the Builderforce app itself.
+          BF_PROJECT_ID: ${{ github.event.inputs.project_id || secrets.BF_PROJECT_ID }}
         run: npm run ci
 
       - name: Upload Playwright report

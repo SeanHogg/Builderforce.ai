@@ -2573,3 +2573,44 @@ export const pullRequests = pgTable('pull_requests', {
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
+
+// ── Slice 5: Runtime-agnostic agent dispatch (claw OR cloud OR browser) ──────
+
+/**
+ * One unit of agent execution for a swimlane stage. A "stage" is the set of
+ * dispatches sharing (ticket_run_id, swimlane_id, stage_seq). Each carries the
+ * registered agent + its model (the user's own LLM), the runtime tier, and a
+ * status the executor (a claw push, or a browser PULL worker) drives to a
+ * terminal state. When all dispatches in a stage are terminal the coordinator
+ * advances the ticket (autonomous mode) or routes it to needs-attention.
+ */
+export const agentDispatches = pgTable('agent_dispatches', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  ticketRunId:  uuid('ticket_run_id').notNull().references(() => ticketRuns.id, { onDelete: 'cascade' }),
+  swimlaneId:   uuid('swimlane_id').references(() => swimlanes.id, { onDelete: 'set null' }),
+  assignmentId: uuid('assignment_id').references(() => swimlaneAgentAssignments.id, { onDelete: 'set null' }),
+  taskId:       integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  agentId:      integer('agent_id').references(() => agents.id, { onDelete: 'set null' }),
+  /** Monotonic per-ticket stage counter so a retried lane is a distinct stage. */
+  stageSeq:     integer('stage_seq').notNull().default(0),
+  role:         varchar('role', { length: 120 }).notNull(),
+  runtime:      varchar('runtime', { length: 16 }).notNull().default('cloud'),  // local|cloud|remote|browser
+  target:       varchar('target', { length: 120 }),
+  /** The LLM the agent runs (the user's own model), e.g. 'anthropic/claude-3-haiku'. */
+  model:        varchar('model', { length: 160 }),
+  input:        text('input'),
+  // pending|claimed|running|completed|failed|cancelled
+  status:       varchar('status', { length: 16 }).notNull().default('pending'),
+  output:       text('output'),
+  error:        text('error'),
+  dependsOn:    text('depends_on'),     // JSON array of sibling dispatch ids
+  /** Claw correlation id, or the browser worker's claim token. */
+  externalRef:  varchar('external_ref', { length: 128 }),
+  position:     integer('position').notNull().default(0),
+  claimedAt:    timestamp('claimed_at'),
+  completedAt:  timestamp('completed_at'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+});

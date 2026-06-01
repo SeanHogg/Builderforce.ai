@@ -1,20 +1,19 @@
 /**
- * SwimlaneCoordinator — application service that drives the per-ticket
- * lifecycle state machine across a board's swimlanes.
+ * SwimlaneCoordinator — drives the per-ticket lifecycle state machine across a
+ * board's swimlanes AND the runtime-agnostic dispatch engine that actually runs
+ * each stage's agents.
  *
- * All decisions (advance vs. gate vs. needs_attention) are delegated to the
- * PURE helpers in ./transitions; this class only does IO (Drizzle) and records
- * an audit row in swimlane_transitions for EVERY lifecycle move (or refusal to
- * advance).
+ * All decisions (advance vs. gate vs. needs_attention; which dispatches are
+ * ready; whether a stage is done/failed) are delegated to the PURE helpers in
+ * ./transitions and ./stageScheduling. This class only orchestrates IO through
+ * the {@link CoordinatorStore} port — so the whole launch → dispatch → result →
+ * autonomous-advance loop is unit-testable with an in-memory fake.
+ *
+ * A stage is the set of agent dispatches sharing (ticketRunId, stageSeq). Each
+ * dispatch runs on a claw (pushed via the injected dispatcher) or in the BROWSER
+ * (left `pending` for a pull worker to claim). When the stage settles the ticket
+ * advances (autonomous) or routes to needs_attention — never a silent advance.
  */
-import { and, asc, eq, gt } from 'drizzle-orm';
-import {
-  boards,
-  swimlanes,
-  ticketRuns,
-  swimlaneTransitions,
-} from '../../infrastructure/database/schema';
-import type { Db } from '../../infrastructure/database/connection';
 import {
   canTransitionTicket,
   mapWorkflowStatusToTicketEvent,
@@ -22,15 +21,35 @@ import {
   type TicketLifecycle,
   type WorkflowStatus,
 } from './transitions';
-
-type TicketRunRow = typeof ticketRuns.$inferSelect;
-type SwimlaneRow = typeof swimlanes.$inferSelect;
+import { compileStage, type StageAssignment, type ExecutionMode } from './compileStage';
+import {
+  aggregateStageOutcome,
+  computeReadyDispatches,
+  type DispatchStatus,
+  type SchedulableDispatch,
+} from './stageScheduling';
+import type {
+  AssignmentLite,
+  CoordinatorStore,
+  DispatchLite,
+  LaneLite,
+  TicketRunLite,
+} from './coordinatorStore';
 
 export interface StageHistoryEntry {
   swimlaneId: string | null;
   workflowId: string | null;
   status: string;
   at: string;
+}
+
+/**
+ * A claw-reachable executor (local/cloud/remote). Browser dispatches are NOT
+ * sent here — they stay `pending` for a browser pull worker. Injected so the
+ * coordinator is unit-testable with a fake.
+ */
+export interface StageDispatcher {
+  dispatch(d: DispatchLite): Promise<{ accepted: boolean; externalRef?: string; error?: string }>;
 }
 
 export class TicketCapacityError extends Error {
@@ -74,54 +93,56 @@ function parseHistory(raw: string | null): StageHistoryEntry[] {
   }
 }
 
+function parseDeps(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 export class SwimlaneCoordinator {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly store: CoordinatorStore,
+    /** Claw-reachable executor for local/cloud/remote dispatches. Optional:
+     *  when absent, only browser (pull) dispatches can run. */
+    private readonly dispatcher?: StageDispatcher,
+  ) {}
 
   /**
-   * Start a ticket on a board: create a ticket_runs row at the first lane.
+   * Start a ticket on a board: create the run at the first lane, then enter it
+   * (queued → stage_running), which compiles + routes that lane's agents.
    * Respects board.maxConcurrentTickets (counts non-terminal runs).
    */
-  async startTicket(boardId: string, taskId: number, tenantId: number): Promise<TicketRunRow> {
-    const [board] = await this.db
-      .select()
-      .from(boards)
-      .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)));
+  async startTicket(boardId: string, taskId: number, tenantId: number): Promise<TicketRunLite> {
+    const board = await this.store.getBoard(boardId, tenantId);
     if (!board) throw new TicketRunNotFoundError();
 
-    // Concurrency gate: count only non-terminal runs against the budget.
-    const active = await this.countActiveTickets(boardId, tenantId);
+    const active = await this.store.countActiveTickets(boardId, tenantId, ACTIVE_LIFECYCLES);
     if (active >= board.maxConcurrentTickets) {
       throw new TicketCapacityError(board.maxConcurrentTickets);
     }
 
-    const firstLane = await this.firstLane(boardId, tenantId);
+    const lanes = await this.store.listLanes(boardId, tenantId);
+    const firstLane = lanes[0];
 
     const now = new Date();
     const history: StageHistoryEntry[] = [
-      {
-        swimlaneId: firstLane?.id ?? null,
-        workflowId: null,
-        status: 'queued',
-        at: now.toISOString(),
-      },
+      { swimlaneId: firstLane?.id ?? null, workflowId: null, status: 'queued', at: now.toISOString() },
     ];
 
-    const [run] = await this.db
-      .insert(ticketRuns)
-      .values({
-        tenantId,
-        boardId,
-        taskId,
-        currentSwimlaneId: firstLane?.id ?? null,
-        lifecycle: 'queued',
-        stageHistory: JSON.stringify(history),
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-    if (!run) throw new Error('Failed to create ticket run.');
+    const run = await this.store.createTicketRun({
+      tenantId,
+      boardId,
+      taskId,
+      currentSwimlaneId: firstLane?.id ?? null,
+      lifecycle: 'queued',
+      stageHistory: JSON.stringify(history),
+    });
 
-    await this.recordTransition({
+    await this.store.recordTransition({
       tenantId,
       ticketRunId: run.id,
       fromSwimlaneId: null,
@@ -131,24 +152,32 @@ export class SwimlaneCoordinator {
       detail: 'ticket started',
     });
 
+    if (firstLane) {
+      return this.applyLifecycle(run, {
+        next: 'stage_running',
+        currentSwimlaneId: firstLane.id,
+        reason: 'manual',
+        workflowStatus: null,
+        historyStatus: 'stage_running',
+        toSwimlaneId: firstLane.id,
+      });
+    }
     return run;
   }
 
   /**
-   * A stage's workflow finished. Decide the next lifecycle using the pure
-   * mapper, advance/route accordingly, and ALWAYS record a transition row.
+   * A stage finished. Decide the next lifecycle via the pure mapper, advance/
+   * route accordingly, and ALWAYS record a transition. Failure → needs_attention
+   * (never auto-advance).
    */
-  async onStageComplete(ticketRunId: string, workflowStatus: WorkflowStatus): Promise<TicketRunRow> {
+  async onStageComplete(ticketRunId: string, workflowStatus: WorkflowStatus): Promise<TicketRunLite> {
     const run = await this.loadRun(ticketRunId);
     const board = await this.loadBoard(run.boardId, run.tenantId);
-
     const event = mapWorkflowStatusToTicketEvent(workflowStatus);
 
-    // Failure path: NEVER auto-advance — route to needs_attention.
     if (!event.canAutoAdvance) {
-      const next = event.next;
       return this.applyLifecycle(run, {
-        next,
+        next: event.next,
         currentSwimlaneId: run.currentSwimlaneId,
         reason: event.reason,
         workflowStatus,
@@ -158,8 +187,6 @@ export class SwimlaneCoordinator {
       });
     }
 
-    // Success path: stage_completed first (record success), then resolve where
-    // a successful stage should land.
     const currentLane = await this.loadLane(run.currentSwimlaneId, run.tenantId);
     const target = resolveSuccessfulStageTarget({
       isTerminalLane: currentLane?.isTerminal ?? false,
@@ -176,11 +203,10 @@ export class SwimlaneCoordinator {
         workflowStatus,
         historyStatus: 'completed',
         toSwimlaneId: nextLane?.id ?? run.currentSwimlaneId,
-        intermediate: 'stage_completed',
+        intermediate: nextLane ? ['stage_completed', 'advancing'] : 'stage_completed',
       });
     }
 
-    // 'done' or 'awaiting_gate'
     return this.applyLifecycle(run, {
       next: target,
       currentSwimlaneId: run.currentSwimlaneId,
@@ -193,7 +219,7 @@ export class SwimlaneCoordinator {
   }
 
   /** A human approved a gate; advance the awaiting_gate ticket to the next lane. */
-  async approveGate(ticketRunId: string): Promise<TicketRunRow> {
+  async approveGate(ticketRunId: string): Promise<TicketRunLite> {
     const run = await this.loadRun(ticketRunId);
     if (run.lifecycle !== 'awaiting_gate' && run.lifecycle !== 'needs_attention') {
       throw new InvalidTicketTransitionError(run.lifecycle as TicketLifecycle, 'advancing');
@@ -208,12 +234,12 @@ export class SwimlaneCoordinator {
       workflowStatus: null,
       historyStatus: 'gate_approved',
       toSwimlaneId: nextLane?.id ?? run.currentSwimlaneId,
-      intermediate: 'advancing',
+      intermediate: nextLane ? 'advancing' : undefined,
     });
   }
 
   /** Retry a failed (needs_attention) stage: re-run the SAME lane. */
-  async retryStage(ticketRunId: string): Promise<TicketRunRow> {
+  async retryStage(ticketRunId: string): Promise<TicketRunLite> {
     const run = await this.loadRun(ticketRunId);
     if (run.lifecycle !== 'needs_attention') {
       throw new InvalidTicketTransitionError(run.lifecycle as TicketLifecycle, 'stage_running');
@@ -229,81 +255,188 @@ export class SwimlaneCoordinator {
     });
   }
 
-  // ── internals ────────────────────────────────────────────────────────────
+  // ── stage execution (the runtime-agnostic dispatch engine) ─────────────────
 
-  private async countActiveTickets(boardId: string, tenantId: number): Promise<number> {
-    const rows = await this.db
-      .select({ lifecycle: ticketRuns.lifecycle })
-      .from(ticketRuns)
-      .where(and(eq(ticketRuns.boardId, boardId), eq(ticketRuns.tenantId, tenantId)));
-    return rows.filter((r) => (ACTIVE_LIFECYCLES as string[]).includes(r.lifecycle)).length;
-  }
-
-  private async firstLane(boardId: string, tenantId: number): Promise<SwimlaneRow | undefined> {
-    const [lane] = await this.db
-      .select()
-      .from(swimlanes)
-      .where(and(eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)))
-      .orderBy(asc(swimlanes.position))
-      .limit(1);
-    return lane;
-  }
-
-  private async nextLane(
-    boardId: string,
+  /**
+   * Report a single dispatch's terminal result (claw callback or browser pull
+   * worker), then re-evaluate the stage — scheduling newly-unblocked siblings
+   * and, once the stage settles, advancing the ticket.
+   */
+  async reportDispatchResult(
+    dispatchId: string,
     tenantId: number,
-    afterPosition: number,
-  ): Promise<SwimlaneRow | undefined> {
-    const [lane] = await this.db
-      .select()
-      .from(swimlanes)
-      .where(
-        and(
-          eq(swimlanes.boardId, boardId),
-          eq(swimlanes.tenantId, tenantId),
-          gt(swimlanes.position, afterPosition),
-        ),
-      )
-      .orderBy(asc(swimlanes.position))
-      .limit(1);
-    return lane;
+    result: { status: 'completed' | 'failed' | 'cancelled'; output?: string | null; error?: string | null },
+  ): Promise<void> {
+    const dispatch = await this.store.getDispatch(dispatchId, tenantId);
+    if (!dispatch) throw new TicketRunNotFoundError();
+
+    await this.store.updateDispatch(dispatchId, {
+      status: result.status,
+      output: result.output ?? dispatch.output,
+      error: result.error ?? dispatch.error,
+      completedAt: true,
+    });
+
+    await this.evaluateStage(dispatch.ticketRunId, dispatch.stageSeq, tenantId);
   }
 
-  private async loadLane(
-    swimlaneId: string | null,
-    tenantId: number,
-  ): Promise<SwimlaneRow | undefined> {
+  private async launchStage(run: TicketRunLite): Promise<void> {
+    const lane = await this.loadLane(run.currentSwimlaneId, run.tenantId);
+    if (!lane) {
+      await this.onStageComplete(run.id, 'completed');
+      return;
+    }
+
+    const assignments = await this.store.listAssignments(lane.id, run.tenantId);
+    if (assignments.length === 0) {
+      await this.onStageComplete(run.id, 'completed');
+      return;
+    }
+
+    const stageSeq = (await this.store.maxStageSeq(run.id)) + 1;
+
+    const stageAssignments: StageAssignment[] = assignments.map((a) => ({
+      id: a.id,
+      role: a.role,
+      runtime: (a.runtime as StageAssignment['runtime']) ?? 'cloud',
+      target: a.target,
+      taskTemplate: a.taskTemplate,
+      position: a.position,
+    }));
+    const specs = compileStage(
+      stageAssignments,
+      (lane.executionMode as ExecutionMode) ?? 'sequential',
+      lane.key,
+    );
+
+    const assignmentById = new Map<string, AssignmentLite>(assignments.map((a) => [a.id, a]));
+    const dispatchIdByAssignment = new Map<string, string>();
+    for (const spec of specs) {
+      const a = assignmentById.get(spec.id);
+      const id = await this.store.insertDispatch({
+        tenantId: run.tenantId,
+        ticketRunId: run.id,
+        swimlaneId: lane.id,
+        assignmentId: spec.id,
+        taskId: run.taskId,
+        agentId: null,
+        stageSeq,
+        role: spec.agentRole,
+        runtime: a?.runtime ?? 'cloud',
+        target: a?.target ?? null,
+        model: a?.model ?? null,
+        input: spec.description,
+        status: 'blocked',
+        dependsOn: '[]',
+        position: a?.position ?? 0,
+      });
+      dispatchIdByAssignment.set(spec.id, id);
+    }
+
+    // Translate compiled dependsOn (assignment ids) → sibling dispatch ids.
+    for (const spec of specs) {
+      const dispatchId = dispatchIdByAssignment.get(spec.id);
+      if (!dispatchId) continue;
+      const depDispatchIds = spec.dependsOn
+        .map((aid) => dispatchIdByAssignment.get(aid))
+        .filter((x): x is string => !!x);
+      await this.store.updateDispatch(dispatchId, { dependsOn: JSON.stringify(depDispatchIds) });
+    }
+
+    await this.evaluateStage(run.id, stageSeq, run.tenantId);
+  }
+
+  private async evaluateStage(ticketRunId: string, stageSeq: number, tenantId: number): Promise<void> {
+    let siblings = await this.store.listStageDispatches(ticketRunId, stageSeq, tenantId);
+
+    const ready = computeReadyDispatches(this.toSchedulable(siblings));
+    if (ready.length > 0) {
+      const readyIds = new Set(ready.map((r) => r.id));
+      for (const d of siblings.filter((s) => readyIds.has(s.id))) {
+        await this.dispatchOne(d);
+      }
+      siblings = await this.store.listStageDispatches(ticketRunId, stageSeq, tenantId);
+    }
+
+    const outcome = aggregateStageOutcome(siblings.map((s) => s.status as DispatchStatus));
+    if (outcome === 'completed') {
+      await this.onStageComplete(ticketRunId, 'completed');
+    } else if (outcome === 'failed') {
+      await this.onStageComplete(ticketRunId, 'failed');
+    }
+    // 'running': a pull worker / claw callback re-enters via reportDispatchResult.
+  }
+
+  /** Route one ready dispatch: browser → claimable `pending`; claw → push. */
+  private async dispatchOne(d: DispatchLite): Promise<void> {
+    if (d.runtime === 'browser') {
+      await this.store.updateDispatch(d.id, { status: 'pending' });
+      return;
+    }
+    if (!this.dispatcher) {
+      await this.store.updateDispatch(d.id, {
+        status: 'failed',
+        error: `No claw dispatcher configured for runtime '${d.runtime}'.`,
+        completedAt: true,
+      });
+      return;
+    }
+    try {
+      const res = await this.dispatcher.dispatch(d);
+      await this.store.updateDispatch(d.id, {
+        status: res.accepted ? 'running' : 'failed',
+        externalRef: res.externalRef ?? d.externalRef,
+        error: res.accepted ? d.error : res.error ?? 'dispatch rejected',
+        completedAt: res.accepted ? false : true,
+      });
+    } catch (err) {
+      await this.store.updateDispatch(d.id, {
+        status: 'failed',
+        error: err instanceof Error ? err.message : String(err),
+        completedAt: true,
+      });
+    }
+  }
+
+  private toSchedulable(rows: DispatchLite[]): SchedulableDispatch[] {
+    return rows.map((r) => ({
+      id: r.id,
+      status: r.status as DispatchStatus,
+      dependsOn: parseDeps(r.dependsOn),
+    }));
+  }
+
+  // ── lane / run helpers ─────────────────────────────────────────────────────
+
+  private async nextLane(boardId: string, tenantId: number, afterPosition: number): Promise<LaneLite | undefined> {
+    const lanes = await this.store.listLanes(boardId, tenantId);
+    return lanes.find((l) => l.position > afterPosition);
+  }
+
+  private async loadLane(swimlaneId: string | null, tenantId: number): Promise<LaneLite | undefined> {
     if (!swimlaneId) return undefined;
-    const [lane] = await this.db
-      .select()
-      .from(swimlanes)
-      .where(and(eq(swimlanes.id, swimlaneId), eq(swimlanes.tenantId, tenantId)));
-    return lane;
+    return (await this.store.getLane(swimlaneId, tenantId)) ?? undefined;
   }
 
-  private async loadRun(ticketRunId: string): Promise<TicketRunRow> {
-    const [run] = await this.db.select().from(ticketRuns).where(eq(ticketRuns.id, ticketRunId));
+  private async loadRun(ticketRunId: string): Promise<TicketRunLite> {
+    const run = await this.store.getTicketRun(ticketRunId);
     if (!run) throw new TicketRunNotFoundError();
     return run;
   }
 
-  private async loadBoard(boardId: string, tenantId: number) {
-    const [board] = await this.db
-      .select()
-      .from(boards)
-      .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)));
+  private async loadBoard(boardId: string, tenantId: number): Promise<BoardLikeForResolve> {
+    const board = await this.store.getBoard(boardId, tenantId);
     if (!board) throw new TicketRunNotFoundError();
     return board;
   }
 
   /**
-   * Apply a lifecycle change with validation, persistence, history append, and
-   * a transition audit row. When `intermediate` is provided, the run passes
-   * through that state first (e.g. stage_completed -> advancing) so the
-   * transition graph stays legal.
+   * Apply a lifecycle change with chain validation, persistence, history append,
+   * a transition audit row, and — when landing in stage_running — launching the
+   * stage's dispatches. `intermediate` may be a single state or an ordered chain.
    */
   private async applyLifecycle(
-    run: TicketRunRow,
+    run: TicketRunLite,
     opts: {
       next: TicketLifecycle;
       currentSwimlaneId: string | null;
@@ -311,23 +444,22 @@ export class SwimlaneCoordinator {
       workflowStatus: WorkflowStatus | null;
       historyStatus: string;
       toSwimlaneId: string | null;
-      intermediate?: TicketLifecycle;
+      intermediate?: TicketLifecycle | TicketLifecycle[];
       error?: string | null;
       clearError?: boolean;
     },
-  ): Promise<TicketRunRow> {
+  ): Promise<TicketRunLite> {
     const from = run.lifecycle as TicketLifecycle;
-
-    // Validate the (possibly two-hop) path.
-    if (opts.intermediate) {
-      if (!canTransitionTicket(from, opts.intermediate)) {
-        throw new InvalidTicketTransitionError(from, opts.intermediate);
+    const intermediates = opts.intermediate
+      ? Array.isArray(opts.intermediate) ? opts.intermediate : [opts.intermediate]
+      : [];
+    const chain: TicketLifecycle[] = [from, ...intermediates, opts.next];
+    for (let i = 0; i < chain.length - 1; i++) {
+      const a = chain[i];
+      const b = chain[i + 1];
+      if (a && b && !canTransitionTicket(a, b)) {
+        throw new InvalidTicketTransitionError(a, b);
       }
-      if (!canTransitionTicket(opts.intermediate, opts.next)) {
-        throw new InvalidTicketTransitionError(opts.intermediate, opts.next);
-      }
-    } else if (!canTransitionTicket(from, opts.next)) {
-      throw new InvalidTicketTransitionError(from, opts.next);
     }
 
     const now = new Date();
@@ -339,20 +471,15 @@ export class SwimlaneCoordinator {
       at: now.toISOString(),
     });
 
-    const [updated] = await this.db
-      .update(ticketRuns)
-      .set({
-        lifecycle: opts.next,
-        currentSwimlaneId: opts.currentSwimlaneId,
-        stageHistory: JSON.stringify(history),
-        error: opts.clearError ? null : opts.error ?? run.error,
-        updatedAt: now,
-      })
-      .where(and(eq(ticketRuns.id, run.id), eq(ticketRuns.tenantId, run.tenantId)))
-      .returning();
+    const updated = await this.store.updateTicketRun(run.id, run.tenantId, {
+      lifecycle: opts.next,
+      currentSwimlaneId: opts.currentSwimlaneId,
+      stageHistory: JSON.stringify(history),
+      error: opts.clearError ? null : opts.error ?? run.error,
+    });
     if (!updated) throw new TicketRunNotFoundError();
 
-    await this.recordTransition({
+    await this.store.recordTransition({
       tenantId: run.tenantId,
       ticketRunId: run.id,
       fromSwimlaneId: run.currentSwimlaneId,
@@ -362,27 +489,13 @@ export class SwimlaneCoordinator {
       detail: `${from} -> ${opts.next}`,
     });
 
+    if (opts.next === 'stage_running') {
+      await this.launchStage(updated);
+    }
+
     return updated;
   }
-
-  private async recordTransition(t: {
-    tenantId: number;
-    ticketRunId: string;
-    fromSwimlaneId: string | null;
-    toSwimlaneId: string | null;
-    reason: string;
-    workflowStatus: WorkflowStatus | null;
-    detail: string;
-  }): Promise<void> {
-    await this.db.insert(swimlaneTransitions).values({
-      tenantId: t.tenantId,
-      ticketRunId: t.ticketRunId,
-      fromSwimlaneId: t.fromSwimlaneId,
-      toSwimlaneId: t.toSwimlaneId,
-      reason: t.reason,
-      workflowStatus: t.workflowStatus,
-      detail: t.detail,
-      at: new Date(),
-    });
-  }
 }
+
+/** Minimal board shape resolveSuccessfulStageTarget needs. */
+type BoardLikeForResolve = { autonomous: boolean };

@@ -9,11 +9,19 @@
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { login, baseUrl } from './src/bf';
+import { login, baseUrl, projectId } from './src/bf';
 
 const STATE_PATH = process.env.BF_STORAGE_STATE ?? '.auth/state.json';
 
 export default async function globalSetup(): Promise<void> {
+  // Project mode: pull-tests already logged each persona in and wrote per-
+  // credential storageState files; specs carry their own `test.use({ ... })`.
+  // Nothing to do here.
+  if (projectId() != null) {
+    console.log('[qa-e2e] project mode — per-persona sessions established by pull-tests.');
+    return;
+  }
+
   const session = await login();
   const origin = baseUrl();
   const { hostname } = new URL(origin);

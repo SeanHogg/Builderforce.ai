@@ -8,7 +8,7 @@
  */
 
 /** Runtime tiers an assignment can target. */
-export type AssignmentRuntime = 'local' | 'cloud' | 'remote';
+export type AssignmentRuntime = 'local' | 'cloud' | 'remote' | 'browser';
 
 /** A single agent assignment within a swimlane (subset of the DB row we need). */
 export interface StageAssignment {
@@ -55,6 +55,12 @@ export type ExecutionMode = 'parallel' | 'sequential';
 export function encodeAgentRole(role: string, runtime: AssignmentRuntime, target?: string | null): string {
   const trimmedRole = role.trim();
   if (runtime === 'local') return trimmedRole;
+  // The browser tier is a PULL runtime: a browser worker claims the dispatch and
+  // runs the agent loop client-side. Encode it distinctly from claw `remote:`.
+  if (runtime === 'browser') {
+    const browserTarget = (target ?? '').trim() || 'browser';
+    return `browser:${browserTarget}:${trimmedRole}`;
+  }
   const resolvedTarget = (target ?? '').trim() || (runtime === 'cloud' ? 'cloud' : '');
   if (!resolvedTarget) {
     // A 'remote' runtime with no target is malformed; fall back to a marker so

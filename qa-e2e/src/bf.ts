@@ -104,8 +104,45 @@ export async function fetchActiveTests(session: BfSession): Promise<ActiveTest[]
   return (res.tests ?? []).filter((t) => t.framework === 'playwright' && t.spec);
 }
 
+// ── Project mode ────────────────────────────────────────────────────────────
+// When BF_PROJECT_ID is set, the harness tests a customer project: it pulls the
+// project's target URL + active tests (each tagged with the persona it runs as)
+// + the redacted credential list, then fetches each persona's decrypted secret
+// to drive the site's login form.
+
+export function projectId(): number | null {
+  return process.env.BF_PROJECT_ID ? Number(process.env.BF_PROJECT_ID) : null;
+}
+
+export interface RunnerBundleTest { id: string; slug: string; name: string; spec: string; credentialId: string | null }
+export interface RunnerCredential { id: string; label: string; role: string | null; username: string; loginUrl: string | null }
+export interface RunnerBundle {
+  target: { id: string; name: string; baseUrl: string } | null;
+  tests: RunnerBundleTest[];
+  credentials: RunnerCredential[];
+}
+
+export async function fetchRunnerBundle(session: BfSession, project: number): Promise<RunnerBundle> {
+  return getJson<RunnerBundle>(`/api/qa/projects/${project}/runner-bundle`, session.tenantToken);
+}
+
+export interface CredentialSecret {
+  id: string;
+  username: string;
+  password: string;
+  loginUrl: string | null;
+  loginSelectors: { usernameSelector?: string; passwordSelector?: string; submitSelector?: string } | null;
+}
+
+export async function fetchCredentialSecret(session: BfSession, credentialId: string): Promise<CredentialSecret> {
+  return getJson<CredentialSecret>(`/api/qa/credentials/${credentialId}/secret`, session.tenantToken);
+}
+
 export interface RunReport {
   testSlug: string;
+  projectId?: number | null;
+  credentialId?: string | null;
+  targetId?: string | null;
   status: 'passed' | 'failed' | 'error' | 'skipped';
   browser?: string;
   targetUrl?: string;

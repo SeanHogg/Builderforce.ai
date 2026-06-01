@@ -15,7 +15,7 @@
 import { and, asc, eq, gte } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { qaFlows, qaJourneyEvents } from '../../infrastructure/database/schema';
-import { type QaStep, shortHash, toSlug } from './qaTypes';
+import { inferPersonaRole, type QaStep, shortHash, toSlug } from './qaTypes';
 
 interface JourneyRow {
   sessionId: string;
@@ -80,7 +80,7 @@ export class QaFlowService {
   async aggregate(
     tenantId: number,
     segmentId: string | undefined,
-    opts: { sinceDays?: number; minRoutes?: number; maxFlows?: number } = {},
+    opts: { sinceDays?: number; minRoutes?: number; maxFlows?: number; projectId?: number } = {},
   ): Promise<{ upserted: number }> {
     const sinceDays = opts.sinceDays ?? 30;
     const minRoutes = opts.minRoutes ?? 2;
@@ -137,17 +137,20 @@ export class QaFlowService {
       const startRoute = agg.signature[0] ?? null;
       const name = agg.signature.join(' → ');
       const slug = `usage-${toSlug(agg.signature.join('-'))}-${shortHash(agg.signature.join('>'))}`;
+      const personaRole = inferPersonaRole(agg.signature);
       await this.db
         .insert(qaFlows)
         .values({
           tenantId,
           segmentId,
+          projectId: opts.projectId,
           name,
           slug,
           source: 'usage',
           description: `Auto-derived from ${agg.frequency} captured session(s).`,
           startRoute,
           steps: JSON.stringify(agg.steps),
+          personaRole,
           frequency: agg.frequency,
           status: 'active',
           updatedAt: now,
@@ -159,6 +162,7 @@ export class QaFlowService {
             frequency: agg.frequency,
             name,
             startRoute,
+            personaRole,
             updatedAt: now,
           },
         });
