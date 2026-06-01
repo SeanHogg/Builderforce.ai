@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { adminApi, type LegalDocument } from '@/lib/adminApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
-import { ChatMessageContent } from '@/components/ChatMessageContent';
+import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 
 export interface LegalEditorContext {
   docType: 'terms' | 'privacy';
@@ -158,7 +158,7 @@ export function LegalEditorDrawer({ context, onClose, onPublished }: LegalEditor
                   background: 'var(--bg-deep)',
                 }}
               >
-                <ChatMessageContent content={content || '_Nothing to preview yet._'} />
+                <LegalDocPreview content={content} />
               </div>
             ) : (
               <textarea

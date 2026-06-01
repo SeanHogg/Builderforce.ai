@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useCart, type CartItem } from '@/lib/CartContext';
 import { useAuth } from '@/lib/AuthContext';
@@ -45,6 +46,16 @@ export default function ShoppingCart() {
   const { isAuthenticated } = useAuth();
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Portal to <body> so the fixed drawer escapes ancestor stacking contexts.
+  // ShoppingCart renders inside `.topbar`, which has both `z-index: 40` AND
+  // `backdrop-filter: blur(12px)` — the latter makes the topbar the containing
+  // block for fixed descendants, clamping the panel to the topbar's height.
+  // (Same trap documented in SlideOutPanel.tsx.)
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Close on Escape
   useEffect(() => {
     if (!isOpen) return;
@@ -59,9 +70,9 @@ export default function ShoppingCart() {
     return () => { document.body.style.overflow = ''; };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
@@ -70,7 +81,7 @@ export default function ShoppingCart() {
           position: 'fixed',
           inset: 0,
           background: 'rgba(0,0,0,0.5)',
-          zIndex: 200,
+          zIndex: 9998,
           backdropFilter: 'blur(2px)',
         }}
         aria-hidden="true"
@@ -90,7 +101,7 @@ export default function ShoppingCart() {
           width: 'min(420px, 100vw)',
           background: 'var(--bg-elevated, #1a1a2e)',
           borderLeft: '1px solid var(--border, rgba(255,255,255,0.1))',
-          zIndex: 201,
+          zIndex: 9999,
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '-8px 0 32px rgba(0,0,0,0.4)',
@@ -271,6 +282,7 @@ export default function ShoppingCart() {
           </div>
         )}
       </div>
-    </>
+    </>,
+    document.body,
   );
 }

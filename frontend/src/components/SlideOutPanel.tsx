@@ -1,5 +1,8 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+
 export interface SlideOutPanelTab {
   id: string;
   label: string;
@@ -39,9 +42,17 @@ export function SlideOutPanel({
   children,
   width = 'min(560px, 96vw)',
 }: SlideOutPanelProps) {
-  if (!open) return null;
+  // Portal to <body> so the fixed drawer escapes ancestor stacking contexts
+  // (e.g. the app `.shell` has `position: relative; z-index: 1`, which would
+  // otherwise trap the drawer below the fixed footer regardless of its z-index).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  return (
+  if (!open || !mounted) return null;
+
+  return createPortal(
     <>
       <div
         className="slide-panel-overlay"
@@ -147,6 +158,7 @@ export function SlideOutPanel({
           {children}
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   );
 }

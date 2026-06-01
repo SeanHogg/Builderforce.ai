@@ -32,6 +32,9 @@ function useShowAppShell(): boolean {
   if (APP_SHELL_PATHS.some((p) => pathname === p)) return true;
   if (pathname.startsWith('/projects')) return true;
   if (pathname.startsWith('/tasks')) return true;
+  if (pathname.startsWith('/workflows')) return true;
+  if (pathname.startsWith('/architect')) return true;
+  if (pathname.startsWith('/agent-worker')) return true;
   if (pathname.startsWith('/workforce')) return true;
   if (pathname.startsWith('/contributors')) return true;
   if (pathname.startsWith('/prompts')) return true;
