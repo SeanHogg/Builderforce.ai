@@ -1472,3 +1472,129 @@ export const retroApi = {
   voteItem: (itemId: string) => request<RetroItem>(`/api/agile/retros/items/${itemId}/vote`, { method: 'POST' }),
   deleteItem: (itemId: string) => request<{ deleted: string }>(`/api/agile/retros/items/${itemId}`, { method: 'DELETE' }),
 };
+
+// ---------------------------------------------------------------------------
+// Analytics — unified contributor activity calendar (humans + AI agents)
+// ---------------------------------------------------------------------------
+
+export interface CalendarCell {
+  date: string;   // YYYY-MM-DD
+  count: number;
+  level: number;  // 0–4 intensity bucket
+}
+
+export interface ContributorCalendar {
+  id: number;
+  displayName: string;
+  kind: 'human' | 'agent';
+  avatarUrl: string | null;
+  jobTitle: string | null;
+  clawId: number | null;
+  total: number;
+  days: CalendarCell[];
+}
+
+export interface ActivityCalendar {
+  range: { from: string; to: string };
+  maxCount: number;
+  contributors: ContributorCalendar[];
+  calendar: CalendarCell[];
+}
+
+export const analyticsApi = {
+  activityCalendar: (params?: { from?: string; to?: string; contributorId?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.from) q.set('from', params.from);
+    if (params?.to) q.set('to', params.to);
+    if (params?.contributorId != null) q.set('contributorId', String(params.contributorId));
+    const query = q.toString();
+    return request<ActivityCalendar>(`/api/analytics/activity-calendar${query ? `?${query}` : ''}`);
+  },
+  syncAgents: () =>
+    request<{ created: number; updated: number; total: number }>('/api/analytics/sync-agents', { method: 'POST' }),
+};
+
+// ---------------------------------------------------------------------------
+// Prompt Library — versioned templates with a public gallery
+// ---------------------------------------------------------------------------
+
+export interface PromptSummary {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  tags: string[];
+  authorName: string | null;
+  currentVersion: number;
+  usageCount: number;
+  starCount: number;
+  isFeatured: boolean;
+  updatedAt: string;
+}
+
+export interface PromptVariable { name: string; description?: string; default?: string; }
+
+export interface PromptPublicView extends PromptSummary {
+  body: string;
+  variables: PromptVariable[];
+  model: string | null;
+}
+
+export interface PromptVersion {
+  id: string;
+  version: number;
+  body: string;
+  variables: PromptVariable[];
+  model: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface PromptEntry extends PromptSummary {
+  visibility: 'private' | 'tenant' | 'public';
+  authorUserId: string | null;
+  versions?: PromptVersion[];
+}
+
+export interface CreatePromptBody {
+  title: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+  visibility?: 'private' | 'tenant' | 'public';
+  authorName?: string;
+  body: string;
+  variables?: PromptVariable[];
+  model?: string;
+  notes?: string;
+}
+
+export const promptLibraryApi = {
+  // Public (no auth required)
+  browsePublic: (params?: { q?: string; category?: string; tag?: string; sort?: 'popular' | 'recent' | 'featured'; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.q) q.set('q', params.q);
+    if (params?.category) q.set('category', params.category);
+    if (params?.tag) q.set('tag', params.tag);
+    if (params?.sort) q.set('sort', params.sort);
+    if (params?.limit != null) q.set('limit', String(params.limit));
+    if (params?.offset != null) q.set('offset', String(params.offset));
+    const query = q.toString();
+    return request<{ prompts: PromptSummary[] }>(`/api/prompts/public${query ? `?${query}` : ''}`).then((r) => r.prompts);
+  },
+  getPublic: (slug: string) => request<PromptPublicView>(`/api/prompts/public/${slug}`),
+  usePublic: (slug: string) => request<PromptPublicView & { usageCount: number }>(`/api/prompts/public/${slug}/use`, { method: 'POST' }),
+
+  // Authenticated (tenant JWT)
+  list: () => request<{ prompts: PromptEntry[] }>('/api/prompts').then((r) => r.prompts),
+  get: (id: string) => request<PromptEntry>(`/api/prompts/${id}`),
+  create: (body: CreatePromptBody) => request<PromptEntry>('/api/prompts', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: string, body: Partial<Pick<PromptEntry, 'title' | 'description' | 'category' | 'tags' | 'visibility'>>) =>
+    request<PromptEntry>(`/api/prompts/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  addVersion: (id: string, body: { body: string; variables?: PromptVariable[]; model?: string; notes?: string }) =>
+    request<PromptEntry & { version: number }>(`/api/prompts/${id}/versions`, { method: 'POST', body: JSON.stringify(body) }),
+  remove: (id: string) => request<{ deleted: boolean }>(`/api/prompts/${id}`, { method: 'DELETE' }),
+  star: (id: string) => request<{ starred: boolean }>(`/api/prompts/${id}/star`, { method: 'POST' }),
+  unstar: (id: string) => request<{ starred: boolean }>(`/api/prompts/${id}/star`, { method: 'DELETE' }),
+};

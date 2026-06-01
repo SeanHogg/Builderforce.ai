@@ -69,6 +69,8 @@ import { createIntegrationRoutes }  from './presentation/routes/integrationRoute
 import { createContributorRoutes }  from './presentation/routes/contributorRoutes';
 import { createDevTeamRoutes }      from './presentation/routes/devTeamRoutes';
 import { createReportRoutes }       from './presentation/routes/reportRoutes';
+import { createAnalyticsRoutes }    from './presentation/routes/analyticsRoutes';
+import { createPromptLibraryRoutes } from './presentation/routes/promptLibraryRoutes';
 import { createBrainRoutes }       from './presentation/routes/brainRoutes';
 import { createIdeRoutes }         from './presentation/routes/ideRoutes';
 import { createIdeAiRoutes }       from './presentation/routes/ideAiRoutes';
@@ -88,6 +90,8 @@ import { createBoardConnectionRoutes } from './presentation/routes/boardConnecti
 import { createBoardWebhookRoutes }    from './presentation/routes/boardWebhookRoutes';
 import { createPrdRoutes }             from './presentation/routes/prdRoutes';
 import { createRepoRoutes }            from './presentation/routes/repoRoutes';
+import { createAgentRuntimeRoutes }    from './presentation/routes/agentRuntimeRoutes';
+import { createGitProxyRoutes }        from './presentation/routes/gitProxyRoutes';
 
 import { API_VERSION } from './version';
 import {
@@ -256,6 +260,8 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/contributors',    createContributorRoutes(db));
   app.route('/api/dev-teams',       createDevTeamRoutes(db));
   app.route('/api/reports',         createReportRoutes(db));
+  app.route('/api/analytics',       createAnalyticsRoutes(db));
+  app.route('/api/prompts',         createPromptLibraryRoutes(db));
   app.route('/api/managed-claws',   createManagedClawRoutes(db));
   app.route('/api/cost-forecast',   createCostForecastRoutes(db));
   app.route('/api/dashboard',       createDashboardRoutes(db));
@@ -271,6 +277,8 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/board-webhooks',    createBoardWebhookRoutes(db));
   app.route('/api/prd',               createPrdRoutes(db));
   app.route('/api/repos',             createRepoRoutes(db));
+  app.route('/api/agent-runtime',     createAgentRuntimeRoutes(db));
+  app.route('/api/git-proxy',         createGitProxyRoutes(db));
 
   app.onError(errorHandler);
   app.notFound((c) => addCorsToResponse(c, c.json({ error: 'Not found' }, 404)));

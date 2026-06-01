@@ -1347,6 +1347,10 @@ export const contributors = pgTable('contributors', {
   excludeFromMetrics: boolean('exclude_from_metrics').notNull().default(false),
   /** userId if this contributor is also a Builderforce user. */
   userId:        varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  /** 'human' (git/PR contributor) | 'agent' (a CoderClaw acting as a teammate). */
+  kind:          varchar('kind', { length: 16 }).notNull().default('human'),
+  /** For agent contributors: the coderclaw instance whose telemetry rolls up here. */
+  clawId:        integer('claw_id').references(() => coderclawInstances.id, { onDelete: 'set null' }),
   isActive:      boolean('is_active').notNull().default(true),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
@@ -1524,6 +1528,61 @@ export const teamMemory = pgTable('team_memory', {
   tags:      text('tags').notNull().default('[]'),
   /** ISO-8601 timestamp provided by the claw. */
   timestamp: varchar('timestamp', { length: 32 }).notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Prompt Library — versioned prompt templates with a public gallery
+// (Composite uniqueness/PKs are enforced in migration 0069. These tables use
+//  the plain object form so the schema-drift parser captures them discretely.)
+// ---------------------------------------------------------------------------
+
+/**
+ * A prompt template. Authored within a tenant; publishable to a public gallery
+ * (visibility='public') that anyone can browse and "use". The body lives in
+ * prompt_library_versions (immutable, versioned); current_version points at the
+ * active one. Unique (tenant_id, slug) is enforced by migration 0069.
+ */
+export const promptLibraryEntries = pgTable('prompt_library_entries', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
+  slug:           varchar('slug', { length: 255 }).notNull(),
+  title:          varchar('title', { length: 255 }).notNull(),
+  description:    text('description'),
+  category:       varchar('category', { length: 100 }),
+  /** JSON array of tag strings, stored as text. */
+  tags:           text('tags').notNull().default('[]'),
+  /** 'private' | 'tenant' | 'public' */
+  visibility:     varchar('visibility', { length: 16 }).notNull().default('private'),
+  authorUserId:   varchar('author_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  authorName:     varchar('author_name', { length: 255 }),
+  currentVersion: integer('current_version').notNull().default(1),
+  usageCount:     integer('usage_count').notNull().default(0),
+  starCount:      integer('star_count').notNull().default(0),
+  isFeatured:     boolean('is_featured').notNull().default(false),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+});
+
+/** Immutable version of a prompt entry's body. Unique (entry_id, version) in 0069. */
+export const promptLibraryVersions = pgTable('prompt_library_versions', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  entryId:   uuid('entry_id').notNull().references(() => promptLibraryEntries.id, { onDelete: 'cascade' }),
+  version:   integer('version').notNull(),
+  body:      text('body').notNull(),
+  /** JSON array of { name, description, default } variable descriptors. */
+  variables: text('variables').notNull().default('[]'),
+  model:     varchar('model', { length: 255 }),
+  notes:     text('notes'),
+  createdBy: varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+/** Per-user star ("like") on a prompt entry. PK (entry_id, user_id) in 0069. */
+export const promptLibraryStars = pgTable('prompt_library_stars', {
+  entryId:   uuid('entry_id').notNull().references(() => promptLibraryEntries.id, { onDelete: 'cascade' }),
+  userId:    varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 

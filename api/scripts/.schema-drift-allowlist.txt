@@ -96,7 +96,6 @@ Table 'audit_events' is declared in schema.ts but never created by any migration
 Table 'contributor_identities' is declared in schema.ts but never created by any migration.
 Table 'contributors' is declared in schema.ts but never created by any migration.
 Table 'dev_team_members' is declared in schema.ts but never created by any migration.
-Table 'integration_credentials' is declared in schema.ts but never created by any migration.
 Table 'managed_claw_requests' is declared in schema.ts but never created by any migration.
 Table 'marketplace_skill_likes' is declared in schema.ts but never created by any migration.
 Table 'report_subscriptions' is declared in schema.ts but never created by any migration.
@@ -141,18 +140,15 @@ Column 'approval_rules.max_files_changed' is declared in schema.ts but never cre
 Column 'approval_rules.is_enabled' is declared in schema.ts but never created/added by any migration.
 Column 'approval_rules.created_at' is declared in schema.ts but never created/added by any migration.
 Column 'approval_rules.updated_at' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.id' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.tenant_id' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.name' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.base_url' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.credentials_enc' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.iv' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.is_enabled' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.last_tested_at' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.last_test_ok' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.created_at' is declared in schema.ts but never created/added by any migration.
-Column 'integration_credentials.updated_at' is declared in schema.ts but never created/added by any migration.
+# integration_credentials + integration_sync_logs are now created by
+# 0064_integration_credentials.sql, so their own columns are no longer drift.
+# These remaining entries are integration_sync_logs columns that the drift
+# checker mis-attributes to integration_credentials: its pgTable regex
+# (check-schema-drift.mjs) cannot close the integrationCredentials block because
+# of the `}, (t) => [ unique(...) ]` trailing form, so it merges both tables'
+# columns under the first table name. Until that regex is fixed, these stay.
 Column 'integration_credentials.credential_id' is declared in schema.ts but never created/added by any migration.
+Column 'integration_credentials.status' is declared in schema.ts but never created/added by any migration.
 Column 'integration_credentials.items_processed' is declared in schema.ts but never created/added by any migration.
 Column 'integration_credentials.items_errored' is declared in schema.ts but never created/added by any migration.
 Column 'integration_credentials.error_message' is declared in schema.ts but never created/added by any migration.
