@@ -27,11 +27,11 @@ export function createSeamRoutes(db: Db): Hono<HonoEnv> {
 
   // ── Feedback ingest (host → BuilderForce) ──────────────────────────────────
   router.post('/ingest/feedback', async (c) => {
-    const body = await c.req.json<{
+    const body = (await c.req.json().catch(() => ({}))) as {
       accountId?: string; companyId?: string;
       eventId?: string; widgetId?: string; text?: string;
       sentiment?: string; contact?: string;
-    }>().catch(() => ({}));
+    };
 
     let svc;
     try {
@@ -98,10 +98,10 @@ export function createSeamRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.post('/webhooks', async (c) => {
-    const body = await c.req.json<{
+    const body = (await c.req.json().catch(() => ({}))) as {
       accountId?: string; companyId?: string;
       url?: string; events?: unknown; secret?: string;
-    }>().catch(() => ({}));
+    };
 
     let svc;
     try {

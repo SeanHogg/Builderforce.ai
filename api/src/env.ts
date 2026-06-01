@@ -69,6 +69,13 @@ export interface Env {
    *    [[durable_objects.bindings]] name = "SESSION_ROOM" class_name = "SessionRoomDO" */
   SESSION_ROOM?: DurableObjectNamespace;
 
+  /** Durable Object namespace for the Architect / Digital-Transformation
+   *  repo-analysis pipeline. One instance per analysis run (`idFromName(runId)`),
+   *  advancing one stage per alarm() tick. Optional: when unset, the
+   *  /api/repo-analysis POST returns 503 (feature disabled). Bind in wrangler.toml:
+   *    [[durable_objects.bindings]] name = "ANALYSIS_RUNNER" class_name = "AnalysisRunnerDO" */
+  ANALYSIS_RUNNER?: DurableObjectNamespace;
+
   /**
    * Optional KV namespace caching API-key → tenant resolutions for ~60s.
    * Without it, every chat-completion call hits the DB to validate `bfk_*` /

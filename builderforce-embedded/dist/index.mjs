@@ -62,6 +62,7 @@ function handleFrameMessage(event, h) {
 
 // src/views.ts
 var EMBED_CAPABILITIES = ["product", "agile", "security"];
+var EMBED_CONSENT_VERSION = 1;
 function pillarToCapability(pillar) {
   return pillar === "governance" ? "security" : pillar;
 }
@@ -226,6 +227,7 @@ export {
   BFEMBED_SOURCE,
   BuilderForceEmbed,
   EMBED_CAPABILITIES,
+  EMBED_CONSENT_VERSION,
   EMBED_VIEWS,
   EMBED_VIEW_KEYS,
   capabilityForView,

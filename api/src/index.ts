@@ -67,6 +67,7 @@ import { createApprovalRoutes }     from './presentation/routes/approvalRoutes';
 import { createApprovalRuleRoutes } from './presentation/routes/approvalRuleRoutes';
 import { createTelemetryRoutes }    from './presentation/routes/telemetryRoutes';
 import { createQaRoutes }           from './presentation/routes/qaRoutes';
+import { createRepoAnalysisRoutes } from './presentation/routes/repoAnalysisRoutes';
 import { createIntegrationRoutes }  from './presentation/routes/integrationRoutes';
 import { createContributorRoutes }  from './presentation/routes/contributorRoutes';
 import { createDevTeamRoutes }      from './presentation/routes/devTeamRoutes';
@@ -112,6 +113,7 @@ import { emulationMiddleware } from './presentation/middleware/emulationMiddlewa
 // Durable Objects (must be re-exported so the Workers runtime can instantiate them)
 export { ClawRelayDO } from './infrastructure/relay/ClawRelayDO';
 export { SessionRoomDO } from './infrastructure/relay/SessionRoomDO';
+export { AnalysisRunnerDO } from './infrastructure/relay/AnalysisRunnerDO';
 export { TenantRateLimiterDO } from './infrastructure/ratelimit/TenantRateLimiterDO';
 
 // ---------------------------------------------------------------------------
@@ -259,6 +261,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/approval-rules',  createApprovalRuleRoutes(db));
   app.route('/api/telemetry',       createTelemetryRoutes(db));
   app.route('/api/qa',              createQaRoutes(db));
+  app.route('/api/repo-analysis',   createRepoAnalysisRoutes(db));
 
   // Phase 6 — Dev Analytics & Team Intelligence
   app.route('/api/integrations',    createIntegrationRoutes(db, env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET));

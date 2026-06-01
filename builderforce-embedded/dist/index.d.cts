@@ -75,6 +75,14 @@ type EmbedPillar = 'product' | 'agile' | 'governance';
 /** The three capability areas a host SuperAdmin enables (governance ⇒ security). */
 type EmbedCapability = 'product' | 'agile' | 'security';
 declare const EMBED_CAPABILITIES: readonly EmbedCapability[];
+/**
+ * The current version of the embed-enablement consent text. Bump this whenever
+ * the legal/consent copy shown before a host enables embedding changes; a tenant
+ * whose recorded `consentVersion` is below this must re-consent. Single source of
+ * truth — the frontend consent modal and the API both key off it (the API mirrors
+ * the value with a comment, same posture as EMBED_CAPABILITIES).
+ */
+declare const EMBED_CONSENT_VERSION = 1;
 /** Map a surface's pillar to the capability that gates it. Single source of truth. */
 declare function pillarToCapability(pillar: EmbedPillar): EmbedCapability;
 interface EmbedViewMeta {
@@ -323,4 +331,4 @@ interface FrameMessageHandlers {
 }
 declare function handleFrameMessage(event: MessageEvent, h: FrameMessageHandlers): void;
 
-export { BFEMBED_SOURCE, BuilderForceEmbed, type BuilderForceEmbedProps, EMBED_CAPABILITIES, EMBED_VIEWS, EMBED_VIEW_KEYS, type EmbedCapability, type EmbedPillar, type EmbedTheme, type EmbedView, type EmbedViewMeta, type FrameMessageHandlers, type FrameToHostMessage, type HostToFrameMessage, capabilityForView, handleFrameMessage, isEmbedView, isFrameToHostMessage, isHostToFrameMessage, pillarToCapability };
+export { BFEMBED_SOURCE, BuilderForceEmbed, type BuilderForceEmbedProps, EMBED_CAPABILITIES, EMBED_CONSENT_VERSION, EMBED_VIEWS, EMBED_VIEW_KEYS, type EmbedCapability, type EmbedPillar, type EmbedTheme, type EmbedView, type EmbedViewMeta, type FrameMessageHandlers, type FrameToHostMessage, type HostToFrameMessage, capabilityForView, handleFrameMessage, isEmbedView, isFrameToHostMessage, isHostToFrameMessage, pillarToCapability };

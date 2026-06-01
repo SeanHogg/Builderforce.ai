@@ -41,11 +41,11 @@ describe('fetchBurnRate', () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ monthlyBurn: 50000, runwayMonths: 8 }), { status: 200 }));
     const res = await fetchBurnRate(db, { tenantId: 1, segmentId: 'seg', fetchImpl });
     expect(res).toEqual({ available: true, source: 'host', monthlyBurn: 50000, runwayMonths: 8 });
-    const [url, init] = fetchImpl.mock.calls[0]!;
+    const [url, init] = (fetchImpl.mock.calls as any[])[0] as [string, RequestInit];
     expect(url).toContain('https://host.example/api/bi/burn-rate?');
     expect(url).toContain('companyId=co');
     expect(url).toContain('accountId=acct');
-    expect((init!.headers as Record<string, string>).Authorization).toBe('Bearer tok');
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok');
   });
 
   it('degrades to unavailable on a non-200', async () => {

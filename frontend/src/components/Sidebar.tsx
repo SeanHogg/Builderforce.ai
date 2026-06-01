@@ -29,6 +29,7 @@ const mainNav: NavItem[] = [
     icon: '💻',
     activePaths: ['/ide'],
   },
+  { href: '/architect', label: 'Architect', icon: '🏛' },
   { href: '/tasks', label: 'Task Mgmt', icon: '☑' },
   { href: '/contributors', label: 'Contributors', icon: '📈' },
   { href: '/training', label: 'Training', icon: '🎓' },
