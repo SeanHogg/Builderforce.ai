@@ -69,7 +69,7 @@ export default function PromptsPage() {
     }
   };
 
-  const usePrompt = async (p: PromptPublicView) => {
+  const applyPrompt = async (p: PromptPublicView) => {
     try {
       const fresh = await promptLibraryApi.usePublic(p.slug);
       await navigator.clipboard.writeText(fresh.body).catch(() => {});
@@ -163,7 +163,7 @@ export default function PromptsPage() {
           prompt={selected}
           isAuthed={isAuthed}
           onClose={() => setSelected(null)}
-          onUse={() => usePrompt(selected)}
+          onUse={() => applyPrompt(selected)}
         />
       )}
 
