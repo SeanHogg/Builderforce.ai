@@ -12,7 +12,7 @@ import {
   type RepoSourceConfig,
   type RepoTreeEntry,
   RepoSourceError,
-} from './RepoSource';
+} from './repoSourceBase';
 
 interface BbRepo { mainbranch?: { name?: string } }
 interface BbSrcNode { path?: string; type?: string; size?: number }

@@ -11,7 +11,7 @@ import {
   type RepoTreeEntry,
   RepoSourceError,
   decodeBase64Utf8,
-} from './RepoSource';
+} from './repoSourceBase';
 
 /** Skip files larger than this (bytes) — protects the token budget + memory. */
 const MAX_FILE_BYTES = 512 * 1024;

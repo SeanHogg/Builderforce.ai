@@ -5,69 +5,28 @@
  * contents, languages, recent commits). Everything runs server-side in the
  * Worker via the provider's REST API — no clone, no installed agent.
  *
- * Each concrete client takes an injected `FetchLike` so the orchestration is
- * unit-testable without live network calls (mirrors boardsync/providers.ts).
- * In production the DO passes `makeRepoFetch()`, which wraps the global fetch in
- * the shared vendor timeout + Cloudflare subrequest-cap detection so a repo
- * that blows the per-invocation budget surfaces the typed
+ * Leaf types/helpers live in ./repoSourceBase (imported by the concrete clients
+ * too) so this barrel can depend on the clients for its factory without forming
+ * a cycle. In production the DO passes `makeRepoFetch()`, which wraps the global
+ * fetch in the shared vendor timeout + Cloudflare subrequest-cap detection so a
+ * repo that blows the per-invocation budget surfaces the typed
  * WorkerSubrequestExhaustedError the DO knows how to back off on.
  */
 import { fetchWithVendorTimeout } from '../../llm/vendors/types';
 import { GitHubRepoSource } from './GitHubRepoSource';
 import { GitLabRepoSource } from './GitLabRepoSource';
 import { BitbucketRepoSource } from './BitbucketRepoSource';
+import type { FetchLike, RepoSource, RepoSourceConfig, RepoTreeEntry } from './repoSourceBase';
 
-export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
-
-export type RepoProvider = 'github' | 'bitbucket' | 'gitlab';
-
-export interface RepoSourceConfig {
-  owner: string;
-  repo: string;
-  /** Provider host, e.g. 'github.com' / 'gitlab.com' / 'bitbucket.org'. */
-  host?: string | null;
-  /** Access token (PAT / app password / OAuth token), already decrypted. */
-  token: string;
-  /** Bitbucket app-password auth needs a username for Basic auth. */
-  username?: string | null;
-}
-
-export interface RepoTreeEntry {
-  path: string;
-  type: 'file' | 'dir';
-  /** Size in bytes when the provider reports it (used to rank "largest module"). */
-  bytes?: number;
-}
-
-export interface RepoCommit {
-  sha: string;
-  message: string;
-  /** ISO date string. */
-  date: string;
-}
-
-export interface RepoSource {
-  getDefaultBranch(): Promise<string>;
-  /** { language: bytes } — empty object when the provider has no languages API. */
-  getLanguages(): Promise<Record<string, number>>;
-  /** Recursive, flattened tree at `ref`. May be truncated by the provider. */
-  getTree(ref: string): Promise<{ entries: RepoTreeEntry[]; truncated: boolean }>;
-  /** File content at `ref`, or null when binary / too large / missing. */
-  getFileContent(path: string, ref: string): Promise<string | null>;
-  listCommits(ref: string, limit: number): Promise<RepoCommit[]>;
-}
-
-/** Raised on a hard provider failure (non-2xx that isn't a missing file). */
-export class RepoSourceError extends Error {
-  constructor(
-    public readonly provider: RepoProvider,
-    public readonly status: number,
-    message: string,
-  ) {
-    super(`[${provider}] ${message} (status ${status})`);
-    this.name = 'RepoSourceError';
-  }
-}
+export type {
+  FetchLike,
+  RepoProvider,
+  RepoSource,
+  RepoSourceConfig,
+  RepoTreeEntry,
+  RepoCommit,
+} from './repoSourceBase';
+export { RepoSourceError, decodeBase64Utf8 } from './repoSourceBase';
 
 /**
  * Worker-safe fetch for repo API calls: shared 15s per-call timeout +
@@ -113,8 +72,7 @@ const SECRET_PATH = /(^|\/)(\.env(\..*)?|.*\.pem|.*\.key|id_rsa|id_ed25519|.*\.p
 const MANIFEST = /(^|\/)(package\.json|tsconfig(\..*)?\.json|requirements\.txt|pyproject\.toml|setup\.py|go\.mod|pom\.xml|build\.gradle(\.kts)?|Cargo\.toml|Gemfile|composer\.json|.*\.csproj|Dockerfile|docker-compose.*\.ya?ml|.*\.tf|wrangler\.toml|serverless\.ya?ml|nx\.json|pnpm-workspace\.yaml|turbo\.json|README(\..*)?|readme(\..*)?)$/i;
 
 /** Framework / app entrypoints — reveal architecture quickly. */
-const ENTRYPOINT = /(^|\/)(src\/)?(index|main|app|server|bootstrap|cli)\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|rb|php|cs)$/i
-  ;
+const ENTRYPOINT = /(^|\/)(src\/)?(index|main|app|server|bootstrap|cli)\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|rb|php|cs)$/i;
 const FRAMEWORK_CONFIG = /(^|\/)(next\.config\.[mc]?[jt]s|vite\.config\.[mc]?[jt]s|nuxt\.config\.[mc]?[jt]s|angular\.json|svelte\.config\.[mc]?[jt]s|astro\.config\.[mc]?[jt]s|remix\.config\.[mc]?[jt]s|webpack\.config\.[mc]?[jt]s)$/i;
 
 export function isExcludedPath(path: string): boolean {
@@ -130,12 +88,6 @@ export function isSecretPath(path: string): boolean {
 /** Rough token estimate for a byte count (~4 bytes/token). */
 export function estimateTokens(bytes: number): number {
   return Math.ceil(bytes / 4);
-}
-
-/** Decode a base64 payload (provider file contents) as UTF-8 text. */
-export function decodeBase64Utf8(b64: string): string {
-  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
 }
 
 export interface SelectEvidenceOptions {

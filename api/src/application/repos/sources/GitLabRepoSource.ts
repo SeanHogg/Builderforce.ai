@@ -12,7 +12,7 @@ import {
   type RepoTreeEntry,
   RepoSourceError,
   decodeBase64Utf8,
-} from './RepoSource';
+} from './repoSourceBase';
 
 const MAX_FILE_BYTES = 512 * 1024;
 
@@ -63,7 +63,9 @@ export class GitLabRepoSource implements RepoSource {
     let page = 1;
     const maxPages = 20; // 20 * 100 = 2000 entries cap — bounds subrequests
     let truncated = false;
-    while (page <= maxPages) {
+    // Iteration counter is the hard stop: never trust the provider's next-page
+    // header to advance (a stuck value would otherwise spin).
+    for (let i = 0; i < maxPages; i++) {
       const { ok, status, body, res } = await this.get<GlTreeNode[]>(
         `/projects/${this.projectId}/repository/tree?recursive=true&per_page=100&ref=${encodeURIComponent(ref)}&page=${page}`,
       );
@@ -73,11 +75,11 @@ export class GitLabRepoSource implements RepoSource {
           entries.push({ path: n.path, type: n.type === 'tree' ? 'dir' : 'file' });
         }
       }
-      const next = res?.headers.get('x-next-page');
-      if (!next) break;
-      if (page >= maxPages) { truncated = true; break; }
-      page = Number(next);
-      if (!Number.isFinite(page) || page <= 0) break;
+      const nextRaw = res?.headers.get('x-next-page');
+      const next = nextRaw ? Number(nextRaw) : NaN;
+      if (!Number.isFinite(next) || next <= page) break; // no further pages / no progress
+      if (i === maxPages - 1) { truncated = true; break; }
+      page = next;
     }
     return { entries, truncated };
   }
