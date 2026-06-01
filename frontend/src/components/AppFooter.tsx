@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ChatMessageContent } from '@/components/ChatMessageContent';
+import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || '—';
 const AUTH_API_URL = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
@@ -134,7 +134,7 @@ export default function AppFooter() {
               }}
             >
               {doc?.content ? (
-                <ChatMessageContent content={doc.content} />
+                <LegalDocPreview content={doc.content} />
               ) : (
                 <p style={{ margin: 0, color: 'var(--text-muted)' }}>Loading…</p>
               )}

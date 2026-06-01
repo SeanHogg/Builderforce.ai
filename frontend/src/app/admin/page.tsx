@@ -38,7 +38,7 @@ import { BUILTIN_PERSONAS, type Persona } from '@/lib/marketplaceData';
 import UserDetailDrawer from '@/components/UserDetailDrawer';
 import { TenantApiKeysAdminTab } from '@/components/admin/TenantApiKeysAdminTab';
 import { LegalEditorDrawer, type LegalEditorContext } from '@/components/admin/LegalEditorDrawer';
-import { ChatMessageContent } from '@/components/ChatMessageContent';
+import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 import { TenantTokenLimitOverrideEditor } from '@/components/admin/TenantTokenLimitOverrideEditor';
 import { TenantPremiumOverrideEditor } from '@/components/admin/TenantPremiumOverrideEditor';
 
@@ -2146,7 +2146,7 @@ export default function AdminPage() {
                           Current {dt === 'terms' ? 'Terms' : 'Privacy'} · v{legalCurrent[dt].version}
                         </div>
                         <div style={{ maxHeight: 360, overflowY: 'auto' }}>
-                          <ChatMessageContent content={legalCurrent[dt].content} />
+                          <LegalDocPreview content={legalCurrent[dt].content} />
                         </div>
                       </div>
                     ))}
