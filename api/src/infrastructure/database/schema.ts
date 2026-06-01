@@ -504,6 +504,10 @@ export const tenantApiKeys = pgTable('tenant_api_keys', {
    *  Array of exact origins or single `'*'` for any-origin escape hatch.
    *  Stored as JSONB on the wire; stringified on insert (drizzle treats `text` here for portability). */
   allowedOrigins:   text('allowed_origins'),
+  /** JSON array of endpoint scopes (e.g. ["ingest:feedback"]). NULL / empty =
+   *  unrestricted full-tenant key (legacy LLM-gateway keys); non-empty = the key
+   *  is limited to exactly these scopes. See migration 0070. */
+  scopes:           text('scopes'),
   lastUsedAt:       timestamp('last_used_at', { withTimezone: true }),
   revokedAt:        timestamp('revoked_at', { withTimezone: true }),
   createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -2539,6 +2543,58 @@ export const boardSyncOutbox = pgTable('board_sync_outbox', {
   status:        varchar('status', { length: 16 }).notNull().default('pending'),  // pending|inflight|done|dead
   lastError:     text('last_error'),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
+});
+
+// ── Cross-domain (channel-3) seams: feedback ingest + outbound webhooks ──────
+
+/**
+ * Voice-of-Customer feedback the host (BurnRateOS) PUSHES to BuilderForce via
+ * POST /v1/ingest/feedback (spec 05 §4.2). Segment-scoped; `external_ref` is the
+ * host event id and is unique per segment so re-delivery is idempotent.
+ */
+export const customerFeedback = pgTable('customer_feedback', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
+  externalRef: varchar('external_ref', { length: 255 }).notNull(),
+  widgetId:    varchar('widget_id', { length: 255 }),
+  text:        text('text').notNull(),
+  sentiment:   varchar('sentiment', { length: 32 }),
+  contact:     varchar('contact', { length: 320 }),
+  status:      varchar('status', { length: 16 }).notNull().default('new'), // new|triaged|dismissed
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  // UNIQUE (segment_id, external_ref) enforced in migration 0071.
+});
+
+/**
+ * Host subscriptions to BuilderForce outbound events (spec 05 §4.3):
+ * workitem.released / sprint.completed / roadmap.published. Segment-scoped.
+ */
+export const webhookSubscriptions = pgTable('webhook_subscriptions', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
+  url:        text('url').notNull(),
+  secret:     varchar('secret', { length: 128 }).notNull(),
+  events:     text('events').notNull().default('[]'), // JSON array of event types
+  active:     boolean('active').notNull().default(true),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+});
+
+/** Per-delivery audit row. `id` doubles as the replay nonce in the signature. */
+export const webhookDeliveries = pgTable('webhook_deliveries', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  subscriptionId: uuid('subscription_id').notNull().references(() => webhookSubscriptions.id, { onDelete: 'cascade' }),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:      uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
+  eventType:      varchar('event_type', { length: 64 }).notNull(),
+  eventId:        varchar('event_id', { length: 255 }).notNull(),
+  status:         varchar('status', { length: 16 }).notNull().default('pending'), // pending|delivered|failed
+  responseStatus: integer('response_status'),
+  attempts:       integer('attempts').notNull().default(0),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  deliveredAt:    timestamp('delivered_at'),
 });
 
 // ── Slice 3: PRD versioning & audit ─────────────────────────────────────────

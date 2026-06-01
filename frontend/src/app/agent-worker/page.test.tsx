@@ -47,6 +47,29 @@ describe('AgentWorker tab', () => {
     });
   });
 
+  it('runs CODING mode for a repo-targeted dispatch (clone/edit/push in-browser)', async () => {
+    const code = vi.fn(async () => ({ status: 'completed' as const, output: 'pushed claw/x' }));
+    let claimed = false;
+    const transport: BrowserRuntimeTransport = {
+      claim: vi.fn(async () => {
+        if (claimed) return null;
+        claimed = true;
+        return { ...dispatch, repo: { repoId: 'r1', defaultBranch: 'main' } };
+      }),
+      callModel: vi.fn(async () => 'should not be used in coding mode'),
+      report: vi.fn(async () => {}),
+    };
+
+    const { getByLabelText, getByTestId } = render(<AgentWorker transport={transport} handlers={{ code }} />);
+    fireEvent.click(getByLabelText('Run pending agents'));
+
+    await waitFor(() => {
+      expect(getByTestId('worker-summary').textContent).toContain('Completed 1');
+    });
+    expect(code).toHaveBeenCalled();
+    expect(transport.report).toHaveBeenCalledWith('d1', { status: 'completed', output: 'pushed claw/x' });
+  });
+
   it('surfaces a failure outcome without throwing', async () => {
     const transport: BrowserRuntimeTransport = {
       claim: vi

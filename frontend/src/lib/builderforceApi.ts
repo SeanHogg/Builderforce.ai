@@ -1391,14 +1391,32 @@ export interface EmbedConfigResult {
   enabled: boolean;
   capabilities: EmbedCapabilityKey[];
   isolationMode: 'single' | 'segmented';
+  /** Consent version the tenant last agreed to (null = never). */
+  consentVersion: number | null;
+  consentedAt: string | null;
+  consentedBy: string | null;
+  /** The version the host must (re-)consent to before enabling. */
+  consentRequiredVersion: number;
+}
+
+export interface EmbedSetConfigResult {
+  enabled: boolean;
+  capabilities: EmbedCapabilityKey[];
+  consentVersion: number | null;
+  consentedAt: string | null;
+  consentedBy: string | null;
 }
 
 export const embedApi = {
   /** Current tenant's embed enablement + capabilities (any member). */
   getConfig: () => request<EmbedConfigResult>('/api/embed/config'),
-  /** Enable/disable + set capabilities (manager+). */
-  setConfig: (body: { enabled: boolean; capabilities: EmbedCapabilityKey[] }) =>
-    request<{ enabled: boolean; capabilities: EmbedCapabilityKey[] }>('/api/embed/config', {
+  /**
+   * Enable/disable + set capabilities (manager+). Pass `consentAcknowledged: true`
+   * when enabling for the first time (or after a consent-version bump) — the API
+   * returns 409 `EMBED_CONSENT_REQUIRED` otherwise.
+   */
+  setConfig: (body: { enabled: boolean; capabilities: EmbedCapabilityKey[]; consentAcknowledged?: boolean }) =>
+    request<EmbedSetConfigResult>('/api/embed/config', {
       method: 'PUT',
       body: JSON.stringify(body),
     }),

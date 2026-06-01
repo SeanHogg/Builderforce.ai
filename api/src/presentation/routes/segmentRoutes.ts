@@ -6,9 +6,10 @@
  * creates one Segment per end-client (account, company) so no client data
  * bleeds. Every business entity is scoped to a Segment (migrations 0054/0055).
  *
- * GET   /api/segments        – list this tenant's segments
- * POST  /api/segments        – provision an end-client segment (manager+)
- * PATCH /api/segments/:id     – update status (suspend/archive)/plan/name (manager+)
+ * GET    /api/segments        – list this tenant's segments
+ * POST   /api/segments        – provision an end-client segment (manager+)
+ * PATCH  /api/segments/:id     – update status (suspend/archive)/plan/name (manager+)
+ * DELETE /api/segments/:id     – erase an end-client segment + all its data (manager+)
  *
  * NOTE: creating segments does NOT flip the tenant to isolation_mode='segmented'.
  * That cutover is deliberate and gated on every write path threading segmentId
@@ -116,6 +117,27 @@ export function createSegmentRoutes(db: Db): Hono<HonoEnv> {
     // Drop the warm-isolate mapping so a status/plan change takes effect now.
     invalidateSegment(updated.id);
     return c.json(updated);
+  });
+
+  // Erase an end-client segment and ALL of its data (DSR / GDPR right-to-erasure,
+  // spec 05 §3.4 + §7). Every business table carries `segment_id … ON DELETE
+  // CASCADE` (migrations 0056–0061+), so deleting the segment row cascades the
+  // delete across all Segment-scoped rows in one transaction at the DB level.
+  // The tenant's default segment is never erasable through this path (it backs
+  // the single-mode tenant itself — erase the tenant instead).
+  router.delete('/:id', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId');
+    const id = c.req.param('id');
+
+    const [deleted] = await db
+      .delete(segments)
+      .where(and(eq(segments.id, id), eq(segments.tenantId, tenantId), eq(segments.isDefault, false)))
+      .returning({ id: segments.id });
+
+    if (!deleted) return c.json({ error: 'segment not found, not yours, or is the default segment' }, 404);
+    // Stop the warm isolate from resolving the now-deleted segment.
+    invalidateSegment(deleted.id);
+    return c.json({ ok: true, id: deleted.id });
   });
 
   return router;

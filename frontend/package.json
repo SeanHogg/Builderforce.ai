@@ -16,6 +16,7 @@
   "dependencies": {
     "@cloudflare/next-on-pages": "^1.13.16",
     "@huggingface/transformers": "^3.8.1",
+    "@isomorphic-git/lightning-fs": "^4.6.2",
     "@monaco-editor/react": "^4.6.0",
     "@seanhogg/builderforce-brain-embedded": "link:../brain-embedded",
     "@seanhogg/builderforce-embedded": "link:../builderforce-embedded",
@@ -26,6 +27,7 @@
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/xterm": "^5.3.0",
+    "isomorphic-git": "^1.38.3",
     "lib0": "^0.2.94",
     "lit": "^3.3.2",
     "mambacode.js": "git+https://github.com/SeanHogg/Mamba.git",

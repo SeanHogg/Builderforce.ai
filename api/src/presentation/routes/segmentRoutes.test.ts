@@ -20,7 +20,7 @@ import { createSegmentRoutes } from './segmentRoutes';
  * security-relevant decisions live there (tenant stamping, no isolation_mode
  * escalation, default-segment protection).
  */
-function makeDb(opts: { selectRows?: unknown[]; insertRows?: unknown[]; updateRows?: unknown[] } = {}) {
+function makeDb(opts: { selectRows?: unknown[]; insertRows?: unknown[]; updateRows?: unknown[]; deleteRows?: unknown[] } = {}) {
   const captured: { insertValues?: any; updateSet?: any } = {};
   const db = {
     select: () => ({ from: () => ({ where: () => ({ orderBy: async () => opts.selectRows ?? [] }) }) }),
@@ -36,6 +36,7 @@ function makeDb(opts: { selectRows?: unknown[]; insertRows?: unknown[]; updateRo
         return { where: () => ({ returning: async () => opts.updateRows ?? [] }) };
       },
     }),
+    delete: () => ({ where: () => ({ returning: async () => opts.deleteRows ?? [] }) }),
   };
   return { db: db as any, captured };
 }
@@ -90,5 +91,18 @@ describe('segmentRoutes', () => {
     const { db } = makeDb();
     const res = await createSegmentRoutes(db).request('/seg-acme', { ...json({ status: 'nonsense' }), method: 'PATCH' });
     expect(res.status).toBe(400);
+  });
+
+  it('DELETE /:id erases an owned non-default segment (cascade at the DB level)', async () => {
+    const { db } = makeDb({ deleteRows: [{ id: 'seg-acme' }] });
+    const res = await createSegmentRoutes(db).request('/seg-acme', { method: 'DELETE' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, id: 'seg-acme' });
+  });
+
+  it('DELETE /:id 404s when no owned, non-default row matches (default + tenant guard)', async () => {
+    const { db } = makeDb({ deleteRows: [] });
+    const res = await createSegmentRoutes(db).request('/seg-default', { method: 'DELETE' });
+    expect(res.status).toBe(404);
   });
 });

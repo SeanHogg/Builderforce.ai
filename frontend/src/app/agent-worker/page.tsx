@@ -13,10 +13,54 @@
  * `transport` prop lets tests drive it with a fake.
  */
 import { useCallback, useState } from 'react';
-import { runLoop, type BrowserRuntimeTransport, type RunOutcome } from '@/lib/browserRuntime/runner';
+import {
+  runLoop,
+  type BrowserRuntimeTransport,
+  type ClaimedDispatch,
+  type CodeResult,
+  type RunHandlers,
+  type RunOutcome,
+} from '@/lib/browserRuntime/runner';
 import { createBrowserAgentTransport } from '@/lib/browserRuntime/transport';
+import { runCodingDispatch } from '@/lib/browserRuntime/coding';
+import { createCodingDeps } from '@/lib/browserRuntime/factory';
+import { getApiBaseUrl, getAuthHeaders } from '@/lib/apiClient';
 
-export function AgentWorker({ transport }: { transport?: BrowserRuntimeTransport }) {
+/**
+ * Default coding handler: for a repo-targeted dispatch, clone + edit + push
+ * in-browser via the git-proxy (and optionally build in a WebContainer). Wired
+ * from the real factory; tests inject their own handler instead.
+ */
+function defaultCodeHandler(transport: BrowserRuntimeTransport) {
+  return async (dispatch: ClaimedDispatch): Promise<CodeResult> => {
+    if (!dispatch.repo) return { status: 'failed', error: 'No repository bound to this task.' };
+    const deps = createCodingDeps({
+      dispatch,
+      repo: dispatch.repo,
+      apiBase: getApiBaseUrl(),
+      authHeaders: getAuthHeaders(),
+      callModel: transport.callModel,
+    });
+    const result = await runCodingDispatch(
+      { role: dispatch.role, input: dispatch.input },
+      dispatch.repo,
+      deps,
+    );
+    return {
+      status: result.buildOk === false ? 'failed' : 'completed',
+      output: result.summary,
+      error: result.buildOk === false ? result.summary : undefined,
+    };
+  };
+}
+
+export function AgentWorker({
+  transport,
+  handlers,
+}: {
+  transport?: BrowserRuntimeTransport;
+  handlers?: RunHandlers;
+}) {
   const [running, setRunning] = useState(false);
   const [outcomes, setOutcomes] = useState<RunOutcome[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -26,13 +70,14 @@ export function AgentWorker({ transport }: { transport?: BrowserRuntimeTransport
     setError(null);
     try {
       const t = transport ?? createBrowserAgentTransport();
-      setOutcomes(await runLoop(t));
+      const h: RunHandlers = handlers ?? { code: defaultCodeHandler(t) };
+      setOutcomes(await runLoop(t, { handlers: h }));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setRunning(false);
     }
-  }, [transport]);
+  }, [transport, handlers]);
 
   const completed = outcomes.filter((o) => o === 'completed').length;
   const failed = outcomes.filter((o) => o === 'failed').length;

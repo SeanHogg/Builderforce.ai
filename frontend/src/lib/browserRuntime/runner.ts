@@ -17,6 +17,21 @@ export interface ClaimedDispatch {
   role: string;
   input: string | null;
   taskId: number | null;
+  /** When present, the task targets a repo and the agent should CODE (clone /
+   *  edit / push via the git-proxy), not just reason. */
+  repo?: { repoId: string; defaultBranch: string | null } | null;
+}
+
+/** Result of a coding step: a terminal status the runner reports verbatim. */
+export interface CodeResult {
+  status: 'completed' | 'failed';
+  output?: string;
+  error?: string;
+}
+
+export interface RunHandlers {
+  /** Executes the in-browser coding flow for a repo-targeted dispatch. */
+  code?: (dispatch: ClaimedDispatch) => Promise<CodeResult>;
 }
 
 export interface ModelCall {
@@ -47,9 +62,33 @@ export const DEFAULT_BROWSER_MODEL = 'anthropic/claude-3-haiku';
  *  - 'completed' — the agent produced output and reported success
  *  - 'failed'    — the agent step threw; reported as failed (never silently dropped)
  */
-export async function runOnce(transport: BrowserRuntimeTransport): Promise<RunOutcome> {
+export async function runOnce(
+  transport: BrowserRuntimeTransport,
+  handlers: RunHandlers = {},
+): Promise<RunOutcome> {
   const dispatch = await transport.claim();
   if (!dispatch) return 'idle';
+
+  // Coding mode: the task targets a repo and a code handler is available →
+  // clone / edit / push in-browser. Otherwise fall back to reasoning.
+  if (dispatch.repo && handlers.code) {
+    try {
+      const r = await handlers.code(dispatch);
+      await transport.report(
+        dispatch.dispatchId,
+        r.status === 'completed'
+          ? { status: 'completed', output: r.output }
+          : { status: 'failed', error: r.error },
+      );
+      return r.status;
+    } catch (err) {
+      await transport.report(dispatch.dispatchId, {
+        status: 'failed',
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return 'failed';
+    }
+  }
 
   const model = (dispatch.model ?? '').trim() || DEFAULT_BROWSER_MODEL;
   const prompt = buildPrompt(dispatch);
@@ -74,12 +113,12 @@ export async function runOnce(transport: BrowserRuntimeTransport): Promise<RunOu
  */
 export async function runLoop(
   transport: BrowserRuntimeTransport,
-  opts: { maxIterations?: number } = {},
+  opts: { maxIterations?: number; handlers?: RunHandlers } = {},
 ): Promise<RunOutcome[]> {
   const max = opts.maxIterations ?? 100;
   const outcomes: RunOutcome[] = [];
   for (let i = 0; i < max; i++) {
-    const outcome = await runOnce(transport);
+    const outcome = await runOnce(transport, opts.handlers ?? {});
     outcomes.push(outcome);
     if (outcome === 'idle') break;
   }

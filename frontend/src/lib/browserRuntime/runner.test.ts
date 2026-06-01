@@ -60,6 +60,42 @@ describe('runOnce', () => {
   });
 });
 
+describe('runOnce — coding mode', () => {
+  it('routes a repo-targeted dispatch to the code handler and reports its result', async () => {
+    const code = vi.fn(async () => ({ status: 'completed' as const, output: 'pushed claw/task-1' }));
+    const report = vi.fn(async () => {});
+    const t = fakeTransport({
+      claim: vi.fn(async () => dispatch({ repo: { repoId: 'r1', defaultBranch: 'main' } })),
+      report,
+    });
+    expect(await runOnce(t, { code })).toBe('completed');
+    expect(code).toHaveBeenCalled();
+    expect(t.callModel).not.toHaveBeenCalled(); // coding path, not plain reasoning
+    expect(report).toHaveBeenCalledWith('d1', { status: 'completed', output: 'pushed claw/task-1' });
+  });
+
+  it('reports failed when the code handler throws', async () => {
+    const code = vi.fn(async () => {
+      throw new Error('push rejected');
+    });
+    const report = vi.fn(async () => {});
+    const t = fakeTransport({
+      claim: vi.fn(async () => dispatch({ repo: { repoId: 'r1', defaultBranch: null } })),
+      report,
+    });
+    expect(await runOnce(t, { code })).toBe('failed');
+    expect(report).toHaveBeenCalledWith('d1', { status: 'failed', error: 'push rejected' });
+  });
+
+  it('falls back to reasoning when no repo is present even if a code handler exists', async () => {
+    const code = vi.fn();
+    const t = fakeTransport(); // dispatch has no repo
+    expect(await runOnce(t, { code })).toBe('completed');
+    expect(code).not.toHaveBeenCalled();
+    expect(t.callModel).toHaveBeenCalled();
+  });
+});
+
 describe('runLoop', () => {
   it('drains the queue until idle', async () => {
     let n = 0;

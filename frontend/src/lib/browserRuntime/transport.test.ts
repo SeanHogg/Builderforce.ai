@@ -15,7 +15,7 @@ describe('createBrowserAgentTransport', () => {
     const claimed = await t.claim();
     expect(request).toHaveBeenCalledWith('/api/agent-runtime/claim', { method: 'POST', body: '{}' });
     expect(claimed).toEqual({
-      dispatchId: 'd1', model: 'anthropic/claude-3-haiku', role: 'impl', input: 'do it', taskId: 5,
+      dispatchId: 'd1', model: 'anthropic/claude-3-haiku', role: 'impl', input: 'do it', taskId: 5, repo: null,
     });
   });
 

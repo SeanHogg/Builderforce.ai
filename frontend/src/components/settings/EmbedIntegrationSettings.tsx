@@ -4,12 +4,19 @@ import { useEffect, useState } from 'react';
 import { EMBED_CAPABILITIES, type EmbedCapability } from '@seanhogg/builderforce-embedded';
 import { embedApi } from '@/lib/builderforceApi';
 import { getStoredTenant } from '@/lib/auth';
+import { EmbedConsentModal } from './EmbedConsentModal';
+import { EmbedInstallSnippet } from './EmbedInstallSnippet';
 
 /**
  * SuperAdmin enablement for the embedded integration: turn on embedding and pick
  * which capability areas (Product / Agile / Security) host apps may surface.
  * Self-gating — renders nothing unless the caller is an owner/manager, so the
  * settings page needs no canX prop (writes are also role-gated server-side).
+ *
+ * Enabling for the first time (or after a consent-version bump) routes through a
+ * consent modal; the acknowledged version is recorded server-side. Once enabled,
+ * the copy-paste install snippet is shown so a host developer can wire the
+ * <BuilderForceEmbed> component into their pages.
  */
 
 const CAPABILITY_LABELS: Record<EmbedCapability, string> = {
@@ -31,10 +38,14 @@ export function EmbedIntegrationSettings() {
 
   const [enabled, setEnabled] = useState(false);
   const [capabilities, setCapabilities] = useState<EmbedCapability[]>([]);
+  const [consentVersion, setConsentVersion] = useState<number | null>(null);
+  const [requiredVersion, setRequiredVersion] = useState(0);
+  const [persistedEnabled, setPersistedEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [consentOpen, setConsentOpen] = useState(false);
 
   useEffect(() => {
     if (!canManage) return;
@@ -44,7 +55,10 @@ export function EmbedIntegrationSettings() {
       .then((cfg) => {
         if (cancelled) return;
         setEnabled(cfg.enabled);
+        setPersistedEnabled(cfg.enabled);
         setCapabilities(cfg.capabilities);
+        setConsentVersion(cfg.consentVersion);
+        setRequiredVersion(cfg.consentRequiredVersion);
       })
       .catch(() => !cancelled && setError('Could not load integration settings.'))
       .finally(() => !cancelled && setLoading(false));
@@ -55,22 +69,41 @@ export function EmbedIntegrationSettings() {
 
   if (!canManage) return null;
 
+  const needsConsent = enabled && consentVersion !== requiredVersion;
+
   const toggleCapability = (cap: EmbedCapability) => {
     setSaved(false);
     setCapabilities((prev) => (prev.includes(cap) ? prev.filter((c) => c !== cap) : [...prev, cap]));
   };
 
-  const save = async () => {
+  // Persist the current form. `acknowledged` is forwarded only when the consent
+  // modal was just confirmed, so the server stamps the consent version.
+  const persist = async (acknowledged: boolean) => {
     setSaving(true);
     setError(null);
     try {
-      await embedApi.setConfig({ enabled, capabilities });
+      const res = await embedApi.setConfig({ enabled, capabilities, consentAcknowledged: acknowledged });
+      setConsentVersion(res.consentVersion);
+      setPersistedEnabled(res.enabled);
       setSaved(true);
     } catch {
       setError('Save failed.');
     } finally {
       setSaving(false);
     }
+  };
+
+  const onSave = () => {
+    if (needsConsent) {
+      setConsentOpen(true);
+      return;
+    }
+    void persist(false);
+  };
+
+  const onConsent = () => {
+    setConsentOpen(false);
+    void persist(true);
   };
 
   return (
@@ -115,7 +148,7 @@ export function EmbedIntegrationSettings() {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button
-              onClick={save}
+              onClick={onSave}
               disabled={saving}
               style={{
                 padding: '6px 14px', fontSize: 12, fontWeight: 600,
@@ -123,12 +156,27 @@ export function EmbedIntegrationSettings() {
                 border: 'none', borderRadius: 8, cursor: saving ? 'default' : 'pointer',
               }}
             >
-              {saving ? 'Saving…' : 'Save'}
+              {saving ? 'Saving…' : needsConsent ? 'Review & enable…' : 'Save'}
             </button>
             {saved && <span style={{ fontSize: 12, color: '#16a34a' }}>Saved ✓</span>}
             {error && <span style={{ fontSize: 12, color: '#dc2626' }}>{error}</span>}
           </div>
+
+          {/* The install snippet is only meaningful once embedding is actually on. */}
+          {persistedEnabled && (
+            <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border-subtle)' }}>
+              <EmbedInstallSnippet capabilities={capabilities} />
+            </div>
+          )}
         </>
+      )}
+
+      {consentOpen && (
+        <EmbedConsentModal
+          version={requiredVersion}
+          onAgree={onConsent}
+          onCancel={() => setConsentOpen(false)}
+        />
       )}
     </div>
   );
