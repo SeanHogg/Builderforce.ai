@@ -62,5 +62,12 @@
     "vercel": "^47.1.4",
     "vitest": "^4.0.18"
   },
-  "packageManager": "pnpm@10.23.0"
+  "packageManager": "pnpm@10.23.0",
+  "pnpm": {
+    "overrides": {
+      "d3-array": "^3.2.4",
+      "d3-shape": "^3.2.0",
+      "d3-path": "^3.1.0"
+    }
+  }
 }

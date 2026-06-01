@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  d3-array: ^3.2.4
+  d3-shape: ^3.2.0
+  d3-path: ^3.1.0
+
 importers:
 
   .:
@@ -58,7 +63,7 @@ importers:
         version: 3.3.2
       mambacode.js:
         specifier: git+https://github.com/SeanHogg/Mamba.git
-        version: '@seanhogg/mambacode.js@git+https://github.com/SeanHogg/Mamba.git#e712a030aa64f4d5d05e714c5f1b216e464d39b4'
+        version: '@seanhogg/mambacode.js@git+https://github.com/SeanHogg/Mamba.git#6bac8c989a225b0f3811d75df0617d2856e45f12'
       mermaid:
         specifier: ^11.15.0
         version: 11.15.0
@@ -1117,9 +1122,9 @@ packages:
   '@rtsao/scc@1.1.0':
     resolution: {integrity: sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g==}
 
-  '@seanhogg/mambacode.js@git+https://github.com/SeanHogg/Mamba.git#e712a030aa64f4d5d05e714c5f1b216e464d39b4':
-    resolution: {commit: e712a030aa64f4d5d05e714c5f1b216e464d39b4, repo: https://github.com/SeanHogg/Mamba.git, type: git}
-    version: 2026.3.21
+  '@seanhogg/mambacode.js@git+https://github.com/SeanHogg/Mamba.git#6bac8c989a225b0f3811d75df0617d2856e45f12':
+    resolution: {commit: 6bac8c989a225b0f3811d75df0617d2856e45f12, repo: https://github.com/SeanHogg/Mamba.git, type: git}
+    version: 2026.5.31
     engines: {node: '>=18.0.0'}
 
   '@sinclair/typebox@0.25.24':
@@ -2067,9 +2072,6 @@ packages:
     resolution: {integrity: sha512-HIN5Pmd9MrX9BkV7tDwnOcEJCSFvCpc8X97h3f508J6I5FsqAY65wKOCvgH2CuP42CaahWaz4tuh32SOOIH7ww==}
     engines: {node: '>=0.10'}
 
-  d3-array@2.12.1:
-    resolution: {integrity: sha512-B0ErZK/66mHtEsR1TkPEEkwdy+WDesimkM5gpZr5Dsg54BiTA5RXtYW5qTLIAcekaS9xfZrzBLF/OAkB3Qn1YQ==}
-
   d3-array@3.2.4:
     resolution: {integrity: sha512-tdQAmyA18i4J7wprpYq8ClcxZy3SC31QMeByyCFyRt7BVHdREQZ5lpzoe5mFEYZUWe+oq8HBvk9JjpibyEV4Jg==}
     engines: {node: '>=12'}
@@ -2139,9 +2141,6 @@ packages:
     resolution: {integrity: sha512-3bYs1rOD33uo8aqJfKP3JWPAibgw8Zm2+L9vBKEHJ2Rg+viTR7o5Mmv5mZcieN+FRYaAOWX5SJATX6k1PWz72g==}
     engines: {node: '>=12'}
 
-  d3-path@1.0.9:
-    resolution: {integrity: sha512-VLaYcn81dtHVTjEHd8B+pbe9yHWpXKZUC87PzoFmsFrJqgFwDe/qxfp5MlfsfM1V5E/iVt0MmEbWQ7FVIXh/bg==}
-
   d3-path@3.1.0:
     resolution: {integrity: sha512-p3KP5HCf/bvjBSSKuXid6Zqijx7wIfNW+J/maPs+iwR35at5JCbLUT0LzF1cnjbCHWhqzQTIN2Jpe8pRebIEFQ==}
     engines: {node: '>=12'}
@@ -2172,9 +2171,6 @@ packages:
   d3-selection@3.0.0:
     resolution: {integrity: sha512-fmTRWbNMmsmWq6xJV8D19U/gw/bwrHfNXxrIN+HfZgnzqTHp9jOmKMhsTUjXOJnZOdZY9Q28y4yebKzqDKlxlQ==}
     engines: {node: '>=12'}
-
-  d3-shape@1.3.7:
-    resolution: {integrity: sha512-EUkvKjqPFUAZyOlhY5gzCxCeI0Aep04LwIRpsZ/mLFelJiUfnK56jo5JMDSE7yyP2kLSb6LtF+S5chMk7uqPqw==}
 
   d3-shape@3.2.0:
     resolution: {integrity: sha512-SaLBuwGm3MOViRq2ABk3eLoxwZELpH6zhl3FbAoJ7Vm1gofKx6El1Ib5z23NUEhF9AsGl7y+dzLe5Cw2AArGTA==}
@@ -3122,9 +3118,6 @@ packages:
   internal-slot@1.1.0:
     resolution: {integrity: sha512-4gd7VpWNQNB4UKKCFFVcp1AVv+FMOgs9NKzjHKusc8jTMhd5eL1NqQqOpE0KzMds804/yHlglp3uxgluOqAPLw==}
     engines: {node: '>= 0.4'}
-
-  internmap@1.0.1:
-    resolution: {integrity: sha512-lDB5YccMydFBtasVtxnZ3MRBHuaoE8GKsppq+EchKL2U4nK/DmEpPHNH8MZe5HkMtpSiTSOZwfN0tzYjO/lJEw==}
 
   internmap@2.0.3:
     resolution: {integrity: sha512-5Hh7Y1wQbvY5ooGgPbDaL5iYLAPzMTUrjMulskHLH6wnv/A+1q5rgEaiuqEjB+oxGXIVZs1FF+R/KPN3ZSQYYg==}
@@ -5942,7 +5935,7 @@ snapshots:
 
   '@rtsao/scc@1.1.0': {}
 
-  '@seanhogg/mambacode.js@git+https://github.com/SeanHogg/Mamba.git#e712a030aa64f4d5d05e714c5f1b216e464d39b4': {}
+  '@seanhogg/mambacode.js@git+https://github.com/SeanHogg/Mamba.git#6bac8c989a225b0f3811d75df0617d2856e45f12': {}
 
   '@sinclair/typebox@0.25.24': {}
 
@@ -7022,10 +7015,6 @@ snapshots:
 
   cytoscape@3.33.4: {}
 
-  d3-array@2.12.1:
-    dependencies:
-      internmap: 1.0.1
-
   d3-array@3.2.4:
     dependencies:
       internmap: 2.0.3
@@ -7091,8 +7080,6 @@ snapshots:
     dependencies:
       d3-color: 3.1.0
 
-  d3-path@1.0.9: {}
-
   d3-path@3.1.0: {}
 
   d3-polygon@3.0.1: {}
@@ -7103,8 +7090,8 @@ snapshots:
 
   d3-sankey@0.12.3:
     dependencies:
-      d3-array: 2.12.1
-      d3-shape: 1.3.7
+      d3-array: 3.2.4
+      d3-shape: 3.2.0
 
   d3-scale-chromatic@3.1.0:
     dependencies:
@@ -7120,10 +7107,6 @@ snapshots:
       d3-time-format: 4.1.0
 
   d3-selection@3.0.0: {}
-
-  d3-shape@1.3.7:
-    dependencies:
-      d3-path: 1.0.9
 
   d3-shape@3.2.0:
     dependencies:
@@ -8200,8 +8183,6 @@ snapshots:
       es-errors: 1.3.0
       hasown: 2.0.3
       side-channel: 1.1.0
-
-  internmap@1.0.1: {}
 
   internmap@2.0.3: {}
 
