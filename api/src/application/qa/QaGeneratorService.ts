@@ -22,6 +22,11 @@ export interface GenerateInput {
   description?: string | null;
   startRoute?: string | null;
   steps: QaStep[];
+  /** The persona this scenario runs as — woven into the prompt so the model
+   *  asserts role-appropriate expectations (e.g. an admin-only control is
+   *  visible as admin, absent as viewer). The session itself is injected by the
+   *  harness; the spec never logs in. */
+  persona?: { label?: string; role?: string | null } | null;
 }
 
 export interface GenerateResult {
@@ -106,9 +111,15 @@ export class QaGeneratorService {
       return { spec: fallbackSpec(input), steps: input.steps, model: null };
     }
 
+    const personaLine = input.persona
+      ? `Persona: this scenario runs as "${input.persona.label ?? input.persona.role ?? 'a standard user'}"` +
+        (input.persona.role ? ` (role: ${input.persona.role})` : '') +
+        `. The session is already authenticated as this persona — assert role-appropriate UI (controls this role should/shouldn't see) and do NOT log in.\n`
+      : '';
     const userPrompt =
       `Flow name: ${input.name}\n` +
       `Start route: ${input.startRoute ?? '(unknown)'}\n` +
+      personaLine +
       (input.description ? `Context: ${input.description}\n` : '') +
       `Captured steps (JSON):\n${JSON.stringify(input.steps, null, 2)}\n\n` +
       `Write the Playwright smoke test for this flow.`;

@@ -46,17 +46,30 @@ import {
   TicketRunNotFoundError,
   InvalidTicketTransitionError,
 } from '../../application/swimlane/SwimlaneCoordinator';
+import { DrizzleCoordinatorStore } from '../../application/swimlane/DrizzleCoordinatorStore';
+import {
+  ClawStageDispatcher,
+  type ClawRelayNamespace,
+} from '../../application/swimlane/clawStageDispatcher';
 import type { WorkflowStatus } from '../../application/swimlane/transitions';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 const WORKFLOW_STATUSES: WorkflowStatus[] = ['pending', 'running', 'completed', 'failed', 'cancelled'];
 
+/** Env shape we read for claw dispatch — CLAW_RELAY is optional (browser-only works without it). */
+type BoardEnv = { CLAW_RELAY?: ClawRelayNamespace };
+
 export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
-  const coordinator = new SwimlaneCoordinator(db);
+  // Built per-request so the claw dispatcher is bound to this request's env.
+  const mkCoordinator = (env: unknown): SwimlaneCoordinator =>
+    new SwimlaneCoordinator(
+      new DrizzleCoordinatorStore(db),
+      new ClawStageDispatcher((env as BoardEnv)?.CLAW_RELAY),
+    );
 
   // ── Boards CRUD ───────────────────────────────────────────────────────────
 
@@ -340,7 +353,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     if (!body.taskId) return c.json({ error: 'taskId is required' }, 400);
 
     try {
-      const run = await coordinator.startTicket(boardId, body.taskId, tenantId);
+      const run = await mkCoordinator(c.env).startTicket(boardId, body.taskId, tenantId);
       return c.json(run, 201);
     } catch (err) {
       if (err instanceof TicketCapacityError) {
@@ -386,7 +399,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     }
 
     try {
-      const run = await coordinator.onStageComplete(ticketRunId, status);
+      const run = await mkCoordinator(c.env).onStageComplete(ticketRunId, status);
       return c.json(run);
     } catch (err) {
       return handleCoordinatorError(c, err);
@@ -398,7 +411,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const ticketRunId = c.req.param('ticketRunId');
     if (!(await assertTicketRun(tenantId, ticketRunId))) return c.json({ error: 'Ticket run not found' }, 404);
     try {
-      const run = await coordinator.approveGate(ticketRunId);
+      const run = await mkCoordinator(c.env).approveGate(ticketRunId);
       return c.json(run);
     } catch (err) {
       return handleCoordinatorError(c, err);
@@ -410,7 +423,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const ticketRunId = c.req.param('ticketRunId');
     if (!(await assertTicketRun(tenantId, ticketRunId))) return c.json({ error: 'Ticket run not found' }, 404);
     try {
-      const run = await coordinator.retryStage(ticketRunId);
+      const run = await mkCoordinator(c.env).retryStage(ticketRunId);
       return c.json(run);
     } catch (err) {
       return handleCoordinatorError(c, err);

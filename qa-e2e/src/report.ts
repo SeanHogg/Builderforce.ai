@@ -8,9 +8,36 @@
  * artifacts; losing the DB write shouldn't mask the actual test outcome.
  */
 
-import { readFileSync } from 'node:fs';
-import { basename } from 'node:path';
-import { login, postRun, baseUrl, type RunReport } from './bf';
+import { existsSync, readFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
+import { login, postRun, baseUrl, projectId, type RunReport } from './bf';
+
+type Manifest = Record<string, { credentialId: string | null; targetId: string | null }>;
+
+function loadManifest(): Manifest {
+  try {
+    const p = join('.auth', 'tests.json');
+    if (existsSync(p)) return JSON.parse(readFileSync(p, 'utf8')) as Manifest;
+  } catch {
+    /* ignore */
+  }
+  return {};
+}
+
+/** The actual URL tested — written to .auth/config.json by pull-tests (the
+ *  project target in project mode), falling back to BF_BASE_URL. */
+function resolvedTargetUrl(): string {
+  try {
+    const p = join('.auth', 'config.json');
+    if (existsSync(p)) {
+      const cfg = JSON.parse(readFileSync(p, 'utf8')) as { baseUrl?: string };
+      if (cfg.baseUrl) return cfg.baseUrl;
+    }
+  } catch {
+    /* ignore */
+  }
+  return baseUrl();
+}
 
 interface PwStep { title?: string; duration?: number; error?: unknown; category?: string }
 interface PwResult { status?: string; duration?: number; error?: { message?: string }; errors?: Array<{ message?: string }>; steps?: PwStep[] }
@@ -82,17 +109,24 @@ async function main(): Promise<void> {
   }
 
   const session = await login();
+  const manifest = loadManifest();
+  const project = projectId();
   const common = {
     browser: 'chromium',
-    targetUrl: baseUrl(),
+    targetUrl: resolvedTargetUrl(),
     commitSha: process.env.GITHUB_SHA,
     runKey: process.env.GITHUB_RUN_ID,
   };
 
   let posted = 0;
   for (const { file, spec } of specs) {
+    const slug = slugFromFile(file);
+    const attribution = manifest[slug];
     const run: RunReport = {
-      testSlug: slugFromFile(file),
+      testSlug: slug,
+      projectId: project,
+      credentialId: attribution?.credentialId ?? null,
+      targetId: attribution?.targetId ?? null,
       status: statusFor(spec),
       durationMs: durationFor(spec),
       errorMessage: errorFor(spec),

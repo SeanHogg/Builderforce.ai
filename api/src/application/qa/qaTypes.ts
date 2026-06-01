@@ -40,6 +40,9 @@ export interface QaFlow {
 export interface QaRunReport {
   testId?: string | null;
   testSlug?: string | null;
+  projectId?: number | null;
+  credentialId?: string | null;
+  targetId?: string | null;
   status: 'passed' | 'failed' | 'error' | 'skipped';
   browser?: string;
   targetUrl?: string;
@@ -79,4 +82,31 @@ export function shortHash(input: string): string {
     h = Math.imul(h, 0x01000193);
   }
   return (h >>> 0).toString(36);
+}
+
+/**
+ * Heuristically infer the persona role a flow needs from the routes it visits.
+ * Admin/settings surfaces imply an elevated persona; everything else is a plain
+ * member. Returns null when nothing in the path suggests a specific role (the
+ * generate step then falls back to the project's default credential). The
+ * generator can refine this, but the heuristic gives a sensible default so a
+ * captured /admin journey isn't run as a viewer that 403s.
+ */
+export function inferPersonaRole(routes: readonly string[]): string | null {
+  const joined = routes.join(' ').toLowerCase();
+  if (/\/admin(\/|$|\s)/.test(joined)) return 'admin';
+  if (/\/(settings|security|approvals|members|api-keys)(\/|$|\s)/.test(joined)) return 'manager';
+  if (routes.length > 0) return 'member';
+  return null;
+}
+
+/** A credential as exposed to clients — the password is NEVER included. */
+export interface QaCredentialPublic {
+  id: string;
+  projectId: number;
+  label: string;
+  role: string | null;
+  username: string;
+  loginUrl: string | null;
+  status: string;
 }
