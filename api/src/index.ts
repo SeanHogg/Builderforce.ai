@@ -64,6 +64,7 @@ import { createWorkflowRoutes }     from './presentation/routes/workflowRoutes';
 import { createApprovalRoutes }     from './presentation/routes/approvalRoutes';
 import { createApprovalRuleRoutes } from './presentation/routes/approvalRuleRoutes';
 import { createTelemetryRoutes }    from './presentation/routes/telemetryRoutes';
+import { createQaRoutes }           from './presentation/routes/qaRoutes';
 import { createIntegrationRoutes }  from './presentation/routes/integrationRoutes';
 import { createContributorRoutes }  from './presentation/routes/contributorRoutes';
 import { createDevTeamRoutes }      from './presentation/routes/devTeamRoutes';
@@ -81,6 +82,12 @@ import { createDashboardRoutes }       from './presentation/routes/dashboardRout
 import { createTeamMemoryRoutes }      from './presentation/routes/teamMemoryRoutes';
 import { createPublicApiRoutes }       from './presentation/routes/publicApiRoutes';
 import { createStudioRoutes }          from './presentation/routes/studioWeightRoutes';
+// Cloud Agent Boards — agentic swimlanes, external board sync, PRD versioning, multi-repo PRs
+import { createBoardRoutes }           from './presentation/routes/boardRoutes';
+import { createBoardConnectionRoutes } from './presentation/routes/boardConnectionRoutes';
+import { createBoardWebhookRoutes }    from './presentation/routes/boardWebhookRoutes';
+import { createPrdRoutes }             from './presentation/routes/prdRoutes';
+import { createRepoRoutes }            from './presentation/routes/repoRoutes';
 
 import { API_VERSION } from './version';
 import {
@@ -242,6 +249,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/approvals',       createApprovalRoutes(db));
   app.route('/api/approval-rules',  createApprovalRuleRoutes(db));
   app.route('/api/telemetry',       createTelemetryRoutes(db));
+  app.route('/api/qa',              createQaRoutes(db));
 
   // Phase 6 — Dev Analytics & Team Intelligence
   app.route('/api/integrations',    createIntegrationRoutes(db, env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET));
@@ -256,6 +264,13 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/ide',       createIdeRoutes());
   app.route('/api/ai',        createIdeAiRoutes(projectService));
   app.route('/api/studio',    createStudioRoutes());
+
+  // Cloud Agent Boards
+  app.route('/api/boards',            createBoardRoutes(db));
+  app.route('/api/board-connections', createBoardConnectionRoutes(db));
+  app.route('/api/board-webhooks',    createBoardWebhookRoutes(db));
+  app.route('/api/prd',               createPrdRoutes(db));
+  app.route('/api/repos',             createRepoRoutes(db));
 
   app.onError(errorHandler);
   app.notFound((c) => addCorsToResponse(c, c.json({ error: 'Not found' }, 404)));

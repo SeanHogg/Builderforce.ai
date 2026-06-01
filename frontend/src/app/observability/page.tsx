@@ -3,13 +3,15 @@
 import { useState } from 'react';
 import { ObservabilityContent } from '@/components/ObservabilityContent';
 import { LlmUsageContent } from '@/components/LlmUsageContent';
+import { QaContent } from '@/components/QaContent';
 
-type Tab = 'logs' | 'timeline' | 'llm';
+type Tab = 'logs' | 'timeline' | 'llm' | 'qa';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'logs', label: 'Logs' },
   { id: 'timeline', label: 'Timeline' },
   { id: 'llm', label: 'LLM Usage' },
+  { id: 'qa', label: 'Agentic QA' },
 ];
 
 export default function ObservabilityPage() {
@@ -58,6 +60,7 @@ export default function ObservabilityPage() {
       {tab === 'logs' && <ObservabilityContent initialView="logs" />}
       {tab === 'timeline' && <ObservabilityContent initialView="timeline" />}
       {tab === 'llm' && <LlmUsageContent />}
+      {tab === 'qa' && <QaContent />}
     </div>
   );
 }

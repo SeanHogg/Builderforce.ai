@@ -1,0 +1,6 @@
+node_modules/
+.auth/
+results.json
+playwright-report/
+test-results/
+tests/generated/

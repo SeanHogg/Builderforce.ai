@@ -686,6 +686,10 @@ export const tasks = pgTable('tasks', {
   startDate:         timestamp('start_date'),
   dueDate:           timestamp('due_date'),
   persona:           varchar('persona', { length: 50 }),
+  /** Origin board provider label for tickets synced from an external board. */
+  source:            varchar('source', { length: 24 }),
+  /** PRD/spec this ticket executes against (the auditable contract). */
+  specId:            uuid('spec_id').references(() => specs.id, { onDelete: 'set null' }),
   archived:          boolean('archived').notNull().default(false),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
@@ -1270,7 +1274,7 @@ export const magicLinkTokens = pgTable('magic_link_tokens', {
 // ---------------------------------------------------------------------------
 
 export const integrationProviderEnum = pgEnum('integration_provider', [
-  'github', 'bitbucket', 'jira', 'confluence', 'freshservice',
+  'github', 'bitbucket', 'jira', 'confluence', 'freshservice', 'rally', 'freshworks',
 ]);
 
 export const integrationSyncStatusEnum = pgEnum('integration_sync_status', [
@@ -2152,4 +2156,420 @@ export const retroItems = pgTable('retro_items', {
   votes:      integer('votes').notNull().default(0),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Agentic QA — usage capture → AI test generation → browser execution results.
+//
+// Pipeline (see README "Agentic QA"):
+//   qa_journey_events  raw client interaction events (route changes, clicks,
+//                      form submits — values redacted client-side)
+//   qa_flows           normalized flows to test, derived from journeys ('usage'),
+//                      synthesized from the route map ('crawl'), or declared ('manual')
+//   qa_tests           AI-generated Playwright specs (one per flow, versioned)
+//   qa_runs            execution results posted back by the CI harness
+//   qa_run_steps       per-step granularity within a run
+//
+// Status/type columns are varchar (not pgEnum) to mirror telemetrySpans.kind —
+// the taxonomy evolves with the capture client without an enum migration.
+// ---------------------------------------------------------------------------
+
+export const qaJourneyEvents = pgTable('qa_journey_events', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
+  userId:     varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  // Client-generated journey id — groups events from one continuous session.
+  sessionId:  varchar('session_id', { length: 64 }).notNull(),
+  seq:        integer('seq').notNull().default(0),
+  // 'pageview' | 'click' | 'input' | 'submit' | 'nav'
+  type:       varchar('type', { length: 32 }).notNull(),
+  route:      varchar('route', { length: 512 }),
+  // Stable selector for the interaction target (data-testid → role+name → text → css).
+  selector:   text('selector'),
+  // Human-readable label (accessible name / trimmed text content).
+  label:      varchar('label', { length: 255 }),
+  // Redacted value descriptor for inputs — NEVER raw input; e.g. "email#filled" / "len:14".
+  value:      varchar('value', { length: 255 }),
+  meta:       text('meta'),       // JSON: viewport, element role/tag, etc.
+  ts:         timestamp('ts').notNull().defaultNow(),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+});
+
+export const qaFlows = pgTable('qa_flows', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  // Project (site-under-test) this flow belongs to. Null = workspace-level
+  // (legacy capture / builderforce self-test).
+  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  name:        varchar('name', { length: 255 }).notNull(),
+  slug:        varchar('slug', { length: 255 }).notNull(),
+  // 'usage' (derived from journeys) | 'crawl' (AI route-map exploration) | 'manual'
+  source:      varchar('source', { length: 16 }).notNull().default('usage'),
+  description: text('description'),
+  startRoute:  varchar('start_route', { length: 512 }),
+  steps:       text('steps'),     // JSON array of normalized QaStep
+  // AI-inferred role this flow needs (e.g. 'admin' for /admin routes); resolved
+  // to a concrete credential at generate time, human-overridable.
+  personaRole: varchar('persona_role', { length: 64 }),
+  credentialId: uuid('credential_id').references(() => qaCredentials.id, { onDelete: 'set null' }),
+  // How many captured journeys collapsed into this flow (usage-derived ranking).
+  frequency:   integer('frequency').notNull().default(0),
+  status:      varchar('status', { length: 16 }).notNull().default('active'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+  // Unique (tenant_id, slug) enforced by migration 0063; onConflictDoUpdate
+  // targets the columns directly, so the constraint isn't declared here (keeps
+  // this a single-arg pgTable for the schema-drift parser).
+});
+
+export const qaTests = pgTable('qa_tests', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  flowId:      uuid('flow_id').references(() => qaFlows.id, { onDelete: 'set null' }),
+  // The persona this scenario runs as (resolved from the flow's personaRole).
+  credentialId: uuid('credential_id').references(() => qaCredentials.id, { onDelete: 'set null' }),
+  personaRole: varchar('persona_role', { length: 64 }),
+  name:        varchar('name', { length: 255 }).notNull(),
+  slug:        varchar('slug', { length: 255 }).notNull(),
+  framework:   varchar('framework', { length: 16 }).notNull().default('playwright'),
+  spec:        text('spec').notNull(),          // generated TypeScript spec source
+  stepsModel:  text('steps_model'),             // JSON structured steps the spec was built from
+  model:       varchar('model', { length: 255 }),   // LLM that generated the spec
+  generatedBy: varchar('generated_by', { length: 36 }),
+  version:     integer('version').notNull().default(1),
+  // 'draft' | 'active' | 'archived' — the CI harness pulls 'active' specs.
+  status:      varchar('status', { length: 16 }).notNull().default('active'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+  // Unique (tenant_id, slug) enforced by migration 0063 (see qa_flows note).
+});
+
+export const qaRuns = pgTable('qa_runs', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:     integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  testId:        uuid('test_id').references(() => qaTests.id, { onDelete: 'set null' }),
+  // Which persona + target this run executed against (for role-aware result triage).
+  credentialId:  uuid('credential_id').references(() => qaCredentials.id, { onDelete: 'set null' }),
+  targetId:      uuid('target_id').references(() => qaTargets.id, { onDelete: 'set null' }),
+  // Correlates all runs from one CI invocation (the GitHub run id).
+  runKey:        varchar('run_key', { length: 64 }),
+  trigger:       varchar('trigger', { length: 16 }).notNull().default('ci'),   // 'ci' | 'manual' | 'cron'
+  // 'queued' | 'running' | 'passed' | 'failed' | 'error' | 'skipped'
+  status:        varchar('status', { length: 16 }).notNull().default('queued'),
+  browser:       varchar('browser', { length: 32 }),
+  targetUrl:     varchar('target_url', { length: 512 }),
+  commitSha:     varchar('commit_sha', { length: 64 }),
+  durationMs:    integer('duration_ms'),
+  totalSteps:    integer('total_steps'),
+  passedSteps:   integer('passed_steps'),
+  errorMessage:  text('error_message'),
+  screenshotKeys: text('screenshot_keys'),  // JSON array of artifact paths/URLs
+  logs:          text('logs'),
+  startedAt:     timestamp('started_at'),
+  finishedAt:    timestamp('finished_at'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+});
+
+export const qaRunSteps = pgTable('qa_run_steps', {
+  id:           serial('id').primaryKey(),
+  runId:        uuid('run_id').notNull().references(() => qaRuns.id, { onDelete: 'cascade' }),
+  seq:          integer('seq').notNull().default(0),
+  action:       varchar('action', { length: 32 }).notNull(),
+  selector:     text('selector'),
+  status:       varchar('status', { length: 16 }).notNull(),   // 'passed' | 'failed' | 'skipped'
+  durationMs:   integer('duration_ms'),
+  errorMessage: text('error_message'),
+  screenshotKey: varchar('screenshot_key', { length: 512 }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// QA targets — per-project site(s)-under-test (root URL / environment).
+// ---------------------------------------------------------------------------
+
+export const qaTargets = pgTable('qa_targets', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:  integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  name:       varchar('name', { length: 255 }).notNull(),       // e.g. "Production", "Staging"
+  baseUrl:    varchar('base_url', { length: 512 }).notNull(),
+  isDefault:  boolean('is_default').notNull().default(false),
+  status:     varchar('status', { length: 16 }).notNull().default('active'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// QA credentials — per-project credential library (test personas). The password
+// is AES-GCM encrypted at rest (secretEnc = "iv.cipher", via INTEGRATION_
+// ENCRYPTION_SECRET) and never returned by list/get. The authenticated CI
+// harness fetches the decrypted secret from a dedicated endpoint to drive the
+// site's login form (arbitrary external sites have no token API to inject).
+// ---------------------------------------------------------------------------
+
+export const qaCredentials = pgTable('qa_credentials', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:     integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  label:         varchar('label', { length: 255 }).notNull(),   // "Admin user", "Read-only viewer"
+  // Free-form role slug used to match AI-inferred personaRole on a flow.
+  role:          varchar('role', { length: 64 }),
+  username:      varchar('username', { length: 512 }).notNull(),
+  secretEnc:     text('secret_enc').notNull(),                   // AES-GCM "iv.cipher"
+  loginUrl:      varchar('login_url', { length: 512 }),         // login page path; default '/login'
+  // Optional explicit login selectors (JSON {usernameSelector, passwordSelector,
+  // submitSelector}) when the form can't be auto-detected.
+  loginSelectors: text('login_selectors'),
+  status:        varchar('status', { length: 16 }).notNull().default('active'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ===========================================================================
+// Cloud Agent Boards (migrations 0064–0067)
+//
+// Agentic swimlanes, external board sync, PRD versioning, and multi-repo / PR
+// tracking. Status-like columns use documented varchars (matching the qa_*
+// convention) rather than pgEnum, so adding a state needs no ALTER TYPE.
+// JSON payloads are stored as text (jsonb is not available in all envs).
+// ===========================================================================
+
+// ── Slice 1: Agentic boards & swimlanes ────────────────────────────────────
+
+/** A board fans an external source (or BF-native backlog) into ordered swimlanes. */
+export const boards = pgTable('boards', {
+  id:                   uuid('id').primaryKey().defaultRandom(),
+  tenantId:             integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:            uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:            integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  name:                 varchar('name', { length: 255 }).notNull(),
+  /** Autonomous mode auto-advances a ticket to the next lane on stage success. */
+  autonomous:           boolean('autonomous').notNull().default(false),
+  maxConcurrentTickets: integer('max_concurrent_tickets').notNull().default(5),
+  needsAttentionLane:   varchar('needs_attention_lane', { length: 120 }).notNull().default('needs-attention'),
+  createdAt:            timestamp('created_at').notNull().defaultNow(),
+  updatedAt:            timestamp('updated_at').notNull().defaultNow(),
+});
+
+/** An ordered lane within a board; a stage of work with assigned agents. */
+export const swimlanes = pgTable('swimlanes', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  boardId:       uuid('board_id').notNull().references(() => boards.id, { onDelete: 'cascade' }),
+  key:           varchar('key', { length: 120 }).notNull(),
+  name:          varchar('name', { length: 255 }).notNull(),
+  position:      integer('position').notNull().default(0),
+  isTerminal:    boolean('is_terminal').notNull().default(false),
+  gate:          varchar('gate', { length: 16 }).notNull().default('auto'),              // 'auto' | 'human'
+  executionMode: varchar('execution_mode', { length: 16 }).notNull().default('sequential'), // 'parallel' | 'sequential'
+  failurePolicy: varchar('failure_policy', { length: 24 }).notNull().default('needs_attention'), // 'needs_attention' | 'retry' | 'skip'
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+  // UNIQUE (board_id, key) enforced in migration 0064 (kept out of the pgTable
+  // second-arg form, which the check:schema drift parser mis-tokenizes).
+});
+
+/** 1..N agents assigned to a swimlane; run in parallel or sequence per stage. */
+export const swimlaneAgentAssignments = pgTable('swimlane_agent_assignments', {
+  id:                   uuid('id').primaryKey().defaultRandom(),
+  tenantId:             integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:            uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  swimlaneId:           uuid('swimlane_id').notNull().references(() => swimlanes.id, { onDelete: 'cascade' }),
+  role:                 varchar('role', { length: 120 }).notNull(),
+  runtime:              varchar('runtime', { length: 16 }).notNull().default('cloud'),   // 'local' | 'cloud' | 'remote'
+  target:               varchar('target', { length: 120 }),   // remote claw id when runtime='remote'
+  taskTemplate:         text('task_template'),
+  requiredCapabilities: text('required_capabilities'),         // JSON array stored as text
+  model:                varchar('model', { length: 120 }),
+  position:             integer('position').notNull().default(0),
+  createdAt:            timestamp('created_at').notNull().defaultNow(),
+});
+
+/** Per-ticket lifecycle state machine sitting ABOVE the workflow engine. */
+export const ticketRuns = pgTable('ticket_runs', {
+  id:                uuid('id').primaryKey().defaultRandom(),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:         uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  boardId:           uuid('board_id').notNull().references(() => boards.id, { onDelete: 'cascade' }),
+  taskId:            integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  currentSwimlaneId: uuid('current_swimlane_id').references(() => swimlanes.id, { onDelete: 'set null' }),
+  // queued|awaiting_gate|stage_running|stage_completed|advancing|needs_attention|done|cancelled
+  lifecycle:         varchar('lifecycle', { length: 24 }).notNull().default('queued'),
+  currentWorkflowId: uuid('current_workflow_id').references(() => workflows.id, { onDelete: 'set null' }),
+  stageHistory:      text('stage_history'),   // JSON array of {swimlaneId, workflowId, status, at}
+  branchName:        varchar('branch_name', { length: 255 }),
+  error:             text('error'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+  // UNIQUE (board_id, task_id) enforced in migration 0064.
+});
+
+/** Append-only audit of every swimlane transition (or refusal to advance). */
+export const swimlaneTransitions = pgTable('swimlane_transitions', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  ticketRunId:    uuid('ticket_run_id').notNull().references(() => ticketRuns.id, { onDelete: 'cascade' }),
+  fromSwimlaneId: uuid('from_swimlane_id').references(() => swimlanes.id, { onDelete: 'set null' }),
+  toSwimlaneId:   uuid('to_swimlane_id').references(() => swimlanes.id, { onDelete: 'set null' }),
+  reason:         varchar('reason', { length: 32 }).notNull(),  // autonomous|gate_approved|failed|retry|manual
+  workflowStatus: varchar('workflow_status', { length: 16 }),
+  detail:         text('detail'),
+  at:             timestamp('at').notNull().defaultNow(),
+});
+
+// ── Slice 2: External board connections & bidirectional sync ────────────────
+
+/** One external board (Jira/GitHub/Freshworks/Rally) bound to a BF project. */
+export const boardConnections = pgTable('board_connections', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:       uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:       integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  credentialId:    uuid('credential_id').references(() => integrationCredentials.id, { onDelete: 'set null' }),
+  provider:        varchar('provider', { length: 24 }).notNull(),  // github|jira|freshworks|rally|bitbucket
+  externalBoardId: varchar('external_board_id', { length: 255 }),
+  status:          varchar('status', { length: 16 }).notNull().default('active'), // active|degraded|disabled
+  pollCursor:      text('poll_cursor'),
+  webhookSecret:   varchar('webhook_secret', { length: 128 }),
+  webhookEnabled:  boolean('webhook_enabled').notNull().default(false),
+  pollIntervalSec: integer('poll_interval_sec').notNull().default(60),
+  lastPolledAt:    timestamp('last_polled_at'),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+});
+
+/** Maps a normalized BF task to its external ticket; the idempotency ledger key. */
+export const externalTicketLinks = pgTable('external_ticket_links', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:       uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  connectionId:    uuid('connection_id').notNull().references(() => boardConnections.id, { onDelete: 'cascade' }),
+  taskId:          integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  provider:        varchar('provider', { length: 24 }).notNull(),
+  externalId:      varchar('external_id', { length: 255 }).notNull(),
+  externalUrl:     varchar('external_url', { length: 500 }),
+  externalVersion: varchar('external_version', { length: 128 }),  // etag/updated_at/version#
+  contentHash:     varchar('content_hash', { length: 64 }),
+  syncState:       varchar('sync_state', { length: 16 }).notNull().default('synced'), // synced|dirty_local|dirty_remote|conflict
+  lastInboundAt:   timestamp('last_inbound_at'),
+  lastOutboundAt:  timestamp('last_outbound_at'),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+  // UNIQUE (connection_id, external_id) enforced in migration 0065.
+});
+
+/** Transactional outbox for reliable, retried writeback to external providers. */
+export const boardSyncOutbox = pgTable('board_sync_outbox', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  connectionId:  uuid('connection_id').notNull().references(() => boardConnections.id, { onDelete: 'cascade' }),
+  taskId:        integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  changeSet:     text('change_set'),   // JSON of changed normalized fields
+  attempts:      integer('attempts').notNull().default(0),
+  nextAttemptAt: timestamp('next_attempt_at').notNull().defaultNow(),
+  status:        varchar('status', { length: 16 }).notNull().default('pending'),  // pending|inflight|done|dead
+  lastError:     text('last_error'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+});
+
+// ── Slice 3: PRD versioning & audit ─────────────────────────────────────────
+
+/** Immutable, monotonic snapshot of a spec/PRD; frozen once an execution uses it. */
+export const specVersions = pgTable('spec_versions', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  specId:     uuid('spec_id').notNull().references(() => specs.id, { onDelete: 'cascade' }),
+  version:    integer('version').notNull(),
+  prd:        text('prd'),
+  archSpec:   text('arch_spec'),
+  taskList:   text('task_list'),
+  origin:     varchar('origin', { length: 24 }).notNull().default('prd_first'), // prd_first|generated_from_ticket
+  frozen:     boolean('frozen').notNull().default(false),
+  frozenAt:   timestamp('frozen_at'),
+  createdBy:  varchar('created_by', { length: 120 }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  // UNIQUE (spec_id, version) enforced in migration 0066.
+});
+
+/** PRD-coordinate audit: (agent action × PRD section) across swimlanes/agents. */
+export const specAuditRecords = pgTable('spec_audit_records', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  specId:      uuid('spec_id').notNull().references(() => specs.id, { onDelete: 'cascade' }),
+  specVersion: integer('spec_version'),
+  sectionId:   varchar('section_id', { length: 120 }),
+  agentRole:   varchar('agent_role', { length: 120 }),
+  action:      varchar('action', { length: 64 }).notNull(),
+  swimlane:    varchar('swimlane', { length: 120 }),
+  taskId:      integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  detail:      text('detail'),
+  at:          timestamp('at').notNull().defaultNow(),
+});
+
+// ── Slice 4: Multi-repo associations & PR/branch tracking ───────────────────
+
+/** A BF project associates with 1..N repos (github|bitbucket|gitlab). */
+export const projectRepositories = pgTable('project_repositories', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:     integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  provider:      varchar('provider', { length: 16 }).notNull(),  // github|bitbucket|gitlab
+  host:          varchar('host', { length: 255 }).notNull().default('github.com'),
+  owner:         varchar('owner', { length: 255 }).notNull(),
+  repo:          varchar('repo', { length: 255 }).notNull(),
+  defaultBranch: varchar('default_branch', { length: 255 }),
+  cloneUrlHttps: varchar('clone_url_https', { length: 500 }),
+  isDefault:     boolean('is_default').notNull().default(false),
+  matchHints:    text('match_hints'),   // JSON {labels?, pathGlobs?, keywords?}
+  credentialId:  uuid('credential_id').references(() => integrationCredentials.id, { onDelete: 'set null' }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+  // UNIQUE (project_id, provider, owner, repo) enforced in migration 0067.
+});
+
+/** A branch created by an agent against an associated repo. */
+export const repoBranches = pgTable('repo_branches', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  repoId:     uuid('repo_id').notNull().references(() => projectRepositories.id, { onDelete: 'cascade' }),
+  taskId:     integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  name:       varchar('name', { length: 255 }).notNull(),
+  baseBranch: varchar('base_branch', { length: 255 }),
+  createdBy:  varchar('created_by', { length: 120 }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+});
+
+/** A pull/merge request opened by an agent, linked to ticket + PRD for traceability. */
+export const pullRequests = pgTable('pull_requests', {
+  id:                uuid('id').primaryKey().defaultRandom(),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:         uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:         integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  repoId:            uuid('repo_id').references(() => projectRepositories.id, { onDelete: 'set null' }),
+  taskId:            integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  specId:            uuid('spec_id').references(() => specs.id, { onDelete: 'set null' }),
+  workflowId:        uuid('workflow_id').references(() => workflows.id, { onDelete: 'set null' }),
+  provider:          varchar('provider', { length: 16 }).notNull(),
+  number:            integer('number'),
+  url:               varchar('url', { length: 500 }),
+  branchName:        varchar('branch_name', { length: 255 }),
+  baseBranch:        varchar('base_branch', { length: 255 }),
+  status:            varchar('status', { length: 16 }).notNull().default('open'),  // draft|open|merged|closed
+  externalTicketRef: varchar('external_ticket_ref', { length: 255 }),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
