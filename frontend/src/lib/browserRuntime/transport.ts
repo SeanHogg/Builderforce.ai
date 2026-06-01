@@ -24,6 +24,7 @@ interface ClaimResponse {
         input: string | null;
         taskId: number | null;
         ticketRunId: string;
+        repo?: { repoId: string; defaultBranch: string | null } | null;
       }
     | null;
 }
@@ -45,6 +46,7 @@ export function createBrowserAgentTransport(deps: { request?: RequestFn } = {}):
         role: res.dispatch.role,
         input: res.dispatch.input,
         taskId: res.dispatch.taskId,
+        repo: res.dispatch.repo ?? null,
       };
     },
 

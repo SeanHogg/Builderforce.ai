@@ -11,6 +11,7 @@ import { requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { emitWebhookEvent, type WebhookEvent } from '../../application/seams/webhookService';
 
 /** The (tenantId, segmentId) scope every tracker query filters by. */
 export function scope(c: Context<HonoEnv>): { tenantId: number; segmentId: string } {
@@ -22,6 +23,33 @@ export interface TrackerOpts {
   fields: string[];
   /** Subset of `fields` required (non-empty) on create. */
   required?: string[];
+  /**
+   * Optional outbound-webhook trigger: when a create/update sets `field` to
+   * `value`, emit `event` (segment-scoped) with the written row as the payload.
+   * Emission is fire-and-forget (executionCtx.waitUntil) and never blocks or
+   * fails the response — it is skipped when no execution context is present
+   * (e.g. unit tests that don't supply one).
+   */
+  emit?: { field: string; value: string; event: WebhookEvent };
+}
+
+/** Fire-and-forget webhook emit when a write set the trigger field to its value. */
+function maybeEmit(
+  c: Context<HonoEnv>,
+  db: Db,
+  opts: TrackerOpts,
+  written: Record<string, unknown>,
+  row: Record<string, unknown> | undefined,
+): void {
+  const e = opts.emit;
+  if (!e || !row || written[e.field] !== e.value) return;
+  const waitUntil = c.executionCtx?.waitUntil?.bind(c.executionCtx);
+  if (!waitUntil) return;
+  const { tenantId, segmentId } = scope(c);
+  const eventId = typeof row.id === 'string' || typeof row.id === 'number' ? String(row.id) : crypto.randomUUID();
+  waitUntil(
+    emitWebhookEvent(db, { tenantId, segmentId, eventType: e.event, eventId, data: row }).catch(() => { /* best-effort */ }),
+  );
 }
 
 /** Coerce JSON values to column types: ISO strings for *At/*Date fields → Date. */
@@ -64,9 +92,11 @@ function createTrackerRoutes(db: Db, table: any, opts: TrackerOpts): Hono<HonoEn
         return c.json({ error: `${r} is required` }, 400);
       }
     }
+    const written = pick(body, opts.fields);
     const rows = (await db.insert(table)
-      .values({ ...pick(body, opts.fields), tenantId, segmentId })
-      .returning()) as unknown[];
+      .values({ ...written, tenantId, segmentId })
+      .returning()) as Array<Record<string, unknown>>;
+    maybeEmit(c, db, opts, written, rows[0]);
     return c.json(rows[0], 201);
   });
 
@@ -78,8 +108,9 @@ function createTrackerRoutes(db: Db, table: any, opts: TrackerOpts): Hono<HonoEn
     patch.updatedAt = new Date();
     const rows = (await db.update(table).set(patch)
       .where(and(eq(table.id, id), eq(table.tenantId, tenantId), eq(table.segmentId, segmentId)))
-      .returning()) as unknown[];
+      .returning()) as Array<Record<string, unknown>>;
     if (!rows[0]) return c.json({ error: 'not found' }, 404);
+    maybeEmit(c, db, opts, patch, rows[0]);
     return c.json(rows[0]);
   });
 

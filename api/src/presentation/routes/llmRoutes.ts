@@ -30,7 +30,7 @@ import {
 } from '../../application/llm/ImageProxyService';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, coderclawInstances, tenantApiKeys, users } from '../../infrastructure/database/schema';
-import { originAllowed } from '../../application/llm/tenantApiKeyService';
+import { originAllowed, deserializeScopes } from '../../application/llm/tenantApiKeyService';
 import { listToolsForTenant, callMcpTool } from '../../application/llm/mcpExtensionService';
 import { resolveKeyCached } from '../../infrastructure/auth/keyResolutionCache';
 import type { FailoverEvent } from '../../application/llm/LlmProxyService';
@@ -120,7 +120,7 @@ function logUsage(
  * HTTP status + code without each catch site re-implementing the mapping.
  * Single source of truth for "auth-related rejection" surface.
  */
-class TenantAccessError extends Error {
+export class TenantAccessError extends Error {
   constructor(
     public readonly status: 401 | 403,
     public readonly code: string,
@@ -129,7 +129,7 @@ class TenantAccessError extends Error {
 }
 
 /** Convert any throwable from `requireTenantAccess` into a Hono JSON response. */
-function respondToAccessError(c: Context<HonoEnv>, err: unknown) {
+export function respondToAccessError(c: Context<HonoEnv>, err: unknown) {
   if (err instanceof TenantAccessError) {
     return c.json({ error: err.message, code: err.code }, err.status);
   }
@@ -145,6 +145,9 @@ type TenantAccess = {
   clawTokenDailyLimit: number | null;
   /** UUID of the `bfk_*` tenant API key that authenticated, when applicable. */
   tenantApiKeyId: string | null;
+  /** Endpoint scopes of the authenticating `bfk_*` key. null = unrestricted
+   *  (full-tenant key) or a non-key auth path (claw / JWT). See migration 0070. */
+  tenantApiKeyScopes: string[] | null;
   role: TenantRole;
   plan: 'free' | 'pro' | 'teams';
   billingStatus: 'none' | 'pending' | 'active' | 'past_due' | 'cancelled';
@@ -252,6 +255,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
       clawId: claw.id,
       clawTokenDailyLimit: claw.tokenDailyLimit,
       tenantApiKeyId: null,
+      tenantApiKeyScopes: null,
       role: TenantRole.DEVELOPER,
       isSuperadmin: false,
       ...(await resolveTenantPlan(c, claw.tenantId)),
@@ -274,12 +278,13 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
           tenantId:        tenantApiKeys.tenantId,
           revokedAt:       tenantApiKeys.revokedAt,
           allowedOrigins:  tenantApiKeys.allowedOrigins,
+          scopes:          tenantApiKeys.scopes,
         })
         .from(tenantApiKeys)
         .where(eq(tenantApiKeys.keyHash, keyHash))
         .limit(1);
       if (!r || r.revokedAt) return { ok: false, reason: 'Invalid or revoked tenant API key' };
-      // Pre-parse allowedOrigins so cache hit doesn't have to.
+      // Pre-parse allowedOrigins + scopes so a cache hit doesn't have to.
       let allowlist: string[] | null = null;
       if (r.allowedOrigins) {
         try {
@@ -287,12 +292,12 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
           if (Array.isArray(parsed)) allowlist = parsed.filter((s) => typeof s === 'string');
         } catch { /* malformed → server-only */ }
       }
-      return { ok: true, payload: { id: r.id, tenantId: r.tenantId, allowedOrigins: allowlist } };
+      return { ok: true, payload: { id: r.id, tenantId: r.tenantId, allowedOrigins: allowlist, scopes: deserializeScopes(r.scopes) } };
     });
 
     if (!resolved.ok) throw new Error(resolved.reason);
-    const { id: keyId, tenantId: keyTenantId, allowedOrigins: allowlist } =
-      resolved.payload as { id: string; tenantId: number; allowedOrigins: string[] | null };
+    const { id: keyId, tenantId: keyTenantId, allowedOrigins: allowlist, scopes: keyScopes } =
+      resolved.payload as { id: string; tenantId: number; allowedOrigins: string[] | null; scopes?: string[] | null };
 
     // Origin allowlist enforcement (single source: tenantApiKeyService.originAllowed).
     const origin = c.req.header('Origin') ?? null;
@@ -319,6 +324,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
       clawId: null,
       clawTokenDailyLimit: null,
       tenantApiKeyId: keyId,
+      tenantApiKeyScopes: keyScopes ?? null,
       role: TenantRole.DEVELOPER,
       isSuperadmin: false,
       ...(await resolveTenantPlan(c, keyTenantId)),
@@ -371,6 +377,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
     clawId: null,
     clawTokenDailyLimit: null,
     tenantApiKeyId: null,
+    tenantApiKeyScopes: null,
     role: payload.role,
     // `users.isSuperadmin` (joined into the membership query above) is the
     // sole source of truth — fresh on every call, instant revocation.

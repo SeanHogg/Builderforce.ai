@@ -23,6 +23,7 @@ import {
   queryTenantApiKeyUsage,
   revokeTenantApiKey,
   updateTenantApiKey,
+  isTenantApiScope,
 } from '../../application/llm/tenantApiKeyService';
 
 /**
@@ -57,16 +58,19 @@ export function createTenantApiKeyRoutes(db: Db): Hono<HonoEnv> {
     await next();
   });
 
-  // POST /api/tenants/:tenantId/api-keys — mint a new bfk_* key
+  // POST /api/tenants/:tenantId/api-keys — mint a new bfk_* key. Optional
+  // `scopes` mints a least-privilege service token (e.g. for the channel-3
+  // seams); omit it for a full-tenant gateway key. Unknown scopes are dropped.
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId   = c.get('userId') as string;
-    const body     = await c.req.json<{ name?: string; allowedOrigins?: string[] | null }>()
-      .catch(() => ({} as { name?: string; allowedOrigins?: string[] | null }));
+    const body     = await c.req.json<{ name?: string; allowedOrigins?: string[] | null; scopes?: unknown }>()
+      .catch(() => ({} as { name?: string; allowedOrigins?: string[] | null; scopes?: unknown }));
     const name     = (body.name ?? '').trim() || 'Tenant API Key';
     const allowedOrigins = normalizeOrigins(body.allowedOrigins);
+    const scopes   = Array.isArray(body.scopes) ? body.scopes.filter(isTenantApiScope) : null;
 
-    const minted = await mintTenantApiKey(db, { tenantId, name, createdByUserId: userId, allowedOrigins });
+    const minted = await mintTenantApiKey(db, { tenantId, name, createdByUserId: userId, allowedOrigins, scopes });
     return c.json(minted, 201);
   });
 

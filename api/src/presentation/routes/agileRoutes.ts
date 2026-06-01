@@ -17,7 +17,7 @@ import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 const TRACKERS: Array<{ path: string; table: unknown; opts: TrackerOpts }> = [
-  { path: '/sprints', table: sprints, opts: { fields: ['name', 'goal', 'startDate', 'endDate', 'capacity', 'status', 'runwayBudget', 'actualBurn', 'notes'], required: ['name'] } },
+  { path: '/sprints', table: sprints, opts: { fields: ['name', 'goal', 'startDate', 'endDate', 'capacity', 'status', 'runwayBudget', 'actualBurn', 'notes'], required: ['name'], emit: { field: 'status', value: 'completed', event: 'sprint.completed' } } },
   { path: '/velocity', table: teamVelocity, opts: { fields: ['period', 'teamId', 'periodStart', 'periodEnd', 'committedPoints', 'completedPoints', 'velocityScore', 'trend', 'notes'], required: ['period'] } },
   { path: '/capacity', table: capacityPlanning, opts: { fields: ['planningPeriod', 'teamId', 'totalCapacity', 'allocatedCapacity', 'availableCapacity', 'utilizationRate', 'teamSize', 'notes'], required: ['planningPeriod'] } },
   { path: '/cost', table: costCalculations, opts: { fields: ['label', 'calculationType', 'laborCost', 'overheadCost', 'toolingCost', 'infrastructureCost', 'totalCost', 'runwayImpactDays', 'notes'], required: ['label'] } },

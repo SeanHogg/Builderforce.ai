@@ -33,8 +33,9 @@ export async function verifySecret(value: string, storedHash: string): Promise<b
  *   - `clu` — Legacy user-bootstrap API key (`users.api_key_hash`)
  *   - `bfk` — Tenant API key for the LLM gateway (`tenant_api_keys.key_hash`)
  *   - `bfai` — Developer API key for the public read-only API (`developer_api_keys.key_hash`)
+ *   - `whsec` — Outbound-webhook signing secret (`webhook_subscriptions.secret`)
  */
-export function generateApiKey(prefix: 'clk' | 'clu' | 'bfk' | 'bfai'): string {
+export function generateApiKey(prefix: 'clk' | 'clu' | 'bfk' | 'bfai' | 'whsec'): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   const hex   = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
   return `${prefix}_${hex}`;

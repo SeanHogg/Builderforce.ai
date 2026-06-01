@@ -11,12 +11,62 @@ import { llmUsageLog, tenantApiKeys } from '../../infrastructure/database/schema
 import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
 import { invalidateKeyCache } from '../../infrastructure/auth/keyResolutionCache';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Endpoint scopes — single source of truth for the per-scope service-token model
+// (migration 0070). A key with NULL/empty scopes is UNRESTRICTED (full tenant
+// access — the legacy LLM-gateway keys); a key with a non-empty scope list is
+// limited to exactly those scopes. Used by the channel-3 cross-domain seams.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Inbound scopes — granted to keys the HOST presents when calling BuilderForce
+// (host → BuilderForce). The BI burn-rate pull goes the other way (BuilderForce
+// → host) and uses a host-issued token stored as BI config, so its scope is not
+// part of this registry.
+export const TENANT_API_SCOPES = [
+  'ingest:feedback',   // BurnRateOS → POST /v1/ingest/feedback
+  'webhooks:manage',   // host manages its outbound webhook subscriptions
+] as const;
+
+export type TenantApiScope = (typeof TENANT_API_SCOPES)[number];
+
+export function isTenantApiScope(v: unknown): v is TenantApiScope {
+  return typeof v === 'string' && (TENANT_API_SCOPES as readonly string[]).includes(v);
+}
+
+function serializeScopes(scopes: string[] | null | undefined): string | null {
+  if (!scopes || scopes.length === 0) return null;
+  const clean = scopes.filter(isTenantApiScope);
+  return clean.length ? JSON.stringify(clean) : null;
+}
+
+export function deserializeScopes(value: string | null | undefined): string[] | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((s) => typeof s === 'string') : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Does a key (with the given stored scopes) satisfy a required scope?
+ *   - null / empty scopes → unrestricted → allowed (legacy full-tenant keys)
+ *   - non-empty scopes    → must include the required scope
+ */
+export function keyHasScope(scopes: string[] | null, required: TenantApiScope): boolean {
+  if (!scopes || scopes.length === 0) return true;
+  return scopes.includes(required);
+}
+
 export interface TenantApiKeyRow {
   id:               string;
   name:             string;
   createdByUserId:  string | null;
   /** Browser allowlist — null = server-only, ['*'] = any origin, otherwise list of exact origins. */
   allowedOrigins:   string[] | null;
+  /** Endpoint scopes — null/empty = unrestricted, otherwise least-privilege list. */
+  scopes:           string[] | null;
   lastUsedAt:       Date | null;
   revokedAt:        Date | null;
   createdAt:        Date;
@@ -28,6 +78,7 @@ export interface MintedTenantApiKey {
   id:         string;
   name:       string;
   allowedOrigins: string[] | null;
+  scopes:     string[] | null;
   createdAt:  Date;
 }
 
@@ -43,6 +94,12 @@ export interface MintTenantApiKeyInput {
    *   - ['https://example.com', ...] → exact-origin allowlist
    */
   allowedOrigins?: string[] | null;
+  /**
+   * Endpoint scopes for a least-privilege service token:
+   *   - undefined / null / [] → unrestricted full-tenant key (default; legacy)
+   *   - ['ingest:feedback', …] → key limited to exactly these scopes
+   */
+  scopes?: string[] | null;
 }
 
 function serializeOrigins(origins: string[] | null | undefined): string | null {
@@ -76,11 +133,13 @@ export async function mintTenantApiKey(
       keyHash,
       createdByUserId: input.createdByUserId,
       allowedOrigins:  serializeOrigins(input.allowedOrigins),
+      scopes:          serializeScopes(input.scopes),
     })
     .returning({
       id:             tenantApiKeys.id,
       name:           tenantApiKeys.name,
       allowedOrigins: tenantApiKeys.allowedOrigins,
+      scopes:         tenantApiKeys.scopes,
       createdAt:      tenantApiKeys.createdAt,
     });
 
@@ -90,6 +149,7 @@ export async function mintTenantApiKey(
     id: row.id,
     name: row.name,
     allowedOrigins: deserializeOrigins(row.allowedOrigins),
+    scopes: deserializeScopes(row.scopes),
     createdAt: row.createdAt,
   };
 }
@@ -102,6 +162,7 @@ export async function listTenantApiKeys(db: Db, tenantId: number): Promise<Tenan
       name:             tenantApiKeys.name,
       createdByUserId:  tenantApiKeys.createdByUserId,
       allowedOrigins:   tenantApiKeys.allowedOrigins,
+      scopes:           tenantApiKeys.scopes,
       lastUsedAt:       tenantApiKeys.lastUsedAt,
       revokedAt:        tenantApiKeys.revokedAt,
       createdAt:        tenantApiKeys.createdAt,
@@ -110,7 +171,11 @@ export async function listTenantApiKeys(db: Db, tenantId: number): Promise<Tenan
     .where(eq(tenantApiKeys.tenantId, tenantId))
     .orderBy(desc(tenantApiKeys.createdAt));
 
-  return rows.map((r) => ({ ...r, allowedOrigins: deserializeOrigins(r.allowedOrigins) }));
+  return rows.map((r) => ({
+    ...r,
+    allowedOrigins: deserializeOrigins(r.allowedOrigins),
+    scopes: deserializeScopes(r.scopes),
+  }));
 }
 
 export interface UpdateTenantApiKeyInput {
@@ -168,6 +233,7 @@ export async function updateTenantApiKey(
       keyHash:          tenantApiKeys.keyHash,
       createdByUserId:  tenantApiKeys.createdByUserId,
       allowedOrigins:   tenantApiKeys.allowedOrigins,
+      scopes:           tenantApiKeys.scopes,
       lastUsedAt:       tenantApiKeys.lastUsedAt,
       revokedAt:        tenantApiKeys.revokedAt,
       createdAt:        tenantApiKeys.createdAt,
@@ -183,6 +249,7 @@ export async function updateTenantApiKey(
     name:            row.name,
     createdByUserId: row.createdByUserId,
     allowedOrigins:  deserializeOrigins(row.allowedOrigins),
+    scopes:          deserializeScopes(row.scopes),
     lastUsedAt:      row.lastUsedAt,
     revokedAt:       row.revokedAt,
     createdAt:       row.createdAt,

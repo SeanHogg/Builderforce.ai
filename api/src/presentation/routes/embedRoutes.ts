@@ -28,9 +28,20 @@ type Capability = (typeof CAPABILITIES)[number];
 const isCapability = (v: unknown): v is Capability =>
   typeof v === 'string' && (CAPABILITIES as readonly string[]).includes(v);
 
+// Mirror of @seanhogg/builderforce-embedded EMBED_CONSENT_VERSION (same
+// duplication posture as CAPABILITIES). Enabling the embed records that the
+// acting admin consented to THIS version; bump both in lockstep.
+const EMBED_CONSENT_VERSION = 1;
+
 interface EmbedConfig {
   enabled: boolean;
   capabilities: Capability[];
+  /** Consent text version the tenant last agreed to (null = never consented). */
+  consentVersion: number | null;
+  /** ISO timestamp of that consent. */
+  consentedAt: string | null;
+  /** userId of the admin who consented. */
+  consentedBy: string | null;
 }
 
 function parseSettings(raw: string | null | undefined): Record<string, unknown> {
@@ -44,10 +55,15 @@ function parseSettings(raw: string | null | undefined): Record<string, unknown> 
 }
 
 function readEmbed(raw: string | null | undefined): EmbedConfig {
-  const embed = parseSettings(raw).embed as { enabled?: unknown; capabilities?: unknown } | undefined;
+  const embed = parseSettings(raw).embed as
+    | { enabled?: unknown; capabilities?: unknown; consentVersion?: unknown; consentedAt?: unknown; consentedBy?: unknown }
+    | undefined;
   return {
     enabled: embed?.enabled === true,
     capabilities: Array.isArray(embed?.capabilities) ? embed!.capabilities.filter(isCapability) : [],
+    consentVersion: typeof embed?.consentVersion === 'number' ? embed.consentVersion : null,
+    consentedAt: typeof embed?.consentedAt === 'string' ? embed.consentedAt : null,
+    consentedBy: typeof embed?.consentedBy === 'string' ? embed.consentedBy : null,
   };
 }
 
@@ -62,12 +78,20 @@ export function createEmbedRoutes(db: Db): Hono<HonoEnv> {
       .from(tenants)
       .where(eq(tenants.id, tenantId))
       .limit(1);
-    return c.json({ ...readEmbed(row?.settings), isolationMode: row?.isolationMode ?? 'single' });
+    const embed = readEmbed(row?.settings);
+    return c.json({
+      ...embed,
+      isolationMode: row?.isolationMode ?? 'single',
+      // The version the host must (re-)consent to before enabling. The UI compares
+      // it against `consentVersion` to decide whether to show the consent modal.
+      consentRequiredVersion: EMBED_CONSENT_VERSION,
+    });
   });
 
   router.put('/config', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId');
-    const body = await c.req.json<{ enabled?: boolean; capabilities?: unknown }>();
+    const userId = c.get('userId');
+    const body = await c.req.json<{ enabled?: boolean; capabilities?: unknown; consentAcknowledged?: boolean }>();
     const capabilities = Array.isArray(body.capabilities) ? body.capabilities.filter(isCapability) : [];
     const enabled = body.enabled === true;
 
@@ -77,14 +101,37 @@ export function createEmbedRoutes(db: Db): Hono<HonoEnv> {
       .where(eq(tenants.id, tenantId))
       .limit(1);
     const settings = parseSettings(row?.settings);
-    settings.embed = { enabled, capabilities };
+    const prior = readEmbed(row?.settings);
+
+    // Consent gate: turning the embed ON requires a recorded consent at the
+    // current version. If the tenant has never consented (or consented to an
+    // older version), the admin must acknowledge the consent modal in this call.
+    let consentVersion = prior.consentVersion;
+    let consentedAt = prior.consentedAt;
+    let consentedBy = prior.consentedBy;
+    if (enabled) {
+      const hasCurrentConsent = prior.consentVersion === EMBED_CONSENT_VERSION;
+      if (!hasCurrentConsent) {
+        if (body.consentAcknowledged !== true) {
+          return c.json(
+            { error: 'Consent required to enable the embedded integration', code: 'EMBED_CONSENT_REQUIRED', consentRequiredVersion: EMBED_CONSENT_VERSION },
+            409,
+          );
+        }
+        consentVersion = EMBED_CONSENT_VERSION;
+        consentedAt = new Date().toISOString();
+        consentedBy = userId;
+      }
+    }
+
+    settings.embed = { enabled, capabilities, consentVersion, consentedAt, consentedBy };
 
     await db
       .update(tenants)
       .set({ settings: JSON.stringify(settings), updatedAt: new Date() })
       .where(eq(tenants.id, tenantId));
 
-    return c.json({ enabled, capabilities });
+    return c.json({ enabled, capabilities, consentVersion, consentedAt, consentedBy });
   });
 
   return router;

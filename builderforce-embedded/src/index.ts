@@ -19,6 +19,7 @@ export {
   EMBED_VIEWS,
   EMBED_VIEW_KEYS,
   EMBED_CAPABILITIES,
+  EMBED_CONSENT_VERSION,
   isEmbedView,
   pillarToCapability,
   capabilityForView,

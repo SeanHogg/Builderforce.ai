@@ -16,9 +16,9 @@
  * and drives these endpoints. Claws use the same /result callback.
  */
 import { Hono } from 'hono';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { agentDispatches } from '../../infrastructure/database/schema';
+import { agentDispatches, tasks, projectRepositories } from '../../infrastructure/database/schema';
 import { SwimlaneCoordinator } from '../../application/swimlane/SwimlaneCoordinator';
 import { DrizzleCoordinatorStore } from '../../application/swimlane/DrizzleCoordinatorStore';
 import {
@@ -69,6 +69,10 @@ export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
 
     if (!claimed) return c.json({ dispatch: null }); // lost the race
 
+    // Resolve the repo the agent should code against (default repo of the
+    // task's project), so the browser worker can clone/edit/push via the proxy.
+    const repo = await resolveRepoForTask(db, tenantId, claimed.taskId);
+
     return c.json({
       dispatch: {
         dispatchId: claimed.id,
@@ -78,6 +82,7 @@ export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
         input: claimed.input,
         taskId: claimed.taskId,
         ticketRunId: claimed.ticketRunId,
+        repo,
       },
     });
   });
@@ -119,4 +124,33 @@ export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
   });
 
   return router;
+}
+
+/**
+ * Resolve the repo a task's agent should code against: the project's default
+ * repo (or the most recently added one). Returns null when the task has no
+ * project repo bound — the worker then runs in reasoning-only mode.
+ */
+async function resolveRepoForTask(
+  db: Db,
+  tenantId: number,
+  taskId: number | null,
+): Promise<{ repoId: string; defaultBranch: string | null } | null> {
+  if (taskId == null) return null;
+  const [task] = await db
+    .select({ projectId: tasks.projectId })
+    .from(tasks)
+    .where(eq(tasks.id, taskId))
+    .limit(1);
+  if (!task) return null;
+
+  const repos = await db
+    .select({ id: projectRepositories.id, isDefault: projectRepositories.isDefault, defaultBranch: projectRepositories.defaultBranch })
+    .from(projectRepositories)
+    .where(and(eq(projectRepositories.projectId, task.projectId), eq(projectRepositories.tenantId, tenantId)))
+    .orderBy(desc(projectRepositories.createdAt));
+  if (repos.length === 0) return null;
+
+  const chosen = repos.find((r) => r.isDefault) ?? repos[0]!;
+  return { repoId: chosen.id, defaultBranch: chosen.defaultBranch };
 }
