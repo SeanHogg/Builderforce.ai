@@ -7,6 +7,7 @@ import { listAgents, hireAgent } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 import { ClawSlideOutPanel } from '@/components/ClawSlideOutPanel';
 import { FleetMeshContent } from '@/components/FleetMeshContent';
+import { CloudAgentsSection } from '@/components/workforce/CloudAgentsSection';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import type { PublishedAgent } from '@/lib/types';
@@ -180,7 +181,7 @@ export default function WorkforcePage() {
         <div>
           <h1 className="page-title" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-strong)', margin: 0 }}>Workforce</h1>
           <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
-            Register and manage your CoderClaw instances (claws). Connect agents to your workspace and hire from the registry.
+            Create cloud agents, register remote agents (claws), and connect them to your workspace. Publish agents to the marketplace to earn revenue.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -198,7 +199,7 @@ export default function WorkforcePage() {
               cursor: 'pointer',
             }}
           >
-            + Register claw
+            + Register remote agent
           </button>
         </div>
       </div>
@@ -214,14 +215,14 @@ export default function WorkforcePage() {
       ) : clawList.length === 0 ? (
         <div className="empty-state" style={{ padding: 48 }}>
           <div className="empty-state-icon">📁</div>
-          <div className="empty-state-title">No claws yet</div>
-          <div className="empty-state-sub">Register a CoderClaw instance to add it to your workforce.</div>
+          <div className="empty-state-title">No remote agents yet</div>
+          <div className="empty-state-sub">Register a CoderClaw instance to add it to your workforce, or create a cloud agent below.</div>
           <button
             type="button"
             onClick={() => setShowRegisterModal(true)}
             style={{ marginTop: 14, padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer' }}
           >
-            Register claw
+            Register remote agent
           </button>
         </div>
       ) : (
@@ -254,6 +255,9 @@ export default function WorkforcePage() {
           <FleetMeshContent claws={clawList} />
         </section>
       )}
+
+      {/* Your cloud agents — create, manage, publish */}
+      <CloudAgentsSection />
 
       {/* Marketplace / Hire agents section */}
       <section style={{ marginTop: 48, paddingTop: 24, borderTop: '1px solid var(--border)' }}>
@@ -298,8 +302,8 @@ export default function WorkforcePage() {
           >
             {!newClaw ? (
               <>
-                <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-strong)', marginBottom: 4 }}>Register a claw</h3>
-                <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 24 }}>Give your CoderClaw instance a name. You’ll get an API key to paste into your claw config.</p>
+                <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-strong)', marginBottom: 4 }}>Register a remote agent</h3>
+                <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 24 }}>Give your remote agent (CoderClaw instance) a name. You’ll get an API key to paste into its config.</p>
                 <form onSubmit={handleRegister}>
                   <div style={{ marginBottom: 16 }}>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--text-strong)', marginBottom: 6 }}>Name</label>
@@ -323,8 +327,8 @@ export default function WorkforcePage() {
               </>
             ) : (
               <>
-                <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-strong)', marginBottom: 4 }}>Claw registered</h3>
-                <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>Copy the API key and add it to your claw environment. It won’t be shown again.</p>
+                <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-strong)', marginBottom: 4 }}>Remote agent registered</h3>
+                <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>Copy the API key and add it to your remote agent’s environment. It won’t be shown again.</p>
                 <div style={{ marginBottom: 16 }}>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--text-strong)', marginBottom: 6 }}>API Key</label>
                   <div style={{ display: 'flex', gap: 8 }}>

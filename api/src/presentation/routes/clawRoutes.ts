@@ -547,7 +547,7 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
     }
 
     await clawService.deactivate(clawId, tenantId);
-    await db
+    const [row] = await db
       .update(coderclawInstances)
       .set({
         connectedAt: null,
@@ -557,7 +557,12 @@ export function createClawRoutes(db: Db, clawService: ClawService): Hono<ClawHon
           eq(coderclawInstances.id, clawId),
           eq(coderclawInstances.tenantId, tenantId),
         ),
-      );
+      )
+      .returning({ apiKeyHash: coderclawInstances.apiKeyHash });
+
+    // Deactivating bypasses the route-level invalidation the other claw
+    // mutations do, so the long-TTL clk_* auth cache would keep serving "active".
+    if (row) await invalidateKeyCache(c.env, 'clk', row.apiKeyHash);
 
     return c.body(null, 204);
   });

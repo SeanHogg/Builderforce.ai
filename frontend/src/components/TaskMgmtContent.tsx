@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   tasksApi,
@@ -11,10 +11,15 @@ import {
   type TaskStatus,
   type TaskPriority,
   type Claw,
+  type Execution,
+  type SwimlaneAgent,
 } from '@/lib/builderforceApi';
 import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
 import { BoardConfigPanel } from './board/BoardConfigPanel';
+import { AgentChip } from './board/AgentChip';
+import { useBoardConfig, normalizeKey } from './board/useBoardConfig';
+import { SlideOutPanel } from './SlideOutPanel';
 import { TaskAgentTab } from './task/TaskAgentTab';
 import { TaskPrdTab } from './task/TaskPrdTab';
 import { RunAgentControl } from './task/RunAgentControl';
@@ -71,6 +76,7 @@ export function TaskMgmtContent({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>(projectsProp ?? []);
   const [clawsList, setClawsList] = useState<Claw[]>([]);
+  const [executions, setExecutions] = useState<Execution[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [approvalGate, setApprovalGate] = useState<{ approvalId: string; taskId: number; reason: string } | null>(null);
@@ -92,21 +98,28 @@ export function TaskMgmtContent({
   const [bulkStatus, setBulkStatus] = useState<TaskStatus | ''>('');
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
   const [boardConfigOpen, setBoardConfigOpen] = useState(false);
+  const [prdOpen, setPrdOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'details' | 'agent' | 'prd'>('details');
 
-  // Reset to the Details tab whenever a different task drawer is opened.
-  useEffect(() => { setDrawerTab('details'); }, [drawerTask?.id]);
+  // Open a task drawer on a specific tab (defaults to Details). Used so clicking
+  // a running-agent chip jumps straight to the Agent tab.
+  const openTask = useCallback((t: Task, tab: 'details' | 'agent' | 'prd' = 'details') => {
+    setDrawerTab(tab);
+    setDrawerTask(t);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [tasksData, clawsData] = await Promise.all([
+      const [tasksData, clawsData, execData] = await Promise.all([
         tasksApi.list(projectId),
         claws.list().catch(() => []),
+        runtimeApi.listRecent().catch(() => []),
       ]);
       setTasks(tasksData);
       setClawsList(clawsData);
+      setExecutions(execData);
       if (projectsProp === undefined && !projectId) {
         const projs = await fetchProjects().catch(() => []);
         setProjects(projs);
@@ -149,6 +162,45 @@ export function TaskMgmtContent({
   const effectiveProjectId = projectId ?? (filterProject ? Number(filterProject) : undefined);
   const effectiveProjectName =
     projectId != null ? projectName : projectNameById(effectiveProjectId);
+
+  // Swimlanes + their configured agents for the selected board, shown discretely
+  // in each column header. Only fetched for the board view of a single project.
+  const { lanes, agentsByLane } = useBoardConfig(
+    effectiveProjectId,
+    effectiveProjectId != null && view === 'board' && !compact,
+  );
+
+  const agentsByStatus = useMemo(() => {
+    const map: Partial<Record<TaskStatus, SwimlaneAgent[]>> = {};
+    for (const status of BOARD_STATUSES) {
+      const lane = lanes.find(
+        (l) =>
+          normalizeKey(l.key) === normalizeKey(status) ||
+          normalizeKey(l.key) === normalizeKey(STATUS_LABELS[status]) ||
+          normalizeKey(l.name) === normalizeKey(STATUS_LABELS[status]),
+      );
+      if (lane) map[status] = agentsByLane[lane.id] ?? [];
+    }
+    return map;
+  }, [lanes, agentsByLane]);
+
+  // Latest execution per task → which agent is actively running (or last ran) it.
+  const latestExecByTask = useMemo(() => {
+    const m = new Map<number, Execution>();
+    for (const e of executions) {
+      const prev = m.get(e.taskId);
+      const ec = e.createdAt ? new Date(e.createdAt).getTime() : 0;
+      const pc = prev?.createdAt ? new Date(prev.createdAt).getTime() : -1;
+      if (!prev || ec >= pc) m.set(e.taskId, e);
+    }
+    return m;
+  }, [executions]);
+
+  // Resolve the human-facing name of whatever agent ran an execution.
+  const execAgentLabel = (e: Execution): string =>
+    (e.clawId != null ? clawsList.find((c) => c.id === e.clawId)?.name : null) ??
+    (e.clawId != null ? `Claw ${e.clawId}` : null) ??
+    (e.agentId != null ? `Agent ${e.agentId}` : 'Agent');
 
   const openCreate = () => {
     setEditTarget(null);
@@ -403,30 +455,50 @@ export function TaskMgmtContent({
               New task
             </button>
             {(() => {
+              // Both the PRD and the board-config controls are board-scoped: they
+              // act on the single selected project, so they share one enabled gate.
               const canConfigure = effectiveProjectId != null;
+              const iconBtn = {
+                ...buttonTertiary,
+                width: 36,
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: canConfigure ? 1 : 0.4,
+                cursor: canConfigure ? 'pointer' : 'not-allowed',
+              } as const;
               return (
-              <button
-                type="button"
-                onClick={() => canConfigure && setBoardConfigOpen(true)}
-                disabled={!canConfigure}
-                style={{
-                  ...buttonTertiary,
-                  width: 36,
-                  padding: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  opacity: canConfigure ? 1 : 0.4,
-                  cursor: canConfigure ? 'pointer' : 'not-allowed',
-                }}
-                aria-label="Configure board"
-                title={canConfigure ? 'Configure swimlanes & agents' : 'Select a single project to configure its board'}
-              >
-                <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                </svg>
-              </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => canConfigure && setPrdOpen(true)}
+                    disabled={!canConfigure}
+                    style={iconBtn}
+                    aria-label="View PRD"
+                    title={canConfigure ? 'View the PRD (shared by every agent on this board)' : 'Select a single project to view its PRD'}
+                  >
+                    <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <path d="M14 2v6h6" />
+                      <line x1="8" y1="13" x2="16" y2="13" />
+                      <line x1="8" y1="17" x2="16" y2="17" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => canConfigure && setBoardConfigOpen(true)}
+                    disabled={!canConfigure}
+                    style={iconBtn}
+                    aria-label="Configure board"
+                    title={canConfigure ? 'Configure swimlanes & agents' : 'Select a single project to configure its board'}
+                  >
+                    <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                  </button>
+                </>
               );
             })()}
           </div>
@@ -548,27 +620,45 @@ export function TaskMgmtContent({
                   minHeight: 120,
                 }}
               >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: 8,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: 'var(--text-muted)',
-                  }}
-                >
-                  <span>{STATUS_LABELS[status]}</span>
-                  <span>{tasksForStatus.length}</span>
+                <div style={{ marginBottom: 8 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    <span>{STATUS_LABELS[status]}</span>
+                    <span>{tasksForStatus.length}</span>
+                  </div>
+                  {(agentsByStatus[status]?.length ?? 0) > 0 && (
+                    <div
+                      style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}
+                      title="Agents configured on this swimlane"
+                    >
+                      {agentsByStatus[status]!.map((a) => (
+                        <AgentChip
+                          key={a.id}
+                          label={a.role}
+                          meta={a.model ?? a.runtime}
+                          title={`${a.role} · ${a.runtime}${a.model ? ` · ${a.model}` : ''}`}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-                  {tasksForStatus.map((task) => (
+                  {tasksForStatus.map((task) => {
+                    const exec = latestExecByTask.get(task.id);
+                    return (
                     <div
                       key={task.id}
                       draggable
                       onDragStart={() => setDragTaskId(String(task.id))}
-                      onClick={() => setDrawerTask(task)}
+                      onClick={() => openTask(task)}
                       style={{
                         ...cardStyle,
                         padding: 12,
@@ -639,9 +729,19 @@ export function TaskMgmtContent({
                         >
                           {task.priority}
                         </span>
-                        {task.assignedClawId && (
+                        {exec ? (
+                          <AgentChip
+                            label={execAgentLabel(exec)}
+                            status={exec.status}
+                            title={`${execAgentLabel(exec)} — execution #${exec.id} · ${exec.status}. Click to open the Agent tab.`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openTask(task, 'agent');
+                            }}
+                          />
+                        ) : task.assignedClawId ? (
                           <span>{clawNameById(task.assignedClawId)}</span>
-                        )}
+                        ) : null}
                         {task.githubPrUrl && (
                           <a
                             href={task.githubPrUrl}
@@ -658,7 +758,8 @@ export function TaskMgmtContent({
                         )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                   {!compact && (
                     <button
                       type="button"
@@ -751,10 +852,12 @@ export function TaskMgmtContent({
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((task) => (
+                  {filtered.map((task) => {
+                    const exec = latestExecByTask.get(task.id);
+                    return (
                     <tr
                       key={task.id}
-                      onClick={() => setDrawerTask(task)}
+                      onClick={() => openTask(task)}
                       style={{
                         borderBottom: '1px solid var(--border-subtle)',
                         cursor: 'pointer',
@@ -828,8 +931,17 @@ export function TaskMgmtContent({
                           {projectNameById(task.projectId)}
                         </td>
                       )}
-                      <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>
-                        {clawNameById(task.assignedClawId)}
+                      <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }} onClick={(e) => e.stopPropagation()}>
+                        {exec ? (
+                          <AgentChip
+                            label={execAgentLabel(exec)}
+                            status={exec.status}
+                            title={`${execAgentLabel(exec)} — execution #${exec.id} · ${exec.status}. Click to open the Agent tab.`}
+                            onClick={() => openTask(task, 'agent')}
+                          />
+                        ) : (
+                          clawNameById(task.assignedClawId)
+                        )}
                       </td>
                       <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>
                         {formatDate(task.dueDate)}
@@ -839,7 +951,7 @@ export function TaskMgmtContent({
                           <button
                             type="button"
                             style={{ ...buttonTertiary, padding: '4px 8px', fontSize: 12 }}
-                            onClick={() => setDrawerTask(task)}
+                            onClick={() => openTask(task)}
                           >
                             View
                           </button>
@@ -866,7 +978,8 @@ export function TaskMgmtContent({
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1203,7 +1316,7 @@ export function TaskMgmtContent({
               </div>
             ) : drawerTab === 'prd' ? (
               <div style={{ flex: 1, overflow: 'auto' }}>
-                <TaskPrdTab task={drawerTask} />
+                <TaskPrdTab projectId={drawerTask.projectId} />
               </div>
             ) : (
             <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
@@ -1326,6 +1439,17 @@ export function TaskMgmtContent({
           projectId={effectiveProjectId}
           projectName={effectiveProjectName}
         />
+      )}
+
+      {effectiveProjectId != null && (
+        <SlideOutPanel
+          open={prdOpen}
+          onClose={() => setPrdOpen(false)}
+          title={`PRD${effectiveProjectName ? ` · ${effectiveProjectName}` : ''}`}
+          width="min(720px, 96vw)"
+        >
+          <TaskPrdTab projectId={effectiveProjectId} />
+        </SlideOutPanel>
       )}
     </div>
   );

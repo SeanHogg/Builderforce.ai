@@ -296,6 +296,19 @@ html[data-theme='light'] .stars {
   }
 }
 
+/* Pulsing dot for an agent actively running a task (see AgentChip). */
+@keyframes agentPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.45;
+    transform: scale(0.78);
+  }
+}
+
 /* ── Nebula gradient ── */
 .nebula {
   position: fixed;

@@ -11,6 +11,7 @@ import {
 } from '@/lib/builderforceApi';
 import { RunAgentControl } from './RunAgentControl';
 import { ClawChatContent } from '../ClawChatContent';
+import { EXECUTION_STATUS_COLOR as STATUS_COLOR } from '../board/AgentChip';
 
 /**
  * "Agent" tab of the task details panel. Shows the run control, the task's
@@ -18,15 +19,6 @@ import { ClawChatContent } from '../ClawChatContent';
  * files the agent created/modified, and (when an agent is assigned) a chat so
  * the user can watch tool calls and direct the agent with new messages.
  */
-
-const STATUS_COLOR: Record<string, string> = {
-  completed: 'var(--success, #16a34a)',
-  failed: 'var(--danger, #dc2626)',
-  cancelled: 'var(--text-muted)',
-  running: 'var(--coral-bright)',
-  submitted: 'var(--coral-bright)',
-  pending: 'var(--text-muted)',
-};
 
 interface AgentResult {
   summary?: string;

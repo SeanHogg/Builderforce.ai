@@ -13,7 +13,16 @@ vi.mock('@/lib/builderforceApi', () => {
       delete: vi.fn().mockResolvedValue(undefined),
     },
     claws: { list: vi.fn().mockResolvedValue([]) },
-    runtimeApi: { submitExecution: vi.fn().mockResolvedValue({}) },
+    runtimeApi: {
+      submitExecution: vi.fn().mockResolvedValue({}),
+      listRecent: vi.fn().mockResolvedValue([]),
+    },
+    isAwaitingApprovalExecution: vi.fn().mockReturnValue(false),
+    boardsApi: {
+      list: vi.fn().mockResolvedValue([]),
+      swimlanes: { list: vi.fn().mockResolvedValue([]) },
+      agents: { list: vi.fn().mockResolvedValue([]) },
+    },
   };
 });
 
