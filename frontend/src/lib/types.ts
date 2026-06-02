@@ -193,7 +193,7 @@ export interface AgentProfile {
 
 export interface PublishedAgent {
   id: string;
-  project_id: number | string;
+  project_id: number | string | null;
   job_id?: string;
   name: string;
   title: string;
@@ -208,6 +208,14 @@ export interface PublishedAgent {
   eval_score?: number;
   created_at: string;
   updated_at: string;
+  // Workforce cloud agents (migration 0075). snake_case to match the raw row.
+  tenant_id?: number | null;
+  runtime_support?: 'cloud' | 'claw' | 'both';
+  preferred_runtime?: 'cloud' | 'claw' | null;
+  price_cents?: number;
+  pricing_model?: 'flat_fee' | 'consumption';
+  price_unit?: string | null;
+  published?: boolean;
 }
 
 /** Portable agent package that can be downloaded and used to deploy the agent. */

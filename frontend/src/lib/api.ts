@@ -429,6 +429,51 @@ export async function fetchAgentPackage(agentId: string): Promise<AgentPackage> 
   return apiRequest<AgentPackage>(`${IDE}/agents/${agentId}/package`);
 }
 
+// --- Workforce cloud agents (tenant-scoped create / publish / manage) -------
+
+export type AgentRuntimeSupport = 'cloud' | 'claw' | 'both';
+export type AgentPricingModel = 'flat_fee' | 'consumption';
+
+export interface CloudAgentInput {
+  name: string;
+  title?: string;
+  bio?: string;
+  skills?: string[];
+  baseModel?: string;
+  runtimeSupport?: AgentRuntimeSupport;
+  preferredRuntime?: 'cloud' | 'claw' | null;
+  /** Price in USD cents (0 = free). */
+  priceCents?: number;
+  pricingModel?: AgentPricingModel;
+  priceUnit?: string | null;
+  published?: boolean;
+}
+
+/** The tenant's own agents (any publish state). */
+export async function listMyAgents(): Promise<PublishedAgent[]> {
+  return apiRequest<PublishedAgent[]>(`/api/workforce/agents/mine`);
+}
+
+export async function createCloudAgent(data: CloudAgentInput): Promise<PublishedAgent> {
+  return apiRequest<PublishedAgent>(`/api/workforce/agents`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateAgent(agentId: string, data: Partial<CloudAgentInput> & { status?: string }): Promise<PublishedAgent> {
+  return apiRequest<PublishedAgent>(`/api/workforce/agents/${agentId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteAgent(agentId: string): Promise<void> {
+  await apiRequest<{ deleted: boolean }>(`/api/workforce/agents/${agentId}`, { method: 'DELETE' });
+}
+
 // ---------------------------------------------------------------------------
 // Repo analysis — the Architect / Digital-Transformation tool (/api/repo-analysis)
 // ---------------------------------------------------------------------------
