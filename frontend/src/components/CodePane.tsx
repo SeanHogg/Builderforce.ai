@@ -12,6 +12,8 @@ interface CodePaneProps {
   onTabClose: (path: string) => void;
   onChange: (value: string) => void;
   ydoc?: Y.Doc | null;
+  /** Namespaces Monaco models so same-named files across projects don't collide. */
+  projectId?: string | number;
 }
 
 /**
@@ -28,6 +30,7 @@ export function CodePane({
   onTabClose,
   onChange,
   ydoc,
+  projectId,
 }: CodePaneProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -39,11 +42,11 @@ export function CodePane({
       />
       <div style={{ flex: 1, overflow: 'hidden' }}>
         <CodeEditor
-          key={activeFile ?? 'none'}
           filePath={activeFile}
           content={activeFile ? (fileContents[activeFile] ?? '') : ''}
           onChange={onChange}
           ydoc={ydoc}
+          modelNamespace={projectId != null ? String(projectId) : undefined}
         />
       </div>
     </div>
