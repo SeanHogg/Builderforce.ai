@@ -1,0 +1,167 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import {
+  boardConnectionsApi,
+  integrationsApi,
+  type BoardConnection,
+  type IntegrationCredential,
+} from '@/lib/builderforceApi';
+
+/**
+ * Manage external project-management board connections (Jira / GitHub issues)
+ * for a project. Creating a connection immediately kicks off an initial sync.
+ * Shared between the project Integrations tab and the Task-Mgmt board-config
+ * COG panel ("assign external boards to this board").
+ *
+ * NOTE: recurring polling is not yet driven by a scheduled job — see the
+ * Consolidated Gap Register ("No scheduled poller drives external board sync").
+ * The "Sync now" button + the on-create sync are the manual trigger.
+ */
+
+const PM_PROVIDERS = ['jira', 'github'] as const;
+
+const cardStyle: React.CSSProperties = {
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20,
+};
+const inputStyle: React.CSSProperties = {
+  padding: '8px 12px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8,
+  background: 'var(--bg-deep)', color: 'var(--text-primary)', width: '100%', boxSizing: 'border-box',
+};
+const btnPrimary: React.CSSProperties = {
+  padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)', color: '#fff',
+  border: 'none', borderRadius: 8, cursor: 'pointer',
+};
+const btnSubtle: React.CSSProperties = {
+  padding: '6px 10px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)',
+  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+};
+
+export function BoardConnectionsManager({ projectId, heading = 'External boards' }: { projectId: number; heading?: string | null }) {
+  const [connections, setConnections] = useState<BoardConnection[]>([]);
+  const [creds, setCreds] = useState<IntegrationCredential[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState<string | null>(null);
+  const [syncMsg, setSyncMsg] = useState<Record<string, string>>({});
+
+  const [provider, setProvider] = useState<string>('jira');
+  const [credentialId, setCredentialId] = useState('');
+  const [externalBoardId, setExternalBoardId] = useState('');
+  const [pollIntervalSec, setPollIntervalSec] = useState(300);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      boardConnectionsApi.list(projectId),
+      Promise.all([integrationsApi.list({ projectId }), integrationsApi.list({ scope: 'global' })]).then(([a, b]) => [...a, ...b]),
+    ])
+      .then(([conns, c]) => { setConnections(conns); setCreds(c); })
+      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load board connections'))
+      .finally(() => setLoading(false));
+  }, [projectId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const resetForm = () => { setProvider('jira'); setCredentialId(''); setExternalBoardId(''); setPollIntervalSec(300); };
+
+  const add = async () => {
+    setSaving(true); setError(null);
+    try {
+      const conn = await boardConnectionsApi.create({
+        projectId,
+        provider,
+        credentialId: credentialId || null,
+        externalBoardId: externalBoardId.trim() || null,
+        pollIntervalSec,
+      });
+      // Kick off the first sync immediately so the board populates without waiting.
+      boardConnectionsApi.sync(conn.id)
+        .then(() => setSyncMsg((m) => ({ ...m, [conn.id]: 'Initial sync started' })))
+        .catch(() => setSyncMsg((m) => ({ ...m, [conn.id]: 'Initial sync failed' })))
+        .finally(load);
+      resetForm(); setAdding(false); load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to create connection');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const syncNow = async (id: string) => {
+    setSyncing(id); setSyncMsg((m) => ({ ...m, [id]: '' }));
+    try {
+      await boardConnectionsApi.sync(id);
+      setSyncMsg((m) => ({ ...m, [id]: 'Synced' }));
+    } catch (e) {
+      setSyncMsg((m) => ({ ...m, [id]: e instanceof Error ? e.message : 'Sync failed' }));
+    } finally {
+      setSyncing(null); load();
+    }
+  };
+
+  const remove = async (id: string) => { if (confirm('Delete this board connection?')) { await boardConnectionsApi.remove(id); load(); } };
+
+  const credName = (id: string | null) => creds.find((c) => c.id === id)?.name;
+  const pmCreds = creds.filter((c) => (PM_PROVIDERS as readonly string[]).includes(c.provider));
+
+  return (
+    <div style={cardStyle}>
+      {heading && <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>{heading}</div>}
+      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+        Connect an external Jira or GitHub board to sync tickets into this project.
+      </div>
+
+      {loading ? (
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>Loading…</div>
+      ) : (
+        <div style={{ marginTop: 12 }}>
+          {connections.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No external boards connected.</div>}
+          {connections.map((conn) => (
+            <div key={conn.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--border-subtle)' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--coral-bright)', minWidth: 56 }}>{conn.provider}</span>
+              <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>
+                {conn.externalBoardId || '(board)'} · {credName(conn.credentialId) ?? 'no key'}
+                <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+                  {conn.status}{conn.lastPolledAt ? ` · last ${new Date(conn.lastPolledAt).toLocaleString()}` : ''}
+                </span>
+                {syncMsg[conn.id] && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>· {syncMsg[conn.id]}</span>}
+              </span>
+              <button type="button" style={btnSubtle} disabled={syncing === conn.id} onClick={() => syncNow(conn.id)}>
+                {syncing === conn.id ? 'Syncing…' : 'Sync now'}
+              </button>
+              <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(conn.id)}>Delete</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginTop: 10 }}>{error}</div>}
+
+      {adding ? (
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 10 }}>
+          <select value={provider} onChange={(e) => setProvider(e.target.value)} style={inputStyle}>
+            {PM_PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+          <select value={credentialId} onChange={(e) => setCredentialId(e.target.value)} style={inputStyle}>
+            <option value="">— Select access key —</option>
+            {pmCreds.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.provider}{c.projectId == null ? ', workspace' : ''})</option>)}
+          </select>
+          <input style={inputStyle} placeholder="External board id (e.g. Jira board/project key)" value={externalBoardId} onChange={(e) => setExternalBoardId(e.target.value)} />
+          <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+            Poll interval (seconds)
+            <input style={{ ...inputStyle, marginTop: 4 }} type="number" min={60} value={pollIntervalSec} onChange={(e) => setPollIntervalSec(Number(e.target.value))} />
+          </label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" style={btnPrimary} disabled={saving} onClick={add}>{saving ? 'Connecting…' : 'Connect & sync'}</button>
+            <button type="button" style={btnSubtle} onClick={() => { setAdding(false); resetForm(); setError(null); }}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" style={{ ...btnPrimary, marginTop: 14 }} onClick={() => setAdding(true)}>Connect external board</button>
+      )}
+    </div>
+  );
+}

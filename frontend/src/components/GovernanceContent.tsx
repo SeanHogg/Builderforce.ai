@@ -2,14 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { fetchProject, updateProject } from '@/lib/api';
+import { projectAgents, type ProjectAgent } from '@/lib/builderforceApi';
 
 export interface GovernanceContentProps {
   projectId: number;
+  /** When set, governance is read/written on this agent instead of the project. */
+  agentAssignment?: ProjectAgent;
   className?: string;
   style?: React.CSSProperties;
 }
 
-export function GovernanceContent({ projectId, className, style }: GovernanceContentProps) {
+export function GovernanceContent({ projectId, agentAssignment, className, style }: GovernanceContentProps) {
   const [governance, setGovernance] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -17,15 +20,20 @@ export function GovernanceContent({ projectId, className, style }: GovernanceCon
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const agentId = agentAssignment?.id ?? null;
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       setError(null);
+      setEditing(false);
       try {
-        const project = await fetchProject(projectId);
-        if (!cancelled) {
-          setGovernance(project?.governance ?? '');
+        if (agentAssignment) {
+          if (!cancelled) setGovernance(agentAssignment.governance ?? '');
+        } else {
+          const project = await fetchProject(projectId);
+          if (!cancelled) setGovernance(project?.governance ?? '');
         }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load governance');
@@ -34,7 +42,9 @@ export function GovernanceContent({ projectId, className, style }: GovernanceCon
       }
     })();
     return () => { cancelled = true; };
-  }, [projectId]);
+    // agentAssignment is keyed by its id; re-run when the selected agent changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, agentId]);
 
   const startEdit = () => {
     setDraft(governance);
@@ -45,7 +55,11 @@ export function GovernanceContent({ projectId, className, style }: GovernanceCon
     setSaving(true);
     setError(null);
     try {
-      await updateProject(projectId, { governance: draft });
+      if (agentAssignment) {
+        await projectAgents.updateGovernance(agentAssignment.id, draft);
+      } else {
+        await updateProject(projectId, { governance: draft });
+      }
       setGovernance(draft);
       setEditing(false);
     } catch (e) {
@@ -142,7 +156,7 @@ export function GovernanceContent({ projectId, className, style }: GovernanceCon
         </div>
       ) : !governance.trim() ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 16, textAlign: 'center' }}>
-          No governance rules defined for this project. Click &quot;Edit&quot; to add rules.
+          No governance rules defined for this {agentAssignment ? 'agent' : 'project'}. Click &quot;Edit&quot; to add rules.
         </div>
       ) : (
         <div

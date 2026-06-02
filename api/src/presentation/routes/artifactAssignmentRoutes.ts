@@ -20,6 +20,7 @@ import {
   artifactAssignments,
   coderclawInstances,
   projects,
+  projectAgents,
   tasks,
 } from '../../infrastructure/database/schema';
 import {
@@ -47,7 +48,7 @@ export function createArtifactAssignmentRoutes(db: Db): Hono<HonoEnv> {
     const artifactType = c.req.query('artifactType') as ArtifactType | undefined;
 
     if (!scope || !VALID_SCOPES.has(scope)) {
-      return c.json({ error: 'scope query param is required (tenant|claw|project|task)' }, 400);
+      return c.json({ error: 'scope query param is required (tenant|claw|project|task|agent)' }, 400);
     }
     if (!scopeIdParam) {
       return c.json({ error: 'scopeId query param is required' }, 400);
@@ -95,7 +96,7 @@ export function createArtifactAssignmentRoutes(db: Db): Hono<HonoEnv> {
       return c.json({ error: 'artifactSlug is required' }, 400);
     }
     if (!body.scope || !VALID_SCOPES.has(body.scope)) {
-      return c.json({ error: 'scope is required (tenant|claw|project|task)' }, 400);
+      return c.json({ error: 'scope is required (tenant|claw|project|task|agent)' }, 400);
     }
     if (body.scopeId == null) {
       return c.json({ error: 'scopeId is required' }, 400);
@@ -163,9 +164,10 @@ export function createArtifactAssignmentRoutes(db: Db): Hono<HonoEnv> {
     const taskIdP    = c.req.query('taskId');
     const clawIdP    = c.req.query('clawId');
     const projectIdP = c.req.query('projectId');
+    const agentIdP   = c.req.query('agentId');
 
-    if (!taskIdP && !clawIdP && !projectIdP) {
-      return c.json({ error: 'At least one of taskId, clawId, or projectId is required' }, 400);
+    if (!taskIdP && !clawIdP && !projectIdP && !agentIdP) {
+      return c.json({ error: 'At least one of taskId, clawId, projectId, or agentId is required' }, 400);
     }
 
     const resolved = await resolveArtifacts(db, {
@@ -173,6 +175,7 @@ export function createArtifactAssignmentRoutes(db: Db): Hono<HonoEnv> {
       taskId:    taskIdP ? Number(taskIdP) : undefined,
       clawId:    clawIdP ? Number(clawIdP) : undefined,
       projectId: projectIdP ? Number(projectIdP) : undefined,
+      agentAssignmentId: agentIdP ? Number(agentIdP) : undefined,
     });
 
     return c.json(resolved);
@@ -219,6 +222,15 @@ async function verifyScopeOwnership(
         .from(tasks)
         .innerJoin(projects, eq(projects.id, tasks.projectId))
         .where(and(eq(tasks.id, scopeId), eq(projects.tenantId, tenantId)))
+        .limit(1);
+      return !!row;
+    }
+
+    case AssignmentScope.AGENT: {
+      const [row] = await db
+        .select({ id: projectAgents.id })
+        .from(projectAgents)
+        .where(and(eq(projectAgents.id, scopeId), eq(projectAgents.tenantId, tenantId)))
         .limit(1);
       return !!row;
     }

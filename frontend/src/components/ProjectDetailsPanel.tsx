@@ -9,17 +9,22 @@ import { ObservabilityContent } from './ObservabilityContent';
 import { TaskMgmtContent } from './TaskMgmtContent';
 import { PRDsContent } from './PRDsContent';
 import { CronJobsContent } from './CronJobsContent';
-import { CapabilitiesContent } from './CapabilitiesContent';
+import { AgentCapabilitiesContent } from './AgentCapabilitiesContent';
+import { BrainPanel } from './brain/BrainPanel';
 import { ConfirmDialog } from './ConfirmDialog';
+import { SourceControlContent } from './sourcecontrol/SourceControlContent';
+import { IntegrationCredentialsManager } from './integrations/IntegrationCredentialsManager';
+import { BoardConnectionsManager } from './integrations/BoardConnectionsManager';
 
 export type ProjectPanelTab =
   | 'details'
+  | 'sourceControl'
+  | 'integrations'
   | 'taskMgmt'
   | 'prds'
   | 'cron'
   | 'capabilities'
-  | 'brain'
-  | 'chat'
+  | 'brainChat'
   | 'instances'
   | 'workspace'
   | 'observability';
@@ -40,12 +45,13 @@ export interface ProjectDetailsPanelProps {
 
 const TABS: { id: ProjectPanelTab; label: string }[] = [
   { id: 'details', label: 'Project details' },
+  { id: 'sourceControl', label: 'Source control' },
+  { id: 'integrations', label: 'Integrations' },
   { id: 'taskMgmt', label: 'Task Mgmt' },
   { id: 'prds', label: 'PRDs' },
   { id: 'cron', label: 'Cron' },
-  { id: 'capabilities', label: 'Capabilities' },
-  { id: 'brain', label: 'Brain' },
-  { id: 'chat', label: 'Chat' },
+  { id: 'capabilities', label: 'Agent / Capabilities' },
+  { id: 'brainChat', label: 'Brain Chat' },
   { id: 'instances', label: 'Instances' },
   { id: 'workspace', label: 'Workspace' },
   { id: 'observability', label: 'Observability' },
@@ -300,7 +306,11 @@ export function ProjectDetailsPanel({
         </div>
 
         {/* Body */}
-        <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
+        <div style={{
+          flex: 1,
+          overflow: activeTab === 'brainChat' ? 'hidden' : 'auto',
+          padding: activeTab === 'brainChat' ? 0 : 20,
+        }}>
           {activeTab === 'details' && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
               <div style={cardStyle}>
@@ -517,8 +527,9 @@ export function ProjectDetailsPanel({
                   >
                     Create task
                   </button>
-                  <Link
-                    href="/brainstorm"
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('brainChat')}
                     style={{
                       padding: '8px 14px',
                       fontSize: 13,
@@ -527,12 +538,11 @@ export function ProjectDetailsPanel({
                       color: 'var(--text-primary)',
                       border: '1px solid var(--border-subtle)',
                       borderRadius: 8,
-                      textDecoration: 'none',
-                      display: 'inline-block',
+                      cursor: 'pointer',
                     }}
                   >
                     Plan with Brain
-                  </Link>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setActiveTab('prds')}
@@ -554,58 +564,17 @@ export function ProjectDetailsPanel({
                   Use Brain to generate PRDs and executable task actions for this project.
                 </div>
               </div>
+            </div>
+          )}
 
-              <div style={{ ...cardStyle, gridColumn: '1 / -1' }}>
-                <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>Source control</div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                  Repository and integrations can be configured here. No integrations configured yet.
-                </div>
-                <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <input
-                    placeholder="owner/repo"
-                    readOnly
-                    style={{
-                      padding: '8px 12px',
-                      fontSize: 13,
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
-                      background: 'var(--bg-deep)',
-                      color: 'var(--text-secondary)',
-                      minWidth: 180,
-                    }}
-                  />
-                  <input
-                    placeholder="https://github.com/owner/repo"
-                    readOnly
-                    style={{
-                      padding: '8px 12px',
-                      fontSize: 13,
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
-                      background: 'var(--bg-deep)',
-                      color: 'var(--text-secondary)',
-                      flex: 1,
-                      minWidth: 200,
-                    }}
-                  />
-                  <button
-                    type="button"
-                    disabled
-                    style={{
-                      padding: '8px 14px',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      background: 'var(--bg-elevated)',
-                      color: 'var(--text-muted)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
-                      cursor: 'not-allowed',
-                    }}
-                  >
-                    Save assignment
-                  </button>
-                </div>
-              </div>
+          {activeTab === 'sourceControl' && (
+            <SourceControlContent projectId={project.id} />
+          )}
+
+          {activeTab === 'integrations' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <IntegrationCredentialsManager projectId={project.id} heading="Project integration keys" />
+              <BoardConnectionsManager projectId={project.id} />
             </div>
           )}
 
@@ -620,56 +589,9 @@ export function ProjectDetailsPanel({
             <PRDsContent projectId={project.id} projectName={project.name} />
           )}
 
-          {activeTab === 'brain' && (
-            <div style={cardStyle}>
-              <div style={{ fontWeight: 600, marginBottom: 10 }}>Brain</div>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-                Use Brain to plan, generate PRDs, and create tasks for this project.
-              </p>
-              <Link
-                href="/brainstorm"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '10px 18px',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                  color: '#fff',
-                  borderRadius: 10,
-                  textDecoration: 'none',
-                }}
-              >
-                Open Brain Storm →
-              </Link>
-            </div>
-          )}
-
-          {activeTab === 'chat' && (
-            <div style={cardStyle}>
-              <div style={{ fontWeight: 600, marginBottom: 10 }}>Chat</div>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-                Project-scoped AI chat. Open the IDE to use the in-editor chat.
-              </p>
-              <Link
-                href={`/ide/${project.publicId ?? project.id}`}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '10px 18px',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  background: 'var(--surface-coral-soft)',
-                  color: 'var(--coral-bright)',
-                  border: '1px solid var(--border-accent)',
-                  borderRadius: 10,
-                  textDecoration: 'none',
-                }}
-              >
-                Open in IDE →
-              </Link>
+          {activeTab === 'brainChat' && (
+            <div style={{ height: '100%' }}>
+              <BrainPanel variant="docked" pinnedProjectId={project.id} />
             </div>
           )}
 
@@ -703,11 +625,7 @@ export function ProjectDetailsPanel({
               : <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 24, textAlign: 'center' }}>No claw assigned to this project. Assign a claw from the Workforce page to manage cron jobs.</div>
           )}
           {activeTab === 'capabilities' && (
-            <CapabilitiesContent
-              scope="project"
-              scopeId={project.id}
-              projectId={project.id}
-            />
+            <AgentCapabilitiesContent projectId={project.id} />
           )}
           {activeTab === 'observability' && <ObservabilityContent />}
         </div>

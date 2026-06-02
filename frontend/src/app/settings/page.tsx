@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { mySessionsApi, myAdminAccessApi, type MySession, type MyAdminAccessSession } from '@/lib/builderforceApi';
 import { EmbedIntegrationSettings } from '@/components/settings/EmbedIntegrationSettings';
+import { IntegrationCredentialsManager } from '@/components/integrations/IntegrationCredentialsManager';
 import {
   getStoredUser,
   getStoredTenant,
@@ -210,6 +211,11 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* Source control & integration keys (workspace-global; self-gates to owner/manager) */}
+      <div style={{ marginBottom: 20 }}>
+        <IntegrationCredentialsManager heading="Source control & integration keys" />
+      </div>
 
       {/* Embedded Integration (self-gates to owner/manager) */}
       <div style={{ marginBottom: 20 }}>

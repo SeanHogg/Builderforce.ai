@@ -25,6 +25,8 @@ export type ResolutionContext = {
   taskId?:    number;
   clawId?:    number;
   projectId?: number;
+  /** project_agents.id — when executing as a specific agent, fold in its per-agent assignments. */
+  agentAssignmentId?: number;
 };
 
 /**
@@ -83,6 +85,16 @@ export async function resolveArtifacts(
       and(
         eq(artifactAssignments.scope, AssignmentScope.TASK),
         eq(artifactAssignments.scopeId, ctx.taskId),
+      ),
+    );
+  }
+
+  // Agent-level — per-agent assignments keyed on project_agents.id
+  if (ctx.agentAssignmentId != null) {
+    scopeConditions.push(
+      and(
+        eq(artifactAssignments.scope, AssignmentScope.AGENT),
+        eq(artifactAssignments.scopeId, ctx.agentAssignmentId),
       ),
     );
   }

@@ -414,11 +414,11 @@ export async function listMarketplaceSkills(params?: {
 }
 
 // ---------------------------------------------------------------------------
-// Artifact assignments (skills, personas, content → tenant/claw/project/task)
+// Artifact assignments (skills, personas, content → tenant/claw/project/task/agent)
 // ---------------------------------------------------------------------------
 
 export type ArtifactType = 'skill' | 'persona' | 'content';
-export type AssignmentScope = 'tenant' | 'claw' | 'project' | 'task';
+export type AssignmentScope = 'tenant' | 'claw' | 'project' | 'task' | 'agent';
 
 export interface ArtifactAssignment {
   tenantId: number;
@@ -460,6 +460,62 @@ export const artifactAssignments = {
       `/api/artifact-assignments/${artifactType}/${encodeURIComponent(artifactSlug)}/${scope}/${scopeId}`,
       { method: 'DELETE' }
     ),
+};
+
+// ---------------------------------------------------------------------------
+// Project agents (agents attached to a project; numeric id scopes per-agent
+// skills/personas/content/governance)
+// ---------------------------------------------------------------------------
+
+/** An agent attached to a project. `agentRef` points back to its source agent. */
+export interface ProjectAgent {
+  id: number;
+  tenantId: number;
+  projectId: number;
+  /** 'workforce' → PublishedAgent.id; 'registered' → agents.id (numeric, as string). */
+  agentKind: 'workforce' | 'registered';
+  agentRef: string;
+  name: string;
+  role: string;
+  governance: string | null;
+  addedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const projectAgents = {
+  list: (projectId: number) =>
+    request<{ agents: ProjectAgent[] }>(`/api/project-agents?projectId=${projectId}`).then((r) => r.agents),
+
+  add: (body: { projectId: number; agentKind: 'workforce' | 'registered'; agentRef: string; name: string; role?: string }) =>
+    request<{ agent: ProjectAgent }>('/api/project-agents', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }).then((r) => r.agent),
+
+  remove: (id: number) =>
+    request<void>(`/api/project-agents/${id}`, { method: 'DELETE' }),
+
+  updateGovernance: (id: number, governance: string) =>
+    request<{ agent: ProjectAgent }>(`/api/project-agents/${id}/governance`, {
+      method: 'PUT',
+      body: JSON.stringify({ governance }),
+    }).then((r) => r.agent),
+};
+
+// ---------------------------------------------------------------------------
+// Registered agents (tenant endpoint agents: claude/openai/ollama/http)
+// ---------------------------------------------------------------------------
+
+export interface RegisteredAgent {
+  id: number;
+  name: string;
+  type: string;
+  isActive: boolean;
+}
+
+export const registeredAgents = {
+  list: () => request<RegisteredAgent[]>('/api/agents'),
 };
 
 // ---------------------------------------------------------------------------
@@ -596,6 +652,27 @@ export function isAwaitingApprovalExecution(
   return value.status === 'awaiting_approval';
 }
 
+export interface ExecutionTraceToolEvent {
+  id: number;
+  ts: string;
+  toolName: string;
+  category?: string;
+  durationMs?: number;
+  args?: string;
+  result?: string;
+  runId?: string;
+  toolCallId?: string;
+}
+
+export interface ExecutionTrace {
+  execution: Execution;
+  trace: {
+    source: string;
+    usageSnapshots: Array<{ id: number; ts: string; inputTokens: number; outputTokens: number; contextTokens: number }>;
+    toolEvents: ExecutionTraceToolEvent[];
+  };
+}
+
 export const runtimeApi = {
   /** Submit a task for execution. Dispatches to assigned claw or all connected claws. */
   submitExecution: (body: {
@@ -608,6 +685,17 @@ export const runtimeApi = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  /** Execution history for a task (newest first). */
+  listForTask: (taskId: number): Promise<Execution[]> =>
+    request<Execution[]>(`/api/runtime/tasks/${taskId}/executions`),
+
+  get: (id: number): Promise<Execution> =>
+    request<Execution>(`/api/runtime/executions/${id}`),
+
+  /** Execution + usage snapshots + tool-call audit events. */
+  trace: (id: number): Promise<ExecutionTrace> =>
+    request<ExecutionTrace>(`/api/runtime/executions/${id}/trace`),
 };
 
 // ---------------------------------------------------------------------------
@@ -1615,4 +1703,252 @@ export const promptLibraryApi = {
   remove: (id: string) => request<{ deleted: boolean }>(`/api/prompts/${id}`, { method: 'DELETE' }),
   star: (id: string) => request<{ starred: boolean }>(`/api/prompts/${id}/star`, { method: 'POST' }),
   unstar: (id: string) => request<{ starred: boolean }>(`/api/prompts/${id}/star`, { method: 'DELETE' }),
+};
+
+// ---------------------------------------------------------------------------
+// Integration credentials — /api/integrations  (GitHub / GitLab / Bitbucket /
+// Jira / Confluence / Freshservice keys). Workspace-global when projectId is
+// omitted, project-scoped when set (0074).
+// ---------------------------------------------------------------------------
+
+export type IntegrationProvider =
+  | 'github' | 'gitlab' | 'bitbucket' | 'jira' | 'confluence' | 'freshservice';
+
+export interface IntegrationCredential {
+  id: string;
+  projectId: number | null;
+  provider: IntegrationProvider;
+  name: string;
+  baseUrl: string | null;
+  isEnabled: boolean;
+  lastTestedAt?: string | null;
+  lastTestOk?: boolean | null;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CreateIntegrationBody {
+  provider: IntegrationProvider;
+  name: string;
+  baseUrl?: string | null;
+  projectId?: number | null;
+  credentials: Record<string, string>;
+}
+
+export const integrationsApi = {
+  /** No opts → all tenant creds; {projectId} → that project; {scope:'global'} → workspace-global only. */
+  list: (opts?: { projectId?: number; scope?: 'global' }): Promise<IntegrationCredential[]> => {
+    const params = new URLSearchParams();
+    if (opts?.projectId != null) params.set('projectId', String(opts.projectId));
+    else if (opts?.scope) params.set('scope', opts.scope);
+    const q = params.toString();
+    return request<{ integrations: IntegrationCredential[] }>(`/api/integrations${q ? `?${q}` : ''}`)
+      .then((r) => r.integrations ?? []);
+  },
+
+  get: (id: string): Promise<IntegrationCredential & { credentials: Record<string, string> }> =>
+    request(`/api/integrations/${id}`),
+
+  create: (body: CreateIntegrationBody): Promise<IntegrationCredential> =>
+    request('/api/integrations', { method: 'POST', body: JSON.stringify(body) }),
+
+  update: (
+    id: string,
+    body: Partial<{ name: string; baseUrl: string | null; credentials: Record<string, string>; isEnabled: boolean }>,
+  ): Promise<IntegrationCredential> =>
+    request(`/api/integrations/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  remove: (id: string): Promise<{ deleted: boolean }> =>
+    request(`/api/integrations/${id}`, { method: 'DELETE' }),
+
+  test: (id: string): Promise<{ ok: boolean; message: string }> =>
+    request(`/api/integrations/${id}/test`, { method: 'POST' }),
+
+  syncLogs: (id: string, limit = 20) =>
+    request<{ logs: unknown[] }>(`/api/integrations/${id}/sync-logs?limit=${limit}`).then((r) => r.logs ?? []),
+};
+
+// ---------------------------------------------------------------------------
+// Project repositories — /api/repos/*
+// ---------------------------------------------------------------------------
+
+export interface ProjectRepository {
+  id: string;
+  projectId: number;
+  provider: string;
+  host: string;
+  owner: string;
+  repo: string;
+  defaultBranch: string | null;
+  cloneUrlHttps: string | null;
+  isDefault: boolean;
+  credentialId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AddRepositoryBody {
+  provider: string;
+  owner: string;
+  repo: string;
+  host?: string;
+  defaultBranch?: string | null;
+  cloneUrlHttps?: string | null;
+  isDefault?: boolean;
+  credentialId?: string | null;
+}
+
+export const reposApi = {
+  list: (projectId: number): Promise<ProjectRepository[]> =>
+    request<{ repositories: ProjectRepository[] }>(`/api/repos/projects/${projectId}/repositories`)
+      .then((r) => r.repositories ?? []),
+
+  add: (projectId: number, body: AddRepositoryBody): Promise<ProjectRepository> =>
+    request(`/api/repos/projects/${projectId}/repositories`, { method: 'POST', body: JSON.stringify(body) }),
+
+  update: (id: string, body: Partial<AddRepositoryBody>): Promise<ProjectRepository> =>
+    request(`/api/repos/repositories/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  setDefault: (id: string): Promise<ProjectRepository> =>
+    request(`/api/repos/repositories/${id}/default`, { method: 'POST' }),
+
+  remove: (id: string): Promise<void> =>
+    request<void>(`/api/repos/repositories/${id}`, { method: 'DELETE' }),
+
+  listPullRequests: (projectId: number) =>
+    request<{ pullRequests: unknown[] }>(`/api/repos/projects/${projectId}/pull-requests`).then((r) => r.pullRequests ?? []),
+};
+
+// ---------------------------------------------------------------------------
+// External board connections — /api/board-connections  (Jira / GitHub PM sync)
+// ---------------------------------------------------------------------------
+
+export interface BoardConnection {
+  id: string;
+  projectId: number;
+  provider: string;
+  credentialId: string | null;
+  externalBoardId: string | null;
+  status: string;
+  webhookEnabled: boolean;
+  pollIntervalSec: number;
+  lastPolledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateBoardConnectionBody {
+  projectId: number;
+  provider: string;
+  credentialId?: string | null;
+  externalBoardId?: string | null;
+  webhookSecret?: string | null;
+  webhookEnabled?: boolean;
+  pollIntervalSec?: number;
+}
+
+export const boardConnectionsApi = {
+  list: (projectId?: number): Promise<BoardConnection[]> => {
+    const q = projectId != null ? `?projectId=${projectId}` : '';
+    return request<{ connections: BoardConnection[] }>(`/api/board-connections${q}`).then((r) => r.connections ?? []);
+  },
+
+  get: (id: string): Promise<BoardConnection> =>
+    request(`/api/board-connections/${id}`),
+
+  create: (body: CreateBoardConnectionBody): Promise<BoardConnection> =>
+    request('/api/board-connections', { method: 'POST', body: JSON.stringify(body) }),
+
+  update: (id: string, body: Partial<Omit<CreateBoardConnectionBody, 'projectId'>> & { status?: string }): Promise<BoardConnection> =>
+    request(`/api/board-connections/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  remove: (id: string): Promise<void> =>
+    request<void>(`/api/board-connections/${id}`, { method: 'DELETE' }),
+
+  /** Kick off (or re-run) a sync for this connection. */
+  sync: (id: string): Promise<{ result: unknown }> =>
+    request(`/api/board-connections/${id}/sync`, { method: 'POST' }),
+
+  links: (id: string) =>
+    request<{ links: unknown[] }>(`/api/board-connections/${id}/links`).then((r) => r.links ?? []),
+};
+
+// ---------------------------------------------------------------------------
+// Cloud-agent boards / swimlanes / agent assignments — /api/boards/*
+// ---------------------------------------------------------------------------
+
+export interface Board {
+  id: string;
+  projectId: number;
+  name: string;
+  autonomous: boolean;
+  maxConcurrentTickets: number;
+  needsAttentionLane: string | null;
+  createdAt: string;
+  updatedAt: string;
+  swimlanes?: Swimlane[];
+}
+
+export interface Swimlane {
+  id: string;
+  boardId: string;
+  key: string;
+  name: string;
+  position: number;
+  isTerminal: boolean;
+  gate: 'auto' | 'human';
+  executionMode: 'sequential' | 'parallel';
+  failurePolicy: 'needs_attention' | 'retry' | 'skip';
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SwimlaneAgent {
+  id: string;
+  swimlaneId: string;
+  role: string;
+  runtime: 'cloud' | 'local' | 'remote' | 'browser';
+  target: string | null;
+  model: string | null;
+  position: number;
+  taskTemplate: string | null;
+  requiredCapabilities: unknown;
+  createdAt: string;
+}
+
+export const boardsApi = {
+  list: (): Promise<Board[]> =>
+    request<{ boards: Board[] }>('/api/boards').then((r) => r.boards ?? []),
+
+  get: (boardId: string): Promise<Board> =>
+    request(`/api/boards/${boardId}`),
+
+  create: (body: { projectId: number; name: string; autonomous?: boolean; maxConcurrentTickets?: number; needsAttentionLane?: string | null }): Promise<Board> =>
+    request('/api/boards', { method: 'POST', body: JSON.stringify(body) }),
+
+  update: (boardId: string, body: Partial<{ name: string; autonomous: boolean; maxConcurrentTickets: number; needsAttentionLane: string | null }>): Promise<Board> =>
+    request(`/api/boards/${boardId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  remove: (boardId: string): Promise<void> =>
+    request<void>(`/api/boards/${boardId}`, { method: 'DELETE' }),
+
+  swimlanes: {
+    list: (boardId: string): Promise<Swimlane[]> =>
+      request<{ swimlanes: Swimlane[] }>(`/api/boards/${boardId}/swimlanes`).then((r) => r.swimlanes ?? []),
+    create: (boardId: string, body: { key: string; name: string; position?: number; isTerminal?: boolean; gate?: string; executionMode?: string; failurePolicy?: string }): Promise<Swimlane> =>
+      request(`/api/boards/${boardId}/swimlanes`, { method: 'POST', body: JSON.stringify(body) }),
+    patch: (boardId: string, laneId: string, body: Partial<{ name: string; position: number; isTerminal: boolean; gate: string; executionMode: string; failurePolicy: string }>): Promise<Swimlane> =>
+      request(`/api/boards/${boardId}/swimlanes/${laneId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    remove: (boardId: string, laneId: string): Promise<void> =>
+      request<void>(`/api/boards/${boardId}/swimlanes/${laneId}`, { method: 'DELETE' }),
+  },
+
+  agents: {
+    list: (boardId: string, laneId: string): Promise<SwimlaneAgent[]> =>
+      request<{ assignments: SwimlaneAgent[] }>(`/api/boards/${boardId}/swimlanes/${laneId}/agents`).then((r) => r.assignments ?? []),
+    create: (boardId: string, laneId: string, body: { role: string; runtime?: string; target?: string | null; model?: string | null; position?: number; taskTemplate?: string | null; requiredCapabilities?: unknown }): Promise<SwimlaneAgent> =>
+      request(`/api/boards/${boardId}/swimlanes/${laneId}/agents`, { method: 'POST', body: JSON.stringify(body) }),
+    remove: (boardId: string, laneId: string, id: string): Promise<void> =>
+      request<void>(`/api/boards/${boardId}/swimlanes/${laneId}/agents/${id}`, { method: 'DELETE' }),
+  },
 };

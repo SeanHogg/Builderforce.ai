@@ -14,9 +14,9 @@
  */
 
 import { Hono } from 'hono';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
-import { integrationCredentials, integrationSyncLogs } from '../../infrastructure/database/schema';
+import { integrationCredentials, integrationSyncLogs, projects } from '../../infrastructure/database/schema';
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -124,6 +124,22 @@ async function testBitbucket(creds: Record<string, unknown>): Promise<{ ok: bool
     : { ok: false, message: `Bitbucket API returned ${res.status}` };
 }
 
+async function testGitLab(
+  creds: Record<string, unknown>,
+  baseUrl: string | null,
+): Promise<{ ok: boolean; message: string }> {
+  const token = creds.accessToken as string;
+  if (!token) return { ok: false, message: 'accessToken is required' };
+  // Self-hosted GitLab supported via baseUrl; default to gitlab.com.
+  const root = (baseUrl?.replace(/\/$/, '') || 'https://gitlab.com');
+  const res = await fetch(`${root}/api/v4/user`, {
+    headers: { Authorization: `Bearer ${token}`, 'PRIVATE-TOKEN': token },
+  });
+  return res.ok
+    ? { ok: true, message: 'Connected' }
+    : { ok: false, message: `GitLab API returned ${res.status}` };
+}
+
 async function testConfluence(
   creds: Record<string, unknown>,
   baseUrl: string | null,
@@ -180,6 +196,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       provider: string;
       name: string;
       baseUrl?: string;
+      projectId?: number | null;
       credentials: Record<string, unknown>;
     }>();
 
@@ -187,9 +204,21 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       return c.json({ error: 'provider, name, and credentials are required' }, 400);
     }
 
-    const validProviders = ['github', 'bitbucket', 'jira', 'confluence', 'freshservice'];
+    const validProviders = ['github', 'gitlab', 'bitbucket', 'jira', 'confluence', 'freshservice'];
     if (!validProviders.includes(body.provider)) {
       return c.json({ error: `provider must be one of: ${validProviders.join(', ')}` }, 400);
+    }
+
+    // Optional project scope — NULL means workspace-global. When set, the
+    // project must belong to this tenant (prevents cross-tenant scoping).
+    let projectId: number | null = null;
+    if (body.projectId != null) {
+      const [proj] = await db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(and(eq(projects.id, body.projectId), eq(projects.tenantId, tenantId)));
+      if (!proj) return c.json({ error: 'projectId not found in this workspace' }, 400);
+      projectId = proj.id;
     }
 
     const { enc, iv } = await encryptCredentials(body.credentials, encryptionSecret);
@@ -198,7 +227,8 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       .insert(integrationCredentials)
       .values({
         tenantId,
-        provider:       body.provider as 'github' | 'bitbucket' | 'jira' | 'confluence' | 'freshservice',
+        projectId,
+        provider:       body.provider as 'github' | 'gitlab' | 'bitbucket' | 'jira' | 'confluence' | 'freshservice',
         name:           body.name.trim(),
         baseUrl:        body.baseUrl ?? null,
         credentialsEnc: enc,
@@ -207,6 +237,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       })
       .returning({
         id: integrationCredentials.id,
+        projectId: integrationCredentials.projectId,
         provider: integrationCredentials.provider,
         name: integrationCredentials.name,
         baseUrl: integrationCredentials.baseUrl,
@@ -217,12 +248,25 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
     return c.json(row, 201);
   });
 
-  // GET /api/integrations
+  // GET /api/integrations            ?projectId=<n>  → that project's creds
+  //                                  ?scope=global   → workspace-global only
+  //                                  (no query)      → all tenant creds
   router.get('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
+    const projectIdParam = c.req.query('projectId');
+    const scope = c.req.query('scope');
+
+    const filters = [eq(integrationCredentials.tenantId, tenantId)];
+    if (projectIdParam) {
+      filters.push(eq(integrationCredentials.projectId, Number(projectIdParam)));
+    } else if (scope === 'global') {
+      filters.push(isNull(integrationCredentials.projectId));
+    }
+
     const rows = await db
       .select({
         id:           integrationCredentials.id,
+        projectId:    integrationCredentials.projectId,
         provider:     integrationCredentials.provider,
         name:         integrationCredentials.name,
         baseUrl:      integrationCredentials.baseUrl,
@@ -233,7 +277,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
         updatedAt:    integrationCredentials.updatedAt,
       })
       .from(integrationCredentials)
-      .where(eq(integrationCredentials.tenantId, tenantId))
+      .where(and(...filters))
       .orderBy(desc(integrationCredentials.createdAt));
 
     return c.json({ integrations: rows });
@@ -300,6 +344,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       .where(and(eq(integrationCredentials.id, id), eq(integrationCredentials.tenantId, tenantId)))
       .returning({
         id: integrationCredentials.id,
+        projectId: integrationCredentials.projectId,
         provider: integrationCredentials.provider,
         name: integrationCredentials.name,
         baseUrl: integrationCredentials.baseUrl,
@@ -345,6 +390,9 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
     switch (row.provider) {
       case 'github':
         result = await testGitHub(creds);
+        break;
+      case 'gitlab':
+        result = await testGitLab(creds, row.baseUrl);
         break;
       case 'jira':
         result = await testJira(creds, row.baseUrl);

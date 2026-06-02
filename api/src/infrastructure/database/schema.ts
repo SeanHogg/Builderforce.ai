@@ -142,7 +142,7 @@ export const workflowTaskStatusEnum = pgEnum('workflow_task_status', ['pending',
 export const approvalStatusEnum = pgEnum('approval_status', ['pending', 'approved', 'rejected', 'expired']);
 
 export const artifactTypeEnum = pgEnum('artifact_type', ['skill', 'persona', 'content']);
-export const assignmentScopeEnum = pgEnum('assignment_scope', ['tenant', 'claw', 'project', 'task']);
+export const assignmentScopeEnum = pgEnum('assignment_scope', ['tenant', 'claw', 'project', 'task', 'agent']);
 export const pricingModelEnum = pgEnum('pricing_model', ['flat_fee', 'consumption']);
 
 // ---------------------------------------------------------------------------
@@ -847,6 +847,30 @@ export const artifactAssignments = pgTable('artifact_assignments', {
 ]);
 
 /**
+ * Agents attached to a project. Gives each agent (workforce or registered) a
+ * numeric id so per-agent artifact assignments can reuse artifact_assignments
+ * with scope='agent' and scope_id = project_agents.id.
+ *
+ *   agentKind 'workforce'  → agentRef holds PublishedAgent.id (string)
+ *   agentKind 'registered' → agentRef holds agents.id (numeric, as string)
+ */
+export const projectAgents = pgTable('project_agents', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:  integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  agentKind:  varchar('agent_kind', { length: 16 }).notNull(),
+  agentRef:   varchar('agent_ref', { length: 64 }).notNull(),
+  name:       varchar('name', { length: 255 }).notNull(),
+  role:       varchar('role', { length: 64 }).notNull().default('default'),
+  governance: text('governance'),
+  addedBy:    varchar('added_by', { length: 36 }).references(() => users.id),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  unique().on(t.tenantId, t.projectId, t.agentKind, t.agentRef),
+]);
+
+/**
  * Platform personas — admin-managed personas (CRUD in Platform Admin).
  * Merged with built-in personas for marketplace display.
  */
@@ -1278,7 +1302,7 @@ export const magicLinkTokens = pgTable('magic_link_tokens', {
 // ---------------------------------------------------------------------------
 
 export const integrationProviderEnum = pgEnum('integration_provider', [
-  'github', 'bitbucket', 'jira', 'confluence', 'freshservice', 'rally', 'freshworks',
+  'github', 'gitlab', 'bitbucket', 'jira', 'confluence', 'freshservice', 'rally', 'freshworks',
 ]);
 
 export const integrationSyncStatusEnum = pgEnum('integration_sync_status', [
@@ -1293,6 +1317,8 @@ export const integrationCredentials = pgTable('integration_credentials', {
   id:             uuid('id').primaryKey().defaultRandom(),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
+  /** NULL = workspace-global credential; set = scoped to a single project (0074). */
+  projectId:      integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   provider:       integrationProviderEnum('provider').notNull(),
   /** Display label, e.g. "Production Jira" */
   name:           varchar('name', { length: 255 }).notNull(),

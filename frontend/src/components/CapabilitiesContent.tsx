@@ -5,6 +5,7 @@ import { SkillAssignmentsContent } from './SkillAssignmentsContent';
 import { PersonaAssignmentsContent } from './PersonaAssignmentsContent';
 import { ContentAssignmentsContent } from './ContentAssignmentsContent';
 import { GovernanceContent } from './GovernanceContent';
+import type { ProjectAgent } from '@/lib/builderforceApi';
 
 type CapabilitySection = 'skills' | 'personas' | 'content' | 'governance';
 
@@ -16,10 +17,12 @@ const SECTIONS: { id: CapabilitySection; label: string }[] = [
 ];
 
 export interface CapabilitiesContentProps {
-  scope: 'claw' | 'project';
+  scope: 'claw' | 'project' | 'agent';
   scopeId: number;
   /** Required for governance editing (project ID). For claw scope, pass associated project id if available. */
   projectId?: number;
+  /** When scope is 'agent', the agent whose governance is edited. */
+  agentAssignment?: ProjectAgent;
   /** Tenant ID for content block name resolution. */
   tenantId?: string;
   /** Hide sections that don't apply. */
@@ -32,6 +35,7 @@ export function CapabilitiesContent({
   scope,
   scopeId,
   projectId,
+  agentAssignment,
   tenantId,
   hideSections,
   className,
@@ -75,7 +79,9 @@ export function CapabilitiesContent({
         <ContentAssignmentsContent scope={scope} scopeId={scopeId} tenantId={tenantId} />
       )}
       {activeSection === 'governance' && (
-        projectId != null ? (
+        scope === 'agent' && agentAssignment ? (
+          <GovernanceContent projectId={projectId ?? 0} agentAssignment={agentAssignment} />
+        ) : projectId != null ? (
           <GovernanceContent projectId={projectId} />
         ) : (
           <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 16, textAlign: 'center' }}>

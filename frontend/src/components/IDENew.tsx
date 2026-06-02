@@ -10,6 +10,8 @@ import { AgentStateViewer } from './AgentStateViewer';
 import { LlmStudioPanel } from './LlmStudioPanel';
 import { PreviewFrame } from './PreviewFrame';
 import { ProjectsSlideOutPanel } from './ProjectsSlideOutPanel';
+import { BrainPanel } from './brain/BrainPanel';
+import { IdeSettingsPanel } from './IdeSettingsPanel';
 import { useWebContainer } from '@/hooks/useWebContainer';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import { useVideoVersions } from '@/hooks/useVideoVersions';
@@ -53,6 +55,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   const [projectTitle, setProjectTitle] = useState(project.name);
   const [isSavingTitle, setIsSavingTitle] = useState(false);
   const [projectsPanelOpen, setProjectsPanelOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [terminalExpanded, setTerminalExpanded] = useState(true);
   const shellStartedRef = useRef(false);
   const terminalWriteRef = useRef<((data: string) => void) | null>(null);
@@ -510,21 +513,30 @@ export default defineConfig({
   // Publish ambient context so the Brain knows the active project/modality and
   // can see the open file.
   const activeFileContent = activeFile ? (fileContents[activeFile] ?? '') : undefined;
+  // The open-file context fed to the LLM. Shared by the global Brain (via
+  // BrainContext) and the Designer left-panel <BrainPanel> so they speak with
+  // identical project awareness.
+  const extraSystem = useMemo(
+    () =>
+      activeFile
+        ? `The user currently has the file \`${activeFile}\` open.${activeFileContent ? `\n\nCurrent content of that file:\n\`\`\`\n${activeFileContent.slice(0, 4000)}\n\`\`\`` : ''}`
+        : undefined,
+    [activeFile, activeFileContent],
+  );
   const setBrainContext = brainCtx.setContext;
   useEffect(() => {
-    const extraSystem = activeFile
-      ? `The user currently has the file \`${activeFile}\` open.${activeFileContent ? `\n\nCurrent content of that file:\n\`\`\`\n${activeFileContent.slice(0, 4000)}\n\`\`\`` : ''}`
-      : undefined;
     setBrainContext({ projectId: projectIdNum, modality, extraSystem });
-  }, [setBrainContext, projectIdNum, modality, activeFile, activeFileContent]);
+  }, [setBrainContext, projectIdNum, modality, extraSystem]);
 
-  // Deep link: when opened with ?chat=, surface that chat in the Brain drawer.
+  // Deep link: when opened with ?chat=, surface that chat. In Designer the chat
+  // lives in the left panel (so we just select it); other modalities have no
+  // left panel, so we pop the floating drawer instead.
   const setBrainOpen = brainCtx.setOpen;
   useEffect(() => {
     if (initialChatId == null) return;
     setBrainContext({ initialChatId });
-    setBrainOpen(true);
-  }, [initialChatId, setBrainContext, setBrainOpen]);
+    if (modality !== 'designer') setBrainOpen(true);
+  }, [initialChatId, modality, setBrainContext, setBrainOpen]);
 
   const statusLabel = wcState.status === 'booting'
     ? '⏳ Booting…'
@@ -642,6 +654,27 @@ export default defineConfig({
           </button>
         )}
 
+        {/* Settings cog — repo / source-control configuration slide-out */}
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          aria-label="Project settings"
+          title="Settings & repository"
+          style={{
+            background: 'var(--bg-elevated)',
+            color: 'var(--text-secondary)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 8,
+            padding: '5px 9px',
+            fontSize: '0.95rem',
+            cursor: 'pointer',
+            flexShrink: 0,
+            lineHeight: 1,
+          }}
+        >
+          ⚙️
+        </button>
+
         {/* Modality switcher — same chrome across modalities; one project, many modes */}
         <div
           role="tablist"
@@ -719,9 +752,48 @@ export default defineConfig({
         currentProjectId={typeof project.id === 'number' ? project.id : Number(project.id)}
       />
 
-      {/* Main content. AI lives in the global Brain drawer (bottom-right), not a
-          left panel — the IDE registers its actions with the Brain instead. */}
+      <IdeSettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        projectId={projectIdNum}
+      />
+
+      {/* Main content. In Designer the coding agent lives in the left panel
+          (the shared <BrainPanel> wired to this project's brain actions); other
+          modalities use the global floating Brain drawer. Either way the IDE
+          registers the same actions, so the agent can create/apply files. */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* Designer left panel — LLM context + agent chat (reused Brain UI) */}
+        {modality === 'designer' && (
+          <div style={{
+            width: 340, minWidth: 340, flexShrink: 0,
+            borderRight: '1px solid var(--border-subtle)',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            background: 'var(--bg-base)',
+          }}>
+            {/* LLM context strip — what the agent currently "sees" */}
+            <div style={{
+              flexShrink: 0, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 6,
+              borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-surface)',
+              fontSize: '0.72rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden',
+            }}>
+              <span title="Coding agent" style={{ fontSize: '0.9rem' }}>🤖</span>
+              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Context:</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {activeFile ? activeFile : 'whole project'}
+              </span>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <BrainPanel
+                variant="docked"
+                pinnedProjectId={projectIdNum}
+                modality={modality}
+                extraSystem={extraSystem}
+                initialChatId={initialChatId}
+              />
+            </div>
+          </div>
+        )}
         {/* Center panel — content depends on the active modality, chrome stays consistent */}
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
           {modality === 'video' ? (

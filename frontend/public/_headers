@@ -1,0 +1,23 @@
+# Cloudflare Workers static-asset headers.
+#
+# `next.config.js` headers() are honoured by `next dev`, but @cloudflare/next-on-pages
+# does NOT reliably emit them for the deployed worker/assets. Without these the
+# /ide document is not cross-origin isolated, so `self.crossOriginIsolated` is
+# false, SharedArrayBuffer can't be transferred to the WebContainer worker, and
+# clicking Run fails with:
+#   DataCloneError: SharedArrayBuffer transfer requires self.crossOriginIsolated
+#   Error: Unable to create more instances   (failed boot, then retried)
+#
+# COOP=same-origin + COEP=credentialless enables cross-origin isolation while
+# still allowing cross-origin fonts/images to load without CORP headers.
+# Keep this in sync with next.config.js headers().
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: credentialless
+
+# The WebContainer connect handshake tab must NOT be cross-origin isolated, or
+# the preview can't complete its postMessage handshake with the IDE.
+# @see https://github.com/stackblitz/webcontainer-core/issues/1725
+# (later rule wins for a repeated header, so this overrides COEP above)
+/webcontainer/connect/*
+  Cross-Origin-Embedder-Policy: unsafe-none
