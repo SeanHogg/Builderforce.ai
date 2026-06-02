@@ -100,8 +100,8 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
     <div style={cardStyle}>
       <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>Repositories</div>
       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-        Repositories this project&apos;s agents can read and open pull requests against. Bind each repo to a key
-        configured in the Integrations tab (or a workspace-wide key).
+        Repositories this project&apos;s agents can read and open pull requests against. Bind each repo to a
+        project integration key (above) or a workspace-wide key.
       </div>
 
       {loading ? (

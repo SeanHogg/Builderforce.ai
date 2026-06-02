@@ -18,7 +18,6 @@ import { BoardConnectionsManager } from './integrations/BoardConnectionsManager'
 
 export type ProjectPanelTab =
   | 'details'
-  | 'sourceControl'
   | 'integrations'
   | 'taskMgmt'
   | 'prds'
@@ -45,7 +44,6 @@ export interface ProjectDetailsPanelProps {
 
 const TABS: { id: ProjectPanelTab; label: string }[] = [
   { id: 'details', label: 'Project details' },
-  { id: 'sourceControl', label: 'Source control' },
   { id: 'integrations', label: 'Integrations' },
   { id: 'taskMgmt', label: 'Task Mgmt' },
   { id: 'prds', label: 'PRDs' },
@@ -567,13 +565,10 @@ export function ProjectDetailsPanel({
             </div>
           )}
 
-          {activeTab === 'sourceControl' && (
-            <SourceControlContent projectId={project.id} />
-          )}
-
           {activeTab === 'integrations' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <IntegrationCredentialsManager projectId={project.id} heading="Project integration keys" />
+              <SourceControlContent projectId={project.id} />
               <BoardConnectionsManager projectId={project.id} />
             </div>
           )}
