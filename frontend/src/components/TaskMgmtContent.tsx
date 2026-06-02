@@ -14,6 +14,10 @@ import {
 } from '@/lib/builderforceApi';
 import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
+import { BoardConfigPanel } from './board/BoardConfigPanel';
+import { TaskAgentTab } from './task/TaskAgentTab';
+import { TaskPrdTab } from './task/TaskPrdTab';
+import { RunAgentControl } from './task/RunAgentControl';
 
 const BOARD_STATUSES: TaskStatus[] = ['backlog', 'todo', 'ready', 'in_progress', 'in_review', 'blocked', 'done'];
 const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -82,12 +86,16 @@ export function TaskMgmtContent({
     priority: 'medium',
   });
   const [saving, setSaving] = useState(false);
-  const [sendingToClaw, setSendingToClaw] = useState(false);
   const [drawerTask, setDrawerTask] = useState<Task | null>(null);
   const [dragTaskId, setDragTaskId] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [bulkStatus, setBulkStatus] = useState<TaskStatus | ''>('');
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
+  const [boardConfigOpen, setBoardConfigOpen] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<'details' | 'agent' | 'prd'>('details');
+
+  // Reset to the Details tab whenever a different task drawer is opened.
+  useEffect(() => { setDrawerTab('details'); }, [drawerTask?.id]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -208,36 +216,6 @@ export function TaskMgmtContent({
       if (drawerTask?.id === t.id) setDrawerTask(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed');
-    }
-  };
-
-  const handleSendToClaw = async (t: Task, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (!t?.id) return;
-    setSendingToClaw(true);
-    setError(null);
-    setApprovalGate(null);
-    try {
-      const result = await runtimeApi.submitExecution({
-        taskId: t.id,
-        clawId: t.assignedClawId ?? undefined,
-      });
-
-      if (isAwaitingApprovalExecution(result)) {
-        setApprovalGate({
-          approvalId: result.approvalId,
-          taskId: result.taskId,
-          reason: result.reason,
-        });
-        return;
-      }
-
-      setError(null);
-      await patchStatus(t.id, 'in_progress', { skipAutoSubmit: true });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to send to claw');
-    } finally {
-      setSendingToClaw(false);
     }
   };
 
@@ -418,6 +396,20 @@ export function TaskMgmtContent({
             <button type="button" onClick={openCreate} style={buttonPrimary}>
               New task
             </button>
+            {projectId != null && (
+              <button
+                type="button"
+                onClick={() => setBoardConfigOpen(true)}
+                style={{ ...buttonTertiary, width: 36, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                aria-label="Configure board"
+                title="Configure swimlanes & agents"
+              >
+                <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -1119,7 +1111,7 @@ export function TaskMgmtContent({
               top: 0,
               right: 0,
               bottom: 0,
-              width: 'min(480px, 96vw)',
+              width: 'min(720px, 96vw)',
               borderLeft: '1px solid var(--border-subtle)',
               boxShadow: '-8px 0 24px rgba(0,0,0,0.2)',
               zIndex: 10003,
@@ -1166,6 +1158,35 @@ export function TaskMgmtContent({
                 </svg>
               </button>
             </div>
+
+            {/* Tabs */}
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, overflowX: 'auto' }}>
+              {([['details', 'Details'], ['agent', 'Agent'], ['prd', 'PRD']] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setDrawerTab(id)}
+                  style={{
+                    padding: '10px 16px', fontSize: 13, border: 'none', background: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
+                    borderBottom: `2px solid ${drawerTab === id ? 'var(--coral-bright, #f4726e)' : 'transparent'}`,
+                    color: drawerTab === id ? 'var(--coral-bright, #f4726e)' : 'var(--text-muted)',
+                    fontWeight: drawerTab === id ? 600 : 400,
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {drawerTab === 'agent' ? (
+              <div style={{ flex: 1, overflow: 'auto' }}>
+                <TaskAgentTab task={drawerTask} claws={clawsList} onTaskChanged={load} />
+              </div>
+            ) : drawerTab === 'prd' ? (
+              <div style={{ flex: 1, overflow: 'auto' }}>
+                <TaskPrdTab task={drawerTask} />
+              </div>
+            ) : (
             <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
                 <span
@@ -1248,18 +1269,16 @@ export function TaskMgmtContent({
                     ))}
                 </div>
               </div>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Run</div>
+                <RunAgentControl
+                  task={drawerTask}
+                  claws={clawsList}
+                  onRan={() => { patchStatus(drawerTask.id, 'in_progress', { skipAutoSubmit: true }); setDrawerTab('agent'); }}
+                  onAwaitingApproval={(g) => setApprovalGate({ approvalId: g.approvalId, taskId: g.taskId, reason: g.reason })}
+                />
+              </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  disabled={sendingToClaw}
-                  style={{
-                    ...buttonPrimary,
-                    opacity: sendingToClaw ? 0.7 : 1,
-                  }}
-                  onClick={(e) => handleSendToClaw(drawerTask, e)}
-                >
-                  {sendingToClaw ? 'Sending…' : 'Send to Claw'}
-                </button>
                 <button type="button" style={buttonTertiary} onClick={(e) => openEdit(drawerTask, e)}>
                   Edit
                 </button>
@@ -1276,8 +1295,18 @@ export function TaskMgmtContent({
                 </button>
               </div>
             </div>
+            )}
           </div>
         </>
+      )}
+
+      {projectId != null && (
+        <BoardConfigPanel
+          open={boardConfigOpen}
+          onClose={() => setBoardConfigOpen(false)}
+          projectId={projectId}
+          projectName={projectName}
+        />
       )}
     </div>
   );

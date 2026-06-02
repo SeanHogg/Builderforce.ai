@@ -32,6 +32,7 @@ export default function DashboardPage() {
   const [detailsProject, setDetailsProject] = useState<Project | null>(null);
   const [selectedClaw, setSelectedClaw] = useState<Claw | null>(null);
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
+  const [activeTab, setActiveTab] = useState<'projects' | 'workforce'>('projects');
   const [confirmProject, setConfirmProject] = useState<Project | null>(null);
   const [sendingToClaw, setSendingToClaw] = useState(false);
   const [promptError, setPromptError] = useState<string | null>(null);
@@ -314,7 +315,60 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Projects section (preview) */}
+        {/* Tabs — Projects / Workforce */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 4,
+            borderBottom: '1px solid var(--border-subtle)',
+            marginBottom: 24,
+          }}
+        >
+          {([
+            { key: 'projects', label: 'Projects', count: projects.length },
+            { key: 'workforce', label: 'Workforce', count: clawList.length },
+          ] as const).map(({ key, label, count }) => {
+            const active = activeTab === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setActiveTab(key)}
+                style={{
+                  padding: '10px 16px',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: active ? '2px solid var(--coral-bright)' : '2px solid transparent',
+                  color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  marginBottom: -1,
+                }}
+              >
+                {label}
+                {!loading && (
+                  <span
+                    style={{
+                      marginLeft: 8,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      padding: '1px 7px',
+                      borderRadius: 999,
+                      background: 'var(--bg-elevated)',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Projects tab (preview) */}
+        {activeTab === 'projects' && (
         <section style={{ marginBottom: 40 }}>
           <div
             style={{
@@ -578,6 +632,7 @@ export default function DashboardPage() {
             </div>
           )}
         </section>
+        )}
 
         {detailsProject && (
           <ProjectDetailsPanel
@@ -631,7 +686,8 @@ export default function DashboardPage() {
           }}
         />
 
-        {/* Workforce section */}
+        {/* Workforce tab */}
+        {activeTab === 'workforce' && (
         <section>
           <div
             style={{
@@ -742,6 +798,7 @@ export default function DashboardPage() {
             </div>
           )}
         </section>
+        )}
       </main>
     </div>
   );

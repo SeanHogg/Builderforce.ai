@@ -122,6 +122,7 @@ export enum ArtifactType {
 }
 
 export enum AssignmentScope {
+  AGENT   = 'agent',
   TENANT  = 'tenant',
   CLAW    = 'claw',
   PROJECT = 'project',
@@ -130,6 +131,7 @@ export enum AssignmentScope {
 
 /** Precedence order for scope resolution (highest → lowest). */
 export const SCOPE_PRECEDENCE: AssignmentScope[] = [
+  AssignmentScope.AGENT,
   AssignmentScope.TASK,
   AssignmentScope.PROJECT,
   AssignmentScope.CLAW,

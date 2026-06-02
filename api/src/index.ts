@@ -56,6 +56,7 @@ import { ClawRepository }          from './infrastructure/repositories/ClawRepos
 import { IClawRepository }         from './domain/claw/IClawRepository';
 import { createSkillAssignmentRoutes } from './presentation/routes/skillAssignmentRoutes';
 import { createArtifactAssignmentRoutes } from './presentation/routes/artifactAssignmentRoutes';
+import { createProjectAgentRoutes } from './presentation/routes/projectAgentRoutes';
 import { createMarketplaceStatsRoutes } from './presentation/routes/marketplaceStatsRoutes';
 import { createWorkforceRoutes }        from './presentation/routes/workforceRoutes';
 import { createLlmRoutes }          from './presentation/routes/llmRoutes';
@@ -231,6 +232,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/claws',            createClawRoutes(db, clawService));
   app.route('/api/skill-assignments', createSkillAssignmentRoutes(db));
   app.route('/api/artifact-assignments', createArtifactAssignmentRoutes(db));
+  app.route('/api/project-agents', createProjectAgentRoutes(db));
   app.route('/api/marketplace-stats', createMarketplaceStatsRoutes(db));
 
   // Chat persistence (claw-auth writes + tenant-JWT reads)

@@ -109,6 +109,7 @@ export const config = {
     '/timeline/:path*',
     '/dashboard/:path*',
     '/ide',
+    '/ide/:path*',
     '/tenants/:path*',
     '/projects/:path*',
     '/training/:path*',

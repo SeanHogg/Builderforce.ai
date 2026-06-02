@@ -36,6 +36,7 @@ const mainNav: NavItem[] = [
 ];
 
 const meshNav: NavItem[] = [
+  { href: '/workforce', label: 'Workforce', icon: '🦀' },
   { href: '/chats', label: 'Chats', icon: '💬' },
 ];
 

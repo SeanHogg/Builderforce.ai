@@ -8,7 +8,7 @@ import {
 import { BUILTIN_PERSONAS, type Persona } from '@/lib/marketplaceData';
 
 export interface PersonaAssignmentsContentProps {
-  scope: 'tenant' | 'claw' | 'project' | 'task';
+  scope: 'tenant' | 'claw' | 'project' | 'task' | 'agent';
   scopeId: number;
   className?: string;
   style?: React.CSSProperties;

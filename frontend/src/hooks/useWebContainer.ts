@@ -49,7 +49,21 @@ export function useWebContainer() {
         throw error;
       }
     }
-    
+
+    // WebContainer needs a cross-origin isolated context to transfer the
+    // SharedArrayBuffer to its worker. Without the COOP/COEP headers (see
+    // public/_headers + next.config.js) `crossOriginIsolated` is false; boot
+    // then dies mid-build with a cryptic DataCloneError, and the next attempt
+    // throws "Unable to create more instances". Fail fast with the real cause.
+    if (typeof crossOriginIsolated !== 'undefined' && !crossOriginIsolated) {
+      const msg =
+        'This page is not cross-origin isolated, so WebContainer cannot start. ' +
+        'The server must send Cross-Origin-Opener-Policy: same-origin and ' +
+        'Cross-Origin-Embedder-Policy: require-corp/credentialless on this route.';
+      setState({ status: 'error', error: msg });
+      throw new Error(msg);
+    }
+
     // Start a new boot
     setState({ status: 'booting' });
     try {
