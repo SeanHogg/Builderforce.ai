@@ -61,6 +61,13 @@ export interface RequestOptions extends Omit<RequestInit, 'headers'> {
   headers?: Record<string, string>;
   /** If true, do not parse JSON (e.g. for text or stream). */
   raw?: boolean;
+  /**
+   * HTTP statuses the caller handles itself (e.g. a 409 it renders inline).
+   * For these, the request still throws so the caller's catch runs, but no
+   * global error toast / support-ticket prompt is raised — they aren't system
+   * faults. Anything not listed still surfaces the global toast.
+   */
+  expectedErrors?: number[];
 }
 
 /**
@@ -71,7 +78,7 @@ export async function apiRequest<T = unknown>(
   path: string,
   opts: RequestOptions = {}
 ): Promise<T> {
-  const { raw, headers: optHeaders, ...init } = opts;
+  const { raw, headers: optHeaders, expectedErrors, ...init } = opts;
   const authHeaders = getAuthHeaders();
   const hadToken = !!authHeaders.Authorization;
   const res = await fetch(`${getApiBaseUrl()}${path}`, {
@@ -83,15 +90,17 @@ export async function apiRequest<T = unknown>(
   if (!res.ok) {
     const msg = await res.json().catch(() => ({})) as { error?: string; code?: string; details?: unknown };
     const message = msg.error || res.statusText || `Request failed (${res.status})`;
-    dispatchApiError({
-      method: init.method?.toUpperCase() ?? 'GET',
-      url: `${getApiBaseUrl()}${path}`,
-      status: res.status,
-      code: msg.code,
-      message,
-      details: msg.details,
-      requestId: res.headers.get('x-request-id') ?? undefined,
-    });
+    if (!expectedErrors?.includes(res.status)) {
+      dispatchApiError({
+        method: init.method?.toUpperCase() ?? 'GET',
+        url: `${getApiBaseUrl()}${path}`,
+        status: res.status,
+        code: msg.code,
+        message,
+        details: msg.details,
+        requestId: res.headers.get('x-request-id') ?? undefined,
+      });
+    }
     throw new Error(message);
   }
   if (raw) return undefined as T;
