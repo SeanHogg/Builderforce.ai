@@ -8,7 +8,6 @@ import {
   runtimeApi,
   isAwaitingApprovalExecution,
   type Task,
-  type TaskStatus,
   type TaskPriority,
   type Claw,
   type Execution,
@@ -25,14 +24,14 @@ import { TaskPrdTab } from './task/TaskPrdTab';
 import { RunAgentControl } from './task/RunAgentControl';
 import {
   TASK_STATUSES as BOARD_STATUSES,
-  TASK_STATUS_LABELS as STATUS_LABELS,
-  isTaskStatus,
+  taskStatusLabel,
+  taskStatusBadgeClass,
 } from '@/lib/taskStatus';
 
-/** A rendered kanban column: a swimlane bound to a task status, or a fallback status column. */
+/** A rendered kanban column = a swimlane (board column). `status` is the lane key tasks sit in. */
 interface BoardColumn {
   id: string;
-  status: TaskStatus;
+  status: string;
   label: string;
   agents: SwimlaneAgent[];
 }
@@ -42,15 +41,6 @@ const PRIORITY_CLASS: Record<TaskPriority, string> = {
   medium: 'badge-blue',
   high: 'badge-yellow',
   urgent: 'badge-red',
-};
-const STATUS_BADGE_CLASS: Record<TaskStatus, string> = {
-  backlog: 'badge-gray',
-  todo: 'badge-gray',
-  ready: 'badge-blue',
-  in_progress: 'badge-blue',
-  in_review: 'badge-yellow',
-  done: 'badge-green',
-  blocked: 'badge-red',
 };
 
 export interface TaskMgmtContentProps {
@@ -97,7 +87,7 @@ export function TaskMgmtContent({
   const [drawerTask, setDrawerTask] = useState<Task | null>(null);
   const [dragTaskId, setDragTaskId] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [bulkStatus, setBulkStatus] = useState<TaskStatus | ''>('');
+  const [bulkStatus, setBulkStatus] = useState<string>('');
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
   const [boardConfigOpen, setBoardConfigOpen] = useState(false);
   const [prdOpen, setPrdOpen] = useState(false);
@@ -172,33 +162,39 @@ export function TaskMgmtContent({
     effectiveProjectId != null && view === 'board' && !compact,
   );
 
-  // The board's columns ARE its swimlanes: a seeded board mirrors the task
-  // statuses 1:1, and renaming / reordering / agent-assigning a lane flows
-  // straight through to the board. Each lane maps to the task status named by
-  // its key (tasks are pinned to the status enum). Lanes not bound to a status
-  // can't hold tasks, so they don't appear as columns. When a project has no
-  // board yet, fall back to the default status columns so the board still works.
+  // The board's columns ARE its swimlanes (fully configurable): each lane is a
+  // column whose key is the status a task holds while sitting in it. Renaming /
+  // reordering / adding / removing lanes and assigning agents all flow straight
+  // through to the board. When a project has no board yet, fall back to the
+  // default status columns so the board still works out of the box.
   const boardColumns = useMemo<BoardColumn[]>(() => {
     const defaults = (): BoardColumn[] =>
-      BOARD_STATUSES.map((s) => ({ id: s, status: s, label: STATUS_LABELS[s], agents: [] }));
+      BOARD_STATUSES.map((s) => ({ id: s, status: s, label: taskStatusLabel(s), agents: [] }));
     if (lanes.length === 0) return defaults();
 
     const cols: BoardColumn[] = [];
-    const covered = new Set<TaskStatus>();
+    const covered = new Set<string>();
     for (const l of lanes) {
-      if (!isTaskStatus(l.key) || covered.has(l.key)) continue;
+      if (covered.has(l.key)) continue;
       cols.push({ id: l.id, status: l.key, label: l.name, agents: agentsByLane[l.id] ?? [] });
       covered.add(l.key);
     }
-    // Surface any status that still holds tasks but has no lane, so customising
-    // lanes (e.g. deleting one) never hides the tasks sitting in that status.
-    for (const s of BOARD_STATUSES) {
-      if (!covered.has(s) && tasks.some((t) => t.status === s)) {
-        cols.push({ id: s, status: s, label: STATUS_LABELS[s], agents: [] });
+    // Surface any status still held by tasks but with no lane (e.g. after a lane
+    // is deleted, or a legacy/custom status) so no task is ever hidden.
+    for (const t of tasks) {
+      if (!covered.has(t.status)) {
+        cols.push({ id: `orphan:${t.status}`, status: t.status, label: taskStatusLabel(t.status), agents: [] });
+        covered.add(t.status);
       }
     }
     return cols.length > 0 ? cols : defaults();
   }, [lanes, agentsByLane, tasks]);
+
+  // Status choices for dropdowns / move-to / filters = the board's columns.
+  const statusChoices = boardColumns.map((c) => ({ value: c.status, label: c.label }));
+  // Label for a task's status: prefer its column's name, else a humanized label.
+  const columnLabel = (status: string) =>
+    boardColumns.find((c) => c.status === status)?.label ?? taskStatusLabel(status);
 
   // Latest execution per task → which agent is actively running (or last ran) it.
   const latestExecByTask = useMemo(() => {
@@ -221,7 +217,7 @@ export function TaskMgmtContent({
   const openCreate = () => {
     setEditTarget(null);
     setForm({
-      status: 'todo',
+      status: boardColumns[0]?.status ?? 'todo',
       priority: 'medium',
       ...(projectId != null ? { projectId } : {}),
     });
@@ -244,7 +240,7 @@ export function TaskMgmtContent({
         const updated = await tasksApi.update(editTarget.id, {
           title: form.title,
           description: form.description ?? null,
-          status: (form.status as TaskStatus) ?? editTarget.status,
+          status: form.status ?? editTarget.status,
           priority: (form.priority as TaskPriority) ?? editTarget.priority,
           assignedClawId: form.assignedClawId ?? null,
           dueDate: form.dueDate ?? null,
@@ -265,7 +261,7 @@ export function TaskMgmtContent({
           assignedClawId: form.assignedClawId ?? undefined,
           dueDate: form.dueDate || undefined,
         });
-        const statusToSet = (form.status as TaskStatus) ?? 'todo';
+        const statusToSet = form.status ?? 'todo';
         const final =
           statusToSet !== 'backlog'
             ? await tasksApi.update(created.id, { status: statusToSet })
@@ -295,7 +291,7 @@ export function TaskMgmtContent({
 
   const patchStatus = async (
     id: number,
-    status: TaskStatus,
+    status: string,
     opts?: { skipAutoSubmit?: boolean }
   ) => {
     try {
@@ -342,7 +338,7 @@ export function TaskMgmtContent({
     }
   };
 
-  const applyBulkStatus = async (status: TaskStatus) => {
+  const applyBulkStatus = async (status: string) => {
     const toUpdate = selectedIds.slice();
     setSelectedIds([]);
     setBulkStatus('');
@@ -350,7 +346,7 @@ export function TaskMgmtContent({
       await patchStatus(id, status);
     }
   };
-  const onDrop = (e: React.DragEvent, status: TaskStatus) => {
+  const onDrop = (e: React.DragEvent, status: string) => {
     e.preventDefault();
     if (dragTaskId) {
       patchStatus(Number(dragTaskId), status);
@@ -554,9 +550,9 @@ export function TaskMgmtContent({
             }}
           >
             <option value="">All statuses</option>
-            {(Object.keys(STATUS_LABELS) as TaskStatus[]).map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABELS[s]}
+            {statusChoices.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
               </option>
             ))}
           </select>
@@ -689,21 +685,20 @@ export function TaskMgmtContent({
                             value={task.status}
                             onChange={(e) => {
                               e.stopPropagation();
-                              const s = e.target.value as TaskStatus;
-                              patchStatus(task.id, s);
+                              patchStatus(task.id, e.target.value);
                               setEditingStatusId(null);
                             }}
                             onClick={(e) => e.stopPropagation()}
                           >
-                            {BOARD_STATUSES.map((s) => (
-                              <option key={s} value={s}>
-                                {STATUS_LABELS[s]}
+                            {statusChoices.map((s) => (
+                              <option key={s.value} value={s.value}>
+                                {s.label}
                               </option>
                             ))}
                           </select>
                         ) : (
                           <span
-                            className={STATUS_BADGE_CLASS[task.status]}
+                            className={taskStatusBadgeClass(task.status)}
                             style={{
                               fontSize: 10,
                               padding: '2px 8px',
@@ -716,7 +711,7 @@ export function TaskMgmtContent({
                               setEditingStatusId(task.id);
                             }}
                           >
-                            {STATUS_LABELS[task.status]}
+                            {columnLabel(task.status)}
                           </span>
                         )}
                       </div>
@@ -782,7 +777,7 @@ export function TaskMgmtContent({
                       type="button"
                       onClick={() => {
                         setForm({
-                          status: status as TaskStatus,
+                          status,
                           priority: 'medium',
                           ...(projectId != null ? { projectId } : {}),
                         });
@@ -820,15 +815,15 @@ export function TaskMgmtContent({
                   <select
                     value={bulkStatus}
                     onChange={(e) => {
-                      const s = e.target.value as TaskStatus;
+                      const s = e.target.value;
                       if (s) applyBulkStatus(s);
                     }}
                     style={{ padding: '4px 8px', fontSize: 13 }}
                   >
                     <option value="">Bulk change status…</option>
-                    {BOARD_STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {STATUS_LABELS[s]}
+                    {statusChoices.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
                       </option>
                     ))}
                   </select>
@@ -902,21 +897,20 @@ export function TaskMgmtContent({
                           <select
                             value={task.status}
                             onChange={(e) => {
-                              const s = e.target.value as TaskStatus;
-                              patchStatus(task.id, s);
+                              patchStatus(task.id, e.target.value);
                               setEditingStatusId(null);
                             }}
                             onClick={(e) => e.stopPropagation()}
                           >
-                            {BOARD_STATUSES.map((s) => (
-                              <option key={s} value={s}>
-                                {STATUS_LABELS[s]}
+                            {statusChoices.map((s) => (
+                              <option key={s.value} value={s.value}>
+                                {s.label}
                               </option>
                             ))}
                           </select>
                         ) : (
                           <span
-                            className={STATUS_BADGE_CLASS[task.status]}
+                            className={taskStatusBadgeClass(task.status)}
                             style={{
                               fontSize: 10,
                               padding: '2px 8px',
@@ -926,7 +920,7 @@ export function TaskMgmtContent({
                             }}
                             onClick={() => setEditingStatusId(task.id)}
                           >
-                            {STATUS_LABELS[task.status]}
+                            {columnLabel(task.status)}
                           </span>
                         )}
                       </td>
@@ -1084,7 +1078,7 @@ export function TaskMgmtContent({
                   </label>
                   <select
                     value={form.status ?? 'todo'}
-                    onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as TaskStatus }))}
+                    onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
                     style={{
                       width: '100%',
                       padding: '8px 10px',
@@ -1095,9 +1089,9 @@ export function TaskMgmtContent({
                       color: 'var(--text-primary)',
                     }}
                   >
-                    {(Object.keys(STATUS_LABELS) as TaskStatus[]).map((s) => (
-                      <option key={s} value={s}>
-                        {STATUS_LABELS[s]}
+                    {statusChoices.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
                       </option>
                     ))}
                   </select>
@@ -1339,10 +1333,10 @@ export function TaskMgmtContent({
             <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
                 <span
-                  className={STATUS_BADGE_CLASS[drawerTask.status]}
+                  className={taskStatusBadgeClass(drawerTask.status)}
                   style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6 }}
                 >
-                  {STATUS_LABELS[drawerTask.status]}
+                  {columnLabel(drawerTask.status)}
                 </span>
                 <span
                   className={PRIORITY_CLASS[drawerTask.priority]}
@@ -1404,16 +1398,16 @@ export function TaskMgmtContent({
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>Move to</div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {(Object.keys(STATUS_LABELS) as TaskStatus[])
-                    .filter((s) => s !== drawerTask.status)
+                  {statusChoices
+                    .filter((s) => s.value !== drawerTask.status)
                     .map((s) => (
                       <button
-                        key={s}
+                        key={s.value}
                         type="button"
                         style={buttonTertiary}
-                        onClick={() => patchStatus(drawerTask.id, s)}
+                        onClick={() => patchStatus(drawerTask.id, s.value)}
                       >
-                        {STATUS_LABELS[s]}
+                        {s.label}
                       </button>
                     ))}
                 </div>

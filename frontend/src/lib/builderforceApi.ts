@@ -546,6 +546,11 @@ export const marketplaceStats = {
 // Tasks (full CRUD + ArtifactAssigner summary)
 // ---------------------------------------------------------------------------
 
+/**
+ * Canonical default statuses. Tasks may hold any string (a swimlane key) on a
+ * configurable board, so `Task.status` is typed `string`; this union is the
+ * default vocabulary used for seeding and automation.
+ */
 export type TaskStatus =
   | 'backlog'
   | 'todo'
@@ -562,7 +567,8 @@ export interface Task {
   key: string;
   title: string;
   description: string | null;
-  status: TaskStatus;
+  /** Free-form lane key (board column). The canonical defaults are {@link TaskStatus}. */
+  status: string;
   priority: TaskPriority;
   assignedAgentType: string | null;
   assignedClawId: number | null;
@@ -611,7 +617,7 @@ export const tasksApi = {
     body: Partial<{
       title: string;
       description: string | null;
-      status: TaskStatus;
+      status: string;
       priority: TaskPriority;
       assignedClawId: number | null;
       dueDate: string | null;

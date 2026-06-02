@@ -22,7 +22,8 @@ export interface CreateTaskDto {
 export interface UpdateTaskDto {
   title?: string;
   description?: string | null;
-  status?: TaskStatus;
+  /** Free-form lane key (board column). See Task.status. */
+  status?: string;
   priority?: TaskPriority;
   assignedAgentType?: AgentType | null;
   assignedClawId?: number | null;

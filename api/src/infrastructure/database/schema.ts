@@ -33,15 +33,9 @@ export const projectStatusEnum = pgEnum('project_status', [
   'active', 'completed', 'archived', 'on_hold',
 ]);
 
-export const taskStatusEnum = pgEnum('task_status', [
-  'backlog', // ideation/unplanned
-  'todo',    // planned
-  'ready',   // queued/assigned awaiting workforce
-  'in_progress',
-  'in_review',
-  'done',
-  'blocked',
-]);
+// Task status is a free-form varchar (see migration 0076): a project's swimlanes
+// define its board columns, so a task's status is whatever lane key it sits in.
+// The canonical default statuses live in the app-layer `TaskStatus` enum.
 
 export const taskPriorityEnum = pgEnum('task_priority', [
   'low', 'medium', 'high', 'urgent',
@@ -679,7 +673,7 @@ export const tasks = pgTable('tasks', {
   key:               varchar('key', { length: 100 }).notNull().unique(),
   title:             varchar('title', { length: 500 }).notNull(),
   description:       text('description'),
-  status:            taskStatusEnum('status').notNull().default('backlog'),
+  status:            varchar('status', { length: 64 }).notNull().default('backlog'),
   priority:          taskPriorityEnum('priority').notNull().default('medium'),
   assignedAgentType: agentTypeEnum('assigned_agent_type'),
   githubIssueNumber: integer('github_issue_number'),
