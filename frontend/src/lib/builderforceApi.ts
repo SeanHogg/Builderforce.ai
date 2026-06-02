@@ -632,8 +632,11 @@ export interface Execution {
   id: number;
   taskId: number;
   status: string;
+  clawId?: number | null;
+  agentId?: number | null;
   submittedBy?: string;
   submittedAt?: string;
+  createdAt?: string;
   [key: string]: unknown;
 }
 
@@ -689,6 +692,11 @@ export const runtimeApi = {
   /** Execution history for a task (newest first). */
   listForTask: (taskId: number): Promise<Execution[]> =>
     request<Execution[]>(`/api/runtime/tasks/${taskId}/executions`),
+
+  /** Recent executions across the tenant (newest first) — used to surface which
+   *  agent is actively running each task on the board. */
+  listRecent: (limit = 200): Promise<Execution[]> =>
+    request<Execution[]>(`/api/runtime/executions?limit=${limit}`),
 
   get: (id: number): Promise<Execution> =>
     request<Execution>(`/api/runtime/executions/${id}`),

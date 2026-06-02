@@ -187,10 +187,14 @@ async function testFreshservice(
 export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
-  router.use('*', requireRole(TenantRole.MANAGER));
+  // Reads (the credential list + sync logs) are allowed for any tenant member so
+  // the Source-control / Integrations credential pickers populate. Mutations and
+  // the detail view (which exposes masked secrets) stay MANAGER-only — applied
+  // per-route below.
+  const manager = requireRole(TenantRole.MANAGER);
 
   // POST /api/integrations
-  router.post('/', async (c) => {
+  router.post('/', manager, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const body = await c.req.json<{
       provider: string;
@@ -283,8 +287,8 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
     return c.json({ integrations: rows });
   });
 
-  // GET /api/integrations/:id
-  router.get('/:id', async (c) => {
+  // GET /api/integrations/:id  (returns masked secrets → MANAGER only)
+  router.get('/:id', manager, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     const [row] = await db
@@ -306,7 +310,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
   });
 
   // PATCH /api/integrations/:id
-  router.patch('/:id', async (c) => {
+  router.patch('/:id', manager, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
 
@@ -356,7 +360,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
   });
 
   // DELETE /api/integrations/:id
-  router.delete('/:id', async (c) => {
+  router.delete('/:id', manager, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
 
@@ -373,7 +377,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
   });
 
   // POST /api/integrations/:id/test
-  router.post('/:id/test', async (c) => {
+  router.post('/:id/test', manager, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
 

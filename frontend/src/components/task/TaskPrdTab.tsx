@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { specsApi, type Task, type Spec } from '@/lib/builderforceApi';
+import { specsApi, type Spec } from '@/lib/builderforceApi';
 import { ChatMessageContent } from '../ChatMessageContent';
 
 /**
@@ -29,7 +29,7 @@ function ExpandIcon() {
   );
 }
 
-export function TaskPrdTab({ task }: { task: Task }) {
+export function TaskPrdTab({ projectId }: { projectId: number }) {
   const [specs, setSpecs] = useState<Spec[]>([]);
   const [selectedId, setSelectedId] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -37,7 +37,7 @@ export function TaskPrdTab({ task }: { task: Task }) {
 
   useEffect(() => {
     setLoading(true);
-    specsApi.list(task.projectId)
+    specsApi.list(projectId)
       .then((list) => {
         const withPrd = list.filter((s) => s.prd);
         setSpecs(withPrd);
@@ -45,7 +45,7 @@ export function TaskPrdTab({ task }: { task: Task }) {
       })
       .catch(() => setSpecs([]))
       .finally(() => setLoading(false));
-  }, [task.projectId]);
+  }, [projectId]);
 
   const selected = specs.find((s) => s.id === selectedId) ?? null;
 

@@ -1515,7 +1515,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       ORDER BY DATE_TRUNC('day', created_at)
     `);
 
-    // Platform totals (all time)
+    // Platform totals — windowed to the same `days` range as the per-model
+    // table + daily series, so the totals card and the table never disagree
+    // (previously the card was all-time, reading e.g. "515k tokens" while the
+    // windowed table said "No usage in this period").
     const [totals] = (await db.execute(sql`
       SELECT
         COUNT(*)::int          AS total_requests,
@@ -1524,6 +1527,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         SUM(completion_tokens)::bigint AS total_completion_tokens,
         COUNT(DISTINCT model)::int AS model_count
       FROM llm_usage_log
+      WHERE created_at >= NOW() - (${days} || ' days')::interval
     `)).rows as Array<{
       total_requests: number; total_tokens: bigint;
       total_prompt_tokens: bigint; total_completion_tokens: bigint;

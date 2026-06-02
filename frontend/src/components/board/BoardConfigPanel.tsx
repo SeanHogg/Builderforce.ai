@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { SlideOutPanel } from '../SlideOutPanel';
 import { BoardConnectionsManager } from '../integrations/BoardConnectionsManager';
+import { useBoardConfig } from './useBoardConfig';
 import {
   boardsApi,
   type Board,
@@ -42,45 +43,11 @@ export interface BoardConfigPanelProps {
 
 export function BoardConfigPanel({ open, onClose, projectId, projectName }: BoardConfigPanelProps) {
   const [tab, setTab] = useState<ConfigTab>('lanes');
-  const [board, setBoard] = useState<Board | null>(null);
-  const [lanes, setLanes] = useState<Swimlane[]>([]);
-  const [agentsByLane, setAgentsByLane] = useState<Record<string, SwimlaneAgent[]>>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadAgents = useCallback(async (boardId: string, laneList: Swimlane[]) => {
-    const entries = await Promise.all(
-      laneList.map(async (l) => [l.id, await boardsApi.agents.list(boardId, l.id)] as const),
-    );
-    setAgentsByLane(Object.fromEntries(entries));
-  }, []);
-
-  const load = useCallback(async () => {
-    setLoading(true); setError(null);
-    try {
-      const boards = await boardsApi.list();
-      const mine = boards.find((b) => b.projectId === projectId) ?? null;
-      setBoard(mine);
-      if (mine) {
-        const laneList = await boardsApi.swimlanes.list(mine.id);
-        laneList.sort((a, b) => a.position - b.position);
-        setLanes(laneList);
-        await loadAgents(mine.id, laneList);
-      } else {
-        setLanes([]); setAgentsByLane({});
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load board');
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, loadAgents]);
-
-  useEffect(() => { if (open) load(); }, [open, load]);
+  const { board, lanes, agentsByLane, loading, error, reload } = useBoardConfig(projectId, open);
 
   const createBoard = async () => {
-    const b = await boardsApi.create({ projectId, name: `${projectName ?? 'Project'} board` });
-    setBoard(b); load();
+    await boardsApi.create({ projectId, name: `${projectName ?? 'Project'} board` });
+    await reload();
   };
 
   return (
@@ -109,9 +76,9 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName }: Boar
           <button type="button" style={btnPrimary} onClick={createBoard}>Create board</button>
         </div>
       ) : tab === 'lanes' ? (
-        <LanesTab board={board} lanes={lanes} agentsByLane={agentsByLane} reload={load} />
+        <LanesTab board={board} lanes={lanes} agentsByLane={agentsByLane} reload={reload} />
       ) : tab === 'settings' ? (
-        <SettingsTab board={board} onSaved={load} />
+        <SettingsTab board={board} onSaved={reload} />
       ) : (
         <div style={sectionPad}>
           <BoardConnectionsManager projectId={projectId} heading="External boards feeding this board" />
