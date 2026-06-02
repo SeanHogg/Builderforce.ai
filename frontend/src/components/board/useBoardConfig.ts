@@ -18,11 +18,6 @@ export interface BoardConfig {
   reload: () => Promise<void>;
 }
 
-/** Normalise a swimlane key / status / label for loose matching. */
-export function normalizeKey(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, '');
-}
-
 /**
  * Loads a project's board, swimlanes, and per-lane agent assignments. Shared by
  * the board-config slide-out (editing) and the task board (displaying which

@@ -47,6 +47,7 @@ import {
   InvalidTicketTransitionError,
 } from '../../application/swimlane/SwimlaneCoordinator';
 import { DrizzleCoordinatorStore } from '../../application/swimlane/DrizzleCoordinatorStore';
+import { DEFAULT_SWIMLANES } from '../../application/swimlane/defaultSwimlanes';
 import {
   ClawStageDispatcher,
   type ClawRelayNamespace,
@@ -82,17 +83,20 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       maxConcurrentTickets?: number;
       needsAttentionLane?: string;
       segmentId?: string;
+      /** Seed the standard status-mirroring swimlanes (default true). */
+      seedDefaultLanes?: boolean;
     }>();
 
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     if (!body.projectId) return c.json({ error: 'projectId is required' }, 400);
 
     const now = new Date();
+    const segmentId = body.segmentId ?? c.get('segmentId') ?? null;
     const [row] = await db
       .insert(boards)
       .values({
         tenantId,
-        segmentId: body.segmentId ?? c.get('segmentId') ?? null,
+        segmentId,
         projectId: body.projectId,
         name: body.name.trim(),
         autonomous: body.autonomous ?? false,
@@ -102,6 +106,28 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         updatedAt: now,
       })
       .returning();
+
+    // Seed default swimlanes mirroring the kanban's task statuses so the board
+    // configuration shows the same lanes the user already sees on the board.
+    if (row && body.seedDefaultLanes !== false) {
+      await db.insert(swimlanes).values(
+        DEFAULT_SWIMLANES.map((l) => ({
+          tenantId,
+          segmentId,
+          boardId: row.id,
+          key: l.key,
+          name: l.name,
+          position: l.position,
+          isTerminal: l.isTerminal,
+          gate: l.gate,
+          executionMode: 'sequential',
+          failurePolicy: 'needs_attention',
+          createdAt: now,
+          updatedAt: now,
+        })),
+      );
+    }
+
     return c.json(row, 201);
   });
 

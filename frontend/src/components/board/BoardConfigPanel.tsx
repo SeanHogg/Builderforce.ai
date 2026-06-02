@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { SlideOutPanel } from '../SlideOutPanel';
 import { BoardConnectionsManager } from '../integrations/BoardConnectionsManager';
 import { useBoardConfig } from './useBoardConfig';
+import { TASK_STATUSES, TASK_STATUS_LABELS, isTaskStatus } from '@/lib/taskStatus';
 import {
   boardsApi,
   type Board,
@@ -44,11 +45,26 @@ export interface BoardConfigPanelProps {
 export function BoardConfigPanel({ open, onClose, projectId, projectName }: BoardConfigPanelProps) {
   const [tab, setTab] = useState<ConfigTab>('lanes');
   const { board, lanes, agentsByLane, loading, error, reload } = useBoardConfig(projectId, open);
+  const [provisioning, setProvisioning] = useState(false);
+  const [provisionError, setProvisionError] = useState<string | null>(null);
 
-  const createBoard = async () => {
-    await boardsApi.create({ projectId, name: `${projectName ?? 'Project'} board` });
-    await reload();
-  };
+  // The cog is only reachable when a project board is selected, so a board is
+  // expected to exist. If none does yet, provision it (with default swimlanes
+  // mirroring the kanban columns) automatically rather than dead-ending on a
+  // "no board exists" prompt that contradicts being on the board. The
+  // provisionError guard stops this from retrying in a loop if creation fails.
+  useEffect(() => {
+    if (!open) { setProvisionError(null); return; }
+    if (loading || error || board || provisioning || provisionError) return;
+    setProvisioning(true);
+    boardsApi
+      .create({ projectId, name: `${projectName ?? 'Project'} board` })
+      .then(() => reload())
+      .catch((e) => setProvisionError(e instanceof Error ? e.message : 'Could not create board'))
+      .finally(() => setProvisioning(false));
+  }, [open, loading, error, board, provisioning, provisionError, projectId, projectName, reload]);
+
+  const shownError = error ?? provisionError;
 
   return (
     <SlideOutPanel
@@ -64,17 +80,18 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName }: Boar
       activeTabId={tab}
       onTabChange={(t) => setTab(t as ConfigTab)}
     >
-      {loading ? (
-        <div style={sectionPad}><span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</span></div>
-      ) : error ? (
-        <div style={sectionPad}><span style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{error}</span></div>
-      ) : !board ? (
+      {loading || provisioning || !board ? (
         <div style={sectionPad}>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-            No board exists for this project yet. Create one to define swimlanes and assign autonomous agents.
-          </div>
-          <button type="button" style={btnPrimary} onClick={createBoard}>Create board</button>
+          {shownError ? (
+            <span style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{shownError}</span>
+          ) : (
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              {provisioning || !board ? 'Setting up this board…' : 'Loading…'}
+            </span>
+          )}
         </div>
+      ) : shownError ? (
+        <div style={sectionPad}><span style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{shownError}</span></div>
       ) : tab === 'lanes' ? (
         <LanesTab board={board} lanes={lanes} agentsByLane={agentsByLane} reload={reload} />
       ) : tab === 'settings' ? (
@@ -93,13 +110,15 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName }: Boar
 function LanesTab({ board, lanes, agentsByLane, reload }: {
   board: Board; lanes: Swimlane[]; agentsByLane: Record<string, SwimlaneAgent[]>; reload: () => void;
 }) {
+  const usedStatuses = new Set(lanes.map((l) => l.key));
+  const firstFreeStatus = TASK_STATUSES.find((s) => !usedStatuses.has(s)) ?? TASK_STATUSES[0];
   const [laneName, setLaneName] = useState('');
+  const [laneStatus, setLaneStatus] = useState<string>(firstFreeStatus);
   const [adding, setAdding] = useState(false);
 
   const addLane = async () => {
-    if (!laneName.trim()) return;
-    const key = laneName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    await boardsApi.swimlanes.create(board.id, { key: key || `lane_${lanes.length + 1}`, name: laneName.trim(), position: lanes.length });
+    const name = laneName.trim() || TASK_STATUS_LABELS[laneStatus as keyof typeof TASK_STATUS_LABELS] || laneStatus;
+    await boardsApi.swimlanes.create(board.id, { key: laneStatus, name, position: lanes.length });
     setLaneName(''); setAdding(false); reload();
   };
   const removeLane = async (id: string) => { if (confirm('Delete this swimlane?')) { await boardsApi.swimlanes.remove(board.id, id); reload(); } };
@@ -107,11 +126,29 @@ function LanesTab({ board, lanes, agentsByLane, reload }: {
 
   return (
     <div style={sectionPad}>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+        Swimlanes are the columns of this project&apos;s task board. Each maps to a task status; rename, reorder, or
+        assign agents and the board updates to match.
+      </div>
       {lanes.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No swimlanes yet.</div>}
       {lanes.map((lane) => (
         <div key={lane.id} style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 14, marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 600, fontSize: 14, flex: 1 }}>{lane.name}</span>
+            <input
+              style={{ ...inputStyle, fontWeight: 600, fontSize: 14, flex: 1, minWidth: 140 }}
+              defaultValue={lane.name}
+              title="Swimlane name (shown as the board column header)"
+              onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== lane.name) patchLane(lane.id, { name: v }); }}
+            />
+            {isTaskStatus(lane.key) ? (
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title="Task status this column holds">
+                → {TASK_STATUS_LABELS[lane.key]}
+              </span>
+            ) : (
+              <span style={{ fontSize: 11, color: 'var(--warning-text, #b45309)', whiteSpace: 'nowrap' }} title="Not bound to a task status — won't appear as a board column">
+                ⚠ no status
+              </span>
+            )}
             <select value={lane.gate} onChange={(e) => patchLane(lane.id, { gate: e.target.value })} style={inputStyle} title="Gate">
               <option value="auto">auto</option>
               <option value="human">human gate</option>
@@ -135,13 +172,18 @@ function LanesTab({ board, lanes, agentsByLane, reload }: {
       ))}
 
       {adding ? (
-        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <input style={{ ...inputStyle, flex: 1 }} placeholder="Swimlane name (e.g. Implement)" value={laneName} onChange={(e) => setLaneName(e.target.value)} />
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+          <select value={laneStatus} onChange={(e) => setLaneStatus(e.target.value)} style={inputStyle} title="Task status this column holds">
+            {TASK_STATUSES.map((s) => (
+              <option key={s} value={s}>{TASK_STATUS_LABELS[s]}{usedStatuses.has(s) ? ' (in use)' : ''}</option>
+            ))}
+          </select>
+          <input style={{ ...inputStyle, flex: 1, minWidth: 140 }} placeholder={`Column name (default: ${TASK_STATUS_LABELS[laneStatus as keyof typeof TASK_STATUS_LABELS] ?? laneStatus})`} value={laneName} onChange={(e) => setLaneName(e.target.value)} />
           <button type="button" style={btnPrimary} onClick={addLane}>Add</button>
           <button type="button" style={btnSubtle} onClick={() => { setAdding(false); setLaneName(''); }}>Cancel</button>
         </div>
       ) : (
-        <button type="button" style={btnPrimary} onClick={() => setAdding(true)}>Add swimlane</button>
+        <button type="button" style={btnPrimary} onClick={() => { setLaneStatus(firstFreeStatus); setAdding(true); }}>Add swimlane</button>
       )}
     </div>
   );

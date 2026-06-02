@@ -18,22 +18,24 @@ import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
 import { BoardConfigPanel } from './board/BoardConfigPanel';
 import { AgentChip } from './board/AgentChip';
-import { useBoardConfig, normalizeKey } from './board/useBoardConfig';
+import { useBoardConfig } from './board/useBoardConfig';
 import { SlideOutPanel } from './SlideOutPanel';
 import { TaskAgentTab } from './task/TaskAgentTab';
 import { TaskPrdTab } from './task/TaskPrdTab';
 import { RunAgentControl } from './task/RunAgentControl';
+import {
+  TASK_STATUSES as BOARD_STATUSES,
+  TASK_STATUS_LABELS as STATUS_LABELS,
+  isTaskStatus,
+} from '@/lib/taskStatus';
 
-const BOARD_STATUSES: TaskStatus[] = ['backlog', 'todo', 'ready', 'in_progress', 'in_review', 'blocked', 'done'];
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  backlog: 'Backlog',
-  todo: 'To Do',
-  ready: 'Ready',
-  in_progress: 'In Progress',
-  in_review: 'In Review',
-  done: 'Done',
-  blocked: 'Blocked',
-};
+/** A rendered kanban column: a swimlane bound to a task status, or a fallback status column. */
+interface BoardColumn {
+  id: string;
+  status: TaskStatus;
+  label: string;
+  agents: SwimlaneAgent[];
+}
 const PRIORITIES: TaskPriority[] = ['low', 'medium', 'high', 'urgent'];
 const PRIORITY_CLASS: Record<TaskPriority, string> = {
   low: 'badge-gray',
@@ -170,19 +172,33 @@ export function TaskMgmtContent({
     effectiveProjectId != null && view === 'board' && !compact,
   );
 
-  const agentsByStatus = useMemo(() => {
-    const map: Partial<Record<TaskStatus, SwimlaneAgent[]>> = {};
-    for (const status of BOARD_STATUSES) {
-      const lane = lanes.find(
-        (l) =>
-          normalizeKey(l.key) === normalizeKey(status) ||
-          normalizeKey(l.key) === normalizeKey(STATUS_LABELS[status]) ||
-          normalizeKey(l.name) === normalizeKey(STATUS_LABELS[status]),
-      );
-      if (lane) map[status] = agentsByLane[lane.id] ?? [];
+  // The board's columns ARE its swimlanes: a seeded board mirrors the task
+  // statuses 1:1, and renaming / reordering / agent-assigning a lane flows
+  // straight through to the board. Each lane maps to the task status named by
+  // its key (tasks are pinned to the status enum). Lanes not bound to a status
+  // can't hold tasks, so they don't appear as columns. When a project has no
+  // board yet, fall back to the default status columns so the board still works.
+  const boardColumns = useMemo<BoardColumn[]>(() => {
+    const defaults = (): BoardColumn[] =>
+      BOARD_STATUSES.map((s) => ({ id: s, status: s, label: STATUS_LABELS[s], agents: [] }));
+    if (lanes.length === 0) return defaults();
+
+    const cols: BoardColumn[] = [];
+    const covered = new Set<TaskStatus>();
+    for (const l of lanes) {
+      if (!isTaskStatus(l.key) || covered.has(l.key)) continue;
+      cols.push({ id: l.id, status: l.key, label: l.name, agents: agentsByLane[l.id] ?? [] });
+      covered.add(l.key);
     }
-    return map;
-  }, [lanes, agentsByLane]);
+    // Surface any status that still holds tasks but has no lane, so customising
+    // lanes (e.g. deleting one) never hides the tasks sitting in that status.
+    for (const s of BOARD_STATUSES) {
+      if (!covered.has(s) && tasks.some((t) => t.status === s)) {
+        cols.push({ id: s, status: s, label: STATUS_LABELS[s], agents: [] });
+      }
+    }
+    return cols.length > 0 ? cols : defaults();
+  }, [lanes, agentsByLane, tasks]);
 
   // Latest execution per task → which agent is actively running (or last ran) it.
   const latestExecByTask = useMemo(() => {
@@ -598,16 +614,17 @@ export function TaskMgmtContent({
           className="task-kanban"
           style={{
             display: 'grid',
-            gridTemplateColumns: `repeat(${BOARD_STATUSES.length}, minmax(200px, 1fr))`,
+            gridTemplateColumns: `repeat(${boardColumns.length}, minmax(200px, 1fr))`,
             gap: 12,
             minHeight: 200,
           }}
         >
-          {BOARD_STATUSES.map((status) => {
+          {boardColumns.map((column) => {
+            const status = column.status;
             const tasksForStatus = filtered.filter((t) => t.status === status);
             return (
               <div
-                key={status}
+                key={column.id}
                 onDragOver={onDragOver}
                 onDrop={(e) => onDrop(e, status)}
                 style={{
@@ -631,15 +648,15 @@ export function TaskMgmtContent({
                       color: 'var(--text-muted)',
                     }}
                   >
-                    <span>{STATUS_LABELS[status]}</span>
+                    <span>{column.label}</span>
                     <span>{tasksForStatus.length}</span>
                   </div>
-                  {(agentsByStatus[status]?.length ?? 0) > 0 && (
+                  {column.agents.length > 0 && (
                     <div
                       style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}
                       title="Agents configured on this swimlane"
                     >
-                      {agentsByStatus[status]!.map((a) => (
+                      {column.agents.map((a) => (
                         <AgentChip
                           key={a.id}
                           label={a.role}
