@@ -144,6 +144,12 @@ export function TaskMgmtContent({
   const clawNameById = (id?: number | null) =>
     id ? clawsList.find((c) => c.id === id)?.name ?? String(id) : 'Unassigned';
 
+  // The board being configured: the scoped project, or the single project chosen
+  // in the filter. Null when viewing "All projects" — the cog stays visible but disabled.
+  const effectiveProjectId = projectId ?? (filterProject ? Number(filterProject) : undefined);
+  const effectiveProjectName =
+    projectId != null ? projectName : projectNameById(effectiveProjectId);
+
   const openCreate = () => {
     setEditTarget(null);
     setForm({
@@ -396,20 +402,33 @@ export function TaskMgmtContent({
             <button type="button" onClick={openCreate} style={buttonPrimary}>
               New task
             </button>
-            {projectId != null && (
+            {(() => {
+              const canConfigure = effectiveProjectId != null;
+              return (
               <button
                 type="button"
-                onClick={() => setBoardConfigOpen(true)}
-                style={{ ...buttonTertiary, width: 36, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                onClick={() => canConfigure && setBoardConfigOpen(true)}
+                disabled={!canConfigure}
+                style={{
+                  ...buttonTertiary,
+                  width: 36,
+                  padding: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: canConfigure ? 1 : 0.4,
+                  cursor: canConfigure ? 'pointer' : 'not-allowed',
+                }}
                 aria-label="Configure board"
-                title="Configure swimlanes & agents"
+                title={canConfigure ? 'Configure swimlanes & agents' : 'Select a single project to configure its board'}
               >
                 <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
                   <circle cx="12" cy="12" r="3" />
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                 </svg>
               </button>
-            )}
+              );
+            })()}
           </div>
         </div>
       )}
@@ -1300,12 +1319,12 @@ export function TaskMgmtContent({
         </>
       )}
 
-      {projectId != null && (
+      {effectiveProjectId != null && (
         <BoardConfigPanel
           open={boardConfigOpen}
           onClose={() => setBoardConfigOpen(false)}
-          projectId={projectId}
-          projectName={projectName}
+          projectId={effectiveProjectId}
+          projectName={effectiveProjectName}
         />
       )}
     </div>
