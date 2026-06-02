@@ -819,6 +819,7 @@ export default defineConfig({
                 onTabClose={closeTab}
                 onChange={handleEditorChange}
                 ydoc={ydoc}
+                projectId={project.id}
               />
             ) : (
               <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
@@ -876,6 +877,7 @@ export default defineConfig({
                 onTabClose={closeTab}
                 onChange={handleEditorChange}
                 ydoc={ydoc}
+                projectId={project.id}
               />
             </div>
           </div>

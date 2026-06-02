@@ -25,5 +25,11 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    // The `link:`ed brain-embedded package ships React as an external peer dep and
+    // imports a bare `react`. Vite follows the symlink into ../brain-embedded/dist and
+    // would resolve `react` from that package's own node_modules (absent in the
+    // frontend-only CI job). Dedupe forces a single React copy — the frontend's — which
+    // also prevents a second React instance breaking brain-embedded's context/hooks.
+    dedupe: ['react', 'react-dom', 'react/jsx-runtime'],
   },
 });
