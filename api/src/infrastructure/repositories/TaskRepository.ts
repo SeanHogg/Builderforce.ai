@@ -155,7 +155,7 @@ function toDomain(row: Row): Task {
     key:               row.key,
     title:             row.title,
     description:       row.description ?? null,
-    status:            row.status as TaskStatus,
+    status:            row.status,
     priority:          row.priority as TaskPriority,
     assignedAgentType: (row.assignedAgentType as AgentType) ?? null,
     assignedClawId: row.assignedClawId != null ? asClawId(row.assignedClawId) : null,

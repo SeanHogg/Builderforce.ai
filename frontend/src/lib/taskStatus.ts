@@ -27,3 +27,28 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
 
 export const isTaskStatus = (k: string): k is TaskStatus =>
   (TASK_STATUSES as string[]).includes(k);
+
+/** "in_progress" / "code-review" → "In Progress" / "Code Review". */
+export function humanizeStatus(s: string): string {
+  return s.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim() || s;
+}
+
+/** Display label for any status string — canonical label, else humanized key. */
+export function taskStatusLabel(status: string): string {
+  return TASK_STATUS_LABELS[status as TaskStatus] ?? humanizeStatus(status);
+}
+
+const TASK_STATUS_BADGE_CLASS: Record<string, string> = {
+  backlog: 'badge-gray',
+  todo: 'badge-gray',
+  ready: 'badge-blue',
+  in_progress: 'badge-blue',
+  in_review: 'badge-yellow',
+  done: 'badge-green',
+  blocked: 'badge-red',
+};
+
+/** Badge CSS class for any status string; custom statuses get a neutral badge. */
+export function taskStatusBadgeClass(status: string): string {
+  return TASK_STATUS_BADGE_CLASS[status] ?? 'badge-gray';
+}

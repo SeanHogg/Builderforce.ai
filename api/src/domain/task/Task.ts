@@ -7,7 +7,12 @@ export interface TaskProps {
   key: string;
   title: string;
   description: string | null;
-  status: TaskStatus;
+  /**
+   * Free-form status = the key of the swimlane (board column) the task sits in.
+   * The {@link TaskStatus} enum holds the canonical defaults automation drives;
+   * a configurable board may use any lane key here.
+   */
+  status: string;
   priority: TaskPriority;
   assignedAgentType: AgentType | null;
   githubIssueNumber: number | null;
@@ -87,7 +92,7 @@ export class Task {
   get key(): string { return this.props.key; }
   get title(): string { return this.props.title; }
   get description(): string | null { return this.props.description; }
-  get status(): TaskStatus { return this.props.status; }
+  get status(): string { return this.props.status; }
   get priority(): TaskPriority { return this.props.priority; }
   get assignedAgentType(): AgentType | null { return this.props.assignedAgentType; }
   get githubIssueNumber(): number | null { return this.props.githubIssueNumber; }

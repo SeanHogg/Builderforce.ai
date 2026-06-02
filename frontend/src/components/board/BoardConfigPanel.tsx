@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { SlideOutPanel } from '../SlideOutPanel';
 import { BoardConnectionsManager } from '../integrations/BoardConnectionsManager';
 import { useBoardConfig } from './useBoardConfig';
-import { TASK_STATUSES, TASK_STATUS_LABELS, isTaskStatus } from '@/lib/taskStatus';
 import {
   boardsApi,
   type Board,
@@ -110,45 +109,58 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName }: Boar
 function LanesTab({ board, lanes, agentsByLane, reload }: {
   board: Board; lanes: Swimlane[]; agentsByLane: Record<string, SwimlaneAgent[]>; reload: () => void;
 }) {
-  const usedStatuses = new Set(lanes.map((l) => l.key));
-  const firstFreeStatus = TASK_STATUSES.find((s) => !usedStatuses.has(s)) ?? TASK_STATUSES[0];
   const [laneName, setLaneName] = useState('');
-  const [laneStatus, setLaneStatus] = useState<string>(firstFreeStatus);
   const [adding, setAdding] = useState(false);
 
+  // Derive a unique, stable lane key from the name — this is the status a task
+  // holds while sitting in the lane, so it must be unique on the board.
+  const keyFor = (name: string): string => {
+    const base = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'lane';
+    const existing = new Set(lanes.map((l) => l.key));
+    if (!existing.has(base)) return base;
+    let i = 2;
+    while (existing.has(`${base}_${i}`)) i += 1;
+    return `${base}_${i}`;
+  };
+
   const addLane = async () => {
-    const name = laneName.trim() || TASK_STATUS_LABELS[laneStatus as keyof typeof TASK_STATUS_LABELS] || laneStatus;
-    await boardsApi.swimlanes.create(board.id, { key: laneStatus, name, position: lanes.length });
+    const name = laneName.trim();
+    if (!name) return;
+    await boardsApi.swimlanes.create(board.id, { key: keyFor(name), name, position: lanes.length });
     setLaneName(''); setAdding(false); reload();
   };
   const removeLane = async (id: string) => { if (confirm('Delete this swimlane?')) { await boardsApi.swimlanes.remove(board.id, id); reload(); } };
   const patchLane = async (id: string, body: Record<string, unknown>) => { await boardsApi.swimlanes.patch(board.id, id, body); reload(); };
+  // Swap a lane's position with its neighbour to reorder the board columns.
+  const moveLane = async (index: number, dir: -1 | 1) => {
+    const target = lanes[index + dir];
+    const current = lanes[index];
+    if (!target || !current) return;
+    await boardsApi.swimlanes.patch(board.id, current.id, { position: target.position });
+    await boardsApi.swimlanes.patch(board.id, target.id, { position: current.position });
+    reload();
+  };
 
   return (
     <div style={sectionPad}>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-        Swimlanes are the columns of this project&apos;s task board. Each maps to a task status; rename, reorder, or
-        assign agents and the board updates to match.
+        Swimlanes are the columns of this project&apos;s task board. Add, rename, reorder, or assign agents and the
+        board updates to match.
       </div>
       {lanes.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No swimlanes yet.</div>}
-      {lanes.map((lane) => (
+      {lanes.map((lane, index) => (
         <div key={lane.id} style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 14, marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <button type="button" style={{ ...btnSubtle, padding: '0 6px', lineHeight: 1.2 }} disabled={index === 0} title="Move left" onClick={() => moveLane(index, -1)}>▲</button>
+              <button type="button" style={{ ...btnSubtle, padding: '0 6px', lineHeight: 1.2 }} disabled={index === lanes.length - 1} title="Move right" onClick={() => moveLane(index, 1)}>▼</button>
+            </div>
             <input
               style={{ ...inputStyle, fontWeight: 600, fontSize: 14, flex: 1, minWidth: 140 }}
               defaultValue={lane.name}
               title="Swimlane name (shown as the board column header)"
               onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== lane.name) patchLane(lane.id, { name: v }); }}
             />
-            {isTaskStatus(lane.key) ? (
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title="Task status this column holds">
-                → {TASK_STATUS_LABELS[lane.key]}
-              </span>
-            ) : (
-              <span style={{ fontSize: 11, color: 'var(--warning-text, #b45309)', whiteSpace: 'nowrap' }} title="Not bound to a task status — won't appear as a board column">
-                ⚠ no status
-              </span>
-            )}
             <select value={lane.gate} onChange={(e) => patchLane(lane.id, { gate: e.target.value })} style={inputStyle} title="Gate">
               <option value="auto">auto</option>
               <option value="human">human gate</option>
@@ -173,17 +185,12 @@ function LanesTab({ board, lanes, agentsByLane, reload }: {
 
       {adding ? (
         <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-          <select value={laneStatus} onChange={(e) => setLaneStatus(e.target.value)} style={inputStyle} title="Task status this column holds">
-            {TASK_STATUSES.map((s) => (
-              <option key={s} value={s}>{TASK_STATUS_LABELS[s]}{usedStatuses.has(s) ? ' (in use)' : ''}</option>
-            ))}
-          </select>
-          <input style={{ ...inputStyle, flex: 1, minWidth: 140 }} placeholder={`Column name (default: ${TASK_STATUS_LABELS[laneStatus as keyof typeof TASK_STATUS_LABELS] ?? laneStatus})`} value={laneName} onChange={(e) => setLaneName(e.target.value)} />
+          <input style={{ ...inputStyle, flex: 1, minWidth: 140 }} placeholder="Column name (e.g. Design, In Review, QA)" value={laneName} onChange={(e) => setLaneName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addLane(); }} />
           <button type="button" style={btnPrimary} onClick={addLane}>Add</button>
           <button type="button" style={btnSubtle} onClick={() => { setAdding(false); setLaneName(''); }}>Cancel</button>
         </div>
       ) : (
-        <button type="button" style={btnPrimary} onClick={() => { setLaneStatus(firstFreeStatus); setAdding(true); }}>Add swimlane</button>
+        <button type="button" style={btnPrimary} onClick={() => setAdding(true)}>Add swimlane</button>
       )}
     </div>
   );

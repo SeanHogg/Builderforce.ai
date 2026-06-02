@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { TaskService } from '../../application/task/TaskService';
-import { TaskPriority, AgentType, TaskStatus } from '../../domain/shared/types';
+import { TaskPriority, AgentType } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { auditEvents } from '../../infrastructure/database/schema';
@@ -49,7 +49,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
     const body = await c.req.json<{
       title?: string;
       description?: string | null;
-      status?: TaskStatus;
+      status?: string;
       priority?: TaskPriority;
       assignedAgentType?: AgentType | null;
       assignedClawId?: number | null;
