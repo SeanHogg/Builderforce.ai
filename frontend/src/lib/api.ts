@@ -482,6 +482,9 @@ export async function startRepoAnalysis(projectId: number | string): Promise<{ r
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({}),
+    // 409 = no_repo: an expected, user-actionable state the Architect page
+    // renders inline. Don't surface it as a global error toast / support ticket.
+    expectedErrors: [409],
   });
 }
 
