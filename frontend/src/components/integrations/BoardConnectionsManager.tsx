@@ -45,7 +45,7 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState<string | null>(null);
-  const [syncMsg, setSyncMsg] = useState<Record<string, string>>({});
+  const [syncMsg, setSyncMsg] = useState<Record<string, { text: string; error: boolean }>>({});
 
   const [provider, setProvider] = useState<string>('jira');
   const [credentialId, setCredentialId] = useState('');
@@ -68,7 +68,12 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
   const resetForm = () => { setProvider('jira'); setCredentialId(''); setExternalBoardId(''); setPollIntervalSec(300); };
 
   const add = async () => {
-    setSaving(true); setError(null);
+    setError(null);
+    if (provider === 'github' && !externalBoardId.trim()) {
+      setError('GitHub boards need a repository in "owner/repo" form (e.g. octocat/hello-world).');
+      return;
+    }
+    setSaving(true);
     try {
       const conn = await boardConnectionsApi.create({
         projectId,
@@ -79,8 +84,8 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
       });
       // Kick off the first sync immediately so the board populates without waiting.
       boardConnectionsApi.sync(conn.id)
-        .then(() => setSyncMsg((m) => ({ ...m, [conn.id]: 'Initial sync started' })))
-        .catch(() => setSyncMsg((m) => ({ ...m, [conn.id]: 'Initial sync failed' })))
+        .then(() => setSyncMsg((m) => ({ ...m, [conn.id]: { text: 'Initial sync started', error: false } })))
+        .catch((e) => setSyncMsg((m) => ({ ...m, [conn.id]: { text: e instanceof Error ? e.message : 'Initial sync failed', error: true } })))
         .finally(load);
       resetForm(); setAdding(false); load();
     } catch (e) {
@@ -91,12 +96,12 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
   };
 
   const syncNow = async (id: string) => {
-    setSyncing(id); setSyncMsg((m) => ({ ...m, [id]: '' }));
+    setSyncing(id); setSyncMsg((m) => { const { [id]: _drop, ...rest } = m; return rest; });
     try {
       await boardConnectionsApi.sync(id);
-      setSyncMsg((m) => ({ ...m, [id]: 'Synced' }));
+      setSyncMsg((m) => ({ ...m, [id]: { text: 'Synced', error: false } }));
     } catch (e) {
-      setSyncMsg((m) => ({ ...m, [id]: e instanceof Error ? e.message : 'Sync failed' }));
+      setSyncMsg((m) => ({ ...m, [id]: { text: e instanceof Error ? e.message : 'Sync failed', error: true } }));
     } finally {
       setSyncing(null); load();
     }
@@ -120,19 +125,36 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
         <div style={{ marginTop: 12 }}>
           {connections.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No external boards connected.</div>}
           {connections.map((conn) => (
-            <div key={conn.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--border-subtle)' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--coral-bright)', minWidth: 56 }}>{conn.provider}</span>
-              <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>
-                {conn.externalBoardId || '(board)'} · {credName(conn.credentialId) ?? 'no key'}
-                <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>
-                  {conn.status}{conn.lastPolledAt ? ` · last ${new Date(conn.lastPolledAt).toLocaleString()}` : ''}
+            <div key={conn.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 0', borderTop: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--coral-bright)', minWidth: 56 }}>{conn.provider}</span>
+                <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>
+                  {conn.externalBoardId || '(board)'} · {credName(conn.credentialId) ?? 'no key'}
+                  <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+                    {conn.status}{conn.lastPolledAt ? ` · last ${new Date(conn.lastPolledAt).toLocaleString()}` : ''}
+                  </span>
+                  {syncMsg[conn.id] && !syncMsg[conn.id].error && (
+                    <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>· {syncMsg[conn.id].text}</span>
+                  )}
                 </span>
-                {syncMsg[conn.id] && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>· {syncMsg[conn.id]}</span>}
-              </span>
-              <button type="button" style={btnSubtle} disabled={syncing === conn.id} onClick={() => syncNow(conn.id)}>
-                {syncing === conn.id ? 'Syncing…' : 'Sync now'}
-              </button>
-              <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(conn.id)}>Delete</button>
+                <button type="button" style={btnSubtle} disabled={syncing === conn.id} onClick={() => syncNow(conn.id)}>
+                  {syncing === conn.id ? 'Syncing…' : 'Sync now'}
+                </button>
+                <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(conn.id)}>Delete</button>
+              </div>
+              {syncMsg[conn.id]?.error && (
+                <div
+                  role="alert"
+                  style={{
+                    fontSize: 12, color: 'var(--error-text, #dc2626)',
+                    background: 'var(--error-bg, rgba(220,38,38,0.08))',
+                    border: '1px solid var(--error-border, rgba(220,38,38,0.3))',
+                    borderRadius: 6, padding: '6px 10px',
+                  }}
+                >
+                  Sync failed: {syncMsg[conn.id].text}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -149,7 +171,12 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
             <option value="">— Select access key —</option>
             {pmCreds.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.provider}{c.projectId == null ? ', workspace' : ''})</option>)}
           </select>
-          <input style={inputStyle} placeholder="External board id (e.g. Jira board/project key)" value={externalBoardId} onChange={(e) => setExternalBoardId(e.target.value)} />
+          <input
+            style={inputStyle}
+            placeholder={provider === 'github' ? 'Repository — owner/repo (e.g. octocat/hello-world)' : 'External board id (e.g. Jira board/project key)'}
+            value={externalBoardId}
+            onChange={(e) => setExternalBoardId(e.target.value)}
+          />
           <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
             Poll interval (seconds)
             <input style={{ ...inputStyle, marginTop: 4 }} type="number" min={60} value={pollIntervalSec} onChange={(e) => setPollIntervalSec(Number(e.target.value))} />
