@@ -9,7 +9,7 @@ title: "Logging"
 
 # Logging
 
-CoderClaw (built on [CoderClaw](https://github.com/SeanHogg/coderClaw)) logs in two places:
+BuilderForce Agents (built on [BuilderForce Agents](https://github.com/SeanHogg/Builderforce.ai)) logs in two places:
 
 - **File logs** (JSON lines) written by the Gateway.
 - **Console output** shown in terminals and the Control UI.
@@ -21,16 +21,16 @@ levels and formats.
 
 By default, the Gateway writes a rolling log file under:
 
-`/tmp/coderclaw/coderclaw-YYYY-MM-DD.log`
+`/tmp/builderforce/builderforce-YYYY-MM-DD.log`
 
 The date uses the gateway host's local timezone.
 
-You can override this in `~/.coderclaw/coderclaw.json`:
+You can override this in `~/.builderforce/builderforce.json`:
 
 ```json
 {
   "logging": {
-    "file": "/path/to/coderclaw.log"
+    "file": "/path/to/builderforce.log"
   }
 }
 ```
@@ -42,7 +42,7 @@ You can override this in `~/.coderclaw/coderclaw.json`:
 Use the CLI to tail the gateway log file via RPC:
 
 ```bash
-coderclaw logs --follow
+builderforce logs --follow
 ```
 
 Output modes:
@@ -63,7 +63,7 @@ In JSON mode, the CLI emits `type`-tagged objects:
 If the Gateway is unreachable, the CLI prints a short hint to run:
 
 ```bash
-coderclaw doctor
+builderforce doctor
 ```
 
 ### Control UI (web)
@@ -76,7 +76,7 @@ See [/web/control-ui](/web/control-ui) for how to open it.
 To filter channel activity (WhatsApp/Telegram/etc), use:
 
 ```bash
-coderclaw channels logs --channel whatsapp
+builderforce channels logs --channel whatsapp
 ```
 
 ## Log formats
@@ -98,7 +98,7 @@ Console formatting is controlled by `logging.consoleStyle`.
 
 ## Configuring logging
 
-All logging configuration lives under `logging` in `~/.coderclaw/coderclaw.json`.
+All logging configuration lives under `logging` in `~/.builderforce/builderforce.json`.
 
 ```json
 {
@@ -106,7 +106,7 @@ All logging configuration lives under `logging` in `~/.coderclaw/coderclaw.json`
     "enabled": true,               // turn off file logging when false
     "format": "json",            // "json" (default) or "text" for human-readable files
     "level": "info",
-    "file": "/tmp/coderclaw/coderclaw-YYYY-MM-DD.log",
+    "file": "/tmp/builderforce/builderforce-YYYY-MM-DD.log",
     "consoleLevel": "info",
     "consoleStyle": "pretty",
     "redactSensitive": "tools",
@@ -127,13 +127,13 @@ used, simply leave `enabled` unset or set it to `true`:
   "logging": {
     "enabled": true,
     "level": "debug",
-    "file": "/var/log/my-claw.log"
+    "file": "/var/log/my-agent.log"
   }
 }
 ```
 
 The CLI and Control UI automatically pick up the value from this configuration;
-commands like `coderclaw logs` will advise you when file logging is disabled.
+commands like `builderforce logs` will advise you when file logging is disabled.
 
 If you're experimenting from code, use:
 
@@ -181,7 +181,7 @@ diagnostics + the exporter plugin are enabled.
 
 - **OpenTelemetry (OTel)**: the data model + SDKs for traces, metrics, and logs.
 - **OTLP**: the wire protocol used to export OTel data to a collector/backend.
-- CoderClaw exports via **OTLP/HTTP (protobuf)** today.
+- BuilderForce Agents exports via **OTLP/HTTP (protobuf)** today.
 
 ### Signals exported
 
@@ -241,7 +241,7 @@ Flags are case-insensitive and support wildcards (e.g. `telegram.*` or `*`).
 Env override (one-off):
 
 ```
-CODERCLAW_DIAGNOSTICS=telegram.http,telegram.payload
+BUILDERFORCE_AGENTS_DIAGNOSTICS=telegram.http,telegram.payload
 ```
 
 Notes:
@@ -271,7 +271,7 @@ works with any OpenTelemetry collector/backend that accepts OTLP/HTTP.
       "enabled": true,
       "endpoint": "http://otel-collector:4318",
       "protocol": "http/protobuf",
-      "serviceName": "coderclaw-gateway",
+      "serviceName": "builderforce-gateway",
       "traces": true,
       "metrics": true,
       "logs": true,
@@ -284,7 +284,7 @@ works with any OpenTelemetry collector/backend that accepts OTLP/HTTP.
 
 Notes:
 
-- You can also enable the plugin with `coderclaw plugins enable diagnostics-otel`.
+- You can also enable the plugin with `builderforce plugins enable diagnostics-otel`.
 - `protocol` currently supports `http/protobuf` only. `grpc` is ignored.
 - Metrics include token usage, cost, context size, run duration, and message-flow
   counters/histograms (webhooks, queueing, session state, queue depth/wait).
@@ -298,60 +298,60 @@ Notes:
 
 Model usage:
 
-- `coderclaw.tokens` (counter, attrs: `coderclaw.token`, `coderclaw.channel`,
-  `coderclaw.provider`, `coderclaw.model`)
-- `coderclaw.cost.usd` (counter, attrs: `coderclaw.channel`, `coderclaw.provider`,
-  `coderclaw.model`)
-- `coderclaw.run.duration_ms` (histogram, attrs: `coderclaw.channel`,
-  `coderclaw.provider`, `coderclaw.model`)
-- `coderclaw.context.tokens` (histogram, attrs: `coderclaw.context`,
-  `coderclaw.channel`, `coderclaw.provider`, `coderclaw.model`)
+- `builderforce.tokens` (counter, attrs: `builderforce.token`, `builderforce.channel`,
+  `builderforce.provider`, `builderforce.model`)
+- `builderforce.cost.usd` (counter, attrs: `builderforce.channel`, `builderforce.provider`,
+  `builderforce.model`)
+- `builderforce.run.duration_ms` (histogram, attrs: `builderforce.channel`,
+  `builderforce.provider`, `builderforce.model`)
+- `builderforce.context.tokens` (histogram, attrs: `builderforce.context`,
+  `builderforce.channel`, `builderforce.provider`, `builderforce.model`)
 
 Message flow:
 
-- `coderclaw.webhook.received` (counter, attrs: `coderclaw.channel`,
-  `coderclaw.webhook`)
-- `coderclaw.webhook.error` (counter, attrs: `coderclaw.channel`,
-  `coderclaw.webhook`)
-- `coderclaw.webhook.duration_ms` (histogram, attrs: `coderclaw.channel`,
-  `coderclaw.webhook`)
-- `coderclaw.message.queued` (counter, attrs: `coderclaw.channel`,
-  `coderclaw.source`)
-- `coderclaw.message.processed` (counter, attrs: `coderclaw.channel`,
-  `coderclaw.outcome`)
-- `coderclaw.message.duration_ms` (histogram, attrs: `coderclaw.channel`,
-  `coderclaw.outcome`)
+- `builderforce.webhook.received` (counter, attrs: `builderforce.channel`,
+  `builderforce.webhook`)
+- `builderforce.webhook.error` (counter, attrs: `builderforce.channel`,
+  `builderforce.webhook`)
+- `builderforce.webhook.duration_ms` (histogram, attrs: `builderforce.channel`,
+  `builderforce.webhook`)
+- `builderforce.message.queued` (counter, attrs: `builderforce.channel`,
+  `builderforce.source`)
+- `builderforce.message.processed` (counter, attrs: `builderforce.channel`,
+  `builderforce.outcome`)
+- `builderforce.message.duration_ms` (histogram, attrs: `builderforce.channel`,
+  `builderforce.outcome`)
 
 Queues + sessions:
 
-- `coderclaw.queue.lane.enqueue` (counter, attrs: `coderclaw.lane`)
-- `coderclaw.queue.lane.dequeue` (counter, attrs: `coderclaw.lane`)
-- `coderclaw.queue.depth` (histogram, attrs: `coderclaw.lane` or
-  `coderclaw.channel=heartbeat`)
-- `coderclaw.queue.wait_ms` (histogram, attrs: `coderclaw.lane`)
-- `coderclaw.session.state` (counter, attrs: `coderclaw.state`, `coderclaw.reason`)
-- `coderclaw.session.stuck` (counter, attrs: `coderclaw.state`)
-- `coderclaw.session.stuck_age_ms` (histogram, attrs: `coderclaw.state`)
-- `coderclaw.run.attempt` (counter, attrs: `coderclaw.attempt`)
+- `builderforce.queue.lane.enqueue` (counter, attrs: `builderforce.lane`)
+- `builderforce.queue.lane.dequeue` (counter, attrs: `builderforce.lane`)
+- `builderforce.queue.depth` (histogram, attrs: `builderforce.lane` or
+  `builderforce.channel=heartbeat`)
+- `builderforce.queue.wait_ms` (histogram, attrs: `builderforce.lane`)
+- `builderforce.session.state` (counter, attrs: `builderforce.state`, `builderforce.reason`)
+- `builderforce.session.stuck` (counter, attrs: `builderforce.state`)
+- `builderforce.session.stuck_age_ms` (histogram, attrs: `builderforce.state`)
+- `builderforce.run.attempt` (counter, attrs: `builderforce.attempt`)
 
 ### Exported spans (names + key attributes)
 
-- `coderclaw.model.usage`
-  - `coderclaw.channel`, `coderclaw.provider`, `coderclaw.model`
-  - `coderclaw.sessionKey`, `coderclaw.sessionId`
-  - `coderclaw.tokens.*` (input/output/cache_read/cache_write/total)
-- `coderclaw.webhook.processed`
-  - `coderclaw.channel`, `coderclaw.webhook`, `coderclaw.chatId`
-- `coderclaw.webhook.error`
-  - `coderclaw.channel`, `coderclaw.webhook`, `coderclaw.chatId`,
-    `coderclaw.error`
-- `coderclaw.message.processed`
-  - `coderclaw.channel`, `coderclaw.outcome`, `coderclaw.chatId`,
-    `coderclaw.messageId`, `coderclaw.sessionKey`, `coderclaw.sessionId`,
-    `coderclaw.reason`
-- `coderclaw.session.stuck`
-  - `coderclaw.state`, `coderclaw.ageMs`, `coderclaw.queueDepth`,
-    `coderclaw.sessionKey`, `coderclaw.sessionId`
+- `builderforce.model.usage`
+  - `builderforce.channel`, `builderforce.provider`, `builderforce.model`
+  - `builderforce.sessionKey`, `builderforce.sessionId`
+  - `builderforce.tokens.*` (input/output/cache_read/cache_write/total)
+- `builderforce.webhook.processed`
+  - `builderforce.channel`, `builderforce.webhook`, `builderforce.chatId`
+- `builderforce.webhook.error`
+  - `builderforce.channel`, `builderforce.webhook`, `builderforce.chatId`,
+    `builderforce.error`
+- `builderforce.message.processed`
+  - `builderforce.channel`, `builderforce.outcome`, `builderforce.chatId`,
+    `builderforce.messageId`, `builderforce.sessionKey`, `builderforce.sessionId`,
+    `builderforce.reason`
+- `builderforce.session.stuck`
+  - `builderforce.state`, `builderforce.ageMs`, `builderforce.queueDepth`,
+    `builderforce.sessionKey`, `builderforce.sessionId`
 
 ### Sampling + flushing
 
@@ -375,7 +375,7 @@ Queues + sessions:
 
 ## Troubleshooting tips
 
-- **Gateway not reachable?** Run `coderclaw doctor` first.
+- **Gateway not reachable?** Run `builderforce doctor` first.
 - **Logs empty?** Check that the Gateway is running and writing to the file path
   in `logging.file`.
 - **Need more detail?** Set `logging.level` to `debug` or `trace` and retry.

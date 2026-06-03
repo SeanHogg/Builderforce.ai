@@ -1,12 +1,12 @@
 ---
-summary: "CLI reference for `coderclaw memory` (status/index/search)"
+summary: "CLI reference for `builderforce memory` (status/index/search)"
 read_when:
   - You want to index or search semantic memory
   - You’re debugging memory availability or indexing
 title: "memory"
 ---
 
-# `coderclaw memory`
+# `builderforce memory`
 
 Manage semantic memory indexing and search.
 Provided by the active memory plugin (default: `memory-core`; set `plugins.slots.memory = "none"` to disable).
@@ -19,15 +19,15 @@ Related:
 ## Examples
 
 ```bash
-coderclaw memory status
-coderclaw memory status --deep
-coderclaw memory status --deep --index
-coderclaw memory status --deep --index --verbose
-coderclaw memory index
-coderclaw memory index --verbose
-coderclaw memory search "release checklist"
-coderclaw memory status --agent main
-coderclaw memory index --agent main --verbose
+builderforce memory status
+builderforce memory status --deep
+builderforce memory status --deep --index
+builderforce memory status --deep --index --verbose
+builderforce memory index
+builderforce memory index --verbose
+builderforce memory search "release checklist"
+builderforce memory status --agent main
+builderforce memory index --agent main --verbose
 ```
 
 ## Options

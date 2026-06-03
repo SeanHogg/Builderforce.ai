@@ -1,0 +1,8 @@
+sessionId: 78025d48-9d2d-4925-a96c-d01b7416463e
+timestamp: 2026-06-03T12:03:46.111Z
+summary: Session auto-checkpointed on exit/reset (no agent summary generated).
+decisions: []
+nextSteps:
+  - Review session history and run /handoff manually for a richer summary.
+openQuestions: []
+artifacts: []

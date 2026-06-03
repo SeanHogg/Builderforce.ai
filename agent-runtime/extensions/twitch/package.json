@@ -1,0 +1,21 @@
+{
+  "name": "@builderforce/twitch",
+  "version": "2026.3.21",
+  "private": true,
+  "description": "BuilderForceAgents Twitch channel plugin",
+  "type": "module",
+  "dependencies": {
+    "@twurple/api": "^8.0.3",
+    "@twurple/auth": "^8.0.3",
+    "@twurple/chat": "^8.0.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*"
+  },
+  "builderforce": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

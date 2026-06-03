@@ -1,5 +1,5 @@
 ---
-summary: "Advanced setup and development workflows for CoderClaw"
+summary: "Advanced setup and development workflows for BuilderForce Agents"
 read_when:
   - Setting up a new machine
   - You want “latest + greatest” without breaking your personal setup
@@ -17,7 +17,7 @@ Last updated: 2026-01-01
 
 ## TL;DR
 
-- **Tailoring lives outside the repo:** `~/.coderclaw/workspace` (workspace) + `~/.coderclaw/coderclaw.json` (config).
+- **Tailoring lives outside the repo:** `~/.builderforce/workspace` (workspace) + `~/.builderforce/builderforce.json` (config).
 - **Stable workflow:** install the macOS app; let it run the bundled Gateway.
 - **Bleeding edge workflow:** run the Gateway yourself via `pnpm gateway:watch`, then let the macOS app attach in Local mode.
 
@@ -31,51 +31,51 @@ Last updated: 2026-01-01
 
 If you want “100% tailored to me” _and_ easy updates, keep your customization in:
 
-- **Config:** `~/.coderclaw/coderclaw.json` (JSON/JSON5-ish)
-- **Workspace:** `~/.coderclaw/workspace` (skills, prompts, memories; make it a private git repo)
+- **Config:** `~/.builderforce/builderforce.json` (JSON/JSON5-ish)
+- **Workspace:** `~/.builderforce/workspace` (skills, prompts, memories; make it a private git repo)
 
 Bootstrap once:
 
 ```bash
-coderclaw setup
+builderforce setup
 ```
 
 From inside this repo, use the local CLI entry:
 
 ```bash
-coderclaw setup
+builderforce setup
 ```
 
-If you don’t have a global install yet, run it via `pnpm coderclaw setup`.
+If you don’t have a global install yet, run it via `pnpm builderforce setup`.
 
 ## Run the Gateway from this repo
 
 After `pnpm build`, you can run the packaged CLI directly:
 
 ```bash
-node coderclaw.mjs gateway --port 18789 --verbose
+node builderforce.mjs gateway --port 18789 --verbose
 ```
 
 ## Stable workflow (macOS app first)
 
-1. Install + launch **CoderClaw.app** (menu bar).
+1. Install + launch **BuilderForce Agents.app** (menu bar).
 2. Complete the onboarding/permissions checklist (TCC prompts).
 3. Ensure Gateway is **Local** and running (the app manages it).
 4. Link surfaces (example: WhatsApp):
 
 ```bash
-coderclaw channels login
+builderforce channels login
 ```
 
 5. Sanity check:
 
 ```bash
-coderclaw health
+builderforce health
 ```
 
 If onboarding is not available in your build:
 
-- Run `coderclaw setup`, then `coderclaw channels login`, then start the Gateway manually (`coderclaw gateway`).
+- Run `builderforce setup`, then `builderforce channels login`, then start the Gateway manually (`builderforce gateway`).
 
 ## Bleeding edge workflow (Gateway in a terminal)
 
@@ -100,7 +100,7 @@ pnpm gateway:watch
 
 ### 2) Point the macOS app at your running Gateway
 
-In **CoderClaw.app**:
+In **BuilderForce Agents.app**:
 
 - Connection Mode: **Local**
   The app will attach to the running gateway on the configured port.
@@ -111,33 +111,33 @@ In **CoderClaw.app**:
 - Or via CLI:
 
 ```bash
-coderclaw health
+builderforce health
 ```
 
 ### Common footguns
 
 - **Wrong port:** Gateway WS defaults to `ws://127.0.0.1:18789`; keep app + CLI on the same port.
 - **Where state lives:**
-  - Credentials: `~/.coderclaw/credentials/`
-  - Sessions: `~/.coderclaw/agents/<agentId>/sessions/`
-  - Logs: `/tmp/coderclaw/`
+  - Credentials: `~/.builderforce/credentials/`
+  - Sessions: `~/.builderforce/agents/<agentId>/sessions/`
+  - Logs: `/tmp/builderforce/`
 
 ## Credential storage map
 
 Use this when debugging auth or deciding what to back up:
 
-- **WhatsApp**: `~/.coderclaw/credentials/whatsapp/<accountId>/creds.json`
+- **WhatsApp**: `~/.builderforce/credentials/whatsapp/<accountId>/creds.json`
 - **Telegram bot token**: config/env or `channels.telegram.tokenFile`
 - **Discord bot token**: config/env (token file not yet supported)
 - **Slack tokens**: config/env (`channels.slack.*`)
-- **Pairing allowlists**: `~/.coderclaw/credentials/<channel>-allowFrom.json`
-- **Model auth profiles**: `~/.coderclaw/agents/<agentId>/agent/auth-profiles.json`
-- **Legacy OAuth import**: `~/.coderclaw/credentials/oauth.json`
+- **Pairing allowlists**: `~/.builderforce/credentials/<channel>-allowFrom.json`
+- **Model auth profiles**: `~/.builderforce/agents/<agentId>/agent/auth-profiles.json`
+- **Legacy OAuth import**: `~/.builderforce/credentials/oauth.json`
   More detail: [Security](/gateway/security#credential-storage-map).
 
 ## Updating (without wrecking your setup)
 
-- Keep `~/.coderclaw/workspace` and `~/.coderclaw/` as “your stuff”; don’t put personal prompts/config into the `coderclaw` repo.
+- Keep `~/.builderforce/workspace` and `~/.builderforce/` as “your stuff”; don’t put personal prompts/config into the `builderforce` repo.
 - Updating source: `git pull` + `pnpm install` (when lockfile changed) + keep using `pnpm gateway:watch`.
 
 ## Linux (systemd user service)
@@ -158,5 +158,5 @@ user service (no lingering needed). See [Gateway runbook](/gateway) for the syst
 - [Gateway runbook](/gateway) (flags, supervision, ports)
 - [Gateway configuration](/gateway/configuration) (config schema + examples)
 - [Discord](/channels/discord) and [Telegram](/channels/telegram) (reply tags + replyToMode settings)
-- [CoderClaw assistant setup](/start/coderclaw)
+- [BuilderForce Agents assistant setup](/start/builderforce)
 - [macOS app](/platforms/macos) (gateway lifecycle)

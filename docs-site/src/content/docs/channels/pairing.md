@@ -3,13 +3,13 @@ summary: "Pairing overview: approve who can DM you + which nodes can join"
 read_when:
   - Setting up DM access control
   - Pairing a new iOS/Android node
-  - Reviewing CoderClaw security posture
+  - Reviewing BuilderForce Agents security posture
 title: "Pairing"
 ---
 
 # Pairing
 
-“Pairing” is CoderClaw’s explicit **owner approval** step.
+“Pairing” is BuilderForce Agents’s explicit **owner approval** step.
 It is used in two places:
 
 1. **DM pairing** (who is allowed to talk to the bot)
@@ -32,15 +32,15 @@ Pairing codes:
 ### Approve a sender
 
 ```bash
-coderclaw pairing list telegram
-coderclaw pairing approve telegram <CODE>
+builderforce pairing list telegram
+builderforce pairing approve telegram <CODE>
 ```
 
 Supported channels: `telegram`, `whatsapp`, `signal`, `imessage`, `discord`, `slack`, `feishu`.
 
 ### Where the state lives
 
-Stored under `~/.coderclaw/credentials/`:
+Stored under `~/.builderforce/credentials/`:
 
 - Pending requests: `<channel>-pairing.json`
 - Approved allowlist store: `<channel>-allowFrom.json`
@@ -58,7 +58,7 @@ If you use the `device-pair` plugin, you can do first-time device pairing entire
 
 1. In Telegram, message your bot: `/pair`
 2. The bot replies with two messages: an instruction message and a separate **setup code** message (easy to copy/paste in Telegram).
-3. On your phone, open the CoderClaw iOS app → Settings → Gateway.
+3. On your phone, open the BuilderForce Agents iOS app → Settings → Gateway.
 4. Paste the setup code and connect.
 5. Back in Telegram: `/pair approve`
 
@@ -72,21 +72,21 @@ Treat the setup code like a password while it is valid.
 ### Approve a node device
 
 ```bash
-coderclaw devices list
-coderclaw devices approve <requestId>
-coderclaw devices reject <requestId>
+builderforce devices list
+builderforce devices approve <requestId>
+builderforce devices reject <requestId>
 ```
 
 ### Node pairing state storage
 
-Stored under `~/.coderclaw/devices/`:
+Stored under `~/.builderforce/devices/`:
 
 - `pending.json` (short-lived; pending requests expire)
 - `paired.json` (paired devices + tokens)
 
 ### Notes
 
-- The legacy `node.pair.*` API (CLI: `coderclaw nodes pending/approve`) is a
+- The legacy `node.pair.*` API (CLI: `builderforce nodes pending/approve`) is a
   separate gateway-owned pairing store. WS nodes still require device pairing.
 
 ## Related docs

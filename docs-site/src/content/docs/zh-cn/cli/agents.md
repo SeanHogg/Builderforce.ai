@@ -1,7 +1,7 @@
 ---
 read_when:
   - 你需要多个隔离的智能体（工作区 + 路由 + 认证）
-summary: "`coderclaw agents` 的 CLI 参考（列出/添加/删除/设置身份）"
+summary: "`builderforce agents` 的 CLI 参考（列出/添加/删除/设置身份）"
 title: agents
 x-i18n:
   generated_at: "2026-02-01T19:58:38Z"
@@ -12,7 +12,7 @@ x-i18n:
   workflow: 14
 ---
 
-# `coderclaw agents`
+# `builderforce agents`
 
 管理隔离的智能体（工作区 + 认证 + 路由）。
 
@@ -24,18 +24,18 @@ x-i18n:
 ## 示例
 
 ```bash
-coderclaw agents list
-coderclaw agents add work --workspace ~/.coderclaw/workspace-work
-coderclaw agents set-identity --workspace ~/.coderclaw/workspace --from-identity
-coderclaw agents set-identity --agent main --avatar avatars/coderclaw.png
-coderclaw agents delete work
+builderforce agents list
+builderforce agents add work --workspace ~/.builderforce/workspace-work
+builderforce agents set-identity --workspace ~/.builderforce/workspace --from-identity
+builderforce agents set-identity --agent main --avatar avatars/builderforce.png
+builderforce agents delete work
 ```
 
 ## 身份文件
 
 每个智能体工作区可以在工作区根目录包含一个 `IDENTITY.md`：
 
-- 示例路径：`~/.coderclaw/workspace/IDENTITY.md`
+- 示例路径：`~/.builderforce/workspace/IDENTITY.md`
 - `set-identity --from-identity` 从工作区根目录读取（或从显式指定的 `--identity-file` 读取）
 
 头像路径相对于工作区根目录解析。
@@ -52,13 +52,13 @@ coderclaw agents delete work
 从 `IDENTITY.md` 加载：
 
 ```bash
-coderclaw agents set-identity --workspace ~/.coderclaw/workspace --from-identity
+builderforce agents set-identity --workspace ~/.builderforce/workspace --from-identity
 ```
 
 显式覆盖字段：
 
 ```bash
-coderclaw agents set-identity --agent main --name "CoderClaw" --emoji "🦞" --avatar avatars/coderclaw.png
+builderforce agents set-identity --agent main --name "BuilderForce Agents" --emoji "🦞" --avatar avatars/builderforce.png
 ```
 
 配置示例：
@@ -70,10 +70,10 @@ coderclaw agents set-identity --agent main --name "CoderClaw" --emoji "🦞" --a
       {
         id: "main",
         identity: {
-          name: "CoderClaw",
+          name: "BuilderForce Agents",
           theme: "space lobster",
           emoji: "🦞",
-          avatar: "avatars/coderclaw.png",
+          avatar: "avatars/builderforce.png",
         },
       },
     ],

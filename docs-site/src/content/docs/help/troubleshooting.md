@@ -1,7 +1,7 @@
 ---
-summary: "Symptom first troubleshooting hub for CoderClaw"
+summary: "Symptom first troubleshooting hub for BuilderForce Agents"
 read_when:
-  - CoderClaw is not working and you need the fastest path to a fix
+  - BuilderForce Agents is not working and you need the fastest path to a fix
   - You want a triage flow before diving into deep runbooks
 title: "Troubleshooting"
 ---
@@ -15,30 +15,30 @@ If you only have 2 minutes, use this page as a triage front door.
 Run this exact ladder in order:
 
 ```bash
-coderclaw status
-coderclaw status --all
-coderclaw gateway probe
-coderclaw gateway status
-coderclaw doctor
-coderclaw channels status --probe
-coderclaw logs --follow
+builderforce status
+builderforce status --all
+builderforce gateway probe
+builderforce gateway status
+builderforce doctor
+builderforce channels status --probe
+builderforce logs --follow
 ```
 
 Good output in one line:
 
-- `coderclaw status` → shows configured channels and no obvious auth errors.
-- `coderclaw status --all` → full report is present and shareable.
-- `coderclaw gateway probe` → expected gateway target is reachable.
-- `coderclaw gateway status` → `Runtime: running` and `RPC probe: ok`.
-- `coderclaw doctor` → no blocking config/service errors.
-- `coderclaw channels status --probe` → channels report `connected` or `ready`.
-- `coderclaw logs --follow` → steady activity, no repeating fatal errors.
+- `builderforce status` → shows configured channels and no obvious auth errors.
+- `builderforce status --all` → full report is present and shareable.
+- `builderforce gateway probe` → expected gateway target is reachable.
+- `builderforce gateway status` → `Runtime: running` and `RPC probe: ok`.
+- `builderforce doctor` → no blocking config/service errors.
+- `builderforce channels status --probe` → channels report `connected` or `ready`.
+- `builderforce logs --follow` → steady activity, no repeating fatal errors.
 
 ## Decision tree
 
 ```mermaid
 flowchart TD
-  A[CoderClaw is not working] --> B{What breaks first}
+  A[BuilderForce Agents is not working] --> B{What breaks first}
   B --> C[No replies]
   B --> D[Dashboard or Control UI will not connect]
   B --> E[Gateway will not start or service not running]
@@ -59,11 +59,11 @@ flowchart TD
 <AccordionGroup>
   <Accordion title="No replies">
     ```bash
-    coderclaw status
-    coderclaw gateway status
-    coderclaw channels status --probe
-    coderclaw pairing list <channel>
-    coderclaw logs --follow
+    builderforce status
+    builderforce gateway status
+    builderforce channels status --probe
+    builderforce pairing list <channel>
+    builderforce logs --follow
     ```
 
     Good output looks like:
@@ -89,16 +89,16 @@ flowchart TD
 
   <Accordion title="Dashboard or Control UI will not connect">
     ```bash
-    coderclaw status
-    coderclaw gateway status
-    coderclaw logs --follow
-    coderclaw doctor
-    coderclaw channels status --probe
+    builderforce status
+    builderforce gateway status
+    builderforce logs --follow
+    builderforce doctor
+    builderforce channels status --probe
     ```
 
     Good output looks like:
 
-    - `Dashboard: http://...` is shown in `coderclaw gateway status`
+    - `Dashboard: http://...` is shown in `builderforce gateway status`
     - `RPC probe: ok`
     - No auth loop in logs
 
@@ -118,11 +118,11 @@ flowchart TD
 
   <Accordion title="Gateway will not start or service installed but not running">
     ```bash
-    coderclaw status
-    coderclaw gateway status
-    coderclaw logs --follow
-    coderclaw doctor
-    coderclaw channels status --probe
+    builderforce status
+    builderforce gateway status
+    builderforce logs --follow
+    builderforce doctor
+    builderforce channels status --probe
     ```
 
     Good output looks like:
@@ -147,11 +147,11 @@ flowchart TD
 
   <Accordion title="Channel connects but messages do not flow">
     ```bash
-    coderclaw status
-    coderclaw gateway status
-    coderclaw logs --follow
-    coderclaw doctor
-    coderclaw channels status --probe
+    builderforce status
+    builderforce gateway status
+    builderforce logs --follow
+    builderforce doctor
+    builderforce channels status --probe
     ```
 
     Good output looks like:
@@ -175,12 +175,12 @@ flowchart TD
 
   <Accordion title="Cron or heartbeat did not fire or did not deliver">
     ```bash
-    coderclaw status
-    coderclaw gateway status
-    coderclaw cron status
-    coderclaw cron list
-    coderclaw cron runs --id <jobId> --limit 20
-    coderclaw logs --follow
+    builderforce status
+    builderforce gateway status
+    builderforce cron status
+    builderforce cron list
+    builderforce cron runs --id <jobId> --limit 20
+    builderforce logs --follow
     ```
 
     Good output looks like:
@@ -206,11 +206,11 @@ flowchart TD
 
   <Accordion title="Node is paired but tool fails camera canvas screen exec">
     ```bash
-    coderclaw status
-    coderclaw gateway status
-    coderclaw nodes status
-    coderclaw nodes describe --node <idOrNameOrIp>
-    coderclaw logs --follow
+    builderforce status
+    builderforce gateway status
+    builderforce nodes status
+    builderforce nodes describe --node <idOrNameOrIp>
+    builderforce logs --follow
     ```
 
     Good output looks like:
@@ -236,17 +236,17 @@ flowchart TD
 
   <Accordion title="Browser tool fails">
     ```bash
-    coderclaw status
-    coderclaw gateway status
-    coderclaw browser status
-    coderclaw logs --follow
-    coderclaw doctor
+    builderforce status
+    builderforce gateway status
+    builderforce browser status
+    builderforce logs --follow
+    builderforce doctor
     ```
 
     Good output looks like:
 
     - Browser status shows `running: true` and a chosen browser/profile.
-    - `coderclaw` profile starts or `chrome` relay has an attached tab.
+    - `builderforce` profile starts or `chrome` relay has an attached tab.
 
     Common log signatures:
 

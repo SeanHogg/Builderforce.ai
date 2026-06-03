@@ -9,7 +9,7 @@ import {
 import { BUILTIN_SKILLS, type BuiltinSkill } from '@/lib/marketplaceData';
 
 export interface SkillAssignmentsContentProps {
-  scope: 'tenant' | 'claw' | 'project' | 'task' | 'agent';
+  scope: 'tenant' | 'host' | 'project' | 'task' | 'agent';
   scopeId: number;
   className?: string;
   style?: React.CSSProperties;

@@ -59,7 +59,7 @@ export interface MyTenantsResult {
     slug: string;
     role: string;
     status: string;
-    defaultClawId: number | null;
+    defaultAgentHostId: number | null;
     plan: string;
     effectivePlan: string;
     billingStatus: string;
@@ -150,7 +150,7 @@ export class AuthService {
           slug: t.slug,
           role: member?.role ?? 'member',
           status: t.status,
-          defaultClawId: t.defaultClawId,
+          defaultAgentHostId: t.defaultAgentHostId,
           plan: t.plan,
           effectivePlan: t.effectivePlan(),
           billingStatus: t.billingStatus,

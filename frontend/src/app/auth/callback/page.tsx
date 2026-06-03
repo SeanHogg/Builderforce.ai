@@ -78,7 +78,7 @@ export default function OAuthCallbackPage() {
           }}
         >
           <Image
-            src="/claw.png"
+            src="/agentHost.png"
             alt=""
             width={48}
             height={48}
@@ -131,7 +131,7 @@ export default function OAuthCallbackPage() {
     >
       <div style={{ textAlign: 'center' }}>
         <Image
-          src="/claw.png"
+          src="/agentHost.png"
           alt=""
           width={56}
           height={56}

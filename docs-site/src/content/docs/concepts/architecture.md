@@ -1,5 +1,5 @@
 ---
-summary: "WebSocket gateway architecture, components, and client flows (CoderClaw Phase 2 enhanced)"
+summary: "WebSocket gateway architecture, components, and client flows (BuilderForce Agents Phase 2 enhanced)"
 read_when:
   - Working on gateway protocol, clients, or transports
 title: "Gateway Architecture"
@@ -11,7 +11,7 @@ Last updated: 2026-02-19
 
 ## Overview
 
-CoderClaw extends [CoderClaw](https://github.com/SeanHogg/coderClaw)'s WebSocket gateway with **Phase 2 distributed runtime capabilities**:
+BuilderForce Agents extends [BuilderForce Agents](https://github.com/SeanHogg/Builderforce.ai)'s WebSocket gateway with **Phase 2 distributed runtime capabilities**:
 
 - A single long‑lived **Gateway** owns all messaging surfaces (WhatsApp via
   Baileys, Telegram via grammY, Slack, Discord, Signal, iMessage, WebChat).
@@ -23,8 +23,8 @@ CoderClaw extends [CoderClaw](https://github.com/SeanHogg/coderClaw)'s WebSocket
   declare `role: node` with explicit caps/commands.
 - One Gateway per host; it is the only place that opens a WhatsApp session.
 - The **canvas host** is served by the Gateway HTTP server under:
-  - `/__coderclaw__/canvas/` (agent-editable HTML/CSS/JS)
-  - `/__coderclaw__/a2ui/` (A2UI host)
+  - `/__builderforce__/canvas/` (agent-editable HTML/CSS/JS)
+  - `/__builderforce__/a2ui/` (A2UI host)
     It uses the same port as the Gateway (default `18789`).
 
 ## Components and flows
@@ -113,7 +113,7 @@ sequenceDiagram
 - After handshake:
   - Requests: `{type:"req", id, method, params}` → `{type:"res", id, ok, payload|error}`
   - Events: `{type:"event", event, payload, seq?, stateVersion?}`
-- If `CODERCLAW_GATEWAY_TOKEN` (or `--token`) is set, `connect.params.auth.token`
+- If `BUILDERFORCE_AGENTS_GATEWAY_TOKEN` (or `--token`) is set, `connect.params.auth.token`
   must match or the socket closes.
 - Idempotency keys are required for side‑effecting methods (`send`, `agent`) to
   safely retry; the server keeps a short‑lived dedupe cache.
@@ -154,7 +154,7 @@ Details: [Gateway protocol](/gateway/protocol), [Pairing](/channels/pairing),
 
 ## Operations snapshot
 
-- Start: `coderclaw gateway` (foreground, logs to stdout).
+- Start: `builderforce gateway` (foreground, logs to stdout).
 - Health: `health` over WS (also included in `hello-ok`).
 - Supervision: launchd/systemd for auto‑restart.
 

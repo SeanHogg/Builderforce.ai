@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import type { Tenant } from '@/lib/types';
 import { createTenant, completeOnboarding } from '@/lib/auth';
 import { createProject } from '@/lib/api';
-import { InstallCoderClaw } from './InstallCoderClaw';
+import { InstallBuilderForceAgents } from './InstallBuilderForceAgents';
 import { InviteTeamMembers } from './InviteTeamMembers';
 
 // ---------------------------------------------------------------------------
@@ -40,7 +40,7 @@ interface Step {
 const STEPS: Step[] = [
   { id: 'workspace', label: 'Create Workspace', description: 'Set up your organization' },
   { id: 'project',   label: 'Create a Project', description: 'Name your first project' },
-  { id: 'install',   label: 'Install CoderClaw', description: 'Connect your AI agent' },
+  { id: 'install',   label: 'Install BuilderForce Agents', description: 'Connect your AI agent' },
   { id: 'invite',    label: 'Invite Team',       description: 'Bring your teammates' },
 ];
 
@@ -539,7 +539,7 @@ export function OnboardingStepper({
 
           {/* ── Step 3: Install ── */}
           {currentStepId === 'install' && (
-            <InstallCoderClaw tenantToken={tenantToken} />
+            <InstallBuilderForceAgents tenantToken={tenantToken} />
           )}
 
           {/* ── Step 4: Invite ── */}

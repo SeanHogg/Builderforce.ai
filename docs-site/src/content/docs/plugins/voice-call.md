@@ -1,14 +1,14 @@
 ---
 summary: "Voice Call plugin: outbound + inbound calls via Twilio/Telnyx/Plivo (plugin install + config + CLI)"
 read_when:
-  - You want to place an outbound voice call from CoderClaw
+  - You want to place an outbound voice call from BuilderForce Agents
   - You are configuring or developing the voice-call plugin
 title: "Voice Call Plugin"
 ---
 
 # Voice Call (plugin)
 
-Voice calls for CoderClaw via a plugin. Supports outbound notifications and
+Voice calls for BuilderForce Agents via a plugin. Supports outbound notifications and
 multi-turn conversations with inbound policies.
 
 Current providers:
@@ -23,7 +23,7 @@ Quick mental model:
 - Install plugin
 - Restart Gateway
 - Configure under `plugins.entries.voice-call.config`
-- Use `coderclaw voicecall ...` or the `voice_call` tool
+- Use `builderforce voicecall ...` or the `voice_call` tool
 
 ## Where it runs (local vs remote)
 
@@ -36,7 +36,7 @@ If you use a remote Gateway, install/configure the plugin on the **machine runni
 ### Option A: install from npm (recommended)
 
 ```bash
-coderclaw plugins install @coderclaw/voice-call
+builderforce plugins install @builderforce/voice-call
 ```
 
 Restart the Gateway afterwards.
@@ -44,7 +44,7 @@ Restart the Gateway afterwards.
 ### Option B: install from a local folder (dev, no copying)
 
 ```bash
-coderclaw plugins install ./extensions/voice-call
+builderforce plugins install ./extensions/voice-call
 cd ./extensions/voice-call && pnpm install
 ```
 
@@ -290,13 +290,13 @@ Auto-responses use the agent system. Tune with:
 ## CLI
 
 ```bash
-coderclaw voicecall call --to "+15555550123" --message "Hello from CoderClaw"
-coderclaw voicecall continue --call-id <id> --message "Any questions?"
-coderclaw voicecall speak --call-id <id> --message "One moment"
-coderclaw voicecall end --call-id <id>
-coderclaw voicecall status --call-id <id>
-coderclaw voicecall tail
-coderclaw voicecall expose --mode funnel
+builderforce voicecall call --to "+15555550123" --message "Hello from BuilderForce Agents"
+builderforce voicecall continue --call-id <id> --message "Any questions?"
+builderforce voicecall speak --call-id <id> --message "One moment"
+builderforce voicecall end --call-id <id>
+builderforce voicecall status --call-id <id>
+builderforce voicecall tail
+builderforce voicecall expose --mode funnel
 ```
 
 ## Agent tool

@@ -1,56 +1,56 @@
 /**
  * Team memory routes – /api/teams/memory (P4-5)
  *
- * Cross-claw memory sharing mesh: CoderClaw instances push activity summaries
- * here so all claws in a tenant can recall what peer claws have been working on.
+ * Cross-agentHost memory sharing mesh: BuilderForce Agents instances push activity summaries
+ * here so all agentHosts in a tenant can recall what peer agentHosts have been working on.
  *
- * POST /api/teams/memory  – store a memory entry (claw API key or tenant JWT)
+ * POST /api/teams/memory  – store a memory entry (agentHost API key or tenant JWT)
  * GET  /api/teams/memory  – retrieve recent entries (tenant JWT)
  */
 
 import { Hono } from 'hono';
 import { and, desc, eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { coderclawInstances, teamMemory } from '../../infrastructure/database/schema';
+import { agentHosts, teamMemory } from '../../infrastructure/database/schema';
 import { verifySecret } from '../../infrastructure/auth/HashService';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
-async function verifyClawApiKey(
+async function verifyAgentHostApiKey(
   db: Db,
-  clawId: number,
+  agentHostId: number,
   key: string | undefined,
 ): Promise<{ id: number; tenantId: number } | null> {
   if (!key) return null;
-  const [claw] = await db
-    .select({ id: coderclawInstances.id, tenantId: coderclawInstances.tenantId, apiKeyHash: coderclawInstances.apiKeyHash })
-    .from(coderclawInstances)
-    .where(eq(coderclawInstances.id, clawId));
-  if (!claw) return null;
-  const valid = await verifySecret(key, claw.apiKeyHash);
-  return valid ? claw : null;
+  const [agentHost] = await db
+    .select({ id: agentHosts.id, tenantId: agentHosts.tenantId, apiKeyHash: agentHosts.apiKeyHash })
+    .from(agentHosts)
+    .where(eq(agentHosts.id, agentHostId));
+  if (!agentHost) return null;
+  const valid = await verifySecret(key, agentHost.apiKeyHash);
+  return valid ? agentHost : null;
 }
 
 export function createTeamMemoryRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
   // ── POST /api/teams/memory ────────────────────────────────────────────────
-  // Claw-auth (Authorization: Bearer <key> + X-Claw-Id header) or tenant JWT.
+  // AgentHost-auth (Authorization: Bearer <key> + X-AgentHost-Id header) or tenant JWT.
   router.post('/', async (c) => {
     let tenantId: number | null = null;
-    let resolvedClawIdStr: string | null = null;
+    let resolvedAgentHostIdStr: string | null = null;
 
-    // Try claw-auth first
+    // Try agentHost-auth first
     const authHeader = c.req.header('Authorization');
-    const clawIdHeader = c.req.header('X-Claw-Id');
-    if (authHeader?.startsWith('Bearer ') && clawIdHeader) {
+    const agentHostIdHeader = c.req.header('X-AgentHost-Id');
+    if (authHeader?.startsWith('Bearer ') && agentHostIdHeader) {
       const key = authHeader.slice(7);
-      const id = Number(clawIdHeader);
+      const id = Number(agentHostIdHeader);
       if (Number.isFinite(id) && id > 0) {
-        const claw = await verifyClawApiKey(db, id, key);
-        if (claw) {
-          tenantId = claw.tenantId;
-          resolvedClawIdStr = String(claw.id);
+        const agentHost = await verifyAgentHostApiKey(db, id, key);
+        if (agentHost) {
+          tenantId = agentHost.tenantId;
+          resolvedAgentHostIdStr = String(agentHost.id);
         }
       }
     }
@@ -65,7 +65,7 @@ export function createTeamMemoryRoutes(db: Db): Hono<HonoEnv> {
     if (!tenantId) return c.text('Unauthorized', 401);
 
     const body = await c.req.json<{
-      clawId?: string;
+      agentHostId?: string;
       runId: string;
       summary: string;
       tags?: string[];
@@ -75,14 +75,14 @@ export function createTeamMemoryRoutes(db: Db): Hono<HonoEnv> {
     if (!body.runId?.trim()) return c.json({ error: 'runId is required' }, 400);
     if (!body.summary?.trim()) return c.json({ error: 'summary is required' }, 400);
 
-    const clawId = resolvedClawIdStr ?? body.clawId ?? '';
-    if (!clawId) return c.json({ error: 'clawId is required when not using claw API key auth' }, 400);
+    const agentHostId = resolvedAgentHostIdStr ?? body.agentHostId ?? '';
+    if (!agentHostId) return c.json({ error: 'agentHostId is required when not using agentHost API key auth' }, 400);
 
     const [row] = await db
       .insert(teamMemory)
       .values({
         tenantId,
-        clawId,
+        agentHostId,
         runId:     body.runId.trim(),
         summary:   body.summary.trim(),
         tags:      JSON.stringify(Array.isArray(body.tags) ? body.tags : []),

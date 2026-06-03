@@ -1,6 +1,6 @@
 /**
  * Built-in personas and skills for the marketplace.
- * Ported from coderClawLink; used by marketplace, personas, and skills pages.
+ * Ported from BuilderForce AgentsLink; used by marketplace, personas, and skills pages.
  */
 
 export type PricingModel = 'flat_fee' | 'consumption';
@@ -13,7 +13,7 @@ export interface Persona {
   decisionStyle: string;
   outputPrefix: string;
   capabilities: string[];
-  source: 'builtin' | 'clawhub' | 'project-local' | 'user-global' | 'clawlink-assigned';
+  source: 'builtin' | 'agenthub' | 'project-local' | 'user-global' | 'agentlink-assigned';
   active?: boolean;
   tags?: string[];
   author?: string;
@@ -184,7 +184,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   { name: 'GitHub', slug: 'github', description: 'GitHub operations via gh CLI: issues, PRs, CI runs, code review, API queries.', emoji: '🐙', category: 'Development', tags: ['git', 'ci', 'code-review', 'issues'], author: 'Builderforce', version: '1.0.0', likes: 456, downloads: 2100 },
   { name: 'Coding Agent', slug: 'coding-agent', description: 'Delegate coding tasks to Codex, Claude Code, or Pi agents via background process for building features, reviewing PRs, and refactoring.', emoji: '🧩', category: 'Development', tags: ['coding', 'agents', 'automation'], author: 'Builderforce', version: '1.0.0', likes: 389, downloads: 1800 },
   { name: 'Skill Creator', slug: 'skill-creator', description: 'Create or update AgentSkills. Design, structure, and package skills with scripts, references, and assets.', emoji: '📦', category: 'Development', tags: ['skills', 'packaging', 'authoring'], author: 'Builderforce', version: '1.0.0', likes: 198, downloads: 760 },
-  { name: 'Slack', slug: 'slack', description: 'Control Slack from CoderClaw including reacting to messages and pinning/unpinning items in channels or DMs.', emoji: '💬', category: 'Communication', tags: ['slack', 'messaging', 'chat'], author: 'Builderforce', version: '1.0.0', likes: 267, downloads: 1100 },
+  { name: 'Slack', slug: 'slack', description: 'Control Slack from BuilderForce Agents including reacting to messages and pinning/unpinning items in channels or DMs.', emoji: '💬', category: 'Communication', tags: ['slack', 'messaging', 'chat'], author: 'Builderforce', version: '1.0.0', likes: 267, downloads: 1100 },
   { name: 'Notion', slug: 'notion', description: 'Notion API for creating and managing pages, databases, and blocks.', emoji: '📝', category: 'Productivity', tags: ['notion', 'notes', 'databases'], author: 'Notion', version: '1.0.0', likes: 289, downloads: 1300 },
   { name: 'Gemini', slug: 'gemini', description: 'Gemini CLI for one-shot Q&A, summaries, and generation.', emoji: '♊️', category: 'AI & ML', tags: ['gemini', 'ai', 'generation'], author: 'Google', version: '1.0.0', likes: 278, downloads: 1200 },
   { name: 'Weather', slug: 'weather', description: 'Get current weather and forecasts via wttr.in or Open-Meteo. No API key needed.', emoji: '🌤️', category: 'Utilities', tags: ['weather', 'forecasts'], author: 'wttr.in', version: '1.0.0', likes: 234, downloads: 1200 },

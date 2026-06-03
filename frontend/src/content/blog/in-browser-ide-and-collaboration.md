@@ -1,7 +1,7 @@
 ---
 title: The In-Browser IDE — Full-Stack Development Without a Local Setup
 date: 2026-03-15
-description: How Builderforce's in-browser IDE works — WebContainers, Monaco editor, real-time collaboration, AI-pair programming, and how it connects to your CoderClaw agents for seamless human-AI co-authorship.
+description: How Builderforce's in-browser IDE works — WebContainers, Monaco editor, real-time collaboration, AI-pair programming, and how it connects to your BuilderForce Agents agents for seamless human-AI co-authorship.
 tags: [ide, webcontainers, collaboration, monaco, ai-coding, browser]
 author: Sean Hogg
 ---
@@ -47,7 +47,7 @@ The IDE has a three-pane layout:
 
 ### Left Panel — File Explorer
 
-Browse, create, rename, and delete files. The file tree reflects the live WebContainers file system — changes you make in the editor appear immediately, and changes made by agents (via CoderClaw) appear as they are written.
+Browse, create, rename, and delete files. The file tree reflects the live WebContainers file system — changes you make in the editor appear immediately, and changes made by agents (via BuilderForce Agents) appear as they are written.
 
 ### Centre Panel — Monaco Editor
 
@@ -105,19 +105,19 @@ Collaboration is powered by **Yjs** — a CRDT-based real-time sync library — 
 
 There is no "owner" — every collaborator has equal access to the file system, terminal, and editor. The underlying WebContainer state is consistent for all participants.
 
-Collaboration sessions can include both humans and agents. If a CoderClaw agent is working on the same project, its file edits arrive as live changes in the editor — you watch the agent write code in the same window where you are reviewing it.
+Collaboration sessions can include both humans and agents. If a BuilderForce Agents agent is working on the same project, its file edits arrive as live changes in the editor — you watch the agent write code in the same window where you are reviewing it.
 
 ---
 
-## Connecting to CoderClaw
+## Connecting to BuilderForce Agents
 
-The IDE and CoderClaw are two ways to interact with the same project. The IDE is the browser-native interface; CoderClaw is the self-hosted agentic runtime. They share:
+The IDE and BuilderForce Agents are two ways to interact with the same project. The IDE is the browser-native interface; BuilderForce Agents is the self-hosted agentic runtime. They share:
 
-- **The same file system** — CoderClaw syncs its workspace to Builderforce; the IDE reads from the synced state
-- **The same task board** — tasks created in the IDE's task panel are the same tasks CoderClaw executes
-- **The same chat history** — messages you send in the IDE's chat are relayed to the active CoderClaw session; CoderClaw's responses appear in the IDE chat in real time
+- **The same file system** — BuilderForce Agents syncs its workspace to Builderforce; the IDE reads from the synced state
+- **The same task board** — tasks created in the IDE's task panel are the same tasks BuilderForce Agents executes
+- **The same chat history** — messages you send in the IDE's chat are relayed to the active BuilderForce Agents session; BuilderForce Agents's responses appear in the IDE chat in real time
 
-This means the IDE is not just a code editor — it is a **window into the agent's work**. While CoderClaw executes a workflow on your server, you can watch the files change in the IDE, follow the agent's reasoning in the chat panel, and intervene if something looks wrong — all without leaving the browser.
+This means the IDE is not just a code editor — it is a **window into the agent's work**. While BuilderForce Agents executes a workflow on your server, you can watch the files change in the IDE, follow the agent's reasoning in the chat panel, and intervene if something looks wrong — all without leaving the browser.
 
 ---
 
@@ -143,13 +143,13 @@ The IDE has built-in git support for projects with a source control integration 
 - **PR creation** — open a pull request directly from the IDE when your work is ready
 - **Branch switching** — checkout branches, create feature branches, merge
 
-Changes committed in the IDE trigger CoderClaw's directory sync — the claw's local workspace is updated to match, keeping IDE and local agent state in sync.
+Changes committed in the IDE trigger BuilderForce Agents's directory sync — the agentHost's local workspace is updated to match, keeping IDE and local agent state in sync.
 
 ---
 
-## When to Use the IDE vs. CoderClaw
+## When to Use the IDE vs. BuilderForce Agents
 
-| Use the IDE | Use CoderClaw |
+| Use the IDE | Use BuilderForce Agents |
 |---|---|
 | Exploring and editing files directly | Running long autonomous workflows |
 | Pair programming with AI on a specific problem | Batch task execution across a project |
@@ -157,7 +157,7 @@ Changes committed in the IDE trigger CoderClaw's directory sync — the claw's l
 | Real-time collaboration with teammates | Unattended overnight work |
 | Running quick terminal commands | Persistent background services |
 
-The two are designed to be used together — start a feature in the IDE with AI assistance, hand off the implementation to a CoderClaw workflow, and review the results in the IDE when the agent is done.
+The two are designed to be used together — start a feature in the IDE with AI assistance, hand off the implementation to a BuilderForce Agents workflow, and review the results in the IDE when the agent is done.
 
 ---
 
@@ -167,9 +167,9 @@ The two are designed to be used together — start a feature in the IDE with AI 
 
 **Use the terminal for one-off commands, the agent for repeated patterns.** If you are running `npm test` more than three times to debug the same issue, describe the failure to the AI chat and let it run the iteration loop.
 
-**Commit frequently in the IDE.** Small, frequent commits give both you and CoderClaw a clean history to reason about. Large uncommitted changesets confuse agents that read git history for context.
+**Commit frequently in the IDE.** Small, frequent commits give both you and BuilderForce Agents a clean history to reason about. Large uncommitted changesets confuse agents that read git history for context.
 
-**Assign the IDE project to a CoderClaw instance.** The IDE is more powerful when a claw is attached — the AI chat in the right panel can dispatch to the full agent runtime, not just the in-browser model.
+**Assign the IDE project to a BuilderForce Agents instance.** The IDE is more powerful when a agentHost is attached — the AI chat in the right panel can dispatch to the full agent runtime, not just the in-browser model.
 
 ---
 
@@ -177,5 +177,5 @@ The two are designed to be used together — start a feature in the IDE with AI 
 
 - Open a project in the [IDE](/ide) and explore the three-pane layout
 - Invite a teammate to collaborate — share the session URL from the IDE header
-- Read [CoderClaw and Agent Integration](/blog/coderclaw-and-agent-integration) to understand how CoderClaw extends what you build in the IDE
+- Read [BuilderForce Agents and Agent Integration](/blog/agents-and-agent-integration) to understand how BuilderForce Agents extends what you build in the IDE
 - Explore [WebGPU and LoRA Training](/blog/webgpu-lora-explained) if you want to fine-tune models for your specific codebase directly in the browser

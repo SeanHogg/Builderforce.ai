@@ -1,12 +1,12 @@
 ---
-summary: "CLI reference for `coderclaw nodes` (list/status/approve/invoke, camera/canvas/screen)"
+summary: "CLI reference for `builderforce nodes` (list/status/approve/invoke, camera/canvas/screen)"
 read_when:
   - You’re managing paired nodes (cameras, screen, canvas)
   - You need to approve requests or invoke node commands
 title: "nodes"
 ---
 
-# `coderclaw nodes`
+# `builderforce nodes`
 
 Manage paired nodes (devices) and invoke node capabilities.
 
@@ -23,14 +23,14 @@ Common options:
 ## Common commands
 
 ```bash
-coderclaw nodes list
-coderclaw nodes list --connected
-coderclaw nodes list --last-connected 24h
-coderclaw nodes pending
-coderclaw nodes approve <requestId>
-coderclaw nodes status
-coderclaw nodes status --connected
-coderclaw nodes status --last-connected 24h
+builderforce nodes list
+builderforce nodes list --connected
+builderforce nodes list --last-connected 24h
+builderforce nodes pending
+builderforce nodes approve <requestId>
+builderforce nodes status
+builderforce nodes status --connected
+builderforce nodes status --last-connected 24h
 ```
 
 `nodes list` prints pending/paired tables. Paired rows include the most recent connect age (Last Connect).
@@ -40,10 +40,10 @@ filter to nodes that connected within a duration (e.g. `24h`, `7d`).
 ## Invoke / run
 
 ```bash
-coderclaw nodes invoke --node <id|name|ip> --command <command> --params <json>
-coderclaw nodes run --node <id|name|ip> <command...>
-coderclaw nodes run --raw "git status"
-coderclaw nodes run --agent main --node <id|name|ip> --raw "git status"
+builderforce nodes invoke --node <id|name|ip> --command <command> --params <json>
+builderforce nodes run --node <id|name|ip> <command...>
+builderforce nodes run --raw "git status"
+builderforce nodes run --agent main --node <id|name|ip> --raw "git status"
 ```
 
 Invoke flags:

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getPostBySlug } from '@/lib/blogData';
 import { BRAND } from '@/lib/content';
+import { pageMetadata } from '@/lib/seo';
 import BlogPostClient from './BlogPostClient';
 
 export const runtime = 'edge';
@@ -15,23 +16,21 @@ export async function generateMetadata({
   if (!post) {
     return { title: 'Post Not Found' };
   }
-  return {
+  const base = pageMetadata({
     title: post.title,
     description: post.description,
-    alternates: { canonical: `/blog/${slug}` },
+    path: `/blog/${slug}`,
+    type: 'article',
+  });
+  return {
+    ...base,
     openGraph: {
-      title: post.title,
-      description: post.description,
-      url: `${BRAND.url}/blog/${slug}`,
+      ...base.openGraph,
       type: 'article',
       publishedTime: post.date,
       modifiedTime: post.date,
       authors: [post.author || BRAND.founder.name],
       tags: post.tags,
-    },
-    twitter: {
-      title: post.title,
-      description: post.description,
     },
   };
 }

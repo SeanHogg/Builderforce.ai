@@ -1,5 +1,5 @@
 ---
-summary: "Overview of CoderClaw onboarding options and flows"
+summary: "Overview of BuilderForce Agents onboarding options and flows"
 read_when:
   - Choosing an onboarding path
   - Setting up a new environment
@@ -9,7 +9,7 @@ sidebarTitle: "Onboarding Overview"
 
 # Onboarding Overview
 
-CoderClaw supports multiple onboarding paths depending on where the Gateway runs
+BuilderForce Agents supports multiple onboarding paths depending on where the Gateway runs
 and how you prefer to configure providers.
 
 ## Choose your onboarding path
@@ -22,18 +22,18 @@ and how you prefer to configure providers.
 Run the wizard in a terminal:
 
 ```bash
-coderclaw onboard
+builderforce onboard
 ```
 
 Use the CLI wizard when you want full control of the Gateway, workspace,
 channels, and skills. Docs:
 
 - [Onboarding Wizard (CLI)](/start/wizard)
-- [`coderclaw onboard` command](/cli/onboard)
+- [`builderforce onboard` command](/cli/onboard)
 
 ## macOS app onboarding
 
-Use the CoderClaw app when you want a fully guided setup on macOS. Docs:
+Use the BuilderForce Agents app when you want a fully guided setup on macOS. Docs:
 
 - [Onboarding (macOS App)](/start/onboarding)
 

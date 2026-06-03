@@ -46,8 +46,8 @@ describe('BrowserGitClient', () => {
 
   it('creates and checks out a working branch', async () => {
     const ops = fakeOps();
-    await base(ops, fakeFs()).createBranch('claw/task-1');
-    expect(ops.branch).toHaveBeenCalledWith({ dir: '/repo', ref: 'claw/task-1', checkout: true });
+    await base(ops, fakeFs()).createBranch('agentHost/task-1');
+    expect(ops.branch).toHaveBeenCalledWith({ dir: '/repo', ref: 'agentHost/task-1', checkout: true });
   });
 
   it('writes files (creating parent dirs) into the working tree', async () => {
@@ -73,11 +73,11 @@ describe('BrowserGitClient', () => {
 
   it('pushes the branch through the proxy', async () => {
     const ops = fakeOps();
-    const res = await base(ops, fakeFs()).push('claw/task-1');
+    const res = await base(ops, fakeFs()).push('agentHost/task-1');
     expect(ops.push).toHaveBeenCalledWith({
       dir: '/repo',
       url: 'https://api/api/git-proxy/r1',
-      ref: 'claw/task-1',
+      ref: 'agentHost/task-1',
       headers: { Authorization: 'Bearer t' },
     });
     expect(res.ok).toBe(true);

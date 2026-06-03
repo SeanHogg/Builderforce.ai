@@ -14,18 +14,18 @@ x-i18n:
 
 # 群组
 
-CoderClaw 在各平台上统一处理群聊：WhatsApp、Telegram、Discord、Slack、Signal、iMessage、Microsoft Teams。
+BuilderForce Agents 在各平台上统一处理群聊：WhatsApp、Telegram、Discord、Slack、Signal、iMessage、Microsoft Teams。
 
 ## 新手入门（2 分钟）
 
-CoderClaw"运行"在你自己的消息账户上。没有单独的 WhatsApp 机器人用户。如果**你**在一个群组中，CoderClaw 就可以看到该群组并在其中回复。
+BuilderForce Agents"运行"在你自己的消息账户上。没有单独的 WhatsApp 机器人用户。如果**你**在一个群组中，BuilderForce Agents 就可以看到该群组并在其中回复。
 
 默认行为：
 
 - 群组受限（`groupPolicy: "allowlist"`）。
 - 除非你明确禁用提及限制，否则回复需要 @ 提及。
 
-解释：允许列表中的发送者可以通过提及来触发 CoderClaw。
+解释：允许列表中的发送者可以通过提及来触发 BuilderForce Agents。
 
 > 简而言之
 >
@@ -235,7 +235,7 @@ requireMention? 是 -> 被提及? 否 -> 仅存储为上下文
       {
         id: "main",
         groupChat: {
-          mentionPatterns: ["@coderclaw", "coderclaw", "\\+15555550123"],
+          mentionPatterns: ["@builderforce", "builderforce", "\\+15555550123"],
           historyLimit: 50,
         },
       },

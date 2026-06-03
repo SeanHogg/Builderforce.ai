@@ -5,13 +5,24 @@ export default defineConfig({
   site: 'https://builderforce.ai',
   base: '/docs',
   trailingSlash: 'never',
+  // Rebrand: old CoderClaw doc slugs redirect to the BuilderForce Agents slugs.
+  redirects: {
+    '/docs/coderclaw': '/docs/agents',
+    '/docs/coderclaw-overview': '/docs/agents-overview',
+    '/docs/coderclaw-architecture': '/docs/agents-architecture',
+    '/docs/coderclaw-vs-alternatives': '/docs/agents-vs-alternatives',
+    '/docs/coderclaw-workflows': '/docs/agents-workflows',
+    '/docs/coderclaw-link': '/docs/agents-link',
+    '/docs/start/coderclaw': '/docs/start/agents',
+    '/docs/tools/clawhub': '/docs/tools/agenthub',
+  },
   integrations: [
     starlight({
-      title: 'Builderforce.ai Docs',
+      title: 'BuilderForce Agents Docs',
       description:
-        'Official Builderforce.ai documentation — covering CoderClaw self-hosted agents, the orchestration portal, channels, tools, models, gateway, CLI, and troubleshooting.',
+        'Official Builderforce.ai documentation — covering BuilderForce Agents self-hosted agents, the orchestration portal, channels, tools, models, gateway, CLI, and troubleshooting.',
       logo: {
-        src: './src/assets/coderclaw.png',
+        src: './src/assets/builderforce-agents.png',
         alt: 'Builderforce.ai',
         replacesTitle: false,
       },
@@ -37,7 +48,7 @@ export default defineConfig({
         },
       ],
       social: [
-        { icon: 'github', label: 'GitHub', href: 'https://github.com/SeanHogg/coderClaw' },
+        { icon: 'github', label: 'GitHub', href: 'https://github.com/SeanHogg/Builderforce.ai' },
         { icon: 'discord', label: 'Discord', href: 'https://discord.gg/9gUsc2sNG6' },
       ],
       customCss: ['./src/styles/custom.css'],

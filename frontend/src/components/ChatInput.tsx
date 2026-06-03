@@ -41,7 +41,7 @@ export interface ChatInputProps {
   /** Pending attachments to display (e.g. before send). */
   pendingAttachments?: ChatInputAttachment[];
   onRemoveAttachment?: (key: string) => void;
-  /** Optional link below the row (e.g. "Manage workforce / claws"). */
+  /** Optional link below the row (e.g. "Manage workforce / agentHosts"). */
   secondaryLink?: { label: string; href: string };
   className?: string;
 }

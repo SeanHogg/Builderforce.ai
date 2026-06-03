@@ -13,7 +13,7 @@ A **node** is a companion device (macOS/iOS/Android/headless) that connects to t
 
 Legacy transport: [Bridge protocol](/gateway/bridge-protocol) (TCP JSONL; deprecated/removed for current nodes).
 
-macOS can also run in **node mode**: the menubar app connects to the Gateway’s WS server and exposes its local canvas/camera commands as a node (so `coderclaw nodes …` works against this Mac).
+macOS can also run in **node mode**: the menubar app connects to the Gateway’s WS server and exposes its local canvas/camera commands as a node (so `builderforce nodes …` works against this Mac).
 
 Notes:
 
@@ -29,17 +29,17 @@ creates a device pairing request for `role: node`. Approve via the devices CLI (
 Quick CLI:
 
 ```bash
-coderclaw devices list
-coderclaw devices approve <requestId>
-coderclaw devices reject <requestId>
-coderclaw nodes status
-coderclaw nodes describe --node <idOrNameOrIp>
+builderforce devices list
+builderforce devices approve <requestId>
+builderforce devices reject <requestId>
+builderforce nodes status
+builderforce nodes describe --node <idOrNameOrIp>
 ```
 
 Notes:
 
 - `nodes status` marks a node as **paired** when its device pairing role includes `node`.
-- `node.pair.*` (CLI: `coderclaw nodes pending/approve/reject`) is a separate gateway-owned
+- `node.pair.*` (CLI: `builderforce nodes pending/approve/reject`) is a separate gateway-owned
   node pairing store; it does **not** gate the WS `connect` handshake.
 
 ## Remote node host (system.run)
@@ -52,14 +52,14 @@ forwards `exec` calls to the **node host** when `host=node` is selected.
 
 - **Gateway host**: receives messages, runs the model, routes tool calls.
 - **Node host**: executes `system.run`/`system.which` on the node machine.
-- **Approvals**: enforced on the node host via `~/.coderclaw/exec-approvals.json`.
+- **Approvals**: enforced on the node host via `~/.builderforce/exec-approvals.json`.
 
 ### Start a node host (foreground)
 
 On the node machine:
 
 ```bash
-coderclaw node run --host <gateway-host> --port 18789 --display-name "Build Node"
+builderforce node run --host <gateway-host> --port 18789 --display-name "Build Node"
 ```
 
 ### Remote gateway via SSH tunnel (loopback bind)
@@ -75,20 +75,20 @@ Example (node host -> gateway host):
 ssh -N -L 18790:127.0.0.1:18789 user@gateway-host
 
 # Terminal B: export the gateway token and connect through the tunnel
-export CODERCLAW_GATEWAY_TOKEN="<gateway-token>"
-coderclaw node run --host 127.0.0.1 --port 18790 --display-name "Build Node"
+export BUILDERFORCE_AGENTS_GATEWAY_TOKEN="<gateway-token>"
+builderforce node run --host 127.0.0.1 --port 18790 --display-name "Build Node"
 ```
 
 Notes:
 
-- The token is `gateway.auth.token` from the gateway config (`~/.coderclaw/coderclaw.json` on the gateway host).
-- `coderclaw node run` reads `CODERCLAW_GATEWAY_TOKEN` for auth.
+- The token is `gateway.auth.token` from the gateway config (`~/.builderforce/builderforce.json` on the gateway host).
+- `builderforce node run` reads `BUILDERFORCE_AGENTS_GATEWAY_TOKEN` for auth.
 
 ### Start a node host (service)
 
 ```bash
-coderclaw node install --host <gateway-host> --port 18789 --display-name "Build Node"
-coderclaw node restart
+builderforce node install --host <gateway-host> --port 18789 --display-name "Build Node"
+builderforce node restart
 ```
 
 ### Pair + name
@@ -96,35 +96,35 @@ coderclaw node restart
 On the gateway host:
 
 ```bash
-coderclaw nodes pending
-coderclaw nodes approve <requestId>
-coderclaw nodes list
+builderforce nodes pending
+builderforce nodes approve <requestId>
+builderforce nodes list
 ```
 
 Naming options:
 
-- `--display-name` on `coderclaw node run` / `coderclaw node install` (persists in `~/.coderclaw/node.json` on the node).
-- `coderclaw nodes rename --node <id|name|ip> --name "Build Node"` (gateway override).
+- `--display-name` on `builderforce node run` / `builderforce node install` (persists in `~/.builderforce/node.json` on the node).
+- `builderforce nodes rename --node <id|name|ip> --name "Build Node"` (gateway override).
 
 ### Allowlist the commands
 
 Exec approvals are **per node host**. Add allowlist entries from the gateway:
 
 ```bash
-coderclaw approvals allowlist add --node <id|name|ip> "/usr/bin/uname"
-coderclaw approvals allowlist add --node <id|name|ip> "/usr/bin/sw_vers"
+builderforce approvals allowlist add --node <id|name|ip> "/usr/bin/uname"
+builderforce approvals allowlist add --node <id|name|ip> "/usr/bin/sw_vers"
 ```
 
-Approvals live on the node host at `~/.coderclaw/exec-approvals.json`.
+Approvals live on the node host at `~/.builderforce/exec-approvals.json`.
 
 ### Point exec at the node
 
 Configure defaults (gateway config):
 
 ```bash
-coderclaw config set tools.exec.host node
-coderclaw config set tools.exec.security allowlist
-coderclaw config set tools.exec.node "<id-or-name>"
+builderforce config set tools.exec.host node
+builderforce config set tools.exec.security allowlist
+builderforce config set tools.exec.node "<id-or-name>"
 ```
 
 Or per session:
@@ -147,7 +147,7 @@ Related:
 Low-level (raw RPC):
 
 ```bash
-coderclaw nodes invoke --node <idOrNameOrIp> --command canvas.eval --params '{"javaScript":"location.href"}'
+builderforce nodes invoke --node <idOrNameOrIp> --command canvas.eval --params '{"javaScript":"location.href"}'
 ```
 
 Higher-level helpers exist for the common “give the agent a MEDIA attachment” workflows.
@@ -159,17 +159,17 @@ If the node is showing the Canvas (WebView), `canvas.snapshot` returns `{ format
 CLI helper (writes to a temp file and prints `MEDIA:<path>`):
 
 ```bash
-coderclaw nodes canvas snapshot --node <idOrNameOrIp> --format png
-coderclaw nodes canvas snapshot --node <idOrNameOrIp> --format jpg --max-width 1200 --quality 0.9
+builderforce nodes canvas snapshot --node <idOrNameOrIp> --format png
+builderforce nodes canvas snapshot --node <idOrNameOrIp> --format jpg --max-width 1200 --quality 0.9
 ```
 
 ### Canvas controls
 
 ```bash
-coderclaw nodes canvas present --node <idOrNameOrIp> --target https://example.com
-coderclaw nodes canvas hide --node <idOrNameOrIp>
-coderclaw nodes canvas navigate https://example.com --node <idOrNameOrIp>
-coderclaw nodes canvas eval --node <idOrNameOrIp> --js "document.title"
+builderforce nodes canvas present --node <idOrNameOrIp> --target https://example.com
+builderforce nodes canvas hide --node <idOrNameOrIp>
+builderforce nodes canvas navigate https://example.com --node <idOrNameOrIp>
+builderforce nodes canvas eval --node <idOrNameOrIp> --js "document.title"
 ```
 
 Notes:
@@ -180,9 +180,9 @@ Notes:
 ### A2UI (Canvas)
 
 ```bash
-coderclaw nodes canvas a2ui push --node <idOrNameOrIp> --text "Hello"
-coderclaw nodes canvas a2ui push --node <idOrNameOrIp> --jsonl ./payload.jsonl
-coderclaw nodes canvas a2ui reset --node <idOrNameOrIp>
+builderforce nodes canvas a2ui push --node <idOrNameOrIp> --text "Hello"
+builderforce nodes canvas a2ui push --node <idOrNameOrIp> --jsonl ./payload.jsonl
+builderforce nodes canvas a2ui reset --node <idOrNameOrIp>
 ```
 
 Notes:
@@ -194,16 +194,16 @@ Notes:
 Photos (`jpg`):
 
 ```bash
-coderclaw nodes camera list --node <idOrNameOrIp>
-coderclaw nodes camera snap --node <idOrNameOrIp>            # default: both facings (2 MEDIA lines)
-coderclaw nodes camera snap --node <idOrNameOrIp> --facing front
+builderforce nodes camera list --node <idOrNameOrIp>
+builderforce nodes camera snap --node <idOrNameOrIp>            # default: both facings (2 MEDIA lines)
+builderforce nodes camera snap --node <idOrNameOrIp> --facing front
 ```
 
 Video clips (`mp4`):
 
 ```bash
-coderclaw nodes camera clip --node <idOrNameOrIp> --duration 10s
-coderclaw nodes camera clip --node <idOrNameOrIp> --duration 3000 --no-audio
+builderforce nodes camera clip --node <idOrNameOrIp> --duration 10s
+builderforce nodes camera clip --node <idOrNameOrIp> --duration 3000 --no-audio
 ```
 
 Notes:
@@ -217,8 +217,8 @@ Notes:
 Nodes expose `screen.record` (mp4). Example:
 
 ```bash
-coderclaw nodes screen record --node <idOrNameOrIp> --duration 10s --fps 10
-coderclaw nodes screen record --node <idOrNameOrIp> --duration 10s --fps 10 --no-audio
+builderforce nodes screen record --node <idOrNameOrIp> --duration 10s --fps 10
+builderforce nodes screen record --node <idOrNameOrIp> --duration 10s --fps 10 --no-audio
 ```
 
 Notes:
@@ -236,8 +236,8 @@ Nodes expose `location.get` when Location is enabled in settings.
 CLI helper:
 
 ```bash
-coderclaw nodes location get --node <idOrNameOrIp>
-coderclaw nodes location get --node <idOrNameOrIp> --accuracy precise --max-age 15000 --location-timeout 10000
+builderforce nodes location get --node <idOrNameOrIp>
+builderforce nodes location get --node <idOrNameOrIp> --accuracy precise --max-age 15000 --location-timeout 10000
 ```
 
 Notes:
@@ -253,7 +253,7 @@ Android nodes can expose `sms.send` when the user grants **SMS** permission and 
 Low-level invoke:
 
 ```bash
-coderclaw nodes invoke --node <idOrNameOrIp> --command sms.send --params '{"to":"+15555550123","message":"Hello from CoderClaw"}'
+builderforce nodes invoke --node <idOrNameOrIp> --command sms.send --params '{"to":"+15555550123","message":"Hello from BuilderForce Agents"}'
 ```
 
 Notes:
@@ -269,8 +269,8 @@ The headless node host exposes `system.run`, `system.which`, and `system.execApp
 Examples:
 
 ```bash
-coderclaw nodes run --node <idOrNameOrIp> -- echo "Hello from mac node"
-coderclaw nodes notify --node <idOrNameOrIp> --title "Ping" --body "Gateway ready"
+builderforce nodes run --node <idOrNameOrIp> -- echo "Hello from mac node"
+builderforce nodes notify --node <idOrNameOrIp> --title "Ping" --body "Gateway ready"
 ```
 
 Notes:
@@ -282,7 +282,7 @@ Notes:
 - Node hosts ignore `PATH` overrides. If you need extra PATH entries, configure the node host service environment (or install tools in standard locations) instead of passing `PATH` via `--env`.
 - On macOS node mode, `system.run` is gated by exec approvals in the macOS app (Settings → Exec approvals).
   Ask/allowlist/full behave the same as the headless node host; denied prompts return `SYSTEM_RUN_DENIED`.
-- On headless node host, `system.run` is gated by exec approvals (`~/.coderclaw/exec-approvals.json`).
+- On headless node host, `system.run` is gated by exec approvals (`~/.builderforce/exec-approvals.json`).
 
 ## Exec node binding
 
@@ -292,21 +292,21 @@ This sets the default node for `exec host=node` (and can be overridden per agent
 Global default:
 
 ```bash
-coderclaw config set tools.exec.node "node-id-or-name"
+builderforce config set tools.exec.node "node-id-or-name"
 ```
 
 Per-agent override:
 
 ```bash
-coderclaw config get agents.list
-coderclaw config set agents.list[0].tools.exec.node "node-id-or-name"
+builderforce config get agents.list
+builderforce config set agents.list[0].tools.exec.node "node-id-or-name"
 ```
 
 Unset to allow any node:
 
 ```bash
-coderclaw config unset tools.exec.node
-coderclaw config unset agents.list[0].tools.exec.node
+builderforce config unset tools.exec.node
+builderforce config unset agents.list[0].tools.exec.node
 ```
 
 ## Permissions map
@@ -315,28 +315,28 @@ Nodes may include a `permissions` map in `node.list` / `node.describe`, keyed by
 
 ## Headless node host (cross-platform)
 
-CoderClaw can run a **headless node host** (no UI) that connects to the Gateway
+BuilderForce Agents can run a **headless node host** (no UI) that connects to the Gateway
 WebSocket and exposes `system.run` / `system.which`. This is useful on Linux/Windows
 or for running a minimal node alongside a server.
 
 Start it:
 
 ```bash
-coderclaw node run --host <gateway-host> --port 18789
+builderforce node run --host <gateway-host> --port 18789
 ```
 
 Notes:
 
 - Pairing is still required (the Gateway will show a node approval prompt).
-- The node host stores its node id, token, display name, and gateway connection info in `~/.coderclaw/node.json`.
-- Exec approvals are enforced locally via `~/.coderclaw/exec-approvals.json`
+- The node host stores its node id, token, display name, and gateway connection info in `~/.builderforce/node.json`.
+- Exec approvals are enforced locally via `~/.builderforce/exec-approvals.json`
   (see [Exec approvals](/tools/exec-approvals)).
 - On macOS, the headless node host prefers the companion app exec host when reachable and falls
-  back to local execution if the app is unavailable. Set `CODERCLAW_NODE_EXEC_HOST=app` to require
-  the app, or `CODERCLAW_NODE_EXEC_FALLBACK=0` to disable fallback.
+  back to local execution if the app is unavailable. Set `BUILDERFORCE_AGENTS_NODE_EXEC_HOST=app` to require
+  the app, or `BUILDERFORCE_AGENTS_NODE_EXEC_FALLBACK=0` to disable fallback.
 - Add `--tls` / `--tls-fingerprint` when the Gateway WS uses TLS.
 
 ## Mac node mode
 
-- The macOS menubar app connects to the Gateway WS server as a node (so `coderclaw nodes …` works against this Mac).
+- The macOS menubar app connects to the Gateway WS server as a node (so `builderforce nodes …` works against this Mac).
 - In remote mode, the app opens an SSH tunnel for the Gateway port and connects to `localhost`.

@@ -1,7 +1,7 @@
 /**
  * Model Abstraction Layer — BuilderForce.ai
  *
- * Defines the pluggable ModelProvider interface so that CoderClaw agents
+ * Defines the pluggable ModelProvider interface so that BuilderForce Agents agents
  * can switch between Mamba (on-device WebGPU) and external LLMs without
  * changing agent logic.
  *

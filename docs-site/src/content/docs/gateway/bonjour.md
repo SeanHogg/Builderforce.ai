@@ -8,7 +8,7 @@ title: "Bonjour Discovery"
 
 # Bonjour / mDNS discovery
 
-CoderClaw uses Bonjour (mDNS / DNS‑SD) as a **LAN‑only convenience** to discover
+BuilderForce Agents uses Bonjour (mDNS / DNS‑SD) as a **LAN‑only convenience** to discover
 an active Gateway (WebSocket endpoint). It is best‑effort and does **not** replace SSH or
 Tailnet-based connectivity.
 
@@ -21,12 +21,12 @@ boundary. You can keep the same discovery UX by switching to **unicast DNS‑SD*
 High‑level steps:
 
 1. Run a DNS server on the gateway host (reachable over Tailnet).
-2. Publish DNS‑SD records for `_coderclaw-gw._tcp` under a dedicated zone
-   (example: `coderclaw.internal.`).
+2. Publish DNS‑SD records for `_builderforce-gw._tcp` under a dedicated zone
+   (example: `builderforce.internal.`).
 3. Configure Tailscale **split DNS** so your chosen domain resolves via that
    DNS server for clients (including iOS).
 
-CoderClaw supports any discovery domain; `coderclaw.internal.` is just an example.
+BuilderForce Agents supports any discovery domain; `builderforce.internal.` is just an example.
 iOS/Android nodes browse both `local.` and your configured wide‑area domain.
 
 ### Gateway config (recommended)
@@ -41,19 +41,19 @@ iOS/Android nodes browse both `local.` and your configured wide‑area domain.
 ### One‑time DNS server setup (gateway host)
 
 ```bash
-coderclaw dns setup --apply
+builderforce dns setup --apply
 ```
 
 This installs CoreDNS and configures it to:
 
 - listen on port 53 only on the gateway’s Tailscale interfaces
-- serve your chosen domain (example: `coderclaw.internal.`) from `~/.coderclaw/dns/<domain>.db`
+- serve your chosen domain (example: `builderforce.internal.`) from `~/.builderforce/dns/<domain>.db`
 
 Validate from a tailnet‑connected machine:
 
 ```bash
-dns-sd -B _coderclaw-gw._tcp coderclaw.internal.
-dig @<TAILNET_IPV4> -p 53 _coderclaw-gw._tcp.coderclaw.internal PTR +short
+dns-sd -B _builderforce-gw._tcp builderforce.internal.
+dig @<TAILNET_IPV4> -p 53 _builderforce-gw._tcp.builderforce.internal PTR +short
 ```
 
 ### Tailscale DNS settings
@@ -64,7 +64,7 @@ In the Tailscale admin console:
 - Add split DNS so your discovery domain uses that nameserver.
 
 Once clients accept tailnet DNS, iOS nodes can browse
-`_coderclaw-gw._tcp` in your discovery domain without multicast.
+`_builderforce-gw._tcp` in your discovery domain without multicast.
 
 ### Gateway listener security (recommended)
 
@@ -73,16 +73,16 @@ access, bind explicitly and keep auth enabled.
 
 For tailnet‑only setups:
 
-- Set `gateway.bind: "tailnet"` in `~/.coderclaw/coderclaw.json`.
+- Set `gateway.bind: "tailnet"` in `~/.builderforce/builderforce.json`.
 - Restart the Gateway (or restart the macOS menubar app).
 
 ## What advertises
 
-Only the Gateway advertises `_coderclaw-gw._tcp`.
+Only the Gateway advertises `_builderforce-gw._tcp`.
 
 ## Service types
 
-- `_coderclaw-gw._tcp` — gateway transport beacon (used by macOS/iOS/Android nodes).
+- `_builderforce-gw._tcp` — gateway transport beacon (used by macOS/iOS/Android nodes).
 
 ## TXT keys (non‑secret hints)
 
@@ -97,7 +97,7 @@ The Gateway advertises small non‑secret hints to make UI flows convenient:
 - `canvasPort=<port>` (only when the canvas host is enabled; currently the same as `gatewayPort`)
 - `sshPort=<port>` (defaults to 22 when not overridden)
 - `transport=gateway`
-- `cliPath=<path>` (optional; absolute path to a runnable `coderclaw` entrypoint)
+- `cliPath=<path>` (optional; absolute path to a runnable `builderforce` entrypoint)
 - `tailnetDns=<magicdns>` (optional hint when Tailnet is available)
 
 Security notes:
@@ -114,13 +114,13 @@ Useful built‑in tools:
 - Browse instances:
 
   ```bash
-  dns-sd -B _coderclaw-gw._tcp local.
+  dns-sd -B _builderforce-gw._tcp local.
   ```
 
 - Resolve one instance (replace `<instance>`):
 
   ```bash
-  dns-sd -L "<instance>" _coderclaw-gw._tcp local.
+  dns-sd -L "<instance>" _builderforce-gw._tcp local.
   ```
 
 If browsing works but resolving fails, you’re usually hitting a LAN policy or
@@ -137,7 +137,7 @@ The Gateway writes a rolling log file (printed on startup as
 
 ## Debugging on iOS node
 
-The iOS node uses `NWBrowser` to discover `_coderclaw-gw._tcp`.
+The iOS node uses `NWBrowser` to discover `_builderforce-gw._tcp`.
 
 To capture logs:
 
@@ -165,11 +165,11 @@ sequences (e.g. spaces become `\032`).
 
 ## Disabling / configuration
 
-- `CODERCLAW_DISABLE_BONJOUR=1` disables advertising (legacy: `CODERCLAW_DISABLE_BONJOUR`).
-- `gateway.bind` in `~/.coderclaw/coderclaw.json` controls the Gateway bind mode.
-- `CODERCLAW_SSH_PORT` overrides the SSH port advertised in TXT (legacy: `CODERCLAW_SSH_PORT`).
-- `CODERCLAW_TAILNET_DNS` publishes a MagicDNS hint in TXT (legacy: `CODERCLAW_TAILNET_DNS`).
-- `CODERCLAW_CLI_PATH` overrides the advertised CLI path (legacy: `CODERCLAW_CLI_PATH`).
+- `BUILDERFORCE_AGENTS_DISABLE_BONJOUR=1` disables advertising (legacy: `BUILDERFORCE_AGENTS_DISABLE_BONJOUR`).
+- `gateway.bind` in `~/.builderforce/builderforce.json` controls the Gateway bind mode.
+- `BUILDERFORCE_AGENTS_SSH_PORT` overrides the SSH port advertised in TXT (legacy: `BUILDERFORCE_AGENTS_SSH_PORT`).
+- `BUILDERFORCE_AGENTS_TAILNET_DNS` publishes a MagicDNS hint in TXT (legacy: `BUILDERFORCE_AGENTS_TAILNET_DNS`).
+- `BUILDERFORCE_AGENTS_CLI_PATH` overrides the advertised CLI path (legacy: `BUILDERFORCE_AGENTS_CLI_PATH`).
 
 ## Related docs
 

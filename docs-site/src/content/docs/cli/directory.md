@@ -1,12 +1,12 @@
 ---
-summary: "CLI reference for `coderclaw directory` (self, peers, groups)"
+summary: "CLI reference for `builderforce directory` (self, peers, groups)"
 read_when:
   - You want to look up contacts/groups/self ids for a channel
   - You are developing a channel directory adapter
 title: "directory"
 ---
 
-# `coderclaw directory`
+# `builderforce directory`
 
 Directory lookups for channels that support it (contacts/peers, groups, and “me”).
 
@@ -18,15 +18,15 @@ Directory lookups for channels that support it (contacts/peers, groups, and “m
 
 ## Notes
 
-- `directory` is meant to help you find IDs you can paste into other commands (especially `coderclaw message send --target ...`).
+- `directory` is meant to help you find IDs you can paste into other commands (especially `builderforce message send --target ...`).
 - For many channels, results are config-backed (allowlists / configured groups) rather than a live provider directory.
 - Default output is `id` (and sometimes `name`) separated by a tab; use `--json` for scripting.
 
 ## Using results with `message send`
 
 ```bash
-coderclaw directory peers list --channel slack --query "U0"
-coderclaw message send --channel slack --target user:U012ABCDEF --message "hello"
+builderforce directory peers list --channel slack --query "U0"
+builderforce message send --channel slack --target user:U012ABCDEF --message "hello"
 ```
 
 ## ID formats (by channel)
@@ -43,21 +43,21 @@ coderclaw message send --channel slack --target user:U012ABCDEF --message "hello
 ## Self (“me”)
 
 ```bash
-coderclaw directory self --channel zalouser
+builderforce directory self --channel zalouser
 ```
 
 ## Peers (contacts/users)
 
 ```bash
-coderclaw directory peers list --channel zalouser
-coderclaw directory peers list --channel zalouser --query "name"
-coderclaw directory peers list --channel zalouser --limit 50
+builderforce directory peers list --channel zalouser
+builderforce directory peers list --channel zalouser --query "name"
+builderforce directory peers list --channel zalouser --limit 50
 ```
 
 ## Groups
 
 ```bash
-coderclaw directory groups list --channel zalouser
-coderclaw directory groups list --channel zalouser --query "work"
-coderclaw directory groups members --channel zalouser --group-id <id>
+builderforce directory groups list --channel zalouser
+builderforce directory groups list --channel zalouser --query "work"
+builderforce directory groups members --channel zalouser --group-id <id>
 ```

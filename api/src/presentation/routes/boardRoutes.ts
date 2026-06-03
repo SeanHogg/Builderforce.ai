@@ -49,27 +49,27 @@ import {
 import { DrizzleCoordinatorStore } from '../../application/swimlane/DrizzleCoordinatorStore';
 import { DEFAULT_SWIMLANES } from '../../application/swimlane/defaultSwimlanes';
 import {
-  ClawStageDispatcher,
-  type ClawRelayNamespace,
-} from '../../application/swimlane/clawStageDispatcher';
+  AgentHostStageDispatcher,
+  type AgentHostRelayNamespace,
+} from '../../application/swimlane/agentHostStageDispatcher';
 import type { WorkflowStatus } from '../../application/swimlane/transitions';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 const WORKFLOW_STATUSES: WorkflowStatus[] = ['pending', 'running', 'completed', 'failed', 'cancelled'];
 
-/** Env shape we read for claw dispatch — CLAW_RELAY is optional (browser-only works without it). */
-type BoardEnv = { CLAW_RELAY?: ClawRelayNamespace };
+/** Env shape we read for agentHost dispatch — AGENT_HOST_RELAY is optional (browser-only works without it). */
+type BoardEnv = { AGENT_HOST_RELAY?: AgentHostRelayNamespace };
 
 export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
-  // Built per-request so the claw dispatcher is bound to this request's env.
+  // Built per-request so the agentHost dispatcher is bound to this request's env.
   const mkCoordinator = (env: unknown): SwimlaneCoordinator =>
     new SwimlaneCoordinator(
       new DrizzleCoordinatorStore(db),
-      new ClawStageDispatcher((env as BoardEnv)?.CLAW_RELAY),
+      new AgentHostStageDispatcher((env as BoardEnv)?.AGENT_HOST_RELAY),
     );
 
   // ── Boards CRUD ───────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@ import { IProjectRepository } from '../../domain/project/IProjectRepository';
 import { Task } from '../../domain/task/Task';
 import {
   ProjectId, TaskId, TaskStatus, TaskPriority, AgentType, TenantId,
-  asProjectId, asTaskId, asTenantId, asClawId,
+  asProjectId, asTaskId, asTenantId, asAgentHostId,
 } from '../../domain/shared/types';
 import { NotFoundError, ForbiddenError } from '../../domain/shared/errors';
 
@@ -13,7 +13,7 @@ export interface CreateTaskDto {
   description?: string | null;
   priority?: TaskPriority;
   assignedAgentType?: AgentType | null;
-  assignedClawId?: number | null;
+  assignedAgentHostId?: number | null;
   startDate?: string | null;
   dueDate?: string | null;
   persona?: string | null;
@@ -26,7 +26,7 @@ export interface UpdateTaskDto {
   status?: string;
   priority?: TaskPriority;
   assignedAgentType?: AgentType | null;
-  assignedClawId?: number | null;
+  assignedAgentHostId?: number | null;
   githubPrUrl?: string | null;
   githubPrNumber?: number | null;
   startDate?: string | null;
@@ -80,7 +80,7 @@ export class TaskService {
       status: TaskStatus.BACKLOG,
       priority: dto.priority ?? TaskPriority.MEDIUM,
       assignedAgentType: dto.assignedAgentType ?? null,
-      assignedClawId: dto.assignedClawId != null ? asClawId(dto.assignedClawId) : null,
+      assignedAgentHostId: dto.assignedAgentHostId != null ? asAgentHostId(dto.assignedAgentHostId) : null,
       startDate: dto.startDate ? new Date(dto.startDate) : null,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
       persona: dto.persona ?? null,
@@ -95,8 +95,8 @@ export class TaskService {
     const task = await this.getTask(id);
     const updated = task.update({
       ...dto,
-      assignedClawId: dto.assignedClawId !== undefined
-        ? (dto.assignedClawId != null ? asClawId(dto.assignedClawId) : null)
+      assignedAgentHostId: dto.assignedAgentHostId !== undefined
+        ? (dto.assignedAgentHostId != null ? asAgentHostId(dto.assignedAgentHostId) : null)
         : undefined,
       startDate: dto.startDate !== undefined ? (dto.startDate ? new Date(dto.startDate) : null) : undefined,
       dueDate: dto.dueDate !== undefined ? (dto.dueDate ? new Date(dto.dueDate) : null) : undefined,

@@ -149,20 +149,20 @@ export function createPrdRoutes(db: Db): Hono<HonoEnv> {
     if (!spec) return c.json({ error: 'Spec not found' }, 404);
 
     const body = await c.req
-      .json<{ ticketDescription?: string; clawId?: number }>()
-      .catch(() => ({} as { ticketDescription?: string; clawId?: number }));
+      .json<{ ticketDescription?: string; agentHostId?: number }>()
+      .catch(() => ({} as { ticketDescription?: string; agentHostId?: number }));
 
-    // workflows.clawId is NOT NULL — resolve from body, the spec, or the tenant default.
-    let clawId = body.clawId ?? spec.clawId ?? null;
-    if (clawId == null) {
+    // workflows.agentHostId is NOT NULL — resolve from body, the spec, or the tenant default.
+    let agentHostId = body.agentHostId ?? spec.agentHostId ?? null;
+    if (agentHostId == null) {
       const [t] = await db
-        .select({ defaultClawId: tenants.defaultClawId })
+        .select({ defaultAgentHostId: tenants.defaultAgentHostId })
         .from(tenants)
         .where(eq(tenants.id, tenantId));
-      clawId = t?.defaultClawId ?? null;
+      agentHostId = t?.defaultAgentHostId ?? null;
     }
-    if (clawId == null) {
-      return c.json({ error: 'clawId is required (no default claw for tenant)' }, 400);
+    if (agentHostId == null) {
+      return c.json({ error: 'agentHostId is required (no default agentHost for tenant)' }, 400);
     }
 
     const ticket = body.ticketDescription ?? spec.goal ?? '';
@@ -177,7 +177,7 @@ export function createPrdRoutes(db: Db): Hono<HonoEnv> {
         id:           workflowId,
         tenantId,
         segmentId,
-        clawId,
+        agentHostId,
         specId,
         workflowType: workflowSpec.workflowType,
         status:       'pending',

@@ -1,15 +1,15 @@
 ---
 title: "Node.js"
-summary: "Install and configure Node.js for CoderClaw — version requirements, install options, and PATH troubleshooting"
+summary: "Install and configure Node.js for BuilderForce Agents — version requirements, install options, and PATH troubleshooting"
 read_when:
-  - "You need to install Node.js before installing CoderClaw"
-  - "You installed CoderClaw but `coderclaw` is command not found"
+  - "You need to install Node.js before installing BuilderForce Agents"
+  - "You installed BuilderForce Agents but `builderforce` is command not found"
   - "npm install -g fails with permissions or PATH issues"
 ---
 
 # Node.js
 
-CoderClaw requires **Node 22 or newer**. The [installer script](/install#install-methods) will detect and install Node automatically — this page is for when you want to set up Node yourself and make sure everything is wired up correctly (versions, PATH, global installs).
+BuilderForce Agents requires **Node 22 or newer**. The [installer script](/install#install-methods) will detect and install Node automatically — this page is for when you want to set up Node yourself and make sure everything is wired up correctly (versions, PATH, global installs).
 
 ## Check your version
 
@@ -82,13 +82,13 @@ fnm use 22
 ```
 
   <Warning>
-  Make sure your version manager is initialized in your shell startup file (`~/.zshrc` or `~/.bashrc`). If it isn't, `coderclaw` may not be found in new terminal sessions because the PATH won't include Node's bin directory.
+  Make sure your version manager is initialized in your shell startup file (`~/.zshrc` or `~/.bashrc`). If it isn't, `builderforce` may not be found in new terminal sessions because the PATH won't include Node's bin directory.
   </Warning>
 </Accordion>
 
 ## Troubleshooting
 
-### `coderclaw: command not found`
+### `builderforce: command not found`
 
 This almost always means npm's global bin directory isn't on your PATH.
 

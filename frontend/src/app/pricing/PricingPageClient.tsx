@@ -23,7 +23,7 @@ interface Subscription {
   pricing: {
     pro: { monthly: number; yearly: number; yearlySavingsPercent: number };
     teams: { perSeatMonthly: number; perSeatYearly: number; yearlySavingsPercent: number; minimumSeats: number };
-    managedClaw: { perClawMonthly: number };
+    managedAgentHost: { perAgentHostMonthly: number };
   };
 }
 
@@ -35,9 +35,9 @@ const cardStyle: React.CSSProperties = {
 };
 
 const PLAN_FEATURES: { label: string; free: boolean; pro: boolean; teams: boolean }[] = [
-  { label: '1 Claw',                           free: true,  pro: false, teams: false },
-  { label: 'Up to 3 Claws',                    free: false, pro: true,  teams: false },
-  { label: 'Unlimited Claws',                  free: false, pro: false, teams: true  },
+  { label: '1 AgentHost',                           free: true,  pro: false, teams: false },
+  { label: 'Up to 3 AgentHosts',                    free: false, pro: true,  teams: false },
+  { label: 'Unlimited AgentHosts',                  free: false, pro: false, teams: true  },
   { label: '5 projects',                       free: true,  pro: false, teams: false },
   { label: 'Unlimited projects',               free: false, pro: true,  teams: true  },
   { label: '10K tokens / day',                 free: true,  pro: false, teams: false },
@@ -419,7 +419,7 @@ export default function PricingPageClient() {
               </table>
             </div>
             <div style={{ marginTop: 14, fontSize: 11, color: 'var(--text-muted)' }}>
-              Add-on: <strong>Managed Claw</strong> — ${sub?.pricing.managedClaw.perClawMonthly ?? 49}/mo per hosted Claw. We run your CoderClaw instance for you — no Docker, no DevOps.
+              Add-on: <strong>Managed AgentHost</strong> — ${sub?.pricing.managedAgentHost.perAgentHostMonthly ?? 49}/mo per hosted AgentHost. We run your BuilderForce Agents instance for you — no Docker, no DevOps.
             </div>
           </div>
 

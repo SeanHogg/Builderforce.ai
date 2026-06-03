@@ -1,8 +1,39 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { workflows, specsApi, claws, type Workflow, type WorkflowTask, type WorkflowGraph, type Spec, type Claw } from '@/lib/builderforceApi';
+import Link from 'next/link';
+import { workflows, workflowDefinitions, specsApi, agentHosts, type Workflow, type WorkflowTask, type WorkflowGraph, type WorkflowDefinitionSummary, type Spec, type AgentHost } from '@/lib/builderforceApi';
 import { WorkflowDagView } from './WorkflowDagView';
+
+/** Saved visual workflow definitions (builder templates) with quick links to
+ *  open the builder. Self-contained: fetches its own data and renders nothing
+ *  but the "Build new" entry when none exist yet. */
+function SavedDefinitionsSection() {
+  const [defs, setDefs] = useState<WorkflowDefinitionSummary[]>([]);
+  useEffect(() => { workflowDefinitions.list().then(setDefs).catch(() => {}); }, []);
+
+  return (
+    <div style={cardStyle}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: defs.length ? 10 : 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Visual workflows</div>
+        <Link href="/workflows/builder" style={{ fontSize: 12, fontWeight: 600, color: 'var(--coral-bright, #f4726e)', textDecoration: 'none' }}>
+          + Build new
+        </Link>
+      </div>
+      {defs.map((d) => (
+        <Link
+          key={d.id}
+          href={`/workflows/builder?id=${d.id}`}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderTop: '1px solid var(--border-subtle)', textDecoration: 'none', color: 'var(--text-primary)' }}
+        >
+          <span style={{ fontSize: 13 }}>🔀</span>
+          <span style={{ fontSize: 12.5, fontWeight: 600, flex: 1 }}>{d.name}</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{new Date(d.updatedAt).toLocaleDateString()}</span>
+        </Link>
+      ))}
+    </div>
+  );
+}
 
 interface WorkflowsContentProps {
   projectId?: number | null;
@@ -175,9 +206,9 @@ export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) 
   const [showCreate, setShowCreate] = useState(false);
   const [createType, setCreateType] = useState<string>('feature');
   const [createDesc, setCreateDesc] = useState('');
-  const [createClawId, setCreateClawId] = useState<number | ''>('');
+  const [createAgentHostId, setCreateAgentHostId] = useState<number | ''>('');
   const [createSpecId, setCreateSpecId] = useState<string>('');
-  const [clawList, setClawList] = useState<Claw[]>([]);
+  const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
   const [specList, setSpecList] = useState<Spec[]>([]);
   const [creating, setCreating] = useState(false);
 
@@ -195,7 +226,7 @@ export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) 
 
   useEffect(() => {
     if (!showCreate) return;
-    claws.list().then(setClawList).catch(() => {});
+    agentHosts.list().then(setAgentHostList).catch(() => {});
     specsApi.list(projectId ?? undefined).then(setSpecList).catch(() => {});
   }, [showCreate, projectId]);
 
@@ -228,7 +259,7 @@ export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) 
   }, []);
 
   const handleCreate = async () => {
-    if (!createClawId) return;
+    if (!createAgentHostId) return;
     setCreating(true);
     try {
       // POST /api/workflows
@@ -241,7 +272,7 @@ export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) 
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          clawId: Number(createClawId),
+          agentHostId: Number(createAgentHostId),
           workflowType: createType,
           description: createDesc.trim() || undefined,
           specId: createSpecId || undefined,
@@ -378,6 +409,8 @@ export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) 
         </button>
       </div>
 
+      <SavedDefinitionsSection />
+
       {showCreate && (
         <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ fontSize: 13, fontWeight: 600 }}>Create Workflow</div>
@@ -422,8 +455,8 @@ export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) 
 
           <div style={{ display: 'flex', gap: 8 }}>
             <select
-              value={createClawId}
-              onChange={(e) => setCreateClawId(e.target.value ? Number(e.target.value) : '')}
+              value={createAgentHostId}
+              onChange={(e) => setCreateAgentHostId(e.target.value ? Number(e.target.value) : '')}
               style={{
                 flex: 1,
                 padding: '8px 10px',
@@ -434,8 +467,8 @@ export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) 
                 borderRadius: 8,
               }}
             >
-              <option value="">Select claw…</option>
-              {clawList.map((c) => (
+              <option value="">Select agentHost…</option>
+              {agentHostList.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
@@ -466,7 +499,7 @@ export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) 
             <button
               type="button"
               onClick={handleCreate}
-              disabled={!createClawId || creating}
+              disabled={!createAgentHostId || creating}
               style={{
                 padding: '8px 18px',
                 fontSize: 13,
@@ -475,8 +508,8 @@ export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) 
                 color: '#fff',
                 border: 'none',
                 borderRadius: 8,
-                cursor: !createClawId || creating ? 'not-allowed' : 'pointer',
-                opacity: !createClawId || creating ? 0.5 : 1,
+                cursor: !createAgentHostId || creating ? 'not-allowed' : 'pointer',
+                opacity: !createAgentHostId || creating ? 0.5 : 1,
               }}
             >
               {creating ? 'Creating…' : 'Create Workflow'}

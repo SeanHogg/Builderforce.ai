@@ -1,8 +1,8 @@
 ---
 read_when:
-  - 向新用户介绍 CoderClaw
-summary: CoderClaw 是一个多渠道 AI 智能体 Gateway 网关，可在任何操作系统上运行。
-title: CoderClaw
+  - 向新用户介绍 BuilderForce Agents
+summary: BuilderForce Agents 是一个多渠道 AI 智能体 Gateway 网关，可在任何操作系统上运行。
+title: BuilderForce Agents
 x-i18n:
   generated_at: "2026-02-04T17:53:40Z"
   model: claude-opus-4-5
@@ -12,18 +12,18 @@ x-i18n:
   workflow: 15
 ---
 
-# CoderClaw 🦞
+# BuilderForce Agents 🦞
 
 <p align="center">
     <img
-        src="/assets/coderclaw-logo-text-dark.png"
-        alt="CoderClaw"
+        src="/assets/builderforce-logo-text-dark.png"
+        alt="BuilderForce Agents"
         width="500"
         class="dark:hidden"
     />
     <img
-        src="/assets/coderclaw-logo-text.png"
-        alt="CoderClaw"
+        src="/assets/builderforce-logo-text.png"
+        alt="BuilderForce Agents"
         width="500"
         class="hidden dark:block"
     />
@@ -38,17 +38,17 @@ x-i18n:
 
 <Columns>
   <Card title="入门指南" href="/start/getting-started" icon="rocket">
-    安装 CoderClaw 并在几分钟内启动 Gateway 网关。
+    安装 BuilderForce Agents 并在几分钟内启动 Gateway 网关。
   </Card>
   <Card title="运行向导" href="/start/wizard" icon="sparkles">
-    通过 `coderclaw onboard` 和配对流程进行引导式设置。
+    通过 `builderforce onboard` 和配对流程进行引导式设置。
   </Card>
   <Card title="打开控制界面" href="/web/control-ui" icon="layout-dashboard">
     启动浏览器仪表板，管理聊天、配置和会话。
   </Card>
 </Columns>
 
-CoderClaw 通过单个 Gateway 网关进程将聊天应用连接到 Pi 等编程智能体。它为 CoderClaw 助手提供支持，并支持本地或远程部署。
+BuilderForce Agents 通过单个 Gateway 网关进程将聊天应用连接到 Pi 等编程智能体。它为 BuilderForce Agents 助手提供支持，并支持本地或远程部署。
 
 ## 工作原理
 
@@ -90,20 +90,20 @@ Gateway 网关是会话、路由和渠道连接的唯一事实来源。
 ## 快速开始
 
 <Steps>
-  <Step title="安装 CoderClaw">
+  <Step title="安装 BuilderForce Agents">
     ```bash
-    npm install -g coderclaw@latest
+    npm install -g builderforce@latest
     ```
   </Step>
   <Step title="新手引导并安装服务">
     ```bash
-    coderclaw onboard --install-daemon
+    builderforce onboard --install-daemon
     ```
   </Step>
   <Step title="配对 WhatsApp 并启动 Gateway 网关">
     ```bash
-    coderclaw channels login
-    coderclaw gateway --port 18789
+    builderforce channels login
+    builderforce gateway --port 18789
     ```
   </Step>
 </Steps>
@@ -118,14 +118,14 @@ Gateway 网关启动后，打开浏览器控制界面。
 - 远程访问：[Web 界面](/web)和 [Tailscale](/gateway/tailscale)
 
 <p align="center">
-  <img src="whatsapp-coderclaw.jpg" alt="CoderClaw" width="420" />
+  <img src="whatsapp-builderforce.jpg" alt="BuilderForce Agents" width="420" />
 </p>
 
 ## 配置（可选）
 
-配置文件位于 `~/.coderclaw/coderclaw.json`。
+配置文件位于 `~/.builderforce/builderforce.json`。
 
-- 如果你**不做任何修改**，CoderClaw 将使用内置的 Pi 二进制文件以 RPC 模式运行，并按发送者创建独立会话。
+- 如果你**不做任何修改**，BuilderForce Agents 将使用内置的 Pi 二进制文件以 RPC 模式运行，并按发送者创建独立会话。
 - 如果你想要限制访问，可以从 `channels.whatsapp.allowFrom` 和（针对群组的）提及规则开始配置。
 
 示例：
@@ -138,7 +138,7 @@ Gateway 网关启动后，打开浏览器控制界面。
       groups: { "*": { requireMention: true } },
     },
   },
-  messages: { groupChat: { mentionPatterns: ["@coderclaw"] } },
+  messages: { groupChat: { mentionPatterns: ["@builderforce"] } },
 }
 ```
 

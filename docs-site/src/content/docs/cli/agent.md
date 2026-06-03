@@ -1,11 +1,11 @@
 ---
-summary: "CLI reference for `coderclaw agent` (send one agent turn via the Gateway)"
+summary: "CLI reference for `builderforce agent` (send one agent turn via the Gateway)"
 read_when:
   - You want to run one agent turn from scripts (optionally deliver reply)
 title: "agent"
 ---
 
-# `coderclaw agent`
+# `builderforce agent`
 
 Run an agent turn via the Gateway (use `--local` for embedded).
 Use `--agent <id>` to target a configured agent directly.
@@ -17,8 +17,8 @@ Related:
 ## Examples
 
 ```bash
-coderclaw agent --to +15555550123 --message "status update" --deliver
-coderclaw agent --agent ops --message "Summarize logs"
-coderclaw agent --session-id 1234 --message "Summarize inbox" --thinking medium
-coderclaw agent --agent ops --message "Generate report" --deliver --reply-channel slack --reply-to "#reports"
+builderforce agent --to +15555550123 --message "status update" --deliver
+builderforce agent --agent ops --message "Summarize logs"
+builderforce agent --session-id 1234 --message "Summarize inbox" --thinking medium
+builderforce agent --agent ops --message "Generate report" --deliver --reply-channel slack --reply-to "#reports"
 ```

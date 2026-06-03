@@ -1,17 +1,17 @@
 ---
-summary: "CoderClaw on Raspberry Pi (budget self-hosted setup)"
+summary: "BuilderForce Agents on Raspberry Pi (budget self-hosted setup)"
 read_when:
-  - Setting up CoderClaw on a Raspberry Pi
-  - Running CoderClaw on ARM devices
+  - Setting up BuilderForce Agents on a Raspberry Pi
+  - Running BuilderForce Agents on ARM devices
   - Building a cheap always-on personal AI
 title: "Raspberry Pi"
 ---
 
-# CoderClaw on Raspberry Pi
+# BuilderForce Agents on Raspberry Pi
 
 ## Goal
 
-Run a persistent, always-on CoderClaw Gateway on a Raspberry Pi for **~$35-80** one-time cost (no monthly fees).
+Run a persistent, always-on BuilderForce Agents Gateway on a Raspberry Pi for **~$35-80** one-time cost (no monthly fees).
 
 Perfect for:
 
@@ -107,19 +107,19 @@ echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
 sudo sysctl -p
 ```
 
-## 6) Install CoderClaw
+## 6) Install BuilderForce Agents
 
 ### Option A: Standard Install (Recommended)
 
 ```bash
-curl -fsSL https://coderclaw.ai/install.sh | bash
+curl -fsSL https://builderforce.ai/install.sh | bash
 ```
 
 ### Option B: Hackable Install (For tinkering)
 
 ```bash
-git clone https://github.com/SeanHogg/coderClaw.git
-cd coderClaw
+git clone https://github.com/SeanHogg/Builderforce.ai.git
+cd BuilderForce Agents
 npm install
 npm run build
 npm link
@@ -130,7 +130,7 @@ The hackable install gives you direct access to logs and code — useful for deb
 ## 7) Run Onboarding
 
 ```bash
-coderclaw onboard --install-daemon
+builderforce onboard --install-daemon
 ```
 
 Follow the wizard:
@@ -144,13 +144,13 @@ Follow the wizard:
 
 ```bash
 # Check status
-coderclaw status
+builderforce status
 
 # Check service
-sudo systemctl status coderclaw
+sudo systemctl status builderforce
 
 # View logs
-journalctl -u coderclaw -f
+journalctl -u builderforce -f
 ```
 
 ## 9) Access the Dashboard
@@ -173,8 +173,8 @@ curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up
 
 # Update config
-coderclaw config set gateway.bind tailnet
-sudo systemctl restart coderclaw
+builderforce config set gateway.bind tailnet
+sudo systemctl restart builderforce
 ```
 
 ---
@@ -221,7 +221,7 @@ htop
 
 ### Binary Compatibility
 
-Most CoderClaw features work on ARM64, but some external binaries may need ARM builds:
+Most BuilderForce Agents features work on ARM64, but some external binaries may need ARM builds:
 
 | Tool               | ARM64 Status | Notes                               |
 | ------------------ | ------------ | ----------------------------------- |
@@ -271,13 +271,13 @@ The onboarding wizard sets this up, but to verify:
 
 ```bash
 # Check service is enabled
-sudo systemctl is-enabled coderclaw
+sudo systemctl is-enabled builderforce
 
 # Enable if not
-sudo systemctl enable coderclaw
+sudo systemctl enable builderforce
 
 # Start on boot
-sudo systemctl start coderclaw
+sudo systemctl start builderforce
 ```
 
 ---
@@ -304,12 +304,12 @@ free -h
 
 ```bash
 # Check logs
-journalctl -u coderclaw --no-pager -n 100
+journalctl -u builderforce --no-pager -n 100
 
 # Common fix: rebuild
-cd ~/coderclaw  # if using hackable install
+cd ~/builderforce  # if using hackable install
 npm run build
-sudo systemctl restart coderclaw
+sudo systemctl restart builderforce
 ```
 
 ### ARM Binary Issues

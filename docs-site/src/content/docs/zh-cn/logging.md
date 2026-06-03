@@ -16,7 +16,7 @@ x-i18n:
 
 # 日志
 
-CoderClaw 在两个地方记录日志：
+BuilderForce Agents 在两个地方记录日志：
 
 - **文件日志**（JSON 行）由 Gateway 网关写入。
 - **控制台输出**显示在终端和控制 UI 中。
@@ -27,16 +27,16 @@ CoderClaw 在两个地方记录日志：
 
 默认情况下，Gateway 网关在以下位置写入滚动日志文件：
 
-`/tmp/coderclaw/coderclaw-YYYY-MM-DD.log`
+`/tmp/builderforce/builderforce-YYYY-MM-DD.log`
 
 日期使用 Gateway 网关主机的本地时区。
 
-你可以在 `~/.coderclaw/coderclaw.json` 中覆盖此设置：
+你可以在 `~/.builderforce/builderforce.json` 中覆盖此设置：
 
 ```json
 {
   "logging": {
-    "file": "/path/to/coderclaw.log"
+    "file": "/path/to/builderforce.log"
   }
 }
 ```
@@ -48,7 +48,7 @@ CoderClaw 在两个地方记录日志：
 使用 CLI 通过 RPC 跟踪 Gateway 网关日志文件：
 
 ```bash
-coderclaw logs --follow
+builderforce logs --follow
 ```
 
 输出模式：
@@ -69,7 +69,7 @@ coderclaw logs --follow
 如果 Gateway 网关无法访问，CLI 会打印一个简短提示运行：
 
 ```bash
-coderclaw doctor
+builderforce doctor
 ```
 
 ### 控制 UI（Web）
@@ -82,7 +82,7 @@ coderclaw doctor
 要过滤渠道活动（WhatsApp/Telegram 等），使用：
 
 ```bash
-coderclaw channels logs --channel whatsapp
+builderforce channels logs --channel whatsapp
 ```
 
 ## 日志格式
@@ -103,13 +103,13 @@ coderclaw channels logs --channel whatsapp
 
 ## 配置日志
 
-所有日志配置都在 `~/.coderclaw/coderclaw.json` 的 `logging` 下。
+所有日志配置都在 `~/.builderforce/builderforce.json` 的 `logging` 下。
 
 ```json
 {
   "logging": {
     "level": "info",
-    "file": "/tmp/coderclaw/coderclaw-YYYY-MM-DD.log",
+    "file": "/tmp/builderforce/builderforce-YYYY-MM-DD.log",
     "consoleLevel": "info",
     "consoleStyle": "pretty",
     "redactSensitive": "tools",
@@ -152,7 +152,7 @@ coderclaw channels logs --channel whatsapp
 
 - **OpenTelemetry（OTel）**：追踪、指标和日志的数据模型 + SDK。
 - **OTLP**：用于将 OTel 数据导出到收集器/后端的线路协议。
-- CoderClaw 目前通过 **OTLP/HTTP（protobuf）** 导出。
+- BuilderForce Agents 目前通过 **OTLP/HTTP（protobuf）** 导出。
 
 ### 导出的信号
 
@@ -211,7 +211,7 @@ coderclaw channels logs --channel whatsapp
 环境变量覆盖（一次性）：
 
 ```
-CODERCLAW_DIAGNOSTICS=telegram.http,telegram.payload
+BUILDERFORCE_AGENTS_DIAGNOSTICS=telegram.http,telegram.payload
 ```
 
 注意：
@@ -240,7 +240,7 @@ CODERCLAW_DIAGNOSTICS=telegram.http,telegram.payload
       "enabled": true,
       "endpoint": "http://otel-collector:4318",
       "protocol": "http/protobuf",
-      "serviceName": "coderclaw-gateway",
+      "serviceName": "builderforce-gateway",
       "traces": true,
       "metrics": true,
       "logs": true,
@@ -253,7 +253,7 @@ CODERCLAW_DIAGNOSTICS=telegram.http,telegram.payload
 
 注意：
 
-- 你也可以使用 `coderclaw plugins enable diagnostics-otel` 启用插件。
+- 你也可以使用 `builderforce plugins enable diagnostics-otel` 启用插件。
 - `protocol` 目前仅支持 `http/protobuf`。`grpc` 被忽略。
 - 指标包括令牌使用、成本、上下文大小、运行持续时间和消息流计数器/直方图（webhooks、队列、会话状态、队列深度/等待）。
 - 追踪/指标可以通过 `traces` / `metrics` 切换（默认：开启）。启用时，追踪包括模型使用 span 加上 webhook/消息处理 span。
@@ -264,45 +264,45 @@ CODERCLAW_DIAGNOSTICS=telegram.http,telegram.payload
 
 模型使用：
 
-- `coderclaw.tokens`（计数器，属性：`coderclaw.token`、`coderclaw.channel`、`coderclaw.provider`、`coderclaw.model`）
-- `coderclaw.cost.usd`（计数器，属性：`coderclaw.channel`、`coderclaw.provider`、`coderclaw.model`）
-- `coderclaw.run.duration_ms`（直方图，属性：`coderclaw.channel`、`coderclaw.provider`、`coderclaw.model`）
-- `coderclaw.context.tokens`（直方图，属性：`coderclaw.context`、`coderclaw.channel`、`coderclaw.provider`、`coderclaw.model`）
+- `builderforce.tokens`（计数器，属性：`builderforce.token`、`builderforce.channel`、`builderforce.provider`、`builderforce.model`）
+- `builderforce.cost.usd`（计数器，属性：`builderforce.channel`、`builderforce.provider`、`builderforce.model`）
+- `builderforce.run.duration_ms`（直方图，属性：`builderforce.channel`、`builderforce.provider`、`builderforce.model`）
+- `builderforce.context.tokens`（直方图，属性：`builderforce.context`、`builderforce.channel`、`builderforce.provider`、`builderforce.model`）
 
 消息流：
 
-- `coderclaw.webhook.received`（计数器，属性：`coderclaw.channel`、`coderclaw.webhook`）
-- `coderclaw.webhook.error`（计数器，属性：`coderclaw.channel`、`coderclaw.webhook`）
-- `coderclaw.webhook.duration_ms`（直方图，属性：`coderclaw.channel`、`coderclaw.webhook`）
-- `coderclaw.message.queued`（计数器，属性：`coderclaw.channel`、`coderclaw.source`）
-- `coderclaw.message.processed`（计数器，属性：`coderclaw.channel`、`coderclaw.outcome`）
-- `coderclaw.message.duration_ms`（直方图，属性：`coderclaw.channel`、`coderclaw.outcome`）
+- `builderforce.webhook.received`（计数器，属性：`builderforce.channel`、`builderforce.webhook`）
+- `builderforce.webhook.error`（计数器，属性：`builderforce.channel`、`builderforce.webhook`）
+- `builderforce.webhook.duration_ms`（直方图，属性：`builderforce.channel`、`builderforce.webhook`）
+- `builderforce.message.queued`（计数器，属性：`builderforce.channel`、`builderforce.source`）
+- `builderforce.message.processed`（计数器，属性：`builderforce.channel`、`builderforce.outcome`）
+- `builderforce.message.duration_ms`（直方图，属性：`builderforce.channel`、`builderforce.outcome`）
 
 队列 + 会话：
 
-- `coderclaw.queue.lane.enqueue`（计数器，属性：`coderclaw.lane`）
-- `coderclaw.queue.lane.dequeue`（计数器，属性：`coderclaw.lane`）
-- `coderclaw.queue.depth`（直方图，属性：`coderclaw.lane` 或 `coderclaw.channel=heartbeat`）
-- `coderclaw.queue.wait_ms`（直方图，属性：`coderclaw.lane`）
-- `coderclaw.session.state`（计数器，属性：`coderclaw.state`、`coderclaw.reason`）
-- `coderclaw.session.stuck`（计数器，属性：`coderclaw.state`）
-- `coderclaw.session.stuck_age_ms`（直方图，属性：`coderclaw.state`）
-- `coderclaw.run.attempt`（计数器，属性：`coderclaw.attempt`）
+- `builderforce.queue.lane.enqueue`（计数器，属性：`builderforce.lane`）
+- `builderforce.queue.lane.dequeue`（计数器，属性：`builderforce.lane`）
+- `builderforce.queue.depth`（直方图，属性：`builderforce.lane` 或 `builderforce.channel=heartbeat`）
+- `builderforce.queue.wait_ms`（直方图，属性：`builderforce.lane`）
+- `builderforce.session.state`（计数器，属性：`builderforce.state`、`builderforce.reason`）
+- `builderforce.session.stuck`（计数器，属性：`builderforce.state`）
+- `builderforce.session.stuck_age_ms`（直方图，属性：`builderforce.state`）
+- `builderforce.run.attempt`（计数器，属性：`builderforce.attempt`）
 
 ### 导出的 span（名称 + 关键属性）
 
-- `coderclaw.model.usage`
-  - `coderclaw.channel`、`coderclaw.provider`、`coderclaw.model`
-  - `coderclaw.sessionKey`、`coderclaw.sessionId`
-  - `coderclaw.tokens.*`（input/output/cache_read/cache_write/total）
-- `coderclaw.webhook.processed`
-  - `coderclaw.channel`、`coderclaw.webhook`、`coderclaw.chatId`
-- `coderclaw.webhook.error`
-  - `coderclaw.channel`、`coderclaw.webhook`、`coderclaw.chatId`、`coderclaw.error`
-- `coderclaw.message.processed`
-  - `coderclaw.channel`、`coderclaw.outcome`、`coderclaw.chatId`、`coderclaw.messageId`、`coderclaw.sessionKey`、`coderclaw.sessionId`、`coderclaw.reason`
-- `coderclaw.session.stuck`
-  - `coderclaw.state`、`coderclaw.ageMs`、`coderclaw.queueDepth`、`coderclaw.sessionKey`、`coderclaw.sessionId`
+- `builderforce.model.usage`
+  - `builderforce.channel`、`builderforce.provider`、`builderforce.model`
+  - `builderforce.sessionKey`、`builderforce.sessionId`
+  - `builderforce.tokens.*`（input/output/cache_read/cache_write/total）
+- `builderforce.webhook.processed`
+  - `builderforce.channel`、`builderforce.webhook`、`builderforce.chatId`
+- `builderforce.webhook.error`
+  - `builderforce.channel`、`builderforce.webhook`、`builderforce.chatId`、`builderforce.error`
+- `builderforce.message.processed`
+  - `builderforce.channel`、`builderforce.outcome`、`builderforce.chatId`、`builderforce.messageId`、`builderforce.sessionKey`、`builderforce.sessionId`、`builderforce.reason`
+- `builderforce.session.stuck`
+  - `builderforce.state`、`builderforce.ageMs`、`builderforce.queueDepth`、`builderforce.sessionKey`、`builderforce.sessionId`
 
 ### 采样 + 刷新
 
@@ -324,6 +324,6 @@ CODERCLAW_DIAGNOSTICS=telegram.http,telegram.payload
 
 ## 故障排除提示
 
-- **Gateway 网关无法访问？** 先运行 `coderclaw doctor`。
+- **Gateway 网关无法访问？** 先运行 `builderforce doctor`。
 - **日志为空？** 检查 Gateway 网关是否正在运行并写入 `logging.file` 中的文件路径。
 - **需要更多细节？** 将 `logging.level` 设置为 `debug` 或 `trace` 并重试。

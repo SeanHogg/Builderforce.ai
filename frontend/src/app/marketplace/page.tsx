@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { useCart, type ArtifactType } from '@/lib/CartContext';
 import {
-  claws,
+  agentHosts,
   artifactAssignments,
   marketplaceStats,
   listMarketplaceSkills,
@@ -162,7 +162,7 @@ export default function MarketplacePage() {
   const [listings, setListings] = useState<MarketplaceListing[]>([]);
   const [stats, setStats] = useState<Record<string, ArtifactStats>>({});
   const [installed, setInstalled] = useState<Set<string>>(new Set());
-  const [hasClaws, setHasClaws] = useState(true);
+  const [hasAgentHosts, setHasAgentHosts] = useState(true);
   const [loading, setLoading] = useState(true);
   const [agents, setAgents] = useState<PublishedAgent[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
@@ -240,18 +240,18 @@ export default function MarketplacePage() {
     ];
     setListings(allListings);
 
-    // User-specific data (owned claws + installed artifacts) is only fetched
+    // User-specific data (owned agentHosts + installed artifacts) is only fetched
     // for authenticated users. Anonymous marketplace browsers see listings
     // and stats but no install state.
     if (isAuthenticated) {
-      const [clawList, assignList] = await Promise.all([
-        claws.list().catch(() => []),
+      const [agentHostList, assignList] = await Promise.all([
+        agentHosts.list().catch(() => []),
         tenantNum ? artifactAssignments.list('tenant', tenantNum).catch(() => []) : [],
       ]);
-      setHasClaws(clawList.length > 0);
+      setHasAgentHosts(agentHostList.length > 0);
       setInstalled(new Set(assignList.map((a) => key(a.artifactType, a.artifactSlug))));
     } else {
-      setHasClaws(false);
+      setHasAgentHosts(false);
       setInstalled(new Set());
     }
 
@@ -777,10 +777,10 @@ export default function MarketplacePage() {
                     <button
                       type="button"
                       className={`btn btn-sm ${isInstalled ? 'btn-secondary' : 'btn-primary'}`}
-                      disabled={!hasClaws}
+                      disabled={!hasAgentHosts}
                       onClick={() => toggleInstall(item)}
                     >
-                      {!hasClaws ? 'Register claw' : isInstalled ? 'Uninstall' : 'Install'}
+                      {!hasAgentHosts ? 'Register agentHost' : isInstalled ? 'Uninstall' : 'Install'}
                     </button>
                   </div>
                 </div>

@@ -37,8 +37,8 @@ export class TenantService {
       yearlySavingsPercent: 20,
       minimumSeats: 1,
     },
-    managedClaw: {
-      perClawMonthly: 49,
+    managedAgentHost: {
+      perAgentHostMonthly: 49,
     },
   } as const;
 
@@ -52,7 +52,7 @@ export class TenantService {
     slug: string;
     role: string;
     status: string;
-    defaultClawId: number | null;
+    defaultAgentHostId: number | null;
     plan: TenantPlan;
     effectivePlan: TenantPlan;
     billingStatus: TenantBillingStatus;
@@ -66,7 +66,7 @@ export class TenantService {
         slug: t.slug,
         role: member?.role ?? 'member',
         status: t.status,
-        defaultClawId: t.defaultClawId,
+        defaultAgentHostId: t.defaultAgentHostId,
         plan: t.plan,
         effectivePlan: t.effectivePlan(),
         billingStatus: t.billingStatus,
@@ -300,9 +300,9 @@ export class TenantService {
     return this.tenants.update(updated);
   }
 
-  async setDefaultClaw(tenantId: number, clawId: number | null): Promise<Tenant> {
+  async setDefaultAgentHost(tenantId: number, agentHostId: number | null): Promise<Tenant> {
     const tenant = await this.getTenant(tenantId);
-    const updated = tenant.setDefaultClaw(clawId);
+    const updated = tenant.setDefaultAgentHost(agentHostId);
     return this.tenants.update(updated);
   }
 }

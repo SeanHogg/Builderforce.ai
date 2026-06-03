@@ -2,7 +2,7 @@
 read_when:
   - 运行无头节点主机
   - 为 system.run 配对非 macOS 节点
-summary: "`coderclaw node` 的 CLI 参考（无头节点主机）"
+summary: "`builderforce node` 的 CLI 参考（无头节点主机）"
 title: node
 x-i18n:
   generated_at: "2026-02-03T07:45:07Z"
@@ -13,7 +13,7 @@ x-i18n:
   workflow: 15
 ---
 
-# `coderclaw node`
+# `builderforce node`
 
 运行一个**无头节点主机**，连接到 Gateway 网关 WebSocket 并在此机器上暴露
 `system.run` / `system.which`。
@@ -49,7 +49,7 @@ x-i18n:
 ## 运行（前台）
 
 ```bash
-coderclaw node run --host <gateway-host> --port 18789
+builderforce node run --host <gateway-host> --port 18789
 ```
 
 选项：
@@ -66,7 +66,7 @@ coderclaw node run --host <gateway-host> --port 18789
 将无头节点主机安装为用户服务。
 
 ```bash
-coderclaw node install --host <gateway-host> --port 18789
+builderforce node install --host <gateway-host> --port 18789
 ```
 
 选项：
@@ -83,13 +83,13 @@ coderclaw node install --host <gateway-host> --port 18789
 管理服务：
 
 ```bash
-coderclaw node status
-coderclaw node stop
-coderclaw node restart
-coderclaw node uninstall
+builderforce node status
+builderforce node stop
+builderforce node restart
+builderforce node uninstall
 ```
 
-使用 `coderclaw node run` 运行前台节点主机（无服务）。
+使用 `builderforce node run` 运行前台节点主机（无服务）。
 
 服务命令接受 `--json` 以获取机器可读输出。
 
@@ -99,17 +99,17 @@ coderclaw node uninstall
 通过以下方式批准：
 
 ```bash
-coderclaw nodes pending
-coderclaw nodes approve <requestId>
+builderforce nodes pending
+builderforce nodes approve <requestId>
 ```
 
 节点主机将其节点 id、token、显示名称和 Gateway 网关连接信息存储在
-`~/.coderclaw/node.json` 中。
+`~/.builderforce/node.json` 中。
 
 ## 执行批准
 
 `system.run` 受本地执行批准限制：
 
-- `~/.coderclaw/exec-approvals.json`
+- `~/.builderforce/exec-approvals.json`
 - [执行批准](/tools/exec-approvals)
-- `coderclaw approvals --node <id|name|ip>`（从 Gateway 网关编辑）
+- `builderforce approvals --node <id|name|ip>`（从 Gateway 网关编辑）

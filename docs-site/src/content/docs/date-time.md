@@ -8,7 +8,7 @@ title: "Date and Time"
 
 # Date & Time
 
-CoderClaw (built on [CoderClaw](https://github.com/SeanHogg/coderClaw)) defaults to **host-local time for transport timestamps** and **user timezone only in the system prompt**.
+BuilderForce Agents (built on [BuilderForce Agents](https://github.com/SeanHogg/Builderforce.ai)) defaults to **host-local time for transport timestamps** and **user timezone only in the system prompt**.
 Provider timestamps are preserved so tools keep their native semantics (current time is available via `session_status`).
 
 ## Message envelopes (local by default)
@@ -102,7 +102,7 @@ System: [2026-01-12 12:19:17 PST] Model switched.
 
 ## Time format detection (auto)
 
-When `timeFormat: "auto"`, CoderClaw inspects the OS preference (macOS/Windows)
+When `timeFormat: "auto"`, BuilderForce Agents inspects the OS preference (macOS/Windows)
 and falls back to locale formatting. The detected value is **cached per process**
 to avoid repeated system calls.
 

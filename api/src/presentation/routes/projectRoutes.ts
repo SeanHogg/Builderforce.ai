@@ -5,7 +5,7 @@ import type { HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { ProjectStatus, TenantRole } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
-import { clawProjects, coderclawInstances, ideProjectChatMessages, ideProjectChats, projectInsightEvents, projects, sourceControlIntegrations, tasks, tenants } from '../../infrastructure/database/schema';
+import { agentHostProjects, agentHosts, ideProjectChatMessages, ideProjectChats, projectInsightEvents, projects, sourceControlIntegrations, tasks, tenants } from '../../infrastructure/database/schema';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 
 const IDE_PREFIX = 'ide/';
@@ -347,19 +347,19 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     );
 
     const tenantId = c.get('tenantId');
-    const assignedClawRows = await db
+    const assignedAgentHostRows = await db
       .select({
-        projectId: clawProjects.projectId,
-        clawId: coderclawInstances.id,
-        clawName: coderclawInstances.name,
+        projectId: agentHostProjects.projectId,
+        agentHostId: agentHosts.id,
+        agentHostName: agentHosts.name,
       })
-      .from(clawProjects)
-      .innerJoin(coderclawInstances, eq(clawProjects.clawId, coderclawInstances.id))
-      .where(and(eq(clawProjects.tenantId, tenantId), inArray(clawProjects.projectId, projectIds)));
-    const assignedClawByProject = new Map<number, { id: number; name: string }>();
-    for (const row of assignedClawRows) {
-      if (!assignedClawByProject.has(row.projectId)) {
-        assignedClawByProject.set(row.projectId, { id: row.clawId, name: row.clawName });
+      .from(agentHostProjects)
+      .innerJoin(agentHosts, eq(agentHostProjects.agentHostId, agentHosts.id))
+      .where(and(eq(agentHostProjects.tenantId, tenantId), inArray(agentHostProjects.projectId, projectIds)));
+    const assignedAgentHostByProject = new Map<number, { id: number; name: string }>();
+    for (const row of assignedAgentHostRows) {
+      if (!assignedAgentHostByProject.has(row.projectId)) {
+        assignedAgentHostByProject.set(row.projectId, { id: row.agentHostId, name: row.agentHostName });
       }
     }
 
@@ -367,7 +367,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       projects: plainProjects.map((project) => ({
         ...project,
         taskCount: taskCountByProject.get(project.id) ?? 0,
-        assignedClaw: assignedClawByProject.get(project.id) ?? null,
+        assignedAgentHost: assignedAgentHostByProject.get(project.id) ?? null,
       })),
     });
   });
@@ -700,7 +700,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     const body = await c.req.json<{
       prompt: string;
       rootWorkingDirectory?: string | null;
-      clawId?: number | null;
+      agentHostId?: number | null;
     }>();
 
     const prompt = body.prompt?.trim();
@@ -734,55 +734,55 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
           rootWorkingDirectory,
         });
 
-    let selectedClawId: number | null = null;
+    let selectedAgentHostId: number | null = null;
 
     const [projectAssigned] = await db
-      .select({ clawId: clawProjects.clawId })
-      .from(clawProjects)
-      .where(and(eq(clawProjects.tenantId, tenantId), eq(clawProjects.projectId, project.id)))
+      .select({ agentHostId: agentHostProjects.agentHostId })
+      .from(agentHostProjects)
+      .where(and(eq(agentHostProjects.tenantId, tenantId), eq(agentHostProjects.projectId, project.id)))
       .limit(1);
 
     if (projectAssigned) {
-      selectedClawId = projectAssigned.clawId;
+      selectedAgentHostId = projectAssigned.agentHostId;
     } else {
-      const requestedClawId = body.clawId ?? null;
+      const requestedAgentHostId = body.agentHostId ?? null;
       const [tenantRow] = await db
-        .select({ defaultClawId: tenants.defaultClawId })
+        .select({ defaultAgentHostId: tenants.defaultAgentHostId })
         .from(tenants)
         .where(eq(tenants.id, tenantId))
         .limit(1);
 
-      const defaultCandidate = requestedClawId ?? tenantRow?.defaultClawId ?? null;
+      const defaultCandidate = requestedAgentHostId ?? tenantRow?.defaultAgentHostId ?? null;
       if (defaultCandidate) {
-        const [claw] = await db
-          .select({ id: coderclawInstances.id })
-          .from(coderclawInstances)
-          .where(and(eq(coderclawInstances.id, defaultCandidate), eq(coderclawInstances.tenantId, tenantId)))
+        const [agentHost] = await db
+          .select({ id: agentHosts.id })
+          .from(agentHosts)
+          .where(and(eq(agentHosts.id, defaultCandidate), eq(agentHosts.tenantId, tenantId)))
           .limit(1);
 
-        if (claw) {
-          selectedClawId = claw.id;
+        if (agentHost) {
+          selectedAgentHostId = agentHost.id;
           await db
-            .insert(clawProjects)
-            .values({ tenantId, clawId: claw.id, projectId: project.id, role: 'default' })
+            .insert(agentHostProjects)
+            .values({ tenantId, agentHostId: agentHost.id, projectId: project.id, role: 'default' })
             .onConflictDoUpdate({
-              target: [clawProjects.tenantId, clawProjects.clawId, clawProjects.projectId],
+              target: [agentHostProjects.tenantId, agentHostProjects.agentHostId, agentHostProjects.projectId],
               set: { updatedAt: new Date() },
             });
         }
       }
     }
 
-    const finalProject = selectedClawId === null
+    const finalProject = selectedAgentHostId === null
       ? await projectService.updateProject(project.id, { status: ProjectStatus.ON_HOLD }, tenantId)
       : await projectService.updateProject(project.id, { status: ProjectStatus.ACTIVE }, tenantId);
 
     return c.json({
       project: finalProject.toPlain(),
       scaffold: {
-        clawId: selectedClawId,
-        wip: selectedClawId === null,
-        synced: selectedClawId !== null,
+        agentHostId: selectedAgentHostId,
+        wip: selectedAgentHostId === null,
+        synced: selectedAgentHostId !== null,
       },
     });
   });
@@ -795,31 +795,31 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     return c.body(null, 204);
   });
 
-  // GET /api/projects/:id/claws — list claws associated with a project
-  router.get('/:id/claws', async (c) => {
+  // GET /api/projects/:id/agentHosts — list agentHosts associated with a project
+  router.get('/:id/agentHosts', async (c) => {
     const tenantId = c.get('tenantId');
     const proj = await projectService.getProject(c.req.param('id'), tenantId);
     const projectId = proj.id;
 
     const rows = await db
       .select({
-        id:          coderclawInstances.id,
-        name:        coderclawInstances.name,
-        slug:        coderclawInstances.slug,
-        status:      coderclawInstances.status,
-        connectedAt: coderclawInstances.connectedAt,
-        lastSeenAt:  coderclawInstances.lastSeenAt,
-        createdAt:   coderclawInstances.createdAt,
+        id:          agentHosts.id,
+        name:        agentHosts.name,
+        slug:        agentHosts.slug,
+        status:      agentHosts.status,
+        connectedAt: agentHosts.connectedAt,
+        lastSeenAt:  agentHosts.lastSeenAt,
+        createdAt:   agentHosts.createdAt,
       })
-      .from(clawProjects)
-      .innerJoin(coderclawInstances, eq(clawProjects.clawId, coderclawInstances.id))
+      .from(agentHostProjects)
+      .innerJoin(agentHosts, eq(agentHostProjects.agentHostId, agentHosts.id))
       .where(and(
-        eq(clawProjects.projectId, projectId),
-        eq(clawProjects.tenantId, tenantId),
+        eq(agentHostProjects.projectId, projectId),
+        eq(agentHostProjects.tenantId, tenantId),
       ));
 
     return c.json({
-      claws: rows.map((r) => ({
+      agentHosts: rows.map((r) => ({
         id:          String(r.id),
         name:        r.name,
         slug:        r.slug,

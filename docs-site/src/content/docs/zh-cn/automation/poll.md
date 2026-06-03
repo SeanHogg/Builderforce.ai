@@ -25,19 +25,19 @@ x-i18n:
 
 ```bash
 # WhatsApp
-coderclaw message poll --target +15555550123 \
+builderforce message poll --target +15555550123 \
   --poll-question "Lunch today?" --poll-option "Yes" --poll-option "No" --poll-option "Maybe"
-coderclaw message poll --target 123456789@g.us \
+builderforce message poll --target 123456789@g.us \
   --poll-question "Meeting time?" --poll-option "10am" --poll-option "2pm" --poll-option "4pm" --poll-multi
 
 # Discord
-coderclaw message poll --channel discord --target channel:123456789 \
+builderforce message poll --channel discord --target channel:123456789 \
   --poll-question "Snack?" --poll-option "Pizza" --poll-option "Sushi"
-coderclaw message poll --channel discord --target channel:123456789 \
+builderforce message poll --channel discord --target channel:123456789 \
   --poll-question "Plan?" --poll-option "A" --poll-option "B" --poll-duration-hours 48
 
 # MS Teams
-coderclaw message poll --channel msteams --target conversation:19:abc@thread.tacv2 \
+builderforce message poll --channel msteams --target conversation:19:abc@thread.tacv2 \
   --poll-question "Lunch?" --poll-option "Pizza" --poll-option "Sushi"
 ```
 
@@ -65,7 +65,7 @@ coderclaw message poll --channel msteams --target conversation:19:abc@thread.tac
 
 - WhatsApp：2-12 个选项，`maxSelections` 必须在选项数量范围内，忽略 `durationHours`。
 - Discord：2-10 个选项，`durationHours` 限制在 1-768 小时之间（默认 24）。`maxSelections > 1` 启用多选；Discord 不支持严格的选择数量限制。
-- MS Teams：Adaptive Card 投票（由 CoderClaw 管理）。无原生投票 API；`durationHours` 被忽略。
+- MS Teams：Adaptive Card 投票（由 BuilderForce Agents 管理）。无原生投票 API；`durationHours` 被忽略。
 
 ## 智能体工具（Message）
 
@@ -73,4 +73,4 @@ coderclaw message poll --channel msteams --target conversation:19:abc@thread.tac
 
 注意：Discord 没有"恰好选择 N 个"模式；`pollMulti` 映射为多选。
 Teams 投票以 Adaptive Cards 形式渲染，需要 Gateway 网关保持在线
-以将投票记录到 `~/.coderclaw/msteams-polls.json`。
+以将投票记录到 `~/.builderforce/msteams-polls.json`。

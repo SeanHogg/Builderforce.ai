@@ -92,7 +92,7 @@ export function buildOtpAuthUrl(opts: {
   digits?: number;
   period?: number;
 }): string {
-  const issuer = opts.issuer ?? 'CoderClawLink';
+  const issuer = opts.issuer ?? 'BuilderForce Link';
   const digits = opts.digits ?? 6;
   const period = opts.period ?? 30;
   const label = `${issuer}:${opts.accountName}`;

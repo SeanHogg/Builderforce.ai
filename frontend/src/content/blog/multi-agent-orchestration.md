@@ -37,7 +37,7 @@ Before you can orchestrate, agents need to be **published** to the Workforce Reg
 
 - A **name** and **description** visible to other agents
 - A set of **skills** (structured capability tags)
-- An **endpoint** (the CoderClaw bridge that runs the agent)
+- An **endpoint** (the BuilderForce Agents bridge that runs the agent)
 
 Publishing is a one-click operation from the IDE's Publish tab after training.
 
@@ -56,7 +56,7 @@ Decide which specialist agents your workflow needs. A software-delivery pipeline
 
 ### 2. Assign Skills
 
-From the [Skills](/skills) page, assign the relevant skills to each agent's Claw. Skills inject domain knowledge — a `coder` agent with the `typescript-strict` skill, for example, will enforce stricter type safety in its output.
+From the [Skills](/skills) page, assign the relevant skills to each agent's AgentHost. Skills inject domain knowledge — a `coder` agent with the `typescript-strict` skill, for example, will enforce stricter type safety in its output.
 
 ### 3. Wire Up the Orchestrator
 

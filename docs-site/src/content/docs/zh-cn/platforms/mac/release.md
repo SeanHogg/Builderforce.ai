@@ -1,8 +1,8 @@
 ---
 read_when:
-  - 制作或验证 CoderClaw macOS 发布版本
+  - 制作或验证 BuilderForce Agents macOS 发布版本
   - 更新 Sparkle appcast 或订阅源资源
-summary: CoderClaw macOS 发布清单（Sparkle 订阅源、打包、签名）
+summary: BuilderForce Agents macOS 发布清单（Sparkle 订阅源、打包、签名）
 title: macOS 发布
 x-i18n:
   generated_at: "2026-02-01T21:33:17Z"
@@ -13,7 +13,7 @@ x-i18n:
   workflow: 15
 ---
 
-# CoderClaw macOS 发布（Sparkle）
+# BuilderForce Agents macOS 发布（Sparkle）
 
 本应用现已支持 Sparkle 自动更新。发布构建必须经过 Developer ID 签名、压缩，并发布包含签名的 appcast 条目。
 
@@ -22,10 +22,10 @@ x-i18n:
 - 已安装 Developer ID Application 证书（示例：`Developer ID Application: <Developer Name> (<TEAMID>)`）。
 - 环境变量 `SPARKLE_PRIVATE_KEY_FILE` 已设置为 Sparkle ed25519 私钥路径（公钥已嵌入 Info.plist）。如果缺失，请检查 `~/.profile`。
 - 用于 `xcrun notarytool` 的公证凭据（钥匙串配置文件或 API 密钥），以实现通过 Gatekeeper 安全分发的 DMG/zip。
-  - 我们使用名为 `coderclaw-notary` 的钥匙串配置文件，由 shell 配置文件中的 App Store Connect API 密钥环境变量创建：
+  - 我们使用名为 `builderforce-notary` 的钥匙串配置文件，由 shell 配置文件中的 App Store Connect API 密钥环境变量创建：
     - `APP_STORE_CONNECT_API_KEY_P8`、`APP_STORE_CONNECT_KEY_ID`、`APP_STORE_CONNECT_ISSUER_ID`
-    - `echo "$APP_STORE_CONNECT_API_KEY_P8" | sed 's/\\n/\n/g' > /tmp/coderclaw-notary.p8`
-    - `xcrun notarytool store-credentials "coderclaw-notary" --key /tmp/coderclaw-notary.p8 --key-id "$APP_STORE_CONNECT_KEY_ID" --issuer "$APP_STORE_CONNECT_ISSUER_ID"`
+    - `echo "$APP_STORE_CONNECT_API_KEY_P8" | sed 's/\\n/\n/g' > /tmp/builderforce-notary.p8`
+    - `xcrun notarytool store-credentials "builderforce-notary" --key /tmp/builderforce-notary.p8 --key-id "$APP_STORE_CONNECT_KEY_ID" --issuer "$APP_STORE_CONNECT_ISSUER_ID"`
 - 已安装 `pnpm` 依赖（`pnpm install --config.node-linker=hoisted`）。
 - Sparkle 工具通过 SwiftPM 自动获取，位于 `apps/macos/.build/artifacts/sparkle/Sparkle/bin/`（`sign_update`、`generate_appcast` 等）。
 
@@ -48,16 +48,16 @@ SIGN_IDENTITY="Developer ID Application: <Developer Name> (<TEAMID>)" \
 scripts/package-mac-app.sh
 
 # 打包用于分发的 zip（包含资源分支以支持 Sparkle 增量更新）
-ditto -c -k --sequesterRsrc --keepParent dist/CoderClaw.app dist/CoderClaw-2026.1.27-beta.1.zip
+ditto -c -k --sequesterRsrc --keepParent dist/BuilderForce Agents.app dist/BuilderForce Agents-2026.1.27-beta.1.zip
 
 # 可选：同时构建适合用户使用的样式化 DMG（拖拽到 /Applications）
-scripts/create-dmg.sh dist/CoderClaw.app dist/CoderClaw-2026.1.27-beta.1.dmg
+scripts/create-dmg.sh dist/BuilderForce Agents.app dist/BuilderForce Agents-2026.1.27-beta.1.dmg
 
 # 推荐：构建 + 公证/装订 zip + DMG
 # 首先，创建一次钥匙串配置文件：
-#   xcrun notarytool store-credentials "coderclaw-notary" \
+#   xcrun notarytool store-credentials "builderforce-notary" \
 #     --apple-id "<apple-id>" --team-id "<team-id>" --password "<app-specific-password>"
-NOTARIZE=1 NOTARYTOOL_PROFILE=coderclaw-notary \
+NOTARIZE=1 NOTARYTOOL_PROFILE=builderforce-notary \
 BUNDLE_ID=bot.molt.mac \
 APP_VERSION=2026.1.27-beta.1 \
 APP_BUILD="$(git rev-list --count HEAD)" \
@@ -66,7 +66,7 @@ SIGN_IDENTITY="Developer ID Application: <Developer Name> (<TEAMID>)" \
 scripts/package-mac-dist.sh
 
 # 可选：随发布一起提供 dSYM
-ditto -c -k --keepParent apps/macos/.build/release/CoderClaw.app.dSYM dist/CoderClaw-2026.1.27-beta.1.dSYM.zip
+ditto -c -k --keepParent apps/macos/.build/release/BuilderForce Agents.app.dSYM dist/BuilderForce Agents-2026.1.27-beta.1.dSYM.zip
 ```
 
 ## Appcast 条目
@@ -74,18 +74,18 @@ ditto -c -k --keepParent apps/macos/.build/release/CoderClaw.app.dSYM dist/Coder
 使用发布说明生成器，以便 Sparkle 渲染格式化的 HTML 说明：
 
 ```bash
-SPARKLE_PRIVATE_KEY_FILE=/path/to/ed25519-private-key scripts/make_appcast.sh dist/CoderClaw-2026.1.27-beta.1.zip https://raw.githubusercontent.com/SeanHogg/coderClaw/main/appcast.xml
+SPARKLE_PRIVATE_KEY_FILE=/path/to/ed25519-private-key scripts/make_appcast.sh dist/BuilderForce Agents-2026.1.27-beta.1.zip https://raw.githubusercontent.com/SeanHogg/Builderforce.ai/main/appcast.xml
 ```
 
-从 `CHANGELOG.md`（通过 [`scripts/changelog-to-html.sh`](https://github.com/SeanHogg/coderClaw/blob/main/scripts/changelog-to-html.sh)）生成 HTML 发布说明，并将其嵌入 appcast 条目。
+从 `CHANGELOG.md`（通过 [`scripts/changelog-to-html.sh`](https://github.com/SeanHogg/Builderforce.ai/blob/main/scripts/changelog-to-html.sh)）生成 HTML 发布说明，并将其嵌入 appcast 条目。
 发布时，将更新后的 `appcast.xml` 与发布资源（zip + dSYM）一起提交。
 
 ## 发布与验证
 
-- 将 `CoderClaw-2026.1.27-beta.1.zip`（和 `CoderClaw-2026.1.27-beta.1.dSYM.zip`）上传到标签 `v2026.1.27-beta.1` 对应的 GitHub 发布。
-- 确保原始 appcast URL 与内置的订阅源匹配：`https://raw.githubusercontent.com/SeanHogg/coderClaw/main/appcast.xml`。
+- 将 `BuilderForce Agents-2026.1.27-beta.1.zip`（和 `BuilderForce Agents-2026.1.27-beta.1.dSYM.zip`）上传到标签 `v2026.1.27-beta.1` 对应的 GitHub 发布。
+- 确保原始 appcast URL 与内置的订阅源匹配：`https://raw.githubusercontent.com/SeanHogg/Builderforce.ai/main/appcast.xml`。
 - 完整性检查：
-  - `curl -I https://raw.githubusercontent.com/SeanHogg/coderClaw/main/appcast.xml` 返回 200。
+  - `curl -I https://raw.githubusercontent.com/SeanHogg/Builderforce.ai/main/appcast.xml` 返回 200。
   - `curl -I <enclosure url>` 在资源上传后返回 200。
   - 在之前的公开构建版本上，从 About 选项卡运行"Check for Updates…"，验证 Sparkle 能正常安装新构建。
 

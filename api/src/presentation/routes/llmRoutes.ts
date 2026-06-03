@@ -29,7 +29,7 @@ import {
   type ImageGenerationRequest,
 } from '../../application/llm/ImageProxyService';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, coderclawInstances, tenantApiKeys, users } from '../../infrastructure/database/schema';
+import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, agentHosts, tenantApiKeys, users } from '../../infrastructure/database/schema';
 import { originAllowed, deserializeScopes } from '../../application/llm/tenantApiKeyService';
 import { listToolsForTenant, callMcpTool } from '../../application/llm/mcpExtensionService';
 import { resolveKeyCached } from '../../infrastructure/auth/keyResolutionCache';
@@ -139,14 +139,14 @@ export function respondToAccessError(c: Context<HonoEnv>, err: unknown) {
 type TenantAccess = {
   userId: string | null;
   tenantId: number;
-  /** Numeric claw ID, set when request authenticates via claw API key. */
-  clawId: number | null;
-  /** Per-claw daily token budget (null = no per-claw cap). */
-  clawTokenDailyLimit: number | null;
+  /** Numeric agentHost ID, set when request authenticates via agentHost API key. */
+  agentHostId: number | null;
+  /** Per-agentHost daily token budget (null = no per-agentHost cap). */
+  agentHostTokenDailyLimit: number | null;
   /** UUID of the `bfk_*` tenant API key that authenticated, when applicable. */
   tenantApiKeyId: string | null;
   /** Endpoint scopes of the authenticating `bfk_*` key. null = unrestricted
-   *  (full-tenant key) or a non-key auth path (claw / JWT). See migration 0070. */
+   *  (full-tenant key) or a non-key auth path (agentHost / JWT). See migration 0070. */
   tenantApiKeyScopes: string[] | null;
   role: TenantRole;
   plan: 'free' | 'pro' | 'teams';
@@ -222,7 +222,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
 
   const token = authHeader.slice(7);
 
-  // Claw API key path: local CoderClaw instances send their raw clk_xxx key
+  // AgentHost API key path: local BuilderForce Agents instances send their raw clk_xxx key
   // directly as the Bearer token rather than exchanging it for a JWT first.
   if (token.startsWith('clk_')) {
     const keyHash = await hashSecret(token);
@@ -231,15 +231,15 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
       const db = buildDatabase(c.env);
       const [r] = await db
         .select({
-          id:               coderclawInstances.id,
-          tenantId:         coderclawInstances.tenantId,
-          status:           coderclawInstances.status,
-          tokenDailyLimit:  coderclawInstances.tokenDailyLimit,
+          id:               agentHosts.id,
+          tenantId:         agentHosts.tenantId,
+          status:           agentHosts.status,
+          tokenDailyLimit:  agentHosts.tokenDailyLimit,
         })
-        .from(coderclawInstances)
-        .where(eq(coderclawInstances.apiKeyHash, keyHash))
+        .from(agentHosts)
+        .where(eq(agentHosts.apiKeyHash, keyHash))
         .limit(1);
-      if (!r || r.status !== 'active') return { ok: false, reason: 'Invalid or inactive claw API key' };
+      if (!r || r.status !== 'active') return { ok: false, reason: 'Invalid or inactive agentHost API key' };
       return {
         ok: true,
         payload: { id: r.id, tenantId: r.tenantId, tokenDailyLimit: r.tokenDailyLimit ?? null },
@@ -247,23 +247,23 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
     });
 
     if (!resolved.ok) throw new Error(resolved.reason);
-    const claw = resolved.payload as { id: number; tenantId: number; tokenDailyLimit: number | null };
+    const agentHost = resolved.payload as { id: number; tenantId: number; tokenDailyLimit: number | null };
 
     return {
       userId: null,
-      tenantId: claw.tenantId,
-      clawId: claw.id,
-      clawTokenDailyLimit: claw.tokenDailyLimit,
+      tenantId: agentHost.tenantId,
+      agentHostId: agentHost.id,
+      agentHostTokenDailyLimit: agentHost.tokenDailyLimit,
       tenantApiKeyId: null,
       tenantApiKeyScopes: null,
       role: TenantRole.DEVELOPER,
       isSuperadmin: false,
-      ...(await resolveTenantPlan(c, claw.tenantId)),
+      ...(await resolveTenantPlan(c, agentHost.tenantId)),
     };
   }
 
   // Tenant API key path (bfk_*): self-service tenant credential issued from
-  // the portal; gateway-only. No claw context — plan-level cap still applies.
+  // the portal; gateway-only. No agentHost context — plan-level cap still applies.
   if (token.startsWith('bfk_')) {
     const keyHash = await hashSecret(token);
 
@@ -321,8 +321,8 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
     return {
       userId: null,
       tenantId: keyTenantId,
-      clawId: null,
-      clawTokenDailyLimit: null,
+      agentHostId: null,
+      agentHostTokenDailyLimit: null,
       tenantApiKeyId: keyId,
       tenantApiKeyScopes: keyScopes ?? null,
       role: TenantRole.DEVELOPER,
@@ -331,18 +331,18 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
     };
   }
 
-  // JWT path: web users and claws that exchanged their API key for a JWT
+  // JWT path: web users and agentHosts that exchanged their API key for a JWT
   const payload = await verifyJwt(token, c.env.JWT_SECRET);
   if (payload.tid == null) {
     throw new Error('Workspace token is required');
   }
 
-  // Service tokens carry no real user: claw instances (`claw:*`) and short-lived
+  // Service tokens carry no real user: agentHost instances (`agentHost:*`) and short-lived
   // embed-session tokens (`embed:*`) minted server-to-server from a bfk_* key.
   // Neither has a tenant_members row, so both skip the membership check.
-  const isClawToken = payload.sub.startsWith('claw:');
+  const isAgentHostToken = payload.sub.startsWith('agentHost:');
   const isEmbedToken = payload.sub.startsWith('embed:');
-  const isServiceToken = isClawToken || isEmbedToken;
+  const isServiceToken = isAgentHostToken || isEmbedToken;
   // Join `users.isSuperadmin` into the membership check so we don't depend on
   // the JWT carrying `sa: true`. Old JWTs minted before the `sa` claim was
   // added still grant superadmin bypass — no re-login required. New JWTs that
@@ -374,14 +374,14 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
   return {
     userId: isServiceToken ? null : payload.sub,
     tenantId: payload.tid,
-    clawId: null,
-    clawTokenDailyLimit: null,
+    agentHostId: null,
+    agentHostTokenDailyLimit: null,
     tenantApiKeyId: null,
     tenantApiKeyScopes: null,
     role: payload.role,
     // `users.isSuperadmin` (joined into the membership query above) is the
     // sole source of truth — fresh on every call, instant revocation.
-    // Service tokens (claw / embed) are never superadmin.
+    // Service tokens (agentHost / embed) are never superadmin.
     isSuperadmin: !isServiceToken && dbIsSuperadmin,
     ...(await resolveTenantPlan(c, payload.tid)),
   };
@@ -458,7 +458,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return respondToAccessError(c, err);
     }
 
-    // Only a tenant API key may mint embed sessions. A JWT (web/claw/embed)
+    // Only a tenant API key may mint embed sessions. A JWT (web/agentHost/embed)
     // can't — that would let a browser token bootstrap fresh tokens forever.
     if (!access.tenantApiKeyId) {
       return c.json(
@@ -594,7 +594,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       ? 0  // 0 disables the plan gate below; real "unlimited" is encoded by planUnlimited
       : (override !== null && override >= 0 ? override : planLimitDefault);
     const needsTenantUsageQuery =
-      planDailyLimit > 0 || (access.clawId !== null && access.clawTokenDailyLimit !== null);
+      planDailyLimit > 0 || (access.agentHostId !== null && access.agentHostTokenDailyLimit !== null);
 
     let usageToday = 0;
     if (needsTenantUsageQuery) {
@@ -612,14 +612,14 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         );
       usageToday = Number(usageRow?.used ?? 0);
 
-      // Per-claw cap (optional, set per-claw in portal)
-      if (access.clawId !== null && access.clawTokenDailyLimit !== null) {
-        if (usageToday >= access.clawTokenDailyLimit) {
+      // Per-agentHost cap (optional, set per-agentHost in portal)
+      if (access.agentHostId !== null && access.agentHostTokenDailyLimit !== null) {
+        if (usageToday >= access.agentHostTokenDailyLimit) {
           return c.json({
-            error: `Per-claw daily token limit reached (${access.clawTokenDailyLimit.toLocaleString()} tokens). Increase the limit in the Builderforce portal under Claws → Settings.`,
-            code: 'claw_token_limit_exceeded',
+            error: `Per-agentHost daily token limit reached (${access.agentHostTokenDailyLimit.toLocaleString()} tokens). Increase the limit in the Builderforce portal under AgentHosts → Settings.`,
+            code: 'agent_host_token_limit_exceeded',
             // `terminal` tells consumer-side fallback chains "no point retrying
-            // this on a different model — the cap is per-tenant/claw, not per-model."
+            // this on a different model — the cap is per-tenant/agentHost, not per-model."
             terminal: true,
             retryAfter: secondsUntilNextUtcMidnight(),
           }, 429);
@@ -728,7 +728,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       // body isn't captured here; identity, timing, attempts, and the chain are.
       logTrace(c.env, c.executionCtx, {
         traceId, surface: 'chat',
-        tenantId: access.tenantId, userId: access.userId, clawId: access.clawId,
+        tenantId: access.tenantId, userId: access.userId, agentHostId: access.agentHostId,
         tenantApiKeyId: access.tenantApiKeyId, llmProduct,
         effectivePlan: access.effectivePlan, premiumOverride: access.premiumOverride,
         result, streamed: true, useCase: callerUseCase, idempotencyKey,
@@ -786,7 +786,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // Full diagnostic trace (builder-side only).
     logTrace(c.env, c.executionCtx, {
       traceId, surface: 'chat',
-      tenantId: access.tenantId, userId: access.userId, clawId: access.clawId,
+      tenantId: access.tenantId, userId: access.userId, agentHostId: access.agentHostId,
       tenantApiKeyId: access.tenantApiKeyId, llmProduct,
       effectivePlan: access.effectivePlan, premiumOverride: access.premiumOverride,
       result, streamed: false,
@@ -967,13 +967,13 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     const byUser = await db.execute(sql`
       SELECT
-        COALESCE(user_id, 'claw-runtime') AS user_id,
+        COALESCE(user_id, 'agentHost-runtime') AS user_id,
         COUNT(*)::int                     AS requests,
         SUM(total_tokens)::bigint         AS total_tokens
       FROM llm_usage_log
       WHERE tenant_id = ${access.tenantId}
         AND created_at >= NOW() - (${days} || ' days')::interval
-      GROUP BY COALESCE(user_id, 'claw-runtime')
+      GROUP BY COALESCE(user_id, 'agentHost-runtime')
       ORDER BY requests DESC
       LIMIT 25
     `);

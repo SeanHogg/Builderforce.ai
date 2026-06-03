@@ -8,14 +8,14 @@ title: "Hooks"
 
 # Hooks
 
-Hooks provide an extensible event-driven system for automating actions in response to agent commands and events. Hooks are automatically discovered from directories and can be managed via CLI commands, similar to how skills work in CoderClaw.
+Hooks provide an extensible event-driven system for automating actions in response to agent commands and events. Hooks are automatically discovered from directories and can be managed via CLI commands, similar to how skills work in BuilderForce Agents.
 
 ## Getting Oriented
 
 Hooks are small scripts that run when something happens. There are two kinds:
 
 - **Hooks** (this page): run inside the Gateway when agent events fire, like `/new`, `/reset`, `/stop`, or lifecycle events.
-- **Webhooks**: external HTTP webhooks that let other systems trigger work in CoderClaw. See [Webhook Hooks](/automation/webhook) or use `coderclaw webhooks` for Gmail helper commands.
+- **Webhooks**: external HTTP webhooks that let other systems trigger work in BuilderForce Agents. See [Webhook Hooks](/automation/webhook) or use `builderforce webhooks` for Gmail helper commands.
 
 Hooks can also be bundled inside plugins; see [Plugins](/tools/plugin#plugin-hooks).
 
@@ -35,54 +35,54 @@ The hooks system allows you to:
 - Save session context to memory when `/new` is issued
 - Log all commands for auditing
 - Trigger custom automations on agent lifecycle events
-- Extend CoderClaw's behavior without modifying core code
+- Extend BuilderForce Agents's behavior without modifying core code
 
 ## Getting Started
 
 ### Bundled Hooks
 
-CoderClaw ships with four bundled hooks that are automatically discovered:
+BuilderForce Agents ships with four bundled hooks that are automatically discovered:
 
-- **💾 session-memory**: Saves session context to your agent workspace (default `~/.coderclaw/workspace/memory/`) when you issue `/new`
+- **💾 session-memory**: Saves session context to your agent workspace (default `~/.builderforce/workspace/memory/`) when you issue `/new`
 - **📎 bootstrap-extra-files**: Injects additional workspace bootstrap files from configured glob/path patterns during `agent:bootstrap`
-- **📝 command-logger**: Logs all command events to `~/.coderclaw/logs/commands.log`
+- **📝 command-logger**: Logs all command events to `~/.builderforce/logs/commands.log`
 - **🚀 boot-md**: Runs `BOOT.md` when the gateway starts (requires internal hooks enabled)
 
 List available hooks:
 
 ```bash
-coderclaw hooks list
+builderforce hooks list
 ```
 
 Enable a hook:
 
 ```bash
-coderclaw hooks enable session-memory
+builderforce hooks enable session-memory
 ```
 
 Check hook status:
 
 ```bash
-coderclaw hooks check
+builderforce hooks check
 ```
 
 Get detailed information:
 
 ```bash
-coderclaw hooks info session-memory
+builderforce hooks info session-memory
 ```
 
 ### Onboarding
 
-During onboarding (`coderclaw onboard`), you'll be prompted to enable recommended hooks. The wizard automatically discovers eligible hooks and presents them for selection.
+During onboarding (`builderforce onboard`), you'll be prompted to enable recommended hooks. The wizard automatically discovers eligible hooks and presents them for selection.
 
 ## Hook Discovery
 
 Hooks are automatically discovered from three directories (in order of precedence):
 
 1. **Workspace hooks**: `<workspace>/hooks/` (per-agent, highest precedence)
-2. **Managed hooks**: `~/.coderclaw/hooks/` (user-installed, shared across workspaces)
-3. **Bundled hooks**: `<coderclaw>/dist/hooks/bundled/` (shipped with CoderClaw)
+2. **Managed hooks**: `~/.builderforce/hooks/` (user-installed, shared across workspaces)
+3. **Bundled hooks**: `<builderforce>/dist/hooks/bundled/` (shipped with BuilderForce Agents)
 
 Managed hook directories can be either a **single hook** or a **hook pack** (package directory).
 
@@ -96,11 +96,11 @@ my-hook/
 
 ## Hook Packs (npm/archives)
 
-Hook packs are standard npm packages that export one or more hooks via `coderclaw.hooks` in
+Hook packs are standard npm packages that export one or more hooks via `builderforce.hooks` in
 `package.json`. Install them with:
 
 ```bash
-coderclaw hooks install <path-or-spec>
+builderforce hooks install <path-or-spec>
 ```
 
 Npm specs are registry-only (package name + optional version/tag). Git/URL/file specs are rejected.
@@ -111,16 +111,16 @@ Example `package.json`:
 {
   "name": "@acme/my-hooks",
   "version": "0.1.0",
-  "coderclaw": {
+  "builderforce": {
     "hooks": ["./hooks/my-hook", "./hooks/other-hook"]
   }
 }
 ```
 
 Each entry points to a hook directory containing `HOOK.md` and `handler.ts` (or `index.ts`).
-Hook packs can ship dependencies; they will be installed under `~/.coderclaw/hooks/<id>`.
+Hook packs can ship dependencies; they will be installed under `~/.builderforce/hooks/<id>`.
 
-Security note: `coderclaw hooks install` installs dependencies with `npm install --ignore-scripts`
+Security note: `builderforce hooks install` installs dependencies with `npm install --ignore-scripts`
 (no lifecycle scripts). Keep hook pack dependency trees "pure JS/TS" and avoid packages that rely
 on `postinstall` builds.
 
@@ -136,7 +136,7 @@ name: my-hook
 description: "Short description of what this hook does"
 homepage: https://builderforce.ai/docs/automation/hooks#my-hook
 metadata:
-  { "coderclaw": { "emoji": "🔗", "events": ["command:new"], "requires": { "bins": ["node"] } } }
+  { "builderforce": { "emoji": "🔗", "events": ["command:new"], "requires": { "bins": ["node"] } } }
 ---
 
 # My Hook
@@ -160,7 +160,7 @@ No configuration needed.
 
 ### Metadata Fields
 
-The `metadata.coderclaw` object supports:
+The `metadata.builderforce` object supports:
 
 - **`emoji`**: Display emoji for CLI (e.g., `"💾"`)
 - **`events`**: Array of events to listen for (e.g., `["command:new", "command:reset"]`)
@@ -221,7 +221,7 @@ Each event includes:
     senderId?: string,
     workspaceDir?: string,
     bootstrapFiles?: WorkspaceBootstrapFile[],
-    cfg?: CoderClawConfig,
+    cfg?: BuilderForce AgentsConfig,
     // Message events (see Message Events section for full details):
     from?: string,             // message:received
     to?: string,               // message:sent
@@ -319,7 +319,7 @@ export default handler;
 
 ### Tool Result Hooks (Plugin API)
 
-These hooks are not event-stream listeners; they let plugins synchronously adjust tool results before CoderClaw persists them.
+These hooks are not event-stream listeners; they let plugins synchronously adjust tool results before BuilderForce Agents persists them.
 
 - **`tool_result_persist`**: transform tool results before they are written to the session transcript. Must be synchronous; return the updated tool result payload or `undefined` to keep it as-is. See [Agent Loop](/concepts/agent-loop).
 
@@ -336,13 +336,13 @@ Planned event types:
 ### 1. Choose Location
 
 - **Workspace hooks** (`<workspace>/hooks/`): Per-agent, highest precedence
-- **Managed hooks** (`~/.coderclaw/hooks/`): Shared across workspaces
+- **Managed hooks** (`~/.builderforce/hooks/`): Shared across workspaces
 
 ### 2. Create Directory Structure
 
 ```bash
-mkdir -p ~/.coderclaw/hooks/my-hook
-cd ~/.coderclaw/hooks/my-hook
+mkdir -p ~/.builderforce/hooks/my-hook
+cd ~/.builderforce/hooks/my-hook
 ```
 
 ### 3. Create HOOK.md
@@ -351,7 +351,7 @@ cd ~/.coderclaw/hooks/my-hook
 ---
 name: my-hook
 description: "Does something useful"
-metadata: { "coderclaw": { "emoji": "🎯", "events": ["command:new"] } }
+metadata: { "builderforce": { "emoji": "🎯", "events": ["command:new"] } }
 ---
 
 # My Custom Hook
@@ -380,10 +380,10 @@ export default handler;
 
 ```bash
 # Verify hook is discovered
-coderclaw hooks list
+builderforce hooks list
 
 # Enable it
-coderclaw hooks enable my-hook
+builderforce hooks enable my-hook
 
 # Restart your gateway process (menu bar app restart on macOS, or restart your dev process)
 
@@ -479,46 +479,46 @@ Note: `module` must be a workspace-relative path. Absolute paths and traversal o
 
 ```bash
 # List all hooks
-coderclaw hooks list
+builderforce hooks list
 
 # Show only eligible hooks
-coderclaw hooks list --eligible
+builderforce hooks list --eligible
 
 # Verbose output (show missing requirements)
-coderclaw hooks list --verbose
+builderforce hooks list --verbose
 
 # JSON output
-coderclaw hooks list --json
+builderforce hooks list --json
 ```
 
 ### Hook Information
 
 ```bash
 # Show detailed info about a hook
-coderclaw hooks info session-memory
+builderforce hooks info session-memory
 
 # JSON output
-coderclaw hooks info session-memory --json
+builderforce hooks info session-memory --json
 ```
 
 ### Check Eligibility
 
 ```bash
 # Show eligibility summary
-coderclaw hooks check
+builderforce hooks check
 
 # JSON output
-coderclaw hooks check --json
+builderforce hooks check --json
 ```
 
 ### Enable/Disable
 
 ```bash
 # Enable a hook
-coderclaw hooks enable session-memory
+builderforce hooks enable session-memory
 
 # Disable a hook
-coderclaw hooks disable command-logger
+builderforce hooks disable command-logger
 ```
 
 ## Bundled hook reference
@@ -531,7 +531,7 @@ Saves session context to memory when you issue `/new`.
 
 **Requirements**: `workspace.dir` must be configured
 
-**Output**: `<workspace>/memory/YYYY-MM-DD-slug.md` (defaults to `~/.coderclaw/workspace`)
+**Output**: `<workspace>/memory/YYYY-MM-DD-slug.md` (defaults to `~/.builderforce/workspace`)
 
 **What it does**:
 
@@ -559,7 +559,7 @@ Saves session context to memory when you issue `/new`.
 **Enable**:
 
 ```bash
-coderclaw hooks enable session-memory
+builderforce hooks enable session-memory
 ```
 
 ### bootstrap-extra-files
@@ -600,7 +600,7 @@ Injects additional bootstrap files (for example monorepo-local `AGENTS.md` / `TO
 **Enable**:
 
 ```bash
-coderclaw hooks enable bootstrap-extra-files
+builderforce hooks enable bootstrap-extra-files
 ```
 
 ### command-logger
@@ -611,7 +611,7 @@ Logs all command events to a centralized audit file.
 
 **Requirements**: None
 
-**Output**: `~/.coderclaw/logs/commands.log`
+**Output**: `~/.builderforce/logs/commands.log`
 
 **What it does**:
 
@@ -630,19 +630,19 @@ Logs all command events to a centralized audit file.
 
 ```bash
 # View recent commands
-tail -n 20 ~/.coderclaw/logs/commands.log
+tail -n 20 ~/.builderforce/logs/commands.log
 
 # Pretty-print with jq
-cat ~/.coderclaw/logs/commands.log | jq .
+cat ~/.builderforce/logs/commands.log | jq .
 
 # Filter by action
-grep '"action":"new"' ~/.coderclaw/logs/commands.log | jq .
+grep '"action":"new"' ~/.builderforce/logs/commands.log | jq .
 ```
 
 **Enable**:
 
 ```bash
-coderclaw hooks enable command-logger
+builderforce hooks enable command-logger
 ```
 
 ### boot-md
@@ -663,7 +663,7 @@ Internal hooks must be enabled for this to run.
 **Enable**:
 
 ```bash
-coderclaw hooks enable boot-md
+builderforce hooks enable boot-md
 ```
 
 ## Best Practices
@@ -720,13 +720,13 @@ const handler: HookHandler = async (event) => {
 Specify exact events in metadata when possible:
 
 ```yaml
-metadata: { "coderclaw": { "events": ["command:new"] } } # Specific
+metadata: { "builderforce": { "events": ["command:new"] } } # Specific
 ```
 
 Rather than:
 
 ```yaml
-metadata: { "coderclaw": { "events": ["command"] } } # General - more overhead
+metadata: { "builderforce": { "events": ["command"] } } # General - more overhead
 ```
 
 ## Debugging
@@ -747,7 +747,7 @@ Registered hook: boot-md -> gateway:startup
 List all discovered hooks:
 
 ```bash
-coderclaw hooks list --verbose
+builderforce hooks list --verbose
 ```
 
 ### Check Registration
@@ -766,7 +766,7 @@ const handler: HookHandler = async (event) => {
 Check why a hook isn't eligible:
 
 ```bash
-coderclaw hooks info my-hook
+builderforce hooks info my-hook
 ```
 
 Look for missing requirements in the output.
@@ -779,10 +779,10 @@ Monitor gateway logs to see hook execution:
 
 ```bash
 # macOS
-./scripts/clawlog.sh -f
+./scripts/agentlog.sh -f
 
 # Other platforms
-tail -f ~/.coderclaw/gateway.log
+tail -f ~/.builderforce/gateway.log
 ```
 
 ### Test Hooks Directly
@@ -858,21 +858,21 @@ Session reset
 1. Check directory structure:
 
    ```bash
-   ls -la ~/.coderclaw/hooks/my-hook/
+   ls -la ~/.builderforce/hooks/my-hook/
    # Should show: HOOK.md, handler.ts
    ```
 
 2. Verify HOOK.md format:
 
    ```bash
-   cat ~/.coderclaw/hooks/my-hook/HOOK.md
+   cat ~/.builderforce/hooks/my-hook/HOOK.md
    # Should have YAML frontmatter with name and metadata
    ```
 
 3. List all discovered hooks:
 
    ```bash
-   coderclaw hooks list
+   builderforce hooks list
    ```
 
 ### Hook Not Eligible
@@ -880,7 +880,7 @@ Session reset
 Check requirements:
 
 ```bash
-coderclaw hooks info my-hook
+builderforce hooks info my-hook
 ```
 
 Look for missing:
@@ -895,7 +895,7 @@ Look for missing:
 1. Verify hook is enabled:
 
    ```bash
-   coderclaw hooks list
+   builderforce hooks list
    # Should show ✓ next to enabled hooks
    ```
 
@@ -904,7 +904,7 @@ Look for missing:
 3. Check gateway logs for errors:
 
    ```bash
-   ./scripts/clawlog.sh | grep hook
+   ./scripts/agentlog.sh | grep hook
    ```
 
 ### Handler Errors
@@ -943,8 +943,8 @@ node -e "import('./path/to/handler.ts').then(console.log)"
 1. Create hook directory:
 
    ```bash
-   mkdir -p ~/.coderclaw/hooks/my-hook
-   mv ./hooks/handlers/my-handler.ts ~/.coderclaw/hooks/my-hook/handler.ts
+   mkdir -p ~/.builderforce/hooks/my-hook
+   mv ./hooks/handlers/my-handler.ts ~/.builderforce/hooks/my-hook/handler.ts
    ```
 
 2. Create HOOK.md:
@@ -953,7 +953,7 @@ node -e "import('./path/to/handler.ts').then(console.log)"
    ---
    name: my-hook
    description: "My custom hook"
-   metadata: { "coderclaw": { "emoji": "🎯", "events": ["command:new"] } }
+   metadata: { "builderforce": { "emoji": "🎯", "events": ["command:new"] } }
    ---
 
    # My Hook
@@ -979,7 +979,7 @@ node -e "import('./path/to/handler.ts').then(console.log)"
 4. Verify and restart your gateway process:
 
    ```bash
-   coderclaw hooks list
+   builderforce hooks list
    # Should show: 🎯 my-hook ✓
    ```
 
@@ -994,6 +994,6 @@ node -e "import('./path/to/handler.ts').then(console.log)"
 ## See Also
 
 - [CLI Reference: hooks](/cli/hooks)
-- [Bundled Hooks README](https://github.com/SeanHogg/coderClaw/tree/main/src/hooks/bundled)
+- [Bundled Hooks README](https://github.com/SeanHogg/Builderforce.ai/tree/main/src/hooks/bundled)
 - [Webhook Hooks](/automation/webhook)
 - [Configuration](/gateway/configuration#hooks)

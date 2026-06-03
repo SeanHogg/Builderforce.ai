@@ -1,0 +1,122 @@
+'use client';
+
+import type { Node } from '@xyflow/react';
+import { NODE_KIND_MAP, type ConfigField } from './nodeKinds';
+import type { BuilderNodeData } from './BuilderNode';
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '7px 9px',
+  fontSize: 12.5,
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 7,
+  background: 'var(--bg-deep)',
+  color: 'var(--text-primary)',
+  boxSizing: 'border-box',
+  marginTop: 3,
+};
+
+interface Props {
+  node: Node<BuilderNodeData>;
+  onChange: (nodeId: string, patch: Partial<BuilderNodeData>) => void;
+  onDelete: (nodeId: string) => void;
+}
+
+/** Right-hand inspector for the selected node — edits its label and the typed
+ *  config fields declared in the node-kind catalog. */
+export function NodeConfigPanel({ node, onChange, onDelete }: Props) {
+  const meta = NODE_KIND_MAP[node.data.kind];
+  const config = node.data.config ?? {};
+
+  const setConfig = (key: string, value: unknown) =>
+    onChange(node.id, { config: { ...config, [key]: value } });
+
+  const renderField = (f: ConfigField) => {
+    const value = config[f.key];
+    if (f.type === 'select') {
+      return (
+        <select style={inputStyle} value={String(value ?? f.options?.[0] ?? '')} onChange={(e) => setConfig(f.key, e.target.value)}>
+          {f.options?.map((o) => (
+            <option key={o} value={o}>{o}</option>
+          ))}
+        </select>
+      );
+    }
+    if (f.type === 'textarea') {
+      return (
+        <textarea
+          style={{ ...inputStyle, minHeight: 64, resize: 'vertical', fontFamily: 'inherit' }}
+          value={String(value ?? '')}
+          placeholder={f.placeholder}
+          onChange={(e) => setConfig(f.key, e.target.value)}
+        />
+      );
+    }
+    if (f.type === 'number') {
+      return (
+        <input
+          type="number"
+          style={inputStyle}
+          value={value == null ? '' : Number(value)}
+          placeholder={f.placeholder}
+          onChange={(e) => setConfig(f.key, e.target.value === '' ? '' : Number(e.target.value))}
+        />
+      );
+    }
+    return (
+      <input
+        type="text"
+        style={inputStyle}
+        value={String(value ?? '')}
+        placeholder={f.placeholder}
+        onChange={(e) => setConfig(f.key, e.target.value)}
+      />
+    );
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', overflowY: 'auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 18 }}>{meta?.icon}</span>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{meta?.label}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{meta?.blurb}</div>
+        </div>
+      </div>
+
+      <label style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
+        Label
+        <input
+          style={inputStyle}
+          value={node.data.label}
+          onChange={(e) => onChange(node.id, { label: e.target.value })}
+        />
+      </label>
+
+      {meta?.fields.map((f) => (
+        <label key={f.key} style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
+          {f.label}
+          {renderField(f)}
+        </label>
+      ))}
+
+      <button
+        type="button"
+        onClick={() => onDelete(node.id)}
+        style={{
+          marginTop: 'auto',
+          padding: '7px 12px',
+          fontSize: 12,
+          fontWeight: 600,
+          background: 'transparent',
+          color: 'var(--danger, #dc2626)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: 8,
+          cursor: 'pointer',
+        }}
+      >
+        Delete node
+      </button>
+    </div>
+  );
+}

@@ -1,6 +1,6 @@
 ---
 read_when:
-  - 为 CoderClaw 设置 Zalo Personal
+  - 为 BuilderForce Agents 设置 Zalo Personal
   - 调试 Zalo Personal 登录或消息流程
 summary: 通过 zca-cli（QR 登录）支持 Zalo 个人账户、功能和配置
 title: Zalo Personal
@@ -23,8 +23,8 @@ x-i18n:
 
 Zalo Personal 作为插件提供，不包含在核心安装中。
 
-- 通过 CLI 安装：`coderclaw plugins install @coderclaw/zalouser`
-- 或从源码检出安装：`coderclaw plugins install ./extensions/zalouser`
+- 通过 CLI 安装：`builderforce plugins install @builderforce/zalouser`
+- 或从源码检出安装：`builderforce plugins install ./extensions/zalouser`
 - 详情：[插件](/tools/plugin)
 
 ## 前置条件：zca-cli
@@ -38,7 +38,7 @@ Gateway 网关机器必须在 `PATH` 中有可用的 `zca` 二进制文件。
 
 1. 安装插件（见上文）。
 2. 登录（QR，在 Gateway 网关机器上）：
-   - `coderclaw channels login --channel zalouser`
+   - `builderforce channels login --channel zalouser`
    - 用 Zalo 手机应用扫描终端中的二维码。
 3. 启用渠道：
 
@@ -71,9 +71,9 @@ Gateway 网关机器必须在 `PATH` 中有可用的 `zca` 二进制文件。
 使用目录 CLI 发现联系人/群组及其 ID：
 
 ```bash
-coderclaw directory self --channel zalouser
-coderclaw directory peers list --channel zalouser --query "name"
-coderclaw directory groups list --channel zalouser --query "work"
+builderforce directory self --channel zalouser
+builderforce directory peers list --channel zalouser --query "name"
+builderforce directory groups list --channel zalouser --query "work"
 ```
 
 ## 限制
@@ -88,8 +88,8 @@ coderclaw directory groups list --channel zalouser --query "work"
 
 通过以下方式批准：
 
-- `coderclaw pairing list zalouser`
-- `coderclaw pairing approve zalouser <code>`
+- `builderforce pairing list zalouser`
+- `builderforce pairing approve zalouser <code>`
 
 ## 群组访问（可选）
 
@@ -99,7 +99,7 @@ coderclaw directory groups list --channel zalouser --query "work"
   - `channels.zalouser.groups`（键为群组 ID 或名称）
 - 阻止所有群组：`channels.zalouser.groupPolicy = "disabled"`。
 - 配置向导可以提示输入群组允许列表。
-- 启动时，CoderClaw 将允许列表中的群组/用户名称解析为 ID 并记录映射；未解析的条目保持原样。
+- 启动时，BuilderForce Agents 将允许列表中的群组/用户名称解析为 ID 并记录映射；未解析的条目保持原样。
 
 示例：
 
@@ -143,5 +143,5 @@ coderclaw directory groups list --channel zalouser --query "work"
 
 **登录不保持：**
 
-- `coderclaw channels status --probe`
-- 重新登录：`coderclaw channels logout --channel zalouser && coderclaw channels login --channel zalouser`
+- `builderforce channels status --probe`
+- 重新登录：`builderforce channels logout --channel zalouser && builderforce channels login --channel zalouser`

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 import { useModalDismiss } from '@/hooks/useModalDismiss';
+import { isNavItemActive } from '@/lib/nav';
 
 export interface MarketingNavLink {
   label: string;
@@ -38,7 +39,7 @@ export default function MarketingHeader({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
-  const isActive = (href: string) => href.startsWith('/') && pathname === href;
+  const isActive = (href: string) => isNavItemActive(pathname, { href });
 
   // Lock body scroll + close on Escape while the menu is open.
   useModalDismiss(open, () => setOpen(false));
@@ -47,7 +48,7 @@ export default function MarketingHeader({
     <header className="mh-nav" aria-label="Main navigation">
       <div className="mh-nav-inner">
         <Link href="/" className="mh-nav-logo">
-          <Image src="/claw.png" alt="" width={32} height={32} priority />
+          <Image src="/agentHost.png" alt="" width={32} height={32} priority />
           Builderforce.ai
         </Link>
 

@@ -21,10 +21,10 @@ export const PERMISSIONS = {
   WORKFLOW_WRITE:     'workflow:write',
   WORKFLOW_EXECUTE:   'workflow:execute',
   WORKFLOW_DELETE:    'workflow:delete',
-  CLAW_READ:          'claw:read',
-  CLAW_REGISTER:      'claw:register',
-  CLAW_CONFIGURE:     'claw:configure',
-  CLAW_DELETE:        'claw:delete',
+  AGENT_HOST_READ:          'agentHost:read',
+  AGENT_HOST_REGISTER:      'agentHost:register',
+  AGENT_HOST_CONFIGURE:     'agentHost:configure',
+  AGENT_HOST_DELETE:        'agentHost:delete',
   MEMBER_READ:        'member:read',
   MEMBER_INVITE:      'member:invite',
   MEMBER_REMOVE:      'member:remove',
@@ -48,20 +48,20 @@ export const PERMISSIONS = {
 export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS];
 
 const VIEWER: Permission[] = [
-  'project:read', 'task:read', 'workflow:read', 'claw:read',
+  'project:read', 'task:read', 'workflow:read', 'agentHost:read',
   'member:read', 'approval:read', 'marketplace:read',
 ];
 
 const DEVELOPER: Permission[] = [
   ...VIEWER,
   'project:write', 'task:write', 'task:assign', 'workflow:write', 'workflow:execute',
-  'claw:register', 'report:read', 'apikey:read', 'apikey:rotate',
+  'agentHost:register', 'report:read', 'apikey:read', 'apikey:rotate',
 ];
 
 const MANAGER: Permission[] = [
   ...DEVELOPER,
   'project:delete', 'project:archive', 'task:delete', 'workflow:delete',
-  'claw:configure', 'claw:delete', 'member:invite', 'member:remove',
+  'agentHost:configure', 'agentHost:delete', 'member:invite', 'member:remove',
   'billing:read', 'report:export', 'approval:approve', 'marketplace:purchase', 'audit:read',
 ];
 

@@ -3,7 +3,7 @@ import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { Task } from '../../domain/task/Task';
 import {
   TaskId, ProjectId, TaskStatus, TaskPriority, AgentType,
-  asTaskId, asProjectId, asClawId,
+  asTaskId, asProjectId, asAgentHostId,
 } from '../../domain/shared/types';
 import { tasks as tasksTable } from '../database/schema';
 import type { Db } from '../database/connection';
@@ -57,7 +57,7 @@ export class TaskRepository implements ITaskRepository {
         status:            plain.status,
         priority:          plain.priority,
         assignedAgentType: plain.assignedAgentType ?? undefined,
-        assignedClawId: plain.assignedClawId ?? undefined,
+        assignedAgentHostId: plain.assignedAgentHostId ?? undefined,
         githubIssueNumber: plain.githubIssueNumber ?? undefined,
         githubIssueUrl:    plain.githubIssueUrl ?? undefined,
         githubPrUrl:       plain.githubPrUrl ?? undefined,
@@ -82,7 +82,7 @@ export class TaskRepository implements ITaskRepository {
         status:            plain.status,
         priority:          plain.priority,
         assignedAgentType: plain.assignedAgentType ?? undefined,
-        assignedClawId: plain.assignedClawId ?? undefined,
+        assignedAgentHostId: plain.assignedAgentHostId ?? undefined,
         githubIssueNumber: plain.githubIssueNumber ?? undefined,
         githubIssueUrl:    plain.githubIssueUrl ?? undefined,
         githubPrUrl:       plain.githubPrUrl ?? undefined,
@@ -158,7 +158,7 @@ function toDomain(row: Row): Task {
     status:            row.status,
     priority:          row.priority as TaskPriority,
     assignedAgentType: (row.assignedAgentType as AgentType) ?? null,
-    assignedClawId: row.assignedClawId != null ? asClawId(row.assignedClawId) : null,
+    assignedAgentHostId: row.assignedAgentHostId != null ? asAgentHostId(row.assignedAgentHostId) : null,
     githubIssueNumber: row.githubIssueNumber ?? null,
     githubIssueUrl:    row.githubIssueUrl ?? null,
     githubPrUrl:       row.githubPrUrl ?? null,

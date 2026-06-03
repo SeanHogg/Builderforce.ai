@@ -3,7 +3,7 @@ read_when:
   - 你需要知道哪些环境变量被加载，以及加载顺序
   - 你在调试 Gateway 网关中缺失的 API 密钥
   - 你在编写提供商认证或部署环境的文档
-summary: CoderClaw 从哪里加载环境变量以及优先级顺序
+summary: BuilderForce Agents 从哪里加载环境变量以及优先级顺序
 title: 环境变量
 x-i18n:
   generated_at: "2026-02-03T07:47:11Z"
@@ -16,15 +16,15 @@ x-i18n:
 
 # 环境变量
 
-CoderClaw 从多个来源拉取环境变量。规则是**永不覆盖现有值**。
+BuilderForce Agents 从多个来源拉取环境变量。规则是**永不覆盖现有值**。
 
 ## 优先级（从高到低）
 
 1. **进程环境**（Gateway 网关进程从父 shell/守护进程已有的内容）。
 2. **当前工作目录中的 `.env`**（dotenv 默认；不覆盖）。
-3. **全局 `.env`** 位于 `~/.coderclaw/.env`（即 `$CODERCLAW_STATE_DIR/.env`；不覆盖）。
-4. **配置 `env` 块** 位于 `~/.coderclaw/coderclaw.json`（仅在缺失时应用）。
-5. **可选的登录 shell 导入**（`env.shellEnv.enabled` 或 `CODERCLAW_LOAD_SHELL_ENV=1`），仅对缺失的预期键名应用。
+3. **全局 `.env`** 位于 `~/.builderforce/.env`（即 `$BUILDERFORCE_AGENTS_STATE_DIR/.env`；不覆盖）。
+4. **配置 `env` 块** 位于 `~/.builderforce/builderforce.json`（仅在缺失时应用）。
+5. **可选的登录 shell 导入**（`env.shellEnv.enabled` 或 `BUILDERFORCE_AGENTS_LOAD_SHELL_ENV=1`），仅对缺失的预期键名应用。
 
 如果配置文件完全缺失，步骤 4 将被跳过；如果启用了 shell 导入，它仍会运行。
 
@@ -60,8 +60,8 @@ CoderClaw 从多个来源拉取环境变量。规则是**永不覆盖现有值**
 
 环境变量等效项：
 
-- `CODERCLAW_LOAD_SHELL_ENV=1`
-- `CODERCLAW_SHELL_ENV_TIMEOUT_MS=15000`
+- `BUILDERFORCE_AGENTS_LOAD_SHELL_ENV=1`
+- `BUILDERFORCE_AGENTS_SHELL_ENV_TIMEOUT_MS=15000`
 
 ## 配置中的环境变量替换
 

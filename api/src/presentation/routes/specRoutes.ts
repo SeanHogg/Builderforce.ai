@@ -1,12 +1,12 @@
 /**
  * Specs routes – /api/specs
  *
- * Specs are structured planning documents produced by the coderClaw /spec command.
+ * Specs are structured planning documents produced by the BuilderForce Agents /spec command.
  * They store PRD, architecture spec, and task list as structured fields.
  *
  * P1-1: Spec / Planning Storage API
  *
- * POST   /api/specs                    Create or upsert a spec (claw API key or tenant JWT)
+ * POST   /api/specs                    Create or upsert a spec (agentHost API key or tenant JWT)
  * GET    /api/specs                    List specs for tenant (tenant JWT)
  * GET    /api/specs/:id                Get spec detail (tenant JWT)
  * PATCH  /api/specs/:id                Update spec status/content (tenant JWT)
@@ -17,41 +17,41 @@
 import { Hono } from 'hono';
 import { eq, and } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { specs, workflows, coderclawInstances } from '../../infrastructure/database/schema';
+import { specs, workflows, agentHosts } from '../../infrastructure/database/schema';
 import { verifySecret } from '../../infrastructure/auth/HashService';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 type SpecsHonoEnv = HonoEnv;
 
-async function verifyClawApiKey(db: Db, id: number, key?: string | null): Promise<{ id: number; tenantId: number } | null> {
+async function verifyAgentHostApiKey(db: Db, id: number, key?: string | null): Promise<{ id: number; tenantId: number } | null> {
   if (!key) return null;
-  const [claw] = await db
-    .select({ id: coderclawInstances.id, tenantId: coderclawInstances.tenantId, apiKeyHash: coderclawInstances.apiKeyHash })
-    .from(coderclawInstances)
-    .where(eq(coderclawInstances.id, id));
-  if (!claw) return null;
-  const valid = await verifySecret(key, claw.apiKeyHash);
-  return valid ? claw : null;
+  const [agentHost] = await db
+    .select({ id: agentHosts.id, tenantId: agentHosts.tenantId, apiKeyHash: agentHosts.apiKeyHash })
+    .from(agentHosts)
+    .where(eq(agentHosts.id, id));
+  if (!agentHost) return null;
+  const valid = await verifySecret(key, agentHost.apiKeyHash);
+  return valid ? agentHost : null;
 }
 
 export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
   const router = new Hono<SpecsHonoEnv>();
 
   // POST /api/specs – create/upsert a spec
-  // Accepts either tenant JWT (from portal) or claw API key (?clawId=&key=).
+  // Accepts either tenant JWT (from portal) or agentHost API key (?agentHostId=&key=).
   router.post('/', async (c) => {
     let tenantId: number;
-    let clawId: number | null = null;
+    let agentHostId: number | null = null;
 
-    // Try claw API key auth first (for automated pushes from the claw runtime)
-    const clawIdParam = Number(c.req.query('clawId') ?? '');
+    // Try agentHost API key auth first (for automated pushes from the agentHost runtime)
+    const agentHostIdParam = Number(c.req.query('agentHostId') ?? '');
     const apiKey = c.req.query('key');
-    if (!Number.isNaN(clawIdParam) && clawIdParam > 0 && apiKey) {
-      const claw = await verifyClawApiKey(db, clawIdParam, apiKey);
-      if (!claw) return c.text('Unauthorized', 401);
-      tenantId = claw.tenantId;
-      clawId = claw.id;
+    if (!Number.isNaN(agentHostIdParam) && agentHostIdParam > 0 && apiKey) {
+      const agentHost = await verifyAgentHostApiKey(db, agentHostIdParam, apiKey);
+      if (!agentHost) return c.text('Unauthorized', 401);
+      tenantId = agentHost.tenantId;
+      agentHostId = agentHost.id;
     } else {
       // Fall back to tenant JWT
       await authMiddleware(c, async () => {});
@@ -81,7 +81,7 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
         id:        specId,
         tenantId,
         projectId: body.projectId ?? null,
-        clawId,
+        agentHostId,
         goal:      body.goal.trim(),
         status:    body.status ?? 'draft',
         prd:       body.prd ?? null,

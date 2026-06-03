@@ -3,7 +3,7 @@
  *
  * Human-in-the-loop approval gate for destructive / high-risk agent actions.
  *
- * POST   /api/approvals          Create a pending approval (claw API key auth)
+ * POST   /api/approvals          Create a pending approval (agentHost API key auth)
  * GET    /api/approvals          List approvals for tenant (tenant JWT)
  * GET    /api/approvals/:id      Get approval detail (tenant JWT)
  * PATCH  /api/approvals/:id      Accept or reject an approval (tenant JWT, MANAGER+)
@@ -12,28 +12,28 @@
 import { Hono } from 'hono';
 import { eq, and, desc, lt, or } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { approvals, coderclawInstances, tenantMembers, users } from '../../infrastructure/database/schema';
+import { approvals, agentHosts, tenantMembers, users } from '../../infrastructure/database/schema';
 import { verifySecret } from '../../infrastructure/auth/HashService';
 import { checkAutoApprovalRules } from './approvalRuleRoutes';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import type { ClawRelayDO } from '../../infrastructure/relay/ClawRelayDO';
+import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 
 type ApprovalHonoEnv = HonoEnv & {
   Bindings: HonoEnv['Bindings'] & {
-    CLAW_RELAY: DurableObjectNamespace<ClawRelayDO>;
+    AGENT_HOST_RELAY: DurableObjectNamespace<AgentHostRelayDO>;
   };
 };
 
-async function verifyClawApiKey(db: Db, id: number, key?: string | null): Promise<{ id: number; tenantId: number } | null> {
+async function verifyAgentHostApiKey(db: Db, id: number, key?: string | null): Promise<{ id: number; tenantId: number } | null> {
   if (!key) return null;
-  const [claw] = await db
-    .select({ id: coderclawInstances.id, tenantId: coderclawInstances.tenantId, apiKeyHash: coderclawInstances.apiKeyHash })
-    .from(coderclawInstances)
-    .where(eq(coderclawInstances.id, id));
-  if (!claw) return null;
-  const valid = await verifySecret(key, claw.apiKeyHash);
-  return valid ? claw : null;
+  const [agentHost] = await db
+    .select({ id: agentHosts.id, tenantId: agentHosts.tenantId, apiKeyHash: agentHosts.apiKeyHash })
+    .from(agentHosts)
+    .where(eq(agentHosts.id, id));
+  if (!agentHost) return null;
+  const valid = await verifySecret(key, agentHost.apiKeyHash);
+  return valid ? agentHost : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -143,19 +143,19 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
   });
 
   // POST /api/approvals – create a pending approval request
-  // Claw API key auth (?clawId=&key=) or tenant JWT.
+  // AgentHost API key auth (?agentHostId=&key=) or tenant JWT.
   router.post('/', async (c) => {
     const env = c.env;
     let tenantId: number;
-    let resolvedClawId: number | null = null;
+    let resolvedAgentHostId: number | null = null;
 
-    const clawIdParam = Number(c.req.query('clawId') ?? '');
+    const agentHostIdParam = Number(c.req.query('agentHostId') ?? '');
     const apiKey = c.req.query('key');
-    if (!Number.isNaN(clawIdParam) && clawIdParam > 0 && apiKey) {
-      const claw = await verifyClawApiKey(db, clawIdParam, apiKey);
-      if (!claw) return c.text('Unauthorized', 401);
-      tenantId = claw.tenantId;
-      resolvedClawId = claw.id;
+    if (!Number.isNaN(agentHostIdParam) && agentHostIdParam > 0 && apiKey) {
+      const agentHost = await verifyAgentHostApiKey(db, agentHostIdParam, apiKey);
+      if (!agentHost) return c.text('Unauthorized', 401);
+      tenantId = agentHost.tenantId;
+      resolvedAgentHostId = agentHost.id;
     } else {
       await authMiddleware(c as unknown as Parameters<typeof authMiddleware>[0], async () => {});
       const tid = (c as unknown as { get: (k: string) => unknown }).get('tenantId');
@@ -187,8 +187,8 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
     await db.insert(approvals).values({
       id:          approvalId,
       tenantId,
-      clawId:      resolvedClawId,
-      requestedBy: body.requestedBy ?? (resolvedClawId ? String(resolvedClawId) : null),
+      agentHostId:      resolvedAgentHostId,
+      requestedBy: body.requestedBy ?? (resolvedAgentHostId ? String(resolvedAgentHostId) : null),
       actionType:  body.actionType,
       description: body.description,
       metadata:    body.metadata != null ? JSON.stringify(body.metadata) : null,
@@ -200,9 +200,9 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
       updatedAt:   now,
     });
 
-    // Notify connected browser clients via the relay if clawId is known
-    if (resolvedClawId && env.CLAW_RELAY) {
-      const stub = env.CLAW_RELAY.get(env.CLAW_RELAY.idFromName(String(resolvedClawId)));
+    // Notify connected browser clients via the relay if agentHostId is known
+    if (resolvedAgentHostId && env.AGENT_HOST_RELAY) {
+      const stub = env.AGENT_HOST_RELAY.get(env.AGENT_HOST_RELAY.idFromName(String(resolvedAgentHostId)));
       stub.fetch(new Request('https://internal/dispatch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -247,11 +247,11 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
   // All read/update routes require tenant JWT
   router.use('*', authMiddleware);
 
-  // GET /api/approvals?status=&clawId=
+  // GET /api/approvals?status=&agentHostId=
   router.get('/', async (c) => {
     const tenantId     = c.get('tenantId') as number;
     const statusFilter = c.req.query('status');
-    const clawFilter   = c.req.query('clawId') ? Number(c.req.query('clawId')) : null;
+    const agentHostFilter   = c.req.query('agentHostId') ? Number(c.req.query('agentHostId')) : null;
 
     let rows = await db
       .select()
@@ -260,7 +260,7 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
       .orderBy(desc(approvals.createdAt));
 
     if (statusFilter) rows = rows.filter((r) => r.status === statusFilter);
-    if (clawFilter != null) rows = rows.filter((r) => r.clawId === clawFilter);
+    if (agentHostFilter != null) rows = rows.filter((r) => r.agentHostId === agentHostFilter);
 
     return c.json({ approvals: rows });
   });
@@ -304,9 +304,9 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
       })
       .where(and(eq(approvals.id, id), eq(approvals.tenantId, tenantId)));
 
-    // Notify the claw about the decision via the relay
-    if (existing.clawId && env.CLAW_RELAY) {
-      const stub = env.CLAW_RELAY.get(env.CLAW_RELAY.idFromName(String(existing.clawId)));
+    // Notify the agentHost about the decision via the relay
+    if (existing.agentHostId && env.AGENT_HOST_RELAY) {
+      const stub = env.AGENT_HOST_RELAY.get(env.AGENT_HOST_RELAY.idFromName(String(existing.agentHostId)));
       stub.fetch(new Request('https://internal/dispatch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

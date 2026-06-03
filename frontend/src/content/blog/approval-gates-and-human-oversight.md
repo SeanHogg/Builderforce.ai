@@ -16,7 +16,7 @@ Builderforce.ai's **approval gate** system solves this at the infrastructure lev
 
 ## How Approval Gates Work
 
-The flow has three participants: the **agent** (running inside CoderClaw), the **Builderforce portal** (where the approval is surfaced to a human), and the **manager** (a team member with the `MANAGER` role or above).
+The flow has three participants: the **agent** (running inside BuilderForce Agents), the **Builderforce portal** (where the approval is surfaced to a human), and the **manager** (a team member with the `MANAGER` role or above).
 
 ```
 Agent runs a task
@@ -32,7 +32,7 @@ Agent runs a task
             │                                                  │
             └──────────────── Manager approves/rejects ────────┘
                                           │
-                             approval.decision pushed to claw
+                             approval.decision pushed to agentHost
                                           │
                                ┌──────────▼──────────┐
                                │ approved → continue  │
@@ -54,7 +54,7 @@ Each approval request shows:
 |---|---|
 | **Action type** | What the agent was trying to do (`git.push`, `deploy`, `task.execution`, etc.) |
 | **Description** | The plain-English reason the agent gave |
-| **Requested by** | Which CoderClaw instance submitted the request |
+| **Requested by** | Which BuilderForce Agents instance submitted the request |
 | **Requested at** | Timestamp of the request |
 | **Expires at** | When the request will auto-timeout if unanswered |
 | **Metadata** | Structured context (task ID, priority, file list, cost estimate, etc.) |
@@ -77,10 +77,10 @@ This is the default safety net — high-stakes tasks always get a human review b
 
 ### 2. Explicit Gates (Agent-Requested)
 
-CoderClaw agents can request approval at any point during execution by calling `requestApproval()`:
+BuilderForce Agents agents can request approval at any point during execution by calling `requestApproval()`:
 
 ```typescript
-import { requestApproval } from "@coderclaw/approval-gate";
+import { requestApproval } from "@builderforce/approval-gate";
 
 const decision = await requestApproval({
   actionType: "git.push",
@@ -105,7 +105,7 @@ The agent suspends at `await requestApproval(...)` until:
 - A manager rejects → returns `"rejected"`
 - The timeout expires → returns `"timeout"`
 
-No polling, no manual re-checking — the decision is pushed to the claw the instant the manager acts.
+No polling, no manual re-checking — the decision is pushed to the agentHost the instant the manager acts.
 
 ---
 
@@ -124,7 +124,7 @@ You can manage team roles from [Settings → Members](/settings).
 When an approval request arrives, the manager sees it in three places:
 
 1. **The portal** — the [Approvals](/approvals) badge updates in the sidebar in real time
-2. **The relay** — if a browser session is open on the relevant claw's chat view, an `approval.request` event arrives immediately
+2. **The relay** — if a browser session is open on the relevant agentHost's chat view, an `approval.request` event arrives immediately
 3. **Messaging channels** (coming in Phase 2) — Slack, Telegram, email notifications for approval requests
 
 ---
@@ -133,7 +133,7 @@ When an approval request arrives, the manager sees it in three places:
 
 Every approval decision is permanent and immutable. The [Audit Log](/admin) records:
 
-- Who requested the approval (claw ID)
+- Who requested the approval (agentHost ID)
 - Who made the decision (user ID)
 - What the decision was and when
 - The review note, if provided
@@ -150,7 +150,7 @@ Approval requests have an optional `expiresAt` timestamp. When an approval expir
 - The awaiting agent receives a `"timeout"` decision
 - The agent is responsible for deciding whether to abort or retry
 
-The default CoderClaw timeout is 10 minutes for interactive agent requests. For longer-running background workflows, you can configure a longer window.
+The default BuilderForce Agents timeout is 10 minutes for interactive agent requests. For longer-running background workflows, you can configure a longer window.
 
 ---
 
@@ -168,6 +168,6 @@ The default CoderClaw timeout is 10 minutes for interactive agent requests. For 
 
 ## Next Steps
 
-- Open [Approvals](/approvals) to see any pending gates on your team's claws
+- Open [Approvals](/approvals) to see any pending gates on your team's agentHosts
 - Read [Task Execution and the Portal](/blog/task-execution-and-observability) to understand how approvals interact with the execution lifecycle
 - See [Multi-Agent Orchestration](/blog/multi-agent-orchestration) for patterns that combine approval gates with multi-step workflows

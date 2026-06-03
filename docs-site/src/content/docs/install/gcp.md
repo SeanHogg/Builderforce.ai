@@ -1,19 +1,19 @@
 ---
-summary: "Run CoderClaw Gateway 24/7 on a GCP Compute Engine VM (Docker) with durable state"
+summary: "Run BuilderForce Agents Gateway 24/7 on a GCP Compute Engine VM (Docker) with durable state"
 read_when:
-  - You want CoderClaw running 24/7 on GCP
+  - You want BuilderForce Agents running 24/7 on GCP
   - You want a production-grade, always-on Gateway on your own VM
   - You want full control over persistence, binaries, and restart behavior
 title: "GCP"
 ---
 
-# CoderClaw on GCP Compute Engine (Docker, Production VPS Guide)
+# BuilderForce Agents on GCP Compute Engine (Docker, Production VPS Guide)
 
 ## Goal
 
-Run a persistent CoderClaw Gateway on a GCP Compute Engine VM using Docker, with durable state, baked-in binaries, and safe restart behavior.
+Run a persistent BuilderForce Agents Gateway on a GCP Compute Engine VM using Docker, with durable state, baked-in binaries, and safe restart behavior.
 
-If you want "CoderClaw 24/7 for ~$5-12/mo", this is a reliable setup on Google Cloud.
+If you want "BuilderForce Agents 24/7 for ~$5-12/mo", this is a reliable setup on Google Cloud.
 Pricing varies by machine type and region; pick the smallest VM that fits your workload and scale up if you hit OOMs.
 
 ## What are we doing (simple terms)?
@@ -21,8 +21,8 @@ Pricing varies by machine type and region; pick the smallest VM that fits your w
 - Create a GCP project and enable billing
 - Create a Compute Engine VM
 - Install Docker (isolated app runtime)
-- Start the CoderClaw Gateway in Docker
-- Persist `~/.coderclaw` + `~/.coderclaw/workspace` on the host (survives restarts/rebuilds)
+- Start the BuilderForce Agents Gateway in Docker
+- Persist `~/.builderforce` + `~/.builderforce/workspace` on the host (survives restarts/rebuilds)
 - Access the Control UI from your laptop via an SSH tunnel
 
 The Gateway can be accessed via:
@@ -42,7 +42,7 @@ For the generic Docker flow, see [Docker](/install/docker).
 2. Create Compute Engine VM (e2-small, Debian 12, 20GB)
 3. SSH into the VM
 4. Install Docker
-5. Clone CoderClaw repository
+5. Clone BuilderForce Agents repository
 6. Create persistent host directories
 7. Configure `.env` and `docker-compose.yml`
 8. Bake required binaries, build, and launch
@@ -89,8 +89,8 @@ All steps can be done via the web UI at [https://console.cloud.google.com](https
 **CLI:**
 
 ```bash
-gcloud projects create my-coderclaw-project --name="CoderClaw Gateway"
-gcloud config set project my-coderclaw-project
+gcloud projects create my-builderforce-project --name="BuilderForce Agents Gateway"
+gcloud config set project my-builderforce-project
 ```
 
 Enable billing at [https://console.cloud.google.com/billing](https://console.cloud.google.com/billing) (required for Compute Engine).
@@ -122,7 +122,7 @@ gcloud services enable compute.googleapis.com
 **CLI:**
 
 ```bash
-gcloud compute instances create coderclaw-gateway \
+gcloud compute instances create builderforce-gateway \
   --zone=us-central1-a \
   --machine-type=e2-small \
   --boot-disk-size=20GB \
@@ -133,7 +133,7 @@ gcloud compute instances create coderclaw-gateway \
 **Console:**
 
 1. Go to Compute Engine > VM instances > Create instance
-2. Name: `coderclaw-gateway`
+2. Name: `builderforce-gateway`
 3. Region: `us-central1`, Zone: `us-central1-a`
 4. Machine type: `e2-small`
 5. Boot disk: Debian 12, 20GB
@@ -146,7 +146,7 @@ gcloud compute instances create coderclaw-gateway \
 **CLI:**
 
 ```bash
-gcloud compute ssh coderclaw-gateway --zone=us-central1-a
+gcloud compute ssh builderforce-gateway --zone=us-central1-a
 ```
 
 **Console:**
@@ -175,7 +175,7 @@ exit
 Then SSH back in:
 
 ```bash
-gcloud compute ssh coderclaw-gateway --zone=us-central1-a
+gcloud compute ssh builderforce-gateway --zone=us-central1-a
 ```
 
 Verify:
@@ -187,11 +187,11 @@ docker compose version
 
 ---
 
-## 6) Clone the CoderClaw repository
+## 6) Clone the BuilderForce Agents repository
 
 ```bash
-git clone https://github.com/SeanHogg/coderClaw.git
-cd coderClaw
+git clone https://github.com/SeanHogg/Builderforce.ai.git
+cd BuilderForce Agents
 ```
 
 This guide assumes you will build a custom image to guarantee binary persistence.
@@ -204,8 +204,8 @@ Docker containers are ephemeral.
 All long-lived state must live on the host.
 
 ```bash
-mkdir -p ~/.coderclaw
-mkdir -p ~/.coderclaw/workspace
+mkdir -p ~/.builderforce
+mkdir -p ~/.builderforce/workspace
 ```
 
 ---
@@ -215,16 +215,16 @@ mkdir -p ~/.coderclaw/workspace
 Create `.env` in the repository root.
 
 ```bash
-CODERCLAW_IMAGE=coderclaw:latest
-CODERCLAW_GATEWAY_TOKEN=change-me-now
-CODERCLAW_GATEWAY_BIND=lan
-CODERCLAW_GATEWAY_PORT=18789
+BUILDERFORCE_AGENTS_IMAGE=builderforce:latest
+BUILDERFORCE_AGENTS_GATEWAY_TOKEN=change-me-now
+BUILDERFORCE_AGENTS_GATEWAY_BIND=lan
+BUILDERFORCE_AGENTS_GATEWAY_PORT=18789
 
-CODERCLAW_CONFIG_DIR=/home/$USER/.coderclaw
-CODERCLAW_WORKSPACE_DIR=/home/$USER/.coderclaw/workspace
+BUILDERFORCE_AGENTS_CONFIG_DIR=/home/$USER/.builderforce
+BUILDERFORCE_AGENTS_WORKSPACE_DIR=/home/$USER/.builderforce/workspace
 
 GOG_KEYRING_PASSWORD=change-me-now
-XDG_CONFIG_HOME=/home/node/.coderclaw
+XDG_CONFIG_HOME=/home/node/.builderforce
 ```
 
 Generate strong secrets:
@@ -243,8 +243,8 @@ Create or update `docker-compose.yml`.
 
 ```yaml
 services:
-  coderclaw-gateway:
-    image: ${CODERCLAW_IMAGE}
+  builderforce-gateway:
+    image: ${BUILDERFORCE_AGENTS_IMAGE}
     build: .
     restart: unless-stopped
     env_file:
@@ -253,28 +253,28 @@ services:
       - HOME=/home/node
       - NODE_ENV=production
       - TERM=xterm-256color
-      - CODERCLAW_GATEWAY_BIND=${CODERCLAW_GATEWAY_BIND}
-      - CODERCLAW_GATEWAY_PORT=${CODERCLAW_GATEWAY_PORT}
-      - CODERCLAW_GATEWAY_TOKEN=${CODERCLAW_GATEWAY_TOKEN}
+      - BUILDERFORCE_AGENTS_GATEWAY_BIND=${BUILDERFORCE_AGENTS_GATEWAY_BIND}
+      - BUILDERFORCE_AGENTS_GATEWAY_PORT=${BUILDERFORCE_AGENTS_GATEWAY_PORT}
+      - BUILDERFORCE_AGENTS_GATEWAY_TOKEN=${BUILDERFORCE_AGENTS_GATEWAY_TOKEN}
       - GOG_KEYRING_PASSWORD=${GOG_KEYRING_PASSWORD}
       - XDG_CONFIG_HOME=${XDG_CONFIG_HOME}
       - PATH=/home/linuxbrew/.linuxbrew/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:
-      - ${CODERCLAW_CONFIG_DIR}:/home/node/.coderclaw
-      - ${CODERCLAW_WORKSPACE_DIR}:/home/node/.coderclaw/workspace
+      - ${BUILDERFORCE_AGENTS_CONFIG_DIR}:/home/node/.builderforce
+      - ${BUILDERFORCE_AGENTS_WORKSPACE_DIR}:/home/node/.builderforce/workspace
     ports:
       # Recommended: keep the Gateway loopback-only on the VM; access via SSH tunnel.
       # To expose it publicly, remove the `127.0.0.1:` prefix and firewall accordingly.
-      - "127.0.0.1:${CODERCLAW_GATEWAY_PORT}:18789"
+      - "127.0.0.1:${BUILDERFORCE_AGENTS_GATEWAY_PORT}:18789"
     command:
       [
         "node",
         "dist/index.js",
         "gateway",
         "--bind",
-        "${CODERCLAW_GATEWAY_BIND}",
+        "${BUILDERFORCE_AGENTS_GATEWAY_BIND}",
         "--port",
-        "${CODERCLAW_GATEWAY_PORT}",
+        "${BUILDERFORCE_AGENTS_GATEWAY_PORT}",
       ]
 ```
 
@@ -347,15 +347,15 @@ CMD ["node","dist/index.js"]
 
 ```bash
 docker compose build
-docker compose up -d coderclaw-gateway
+docker compose up -d builderforce-gateway
 ```
 
 Verify binaries:
 
 ```bash
-docker compose exec coderclaw-gateway which gog
-docker compose exec coderclaw-gateway which goplaces
-docker compose exec coderclaw-gateway which wacli
+docker compose exec builderforce-gateway which gog
+docker compose exec builderforce-gateway which goplaces
+docker compose exec builderforce-gateway which wacli
 ```
 
 Expected output:
@@ -371,7 +371,7 @@ Expected output:
 ## 12) Verify Gateway
 
 ```bash
-docker compose logs -f coderclaw-gateway
+docker compose logs -f builderforce-gateway
 ```
 
 Success:
@@ -387,7 +387,7 @@ Success:
 Create an SSH tunnel to forward the Gateway port:
 
 ```bash
-gcloud compute ssh coderclaw-gateway --zone=us-central1-a -- -L 18789:127.0.0.1:18789
+gcloud compute ssh builderforce-gateway --zone=us-central1-a -- -L 18789:127.0.0.1:18789
 ```
 
 Open in your browser:
@@ -400,17 +400,17 @@ Paste your gateway token.
 
 ## What persists where (source of truth)
 
-CoderClaw runs in Docker, but Docker is not the source of truth.
+BuilderForce Agents runs in Docker, but Docker is not the source of truth.
 All long-lived state must survive restarts, rebuilds, and reboots.
 
 | Component           | Location                           | Persistence mechanism  | Notes                             |
 | ------------------- | ---------------------------------- | ---------------------- | --------------------------------- |
-| Gateway config      | `/home/node/.coderclaw/`           | Host volume mount      | Includes `coderclaw.json`, tokens |
-| Model auth profiles | `/home/node/.coderclaw/`           | Host volume mount      | OAuth tokens, API keys            |
-| Skill configs       | `/home/node/.coderclaw/skills/`    | Host volume mount      | Skill-level state                 |
-| Agent workspace     | `/home/node/.coderclaw/workspace/` | Host volume mount      | Code and agent artifacts          |
-| WhatsApp session    | `/home/node/.coderclaw/`           | Host volume mount      | Preserves QR login                |
-| Gmail keyring       | `/home/node/.coderclaw/`           | Host volume + password | Requires `GOG_KEYRING_PASSWORD`   |
+| Gateway config      | `/home/node/.builderforce/`           | Host volume mount      | Includes `builderforce.json`, tokens |
+| Model auth profiles | `/home/node/.builderforce/`           | Host volume mount      | OAuth tokens, API keys            |
+| Skill configs       | `/home/node/.builderforce/skills/`    | Host volume mount      | Skill-level state                 |
+| Agent workspace     | `/home/node/.builderforce/workspace/` | Host volume mount      | Code and agent artifacts          |
+| WhatsApp session    | `/home/node/.builderforce/`           | Host volume mount      | Preserves QR login                |
+| Gmail keyring       | `/home/node/.builderforce/`           | Host volume + password | Requires `GOG_KEYRING_PASSWORD`   |
 | External binaries   | `/usr/local/bin/`                  | Docker image           | Must be baked at build time       |
 | Node runtime        | Container filesystem               | Docker image           | Rebuilt every image build         |
 | OS packages         | Container filesystem               | Docker image           | Do not install at runtime         |
@@ -420,10 +420,10 @@ All long-lived state must survive restarts, rebuilds, and reboots.
 
 ## Updates
 
-To update CoderClaw on the VM:
+To update BuilderForce Agents on the VM:
 
 ```bash
-cd ~/coderclaw
+cd ~/builderforce
 git pull
 docker compose build
 docker compose up -d
@@ -453,15 +453,15 @@ If using e2-micro and hitting OOM, upgrade to e2-small or e2-medium:
 
 ```bash
 # Stop the VM first
-gcloud compute instances stop coderclaw-gateway --zone=us-central1-a
+gcloud compute instances stop builderforce-gateway --zone=us-central1-a
 
 # Change machine type
-gcloud compute instances set-machine-type coderclaw-gateway \
+gcloud compute instances set-machine-type builderforce-gateway \
   --zone=us-central1-a \
   --machine-type=e2-small
 
 # Start the VM
-gcloud compute instances start coderclaw-gateway --zone=us-central1-a
+gcloud compute instances start builderforce-gateway --zone=us-central1-a
 ```
 
 ---
@@ -475,15 +475,15 @@ For automation or CI/CD pipelines, create a dedicated service account with minim
 1. Create a service account:
 
    ```bash
-   gcloud iam service-accounts create coderclaw-deploy \
-     --display-name="CoderClaw Deployment"
+   gcloud iam service-accounts create builderforce-deploy \
+     --display-name="BuilderForce Agents Deployment"
    ```
 
 2. Grant Compute Instance Admin role (or narrower custom role):
 
    ```bash
-   gcloud projects add-iam-policy-binding my-coderclaw-project \
-     --member="serviceAccount:coderclaw-deploy@my-coderclaw-project.iam.gserviceaccount.com" \
+   gcloud projects add-iam-policy-binding my-builderforce-project \
+     --member="serviceAccount:builderforce-deploy@my-builderforce-project.iam.gserviceaccount.com" \
      --role="roles/compute.instanceAdmin.v1"
    ```
 

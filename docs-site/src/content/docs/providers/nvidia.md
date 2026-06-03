@@ -1,7 +1,7 @@
 ---
-summary: "Use NVIDIA's OpenAI-compatible API in CoderClaw"
+summary: "Use NVIDIA's OpenAI-compatible API in BuilderForce Agents"
 read_when:
-  - You want to use NVIDIA models in CoderClaw
+  - You want to use NVIDIA models in BuilderForce Agents
   - You need NVIDIA_API_KEY setup
 title: "NVIDIA"
 ---
@@ -16,8 +16,8 @@ Export the key once, then run onboarding and set an NVIDIA model:
 
 ```bash
 export NVIDIA_API_KEY="nvapi-..."
-coderclaw onboard --auth-choice skip
-coderclaw models set nvidia/nvidia/llama-3.1-nemotron-70b-instruct
+builderforce onboard --auth-choice skip
+builderforce models set nvidia/nvidia/llama-3.1-nemotron-70b-instruct
 ```
 
 If you still pass `--token`, remember it lands in shell history and `ps` output; prefer the env var when possible.

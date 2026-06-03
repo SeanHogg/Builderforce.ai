@@ -34,7 +34,7 @@ Status: production-ready for DMs + channels via Slack app integrations. Default 
         - install app and copy **Bot Token** (`xoxb-...`)
       </Step>
 
-      <Step title="Configure CoderClaw">
+      <Step title="Configure BuilderForce Agents">
 
 ```json5
 {
@@ -74,7 +74,7 @@ SLACK_BOT_TOKEN=xoxb-...
       <Step title="Start gateway">
 
 ```bash
-coderclaw gateway
+builderforce gateway
 ```
 
       </Step>
@@ -92,7 +92,7 @@ coderclaw gateway
 
       </Step>
 
-      <Step title="Configure CoderClaw HTTP mode">
+      <Step title="Configure BuilderForce Agents HTTP mode">
 
 ```json5
 {
@@ -152,7 +152,7 @@ For actions/directory reads, user token can be preferred when configured. For wr
     - `dm.groupEnabled` (group DMs default false)
     - `dm.groupChannels` (optional MPIM allowlist)
 
-    Pairing in DMs uses `coderclaw pairing approve slack <code>`.
+    Pairing in DMs uses `builderforce pairing approve slack <code>`.
 
   </Tab>
 
@@ -211,7 +211,7 @@ For actions/directory reads, user token can be preferred when configured. For wr
 Default slash command settings:
 
 - `enabled: false`
-- `name: "coderclaw"`
+- `name: "builderforce"`
 - `sessionPrefix: "slack:slash"`
 - `ephemeral: true`
 
@@ -299,7 +299,7 @@ Available action groups in current Slack tooling:
 
 ## Ack reactions
 
-`ackReaction` sends an acknowledgement emoji while CoderClaw is processing an inbound message.
+`ackReaction` sends an acknowledgement emoji while BuilderForce Agents is processing an inbound message.
 
 Resolution order:
 
@@ -321,12 +321,12 @@ Notes:
 ```json
 {
   "display_information": {
-    "name": "CoderClaw",
-    "description": "Slack connector for CoderClaw"
+    "name": "BuilderForce Agents",
+    "description": "Slack connector for BuilderForce Agents"
   },
   "features": {
     "bot_user": {
-      "display_name": "CoderClaw",
+      "display_name": "BuilderForce Agents",
       "always_online": false
     },
     "app_home": {
@@ -335,8 +335,8 @@ Notes:
     },
     "slash_commands": [
       {
-        "command": "/coderclaw",
-        "description": "Send a message to CoderClaw",
+        "command": "/builderforce",
+        "description": "Send a message to BuilderForce Agents",
         "should_escape": false
       }
     ]
@@ -416,9 +416,9 @@ Notes:
     Useful commands:
 
 ```bash
-coderclaw channels status --probe
-coderclaw logs --follow
-coderclaw doctor
+builderforce channels status --probe
+builderforce logs --follow
+builderforce doctor
 ```
 
   </Accordion>
@@ -431,7 +431,7 @@ coderclaw doctor
     - pairing approvals / allowlist entries
 
 ```bash
-coderclaw pairing list slack
+builderforce pairing list slack
 ```
 
   </Accordion>
@@ -463,7 +463,7 @@ coderclaw pairing list slack
 
 ## Text streaming
 
-CoderClaw supports Slack native text streaming via the Agents and AI Apps API.
+BuilderForce Agents supports Slack native text streaming via the Agents and AI Apps API.
 
 By default, streaming is enabled. Disable it per account:
 
@@ -485,7 +485,7 @@ channels:
 - Later text chunks append to the same stream (`chat.appendStream`).
 - End of reply finalizes stream (`chat.stopStream`).
 - Media and non-text payloads fall back to normal delivery.
-- If streaming fails mid-reply, CoderClaw falls back to normal delivery for remaining payloads.
+- If streaming fails mid-reply, BuilderForce Agents falls back to normal delivery for remaining payloads.
 
 ## Configuration reference pointers
 

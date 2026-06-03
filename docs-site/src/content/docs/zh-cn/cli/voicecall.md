@@ -2,7 +2,7 @@
 read_when:
   - 使用语音通话插件并想了解 CLI 入口
   - 想要 `voicecall call|continue|status|tail|expose` 的快速示例
-summary: 语音通话插件命令的 `coderclaw voicecall` CLI 参考
+summary: 语音通话插件命令的 `builderforce voicecall` CLI 参考
 title: voicecall
 x-i18n:
   generated_at: "2026-02-01T20:21:37Z"
@@ -13,7 +13,7 @@ x-i18n:
   workflow: 14
 ---
 
-# `coderclaw voicecall`
+# `builderforce voicecall`
 
 `voicecall` 是一个由插件提供的命令。只有在安装并启用了语音通话插件时才会出现。
 
@@ -24,18 +24,18 @@ x-i18n:
 ## 常用命令
 
 ```bash
-coderclaw voicecall status --call-id <id>
-coderclaw voicecall call --to "+15555550123" --message "Hello" --mode notify
-coderclaw voicecall continue --call-id <id> --message "Any questions?"
-coderclaw voicecall end --call-id <id>
+builderforce voicecall status --call-id <id>
+builderforce voicecall call --to "+15555550123" --message "Hello" --mode notify
+builderforce voicecall continue --call-id <id> --message "Any questions?"
+builderforce voicecall end --call-id <id>
 ```
 
 ## 暴露 Webhook（Tailscale）
 
 ```bash
-coderclaw voicecall expose --mode serve
-coderclaw voicecall expose --mode funnel
-coderclaw voicecall unexpose
+builderforce voicecall expose --mode serve
+builderforce voicecall expose --mode funnel
+builderforce voicecall unexpose
 ```
 
 安全提示：仅将 webhook 端点暴露给你信任的网络。尽可能优先使用 Tailscale Serve 而非 Funnel。

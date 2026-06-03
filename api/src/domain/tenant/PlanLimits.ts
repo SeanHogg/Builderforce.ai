@@ -8,8 +8,8 @@ import { TenantPlan } from '../shared/types';
  * these numbers inline.
  */
 export interface PlanLimits {
-  /** Maximum number of registered Claws (0 = blocked, -1 = unlimited) */
-  maxClaws: number;
+  /** Maximum number of registered AgentHosts (0 = blocked, -1 = unlimited) */
+  maxAgentHosts: number;
   /** Maximum number of projects */
   maxProjects: number;
   /** Maximum number of active seats (team members); -1 = unlimited */
@@ -18,11 +18,11 @@ export interface PlanLimits {
   tokenDailyLimit: number;
   /** Whether approval workflow gates are available */
   approvalWorkflows: boolean;
-  /** Whether fleet mesh (claw-to-claw routing) is available */
+  /** Whether fleet mesh (agentHost-to-agentHost routing) is available */
   fleetMesh: boolean;
   /** Whether full telemetry + audit trail is available */
   fullTelemetry: boolean;
-  /** Whether custom agent roles (.coderClaw/agents/) are synced from Builderforce */
+  /** Whether custom agent roles (.builderforce/agents/) are synced from Builderforce */
   customAgentRoles: boolean;
   /** Whether the shared team approval inbox is available */
   teamApprovalInbox: boolean;
@@ -32,7 +32,7 @@ export interface PlanLimits {
 
 export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
   [TenantPlan.FREE]: {
-    maxClaws: 1,
+    maxAgentHosts: 1,
     maxProjects: 5,
     maxSeats: 1,
     tokenDailyLimit: 10_000,
@@ -44,7 +44,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     seatCostControls: false,
   },
   [TenantPlan.PRO]: {
-    maxClaws: 3,
+    maxAgentHosts: 3,
     maxProjects: -1,
     maxSeats: 1,
     tokenDailyLimit: 1_000_000,
@@ -56,7 +56,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     seatCostControls: false,
   },
   [TenantPlan.TEAMS]: {
-    maxClaws: -1,
+    maxAgentHosts: -1,
     maxProjects: -1,
     maxSeats: -1,
     tokenDailyLimit: 5_000_000,
@@ -74,10 +74,10 @@ export function getLimits(plan: TenantPlan): PlanLimits {
   return PLAN_LIMITS[plan];
 }
 
-/** Returns true if adding one more claw is within plan limits. */
-export function canAddClaw(plan: TenantPlan, currentClawCount: number): boolean {
-  const { maxClaws } = getLimits(plan);
-  return maxClaws === -1 || currentClawCount < maxClaws;
+/** Returns true if adding one more agentHost is within plan limits. */
+export function canAddAgentHost(plan: TenantPlan, currentAgentHostCount: number): boolean {
+  const { maxAgentHosts } = getLimits(plan);
+  return maxAgentHosts === -1 || currentAgentHostCount < maxAgentHosts;
 }
 
 /** Returns true if adding one more seat is within plan limits. */

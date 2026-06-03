@@ -4,13 +4,13 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   runtimeApi,
   type Task,
-  type Claw,
+  type AgentHost,
   type Execution,
   type ExecutionTrace,
   type ExecutionTraceToolEvent,
 } from '@/lib/builderforceApi';
 import { RunAgentControl } from './RunAgentControl';
-import { ClawChatContent } from '../ClawChatContent';
+import { AgentHostChatContent } from '../AgentHostChatContent';
 import { EXECUTION_STATUS_COLOR as STATUS_COLOR } from '../board/AgentChip';
 
 /**
@@ -52,7 +52,7 @@ const cardStyle: React.CSSProperties = {
   border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 14, marginBottom: 12,
 };
 
-export function TaskAgentTab({ task, claws, onTaskChanged }: { task: Task; claws: Claw[]; onTaskChanged?: () => void }) {
+export function TaskAgentTab({ task, agentHosts, onTaskChanged }: { task: Task; agentHosts: AgentHost[]; onTaskChanged?: () => void }) {
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [trace, setTrace] = useState<ExecutionTrace | null>(null);
@@ -85,7 +85,7 @@ export function TaskAgentTab({ task, claws, onTaskChanged }: { task: Task; claws
   const files = filesFromExecution(result, toolEvents);
   const prUrl = (selected as { githubPrUrl?: string } | null)?.githubPrUrl ?? task.githubPrUrl;
 
-  const assignedClaw = claws.find((c) => c.id === task.assignedClawId) ?? null;
+  const assignedAgentHost = agentHosts.find((c) => c.id === task.assignedAgentHostId) ?? null;
 
   return (
     <div style={{ padding: 20 }}>
@@ -94,7 +94,7 @@ export function TaskAgentTab({ task, claws, onTaskChanged }: { task: Task; claws
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>Run this task</div>
         <RunAgentControl
           task={task}
-          claws={claws}
+          agentHosts={agentHosts}
           onRan={() => { setGate(null); loadExecutions(true); onTaskChanged?.(); }}
           onAwaitingApproval={(g) => setGate({ approvalId: g.approvalId, reason: g.reason })}
         />
@@ -180,9 +180,9 @@ export function TaskAgentTab({ task, claws, onTaskChanged }: { task: Task; claws
 
       {/* Agent chat — watch tool calls & direct the agent */}
       <div style={{ fontWeight: 600, fontSize: 14, margin: '16px 0 8px' }}>Agent chat</div>
-      {assignedClaw ? (
+      {assignedAgentHost ? (
         <div style={{ height: 380, border: '1px solid var(--border-subtle)', borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <ClawChatContent clawId={assignedClaw.id} clawName={assignedClaw.name} />
+          <AgentHostChatContent agentHostId={assignedAgentHost.id} agentHostName={assignedAgentHost.name} />
         </div>
       ) : (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>

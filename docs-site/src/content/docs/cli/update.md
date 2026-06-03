@@ -1,29 +1,29 @@
 ---
-summary: "CLI reference for `coderclaw update` (safe-ish source update + gateway auto-restart)"
+summary: "CLI reference for `builderforce update` (safe-ish source update + gateway auto-restart)"
 read_when:
   - You want to update a source checkout safely
   - You need to understand `--update` shorthand behavior
 title: "update"
 ---
 
-# `coderclaw update`
+# `builderforce update`
 
-Safely update CoderClaw and switch between stable/beta/dev channels.
+Safely update BuilderForce Agents and switch between stable/beta/dev channels.
 
 If you installed via **npm/pnpm** (global install, no git metadata), updates happen via the package manager flow in [Updating](/install/updating).
 
 ## Usage
 
 ```bash
-coderclaw update
-coderclaw update status
-coderclaw update wizard
-coderclaw update --channel beta
-coderclaw update --channel dev
-coderclaw update --tag beta
-coderclaw update --no-restart
-coderclaw update --json
-coderclaw --update
+builderforce update
+builderforce update status
+builderforce update wizard
+builderforce update --channel beta
+builderforce update --channel dev
+builderforce update --tag beta
+builderforce update --no-restart
+builderforce update --json
+builderforce --update
 ```
 
 ## Options
@@ -41,9 +41,9 @@ Note: downgrades require confirmation because older versions can break configura
 Show the active update channel + git tag/branch/SHA (for source checkouts), plus update availability.
 
 ```bash
-coderclaw update status
-coderclaw update status --json
-coderclaw update status --timeout 10
+builderforce update status
+builderforce update status --json
+builderforce update status --timeout 10
 ```
 
 Options:
@@ -59,10 +59,10 @@ offers to create one.
 
 ## What it does
 
-When you switch channels explicitly (`--channel ...`), CoderClaw also keeps the
+When you switch channels explicitly (`--channel ...`), BuilderForce Agents also keeps the
 install method aligned:
 
-- `dev` → ensures a git checkout (default: `~/coderclaw`, override with `CODERCLAW_GIT_DIR`),
+- `dev` → ensures a git checkout (default: `~/builderforce`, override with `BUILDERFORCE_AGENTS_GIT_DIR`),
   updates it, and installs the global CLI from that checkout.
 - `stable`/`beta` → installs from npm using the matching dist-tag.
 
@@ -83,16 +83,16 @@ High-level:
 5. Rebases onto the selected commit (dev only).
 6. Installs deps (pnpm preferred; npm fallback).
 7. Builds + builds the Control UI.
-8. Runs `coderclaw doctor` as the final “safe update” check.
+8. Runs `builderforce doctor` as the final “safe update” check.
 9. Syncs plugins to the active channel (dev uses bundled extensions; stable/beta uses npm) and updates npm-installed plugins.
 
 ## `--update` shorthand
 
-`coderclaw --update` rewrites to `coderclaw update` (useful for shells and launcher scripts).
+`builderforce --update` rewrites to `builderforce update` (useful for shells and launcher scripts).
 
 ## See also
 
-- `coderclaw doctor` (offers to run update first on git checkouts)
+- `builderforce doctor` (offers to run update first on git checkouts)
 - [Development channels](/install/development-channels)
 - [Updating](/install/updating)
 - [CLI reference](/cli)

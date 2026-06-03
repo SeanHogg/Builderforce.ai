@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/AuthContext';
 import {
   artifactAssignments,
   marketplaceStats,
-  claws,
+  agentHosts,
   listMarketplaceSkills,
   type ArtifactStats,
 } from '@/lib/builderforceApi';
@@ -42,7 +42,7 @@ export default function SkillsPage() {
   const [assigned, setAssigned] = useState<{ slug: string; name: string }[]>([]);
   const [userSkills, setUserSkills] = useState<UserSkill[]>([]);
   const [stats, setStats] = useState<Record<string, ArtifactStats>>({});
-  const [hasClaws, setHasClaws] = useState(true);
+  const [hasAgentHosts, setHasAgentHosts] = useState(true);
   const [installedSlugs, setInstalledSlugs] = useState<Set<string>>(new Set());
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState({ name: '', description: '', category: 'general', version: '1.0.0', tags: '', image: '' });
@@ -51,12 +51,12 @@ export default function SkillsPage() {
     setLoading(true);
     setError('');
     try {
-      const [clawList, assignList, res] = await Promise.all([
-        claws.list().catch(() => []),
+      const [agentHostList, assignList, res] = await Promise.all([
+        agentHosts.list().catch(() => []),
         tenantNum ? artifactAssignments.list('tenant', tenantNum, 'skill').catch(() => []) : [],
         listMarketplaceSkills({ limit: 100 }).catch(() => ({ skills: [] })),
       ]);
-      setHasClaws(clawList.length > 0);
+      setHasAgentHosts(agentHostList.length > 0);
       setAssigned(assignList.map((a) => ({ slug: a.artifactSlug, name: a.artifactSlug })));
       setInstalledSlugs(new Set(assignList.map((a) => a.artifactSlug)));
       setApiSkills((res.skills ?? []).map((s) => ({

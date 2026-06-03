@@ -31,7 +31,7 @@ Architecture Spec                    ◄── AI-assisted in Brainstorm
 Task list (JSON)                     ◄── AI-generated from spec
     │
     ▼
-Executable tasks                     ──► Agent execution on CoderClaw
+Executable tasks                     ──► Agent execution on BuilderForce Agents
 ```
 
 The spec is the container that holds all four layers in one place.
@@ -73,7 +73,7 @@ The spec stores:
 | **Architecture spec** | Technical design document (Markdown) |
 | **Task list** | JSON array of tasks ready for the board |
 | **Status** | Current stage in the approval workflow |
-| **Linked claw** | Which CoderClaw instance will execute it |
+| **Linked agentHost** | Which BuilderForce Agents instance will execute it |
 | **Linked project** | The project this spec belongs to |
 
 ---
@@ -94,7 +94,7 @@ A task list entry looks like:
 }
 ```
 
-The task list is reviewed in the spec editor. You can add, remove, and reorder tasks, adjust priorities, and assign personas (which CoderClaw agent role should handle each task).
+The task list is reviewed in the spec editor. You can add, remove, and reorder tasks, adjust priorities, and assign personas (which BuilderForce Agents agent role should handle each task).
 
 ---
 
@@ -102,13 +102,13 @@ The task list is reviewed in the spec editor. You can add, remove, and reorder t
 
 When the spec is `approved`, click **Create Tasks** to push the task list to the [Tasks](/tasks) board. Each entry in the task list becomes a task record in the backlog.
 
-From here, tasks follow the normal task lifecycle — they can be triaged, prioritised, assigned to specific claws, and submitted for execution. The spec remains linked to each task, so you can always trace any task back to the original PRD.
+From here, tasks follow the normal task lifecycle — they can be triaged, prioritised, assigned to specific agentHosts, and submitted for execution. The spec remains linked to each task, so you can always trace any task back to the original PRD.
 
 ---
 
 ## Spec Workflows
 
-When you submit a spec for execution (rather than converting it to individual tasks), Builderforce creates a **spec workflow** — a CoderClaw orchestration that treats the entire spec as a unit of work.
+When you submit a spec for execution (rather than converting it to individual tasks), Builderforce creates a **spec workflow** — a BuilderForce Agents orchestration that treats the entire spec as a unit of work.
 
 The spec workflow type `planning` runs:
 
@@ -137,13 +137,13 @@ When a spec's tasks are complete and a pull request is created, you can link the
 2. Paste the GitHub PR URL into the **PR URL** field
 3. The spec's status updates automatically when the PR merges
 
-If you have a GitHub source control integration configured (Settings → Source Control), CoderClaw can create and link PRs automatically without the manual step.
+If you have a GitHub source control integration configured (Settings → Source Control), BuilderForce Agents can create and link PRs automatically without the manual step.
 
 ---
 
 ## Governance and Constraints
 
-The spec's architecture doc is also the right place to record **project governance** — the rules your agents must follow when working in this project. Governance docs are synced to the claw's `.coderClaw/context.yaml` as part of the assignment context, so agents load them at startup and follow them throughout execution.
+The spec's architecture doc is also the right place to record **project governance** — the rules your agents must follow when working in this project. Governance docs are synced to the agentHost's `.builderforce/context.yaml` as part of the assignment context, so agents load them at startup and follow them throughout execution.
 
 Governance examples:
 

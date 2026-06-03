@@ -2,7 +2,7 @@
 read_when:
   - 你想添加/删除渠道账户（WhatsApp/Telegram/Discord/Google Chat/Slack/Mattermost（插件）/Signal/iMessage）
   - 你想检查渠道状态或跟踪渠道日志
-summary: "`coderclaw channels` 的 CLI 参考（账户、状态、登录/登出、日志）"
+summary: "`builderforce channels` 的 CLI 参考（账户、状态、登录/登出、日志）"
 title: channels
 x-i18n:
   generated_at: "2026-02-03T07:44:51Z"
@@ -13,7 +13,7 @@ x-i18n:
   workflow: 15
 ---
 
-# `coderclaw channels`
+# `builderforce channels`
 
 管理 Gateway 网关上的聊天渠道账户及其运行时状态。
 
@@ -25,43 +25,43 @@ x-i18n:
 ## 常用命令
 
 ```bash
-coderclaw channels list
-coderclaw channels status
-coderclaw channels capabilities
-coderclaw channels capabilities --channel discord --target channel:123
-coderclaw channels resolve --channel slack "#general" "@jane"
-coderclaw channels logs --channel all
+builderforce channels list
+builderforce channels status
+builderforce channels capabilities
+builderforce channels capabilities --channel discord --target channel:123
+builderforce channels resolve --channel slack "#general" "@jane"
+builderforce channels logs --channel all
 ```
 
 ## 添加/删除账户
 
 ```bash
-coderclaw channels add --channel telegram --token <bot-token>
-coderclaw channels remove --channel telegram --delete
+builderforce channels add --channel telegram --token <bot-token>
+builderforce channels remove --channel telegram --delete
 ```
 
-提示：`coderclaw channels add --help` 显示每个渠道的标志（token、app token、signal-cli 路径等）。
+提示：`builderforce channels add --help` 显示每个渠道的标志（token、app token、signal-cli 路径等）。
 
 ## 登录/登出（交互式）
 
 ```bash
-coderclaw channels login --channel whatsapp
-coderclaw channels logout --channel whatsapp
+builderforce channels login --channel whatsapp
+builderforce channels logout --channel whatsapp
 ```
 
 ## 故障排除
 
-- 运行 `coderclaw status --deep` 进行全面探测。
-- 使用 `coderclaw doctor` 获取引导式修复。
-- `coderclaw channels list` 输出 `Claude: HTTP 403 ... user:profile` → 用量快照需要 `user:profile` 权限范围。使用 `--no-usage`，或提供 claude.ai 会话密钥（`CLAUDE_WEB_SESSION_KEY` / `CLAUDE_WEB_COOKIE`），或通过 Claude Code CLI 重新授权。
+- 运行 `builderforce status --deep` 进行全面探测。
+- 使用 `builderforce doctor` 获取引导式修复。
+- `builderforce channels list` 输出 `Claude: HTTP 403 ... user:profile` → 用量快照需要 `user:profile` 权限范围。使用 `--no-usage`，或提供 claude.ai 会话密钥（`CLAUDE_WEB_SESSION_KEY` / `CLAUDE_WEB_COOKIE`），或通过 Claude Code CLI 重新授权。
 
 ## 能力探测
 
 获取提供商能力提示（可用的 intents/scopes）以及静态功能支持：
 
 ```bash
-coderclaw channels capabilities
-coderclaw channels capabilities --channel discord --target channel:123
+builderforce channels capabilities
+builderforce channels capabilities --channel discord --target channel:123
 ```
 
 说明：
@@ -75,9 +75,9 @@ coderclaw channels capabilities --channel discord --target channel:123
 使用提供商目录将渠道/用户名称解析为 ID：
 
 ```bash
-coderclaw channels resolve --channel slack "#general" "@jane"
-coderclaw channels resolve --channel discord "My Server/#support" "@someone"
-coderclaw channels resolve --channel matrix "Project Room"
+builderforce channels resolve --channel slack "#general" "@jane"
+builderforce channels resolve --channel discord "My Server/#support" "@someone"
+builderforce channels resolve --channel matrix "Project Room"
 ```
 
 说明：

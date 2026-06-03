@@ -12,7 +12,7 @@
  * POST   /api/contributors/:id/identities    Add platform identity (MANAGER+)
  * DELETE /api/contributors/:id/identities/:identityId (MANAGER+)
  *
- * POST   /api/contributors/activity          Ingest activity events (claw API key OR JWT)
+ * POST   /api/contributors/activity          Ingest activity events (agentHost API key OR JWT)
  * GET    /api/contributors/:id/activity      List activity events (MANAGER+)
  * GET    /api/contributors/:id/metrics       Aggregated daily metrics (MANAGER+)
  * POST   /api/contributors/aggregate         Trigger daily metrics recalculation (MANAGER+)
@@ -100,7 +100,7 @@ async function aggregateDailyMetrics(
 export function createContributorRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
-  // ── Activity ingest (no JWT — accepts claw API key via query params) ──────
+  // ── Activity ingest (no JWT — accepts agentHost API key via query params) ──────
   // POST /api/contributors/activity
   router.post('/activity', async (c) => {
     // Accept tenant JWT for this endpoint

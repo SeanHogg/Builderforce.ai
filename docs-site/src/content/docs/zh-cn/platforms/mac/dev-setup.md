@@ -1,7 +1,7 @@
 ---
 read_when:
   - 设置 macOS 开发环境
-summary: 为在 CoderClaw macOS 应用上工作的开发者提供的设置指南
+summary: 为在 BuilderForce Agents macOS 应用上工作的开发者提供的设置指南
 title: macOS 开发设置
 x-i18n:
   generated_at: "2026-02-03T07:52:36Z"
@@ -14,7 +14,7 @@ x-i18n:
 
 # macOS 开发者设置
 
-本指南涵盖从源代码构建和运行 CoderClaw macOS 应用程序的必要步骤。
+本指南涵盖从源代码构建和运行 BuilderForce Agents macOS 应用程序的必要步骤。
 
 ## 前置条件
 
@@ -33,7 +33,7 @@ pnpm install
 
 ## 2. 构建和打包应用
 
-要构建 macOS 应用并将其打包到 `dist/CoderClaw.app`，运行：
+要构建 macOS 应用并将其打包到 `dist/BuilderForce Agents.app`，运行：
 
 ```bash
 ./scripts/package-mac-app.sh
@@ -42,24 +42,24 @@ pnpm install
 如果你没有 Apple Developer ID 证书，脚本将自动使用 **ad-hoc 签名**（`-`）。
 
 有关开发运行模式、签名标志和 Team ID 故障排除，请参阅 macOS 应用 README：
-https://github.com/SeanHogg/coderClaw/blob/main/apps/macos/README.md
+https://github.com/SeanHogg/Builderforce.ai/blob/main/apps/macos/README.md
 
 > **注意**：Ad-hoc 签名的应用可能会触发安全提示。如果应用立即崩溃并显示"Abort trap 6"，请参阅[故障排除](#troubleshooting)部分。
 
 ## 3. 安装 CLI
 
-macOS 应用期望全局安装 `coderclaw` CLI 来管理后台任务。
+macOS 应用期望全局安装 `builderforce` CLI 来管理后台任务。
 
 **安装方法（推荐）：**
 
-1.  打开 CoderClaw 应用。
+1.  打开 BuilderForce Agents 应用。
 2.  转到 **General** 设置标签页。
 3.  点击 **"Install CLI"**。
 
 或者，手动安装：
 
 ```bash
-npm install -g coderclaw@<version>
+npm install -g builderforce@<version>
 ```
 
 ## 故障排除
@@ -92,15 +92,15 @@ xcrun swift --version
    ```bash
    tccutil reset All bot.molt.mac.debug
    ```
-2. 如果这不起作用，在 [`scripts/package-mac-app.sh`](https://github.com/SeanHogg/coderClaw/blob/main/scripts/package-mac-app.sh) 中临时更改 `BUNDLE_ID` 以强制 macOS 从"全新状态"开始。
+2. 如果这不起作用，在 [`scripts/package-mac-app.sh`](https://github.com/SeanHogg/Builderforce.ai/blob/main/scripts/package-mac-app.sh) 中临时更改 `BUNDLE_ID` 以强制 macOS 从"全新状态"开始。
 
 ### Gateway 网关无限期"Starting..."
 
 如果 Gateway 网关状态一直停留在"Starting..."，检查是否有僵尸进程占用端口：
 
 ```bash
-coderclaw gateway status
-coderclaw gateway stop
+builderforce gateway status
+builderforce gateway stop
 
 # 如果你没有使用 LaunchAgent（开发模式/手动运行），找到监听器：
 lsof -nP -iTCP:18789 -sTCP:LISTEN

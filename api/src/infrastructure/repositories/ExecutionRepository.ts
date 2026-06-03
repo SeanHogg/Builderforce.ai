@@ -2,8 +2,8 @@ import { and, desc, eq } from 'drizzle-orm';
 import { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
 import { Execution, ExecutionProps } from '../../domain/execution/Execution';
 import {
-  ExecutionId, TaskId, TenantId, AgentId, ClawId, ExecutionStatus,
-  asExecutionId, asTaskId, asTenantId, asAgentId, asClawId,
+  ExecutionId, TaskId, TenantId, AgentId, AgentHostId, ExecutionStatus,
+  asExecutionId, asTaskId, asTenantId, asAgentId, asAgentHostId,
 } from '../../domain/shared/types';
 import { executions as executionsTable } from '../database/schema';
 import type { Db } from '../database/connection';
@@ -56,7 +56,7 @@ export class ExecutionRepository implements IExecutionRepository {
       .values({
         taskId:      plain.taskId,
         agentId:     plain.agentId ?? undefined,
-        clawId:      plain.clawId ?? undefined,
+        agentHostId:      plain.agentHostId ?? undefined,
         tenantId:    plain.tenantId,
         submittedBy: plain.submittedBy,
         sessionId:   plain.sessionId ?? undefined,
@@ -92,7 +92,7 @@ function toDomain(row: typeof executionsTable.$inferSelect): Execution {
     id:           asExecutionId(row.id),
     taskId:       asTaskId(row.taskId),
     agentId:      row.agentId != null ? asAgentId(row.agentId) : null,
-    clawId:       row.clawId != null ? asClawId(row.clawId) : null,
+    agentHostId:       row.agentHostId != null ? asAgentHostId(row.agentHostId) : null,
     tenantId:     asTenantId(row.tenantId),
     submittedBy:  row.submittedBy,
     sessionId:    row.sessionId ?? null,

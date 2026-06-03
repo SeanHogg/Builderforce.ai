@@ -3,7 +3,7 @@ title: Pricing
 description: Free / Pro / Enterprise tiers, LLM add-ons, self-hosting, and FAQ
 ---
 
-# coderClaw.ai Pricing
+# BuilderForce Agents.ai Pricing
 
 **TL;DR** — The orchestration platform is MIT-licensed and **free to self-host forever**. Managed cloud pricing starts at $0 and scales with your team.
 
@@ -14,11 +14,11 @@ description: Free / Pro / Enterprise tiers, LLM add-ons, self-hosting, and FAQ
 | Feature | **Free** | **Pro** | **Enterprise** |
 |---------|----------|---------|----------------|
 | **Monthly price** | $0 | $29 / seat | Custom |
-| **Claws (AI agents)** | 1 | Unlimited | Unlimited |
+| **Agents (AI agents)** | 1 | Unlimited | Unlimited |
 | **Projects** | 3 | Unlimited | Unlimited |
 | **Tasks** | 50 | Unlimited | Unlimited |
 | **Team members** | 1 | Up to 25 | Unlimited |
-| **coderClawLLM compute** | Free model pool (rate-limited) | Pro model pool (priority) | Dedicated capacity |
+| **BuilderForce AgentsLLM compute** | Free model pool (rate-limited) | Pro model pool (priority) | Dedicated capacity |
 | **LLM requests / month** | 1,000 | 50,000 | Unlimited / SLA |
 | **Chat history** | 7 days | 90 days | Unlimited |
 | **Audit log retention** | 30 days | 1 year | Unlimited |
@@ -43,7 +43,7 @@ description: Free / Pro / Enterprise tiers, LLM add-ons, self-hosting, and FAQ
 The Free plan is designed for individuals, hobbyists, and teams evaluating the platform.
 
 **What you get:**
-- 1 registered Claw (AI agent)
+- 1 registered Agent (AI agent)
 - 3 projects, 50 tasks
 - 1,000 LLM requests / month via the free model pool
 - Full access to the Builderforce portal: specs, workflows, approvals, chat history (7-day window), audit log (30-day window)
@@ -59,7 +59,7 @@ The Free plan is designed for individuals, hobbyists, and teams evaluating the p
 Pro is designed for professional developers and small-to-medium teams that need unlimited agent scale and higher LLM throughput.
 
 **Everything in Free, plus:**
-- Unlimited Claws, projects, and tasks
+- Unlimited Agents, projects, and tasks
 - Up to 25 team members with full 4-role RBAC (VIEWER → DEVELOPER → MANAGER → OWNER)
 - 50,000 LLM requests / month via the priority Pro model pool with automatic failover
 - 90-day chat history and 1-year audit log retention
@@ -78,20 +78,20 @@ Enterprise is designed for large engineering organisations that need compliance 
 - Unlimited seats
 - SSO / SAML integration
 - Private skill registry (share skills within your org without publishing publicly)
-- Dedicated coderClawLLM compute capacity with reserved throughput
+- Dedicated BuilderForce AgentsLLM compute capacity with reserved throughput
 - Unlimited audit log and chat history retention
 - GDPR Data Processing Agreement (DPA)
 - Air-gapped / on-premises deployment support
 - 99.9% uptime SLA with financial penalties
 - Dedicated Customer Success Manager and Slack Connect channel
 
-Contact **sales@coderclaw.ai** to discuss Enterprise pricing.
+Contact **sales@builderforce.ai** to discuss Enterprise pricing.
 
 ---
 
-## coderClawLLM Add-ons
+## BuilderForce AgentsLLM Add-ons
 
-The coderClawLLM proxy is billed separately from seat licences on the managed cloud:
+The BuilderForce AgentsLLM proxy is billed separately from seat licences on the managed cloud:
 
 | Add-on | Price | Description |
 |--------|-------|-------------|
@@ -141,14 +141,14 @@ Yes — new accounts get a **14-day Pro trial** with no credit card required. Tr
 **What happens when I hit LLM request limits?**
 Requests beyond the monthly limit are queued (not dropped). You will receive a warning email at 80% usage. You can purchase add-on blocks or enable BYOK to avoid interruption.
 
-**Do I pay per Claw or per user?**
-Pro billing is **per seat (user)**, not per Claw. You can register unlimited Claws on Pro without additional seat charges.
+**Do I pay per Agent or per user?**
+Pro billing is **per seat (user)**, not per Agent. You can register unlimited Agents on Pro without additional seat charges.
 
 **Is my data private if I use the managed cloud?**
-Yes. All data is tenant-isolated in Postgres. coderClaw.ai staff cannot access your data without an explicit impersonation record in the audit log. See the [Privacy Policy](https://coderclaw.ai/privacy) for full details.
+Yes. All data is tenant-isolated in Postgres. BuilderForce Agents.ai staff cannot access your data without an explicit impersonation record in the audit log. See the [Privacy Policy](https://builderforce.ai/privacy) for full details.
 
 **Can I switch between self-hosted and managed cloud?**
-Yes. Export your data at any time via the API. Migration tooling is available in the [CoderClaw CLI](https://github.com/SeanHogg/coderClaw).
+Yes. Export your data at any time via the API. Migration tooling is available in the [BuilderForce Agents CLI](https://github.com/SeanHogg/Builderforce.ai).
 
 **Where can I ask questions?**
-[Discord](https://discord.gg/qkhbAGHRBT) · **sales@coderclaw.ai** for Enterprise · **support@coderclaw.ai** for billing issues.
+[Discord](https://discord.gg/qkhbAGHRBT) · **sales@builderforce.ai** for Enterprise · **support@builderforce.ai** for billing issues.

@@ -27,11 +27,11 @@ export const PERMISSIONS = {
   WORKFLOW_EXECUTE:  'workflow:execute',
   WORKFLOW_DELETE:   'workflow:delete',
 
-  // Claws
-  CLAW_READ:         'claw:read',
-  CLAW_REGISTER:     'claw:register',
-  CLAW_CONFIGURE:    'claw:configure',
-  CLAW_DELETE:       'claw:delete',
+  // AgentHosts
+  AGENT_HOST_READ:         'agentHost:read',
+  AGENT_HOST_REGISTER:     'agentHost:register',
+  AGENT_HOST_CONFIGURE:    'agentHost:configure',
+  AGENT_HOST_DELETE:       'agentHost:delete',
 
   // Members
   MEMBER_READ:       'member:read',
@@ -85,7 +85,7 @@ const VIEWER_PERMS: Permission[] = [
   'project:read',
   'task:read',
   'workflow:read',
-  'claw:read',
+  'agentHost:read',
   'member:read',
   'approval:read',
   'marketplace:read',
@@ -98,7 +98,7 @@ const DEVELOPER_PERMS: Permission[] = [
   'task:assign',
   'workflow:write',
   'workflow:execute',
-  'claw:register',
+  'agentHost:register',
   'report:read',
   'apikey:read',
   'apikey:rotate',
@@ -110,8 +110,8 @@ const MANAGER_PERMS: Permission[] = [
   'project:archive',
   'task:delete',
   'workflow:delete',
-  'claw:configure',
-  'claw:delete',
+  'agentHost:configure',
+  'agentHost:delete',
   'member:invite',
   'member:remove',
   'billing:read',

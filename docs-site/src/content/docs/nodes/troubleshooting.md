@@ -13,19 +13,19 @@ Use this page when a node is visible in status but node tools fail.
 ## Command ladder
 
 ```bash
-coderclaw status
-coderclaw gateway status
-coderclaw logs --follow
-coderclaw doctor
-coderclaw channels status --probe
+builderforce status
+builderforce gateway status
+builderforce logs --follow
+builderforce doctor
+builderforce channels status --probe
 ```
 
 Then run node specific checks:
 
 ```bash
-coderclaw nodes status
-coderclaw nodes describe --node <idOrNameOrIp>
-coderclaw approvals get --node <idOrNameOrIp>
+builderforce nodes status
+builderforce nodes describe --node <idOrNameOrIp>
+builderforce approvals get --node <idOrNameOrIp>
 ```
 
 Healthy signals:
@@ -41,9 +41,9 @@ Healthy signals:
 Quick check and fix:
 
 ```bash
-coderclaw nodes describe --node <idOrNameOrIp>
-coderclaw nodes canvas snapshot --node <idOrNameOrIp>
-coderclaw logs --follow
+builderforce nodes describe --node <idOrNameOrIp>
+builderforce nodes canvas snapshot --node <idOrNameOrIp>
+builderforce logs --follow
 ```
 
 If you see `NODE_BACKGROUND_UNAVAILABLE`, bring the node app to the foreground and retry.
@@ -67,10 +67,10 @@ These are different gates:
 Quick checks:
 
 ```bash
-coderclaw devices list
-coderclaw nodes status
-coderclaw approvals get --node <idOrNameOrIp>
-coderclaw approvals allowlist add --node <idOrNameOrIp> "/usr/bin/uname"
+builderforce devices list
+builderforce nodes status
+builderforce approvals get --node <idOrNameOrIp>
+builderforce approvals allowlist add --node <idOrNameOrIp> "/usr/bin/uname"
 ```
 
 If pairing is missing, approve the node device first.
@@ -90,10 +90,10 @@ If pairing is fine but `system.run` fails, fix exec approvals/allowlist.
 ## Fast recovery loop
 
 ```bash
-coderclaw nodes status
-coderclaw nodes describe --node <idOrNameOrIp>
-coderclaw approvals get --node <idOrNameOrIp>
-coderclaw logs --follow
+builderforce nodes status
+builderforce nodes describe --node <idOrNameOrIp>
+builderforce approvals get --node <idOrNameOrIp>
+builderforce logs --follow
 ```
 
 If still stuck:

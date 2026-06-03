@@ -39,11 +39,11 @@ x-i18n:
 ## CLI 工作流程（支持无头模式）
 
 ```bash
-coderclaw nodes pending
-coderclaw nodes approve <requestId>
-coderclaw nodes reject <requestId>
-coderclaw nodes status
-coderclaw nodes rename --node <id|name|ip> --name "Living Room iPad"
+builderforce nodes pending
+builderforce nodes approve <requestId>
+builderforce nodes reject <requestId>
+builderforce nodes status
+builderforce nodes rename --node <id|name|ip> --name "Living Room iPad"
 ```
 
 `nodes status` 显示已配对/已连接的节点及其功能。
@@ -80,12 +80,12 @@ coderclaw nodes rename --node <id|name|ip> --name "Living Room iPad"
 
 ## 存储（本地，私有）
 
-配对状态存储在 Gateway 网关状态目录下（默认 `~/.coderclaw`）：
+配对状态存储在 Gateway 网关状态目录下（默认 `~/.builderforce`）：
 
-- `~/.coderclaw/nodes/paired.json`
-- `~/.coderclaw/nodes/pending.json`
+- `~/.builderforce/nodes/paired.json`
+- `~/.builderforce/nodes/pending.json`
 
-如果你覆盖了 `CODERCLAW_STATE_DIR`，`nodes/` 文件夹会随之移动。
+如果你覆盖了 `BUILDERFORCE_AGENTS_STATE_DIR`，`nodes/` 文件夹会随之移动。
 
 安全注意事项：
 

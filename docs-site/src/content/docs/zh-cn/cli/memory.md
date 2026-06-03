@@ -2,7 +2,7 @@
 read_when:
   - 你想要索引或搜索语义记忆
   - 你正在调试记忆可用性或索引问题
-summary: "`coderclaw memory`（status/index/search）的 CLI 参考"
+summary: "`builderforce memory`（status/index/search）的 CLI 参考"
 title: memory
 x-i18n:
   generated_at: "2026-02-01T20:21:11Z"
@@ -13,7 +13,7 @@ x-i18n:
   workflow: 14
 ---
 
-# `coderclaw memory`
+# `builderforce memory`
 
 管理语义记忆的索引和搜索。
 由活跃的记忆插件提供（默认：`memory-core`；设置 `plugins.slots.memory = "none"` 可禁用）。
@@ -26,15 +26,15 @@ x-i18n:
 ## 示例
 
 ```bash
-coderclaw memory status
-coderclaw memory status --deep
-coderclaw memory status --deep --index
-coderclaw memory status --deep --index --verbose
-coderclaw memory index
-coderclaw memory index --verbose
-coderclaw memory search "release checklist"
-coderclaw memory status --agent main
-coderclaw memory index --agent main --verbose
+builderforce memory status
+builderforce memory status --deep
+builderforce memory status --deep --index
+builderforce memory status --deep --index --verbose
+builderforce memory index
+builderforce memory index --verbose
+builderforce memory search "release checklist"
+builderforce memory status --agent main
+builderforce memory index --agent main --verbose
 ```
 
 ## 选项

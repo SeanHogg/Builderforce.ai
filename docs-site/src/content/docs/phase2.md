@@ -4,13 +4,13 @@ title: "Phase 2: Distributed AI Runtime & Secure Control Mesh"
 
 # Phase 2: Distributed AI Runtime & Secure Control Mesh
 
-CoderClaw Phase 2 introduces a networked, distributed AI node architecture with secure remote orchestration capabilities while maintaining deterministic execution and security boundaries.
+BuilderForce Agents Phase 2 introduces a networked, distributed AI node architecture with secure remote orchestration capabilities while maintaining deterministic execution and security boundaries.
 
-> **Foundation**: CoderClaw is built on [CoderClaw](https://github.com/SeanHogg/coderClaw)'s proven multi-channel gateway architecture. Phase 2 adds enterprise-ready features for distributed execution, security, and team collaboration.
+> **Foundation**: BuilderForce Agents is built on [BuilderForce Agents](https://github.com/SeanHogg/Builderforce.ai)'s proven multi-channel gateway architecture. Phase 2 adds enterprise-ready features for distributed execution, security, and team collaboration.
 
 ## Overview
 
-Phase 2 transforms CoderClaw from a local-only development runtime into a distributed system that can:
+Phase 2 transforms BuilderForce Agents from a local-only development runtime into a distributed system that can:
 
 - Execute tasks locally or remotely
 - Manage distributed task lifecycles
@@ -79,11 +79,11 @@ Transport adapters implement the communication layer without assumptions about p
 Example usage:
 
 ```typescript
-import { CoderClawRuntime, LocalTransportAdapter } from "coderclaw/transport";
+import { BuilderForce AgentsRuntime, LocalTransportAdapter } from "builderforce/transport";
 
 // Create runtime with local adapter
 const adapter = new LocalTransportAdapter(context);
-const runtime = new CoderClawRuntime(adapter, "local-only");
+const runtime = new BuilderForce AgentsRuntime(adapter, "local-only");
 
 // Submit a task
 const task = await runtime.submitTask({
@@ -201,7 +201,7 @@ const BUILTIN_ROLES = {
 const session = await securityService.createSession(userId, deviceId, ["developer"]);
 ```
 
-**Repo-level policy** (`.coderClaw/security.yaml`):
+**Repo-level policy** (`.builderforce/security.yaml`):
 
 ```yaml
 enforceTrust: true
@@ -303,10 +303,10 @@ const task = await runtime.submitTask({
 
 ### Local-Only Mode
 
-Default single-machine setup (backward compatible with CoderClaw):
+Default single-machine setup (backward compatible with BuilderForce Agents):
 
 ```typescript
-const runtime = new CoderClawRuntime(new LocalTransportAdapter(context), "local-only");
+const runtime = new BuilderForce AgentsRuntime(new LocalTransportAdapter(context), "local-only");
 ```
 
 ### Remote-Enabled Mode
@@ -314,7 +314,7 @@ const runtime = new CoderClawRuntime(new LocalTransportAdapter(context), "local-
 Accepts remote connections with authentication:
 
 ```typescript
-const runtime = new CoderClawRuntime(new HTTPTransportAdapter(config), "remote-enabled");
+const runtime = new BuilderForce AgentsRuntime(new HTTPTransportAdapter(config), "remote-enabled");
 ```
 
 ### Distributed Cluster Mode
@@ -322,7 +322,7 @@ const runtime = new CoderClawRuntime(new HTTPTransportAdapter(config), "remote-e
 Full distributed deployment (future):
 
 ```typescript
-const runtime = new CoderClawRuntime(new ClusterTransportAdapter(config), "distributed-cluster");
+const runtime = new BuilderForce AgentsRuntime(new ClusterTransportAdapter(config), "distributed-cluster");
 ```
 
 ## 6. Team & Enterprise Features
@@ -346,7 +346,7 @@ Skills can be distributed team-wide:
 
 ```bash
 # Install team skill
-coderclaw skill install team/security-scanner --registry team-registry
+builderforce skill install team/security-scanner --registry team-registry
 ```
 
 ### Team-Wide Policy Enforcement
@@ -365,7 +365,7 @@ organizationPolicy:
 ```yaml
 # .github/workflows/ai-review.yml
 - name: Run AI Code Review
-  uses: coderclaw/action@v2
+  uses: builderforce/action@v2
   with:
     task: "Review pull request"
     agent: "code-reviewer"
@@ -377,7 +377,7 @@ organizationPolicy:
 ### Runtime Configuration
 
 ```yaml
-# .coderClaw/runtime.yaml
+# .builderforce/runtime.yaml
 mode: remote-enabled
 
 transport:
@@ -398,7 +398,7 @@ deployment:
 ### Security Configuration
 
 ```yaml
-# .coderClaw/security.yaml
+# .builderforce/security.yaml
 identity:
   providers:
     - oidc
@@ -447,11 +447,11 @@ Phase 2 is backward compatible with Phase 1:
 
 ```typescript
 // Phase 1: Direct orchestrator usage
-import { globalOrchestrator } from "coderclaw/coderclaw";
+import { globalOrchestrator } from "builderforce/builderforce";
 const workflow = globalOrchestrator.createWorkflow(steps);
 
 // Phase 2: Enhanced orchestrator with transport
-import { globalEnhancedOrchestrator } from "coderclaw/coderclaw/orchestrator-enhanced";
+import { globalEnhancedOrchestrator } from "builderforce/builderforce/orchestrator-enhanced";
 const workflow = globalEnhancedOrchestrator.createWorkflow(steps);
 ```
 

@@ -17,16 +17,16 @@ x-i18n:
 
 面向用户的概览（CLI + Control UI + 配置），请参阅 [/logging](/logging)。
 
-CoderClaw 有两个日志"界面"：
+BuilderForce Agents 有两个日志"界面"：
 
 - **控制台输出**（你在终端 / Debug UI 中看到的内容）。
 - **文件日志**（JSON 行）由 Gateway 网关日志记录器写入。
 
 ## 基于文件的日志记录器
 
-- 默认滚动日志文件位于 `/tmp/coderclaw/` 下（每天一个文件）：`coderclaw-YYYY-MM-DD.log`
+- 默认滚动日志文件位于 `/tmp/builderforce/` 下（每天一个文件）：`builderforce-YYYY-MM-DD.log`
   - 日期使用 Gateway 网关主机的本地时区。
-- 日志文件路径和级别可以通过 `~/.coderclaw/coderclaw.json` 配置：
+- 日志文件路径和级别可以通过 `~/.builderforce/builderforce.json` 配置：
   - `logging.file`
   - `logging.level`
 
@@ -35,7 +35,7 @@ CoderClaw 有两个日志"界面"：
 Control UI 的 Logs 标签页通过 Gateway 网关（`logs.tail`）尾随此文件。CLI 也可以这样做：
 
 ```bash
-coderclaw logs --follow
+builderforce logs --follow
 ```
 
 **Verbose 与日志级别**
@@ -75,7 +75,7 @@ Gateway 网关以两种模式打印 WebSocket 协议日志：
 
 ### WS 日志样式
 
-`coderclaw gateway` 支持每个 Gateway 网关的样式切换：
+`builderforce gateway` 支持每个 Gateway 网关的样式切换：
 
 - `--ws-log auto`（默认）：普通模式已优化；详细模式使用紧凑输出
 - `--ws-log compact`：详细时使用紧凑输出（配对的请求/响应）
@@ -86,13 +86,13 @@ Gateway 网关以两种模式打印 WebSocket 协议日志：
 
 ```bash
 # 优化的（仅错误/慢调用）
-coderclaw gateway
+builderforce gateway
 
 # 显示所有 WS 流量（配对）
-coderclaw gateway --verbose --ws-log compact
+builderforce gateway --verbose --ws-log compact
 
 # 显示所有 WS 流量（完整元数据）
-coderclaw gateway --verbose --ws-log full
+builderforce gateway --verbose --ws-log full
 ```
 
 ## 控制台格式化（子系统日志）

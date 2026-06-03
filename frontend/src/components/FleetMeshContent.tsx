@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import type { Claw } from '@/lib/builderforceApi';
+import type { AgentHost } from '@/lib/builderforceApi';
 import { dispatchApi } from '@/lib/builderforceApi';
 
 interface FleetMeshContentProps {
-  claws: Claw[];
+  agentHosts: AgentHost[];
 }
 
 const cardStyle: React.CSSProperties = {
@@ -15,13 +15,13 @@ const cardStyle: React.CSSProperties = {
   padding: 16,
 };
 
-// Arrange claws in a circle around a central hub
-function layoutNodes(claws: Claw[], cx: number, cy: number, radius: number) {
-  if (claws.length === 0) return [];
-  return claws.map((claw, i) => {
-    const angle = (2 * Math.PI * i) / claws.length - Math.PI / 2;
+// Arrange agentHosts in a circle around a central hub
+function layoutNodes(agentHosts: AgentHost[], cx: number, cy: number, radius: number) {
+  if (agentHosts.length === 0) return [];
+  return agentHosts.map((agentHost, i) => {
+    const angle = (2 * Math.PI * i) / agentHosts.length - Math.PI / 2;
     return {
-      claw,
+      agentHost,
       x: cx + radius * Math.cos(angle),
       y: cy + radius * Math.sin(angle),
     };
@@ -32,8 +32,8 @@ function truncate(s: string, n: number) {
   return s.length > n ? s.slice(0, n) + '…' : s;
 }
 
-export function FleetMeshContent({ claws }: FleetMeshContentProps) {
-  const [selectedClaw, setSelectedClaw] = useState<Claw | null>(null);
+export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
+  const [selectedAgentHost, setSelectedAgentHost] = useState<AgentHost | null>(null);
   const [dispatchPayload, setDispatchPayload] = useState('{"type":"ping"}');
   const [dispatching, setDispatching] = useState(false);
   const [dispatchResult, setDispatchResult] = useState<string | null>(null);
@@ -46,12 +46,12 @@ export function FleetMeshContent({ claws }: FleetMeshContentProps) {
   const cy = H / 2;
   const radius = Math.min(cx, cy) - 60;
 
-  const nodes = useMemo(() => layoutNodes(claws, cx, cy, radius), [claws, cx, cy, radius]);
+  const nodes = useMemo(() => layoutNodes(agentHosts, cx, cy, radius), [agentHosts, cx, cy, radius]);
 
-  const onlineClaws = claws.filter((c) => !!c.connectedAt);
+  const onlineAgentHosts = agentHosts.filter((c) => !!c.connectedAt);
 
   const handleDispatch = async () => {
-    if (!selectedClaw) return;
+    if (!selectedAgentHost) return;
     let payload: Record<string, unknown>;
     try {
       payload = JSON.parse(dispatchPayload) as Record<string, unknown>;
@@ -63,7 +63,7 @@ export function FleetMeshContent({ claws }: FleetMeshContentProps) {
     setDispatchResult(null);
     setDispatchError(null);
     try {
-      const result = await dispatchApi.send(selectedClaw.id, payload);
+      const result = await dispatchApi.send(selectedAgentHost.id, payload);
       setDispatchResult(JSON.stringify(result, null, 2));
     } catch (e) {
       setDispatchError(e instanceof Error ? e.message : 'Dispatch failed');
@@ -72,7 +72,7 @@ export function FleetMeshContent({ claws }: FleetMeshContentProps) {
     }
   };
 
-  if (claws.length === 0) return null;
+  if (agentHosts.length === 0) return null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -81,7 +81,7 @@ export function FleetMeshContent({ claws }: FleetMeshContentProps) {
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
           Fleet Mesh
           <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-muted)' }}>
-            {onlineClaws.length}/{claws.length} online
+            {onlineAgentHosts.length}/{agentHosts.length} online
           </span>
         </div>
         <svg
@@ -89,25 +89,25 @@ export function FleetMeshContent({ claws }: FleetMeshContentProps) {
           style={{ width: '100%', maxWidth: W, display: 'block', margin: '0 auto' }}
         >
           {/* Lines from hub to each node */}
-          {nodes.map(({ claw, x, y }) => (
+          {nodes.map(({ agentHost, x, y }) => (
             <line
-              key={`line-${claw.id}`}
+              key={`line-${agentHost.id}`}
               x1={cx}
               y1={cy}
               x2={x}
               y2={y}
-              stroke={claw.connectedAt ? 'var(--cyan-bright, #00e5cc)' : 'var(--border-subtle)'}
-              strokeWidth={hoveredId === claw.id ? 2 : 1}
-              strokeDasharray={claw.connectedAt ? undefined : '4 3'}
+              stroke={agentHost.connectedAt ? 'var(--cyan-bright, #00e5cc)' : 'var(--border-subtle)'}
+              strokeWidth={hoveredId === agentHost.id ? 2 : 1}
+              strokeDasharray={agentHost.connectedAt ? undefined : '4 3'}
               opacity={0.5}
             />
           ))}
 
-          {/* Cross-claw lines (mesh edges between online claws) */}
+          {/* Cross-agentHost lines (mesh edges between online agentHosts) */}
           {nodes
-            .filter(({ claw }) => claw.connectedAt)
-            .map(({ claw: a, x: ax, y: ay }, i, arr) =>
-              arr.slice(i + 1).map(({ claw: b, x: bx, y: by }) => (
+            .filter(({ agentHost }) => agentHost.connectedAt)
+            .map(({ agentHost: a, x: ax, y: ay }, i, arr) =>
+              arr.slice(i + 1).map(({ agentHost: b, x: bx, y: by }) => (
                 <line
                   key={`mesh-${a.id}-${b.id}`}
                   x1={ax}
@@ -127,18 +127,18 @@ export function FleetMeshContent({ claws }: FleetMeshContentProps) {
             HUB
           </text>
 
-          {/* Claw nodes */}
-          {nodes.map(({ claw, x, y }) => {
-            const online = !!claw.connectedAt;
-            const isSelected = selectedClaw?.id === claw.id;
-            const isHovered = hoveredId === claw.id;
+          {/* AgentHost nodes */}
+          {nodes.map(({ agentHost, x, y }) => {
+            const online = !!agentHost.connectedAt;
+            const isSelected = selectedAgentHost?.id === agentHost.id;
+            const isHovered = hoveredId === agentHost.id;
             const nodeColor = online ? 'var(--cyan-bright, #00e5cc)' : 'var(--border-subtle)';
             return (
               <g
-                key={claw.id}
+                key={agentHost.id}
                 style={{ cursor: 'pointer' }}
-                onClick={() => setSelectedClaw(isSelected ? null : claw)}
-                onMouseEnter={() => setHoveredId(claw.id)}
+                onClick={() => setSelectedAgentHost(isSelected ? null : agentHost)}
+                onMouseEnter={() => setHoveredId(agentHost.id)}
                 onMouseLeave={() => setHoveredId(null)}
               >
                 <circle
@@ -159,7 +159,7 @@ export function FleetMeshContent({ claws }: FleetMeshContentProps) {
                   fontSize={9}
                   fill="var(--text-muted)"
                 >
-                  {truncate(claw.name, 14)}
+                  {truncate(agentHost.name, 14)}
                 </text>
               </g>
             );
@@ -174,19 +174,19 @@ export function FleetMeshContent({ claws }: FleetMeshContentProps) {
       <div style={cardStyle}>
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>Remote Dispatch</div>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.5 }}>
-          Send a JSON message directly to any claw in the fleet. Use this to trigger tasks, ping agents, or forward commands.
+          Send a JSON message directly to any agentHost in the fleet. Use this to trigger tasks, ping agents, or forward commands.
         </p>
 
-        {/* Target claw selector */}
+        {/* Target agentHost selector */}
         <div style={{ marginBottom: 10 }}>
           <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
-            Target Claw
+            Target AgentHost
           </label>
           <select
-            value={selectedClaw?.id ?? ''}
+            value={selectedAgentHost?.id ?? ''}
             onChange={(e) => {
               const id = Number(e.target.value);
-              setSelectedClaw(claws.find((c) => c.id === id) ?? null);
+              setSelectedAgentHost(agentHosts.find((c) => c.id === id) ?? null);
               setDispatchResult(null);
               setDispatchError(null);
             }}
@@ -200,8 +200,8 @@ export function FleetMeshContent({ claws }: FleetMeshContentProps) {
               borderRadius: 8,
             }}
           >
-            <option value="">Select claw…</option>
-            {claws.map((c) => (
+            <option value="">Select agentHost…</option>
+            {agentHosts.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}{c.connectedAt ? ' ●' : ' ○'}
               </option>
@@ -289,16 +289,16 @@ export function FleetMeshContent({ claws }: FleetMeshContentProps) {
           <button
             type="button"
             onClick={handleDispatch}
-            disabled={!selectedClaw || dispatching}
+            disabled={!selectedAgentHost || dispatching}
             style={{
               padding: '8px 18px',
               fontSize: 13,
               fontWeight: 600,
-              background: selectedClaw && !dispatching ? 'var(--coral-bright, #f4726e)' : 'var(--bg-elevated)',
-              color: selectedClaw && !dispatching ? '#fff' : 'var(--text-muted)',
+              background: selectedAgentHost && !dispatching ? 'var(--coral-bright, #f4726e)' : 'var(--bg-elevated)',
+              color: selectedAgentHost && !dispatching ? '#fff' : 'var(--text-muted)',
               border: 'none',
               borderRadius: 8,
-              cursor: !selectedClaw || dispatching ? 'not-allowed' : 'pointer',
+              cursor: !selectedAgentHost || dispatching ? 'not-allowed' : 'pointer',
             }}
           >
             {dispatching ? 'Dispatching…' : 'Dispatch →'}

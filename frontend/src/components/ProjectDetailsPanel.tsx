@@ -594,7 +594,7 @@ export function ProjectDetailsPanel({
             <div style={cardStyle}>
               <div style={{ fontWeight: 600, marginBottom: 10 }}>Instances</div>
               <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Active agent/claw instances for this project. Configure from Workforce.
+                Active agent/agentHost instances for this project. Configure from Workforce.
               </p>
               <Link href="/workforce" style={{ fontSize: 13, color: 'var(--coral-bright)', marginTop: 8, display: 'inline-block' }}>
                 Workforce →
@@ -615,9 +615,9 @@ export function ProjectDetailsPanel({
           )}
 
           {activeTab === 'cron' && (
-            project.assignedClaw?.id
-              ? <CronJobsContent clawId={project.assignedClaw.id} projectId={project.id} hideProjectColumn />
-              : <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 24, textAlign: 'center' }}>No claw assigned to this project. Assign a claw from the Workforce page to manage cron jobs.</div>
+            project.assignedAgentHost?.id
+              ? <CronJobsContent agentHostId={project.assignedAgentHost.id} projectId={project.id} hideProjectColumn />
+              : <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 24, textAlign: 'center' }}>No agentHost assigned to this project. Assign a agentHost from the Workforce page to manage cron jobs.</div>
           )}
           {activeTab === 'capabilities' && (
             <AgentCapabilitiesContent projectId={project.id} />
