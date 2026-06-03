@@ -64,6 +64,7 @@ Column 'tasks.description' is declared in schema.ts but never created/added by a
 Column 'tasks.id' is declared in schema.ts but never created/added by any migration.
 Column 'tasks.key' is declared in schema.ts but never created/added by any migration.
 Column 'tasks.project_id' is declared in schema.ts but never created/added by any migration.
+Column 'tasks.status' is declared in schema.ts but never created/added by any migration.
 Column 'tasks.title' is declared in schema.ts but never created/added by any migration.
 Column 'tasks.updated_at' is declared in schema.ts but never created/added by any migration.
 Column 'tenants.created_at' is declared in schema.ts but never created/added by any migration.
