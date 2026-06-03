@@ -1,42 +1,42 @@
 ---
 title: "Default AGENTS.md"
-summary: "Default CoderClaw agent instructions and skills roster for the personal assistant setup"
+summary: "Default BuilderForce Agents agent instructions and skills roster for the personal assistant setup"
 read_when:
-  - Starting a new CoderClaw agent session
+  - Starting a new BuilderForce Agents agent session
   - Enabling or auditing default skills
 ---
 
-# AGENTS.md — CoderClaw Personal Assistant (default)
+# AGENTS.md — BuilderForce Agents Personal Assistant (default)
 
 ## First run (recommended)
 
-CoderClaw uses a dedicated workspace directory for the agent. Default: `~/.coderclaw/workspace` (configurable via `agents.defaults.workspace`).
+BuilderForce Agents uses a dedicated workspace directory for the agent. Default: `~/.builderforce/workspace` (configurable via `agents.defaults.workspace`).
 
 1. Create the workspace (if it doesn’t already exist):
 
 ```bash
-mkdir -p ~/.coderclaw/workspace
+mkdir -p ~/.builderforce/workspace
 ```
 
 2. Copy the default workspace templates into the workspace:
 
 ```bash
-cp foundation/AGENTS.md ~/.coderclaw/workspace/AGENTS.md
-cp foundation/SOUL.md ~/.coderclaw/workspace/SOUL.md
-cp foundation/TOOLS.md ~/.coderclaw/workspace/TOOLS.md
+cp foundation/AGENTS.md ~/.builderforce/workspace/AGENTS.md
+cp foundation/SOUL.md ~/.builderforce/workspace/SOUL.md
+cp foundation/TOOLS.md ~/.builderforce/workspace/TOOLS.md
 ```
 
 3. Optional: if you want the personal assistant skill roster, replace AGENTS.md with this file:
 
 ```bash
-cp docs/reference/AGENTS.default.md ~/.coderclaw/workspace/AGENTS.md
+cp docs/reference/AGENTS.default.md ~/.builderforce/workspace/AGENTS.md
 ```
 
 4. Optional: choose a different workspace by setting `agents.defaults.workspace` (supports `~`):
 
 ```json5
 {
-  agents: { defaults: { workspace: "~/.coderclaw/workspace" } },
+  agents: { defaults: { workspace: "~/.builderforce/workspace" } },
 }
 ```
 
@@ -77,20 +77,20 @@ cp docs/reference/AGENTS.default.md ~/.coderclaw/workspace/AGENTS.md
 
 ## Backup tip (recommended)
 
-If you treat this workspace as CoderClaw’s “memory”, make it a git repo (ideally private) so `AGENTS.md` and your memory files are backed up.
+If you treat this workspace as BuilderForce Agents’s “memory”, make it a git repo (ideally private) so `AGENTS.md` and your memory files are backed up.
 
 ```bash
-cd ~/.coderclaw/workspace
+cd ~/.builderforce/workspace
 git init
 git add AGENTS.md
-git commit -m "Add CoderClaw workspace"
+git commit -m "Add BuilderForce Agents workspace"
 # Optional: add a private remote + push
 ```
 
-## What CoderClaw Does
+## What BuilderForce Agents Does
 
 - Runs WhatsApp gateway + Pi coding agent so the assistant can read/write chats, fetch context, and run skills via the host Mac.
-- macOS app manages permissions (screen recording, notifications, microphone) and exposes the `coderclaw` CLI via its bundled binary.
+- macOS app manages permissions (screen recording, notifications, microphone) and exposes the `builderforce` CLI via its bundled binary.
 - Direct chats collapse into the agent's `main` session by default; groups stay isolated as `agent:<agentId>:<channel>:group:<id>` (rooms/channels: `agent:<agentId>:<channel>:channel:<id>`); heartbeats keep background tasks alive.
 
 ## Core Skills (enable in Settings → Skills)
@@ -115,10 +115,10 @@ git commit -m "Add CoderClaw workspace"
 
 ## Usage Notes
 
-- Prefer the `coderclaw` CLI for scripting; mac app handles permissions.
+- Prefer the `builderforce` CLI for scripting; mac app handles permissions.
 - Run installs from the Skills tab; it hides the button if a binary is already present.
 - Keep heartbeats enabled so the assistant can schedule reminders, monitor inboxes, and trigger camera captures.
 - Canvas UI runs full-screen with native overlays. Avoid placing critical controls in the top-left/top-right/bottom edges; add explicit gutters in the layout and don’t rely on safe-area insets.
-- For browser-driven verification, use `coderclaw browser` (tabs/status/screenshot) with the CoderClaw-managed Chrome profile.
-- For DOM inspection, use `coderclaw browser eval|query|dom|snapshot` (and `--json`/`--out` when you need machine output).
-- For interactions, use `coderclaw browser click|type|hover|drag|select|upload|press|wait|navigate|back|evaluate|run` (click/type require snapshot refs; use `evaluate` for CSS selectors).
+- For browser-driven verification, use `builderforce browser` (tabs/status/screenshot) with the BuilderForce Agents-managed Chrome profile.
+- For DOM inspection, use `builderforce browser eval|query|dom|snapshot` (and `--json`/`--out` when you need machine output).
+- For interactions, use `builderforce browser click|type|hover|drag|select|upload|press|wait|navigate|back|evaluate|run` (click/type require snapshot refs; use `evaluate` for CSS selectors).

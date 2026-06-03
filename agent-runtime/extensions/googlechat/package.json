@@ -1,0 +1,40 @@
+{
+  "name": "@builderforce/googlechat",
+  "version": "2026.3.21",
+  "private": true,
+  "description": "BuilderForceAgents Google Chat channel plugin",
+  "type": "module",
+  "dependencies": {
+    "google-auth-library": "^10.5.0"
+  },
+  "devDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*"
+  },
+  "peerDependencies": {
+    "@seanhogg/builderforce-agents": ">=2026.1.26"
+  },
+  "builderforce": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "channel": {
+      "id": "googlechat",
+      "label": "Google Chat",
+      "selectionLabel": "Google Chat (Chat API)",
+      "detailLabel": "Google Chat",
+      "docsPath": "/channels/googlechat",
+      "docsLabel": "googlechat",
+      "blurb": "Google Workspace Chat app via HTTP webhooks.",
+      "aliases": [
+        "gchat",
+        "google-chat"
+      ],
+      "order": 55
+    },
+    "install": {
+      "npmSpec": "@builderforce/googlechat",
+      "localPath": "extensions/googlechat",
+      "defaultChoice": "npm"
+    }
+  }
+}

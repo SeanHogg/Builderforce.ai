@@ -1,7 +1,7 @@
 ---
 read_when:
   - 你想以非交互方式读取或编辑配置
-summary: "`coderclaw config` 的 CLI 参考（获取/设置/取消设置配置值）"
+summary: "`builderforce config` 的 CLI 参考（获取/设置/取消设置配置值）"
 title: config
 x-i18n:
   generated_at: "2026-02-03T10:04:13Z"
@@ -12,19 +12,19 @@ x-i18n:
   workflow: 15
 ---
 
-# `coderclaw config`
+# `builderforce config`
 
 配置辅助命令：通过路径获取/设置/取消设置值。不带子命令运行将打开
-配置向导（与 `coderclaw configure` 相同）。
+配置向导（与 `builderforce configure` 相同）。
 
 ## 示例
 
 ```bash
-coderclaw config get browser.executablePath
-coderclaw config set browser.executablePath "/usr/bin/google-chrome"
-coderclaw config set agents.defaults.heartbeat.every "2h"
-coderclaw config set agents.list[0].tools.exec.node "node-id-or-name"
-coderclaw config unset tools.web.search.apiKey
+builderforce config get browser.executablePath
+builderforce config set browser.executablePath "/usr/bin/google-chrome"
+builderforce config set agents.defaults.heartbeat.every "2h"
+builderforce config set agents.list[0].tools.exec.node "node-id-or-name"
+builderforce config unset tools.web.search.apiKey
 ```
 
 ## 路径
@@ -32,15 +32,15 @@ coderclaw config unset tools.web.search.apiKey
 路径使用点号或括号表示法：
 
 ```bash
-coderclaw config get agents.defaults.workspace
-coderclaw config get agents.list[0].id
+builderforce config get agents.defaults.workspace
+builderforce config get agents.list[0].id
 ```
 
 使用智能体列表索引来定位特定智能体：
 
 ```bash
-coderclaw config get agents.list
-coderclaw config set agents.list[1].tools.exec.node "node-id-or-name"
+builderforce config get agents.list
+builderforce config set agents.list[1].tools.exec.node "node-id-or-name"
 ```
 
 ## 值
@@ -49,9 +49,9 @@ coderclaw config set agents.list[1].tools.exec.node "node-id-or-name"
 使用 `--json` 强制要求 JSON5 解析。
 
 ```bash
-coderclaw config set agents.defaults.heartbeat.every "0m"
-coderclaw config set gateway.port 19001 --json
-coderclaw config set channels.whatsapp.groups '["*"]' --json
+builderforce config set agents.defaults.heartbeat.every "0m"
+builderforce config set gateway.port 19001 --json
+builderforce config set channels.whatsapp.groups '["*"]' --json
 ```
 
 编辑后请重启 Gateway 网关。

@@ -147,7 +147,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       'Dataset generation wizard',
       'AI evaluation engine',
       'Public Workforce browsing',
-      '1 Claw (CoderClaw instance)',
+      '1 AgentHost (BuilderForce Agents instance)',
       '5 projects',
       '10K tokens/day',
       'Community support',
@@ -170,7 +170,7 @@ export const PRICING_PLANS: PricingPlan[] = [
     description: 'Unlimited agents, private models, and priority support for professional teams.',
     features: [
       'Everything in Free',
-      'Up to 3 Claws',
+      'Up to 3 AgentHosts',
       'Unlimited projects',
       '1M tokens/day',
       'Approval workflows',
@@ -195,7 +195,7 @@ export const PRICING_PLANS: PricingPlan[] = [
     description: 'Enterprise-grade controls with shared approval inbox and per-seat billing.',
     features: [
       'Everything in Pro',
-      'Unlimited Claws',
+      'Unlimited AgentHosts',
       '5M tokens/day',
       'Shared team approval inbox',
       'Per-seat cost controls',
@@ -279,8 +279,8 @@ export const HOMEPAGE_FAQ: FaqItem[] = [
     answer: 'Unlike cloud training platforms that charge per GPU-hour, Builderforce runs training on your local WebGPU device at zero cost. It also includes built-in dataset generation, AI evaluation, and a marketplace for publishing agents — features typically requiring multiple separate tools.',
   },
   {
-    question: 'Can I integrate Builderforce agents with CoderClaw?',
-    answer: 'Yes — agents trained on Builderforce can be exported and deployed as CoderClaw hippocampus models. The platform supports the full pipeline from training custom SSM models to pushing them to your self-hosted CoderClaw gateway.',
+    question: 'Can I integrate Builderforce agents with BuilderForce Agents?',
+    answer: 'Yes — agents trained on Builderforce can be exported and deployed as BuilderForce Agents hippocampus models. The platform supports the full pipeline from training custom SSM models to pushing them to your self-hosted BuilderForce Agents gateway.',
   },
 ];
 
@@ -292,15 +292,15 @@ export const PRICING_FAQ: FaqItem[] = [
   },
   {
     question: 'What is included in the Pro plan?',
-    answer: 'Pro ($29/seat/month) includes everything in Free plus up to 3 Claws, unlimited projects, 1M tokens/day, approval workflows, fleet mesh, full telemetry, custom agent roles, and priority support.',
+    answer: 'Pro ($29/seat/month) includes everything in Free plus up to 3 AgentHosts, unlimited projects, 1M tokens/day, approval workflows, fleet mesh, full telemetry, custom agent roles, and priority support.',
   },
   {
     question: 'Can I change plans at any time?',
     answer: 'Yes — you can upgrade or downgrade at any time from the Pricing & Billing page. Upgrades take effect immediately; downgrades apply at the end of your current billing period.',
   },
   {
-    question: 'What is a Managed Claw?',
-    answer: 'A Managed Claw ($49/month) is a hosted CoderClaw instance that Builderforce runs for you — no Docker, no DevOps. It connects to your workspace and runs your deployed agents.',
+    question: 'What is a Managed AgentHost?',
+    answer: 'A Managed AgentHost ($49/month) is a hosted BuilderForce Agents instance that Builderforce runs for you — no Docker, no DevOps. It connects to your workspace and runs your deployed agents.',
   },
   {
     question: 'Do you offer yearly billing?',
@@ -348,7 +348,7 @@ export const REGISTER_FAQ: FaqItem[] = [
 export const BLOG_FAQ: FaqItem[] = [
   {
     question: 'What topics does the Builderforce blog cover?',
-    answer: 'The blog covers AI agent training, WebGPU LoRA fine-tuning, dataset generation, multi-agent orchestration, CoderClaw integration, and product development best practices.',
+    answer: 'The blog covers AI agent training, WebGPU LoRA fine-tuning, dataset generation, multi-agent orchestration, BuilderForce Agents integration, and product development best practices.',
   },
   {
     question: 'Who writes the articles?',
@@ -382,25 +382,111 @@ export const DEFINED_TERMS: DefinedTermEntry[] = [
   },
   {
     name: 'Agent Orchestration',
-    description: 'The coordination of multiple AI agents working together on complex tasks. Includes workflow sequencing, approval gates, fleet mesh networking, and remote dispatch across CoderClaw instances.',
+    description: 'The coordination of multiple AI agents working together on complex tasks. Includes workflow sequencing, approval gates, fleet mesh networking, and remote dispatch across BuilderForce Agents instances.',
   },
 ];
 
 /* ════════════════════ NAV LINKS ════════════════════ */
 
-export const MARKETING_NAV_LINKS = [
-  { href: '/marketplace', label: 'Workforce' },
-  { href: '/blog', label: 'Blog' },
-  { href: '/#features', label: 'Features' },
-  { href: '/#pricing', label: 'Pricing' },
-  { href: '/login', label: 'Sign In' },
-] as const;
+export interface NavLink {
+  href: string;
+  label: string;
+}
 
-export const FOOTER_LINKS = [
+/**
+ * Single source of truth for the marketing header links. Consumed by the
+ * landing page (and any other marketing surface) so the public nav can't drift.
+ * "Product" leads with the capability tour so logged-out visitors can discover
+ * what the platform actually does before signing up.
+ */
+export const MARKETING_NAV_LINKS: NavLink[] = [
+  { href: '/product', label: 'Product' },
+  { href: '/marketplace', label: 'Workforce' },
+  { href: '/agents', label: 'BuilderForce Agents' },
+  { href: '/blog', label: 'Blog' },
+  { href: '/pricing', label: 'Pricing' },
+  { href: '/login', label: 'Sign In' },
+];
+
+export const FOOTER_LINKS: NavLink[] = [
   { href: '/', label: 'Home' },
+  { href: '/product', label: 'Product' },
   { href: '/marketplace', label: 'Workforce Registry' },
+  { href: '/agents', label: 'BuilderForce Agents' },
   { href: '/blog', label: 'Blog' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/login', label: 'Sign In' },
   { href: '/register', label: 'Get Started' },
-] as const;
+];
+
+/* ════════════════════ PRODUCT SURFACES (public capability tour) ════════════════════ */
+
+export interface ProductSurface {
+  icon: string;
+  title: string;
+  desc: string;
+  /** Where the authenticated surface lives (deep link after sign-in). */
+  href: string;
+}
+
+export interface ProductSection {
+  id: string;
+  title: string;
+  blurb: string;
+  surfaces: ProductSurface[];
+}
+
+/**
+ * The actual in-app surfaces, described for logged-out visitors. Mirrors the
+ * authenticated Sidebar groupings (MAIN / MESH / EXTENSIONS / SYSTEM) so the
+ * public /product page stays in lock-step with what the app really ships —
+ * fixing the "the menu is hidden so nobody knows what the product consists of"
+ * gap. Keep this aligned with components/Sidebar.tsx.
+ */
+export const PRODUCT_SECTIONS: ProductSection[] = [
+  {
+    id: 'build',
+    title: 'Build & Train',
+    blurb: 'Go from an idea to a trained, evaluated AI agent — all in the browser.',
+    surfaces: [
+      { icon: '🏠', title: 'Dashboard', desc: 'Your command center: workspace health, recent runs, and what your AI workforce is doing right now.', href: '/dashboard' },
+      { icon: '💡', title: 'Brain Storm', desc: 'Describe what you need in plain language; the Brain turns it into projects, datasets, and agents.', href: '/brainstorm' },
+      { icon: '🏛', title: 'Architect', desc: 'Plan multi-step solutions and system designs before a single line of code is written.', href: '/architect' },
+      { icon: '💻', title: 'IDE Workspace', desc: 'Monaco editor, terminal, AI chat, and file explorer in one collaborative project workspace.', href: '/ide' },
+      { icon: '🎓', title: 'Training', desc: 'In-browser WebGPU LoRA fine-tuning up to 2B parameters with a live evaluation engine — zero GPU bills.', href: '/training' },
+    ],
+  },
+  {
+    id: 'orchestrate',
+    title: 'Orchestrate',
+    blurb: 'Coordinate work across agents, workflows, and a mesh of remote AgentHosts.',
+    surfaces: [
+      { icon: '🔀', title: 'Workflow Builder', desc: 'Compose agents and tools into repeatable, approval-gated workflows.', href: '/workflows/builder' },
+      { icon: '☑', title: 'Task Management', desc: 'Track, assign, and watch tasks flow through your agent workforce.', href: '/tasks' },
+      { icon: '🦀', title: 'Workforce Mesh', desc: 'Discover and dispatch work across local and remote AgentHosts — capacity sharing across machines and tenants.', href: '/workforce' },
+      { icon: '💬', title: 'Chats', desc: 'Talk to your agents directly, or watch them collaborate in shared conversations.', href: '/chats' },
+    ],
+  },
+  {
+    id: 'extend',
+    title: 'Extend',
+    blurb: 'A marketplace of skills, personas, prompts, and content to supercharge agents.',
+    surfaces: [
+      { icon: '⭐', title: 'Skills', desc: 'Install or publish reusable agent skills from the Workforce marketplace.', href: '/skills' },
+      { icon: '👤', title: 'Personas', desc: 'Give agents a voice and behavior profile with reusable personas.', href: '/personas' },
+      { icon: '📚', title: 'Prompt Library', desc: 'Browse, use, and share community prompt templates with variables.', href: '/prompts' },
+      { icon: '✎', title: 'Content Manager', desc: 'Author and share content blocks your agents and marketplace can reuse.', href: '/content-manager' },
+    ],
+  },
+  {
+    id: 'govern',
+    title: 'Govern & Operate',
+    blurb: 'Approvals, security, and full observability — your AI Security Officer.',
+    surfaces: [
+      { icon: '✅', title: 'Approvals', desc: 'Human-in-the-loop approval gates on every sensitive action your agents take.', href: '/approvals' },
+      { icon: '🔒', title: 'Security', desc: 'Per-tenant isolation and AES-256-GCM encrypted credentials for every integration.', href: '/security' },
+      { icon: '📊', title: 'Observability', desc: 'Full telemetry and an audit trail of every agent action, token, and tool call.', href: '/observability' },
+      { icon: '🏢', title: 'Tenants & Workspaces', desc: 'Multi-tenant workspaces with per-seat roles, members, and cost controls.', href: '/tenants' },
+    ],
+  },
+];

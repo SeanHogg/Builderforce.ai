@@ -1,7 +1,7 @@
 ---
-summary: "Use Z.AI (GLM models) with CoderClaw"
+summary: "Use Z.AI (GLM models) with BuilderForce Agents"
 read_when:
-  - You want Z.AI / GLM models in CoderClaw
+  - You want Z.AI / GLM models in BuilderForce Agents
   - You need a simple ZAI_API_KEY setup
 title: "Z.AI"
 ---
@@ -9,15 +9,15 @@ title: "Z.AI"
 # Z.AI
 
 Z.AI is the API platform for **GLM** models. It provides REST APIs for GLM and uses API keys
-for authentication. Create your API key in the Z.AI console. CoderClaw uses the `zai` provider
+for authentication. Create your API key in the Z.AI console. BuilderForce Agents uses the `zai` provider
 with a Z.AI API key.
 
 ## CLI setup
 
 ```bash
-coderclaw onboard --auth-choice zai-api-key
+builderforce onboard --auth-choice zai-api-key
 # or non-interactive
-coderclaw onboard --zai-api-key "$ZAI_API_KEY"
+builderforce onboard --zai-api-key "$ZAI_API_KEY"
 ```
 
 ## Config snippet

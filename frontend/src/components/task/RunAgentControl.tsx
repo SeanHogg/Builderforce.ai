@@ -6,17 +6,17 @@ import {
   llmApi,
   isAwaitingApprovalExecution,
   type Task,
-  type Claw,
+  type AgentHost,
 } from '@/lib/builderforceApi';
 
 /**
- * Run-with-agent control — replaces the old "Send to Claw" button. A button
+ * Run-with-agent control — replaces the old "Send to AgentHost" button. A button
  * group: [ Agent ▾ | LLM model ▾ | Run ▶ ]. The user picks which connected
- * agent (claw) executes and which model it should use (default = the
+ * agent (agentHost) executes and which model it should use (default = the
  * builderforce.ai gateway default), then runs. The chosen model is forwarded
  * to the agent via the execution payload.
  *
- * Shared between the task Details tab (where Send to Claw used to be) and the
+ * Shared between the task Details tab (where Send to AgentHost used to be) and the
  * Agent tab header.
  */
 
@@ -29,15 +29,15 @@ const selectStyle: React.CSSProperties = {
 
 export interface RunAgentControlProps {
   task: Task;
-  claws: Claw[];
+  agentHosts: AgentHost[];
   /** Called after a successful submit (so the parent can refresh executions). */
   onRan?: (executionId: number) => void;
   /** Called when execution is gated behind an approval. */
   onAwaitingApproval?: (g: { approvalId: string; taskId: number; reason: string }) => void;
 }
 
-export function RunAgentControl({ task, claws, onRan, onAwaitingApproval }: RunAgentControlProps) {
-  const [clawId, setClawId] = useState<string>(task.assignedClawId != null ? String(task.assignedClawId) : '');
+export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }: RunAgentControlProps) {
+  const [agentHostId, setAgentHostId] = useState<string>(task.assignedAgentHostId != null ? String(task.assignedAgentHostId) : '');
   const [model, setModel] = useState<string>('');
   const [models, setModels] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
@@ -57,7 +57,7 @@ export function RunAgentControl({ task, claws, onRan, onAwaitingApproval }: RunA
     try {
       const result = await runtimeApi.submitExecution({
         taskId: task.id,
-        clawId: clawId ? Number(clawId) : undefined,
+        agentHostId: agentHostId ? Number(agentHostId) : undefined,
         // Forward the chosen model to the agent; default = gateway default.
         payload: model ? JSON.stringify({ model }) : undefined,
       });
@@ -76,9 +76,9 @@ export function RunAgentControl({ task, claws, onRan, onAwaitingApproval }: RunA
   return (
     <div>
       <div style={{ display: 'inline-flex', alignItems: 'stretch', border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden' }}>
-        <select value={clawId} onChange={(e) => setClawId(e.target.value)} style={{ ...selectStyle, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="Agent">
+        <select value={agentHostId} onChange={(e) => setAgentHostId(e.target.value)} style={{ ...selectStyle, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="Agent">
           <option value="">Auto (any agent)</option>
-          {claws.map((c) => (
+          {agentHosts.map((c) => (
             <option key={c.id} value={c.id}>{c.name}{c.connectedAt ? '' : ' (offline)'}</option>
           ))}
         </select>

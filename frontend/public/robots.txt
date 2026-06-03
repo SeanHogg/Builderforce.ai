@@ -4,10 +4,13 @@
 # Default: allow everything public
 User-agent: *
 Allow: /
+Allow: /product
 Allow: /blog
 Allow: /blog/
 Allow: /pricing
 Allow: /marketplace
+Allow: /agents
+Allow: /agents/
 Allow: /login
 Allow: /register
 Disallow: /dashboard

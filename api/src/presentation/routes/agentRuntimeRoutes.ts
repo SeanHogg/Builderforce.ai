@@ -13,7 +13,7 @@
  *                                                 it to needs_attention).
  *
  * A browser PWA/WebContainer runs the agent loop in src/application/browserRuntime
- * and drives these endpoints. Claws use the same /result callback.
+ * and drives these endpoints. AgentHosts use the same /result callback.
  */
 import { Hono } from 'hono';
 import { and, asc, desc, eq } from 'drizzle-orm';
@@ -22,13 +22,13 @@ import { agentDispatches, tasks, projectRepositories } from '../../infrastructur
 import { SwimlaneCoordinator } from '../../application/swimlane/SwimlaneCoordinator';
 import { DrizzleCoordinatorStore } from '../../application/swimlane/DrizzleCoordinatorStore';
 import {
-  ClawStageDispatcher,
-  type ClawRelayNamespace,
-} from '../../application/swimlane/clawStageDispatcher';
+  AgentHostStageDispatcher,
+  type AgentHostRelayNamespace,
+} from '../../application/swimlane/agentHostStageDispatcher';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
-type RuntimeEnv = { CLAW_RELAY?: ClawRelayNamespace };
+type RuntimeEnv = { AGENT_HOST_RELAY?: AgentHostRelayNamespace };
 
 export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -37,7 +37,7 @@ export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
   const mkCoordinator = (env: unknown): SwimlaneCoordinator =>
     new SwimlaneCoordinator(
       new DrizzleCoordinatorStore(db),
-      new ClawStageDispatcher((env as RuntimeEnv)?.CLAW_RELAY),
+      new AgentHostStageDispatcher((env as RuntimeEnv)?.AGENT_HOST_RELAY),
     );
 
   // Claim the next pending browser dispatch for this tenant.

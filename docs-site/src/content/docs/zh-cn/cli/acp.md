@@ -15,26 +15,26 @@ x-i18n:
 
 # acp
 
-运行与 CoderClaw Gateway 网关通信的 ACP（Agent Client Protocol）桥接器。
+运行与 BuilderForce Agents Gateway 网关通信的 ACP（Agent Client Protocol）桥接器。
 
 此命令通过 stdio 使用 ACP 协议与 IDE 通信，并通过 WebSocket 将提示转发到 Gateway 网关。它将 ACP 会话映射到 Gateway 网关会话键。
 
 ## 用法
 
 ```bash
-coderclaw acp
+builderforce acp
 
 # Remote Gateway
-coderclaw acp --url wss://gateway-host:18789 --token <token>
+builderforce acp --url wss://gateway-host:18789 --token <token>
 
 # Attach to an existing session key
-coderclaw acp --session agent:main:main
+builderforce acp --session agent:main:main
 
 # Attach by label (must already exist)
-coderclaw acp --session-label "support inbox"
+builderforce acp --session-label "support inbox"
 
 # Reset the session key before the first prompt
-coderclaw acp --session agent:main:main --reset-session
+builderforce acp --session agent:main:main --reset-session
 ```
 
 ## ACP 客户端（调试）
@@ -43,34 +43,34 @@ coderclaw acp --session agent:main:main --reset-session
 它会启动 ACP 桥接器并让你交互式输入提示。
 
 ```bash
-coderclaw acp client
+builderforce acp client
 
 # Point the spawned bridge at a remote Gateway
-coderclaw acp client --server-args --url wss://gateway-host:18789 --token <token>
+builderforce acp client --server-args --url wss://gateway-host:18789 --token <token>
 
-# Override the server command (default: coderclaw)
-coderclaw acp client --server "node" --server-args coderclaw.mjs acp --url ws://127.0.0.1:19001
+# Override the server command (default: builderforce)
+builderforce acp client --server "node" --server-args builderforce.mjs acp --url ws://127.0.0.1:19001
 ```
 
 ## 如何使用
 
-当 IDE（或其他客户端）使用 Agent Client Protocol 并且你希望它驱动 CoderClaw Gateway 网关会话时，请使用 ACP。
+当 IDE（或其他客户端）使用 Agent Client Protocol 并且你希望它驱动 BuilderForce Agents Gateway 网关会话时，请使用 ACP。
 
 1. 确保 Gateway 网关正在运行（本地或远程）。
 2. 配置 Gateway 网关目标（配置或标志）。
-3. 将你的 IDE 配置为通过 stdio 运行 `coderclaw acp`。
+3. 将你的 IDE 配置为通过 stdio 运行 `builderforce acp`。
 
 示例配置（持久化）：
 
 ```bash
-coderclaw config set gateway.remote.url wss://gateway-host:18789
-coderclaw config set gateway.remote.token <token>
+builderforce config set gateway.remote.url wss://gateway-host:18789
+builderforce config set gateway.remote.token <token>
 ```
 
 示例直接运行（不写入配置）：
 
 ```bash
-coderclaw acp --url wss://gateway-host:18789 --token <token>
+builderforce acp --url wss://gateway-host:18789 --token <token>
 ```
 
 ## 选择智能体
@@ -80,9 +80,9 @@ ACP 不直接选择智能体。它通过 Gateway 网关会话键进行路由。
 使用智能体作用域的会话键来定位特定智能体：
 
 ```bash
-coderclaw acp --session agent:main:main
-coderclaw acp --session agent:design:main
-coderclaw acp --session agent:qa:bug-123
+builderforce acp --session agent:main:main
+builderforce acp --session agent:design:main
+builderforce acp --session agent:qa:bug-123
 ```
 
 每个 ACP 会话映射到单个 Gateway 网关会话键。一个智能体可以有多个会话；除非你覆盖键或标签，否则 ACP 默认使用隔离的 `acp:<uuid>` 会话。
@@ -94,9 +94,9 @@ coderclaw acp --session agent:qa:bug-123
 ```json
 {
   "agent_servers": {
-    "CoderClaw ACP": {
+    "BuilderForce Agents ACP": {
       "type": "custom",
-      "command": "coderclaw",
+      "command": "builderforce",
       "args": ["acp"],
       "env": {}
     }
@@ -109,9 +109,9 @@ coderclaw acp --session agent:qa:bug-123
 ```json
 {
   "agent_servers": {
-    "CoderClaw ACP": {
+    "BuilderForce Agents ACP": {
       "type": "custom",
-      "command": "coderclaw",
+      "command": "builderforce",
       "args": [
         "acp",
         "--url",
@@ -127,7 +127,7 @@ coderclaw acp --session agent:qa:bug-123
 }
 ```
 
-在 Zed 中，打开 Agent 面板并选择"CoderClaw ACP"来开始一个会话。
+在 Zed 中，打开 Agent 面板并选择"BuilderForce Agents ACP"来开始一个会话。
 
 ## 会话映射
 
@@ -167,7 +167,7 @@ coderclaw acp --session agent:qa:bug-123
 ### `acp client` 选项
 
 - `--cwd <dir>`：ACP 会话的工作目录。
-- `--server <command>`：ACP 服务器命令（默认：`coderclaw`）。
+- `--server <command>`：ACP 服务器命令（默认：`builderforce`）。
 - `--server-args <args...>`：传递给 ACP 服务器的额外参数。
 - `--server-verbose`：启用 ACP 服务器的详细日志。
 - `--verbose, -v`：详细客户端日志。

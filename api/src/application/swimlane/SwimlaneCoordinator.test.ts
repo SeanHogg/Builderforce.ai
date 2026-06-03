@@ -284,7 +284,7 @@ describe('SwimlaneCoordinator — execution loop', () => {
     expect(store.pending(run.id)).toHaveLength(1);
   });
 
-  it('claw runtime: a cloud dispatch is pushed via the injected dispatcher and marked running', async () => {
+  it('agentHost runtime: a cloud dispatch is pushed via the injected dispatcher and marked running', async () => {
     store.seedBoard({ id: 'b1', tenantId: TENANT, autonomous: true });
     store.seedLane({ id: 'l0', boardId: 'b1', position: 0, isTerminal: true });
     store.seedAssignment('l0', { id: 'a0', role: 'impl', runtime: 'cloud' });
@@ -294,14 +294,14 @@ describe('SwimlaneCoordinator — execution loop', () => {
 
     expect(acceptingDispatcher.dispatch).toHaveBeenCalledTimes(1);
     const all = await store.listStageDispatches(run.id, 1, TENANT);
-    expect(all[0]!.status).toBe('running'); // pushed, awaiting claw callback
+    expect(all[0]!.status).toBe('running'); // pushed, awaiting agentHost callback
     expect((await store.getTicketRun(run.id))!.lifecycle).toBe('stage_running');
 
     await coord.reportDispatchResult(all[0]!.id, TENANT, { status: 'completed' });
     expect((await store.getTicketRun(run.id))!.lifecycle).toBe('done');
   });
 
-  it('claw runtime with no dispatcher: the dispatch fails and the ticket goes to needs_attention', async () => {
+  it('agentHost runtime with no dispatcher: the dispatch fails and the ticket goes to needs_attention', async () => {
     store.seedBoard({ id: 'b1', tenantId: TENANT, autonomous: true });
     store.seedLane({ id: 'l0', boardId: 'b1', position: 0, isTerminal: true });
     store.seedAssignment('l0', { id: 'a0', role: 'impl', runtime: 'cloud' });

@@ -5,7 +5,7 @@ import type { TrainingJob, AgentProfile, AgentPackage, MambaStateSnapshot } from
 import { publishAgent } from '@/lib/api';
 import { MambaEngine } from '@/lib/mamba-engine';
 
-const INSTALL_COMMAND = 'iwr -useb https://coderclaw.ai/install.ps1 | iex';
+const INSTALL_COMMAND = 'iwr -useb https://builderforce.ai/install.ps1 | iex';
 
 interface AgentPublishPanelProps {
   projectId: string | number;
@@ -310,7 +310,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
         {tab === 'download' && (
           <div className="p-3 space-y-3">
             <p className="text-xs text-gray-400">
-              Download your agent as a portable package. Install it in CoderClaw or any
+              Download your agent as a portable package. Install it in BuilderForce Agents or any
               Builderforce-compatible platform to use your custom-trained LLM.
             </p>
             {/* Mamba memory toggle */}

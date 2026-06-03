@@ -1,19 +1,19 @@
 ---
-summary: "Move (migrate) a CoderClaw install from one machine to another"
+summary: "Move (migrate) a BuilderForce Agents install from one machine to another"
 read_when:
-  - You are moving CoderClaw to a new laptop/server
+  - You are moving BuilderForce Agents to a new laptop/server
   - You want to preserve sessions, auth, and channel logins (WhatsApp, etc.)
 title: "Migration Guide"
 ---
 
-# Migrating CoderClaw to a new machine
+# Migrating BuilderForce Agents to a new machine
 
-This guide migrates a CoderClaw Gateway from one machine to another **without redoing onboarding**.
+This guide migrates a BuilderForce Agents Gateway from one machine to another **without redoing onboarding**.
 
 The migration is simple conceptually:
 
-- Copy the **state directory** (`$CODERCLAW_STATE_DIR`, default: `~/.coderclaw/`) — this includes config, auth, sessions, and channel state.
-- Copy your **workspace** (`~/.coderclaw/workspace/` by default) — this includes your agent files (memory, prompts, etc.).
+- Copy the **state directory** (`$BUILDERFORCE_AGENTS_STATE_DIR`, default: `~/.builderforce/`) — this includes config, auth, sessions, and channel state.
+- Copy your **workspace** (`~/.builderforce/workspace/` by default) — this includes your agent files (memory, prompts, etc.).
 
 But there are common footguns around **profiles**, **permissions**, and **partial copies**.
 
@@ -23,26 +23,26 @@ But there are common footguns around **profiles**, **permissions**, and **partia
 
 Most installs use the default:
 
-- **State dir:** `~/.coderclaw/`
+- **State dir:** `~/.builderforce/`
 
 But it may be different if you use:
 
-- `--profile <name>` (often becomes `~/.coderclaw-<profile>/`)
-- `CODERCLAW_STATE_DIR=/some/path`
+- `--profile <name>` (often becomes `~/.builderforce-<profile>/`)
+- `BUILDERFORCE_AGENTS_STATE_DIR=/some/path`
 
 If you’re not sure, run on the **old** machine:
 
 ```bash
-coderclaw status
+builderforce status
 ```
 
-Look for mentions of `CODERCLAW_STATE_DIR` / profile in the output. If you run multiple gateways, repeat for each profile.
+Look for mentions of `BUILDERFORCE_AGENTS_STATE_DIR` / profile in the output. If you run multiple gateways, repeat for each profile.
 
 ### 2) Identify your workspace
 
 Common defaults:
 
-- `~/.coderclaw/workspace/` (recommended workspace)
+- `~/.builderforce/workspace/` (recommended workspace)
 - a custom folder you created
 
 Your workspace is where files like `MEMORY.md`, `USER.md`, and `memory/*.md` live.
@@ -51,7 +51,7 @@ Your workspace is where files like `MEMORY.md`, `USER.md`, and `memory/*.md` liv
 
 If you copy **both** the state dir and workspace, you keep:
 
-- Gateway configuration (`coderclaw.json`)
+- Gateway configuration (`builderforce.json`)
 - Auth profiles / API keys / OAuth tokens
 - Session history + agent state
 - Channel state (e.g. WhatsApp login/session)
@@ -63,7 +63,7 @@ If you copy **only** the workspace (e.g., via Git), you do **not** preserve:
 - credentials
 - channel logins
 
-Those live under `$CODERCLAW_STATE_DIR`.
+Those live under `$BUILDERFORCE_AGENTS_STATE_DIR`.
 
 ## Migration steps (recommended)
 
@@ -72,7 +72,7 @@ Those live under `$CODERCLAW_STATE_DIR`.
 On the **old** machine, stop the gateway first so files aren’t changing mid-copy:
 
 ```bash
-coderclaw gateway stop
+builderforce gateway stop
 ```
 
 (Optional but recommended) archive the state dir and workspace:
@@ -80,27 +80,27 @@ coderclaw gateway stop
 ```bash
 # Adjust paths if you use a profile or custom locations
 cd ~
-tar -czf coderclaw-state.tgz .coderclaw
+tar -czf builderforce-state.tgz .builderforce
 
-tar -czf coderclaw-workspace.tgz .coderclaw/workspace
+tar -czf builderforce-workspace.tgz .builderforce/workspace
 ```
 
-If you have multiple profiles/state dirs (e.g. `~/.coderclaw-main`, `~/.coderclaw-work`), archive each.
+If you have multiple profiles/state dirs (e.g. `~/.builderforce-main`, `~/.builderforce-work`), archive each.
 
-### Step 1 — Install CoderClaw on the new machine
+### Step 1 — Install BuilderForce Agents on the new machine
 
 On the **new** machine, install the CLI (and Node if needed):
 
 - See: [Install](/install)
 
-At this stage, it’s OK if onboarding creates a fresh `~/.coderclaw/` — you will overwrite it in the next step.
+At this stage, it’s OK if onboarding creates a fresh `~/.builderforce/` — you will overwrite it in the next step.
 
 ### Step 2 — Copy the state dir + workspace to the new machine
 
 Copy **both**:
 
-- `$CODERCLAW_STATE_DIR` (default `~/.coderclaw/`)
-- your workspace (default `~/.coderclaw/workspace/`)
+- `$BUILDERFORCE_AGENTS_STATE_DIR` (default `~/.builderforce/`)
+- your workspace (default `~/.builderforce/workspace/`)
 
 Common approaches:
 
@@ -110,7 +110,7 @@ Common approaches:
 
 After copying, ensure:
 
-- Hidden directories were included (e.g. `.coderclaw/`)
+- Hidden directories were included (e.g. `.builderforce/`)
 - File ownership is correct for the user running the gateway
 
 ### Step 3 — Run Doctor (migrations + service repair)
@@ -118,7 +118,7 @@ After copying, ensure:
 On the **new** machine:
 
 ```bash
-coderclaw doctor
+builderforce doctor
 ```
 
 Doctor is the “safe boring” command. It repairs services, applies config migrations, and warns about mismatches.
@@ -126,15 +126,15 @@ Doctor is the “safe boring” command. It repairs services, applies config mig
 Then:
 
 ```bash
-coderclaw gateway restart
-coderclaw status
+builderforce gateway restart
+builderforce status
 ```
 
 ## Common footguns (and how to avoid them)
 
 ### Footgun: profile / state-dir mismatch
 
-If you ran the old gateway with a profile (or `CODERCLAW_STATE_DIR`), and the new gateway uses a different one, you’ll see symptoms like:
+If you ran the old gateway with a profile (or `BUILDERFORCE_AGENTS_STATE_DIR`), and the new gateway uses a different one, you’ll see symptoms like:
 
 - config changes not taking effect
 - channels missing / logged out
@@ -143,17 +143,17 @@ If you ran the old gateway with a profile (or `CODERCLAW_STATE_DIR`), and the ne
 Fix: run the gateway/service using the **same** profile/state dir you migrated, then rerun:
 
 ```bash
-coderclaw doctor
+builderforce doctor
 ```
 
-### Footgun: copying only `coderclaw.json`
+### Footgun: copying only `builderforce.json`
 
-`coderclaw.json` is not enough. Many providers store state under:
+`builderforce.json` is not enough. Many providers store state under:
 
-- `$CODERCLAW_STATE_DIR/credentials/`
-- `$CODERCLAW_STATE_DIR/agents/<agentId>/...`
+- `$BUILDERFORCE_AGENTS_STATE_DIR/credentials/`
+- `$BUILDERFORCE_AGENTS_STATE_DIR/agents/<agentId>/...`
 
-Always migrate the entire `$CODERCLAW_STATE_DIR` folder.
+Always migrate the entire `$BUILDERFORCE_AGENTS_STATE_DIR` folder.
 
 ### Footgun: permissions / ownership
 
@@ -170,7 +170,7 @@ If you’re in remote mode, migrate the **gateway host**.
 
 ### Footgun: secrets in backups
 
-`$CODERCLAW_STATE_DIR` contains secrets (API keys, OAuth tokens, WhatsApp creds). Treat backups like production secrets:
+`$BUILDERFORCE_AGENTS_STATE_DIR` contains secrets (API keys, OAuth tokens, WhatsApp creds). Treat backups like production secrets:
 
 - store encrypted
 - avoid sharing over insecure channels
@@ -180,7 +180,7 @@ If you’re in remote mode, migrate the **gateway host**.
 
 On the new machine, confirm:
 
-- `coderclaw status` shows the gateway running
+- `builderforce status` shows the gateway running
 - Your channels are still connected (e.g. WhatsApp doesn’t require re-pair)
 - The dashboard opens and shows existing sessions
 - Your workspace files (memory, configs) are present
@@ -189,4 +189,4 @@ On the new machine, confirm:
 
 - [Doctor](/gateway/doctor)
 - [Gateway troubleshooting](/gateway/troubleshooting)
-- [Where does CoderClaw store its data?](/help/faq#where-does-coderclaw-store-its-data)
+- [Where does BuilderForce Agents store its data?](/help/faq#where-does-builderforce-store-its-data)

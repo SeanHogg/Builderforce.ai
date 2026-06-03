@@ -1,20 +1,20 @@
 ---
-summary: "Agent tool surface for CoderClaw (browser, canvas, nodes, message, cron) replacing legacy `coderclaw-*` skills"
+summary: "Agent tool surface for BuilderForce Agents (browser, canvas, nodes, message, cron) replacing legacy `builderforce-*` skills"
 read_when:
   - Adding or modifying agent tools
-  - Retiring or changing `coderclaw-*` skills
+  - Retiring or changing `builderforce-*` skills
 title: "Tools"
 ---
 
-# Tools (CoderClaw)
+# Tools (BuilderForce Agents)
 
-CoderClaw exposes **first-class agent tools** for browser, canvas, nodes, and cron.
-These replace the old `coderclaw-*` skills: the tools are typed, no shelling,
+BuilderForce Agents exposes **first-class agent tools** for browser, canvas, nodes, and cron.
+These replace the old `builderforce-*` skills: the tools are typed, no shelling,
 and the agent should rely on them directly.
 
 ## Disabling tools
 
-You can globally allow/deny tools via `tools.allow` / `tools.deny` in `coderclaw.json`
+You can globally allow/deny tools via `tools.allow` / `tools.deny` in `builderforce.json`
 (deny wins). This prevents disallowed tools from being sent to model providers.
 
 ```json5
@@ -27,7 +27,7 @@ Notes:
 
 - Matching is case-insensitive.
 - `*` wildcards are supported (`"*"` means all tools).
-- If `tools.allow` only references unknown or unloaded plugin tool names, CoderClaw logs a warning and ignores the allowlist so core tools stay available.
+- If `tools.allow` only references unknown or unloaded plugin tool names, BuilderForce Agents logs a warning and ignores the allowlist so core tools stay available.
 
 ## Tool profiles (base allowlist)
 
@@ -151,7 +151,7 @@ Available groups:
 - `group:automation`: `cron`, `gateway`
 - `group:messaging`: `message`
 - `group:nodes`: `nodes`
-- `group:coderclaw`: all built-in CoderClaw tools (excludes provider plugins)
+- `group:builderforce`: all built-in BuilderForce Agents tools (excludes provider plugins)
 
 Example (allow only file tools + browser):
 
@@ -207,7 +207,7 @@ Notes:
 - If `process` is disallowed, `exec` runs synchronously and ignores `yieldMs`/`background`.
 - `elevated` is gated by `tools.elevated` plus any `agents.list[].tools.elevated` override (both must allow) and is an alias for `host=gateway` + `security=full`.
 - `elevated` only changes behavior when the agent is sandboxed (otherwise it’s a no-op).
-- `host=node` can target a macOS companion app or a headless node host (`coderclaw node run`).
+- `host=node` can target a macOS companion app or a headless node host (`builderforce node run`).
 - gateway/node approvals and allowlists: [Exec approvals](/tools/exec-approvals).
 
 ### `process`
@@ -226,7 +226,7 @@ Notes:
 
 ### `loop-detection` (tool-call loop guardrails)
 
-CoderClaw tracks recent tool-call history and blocks or warns when it detects repetitive no-progress loops.
+BuilderForce Agents tracks recent tool-call history and blocks or warns when it detects repetitive no-progress loops.
 Enable with `tools.loopDetection.enabled: true` (default is `false`).
 
 ```json5
@@ -264,7 +264,7 @@ Core parameters:
 
 Notes:
 
-- Requires a Brave API key (recommended: `coderclaw configure --section web`, or set `BRAVE_API_KEY`).
+- Requires a Brave API key (recommended: `builderforce configure --section web`, or set `BRAVE_API_KEY`).
 - Enable via `tools.web.search.enabled`.
 - Responses are cached (default 15 min).
 - See [Web tools](/tools/web) for setup.
@@ -290,7 +290,7 @@ Notes:
 
 ### `browser`
 
-Control the dedicated CoderClaw-managed browser.
+Control the dedicated BuilderForce Agents-managed browser.
 
 Core actions:
 
@@ -342,7 +342,7 @@ Notes:
 - Uses gateway `node.invoke` under the hood.
 - If no `node` is provided, the tool picks a default (single connected node or local mac node).
 - A2UI is v0.8 only (no `createSurface`); the CLI rejects v0.9 JSONL with line errors.
-- Quick smoke: `coderclaw nodes canvas a2ui push --node <id> --text "Hello from A2UI"`.
+- Quick smoke: `builderforce nodes canvas a2ui push --node <id> --text "Hello from A2UI"`.
 
 ### `nodes`
 
@@ -444,7 +444,7 @@ Restart or apply updates to the running Gateway process (in-place).
 
 Core actions:
 
-- `restart` (authorizes + sends `SIGUSR1` for in-process restart; `coderclaw gateway` restart in-place)
+- `restart` (authorizes + sends `SIGUSR1` for in-process restart; `builderforce gateway` restart in-place)
 - `config.get` / `config.schema`
 - `config.apply` (validate + write config + restart + wake)
 - `config.patch` (merge partial update + restart + wake)
@@ -481,7 +481,7 @@ Notes:
 - `sessions_spawn` is non-blocking and returns `status: "accepted"` immediately.
 - `sessions_send` runs a reply‑back ping‑pong (reply `REPLY_SKIP` to stop; max turns via `session.agentToAgent.maxPingPongTurns`, 0–5).
 - After the ping‑pong, the target agent runs an **announce step**; reply `ANNOUNCE_SKIP` to suppress the announcement.
-- Sandbox clamp: when the current session is sandboxed and `agents.defaults.sandbox.sessionToolsVisibility: "spawned"`, CoderClaw clamps `tools.sessions.visibility` to `tree`.
+- Sandbox clamp: when the current session is sandboxed and `agents.defaults.sandbox.sessionToolsVisibility: "spawned"`, BuilderForce Agents clamps `tools.sessions.visibility` to `tree`.
 
 ### `agents_list`
 

@@ -1,7 +1,7 @@
 ---
 read_when:
   - 你想快速检查运行中的 Gateway 网关健康状态
-summary: "`coderclaw health` 的 CLI 参考（通过 RPC 获取 Gateway 网关健康端点）"
+summary: "`builderforce health` 的 CLI 参考（通过 RPC 获取 Gateway 网关健康端点）"
 title: health
 x-i18n:
   generated_at: "2026-02-03T07:44:55Z"
@@ -12,14 +12,14 @@ x-i18n:
   workflow: 15
 ---
 
-# `coderclaw health`
+# `builderforce health`
 
 从运行中的 Gateway 网关获取健康状态。
 
 ```bash
-coderclaw health
-coderclaw health --json
-coderclaw health --verbose
+builderforce health
+builderforce health --json
+builderforce health --verbose
 ```
 
 注意：

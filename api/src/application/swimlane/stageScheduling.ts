@@ -17,7 +17,7 @@ export type DispatchStatus =
   | 'blocked'    // waiting on an unmet dependency
   | 'pending'    // ready; awaiting a browser pull worker to claim it
   | 'claimed'    // a worker took it but hasn't started
-  | 'running'    // executing (claw or browser)
+  | 'running'    // executing (agentHost or browser)
   | 'completed'
   | 'failed'
   | 'cancelled';

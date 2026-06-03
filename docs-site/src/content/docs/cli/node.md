@@ -1,12 +1,12 @@
 ---
-summary: "CLI reference for `coderclaw node` (headless node host)"
+summary: "CLI reference for `builderforce node` (headless node host)"
 read_when:
   - Running the headless node host
   - Pairing a non-macOS node for system.run
 title: "node"
 ---
 
-# `coderclaw node`
+# `builderforce node`
 
 Run a **headless node host** that connects to the Gateway WebSocket and exposes
 `system.run` / `system.which` on this machine.
@@ -46,7 +46,7 @@ Disable it on the node if needed:
 ## Run (foreground)
 
 ```bash
-coderclaw node run --host <gateway-host> --port 18789
+builderforce node run --host <gateway-host> --port 18789
 ```
 
 Options:
@@ -63,7 +63,7 @@ Options:
 Install a headless node host as a user service.
 
 ```bash
-coderclaw node install --host <gateway-host> --port 18789
+builderforce node install --host <gateway-host> --port 18789
 ```
 
 Options:
@@ -80,13 +80,13 @@ Options:
 Manage the service:
 
 ```bash
-coderclaw node status
-coderclaw node stop
-coderclaw node restart
-coderclaw node uninstall
+builderforce node status
+builderforce node stop
+builderforce node restart
+builderforce node uninstall
 ```
 
-Use `coderclaw node run` for a foreground node host (no service).
+Use `builderforce node run` for a foreground node host (no service).
 
 Service commands accept `--json` for machine-readable output.
 
@@ -96,17 +96,17 @@ The first connection creates a pending node pair request on the Gateway.
 Approve it via:
 
 ```bash
-coderclaw nodes pending
-coderclaw nodes approve <requestId>
+builderforce nodes pending
+builderforce nodes approve <requestId>
 ```
 
 The node host stores its node id, token, display name, and gateway connection info in
-`~/.coderclaw/node.json`.
+`~/.builderforce/node.json`.
 
 ## Exec approvals
 
 `system.run` is gated by local exec approvals:
 
-- `~/.coderclaw/exec-approvals.json`
+- `~/.builderforce/exec-approvals.json`
 - [Exec approvals](/tools/exec-approvals)
-- `coderclaw approvals --node <id|name|ip>` (edit from the Gateway)
+- `builderforce approvals --node <id|name|ip>` (edit from the Gateway)

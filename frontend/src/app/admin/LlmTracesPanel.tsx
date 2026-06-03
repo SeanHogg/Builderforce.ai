@@ -48,7 +48,7 @@ interface TraceSummary {
 interface TraceDetail extends TraceSummary {
   effectivePlan: string | null;
   premiumOverride: boolean;
-  clawId: number | null;
+  agentHostId: number | null;
   tenantApiKeyId: string | null;
   promptTokens: number;
   completionTokens: number;
@@ -257,7 +257,7 @@ export function LlmTracesPanel() {
                 <Field label="Product / Plan">{selected.llmProduct} / {selected.effectivePlan}{selected.premiumOverride ? ' (premium)' : ''}</Field>
                 <Field label="Resolved model">{selected.resolvedModel} {selected.resolvedVendor ? `(${selected.resolvedVendor})` : ''}</Field>
                 <Field label="Tenant / User">{selected.tenantId ?? '—'} / {selected.userId ?? '—'}</Field>
-                <Field label="Claw / API key">{selected.clawId ?? '—'} / {selected.tenantApiKeyId ?? '—'}</Field>
+                <Field label="AgentHost / API key">{selected.agentHostId ?? '—'} / {selected.tenantApiKeyId ?? '—'}</Field>
                 <Field label="Tokens">{selected.promptTokens} in / {selected.completionTokens} out / {selected.totalTokens} total</Field>
                 <Field label="Attempts / retries">{selected.attemptCount} / {selected.retries}{selected.schemaRetries ? ` (+${selected.schemaRetries} schema)` : ''}</Field>
                 <Field label="Use case">{selected.useCase}</Field>

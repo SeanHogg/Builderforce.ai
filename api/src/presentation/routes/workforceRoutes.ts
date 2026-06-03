@@ -12,7 +12,7 @@
  *   DELETE /agents/:id      — delete a tenant-owned agent
  *
  * A cloud agent lives in `ide_agents` with project_id NULL + tenant_id set
- * (migration 0075). It can declare runtime support (cloud / claw / both) and be
+ * (migration 0075). It can declare runtime support (cloud / agentHost / both) and be
  * published to the marketplace with a price for revenue.
  */
 import { Hono } from 'hono';
@@ -20,7 +20,7 @@ import { neon } from '@neondatabase/serverless';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { HonoEnv } from '../../env';
 
-const RUNTIME_SUPPORT = ['cloud', 'claw', 'both'] as const;
+const RUNTIME_SUPPORT = ['cloud', 'host', 'both'] as const;
 const PRICING_MODELS = ['flat_fee', 'consumption'] as const;
 
 export function createWorkforceRoutes(): Hono<HonoEnv> {

@@ -2,7 +2,7 @@
 read_when:
   - 你在不使用完整新手引导向导的情况下进行首次设置
   - 你想设置默认工作区路径
-summary: "`coderclaw setup` 的 CLI 参考（初始化配置 + 工作区）"
+summary: "`builderforce setup` 的 CLI 参考（初始化配置 + 工作区）"
 title: setup
 x-i18n:
   generated_at: "2026-02-01T20:21:26Z"
@@ -13,9 +13,9 @@ x-i18n:
   workflow: 14
 ---
 
-# `coderclaw setup`
+# `builderforce setup`
 
-初始化 `~/.coderclaw/coderclaw.json` 和智能体工作区。
+初始化 `~/.builderforce/builderforce.json` 和智能体工作区。
 
 相关内容：
 
@@ -25,12 +25,12 @@ x-i18n:
 ## 示例
 
 ```bash
-coderclaw setup
-coderclaw setup --workspace ~/.coderclaw/workspace
+builderforce setup
+builderforce setup --workspace ~/.builderforce/workspace
 ```
 
 通过 setup 运行向导：
 
 ```bash
-coderclaw setup --wizard
+builderforce setup --wizard
 ```

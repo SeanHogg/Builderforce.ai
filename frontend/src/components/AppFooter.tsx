@@ -70,7 +70,7 @@ export default function AppFooter() {
         </div>
       </footer>
 
-      {/* Legal document modal (CoderClawLink-style: show content from API, no external URL) */}
+      {/* Legal document modal (BuilderForceAgentsLink-style: show content from API, no external URL) */}
       {modalType !== null && (
         <div
           role="dialog"

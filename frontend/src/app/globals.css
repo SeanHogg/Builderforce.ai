@@ -8,7 +8,7 @@
 @tailwind utilities;
 
 /* ============================================================
-   CoderClaw / Builderforce design tokens
+   BuilderForce Agents / Builderforce design tokens
    Deep space dark · Blue spectrum · Bioluminescent cyan
    ============================================================ */
 
@@ -76,12 +76,12 @@
   --font-body: 'Satoshi', system-ui, sans-serif;
   --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
 
-  /* CoderClawLink-style shell (same header, footer, slide-out nav) */
+  /* BuilderForceAgentsLink-style shell (same header, footer, slide-out nav) */
   --footer-height: 44px;
   --shell-nav-width: 220px;
   --shell-nav-width-collapsed: 52px;
   --shell-topbar-height: 56px;
-  /* Aliases for CoderClawLink class names */
+  /* Aliases for BuilderForceAgentsLink class names */
   --bg: var(--bg-deep);
   --bg-base: var(--bg-surface);
   --bg-accent: var(--bg-surface);
@@ -322,7 +322,7 @@ html[data-theme='light'] .stars {
 }
 
 /* ============================================================
-   QuickStart interactive install block (copied from coderClawLink)
+   QuickStart interactive install block (copied from BuilderForce AgentsLink)
    ============================================================ */
 .quickstart-skin {
   --bg-deep: #050810;
@@ -372,7 +372,7 @@ html[data-theme='light'] .stars {
   animation: quickstart-fadeInUp 0.8s ease-out 0.6s both;
 }
 
-.quickstart-skin .claw-accent {
+.quickstart-skin .agentHost-accent {
   color: var(--coral-bright);
   font-weight: 700;
 }
@@ -595,7 +595,7 @@ html[data-theme='light'] .nebula {
   color: var(--text-primary);
 }
 
-.claw-accent {
+.agentHost-accent {
   color: var(--coral-bright);
   font-weight: 700;
 }
@@ -618,7 +618,7 @@ html[data-theme='light'] .nebula {
 }
 
 /* ============================================================
-   CoderClawLink-style App Shell (header, footer, slide-out nav)
+   BuilderForceAgentsLink-style App Shell (header, footer, slide-out nav)
    ============================================================ */
 
 .shell {
@@ -1410,7 +1410,7 @@ html[data-theme='light'] .nebula {
   border-top: 1px solid var(--border);
 }
 
-/* Card / empty state for claws */
+/* Card / empty state for agentHosts */
 .card {
   background: var(--card);
   border: 1px solid var(--border);

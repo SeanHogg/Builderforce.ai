@@ -11,7 +11,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 export interface CronJobsContentProps {
-  clawId: number;
+  agentHostId: number;
   /** When set, only show cron jobs for this project. */
   projectId?: number;
   /** Hide the project column (e.g. when embedded inside a project panel). */
@@ -21,7 +21,7 @@ export interface CronJobsContentProps {
 }
 
 export function CronJobsContent({
-  clawId,
+  agentHostId,
   projectId,
   hideProjectColumn,
   className,
@@ -41,14 +41,14 @@ export function CronJobsContent({
     setLoading(true);
     setError(null);
     try {
-      const list = await cronApi.list(clawId, projectId);
+      const list = await cronApi.list(agentHostId, projectId);
       setJobs(list);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load cron jobs');
     } finally {
       setLoading(false);
     }
-  }, [clawId, projectId]);
+  }, [agentHostId, projectId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -58,7 +58,7 @@ export function CronJobsContent({
     setSaving(true);
     setError(null);
     try {
-      const created = await cronApi.create(clawId, {
+      const created = await cronApi.create(agentHostId, {
         name: formName.trim(),
         schedule: formSchedule.trim(),
         projectId: formProjectId ? Number(formProjectId) : (projectId ?? null),
@@ -77,7 +77,7 @@ export function CronJobsContent({
 
   const toggleEnabled = async (job: CronJob) => {
     try {
-      const updated = await cronApi.update(clawId, job.id, { enabled: !job.enabled });
+      const updated = await cronApi.update(agentHostId, job.id, { enabled: !job.enabled });
       setJobs((prev) => prev.map((j) => (j.id === job.id ? updated : j)));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to update');
@@ -86,7 +86,7 @@ export function CronJobsContent({
 
   const handleDelete = async (jobId: string) => {
     try {
-      await cronApi.delete(clawId, jobId);
+      await cronApi.delete(agentHostId, jobId);
       setJobs((prev) => prev.filter((j) => j.id !== jobId));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to delete');

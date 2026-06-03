@@ -171,8 +171,8 @@ describe('requireTenantAccess (bfk_* path)', () => {
     const access = await requireTenantAccess(mockContext('bfk_abc123', db));
 
     expect(access.tenantId).toBe(42);
-    expect(access.clawId).toBeNull();
-    expect(access.clawTokenDailyLimit).toBeNull();
+    expect(access.agentHostId).toBeNull();
+    expect(access.agentHostTokenDailyLimit).toBeNull();
     expect(access.userId).toBeNull();
     expect(access.effectivePlan).toBe('pro');
   });

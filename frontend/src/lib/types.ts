@@ -48,8 +48,8 @@ export interface Project {
   updatedAt?: string;
   /** From list endpoint */
   taskCount?: number;
-  /** From list endpoint: primary assigned Workforce agent (claw) for this project */
-  assignedClaw?: { id: number; name: string } | null;
+  /** From list endpoint: primary assigned Workforce agent (agentHost) for this project */
+  assignedAgentHost?: { id: number; name: string } | null;
 }
 
 export interface FileEntry {
@@ -210,8 +210,8 @@ export interface PublishedAgent {
   updated_at: string;
   // Workforce cloud agents (migration 0075). snake_case to match the raw row.
   tenant_id?: number | null;
-  runtime_support?: 'cloud' | 'claw' | 'both';
-  preferred_runtime?: 'cloud' | 'claw' | null;
+  runtime_support?: 'cloud' | 'host' | 'both';
+  preferred_runtime?: 'cloud' | 'host' | null;
   price_cents?: number;
   pricing_model?: 'flat_fee' | 'consumption';
   price_unit?: string | null;
@@ -243,14 +243,14 @@ export interface AgentPackage {
 }
 
 // ---------------------------------------------------------------------------
-// CoderClaw Agent
+// BuilderForce Agents Agent
 // ---------------------------------------------------------------------------
 
-/** Which model backend a CoderClaw agent uses for inference */
+/** Which model backend a BuilderForce Agents agent uses for inference */
 export type ModelBackend = 'mamba' | 'external-llm' | string;
 
-/** Top-level configuration for a CoderClaw agent */
-export interface CoderClawAgentConfig {
+/** Top-level configuration for a BuilderForce Agents agent */
+export interface BuilderForceAgentConfig {
   /** Unique agent identifier */
   agentId: string;
   /** Display name shown in the IDE and workforce registry */

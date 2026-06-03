@@ -2,7 +2,7 @@
  * Artifact assignment routes — assign skills, personas, or content to any scope.
  *
  * Scope hierarchy (highest precedence → lowest):
- *   task → project → claw → tenant
+ *   task → project → agentHost → tenant
  *
  * Routes:
  *   GET    /api/artifact-assignments?scope=<scope>&scopeId=<id>[&artifactType=<type>]
@@ -18,7 +18,7 @@ import { eq, and, inArray } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   artifactAssignments,
-  coderclawInstances,
+  agentHosts,
   projects,
   projectAgents,
   tasks,
@@ -48,7 +48,7 @@ export function createArtifactAssignmentRoutes(db: Db): Hono<HonoEnv> {
     const artifactType = c.req.query('artifactType') as ArtifactType | undefined;
 
     if (!scope || !VALID_SCOPES.has(scope)) {
-      return c.json({ error: 'scope query param is required (tenant|claw|project|task|agent)' }, 400);
+      return c.json({ error: 'scope query param is required (tenant|agentHost|project|task|agent)' }, 400);
     }
     if (!scopeIdParam) {
       return c.json({ error: 'scopeId query param is required' }, 400);
@@ -96,7 +96,7 @@ export function createArtifactAssignmentRoutes(db: Db): Hono<HonoEnv> {
       return c.json({ error: 'artifactSlug is required' }, 400);
     }
     if (!body.scope || !VALID_SCOPES.has(body.scope)) {
-      return c.json({ error: 'scope is required (tenant|claw|project|task|agent)' }, 400);
+      return c.json({ error: 'scope is required (tenant|agentHost|project|task|agent)' }, 400);
     }
     if (body.scopeId == null) {
       return c.json({ error: 'scopeId is required' }, 400);
@@ -162,18 +162,18 @@ export function createArtifactAssignmentRoutes(db: Db): Hono<HonoEnv> {
   router.get('/resolve', async (c) => {
     const tenantId   = c.get('tenantId') as number;
     const taskIdP    = c.req.query('taskId');
-    const clawIdP    = c.req.query('clawId');
+    const agentHostIdP    = c.req.query('agentHostId');
     const projectIdP = c.req.query('projectId');
     const agentIdP   = c.req.query('agentId');
 
-    if (!taskIdP && !clawIdP && !projectIdP && !agentIdP) {
-      return c.json({ error: 'At least one of taskId, clawId, projectId, or agentId is required' }, 400);
+    if (!taskIdP && !agentHostIdP && !projectIdP && !agentIdP) {
+      return c.json({ error: 'At least one of taskId, agentHostId, projectId, or agentId is required' }, 400);
     }
 
     const resolved = await resolveArtifacts(db, {
       tenantId,
       taskId:    taskIdP ? Number(taskIdP) : undefined,
-      clawId:    clawIdP ? Number(clawIdP) : undefined,
+      agentHostId:    agentHostIdP ? Number(agentHostIdP) : undefined,
       projectId: projectIdP ? Number(projectIdP) : undefined,
       agentAssignmentId: agentIdP ? Number(agentIdP) : undefined,
     });
@@ -198,11 +198,11 @@ async function verifyScopeOwnership(
     case AssignmentScope.TENANT:
       return scopeId === tenantId;
 
-    case AssignmentScope.CLAW: {
+    case AssignmentScope.HOST: {
       const [row] = await db
-        .select({ id: coderclawInstances.id })
-        .from(coderclawInstances)
-        .where(and(eq(coderclawInstances.id, scopeId), eq(coderclawInstances.tenantId, tenantId)))
+        .select({ id: agentHosts.id })
+        .from(agentHosts)
+        .where(and(eq(agentHosts.id, scopeId), eq(agentHosts.tenantId, tenantId)))
         .limit(1);
       return !!row;
     }

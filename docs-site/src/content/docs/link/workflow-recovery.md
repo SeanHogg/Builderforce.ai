@@ -1,20 +1,20 @@
 ---
 title: Workflow Recovery and Debugging
-description: How CoderClaw checkpoints multi-step workflows, how to resume after failure, and how to diagnose stuck or misbehaving workflows
+description: How BuilderForce Agents checkpoints multi-step workflows, how to resume after failure, and how to diagnose stuck or misbehaving workflows
 ---
 
 # Workflow Recovery and Debugging
 
-Multi-step workflows can fail partway through — the model times out, a tool call errors, the machine loses power, or an approval gate is rejected. CoderClaw checkpoints each step as it completes so that you can resume from the last safe point rather than starting over.
+Multi-step workflows can fail partway through — the model times out, a tool call errors, the machine loses power, or an approval gate is rejected. BuilderForce Agents checkpoints each step as it completes so that you can resume from the last safe point rather than starting over.
 
 ---
 
 ## Workflow checkpoints
 
-Every workflow run writes a YAML checkpoint file under `.coderClaw/sessions/`:
+Every workflow run writes a YAML checkpoint file under `.builderforce/sessions/`:
 
 ```
-.coderClaw/
+.builderforce/
   sessions/
     workflow-orchestration-20260321-095412.yaml
     workflow-planning-20260320-143001.yaml
@@ -64,17 +64,17 @@ steps:
 To resume from the last completed step:
 
 ```bash
-coderclaw workflow resume workflow-orchestration-20260321-095412
+builderforce workflow resume workflow-orchestration-20260321-095412
 ```
 
-CoderClaw reads the checkpoint, skips all `completed` steps, and re-runs from the first `failed` or `pending` step.
+BuilderForce Agents reads the checkpoint, skips all `completed` steps, and re-runs from the first `failed` or `pending` step.
 
 ### Skipping a failed step
 
 If you want to skip the failed step and continue from the next one:
 
 ```bash
-coderclaw workflow resume workflow-orchestration-20260321-095412 --skip-failed
+builderforce workflow resume workflow-orchestration-20260321-095412 --skip-failed
 ```
 
 Use this when the failure was a non-critical step (e.g. a linting step that errored on a pre-existing issue) and you want the workflow to continue regardless.
@@ -82,7 +82,7 @@ Use this when the failure was a non-critical step (e.g. a linting step that erro
 ### Re-running from a specific step
 
 ```bash
-coderclaw workflow resume workflow-orchestration-20260321-095412 --from-step 1
+builderforce workflow resume workflow-orchestration-20260321-095412 --from-step 1
 ```
 
 This re-runs step 1 and all subsequent steps, discarding the previous output from those steps.
@@ -96,7 +96,7 @@ This re-runs step 1 and all subsequent steps, discarding the previous output fro
 The checkpoint is the fastest way to see what failed:
 
 ```bash
-cat .coderClaw/sessions/workflow-orchestration-20260321-095412.yaml
+cat .builderforce/sessions/workflow-orchestration-20260321-095412.yaml
 ```
 
 Look for `status: failed` steps and their `error` field.
@@ -107,19 +107,19 @@ The JSONL telemetry file has span-level detail for every step:
 
 ```bash
 jq 'select(.kind == "task.fail") | {role: .data.role, error: .data.error}' \
-  .coderClaw/telemetry/2026-03-21.jsonl
+  .builderforce/telemetry/2026-03-21.jsonl
 ```
 
 ### Check the tool audit log
 
-The tool audit log (written to the portal when connected) records every tool call the agent made, including inputs, outputs, and errors. Check it from the Builderforce portal under the claw detail panel → **Tool Audit** tab. Before re-running a workflow that produced unexpected output, read the tool audit log — it is the authoritative record of what the agent actually did.
+The tool audit log (written to the portal when connected) records every tool call the agent made, including inputs, outputs, and errors. Check it from the Builderforce portal under the agent detail panel → **Tool Audit** tab. Before re-running a workflow that produced unexpected output, read the tool audit log — it is the authoritative record of what the agent actually did.
 
 ### Check session chat history
 
 Each workflow step runs in its own session. The session key is `wf-<workflowId>-step-<index>`. To review the agent's reasoning for a specific step:
 
 ```bash
-coderclaw sessions get wf-orchestration-20260321-095412-step-1
+builderforce sessions get wf-orchestration-20260321-095412-step-1
 ```
 
 ---
@@ -132,13 +132,13 @@ A workflow is "stuck" when its status is `in_progress` but no step has progresse
 |-------|---------|-----|
 | Approval gate pending | Checkpoint shows `running` step with `requiresApproval: true` | Approve or reject in the portal |
 | Model timeout | Step has been `running` for >10 minutes | Cancel and resume — the step will retry |
-| Remote claw offline | `remote:auto` step can't find a matching claw | Bring the target claw online, then resume |
+| Remote agent offline | `remote:auto` step can't find a matching agent | Bring the target agent online, then resume |
 | Infinite tool loop | Step is `running` but consuming tokens with no progress | Check tool audit log; cancel and revise the step description |
 
 To cancel a running workflow:
 
 ```bash
-coderclaw workflow cancel workflow-orchestration-20260321-095412
+builderforce workflow cancel workflow-orchestration-20260321-095412
 ```
 
 This sets the workflow status to `failed` in both the checkpoint and the portal (if connected).
@@ -154,7 +154,7 @@ When connected to Builderforce, workflow status is synced live. The [Workflows](
 - Link to the spec that generated the workflow (if created from a spec)
 - Ability to manually mark a workflow as `failed` or `cancelled`
 
-If a workflow is stuck in `in_progress` in the portal but the claw has already finished, use `PATCH /api/workflows/:id` to manually update the status.
+If a workflow is stuck in `in_progress` in the portal but the agent has already finished, use `PATCH /api/workflows/:id` to manually update the status.
 
 ---
 

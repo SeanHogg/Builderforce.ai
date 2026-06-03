@@ -1,11 +1,11 @@
 ---
 title: "Deep Understanding"
-summary: "Systems-level guide to how CoderClaw works under the hood."
+summary: "Systems-level guide to how BuilderForce Agents works under the hood."
 ---
 
-# Deep Understanding of CoderClaw
+# Deep Understanding of BuilderForce Agents
 
-This guide is for operators and developers who want to understand how CoderClaw works at a
+This guide is for operators and developers who want to understand how BuilderForce Agents works at a
 systems level — beyond the getting-started docs and into the mechanics that govern runtime
 behaviour, state, and extension points.
 
@@ -13,7 +13,7 @@ behaviour, state, and extension points.
 
 ## The Mental Model
 
-CoderClaw is a **gateway-centred AI agent runtime**. A single long-lived Gateway process owns
+BuilderForce Agents is a **gateway-centred AI agent runtime**. A single long-lived Gateway process owns
 all messaging surfaces (Slack, Telegram, iMessage, Discord, …), all agent sessions, and all
 tool policy enforcement. Clients — the TUI, macOS app, iOS/Android nodes, and the web Control
 UI — are thin consumers of the Gateway's typed WebSocket API.
@@ -45,7 +45,7 @@ replies, no tool execution.
 A **session** is a named, persistent conversation thread associated with one agent. Sessions:
 
 - Are identified by a `sessionKey` (e.g. `main`, `global`, or a custom key)
-- Persist to disk in the workspace (`~/.coderclaw/workspace/sessions/`)
+- Persist to disk in the workspace (`~/.builderforce/workspace/sessions/`)
 - Carry history, memory, and verbose/thinking level overrides
 - Are serialised — only one agent run executes per session at a time (queue prevents races)
 
@@ -130,7 +130,7 @@ If the TUI starts and the Gateway is not running:
 
 ## Config File Structure
 
-CoderClaw's config lives at `~/.coderclaw/coderclaw.yaml` (or `coderclaw.json`). The key
+BuilderForce Agents's config lives at `~/.builderforce/builderforce.yaml` (or `builderforce.json`). The key
 namespaces:
 
 ```yaml
@@ -146,7 +146,7 @@ agents:
     model:
       primary: "claude-opus-4-6"
     verboseDefault: "on"  # off | on | full
-    workspace: "~/.coderclaw/workspace"
+    workspace: "~/.builderforce/workspace"
     timeoutSeconds: 600
 
 models:
@@ -154,7 +154,7 @@ models:
     apiKey: "..."
 ```
 
-Run `coderclaw configure` to change any setting interactively, or `coderclaw doctor` to
+Run `builderforce configure` to change any setting interactively, or `builderforce doctor` to
 validate the current config and check connectivity.
 
 ---
@@ -175,7 +175,7 @@ full decision matrix.
 
 ## Memory and Context
 
-CoderClaw supports three memory layers that are injected into each prompt:
+BuilderForce Agents supports three memory layers that are injected into each prompt:
 
 | Layer          | Source file    | Purpose                                     |
 |----------------|----------------|---------------------------------------------|
@@ -184,7 +184,7 @@ CoderClaw supports three memory layers that are injected into each prompt:
 | Session memory | `memory/` dir  | Accumulated facts written by the agent      |
 
 The **session-memory hook** (`/new` command) writes a summary of the previous session to
-`memory/` before resetting the conversation. This is how CoderClaw maintains long-term
+`memory/` before resetting the conversation. This is how BuilderForce Agents maintains long-term
 context across resets without ballooning the token count.
 
 ---
@@ -193,8 +193,8 @@ context across resets without ballooning the token count.
 
 | Mechanism      | Where                         | What it can do                                                         |
 |----------------|-------------------------------|------------------------------------------------------------------------|
-| **Hooks**      | `~/.coderclaw/hooks/`         | Run scripts on gateway events (`/new`, `/reset`, `/stop`)             |
-| **Skills**     | `~/.coderclaw/skills/`        | Inject SKILL.md files as tool-use instructions                         |
+| **Hooks**      | `~/.builderforce/hooks/`         | Run scripts on gateway events (`/new`, `/reset`, `/stop`)             |
+| **Skills**     | `~/.builderforce/skills/`        | Inject SKILL.md files as tool-use instructions                         |
 | **Plugins**    | `plugins.entries.<id>` config | Register channels, CLI commands, RPC methods, background services      |
 | **Sub-agents** | `subagents` tool              | Spawn parallel agent runs from within an agent run                     |
 
@@ -206,12 +206,12 @@ writing TypeScript code that runs in-process with the Gateway.
 ## Common Diagnostic Commands
 
 ```bash
-coderclaw status              # Session status and active runs
-coderclaw doctor              # Config validation + connectivity check
-coderclaw gateway probe       # Check if gateway is reachable
-coderclaw logs --follow       # Tail gateway logs in real time
-coderclaw sessions list       # List all known sessions
-coderclaw agent status --all  # Verbose status across all agents
+builderforce status              # Session status and active runs
+builderforce doctor              # Config validation + connectivity check
+builderforce gateway probe       # Check if gateway is reachable
+builderforce logs --follow       # Tail gateway logs in real time
+builderforce sessions list       # List all known sessions
+builderforce agent status --all  # Verbose status across all agents
 ```
 
 See [Troubleshooting](/troubleshooting) and [Doctor](/cli/doctor) for full guidance.

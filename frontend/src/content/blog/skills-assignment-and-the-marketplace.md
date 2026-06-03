@@ -1,7 +1,7 @@
 ---
 title: Skills, Assignments, and the Marketplace — Equipping Your Agents
 date: 2026-03-13
-description: How the Builderforce skills system works — from browsing and publishing in the marketplace, to assigning skills at tenant or claw scope, to how skills load into running CoderClaw agents at startup.
+description: How the Builderforce skills system works — from browsing and publishing in the marketplace, to assigning skills at tenant or agentHost scope, to how skills load into running BuilderForce Agents agents at startup.
 tags: [skills, marketplace, assignments, agents, plugins, extensions]
 author: Sean Hogg
 ---
@@ -10,7 +10,7 @@ author: Sean Hogg
 
 An agent's built-in capabilities are its starting point. Skills are how you extend those capabilities — injecting domain knowledge, API integrations, structured workflows, and specialist behaviour without retraining the underlying model.
 
-Builderforce has two ways to get skills onto your agents: the **Skills Marketplace** (community-published, browse and assign) and **custom skills** (you build them, you own them). Both follow the same assignment model, and both are loaded automatically onto your CoderClaw instances at startup.
+Builderforce has two ways to get skills onto your agents: the **Skills Marketplace** (community-published, browse and assign) and **custom skills** (you build them, you own them). Both follow the same assignment model, and both are loaded automatically onto your BuilderForce Agents instances at startup.
 
 ---
 
@@ -67,53 +67,53 @@ Published skills are immediately searchable in the marketplace. You can update t
 
 ## Assigning Skills
 
-A skill does nothing until it is **assigned** — linked to the agents or claws that should use it. Builderforce has a two-level assignment model.
+A skill does nothing until it is **assigned** — linked to the agents or agentHosts that should use it. Builderforce has a two-level assignment model.
 
 ### Tenant-Level Assignments
 
-A **tenant-level assignment** makes a skill available to **all claws** in your organisation. Use this for skills that every agent should have — your coding standards, your API conventions, your company-specific tooling.
+A **tenant-level assignment** makes a skill available to **all agentHosts** in your organisation. Use this for skills that every agent should have — your coding standards, your API conventions, your company-specific tooling.
 
 Manage tenant assignments from [/skills](/skills) → **Tenant Assignments** tab:
 
 1. Search for or paste the skill slug
-2. Click **Assign to All Claws**
-3. The skill appears in every claw's skill registry at its next startup
+2. Click **Assign to All AgentHosts**
+3. The skill appears in every agentHost's skill registry at its next startup
 
-### Claw-Level Assignments
+### AgentHost-Level Assignments
 
-A **claw-level assignment** overrides or adds a skill for a specific CoderClaw instance. Use this to equip a specialist claw — your `frontend-workstation` might have React and Tailwind skills that no other claw needs.
+A **agentHost-level assignment** overrides or adds a skill for a specific BuilderForce Agents instance. Use this to equip a specialist agentHost — your `frontend-workstation` might have React and Tailwind skills that no other agentHost needs.
 
-Manage claw assignments from the claw detail panel → **Skills** tab:
+Manage agentHost assignments from the agentHost detail panel → **Skills** tab:
 
 1. Click **Assign Skill**
 2. Search and select the skill
-3. The assignment takes effect at the claw's next startup
+3. The assignment takes effect at the agentHost's next startup
 
-Claw-level assignments **override** tenant-level assignments when the same skill slug appears at both levels — the claw-specific configuration wins.
+AgentHost-level assignments **override** tenant-level assignments when the same skill slug appears at both levels — the agentHost-specific configuration wins.
 
 ---
 
 ## How Skills Load at Startup
 
-When CoderClaw starts and a Builderforce connection is configured, it fetches the merged skill list:
+When BuilderForce Agents starts and a Builderforce connection is configured, it fetches the merged skill list:
 
 ```
-GET /api/claws/:id/skills
+GET /api/agent-hosts/:id/skills
 ```
 
 This returns the union of:
 1. All tenant-level skill assignments
-2. All claw-level overrides for this specific claw
+2. All agentHost-level overrides for this specific agentHost
 
-The merged set is loaded into the claw's local **skill registry** and is available to agents for the lifetime of that process. If you add a new skill assignment in the portal, the claw picks it up the next time it restarts.
+The merged set is loaded into the agentHost's local **skill registry** and is available to agents for the lifetime of that process. If you add a new skill assignment in the portal, the agentHost picks it up the next time it restarts.
 
-To check what skills a running claw has loaded, look at its startup logs:
+To check what skills a running agentHost has loaded, look at its startup logs:
 
 ```
 [skill-registry] loaded 4 skill(s): typescript-strict, github-api, test-runner, our-coding-standards
 ```
 
-Or query the portal from the claw's **Skills** tab, which shows the live assignment state.
+Or query the portal from the agentHost's **Skills** tab, which shows the live assignment state.
 
 ---
 
@@ -123,12 +123,12 @@ Skills are one type of **artifact**. Builderforce uses a unified **artifact assi
 
 | Scope | Applies to |
 |---|---|
-| `tenant` | All claws and agents in the organisation |
-| `claw` | A specific CoderClaw instance |
-| `project` | Any claw working on a specific project |
+| `tenant` | All agentHosts and agents in the organisation |
+| `agentHost` | A specific BuilderForce Agents instance |
+| `project` | Any agentHost working on a specific project |
 | `task` | The agent executing a specific task |
 
-Scope resolution follows precedence: `task > project > claw > tenant`. If a task has a specific skill assigned, that assignment wins even if the tenant-level assignment says something different.
+Scope resolution follows precedence: `task > project > agentHost > tenant`. If a task has a specific skill assigned, that assignment wins even if the tenant-level assignment says something different.
 
 Manage artifact assignments from [/skills](/skills) → **Artifact Assignments**, where you can assign any artifact type at any scope from a single interface.
 
@@ -190,7 +190,7 @@ Schedule: 0 9 * * 1-5   (9am Monday–Friday)
 Task: "Run the daily standup summary skill for project X"
 ```
 
-The cron poller on the assigned claw fetches the job schedule at startup and executes the task at the right time. No external cron infrastructure required.
+The cron poller on the assigned agentHost fetches the job schedule at startup and executes the task at the right time. No external cron infrastructure required.
 
 ---
 
@@ -200,14 +200,14 @@ The cron poller on the assigned claw fetches the job schedule at startup and exe
 
 **Version skills before updating.** If a skill update would change agent behaviour, bump the version before publishing. Consumers pinned to `v1.2` are unaffected; consumers who want the new behaviour explicitly update their assignment.
 
-**Test skills in isolation before tenant-wide assignment.** Assign a new skill to one claw first, run a few tasks, check the output. Once you are confident, promote to tenant-level.
+**Test skills in isolation before tenant-wide assignment.** Assign a new skill to one agentHost first, run a few tasks, check the output. Once you are confident, promote to tenant-level.
 
-**Use personas alongside skills.** A skill teaches knowledge; a persona shapes voice and decision style. The combination — a claw with your TypeScript skill and your "senior engineer" persona — produces more consistent, on-brand output than either alone.
+**Use personas alongside skills.** A skill teaches knowledge; a persona shapes voice and decision style. The combination — a agentHost with your TypeScript skill and your "senior engineer" persona — produces more consistent, on-brand output than either alone.
 
 ---
 
 ## Next Steps
 
 - Browse the [Skills Marketplace](/skills) and assign your first community skill
-- Read [Multi-Agent Orchestration](/blog/multi-agent-orchestration) to see how skill-equipped claws fit into a workflow
-- Explore [Fleet Management](/blog/fleet-management-and-claw-routing) to understand how skills compose with claw-level capability declarations
+- Read [Multi-Agent Orchestration](/blog/multi-agent-orchestration) to see how skill-equipped agentHosts fit into a workflow
+- Explore [Fleet Management](/blog/fleet-management-and-agentHost-routing) to understand how skills compose with agentHost-level capability declarations

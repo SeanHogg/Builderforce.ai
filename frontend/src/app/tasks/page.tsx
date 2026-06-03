@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { TaskMgmtContent } from '@/components/TaskMgmtContent';
 
 /**
- * Task Mgmt page: full task list/board with project filter (like CoderClawLink).
+ * Task Mgmt page: full task list/board with project filter (like BuilderForceAgentsLink).
  * Uses the same reusable TaskMgmtContent as the project details panel.
  */
 export default function TaskMgmtPage() {

@@ -75,7 +75,7 @@ const post = (b: unknown) => ({
 });
 
 const SPEC = {
-  id: 'spec-uuid', tenantId: TENANT, clawId: 3, goal: 'Ship it',
+  id: 'spec-uuid', tenantId: TENANT, agentHostId: 3, goal: 'Ship it',
   prd: '# PRD', archSpec: '# Arch', taskList: '[]',
 };
 
@@ -121,7 +121,7 @@ describe('prdRoutes', () => {
   });
 
   it('generates a planning workflow + marks spec origin', async () => {
-    // selects: loadSpec, (clawId resolved from spec so no tenant lookup), existing versions
+    // selects: loadSpec, (agentHostId resolved from spec so no tenant lookup), existing versions
     const { db, captured } = makeDb({
       selects: [[SPEC], [{ version: 1 }]],
       inserts: [
@@ -136,7 +136,7 @@ describe('prdRoutes', () => {
     expect(res.status).toBe(201);
     const wf = captured.insertValues[0];
     expect(wf.workflowType).toBe('planning');
-    expect(wf.clawId).toBe(3);
+    expect(wf.agentHostId).toBe(3);
     expect(wf.specId).toBe('spec-uuid');
     const sv = captured.insertValues[1];
     expect(sv.origin).toBe('generated_from_ticket');

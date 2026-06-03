@@ -69,7 +69,7 @@ export interface TraceInput {
   surface: string;
   tenantId?: number | null;
   userId?: string | null;
-  clawId?: number | null;
+  agentHostId?: number | null;
   tenantApiKeyId?: string | null;
   llmProduct?: string | null;
   effectivePlan?: string | null;
@@ -106,7 +106,7 @@ export function logTrace(env: Env, ctx: ExecutionContext, input: TraceInput): vo
     traceId:           input.traceId,
     tenantId:          input.tenantId ?? null,
     userId:            input.userId ?? null,
-    clawId:            input.clawId ?? null,
+    agentHostId:            input.agentHostId ?? null,
     tenantApiKeyId:    input.tenantApiKeyId ?? null,
     llmProduct:        input.llmProduct ?? null,
     surface:           input.surface,

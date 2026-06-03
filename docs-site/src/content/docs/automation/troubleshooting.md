@@ -14,28 +14,28 @@ Use this page for scheduler and delivery issues (`cron` + `heartbeat`).
 ## Command ladder
 
 ```bash
-coderclaw status
-coderclaw gateway status
-coderclaw logs --follow
-coderclaw doctor
-coderclaw channels status --probe
+builderforce status
+builderforce gateway status
+builderforce logs --follow
+builderforce doctor
+builderforce channels status --probe
 ```
 
 Then run automation checks:
 
 ```bash
-coderclaw cron status
-coderclaw cron list
-coderclaw system heartbeat last
+builderforce cron status
+builderforce cron list
+builderforce system heartbeat last
 ```
 
 ## Cron not firing
 
 ```bash
-coderclaw cron status
-coderclaw cron list
-coderclaw cron runs --id <jobId> --limit 20
-coderclaw logs --follow
+builderforce cron status
+builderforce cron list
+builderforce cron runs --id <jobId> --limit 20
+builderforce logs --follow
 ```
 
 Good output looks like:
@@ -53,10 +53,10 @@ Common signatures:
 ## Cron fired but no delivery
 
 ```bash
-coderclaw cron runs --id <jobId> --limit 20
-coderclaw cron list
-coderclaw channels status --probe
-coderclaw logs --follow
+builderforce cron runs --id <jobId> --limit 20
+builderforce cron list
+builderforce channels status --probe
+builderforce logs --follow
 ```
 
 Good output looks like:
@@ -74,10 +74,10 @@ Common signatures:
 ## Heartbeat suppressed or skipped
 
 ```bash
-coderclaw system heartbeat last
-coderclaw logs --follow
-coderclaw config get agents.defaults.heartbeat
-coderclaw channels status --probe
+builderforce system heartbeat last
+builderforce logs --follow
+builderforce config get agents.defaults.heartbeat
+builderforce channels status --probe
 ```
 
 Good output looks like:
@@ -95,11 +95,11 @@ Common signatures:
 ## Timezone and activeHours gotchas
 
 ```bash
-coderclaw config get agents.defaults.heartbeat.activeHours
-coderclaw config get agents.defaults.heartbeat.activeHours.timezone
-coderclaw config get agents.defaults.userTimezone || echo "agents.defaults.userTimezone not set"
-coderclaw cron list
-coderclaw logs --follow
+builderforce config get agents.defaults.heartbeat.activeHours
+builderforce config get agents.defaults.heartbeat.activeHours.timezone
+builderforce config get agents.defaults.userTimezone || echo "agents.defaults.userTimezone not set"
+builderforce cron list
+builderforce logs --follow
 ```
 
 Quick rules:

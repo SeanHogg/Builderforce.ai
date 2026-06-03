@@ -43,13 +43,13 @@ Restart the gateway after changing flags.
 ## Env override (one-off)
 
 ```bash
-CODERCLAW_DIAGNOSTICS=telegram.http,telegram.payload
+BUILDERFORCE_AGENTS_DIAGNOSTICS=telegram.http,telegram.payload
 ```
 
 Disable all flags:
 
 ```bash
-CODERCLAW_DIAGNOSTICS=0
+BUILDERFORCE_AGENTS_DIAGNOSTICS=0
 ```
 
 ## Where logs go
@@ -57,7 +57,7 @@ CODERCLAW_DIAGNOSTICS=0
 Flags emit logs into the standard diagnostics log file. By default:
 
 ```
-/tmp/coderclaw/coderclaw-YYYY-MM-DD.log
+/tmp/builderforce/builderforce-YYYY-MM-DD.log
 ```
 
 If you set `logging.file`, use that path instead. Logs are JSONL (one JSON object per line). Redaction still applies based on `logging.redactSensitive`.
@@ -67,22 +67,22 @@ If you set `logging.file`, use that path instead. Logs are JSONL (one JSON objec
 Pick the latest log file:
 
 ```bash
-ls -t /tmp/coderclaw/coderclaw-*.log | head -n 1
+ls -t /tmp/builderforce/builderforce-*.log | head -n 1
 ```
 
 Filter for Telegram HTTP diagnostics:
 
 ```bash
-rg "telegram http error" /tmp/coderclaw/coderclaw-*.log
+rg "telegram http error" /tmp/builderforce/builderforce-*.log
 ```
 
 Or tail while reproducing:
 
 ```bash
-tail -f /tmp/coderclaw/coderclaw-$(date +%F).log | rg "telegram http error"
+tail -f /tmp/builderforce/builderforce-$(date +%F).log | rg "telegram http error"
 ```
 
-For remote gateways, you can also use `coderclaw logs --follow` (see [/cli/logs](/cli/logs)).
+For remote gateways, you can also use `builderforce logs --follow` (see [/cli/logs](/cli/logs)).
 
 ## Notes
 

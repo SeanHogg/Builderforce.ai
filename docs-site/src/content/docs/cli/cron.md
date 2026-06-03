@@ -1,12 +1,12 @@
 ---
-summary: "CLI reference for `coderclaw cron` (schedule and run background jobs)"
+summary: "CLI reference for `builderforce cron` (schedule and run background jobs)"
 read_when:
   - You want scheduled jobs and wakeups
   - You’re debugging cron execution and logs
 title: "cron"
 ---
 
-# `coderclaw cron`
+# `builderforce cron`
 
 Manage cron jobs for the Gateway scheduler.
 
@@ -14,7 +14,7 @@ Related:
 
 - Cron jobs: [Cron jobs](/automation/cron-jobs)
 
-Tip: run `coderclaw cron --help` for the full command surface.
+Tip: run `builderforce cron --help` for the full command surface.
 
 Note: isolated `cron add` jobs default to `--announce` delivery. Use `--no-deliver` to keep
 output internal. `--deliver` remains as a deprecated alias for `--announce`.
@@ -28,17 +28,17 @@ Note: recurring jobs now use exponential retry backoff after consecutive errors 
 Update delivery settings without changing the message:
 
 ```bash
-coderclaw cron edit <job-id> --announce --channel telegram --to "123456789"
+builderforce cron edit <job-id> --announce --channel telegram --to "123456789"
 ```
 
 Disable delivery for an isolated job:
 
 ```bash
-coderclaw cron edit <job-id> --no-deliver
+builderforce cron edit <job-id> --no-deliver
 ```
 
 Announce to a specific channel:
 
 ```bash
-coderclaw cron edit <job-id> --announce --channel slack --to "channel:C1234567890"
+builderforce cron edit <job-id> --announce --channel slack --to "channel:C1234567890"
 ```

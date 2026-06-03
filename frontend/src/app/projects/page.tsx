@@ -4,14 +4,14 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Project } from '@/lib/types';
-import type { Claw } from '@/lib/builderforceApi';
+import type { AgentHost } from '@/lib/builderforceApi';
 import { fetchProjects, createProject, deleteProject } from '@/lib/api';
-import { claws } from '@/lib/builderforceApi';
+import { agentHosts } from '@/lib/builderforceApi';
 import { useAuth } from '@/lib/AuthContext';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
 import { ProjectCard } from '@/components/ProjectCard';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { ClawSlideOutPanel } from '@/components/ClawSlideOutPanel';
+import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 
@@ -25,7 +25,7 @@ export default function ProjectsPage() {
   const { isAuthenticated, hasTenant } = useAuth();
 
   const [projects, setProjects] = useState<Project[]>([]);
-  const [clawList, setClawList] = useState<Claw[]>([]);
+  const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
@@ -34,7 +34,7 @@ export default function ProjectsPage() {
   const [error, setError] = useState<string | null>(null);
   const [detailsProject, setDetailsProject] = useState<Project | null>(null);
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
-  const [selectedClaw, setSelectedClaw] = useState<Claw | null>(null);
+  const [selectedAgentHost, setSelectedAgentHost] = useState<AgentHost | null>(null);
   const [confirmProject, setConfirmProject] = useState<Project | null>(null);
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
 
@@ -53,10 +53,10 @@ export default function ProjectsPage() {
         setError('Failed to load projects. Check your connection and try again.');
         return [] as Project[];
       }),
-      claws.list().catch(() => [] as Claw[]),
-    ]).then(([projs, clawsData]) => {
+      agentHosts.list().catch(() => [] as AgentHost[]),
+    ]).then(([projs, agentHostsData]) => {
       setProjects(projs);
-      setClawList(clawsData);
+      setAgentHostList(agentHostsData);
     }).finally(() => setIsLoading(false));
   }, [isAuthenticated, hasTenant]);
 
@@ -290,8 +290,8 @@ export default function ProjectsPage() {
                 onDetailsClick={setDetailsProject}
                 showDetailsButton
                 onAssignedAgentClick={(ac) => {
-                  const claw = clawList.find((c) => c.id === ac.id);
-                  if (claw) setSelectedClaw(claw);
+                  const agentHost = agentHostList.find((c) => c.id === ac.id);
+                  if (agentHost) setSelectedAgentHost(agentHost);
                 }}
                 onDelete={async (p) => {
                   try {
@@ -324,12 +324,12 @@ export default function ProjectsPage() {
                       {project.description ?? '—'}
                     </td>
                     <td style={{ padding: '12px 16px' }}>
-                      {project.assignedClaw ? (
+                      {project.assignedAgentHost ? (
                         <button
                           type="button"
                           onClick={() => {
-                            const claw = clawList.find((c) => c.id === project.assignedClaw!.id);
-                            if (claw) setSelectedClaw(claw);
+                            const agentHost = agentHostList.find((c) => c.id === project.assignedAgentHost!.id);
+                            if (agentHost) setSelectedAgentHost(agentHost);
                           }}
                           style={{
                             fontSize: 12,
@@ -342,7 +342,7 @@ export default function ProjectsPage() {
                             textDecoration: 'underline',
                           }}
                         >
-                          {project.assignedClaw.name}
+                          {project.assignedAgentHost.name}
                         </button>
                       ) : (
                         <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
@@ -427,7 +427,7 @@ export default function ProjectsPage() {
             open={!!detailsProject}
             onClose={() => setDetailsProject(null)}
             onProjectUpdate={(updated) => {
-              setProjects((prev) => prev.map((p) => (p.id === updated.id ? { ...updated, assignedClaw: p.assignedClaw } : p)));
+              setProjects((prev) => prev.map((p) => (p.id === updated.id ? { ...updated, assignedAgentHost: p.assignedAgentHost } : p)));
               setDetailsProject((p) => (p && p.id === updated.id ? updated : p));
             }}
             onDelete={async (p) => {
@@ -443,11 +443,11 @@ export default function ProjectsPage() {
           />
         )}
 
-        {selectedClaw && (
-          <ClawSlideOutPanel
-            claw={selectedClaw}
-            open={!!selectedClaw}
-            onClose={() => setSelectedClaw(null)}
+        {selectedAgentHost && (
+          <AgentHostSlideOutPanel
+            agentHost={selectedAgentHost}
+            open={!!selectedAgentHost}
+            onClose={() => setSelectedAgentHost(null)}
           />
         )}
         <UpgradeModal error={planError} onClose={() => setPlanError(null)} />

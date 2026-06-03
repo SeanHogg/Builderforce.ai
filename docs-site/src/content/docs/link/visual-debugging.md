@@ -5,7 +5,7 @@ description: Timeline, list, and graph views for execution debugging
 
 # Visual Debugging & Execution Timeline
 
-builderforce.ai provides a multi-view **visual debugger** that lets you see exactly what a claw (and any sub-agents it delegates to) did during an execution — without reading raw log output.
+builderforce.ai provides a multi-view **visual debugger** that lets you see exactly what a agent (and any sub-agents it delegates to) did during an execution — without reading raw log output.
 
 ## Overview
 
@@ -19,9 +19,9 @@ Three complementary views are available wherever execution history is shown:
 
 You can access these views in three places:
 
-1. **Logs → Visual Timeline tab** — tenant-wide view across all claws
-2. **Project workspace → Timeline tab** — scoped to the project's assigned claw(s)
-3. **Task drawer → Timeline tab** — scoped to the claw assigned to that specific task
+1. **Logs → Visual Timeline tab** — tenant-wide view across all agents
+2. **Project workspace → Timeline tab** — scoped to the project's assigned agent(s)
+3. **Task drawer → Timeline tab** — scoped to the agent assigned to that specific task
 
 ---
 
@@ -74,10 +74,10 @@ Visual debugging is powered by two data sources:
 
 ### Tool audit events
 
-Every tool call a claw makes is optionally posted to the API:
+Every tool call a agent makes is optionally posted to the API:
 
 ```http
-POST /api/claws/:id/tool-audit?key=<clawApiKey>
+POST /api/agents/:id/tool-audit?key=<agentNodeApiKey>
 Content-Type: application/json
 
 {
@@ -93,14 +93,14 @@ Content-Type: application/json
 The portal fetches them back via:
 
 ```http
-GET /api/claws/:id/tool-audit?runId=run-abc123&limit=200
+GET /api/agents/:id/tool-audit?runId=run-abc123&limit=200
 ```
 
 See [API Reference](/link/api-reference/) for full parameter documentation.
 
 ### Workflows & workflow tasks
 
-For structured multi-step plans, claws register a workflow and then push task updates:
+For structured multi-step plans, agents register a workflow and then push task updates:
 
 ```http
 POST /api/workflows            # register a workflow
@@ -115,16 +115,16 @@ See [Multi-Agent Orchestration](/link/multi-agent-orchestration/) for details on
 
 The current implementation covers:
 
-- ✅ Timeline view for tool calls (requires claw to push tool-audit events)
+- ✅ Timeline view for tool calls (requires agent to push tool-audit events)
 - ✅ Dependency graph for workflow tasks
 - ✅ Flat chronological list view
 - ✅ Project-level and task-level scoping
 
-Known gaps that require claw-side implementation:
+Known gaps that require agent-side implementation:
 
-- **Correlation IDs**: claws should attach a `runId` matching the execution ID so timeline events are automatically scoped per execution run
-- **Streaming updates**: the timeline currently requires a manual refresh; real-time push via the WebSocket gateway would allow the timeline to update live while a claw runs
-- **Sub-agent correlation**: when a claw delegates to another claw, the delegated claw's tool events should carry the parent `runId` for a unified view
+- **Correlation IDs**: agents should attach a `runId` matching the execution ID so timeline events are automatically scoped per execution run
+- **Streaming updates**: the timeline currently requires a manual refresh; real-time push via the WebSocket gateway would allow the timeline to update live while a agent runs
+- **Sub-agent correlation**: when a agent delegates to another agent, the delegated agent's tool events should carry the parent `runId` for a unified view
 
 ---
 

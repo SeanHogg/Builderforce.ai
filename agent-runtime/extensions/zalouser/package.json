@@ -1,0 +1,35 @@
+{
+  "name": "@builderforce/zalouser",
+  "version": "2026.3.21",
+  "description": "BuilderForceAgents Zalo Personal Account plugin via zca-cli",
+  "type": "module",
+  "dependencies": {
+    "@sinclair/typebox": "0.34.48"
+  },
+  "devDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*"
+  },
+  "builderforce": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "channel": {
+      "id": "zalouser",
+      "label": "Zalo Personal",
+      "selectionLabel": "Zalo (Personal Account)",
+      "docsPath": "/channels/zalouser",
+      "docsLabel": "zalouser",
+      "blurb": "Zalo personal account via QR code login.",
+      "aliases": [
+        "zlu"
+      ],
+      "order": 85,
+      "quickstartAllowFrom": true
+    },
+    "install": {
+      "npmSpec": "@builderforce/zalouser",
+      "localPath": "extensions/zalouser",
+      "defaultChoice": "npm"
+    }
+  }
+}

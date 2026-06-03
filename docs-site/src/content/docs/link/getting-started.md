@@ -5,7 +5,7 @@ description: Set up Builderforce locally and deploy to Cloudflare in ~20 minutes
 
 # Getting Started with Builderforce
 
-**Builderforce** is the AI-native orchestration portal for [CoderClaw](https://coderclaw.ai). This guide walks you from zero to a running local dev environment — including the API, frontend, and database.
+**Builderforce** is the AI-native orchestration portal for [BuilderForce Agents](https://builderforce.ai). This guide walks you from zero to a running local dev environment — including the API, frontend, and database.
 
 **Time to complete:** ~20 minutes
 
@@ -20,7 +20,7 @@ description: Set up Builderforce locally and deploy to Cloudflare in ~20 minutes
 5. [Run Database Migrations](#5-run-database-migrations)
 6. [Start Local Development](#6-start-local-development)
 7. [Register Your First User](#7-register-your-first-user)
-8. [Register Your First Claw](#8-register-your-first-claw)
+8. [Register Your First Agent](#8-register-your-first-agent)
 9. [Deploy to Production](#9-deploy-to-production)
 10. [Self-Hosted with Docker](#10-self-hosted-with-docker)
 11. [Next Steps](#next-steps)
@@ -188,9 +188,9 @@ Store the `token` — include it in all subsequent requests as `Authorization: B
 
 ---
 
-## 8. Register Your First Claw
+## 8. Register Your First Agent
 
-A **Claw** is a registered coderClaw agent instance. First, create a tenant:
+A **Agent** is a registered BuilderForce Agents agent instance. First, create a tenant:
 
 ```bash
 curl -s -X POST http://localhost:8787/api/tenants \
@@ -199,22 +199,22 @@ curl -s -X POST http://localhost:8787/api/tenants \
   -d '{"name":"My Team"}' | jq .
 ```
 
-Then register a Claw within that tenant:
+Then register a Agent within that tenant:
 
 ```bash
-curl -s -X POST http://localhost:8787/api/claws \
+curl -s -X POST http://localhost:8787/api/agents \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{"name":"my-claw","tenantId":<tenant-id>}' | jq .
+  -d '{"name":"my-agent","tenantId":<tenant-id>}' | jq .
 ```
 
-The response includes a `apiKey` for the Claw — configure your coderClaw runtime with:
+The response includes a `apiKey` for the Agent — configure your BuilderForce Agents runtime with:
 
 ```bash
-# In your coderClaw project
-coderclaw config set portal.url http://localhost:8787
-coderclaw config set portal.clawId <claw-id>
-coderclaw config set portal.apiKey <claw-api-key>
+# In your BuilderForce Agents project
+builderforce config set portal.url http://localhost:8787
+builderforce config set portal.agentNodeId <agent-id>
+builderforce config set portal.apiKey <agent-api-key>
 ```
 
 ---
@@ -283,5 +283,5 @@ The `docker-compose.yml` supports three profiles: `dev`, `deploy`, and `migrate`
 | Multi-agent orchestration | [Multi-Agent Orchestration](/link/multi-agent-orchestration/) |
 | Pricing and plans | [Pricing](/link/pricing/) |
 | Go-to-market strategy | [Go-to-Market](/link/go-to-market/) |
-| CoderClaw core agent | [github.com/SeanHogg/coderClaw](https://github.com/SeanHogg/coderClaw) |
+| BuilderForce Agents core agent | [github.com/SeanHogg/Builderforce.ai](https://github.com/SeanHogg/Builderforce.ai) |
 | Discord community | [discord.gg/qkhbAGHRBT](https://discord.gg/qkhbAGHRBT)

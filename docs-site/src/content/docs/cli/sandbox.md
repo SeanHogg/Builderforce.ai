@@ -11,29 +11,29 @@ Manage Docker-based sandbox containers for isolated agent execution.
 
 ## Overview
 
-CoderClaw can run agents in isolated Docker containers for security. The `sandbox` commands help you manage these containers, especially after updates or configuration changes.
+BuilderForce Agents can run agents in isolated Docker containers for security. The `sandbox` commands help you manage these containers, especially after updates or configuration changes.
 
 ## Commands
 
-### `coderclaw sandbox explain`
+### `builderforce sandbox explain`
 
 Inspect the **effective** sandbox mode/scope/workspace access, sandbox tool policy, and elevated gates (with fix-it config key paths).
 
 ```bash
-coderclaw sandbox explain
-coderclaw sandbox explain --session agent:main:main
-coderclaw sandbox explain --agent work
-coderclaw sandbox explain --json
+builderforce sandbox explain
+builderforce sandbox explain --session agent:main:main
+builderforce sandbox explain --agent work
+builderforce sandbox explain --json
 ```
 
-### `coderclaw sandbox list`
+### `builderforce sandbox list`
 
 List all sandbox containers with their status and configuration.
 
 ```bash
-coderclaw sandbox list
-coderclaw sandbox list --browser  # List only browser containers
-coderclaw sandbox list --json     # JSON output
+builderforce sandbox list
+builderforce sandbox list --browser  # List only browser containers
+builderforce sandbox list --json     # JSON output
 ```
 
 **Output includes:**
@@ -44,16 +44,16 @@ coderclaw sandbox list --json     # JSON output
 - Idle time (time since last use)
 - Associated session/agent
 
-### `coderclaw sandbox recreate`
+### `builderforce sandbox recreate`
 
 Remove sandbox containers to force recreation with updated images/config.
 
 ```bash
-coderclaw sandbox recreate --all                # Recreate all containers
-coderclaw sandbox recreate --session main       # Specific session
-coderclaw sandbox recreate --agent mybot        # Specific agent
-coderclaw sandbox recreate --browser            # Only browser containers
-coderclaw sandbox recreate --all --force        # Skip confirmation
+builderforce sandbox recreate --all                # Recreate all containers
+builderforce sandbox recreate --session main       # Specific session
+builderforce sandbox recreate --agent mybot        # Specific agent
+builderforce sandbox recreate --browser            # Only browser containers
+builderforce sandbox recreate --all --force        # Skip confirmation
 ```
 
 **Options:**
@@ -72,14 +72,14 @@ coderclaw sandbox recreate --all --force        # Skip confirmation
 
 ```bash
 # Pull new image
-docker pull coderclaw-sandbox:latest
-docker tag coderclaw-sandbox:latest coderclaw-sandbox:bookworm-slim
+docker pull builderforce-sandbox:latest
+docker tag builderforce-sandbox:latest builderforce-sandbox:bookworm-slim
 
 # Update config to use new image
 # Edit config: agents.defaults.sandbox.docker.image (or agents.list[].sandbox.docker.image)
 
 # Recreate containers
-coderclaw sandbox recreate --all
+builderforce sandbox recreate --all
 ```
 
 ### After changing sandbox configuration
@@ -88,22 +88,22 @@ coderclaw sandbox recreate --all
 # Edit config: agents.defaults.sandbox.* (or agents.list[].sandbox.*)
 
 # Recreate to apply new config
-coderclaw sandbox recreate --all
+builderforce sandbox recreate --all
 ```
 
 ### After changing setupCommand
 
 ```bash
-coderclaw sandbox recreate --all
+builderforce sandbox recreate --all
 # or just one agent:
-coderclaw sandbox recreate --agent family
+builderforce sandbox recreate --agent family
 ```
 
 ### For a specific agent only
 
 ```bash
 # Update only one agent's containers
-coderclaw sandbox recreate --agent alfred
+builderforce sandbox recreate --agent alfred
 ```
 
 ## Why is this needed?
@@ -114,14 +114,14 @@ coderclaw sandbox recreate --agent alfred
 - Containers are only pruned after 24h of inactivity
 - Regularly-used agents keep old containers running indefinitely
 
-**Solution:** Use `coderclaw sandbox recreate` to force removal of old containers. They'll be recreated automatically with current settings when next needed.
+**Solution:** Use `builderforce sandbox recreate` to force removal of old containers. They'll be recreated automatically with current settings when next needed.
 
-Tip: prefer `coderclaw sandbox recreate` over manual `docker rm`. It uses the
+Tip: prefer `builderforce sandbox recreate` over manual `docker rm`. It uses the
 Gateway’s container naming and avoids mismatches when scope/session keys change.
 
 ## Configuration
 
-Sandbox settings live in `~/.coderclaw/coderclaw.json` under `agents.defaults.sandbox` (per-agent overrides go in `agents.list[].sandbox`):
+Sandbox settings live in `~/.builderforce/builderforce.json` under `agents.defaults.sandbox` (per-agent overrides go in `agents.list[].sandbox`):
 
 ```jsonc
 {
@@ -131,8 +131,8 @@ Sandbox settings live in `~/.coderclaw/coderclaw.json` under `agents.defaults.sa
         "mode": "all", // off, non-main, all
         "scope": "agent", // session, agent, shared
         "docker": {
-          "image": "coderclaw-sandbox:bookworm-slim",
-          "containerPrefix": "coderclaw-sbx-",
+          "image": "builderforce-sandbox:bookworm-slim",
+          "containerPrefix": "builderforce-sbx-",
           // ... more Docker options
         },
         "prune": {

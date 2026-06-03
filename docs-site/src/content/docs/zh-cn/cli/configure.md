@@ -1,7 +1,7 @@
 ---
 read_when:
   - 你想交互式地调整凭证、设备或智能体默认设置
-summary: "`coderclaw configure` 的 CLI 参考（交互式配置提示）"
+summary: "`builderforce configure` 的 CLI 参考（交互式配置提示）"
 title: configure
 x-i18n:
   generated_at: "2026-02-03T07:44:46Z"
@@ -12,13 +12,13 @@ x-i18n:
   workflow: 15
 ---
 
-# `coderclaw configure`
+# `builderforce configure`
 
 用于设置凭证、设备和智能体默认值的交互式提示。
 
 注意：**模型**部分现在包含一个用于 `agents.defaults.models` 允许列表的多选项（显示在 `/model` 和模型选择器中的内容）。
 
-提示：不带子命令的 `coderclaw config` 会打开相同的向导。使用 `coderclaw config get|set|unset` 进行非交互式编辑。
+提示：不带子命令的 `builderforce config` 会打开相同的向导。使用 `builderforce config get|set|unset` 进行非交互式编辑。
 
 相关内容：
 
@@ -33,6 +33,6 @@ x-i18n:
 ## 示例
 
 ```bash
-coderclaw configure
-coderclaw configure --section models --section channels
+builderforce configure
+builderforce configure --section models --section channels
 ```

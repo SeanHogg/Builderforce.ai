@@ -18,29 +18,29 @@ x-i18n:
 
 ## 概述
 
-CoderClaw 可以在隔离的 Docker 容器中运行智能体以确保安全。`sandbox` 命令帮助你管理这些容器，特别是在更新或配置更改后。
+BuilderForce Agents 可以在隔离的 Docker 容器中运行智能体以确保安全。`sandbox` 命令帮助你管理这些容器，特别是在更新或配置更改后。
 
 ## 命令
 
-### `coderclaw sandbox explain`
+### `builderforce sandbox explain`
 
 检查**生效的**沙箱模式/作用域/工作区访问权限、沙箱工具策略和提权门控（附带修复配置的键路径）。
 
 ```bash
-coderclaw sandbox explain
-coderclaw sandbox explain --session agent:main:main
-coderclaw sandbox explain --agent work
-coderclaw sandbox explain --json
+builderforce sandbox explain
+builderforce sandbox explain --session agent:main:main
+builderforce sandbox explain --agent work
+builderforce sandbox explain --json
 ```
 
-### `coderclaw sandbox list`
+### `builderforce sandbox list`
 
 列出所有沙箱容器及其状态和配置。
 
 ```bash
-coderclaw sandbox list
-coderclaw sandbox list --browser  # List only browser containers
-coderclaw sandbox list --json     # JSON output
+builderforce sandbox list
+builderforce sandbox list --browser  # List only browser containers
+builderforce sandbox list --json     # JSON output
 ```
 
 **输出包括：**
@@ -51,16 +51,16 @@ coderclaw sandbox list --json     # JSON output
 - 空闲时间（自上次使用以来的时间）
 - 关联的会话/智能体
 
-### `coderclaw sandbox recreate`
+### `builderforce sandbox recreate`
 
 移除沙箱容器以强制使用更新的镜像/配置重新创建。
 
 ```bash
-coderclaw sandbox recreate --all                # Recreate all containers
-coderclaw sandbox recreate --session main       # Specific session
-coderclaw sandbox recreate --agent mybot        # Specific agent
-coderclaw sandbox recreate --browser            # Only browser containers
-coderclaw sandbox recreate --all --force        # Skip confirmation
+builderforce sandbox recreate --all                # Recreate all containers
+builderforce sandbox recreate --session main       # Specific session
+builderforce sandbox recreate --agent mybot        # Specific agent
+builderforce sandbox recreate --browser            # Only browser containers
+builderforce sandbox recreate --all --force        # Skip confirmation
 ```
 
 **选项：**
@@ -79,14 +79,14 @@ coderclaw sandbox recreate --all --force        # Skip confirmation
 
 ```bash
 # Pull new image
-docker pull coderclaw-sandbox:latest
-docker tag coderclaw-sandbox:latest coderclaw-sandbox:bookworm-slim
+docker pull builderforce-sandbox:latest
+docker tag builderforce-sandbox:latest builderforce-sandbox:bookworm-slim
 
 # Update config to use new image
 # Edit config: agents.defaults.sandbox.docker.image (or agents.list[].sandbox.docker.image)
 
 # Recreate containers
-coderclaw sandbox recreate --all
+builderforce sandbox recreate --all
 ```
 
 ### 更改沙箱配置后
@@ -95,22 +95,22 @@ coderclaw sandbox recreate --all
 # Edit config: agents.defaults.sandbox.* (or agents.list[].sandbox.*)
 
 # Recreate to apply new config
-coderclaw sandbox recreate --all
+builderforce sandbox recreate --all
 ```
 
 ### 更改 setupCommand 后
 
 ```bash
-coderclaw sandbox recreate --all
+builderforce sandbox recreate --all
 # or just one agent:
-coderclaw sandbox recreate --agent family
+builderforce sandbox recreate --agent family
 ```
 
 ### 仅针对特定智能体
 
 ```bash
 # Update only one agent's containers
-coderclaw sandbox recreate --agent alfred
+builderforce sandbox recreate --agent alfred
 ```
 
 ## 为什么需要这个？
@@ -121,13 +121,13 @@ coderclaw sandbox recreate --agent alfred
 - 容器仅在空闲 24 小时后才被清理
 - 经常使用的智能体会无限期保持旧容器运行
 
-**解决方案：** 使用 `coderclaw sandbox recreate` 强制移除旧容器。它们会在下次需要时自动使用当前设置重新创建。
+**解决方案：** 使用 `builderforce sandbox recreate` 强制移除旧容器。它们会在下次需要时自动使用当前设置重新创建。
 
-提示：优先使用 `coderclaw sandbox recreate` 而不是手动 `docker rm`。它使用 Gateway 网关的容器命名规则，避免在作用域/会话键更改时出现不匹配。
+提示：优先使用 `builderforce sandbox recreate` 而不是手动 `docker rm`。它使用 Gateway 网关的容器命名规则，避免在作用域/会话键更改时出现不匹配。
 
 ## 配置
 
-沙箱设置位于 `~/.coderclaw/coderclaw.json` 的 `agents.defaults.sandbox` 下（每个智能体的覆盖设置在 `agents.list[].sandbox` 中）：
+沙箱设置位于 `~/.builderforce/builderforce.json` 的 `agents.defaults.sandbox` 下（每个智能体的覆盖设置在 `agents.list[].sandbox` 中）：
 
 ```jsonc
 {
@@ -137,8 +137,8 @@ coderclaw sandbox recreate --agent alfred
         "mode": "all", // off, non-main, all
         "scope": "agent", // session, agent, shared
         "docker": {
-          "image": "coderclaw-sandbox:bookworm-slim",
-          "containerPrefix": "coderclaw-sbx-",
+          "image": "builderforce-sandbox:bookworm-slim",
+          "containerPrefix": "builderforce-sbx-",
           // ... more Docker options
         },
         "prune": {

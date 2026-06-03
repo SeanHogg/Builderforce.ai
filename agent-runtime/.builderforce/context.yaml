@@ -1,0 +1,16 @@
+version: 1
+projectName: product
+description: A builderForceAgents-enabled project
+rootPath: C:\code\agentic\builderForceAgents\product
+languages: []
+frameworks: []
+architecture:
+  style: unknown
+  layers: []
+  patterns: []
+lintingTools: []
+dependencies:
+  production: {}
+  development: {}
+customRules: []
+metadata: {}

@@ -8,24 +8,24 @@ title: "Skills"
 
 # Skills (macOS)
 
-The macOS app surfaces CoderClaw skills via the gateway; it does not parse skills locally.
+The macOS app surfaces BuilderForce Agents skills via the gateway; it does not parse skills locally.
 
 ## Data source
 
 - `skills.status` (gateway) returns all skills plus eligibility and missing requirements
   (including allowlist blocks for bundled skills).
-- Requirements are derived from `metadata.coderclaw.requires` in each `SKILL.md`.
+- Requirements are derived from `metadata.builderforce.requires` in each `SKILL.md`.
 
 ## Install actions
 
-- `metadata.coderclaw.install` defines install options (brew/node/go/uv).
+- `metadata.builderforce.install` defines install options (brew/node/go/uv).
 - The app calls `skills.install` to run installers on the gateway host.
 - The gateway surfaces only one preferred installer when multiple are provided
   (brew when available, otherwise node manager from `skills.install`, default npm).
 
 ## Env/API keys
 
-- The app stores keys in `~/.coderclaw/coderclaw.json` under `skills.entries.<skillKey>`.
+- The app stores keys in `~/.builderforce/builderforce.json` under `skills.entries.<skillKey>`.
 - `skills.update` patches `enabled`, `apiKey`, and `env`.
 
 ## Remote mode

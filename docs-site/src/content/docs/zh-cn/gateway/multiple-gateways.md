@@ -2,7 +2,7 @@
 read_when:
   - 在同一台机器上运行多个 Gateway 网关
   - 你需要每个 Gateway 网关有隔离的配置/状态/端口
-summary: 在同一主机上运行多个 CoderClaw Gateway 网关（隔离、端口和配置文件）
+summary: 在同一主机上运行多个 BuilderForce Agents Gateway 网关（隔离、端口和配置文件）
 title: 多 Gateway 网关
 x-i18n:
   generated_at: "2026-02-03T07:48:13Z"
@@ -19,8 +19,8 @@ x-i18n:
 
 ## 隔离检查清单（必需）
 
-- `CODERCLAW_CONFIG_PATH` — 每个实例的配置文件
-- `CODERCLAW_STATE_DIR` — 每个实例的会话、凭证、缓存
+- `BUILDERFORCE_AGENTS_CONFIG_PATH` — 每个实例的配置文件
+- `BUILDERFORCE_AGENTS_STATE_DIR` — 每个实例的会话、凭证、缓存
 - `agents.defaults.workspace` — 每个实例的工作区根目录
 - `gateway.port`（或 `--port`）— 每个实例唯一
 - 派生端口（浏览器/画布）不得重叠
@@ -29,23 +29,23 @@ x-i18n:
 
 ## 推荐：配置文件（`--profile`）
 
-配置文件自动限定 `CODERCLAW_STATE_DIR` + `CODERCLAW_CONFIG_PATH` 范围并为服务名称添加后缀。
+配置文件自动限定 `BUILDERFORCE_AGENTS_STATE_DIR` + `BUILDERFORCE_AGENTS_CONFIG_PATH` 范围并为服务名称添加后缀。
 
 ```bash
 # main
-coderclaw --profile main setup
-coderclaw --profile main gateway --port 18789
+builderforce --profile main setup
+builderforce --profile main gateway --port 18789
 
 # rescue
-coderclaw --profile rescue setup
-coderclaw --profile rescue gateway --port 19001
+builderforce --profile rescue setup
+builderforce --profile rescue gateway --port 19001
 ```
 
 按配置文件的服务：
 
 ```bash
-coderclaw --profile main gateway install
-coderclaw --profile rescue gateway install
+builderforce --profile main gateway install
+builderforce --profile rescue gateway install
 ```
 
 ## 救援机器人指南
@@ -66,11 +66,11 @@ coderclaw --profile rescue gateway install
 ```bash
 # 主机器人（现有或新建，不带 --profile 参数）
 # 运行在端口 18789 + Chrome CDC/Canvas/... 端口
-coderclaw onboard
-coderclaw gateway install
+builderforce onboard
+builderforce gateway install
 
 # 救援机器人（隔离的配置文件 + 端口）
-coderclaw --profile rescue onboard
+builderforce --profile rescue onboard
 # 注意：
 # - 工作区名称默认会添加 -rescue 后缀
 # - 端口应至少为 18789 + 20 个端口，
@@ -78,12 +78,12 @@ coderclaw --profile rescue onboard
 # - 其余的新手引导与正常相同
 
 # 安装服务（如果在新手引导期间没有自动完成）
-coderclaw --profile rescue gateway install
+builderforce --profile rescue gateway install
 ```
 
 ## 端口映射（派生）
 
-基础端口 = `gateway.port`（或 `CODERCLAW_GATEWAY_PORT` / `--port`）。
+基础端口 = `gateway.port`（或 `BUILDERFORCE_AGENTS_GATEWAY_PORT` / `--port`）。
 
 - 浏览器控制服务端口 = 基础 + 2（仅 loopback）
 - `canvasHost.port = 基础 + 4`
@@ -101,19 +101,19 @@ coderclaw --profile rescue gateway install
 ## 手动环境变量示例
 
 ```bash
-CODERCLAW_CONFIG_PATH=~/.coderclaw/main.json \
-CODERCLAW_STATE_DIR=~/.coderclaw-main \
-coderclaw gateway --port 18789
+BUILDERFORCE_AGENTS_CONFIG_PATH=~/.builderforce/main.json \
+BUILDERFORCE_AGENTS_STATE_DIR=~/.builderforce-main \
+builderforce gateway --port 18789
 
-CODERCLAW_CONFIG_PATH=~/.coderclaw/rescue.json \
-CODERCLAW_STATE_DIR=~/.coderclaw-rescue \
-coderclaw gateway --port 19001
+BUILDERFORCE_AGENTS_CONFIG_PATH=~/.builderforce/rescue.json \
+BUILDERFORCE_AGENTS_STATE_DIR=~/.builderforce-rescue \
+builderforce gateway --port 19001
 ```
 
 ## 快速检查
 
 ```bash
-coderclaw --profile main status
-coderclaw --profile rescue status
-coderclaw --profile rescue browser status
+builderforce --profile main status
+builderforce --profile rescue status
+builderforce --profile rescue browser status
 ```

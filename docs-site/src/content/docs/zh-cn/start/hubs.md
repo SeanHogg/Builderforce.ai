@@ -1,7 +1,7 @@
 ---
 read_when:
   - 你想要一份完整的文档地图
-summary: 链接到每篇 CoderClaw 文档的导航中心
+summary: 链接到每篇 BuilderForce Agents 文档的导航中心
 title: 文档导航中心
 x-i18n:
   generated_at: "2026-02-04T17:55:29Z"
@@ -29,7 +29,7 @@ x-i18n:
 - [文档目录](/start/docs-directory)
 - [配置](/gateway/configuration)
 - [配置示例](/gateway/configuration-examples)
-- [CoderClaw 助手](/start/coderclaw)
+- [BuilderForce Agents 助手](/start/builderforce)
 - [展示](/start/showcase)
 
 ## 安装 + 更新
@@ -169,7 +169,7 @@ x-i18n:
 ## 工作区 + 模板
 
 - [Skills](/tools/skills)
-- [ClawHub](/tools/clawhub)
+- [AgentHub](/tools/agenthub)
 - [Skills 配置](/tools/skills-config)
 - [默认 AGENTS](/reference/AGENTS.default)
 - [模板：AGENTS](/reference/templates/AGENTS)

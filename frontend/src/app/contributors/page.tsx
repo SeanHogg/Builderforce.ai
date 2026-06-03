@@ -16,7 +16,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 // GitHub-style intensity palettes. Humans = green, agents = purple, so the
-// activity calendar visibly distinguishes people from claws.
+// activity calendar visibly distinguishes people from agentHosts.
 const GREEN = ['#0e4429', '#006d32', '#26a641', '#39d353'];
 const PURPLE = ['#3a2063', '#5b2da6', '#8a4be0', '#b388ff'];
 const EMPTY = 'var(--border-subtle)';
@@ -174,7 +174,7 @@ export default function ContributorsPage() {
         </button>
       </div>
       <p style={{ color: 'var(--text-muted)', marginTop: 0, marginBottom: 20, fontSize: 14 }}>
-        Your whole team on one activity calendar — humans (git &amp; PR activity) and AI agents (CoderClaw telemetry) side by side.
+        Your whole team on one activity calendar — humans (git &amp; PR activity) and AI agents (BuilderForce Agents telemetry) side by side.
       </p>
 
       {loading && <div style={cardStyle}>Loading activity…</div>}
@@ -229,7 +229,7 @@ export default function ContributorsPage() {
               ))}
               {data.contributors.length === 0 && (
                 <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: 8 }}>
-                  No contributors yet. Connect a repo integration to ingest human activity, or click <b>Sync AI agents</b> to add your claws.
+                  No contributors yet. Connect a repo integration to ingest human activity, or click <b>Sync AI agents</b> to add your agentHosts.
                 </div>
               )}
             </div>

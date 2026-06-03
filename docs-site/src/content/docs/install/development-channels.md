@@ -10,7 +10,7 @@ title: "Development Channels"
 
 Last updated: 2026-01-21
 
-CoderClaw ships three update channels:
+BuilderForce Agents ships three update channels:
 
 - **stable**: npm dist-tag `latest`.
 - **beta**: npm dist-tag `beta` (builds under test).
@@ -24,9 +24,9 @@ without changing the version number — dist-tags are the source of truth for np
 Git checkout:
 
 ```bash
-coderclaw update --channel stable
-coderclaw update --channel beta
-coderclaw update --channel dev
+builderforce update --channel stable
+builderforce update --channel beta
+builderforce update --channel dev
 ```
 
 - `stable`/`beta` check out the latest matching tag (often the same tag).
@@ -35,17 +35,17 @@ coderclaw update --channel dev
 npm/pnpm global install:
 
 ```bash
-coderclaw update --channel stable
-coderclaw update --channel beta
-coderclaw update --channel dev
+builderforce update --channel stable
+builderforce update --channel beta
+builderforce update --channel dev
 ```
 
 This updates via the corresponding npm dist-tag (`latest`, `beta`, `dev`).
 
-When you **explicitly** switch channels with `--channel`, CoderClaw also aligns
+When you **explicitly** switch channels with `--channel`, BuilderForce Agents also aligns
 the install method:
 
-- `dev` ensures a git checkout (default `~/coderclaw`, override with `CODERCLAW_GIT_DIR`),
+- `dev` ensures a git checkout (default `~/builderforce`, override with `BUILDERFORCE_AGENTS_GIT_DIR`),
   updates it, and installs the global CLI from that checkout.
 - `stable`/`beta` installs from npm using the matching dist-tag.
 
@@ -53,7 +53,7 @@ Tip: if you want stable + dev in parallel, keep two clones and point your gatewa
 
 ## Plugins and channels
 
-When you switch channels with `coderclaw update`, CoderClaw also syncs plugin sources:
+When you switch channels with `builderforce update`, BuilderForce Agents also syncs plugin sources:
 
 - `dev` prefers bundled plugins from the git checkout.
 - `stable` and `beta` restore npm-installed plugin packages.

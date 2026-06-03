@@ -1,12 +1,12 @@
 ---
-summary: "CLI reference for `coderclaw models` (status/list/set/scan, aliases, fallbacks, auth)"
+summary: "CLI reference for `builderforce models` (status/list/set/scan, aliases, fallbacks, auth)"
 read_when:
   - You want to change default models or view provider auth status
   - You want to scan available models/providers and debug auth profiles
 title: "models"
 ---
 
-# `coderclaw models`
+# `builderforce models`
 
 Model discovery, scanning, and configuration (default model, fallbacks, auth profiles).
 
@@ -18,26 +18,26 @@ Related:
 ## Common commands
 
 ```bash
-coderclaw models status
-coderclaw models list
-coderclaw models set <model-or-alias>
-coderclaw models scan
+builderforce models status
+builderforce models list
+builderforce models set <model-or-alias>
+builderforce models scan
 ```
 
-`coderclaw models status` shows the resolved default/fallbacks plus an auth overview.
+`builderforce models status` shows the resolved default/fallbacks plus an auth overview.
 When provider usage snapshots are available, the OAuth/token status section includes
 provider usage headers.
 Add `--probe` to run live auth probes against each configured provider profile.
 Probes are real requests (may consume tokens and trigger rate limits).
 Use `--agent <id>` to inspect a configured agent’s model/auth state. When omitted,
-the command uses `CODERCLAW_AGENT_DIR`/`PI_CODING_AGENT_DIR` if set, otherwise the
+the command uses `BUILDERFORCE_AGENTS_AGENT_DIR`/`PI_CODING_AGENT_DIR` if set, otherwise the
 configured default agent.
 
 Notes:
 
 - `models set <model-or-alias>` accepts `provider/model` or an alias.
 - Model refs are parsed by splitting on the **first** `/`. If the model ID includes `/` (OpenRouter-style), include the provider prefix (example: `openrouter/moonshotai/kimi-k2`).
-- If you omit the provider, CoderClaw treats the input as an alias or a model for the **default provider** (only works when there is no `/` in the model ID).
+- If you omit the provider, BuilderForce Agents treats the input as an alias or a model for the **default provider** (only works when there is no `/` in the model ID).
 
 ### `models status`
 
@@ -52,26 +52,26 @@ Options:
 - `--probe-timeout <ms>`
 - `--probe-concurrency <n>`
 - `--probe-max-tokens <n>`
-- `--agent <id>` (configured agent id; overrides `CODERCLAW_AGENT_DIR`/`PI_CODING_AGENT_DIR`)
+- `--agent <id>` (configured agent id; overrides `BUILDERFORCE_AGENTS_AGENT_DIR`/`PI_CODING_AGENT_DIR`)
 
 ## Aliases + fallbacks
 
 ```bash
-coderclaw models aliases list
-coderclaw models fallbacks list
+builderforce models aliases list
+builderforce models fallbacks list
 ```
 
 ## Auth profiles
 
 ```bash
-coderclaw models auth add
-coderclaw models auth login --provider <id>
-coderclaw models auth setup-token
-coderclaw models auth paste-token
+builderforce models auth add
+builderforce models auth login --provider <id>
+builderforce models auth setup-token
+builderforce models auth paste-token
 ```
 
 `models auth login` runs a provider plugin’s auth flow (OAuth/API key). Use
-`coderclaw plugins list` to see which providers are installed.
+`builderforce plugins list` to see which providers are installed.
 
 Notes:
 

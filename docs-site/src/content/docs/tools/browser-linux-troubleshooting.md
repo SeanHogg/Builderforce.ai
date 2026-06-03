@@ -1,5 +1,5 @@
 ---
-summary: "Fix Chrome/Brave/Edge/Chromium CDP startup issues for CoderClaw browser control on Linux"
+summary: "Fix Chrome/Brave/Edge/Chromium CDP startup issues for BuilderForce Agents browser control on Linux"
 read_when: "Browser control fails on Linux, especially with snap Chromium"
 title: "Browser Troubleshooting"
 ---
@@ -8,15 +8,15 @@ title: "Browser Troubleshooting"
 
 ## Problem: "Failed to start Chrome CDP on port 18800"
 
-CoderClaw's browser control server fails to launch Chrome/Brave/Edge/Chromium with the error:
+BuilderForce Agents's browser control server fails to launch Chrome/Brave/Edge/Chromium with the error:
 
 ```
-{"error":"Error: Failed to start Chrome CDP on port 18800 for profile \"coderclaw\"."}
+{"error":"Error: Failed to start Chrome CDP on port 18800 for profile \"builderforce\"."}
 ```
 
 ### Root Cause
 
-On Ubuntu (and many Linux distros), the default Chromium installation is a **snap package**. Snap's AppArmor confinement interferes with how CoderClaw spawns and monitors the browser process.
+On Ubuntu (and many Linux distros), the default Chromium installation is a **snap package**. Snap's AppArmor confinement interferes with how BuilderForce Agents spawns and monitors the browser process.
 
 The `apt install chromium` command installs a stub package that redirects to snap:
 
@@ -37,7 +37,7 @@ sudo dpkg -i google-chrome-stable_current_amd64.deb
 sudo apt --fix-broken install -y  # if there are dependency errors
 ```
 
-Then update your CoderClaw config (`~/.coderclaw/coderclaw.json`):
+Then update your BuilderForce Agents config (`~/.builderforce/builderforce.json`):
 
 ```json
 {
@@ -52,7 +52,7 @@ Then update your CoderClaw config (`~/.coderclaw/coderclaw.json`):
 
 ### Solution 2: Use Snap Chromium with Attach-Only Mode
 
-If you must use snap Chromium, configure CoderClaw to attach to a manually-started browser:
+If you must use snap Chromium, configure BuilderForce Agents to attach to a manually-started browser:
 
 1. Update config:
 
@@ -72,20 +72,20 @@ If you must use snap Chromium, configure CoderClaw to attach to a manually-start
 ```bash
 chromium-browser --headless --no-sandbox --disable-gpu \
   --remote-debugging-port=18800 \
-  --user-data-dir=$HOME/.coderclaw/browser/coderclaw/user-data \
+  --user-data-dir=$HOME/.builderforce/browser/builderforce/user-data \
   about:blank &
 ```
 
 3. Optionally create a systemd user service to auto-start Chrome:
 
 ```ini
-# ~/.config/systemd/user/coderclaw-browser.service
+# ~/.config/systemd/user/builderforce-browser.service
 [Unit]
-Description=CoderClaw Browser (Chrome CDP)
+Description=BuilderForce Agents Browser (Chrome CDP)
 After=network.target
 
 [Service]
-ExecStart=/snap/bin/chromium --headless --no-sandbox --disable-gpu --remote-debugging-port=18800 --user-data-dir=%h/.coderclaw/browser/coderclaw/user-data about:blank
+ExecStart=/snap/bin/chromium --headless --no-sandbox --disable-gpu --remote-debugging-port=18800 --user-data-dir=%h/.builderforce/browser/builderforce/user-data about:blank
 Restart=on-failure
 RestartSec=5
 
@@ -93,7 +93,7 @@ RestartSec=5
 WantedBy=default.target
 ```
 
-Enable with: `systemctl --user enable --now coderclaw-browser.service`
+Enable with: `systemctl --user enable --now builderforce-browser.service`
 
 ### Verifying the Browser Works
 
@@ -123,17 +123,17 @@ curl -s http://127.0.0.1:18791/tabs
 
 ### Problem: "Chrome extension relay is running, but no tab is connected"
 
-You’re using the `chrome` profile (extension relay). It expects the CoderClaw
+You’re using the `chrome` profile (extension relay). It expects the BuilderForce Agents
 browser extension to be attached to a live tab.
 
 Fix options:
 
-1. **Use the managed browser:** `coderclaw browser start --browser-profile coderclaw`
-   (or set `browser.defaultProfile: "coderclaw"`).
+1. **Use the managed browser:** `builderforce browser start --browser-profile builderforce`
+   (or set `browser.defaultProfile: "builderforce"`).
 2. **Use the extension relay:** install the extension, open a tab, and click the
-   CoderClaw extension icon to attach it.
+   BuilderForce Agents extension icon to attach it.
 
 Notes:
 
 - The `chrome` profile uses your **system default Chromium browser** when possible.
-- Local `coderclaw` profiles auto-assign `cdpPort`/`cdpUrl`; only set those for remote CDP.
+- Local `builderforce` profiles auto-assign `cdpPort`/`cdpUrl`; only set those for remote CDP.

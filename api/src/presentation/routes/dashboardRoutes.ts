@@ -4,8 +4,8 @@
  * Provides aggregate data for the Builderforce manager portal home screen.
  * All endpoints require a tenant-scoped JWT and MANAGER+ role.
  *
- * GET /api/dashboard          — overview: pending approvals, token usage today, active claws, recent workflows
- * GET /api/dashboard/usage    — detailed token usage breakdown (per-claw, per-model, selectable window)
+ * GET /api/dashboard          — overview: pending approvals, token usage today, active agentHosts, recent workflows
+ * GET /api/dashboard/usage    — detailed token usage breakdown (per-agentHost, per-model, selectable window)
  */
 
 import { Hono } from 'hono';
@@ -13,7 +13,7 @@ import { and, count, desc, eq, gte, sql, sum } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   approvals,
-  coderclawInstances,
+  agentHosts,
   llmUsageLog,
   tenants,
   workflows,
@@ -30,7 +30,7 @@ export function createDashboardRoutes(db: Db): Hono<HonoEnv> {
 
   // ── GET /api/dashboard ───────────────────────────────────────────────────
   // Overview snapshot: pending approvals count, token usage today vs limit,
-  // active + total claw counts, recent workflow statuses.
+  // active + total agentHost counts, recent workflow statuses.
   router.get('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
 
@@ -40,7 +40,7 @@ export function createDashboardRoutes(db: Db): Hono<HonoEnv> {
     // Run all queries in parallel
     const [
       pendingApprovalsResult,
-      clawCountsResult,
+      agentHostCountsResult,
       tokenUsageResult,
       recentWorkflowsResult,
       tenantRow,
@@ -51,14 +51,14 @@ export function createDashboardRoutes(db: Db): Hono<HonoEnv> {
         .from(approvals)
         .where(and(eq(approvals.tenantId, tenantId), eq(approvals.status, 'pending'))),
 
-      // Claw counts: total and online
+      // AgentHost counts: total and online
       db
         .select({
           total: count(),
-          online: sql<number>`count(*) filter (where ${coderclawInstances.connectedAt} is not null)`,
+          online: sql<number>`count(*) filter (where ${agentHosts.connectedAt} is not null)`,
         })
-        .from(coderclawInstances)
-        .where(and(eq(coderclawInstances.tenantId, tenantId), eq(coderclawInstances.status, 'active'))),
+        .from(agentHosts)
+        .where(and(eq(agentHosts.tenantId, tenantId), eq(agentHosts.status, 'active'))),
 
       // Token usage today
       db
@@ -74,7 +74,7 @@ export function createDashboardRoutes(db: Db): Hono<HonoEnv> {
           workflowType: workflows.workflowType,
           createdAt: workflows.createdAt,
           completedAt: workflows.completedAt,
-          clawId: workflows.clawId,
+          agentHostId: workflows.agentHostId,
         })
         .from(workflows)
         .where(eq(workflows.tenantId, tenantId))
@@ -101,9 +101,9 @@ export function createDashboardRoutes(db: Db): Hono<HonoEnv> {
       approvals: {
         pending: Number(pendingApprovalsResult[0]?.total ?? 0),
       },
-      claws: {
-        total: Number(clawCountsResult[0]?.total ?? 0),
-        online: Number(clawCountsResult[0]?.online ?? 0),
+      agentHosts: {
+        total: Number(agentHostCountsResult[0]?.total ?? 0),
+        online: Number(agentHostCountsResult[0]?.online ?? 0),
       },
       tokens: {
         usedToday: tokenUsedToday,
@@ -134,10 +134,10 @@ export function createDashboardRoutes(db: Db): Hono<HonoEnv> {
       windowStart.setUTCDate(1);
     }
 
-    // Per-claw breakdown
-    const perClaw = await db
+    // Per-agentHost breakdown
+    const perAgentHost = await db
       .select({
-        clawId: llmUsageLog.tenantId, // approximation; real per-claw requires clawId on log
+        agentHostId: llmUsageLog.tenantId, // approximation; real per-agentHost requires agentHostId on log
         model: llmUsageLog.model,
         totalTokens: sum(llmUsageLog.totalTokens),
         promptTokens: sum(llmUsageLog.promptTokens),
@@ -175,7 +175,7 @@ export function createDashboardRoutes(db: Db): Hono<HonoEnv> {
         requests: Number(total?.totalRequests ?? 0),
       },
       perModel,
-      perClaw,
+      perAgentHost,
     });
   });
 

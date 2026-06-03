@@ -26,9 +26,9 @@ How to see whether the linked channel is healthy from the menu bar app.
 
 ## How the probe works
 
-- App runs `coderclaw health --json` via `ShellExecutor` every ~60s and on demand. The probe loads creds and reports status without sending messages.
+- App runs `builderforce health --json` via `ShellExecutor` every ~60s and on demand. The probe loads creds and reports status without sending messages.
 - Cache the last good snapshot and the last error separately to avoid flicker; show the timestamp of each.
 
 ## When in doubt
 
-- You can still use the CLI flow in [Gateway health](/gateway/health) (`coderclaw status`, `coderclaw status --deep`, `coderclaw health --json`) and tail `/tmp/coderclaw/coderclaw-*.log` for `web-heartbeat` / `web-reconnect`.
+- You can still use the CLI flow in [Gateway health](/gateway/health) (`builderforce status`, `builderforce status --deep`, `builderforce health --json`) and tail `/tmp/builderforce/builderforce-*.log` for `web-heartbeat` / `web-reconnect`.

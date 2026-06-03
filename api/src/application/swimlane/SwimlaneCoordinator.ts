@@ -10,7 +10,7 @@
  * autonomous-advance loop is unit-testable with an in-memory fake.
  *
  * A stage is the set of agent dispatches sharing (ticketRunId, stageSeq). Each
- * dispatch runs on a claw (pushed via the injected dispatcher) or in the BROWSER
+ * dispatch runs on a agentHost (pushed via the injected dispatcher) or in the BROWSER
  * (left `pending` for a pull worker to claim). When the stage settles the ticket
  * advances (autonomous) or routes to needs_attention — never a silent advance.
  */
@@ -44,7 +44,7 @@ export interface StageHistoryEntry {
 }
 
 /**
- * A claw-reachable executor (local/cloud/remote). Browser dispatches are NOT
+ * A agentHost-reachable executor (local/cloud/remote). Browser dispatches are NOT
  * sent here — they stay `pending` for a browser pull worker. Injected so the
  * coordinator is unit-testable with a fake.
  */
@@ -106,7 +106,7 @@ function parseDeps(raw: string | null): string[] {
 export class SwimlaneCoordinator {
   constructor(
     private readonly store: CoordinatorStore,
-    /** Claw-reachable executor for local/cloud/remote dispatches. Optional:
+    /** AgentHost-reachable executor for local/cloud/remote dispatches. Optional:
      *  when absent, only browser (pull) dispatches can run. */
     private readonly dispatcher?: StageDispatcher,
   ) {}
@@ -258,7 +258,7 @@ export class SwimlaneCoordinator {
   // ── stage execution (the runtime-agnostic dispatch engine) ─────────────────
 
   /**
-   * Report a single dispatch's terminal result (claw callback or browser pull
+   * Report a single dispatch's terminal result (agentHost callback or browser pull
    * worker), then re-evaluate the stage — scheduling newly-unblocked siblings
    * and, once the stage settles, advancing the ticket.
    */
@@ -364,10 +364,10 @@ export class SwimlaneCoordinator {
     } else if (outcome === 'failed') {
       await this.onStageComplete(ticketRunId, 'failed');
     }
-    // 'running': a pull worker / claw callback re-enters via reportDispatchResult.
+    // 'running': a pull worker / agentHost callback re-enters via reportDispatchResult.
   }
 
-  /** Route one ready dispatch: browser → claimable `pending`; claw → push. */
+  /** Route one ready dispatch: browser → claimable `pending`; agentHost → push. */
   private async dispatchOne(d: DispatchLite): Promise<void> {
     if (d.runtime === 'browser') {
       await this.store.updateDispatch(d.id, { status: 'pending' });
@@ -376,7 +376,7 @@ export class SwimlaneCoordinator {
     if (!this.dispatcher) {
       await this.store.updateDispatch(d.id, {
         status: 'failed',
-        error: `No claw dispatcher configured for runtime '${d.runtime}'.`,
+        error: `No agentHost dispatcher configured for runtime '${d.runtime}'.`,
         completedAt: true,
       });
       return;

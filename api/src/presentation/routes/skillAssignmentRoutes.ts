@@ -3,13 +3,13 @@
  *
  * Tenant-level:
  *   GET  /api/skill-assignments/tenant         – list skills assigned to the current tenant
- *   POST /api/skill-assignments/tenant         – assign a marketplace skill to the tenant (all claws)
+ *   POST /api/skill-assignments/tenant         – assign a marketplace skill to the tenant (all agentHosts)
  *   DELETE /api/skill-assignments/tenant/:slug – remove tenant-level assignment
  *
- * Claw-level:
- *   GET  /api/skill-assignments/claws/:clawId         – list skills assigned to a specific claw
- *   POST /api/skill-assignments/claws/:clawId         – assign a skill to a specific claw
- *   DELETE /api/skill-assignments/claws/:clawId/:slug – remove claw-level assignment
+ * AgentHost-level:
+ *   GET  /api/skill-assignments/agentHosts/:agentHostId         – list skills assigned to a specific agentHost
+ *   POST /api/skill-assignments/agentHosts/:agentHostId         – assign a skill to a specific agentHost
+ *   DELETE /api/skill-assignments/agentHosts/:agentHostId/:slug – remove agentHost-level assignment
  *
  * All routes require a tenant-scoped JWT.
  * Write routes require at least MANAGER role.
@@ -19,8 +19,8 @@ import { eq, and } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   tenantSkillAssignments,
-  clawSkillAssignments,
-  coderclawInstances,
+  agentHostSkillAssignments,
+  agentHosts,
   marketplaceSkills,
 } from '../../infrastructure/database/schema';
 import { TenantRole } from '../../domain/shared/types';
@@ -89,51 +89,51 @@ export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
     return c.body(null, 204);
   });
 
-  // ── Claw-level ────────────────────────────────────────────────────────────
+  // ── AgentHost-level ────────────────────────────────────────────────────────────
 
-  // GET /api/skill-assignments/claws/:clawId
-  router.get('/claws/:clawId', async (c) => {
+  // GET /api/skill-assignments/agentHosts/:agentHostId
+  router.get('/agentHosts/:agentHostId', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const clawId   = Number(c.req.param('clawId'));
+    const agentHostId   = Number(c.req.param('agentHostId'));
 
-    // Ensure claw belongs to this tenant
-    const [claw] = await db
-      .select({ id: coderclawInstances.id })
-      .from(coderclawInstances)
-      .where(and(eq(coderclawInstances.id, clawId), eq(coderclawInstances.tenantId, tenantId)))
+    // Ensure agentHost belongs to this tenant
+    const [agentHost] = await db
+      .select({ id: agentHosts.id })
+      .from(agentHosts)
+      .where(and(eq(agentHosts.id, agentHostId), eq(agentHosts.tenantId, tenantId)))
       .limit(1);
-    if (!claw) return c.json({ error: 'Claw not found' }, 404);
+    if (!agentHost) return c.json({ error: 'AgentHost not found' }, 404);
 
     const rows = await db
       .select({
-        skillSlug:  clawSkillAssignments.skillSlug,
-        assignedBy: clawSkillAssignments.assignedBy,
-        assignedAt: clawSkillAssignments.assignedAt,
+        skillSlug:  agentHostSkillAssignments.skillSlug,
+        assignedBy: agentHostSkillAssignments.assignedBy,
+        assignedAt: agentHostSkillAssignments.assignedAt,
         skillName:  marketplaceSkills.name,
         skillDesc:  marketplaceSkills.description,
         skillIcon:  marketplaceSkills.iconUrl,
         skillVer:   marketplaceSkills.version,
       })
-      .from(clawSkillAssignments)
-      .leftJoin(marketplaceSkills, eq(clawSkillAssignments.skillSlug, marketplaceSkills.slug))
-      .where(eq(clawSkillAssignments.clawId, clawId));
-    return c.json({ clawId, assignments: rows });
+      .from(agentHostSkillAssignments)
+      .leftJoin(marketplaceSkills, eq(agentHostSkillAssignments.skillSlug, marketplaceSkills.slug))
+      .where(eq(agentHostSkillAssignments.agentHostId, agentHostId));
+    return c.json({ agentHostId, assignments: rows });
   });
 
-  // POST /api/skill-assignments/claws/:clawId  body: { skillSlug }
-  router.post('/claws/:clawId', requireRole(TenantRole.MANAGER), async (c) => {
+  // POST /api/skill-assignments/agentHosts/:agentHostId  body: { skillSlug }
+  router.post('/agentHosts/:agentHostId', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId   = c.get('userId') as string;
-    const clawId   = Number(c.req.param('clawId'));
+    const agentHostId   = Number(c.req.param('agentHostId'));
     const body     = await c.req.json<{ skillSlug: string }>();
     if (!body.skillSlug) return c.json({ error: 'skillSlug is required' }, 400);
 
-    const [claw] = await db
-      .select({ id: coderclawInstances.id })
-      .from(coderclawInstances)
-      .where(and(eq(coderclawInstances.id, clawId), eq(coderclawInstances.tenantId, tenantId)))
+    const [agentHost] = await db
+      .select({ id: agentHosts.id })
+      .from(agentHosts)
+      .where(and(eq(agentHosts.id, agentHostId), eq(agentHosts.tenantId, tenantId)))
       .limit(1);
-    if (!claw) return c.json({ error: 'Claw not found' }, 404);
+    if (!agentHost) return c.json({ error: 'AgentHost not found' }, 404);
 
     const [skill] = await db
       .select({ slug: marketplaceSkills.slug })
@@ -143,24 +143,24 @@ export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
     if (!skill) return c.json({ error: 'Skill not found' }, 404);
 
     await db
-      .insert(clawSkillAssignments)
-      .values({ clawId, tenantId, skillSlug: body.skillSlug, assignedBy: userId })
+      .insert(agentHostSkillAssignments)
+      .values({ agentHostId, tenantId, skillSlug: body.skillSlug, assignedBy: userId })
       .onConflictDoNothing();
 
-    return c.json({ ok: true, clawId, skillSlug: body.skillSlug }, 201);
+    return c.json({ ok: true, agentHostId, skillSlug: body.skillSlug }, 201);
   });
 
-  // DELETE /api/skill-assignments/claws/:clawId/:slug
-  router.delete('/claws/:clawId/:slug', requireRole(TenantRole.MANAGER), async (c) => {
+  // DELETE /api/skill-assignments/agentHosts/:agentHostId/:slug
+  router.delete('/agentHosts/:agentHostId/:slug', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId  = c.get('tenantId') as number;
-    const clawId    = Number(c.req.param('clawId'));
+    const agentHostId    = Number(c.req.param('agentHostId'));
     const skillSlug = c.req.param('slug');
     await db
-      .delete(clawSkillAssignments)
+      .delete(agentHostSkillAssignments)
       .where(and(
-        eq(clawSkillAssignments.clawId, clawId),
-        eq(clawSkillAssignments.tenantId, tenantId),
-        eq(clawSkillAssignments.skillSlug, skillSlug),
+        eq(agentHostSkillAssignments.agentHostId, agentHostId),
+        eq(agentHostSkillAssignments.tenantId, tenantId),
+        eq(agentHostSkillAssignments.skillSlug, skillSlug),
       ));
     return c.body(null, 204);
   });

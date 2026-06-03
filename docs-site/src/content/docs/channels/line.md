@@ -1,7 +1,7 @@
 ---
 summary: "LINE Messaging API plugin setup, config, and usage"
 read_when:
-  - You want to connect CoderClaw to LINE
+  - You want to connect BuilderForce Agents to LINE
   - You need LINE webhook + credential setup
   - You want LINE-specific message options
 title: LINE
@@ -9,7 +9,7 @@ title: LINE
 
 # LINE (plugin)
 
-LINE connects to CoderClaw via the LINE Messaging API. The plugin runs as a webhook
+LINE connects to BuilderForce Agents via the LINE Messaging API. The plugin runs as a webhook
 receiver on the gateway and uses your channel access token + channel secret for
 authentication.
 
@@ -22,13 +22,13 @@ are not supported.
 Install the LINE plugin:
 
 ```bash
-coderclaw plugins install @coderclaw/line
+builderforce plugins install @builderforce/line
 ```
 
 Local checkout (when running from a git repo):
 
 ```bash
-coderclaw plugins install ./extensions/line
+builderforce plugins install ./extensions/line
 ```
 
 ## Setup
@@ -107,8 +107,8 @@ Direct messages default to pairing. Unknown senders get a pairing code and their
 messages are ignored until approved.
 
 ```bash
-coderclaw pairing list line
-coderclaw pairing approve line <CODE>
+builderforce pairing list line
+builderforce pairing approve line <CODE>
 ```
 
 Allowlists and policies:

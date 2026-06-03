@@ -13,15 +13,15 @@ Status: experimental. Direct messages only; groups coming soon per Zalo docs.
 
 Zalo ships as a plugin and is not bundled with the core install.
 
-- Install via CLI: `coderclaw plugins install @coderclaw/zalo`
+- Install via CLI: `builderforce plugins install @builderforce/zalo`
 - Or select **Zalo** during onboarding and confirm the install prompt
 - Details: [Plugins](/tools/plugin)
 
 ## Quick setup (beginner)
 
 1. Install the Zalo plugin:
-   - From a source checkout: `coderclaw plugins install ./extensions/zalo`
-   - From npm (if published): `coderclaw plugins install @coderclaw/zalo`
+   - From a source checkout: `builderforce plugins install ./extensions/zalo`
+   - From npm (if published): `builderforce plugins install @builderforce/zalo`
    - Or pick **Zalo** in onboarding and confirm the install prompt
 2. Set the token:
    - Env: `ZALO_BOT_TOKEN=...`
@@ -102,8 +102,8 @@ Multi-account support: use `channels.zalo.accounts` with per-account tokens and 
 
 - Default: `channels.zalo.dmPolicy = "pairing"`. Unknown senders receive a pairing code; messages are ignored until approved (codes expire after 1 hour).
 - Approve via:
-  - `coderclaw pairing list zalo`
-  - `coderclaw pairing approve zalo <CODE>`
+  - `builderforce pairing list zalo`
+  - `builderforce pairing approve zalo <CODE>`
 - Pairing is the default token exchange. Details: [Pairing](/channels/pairing)
 - `channels.zalo.allowFrom` accepts numeric user IDs (no username lookup available).
 
@@ -141,15 +141,15 @@ Multi-account support: use `channels.zalo.accounts` with per-account tokens and 
 ## Delivery targets (CLI/cron)
 
 - Use a chat id as the target.
-- Example: `coderclaw message send --channel zalo --target 123456789 --message "hi"`.
+- Example: `builderforce message send --channel zalo --target 123456789 --message "hi"`.
 
 ## Troubleshooting
 
 **Bot doesn't respond:**
 
-- Check that the token is valid: `coderclaw channels status --probe`
+- Check that the token is valid: `builderforce channels status --probe`
 - Verify the sender is approved (pairing or allowFrom)
-- Check gateway logs: `coderclaw logs --follow`
+- Check gateway logs: `builderforce logs --follow`
 
 **Webhook not receiving events:**
 

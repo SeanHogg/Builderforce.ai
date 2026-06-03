@@ -116,7 +116,7 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
     throw new UnauthorizedError('This endpoint requires a workspace token; please select a workspace first');
   }
 
-  if (!payload.sub.startsWith('claw:')) {
+  if (!payload.sub.startsWith('agentHost:')) {
     const db = buildDatabase(c.env);
     const terms = await checkTermsAcceptance(db, payload.sub);
     if (terms.needsAcceptance) {

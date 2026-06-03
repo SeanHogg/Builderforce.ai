@@ -44,8 +44,8 @@ export class CclQuickstart extends LitElement {
       beta: "# Living on the edge. Bugs are features you found first. 🦞",
     },
     quickInstall: {
-      stable: "# Install CoderClaw",
-      beta: "# Install CoderClaw (beta) — Fresh from the lab 🧪",
+      stable: "# Install BuilderForce Agents",
+      beta: "# Install BuilderForce Agents (beta) — Fresh from the lab 🧪",
     },
     quickOnboard: {
       stable: "# Meet your lobster",
@@ -53,10 +53,10 @@ export class CclQuickstart extends LitElement {
     },
   };
 
-  private readonly windowsPsCmd = "iwr -useb https://coderclaw.ai/install.ps1 | iex";
-  private readonly windowsPsBetaCmd = "& ([scriptblock]::Create((iwr -useb https://coderclaw.ai/install.ps1))) -Tag beta";
-  private readonly windowsCmdCmd = "curl -fsSL https://coderclaw.ai/install.cmd -o install.cmd && install.cmd && del install.cmd";
-  private readonly windowsCmdBetaCmd = "curl -fsSL https://coderclaw.ai/install.cmd -o install.cmd && install.cmd --tag beta && del install.cmd";
+  private readonly windowsPsCmd = "iwr -useb https://builderforce.ai/install.ps1 | iex";
+  private readonly windowsPsBetaCmd = "& ([scriptblock]::Create((iwr -useb https://builderforce.ai/install.ps1))) -Tag beta";
+  private readonly windowsCmdCmd = "curl -fsSL https://builderforce.ai/install.cmd -o install.cmd && install.cmd && del install.cmd";
+  private readonly windowsCmdBetaCmd = "curl -fsSL https://builderforce.ai/install.cmd -o install.cmd && install.cmd --tag beta && del install.cmd";
 
   private get currentOs(): Os {
     const isWindows = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform === "Windows"
@@ -85,8 +85,8 @@ export class CclQuickstart extends LitElement {
   private get onelinerCommand() {
     if (this.selectedOs === "unix") {
       return this.currentBeta
-        ? "curl -fsSL https://coderclaw.ai/install.sh | bash -s -- --beta"
-        : "curl -fsSL https://coderclaw.ai/install.sh | bash";
+        ? "curl -fsSL https://builderforce.ai/install.sh | bash -s -- --beta"
+        : "curl -fsSL https://builderforce.ai/install.sh | bash";
     }
     if (this.currentWinShell === "cmd") {
       return this.currentBeta ? this.windowsCmdBetaCmd : this.windowsCmdCmd;
@@ -97,8 +97,8 @@ export class CclQuickstart extends LitElement {
   private get quickInstallCommand() {
     const betaSuffix = this.currentBeta ? "@beta" : "";
     return this.currentPm === "npm"
-      ? `npm i -g coderclaw${betaSuffix}`
-      : `pnpm add -g coderclaw${betaSuffix}`;
+      ? `npm i -g @seanhogg/builderforce-agents${betaSuffix}`
+      : `pnpm add -g @seanhogg/builderforce-agents${betaSuffix}`;
   }
 
   private async copyCommand(kind: string, command: string) {
@@ -152,7 +152,7 @@ export class CclQuickstart extends LitElement {
     return html`
       <section class="quickstart quickstart-skin">
         <h2 class="section-title">
-          <span class="claw-accent">⟩</span> Quick Start
+          <span class="agentHost-accent">⟩</span> Quick Start
         </h2>
         <div class="code-block">
           <div class="code-header">
@@ -221,8 +221,8 @@ export class CclQuickstart extends LitElement {
             <div class="code-line comment">${this.comments.quickOnboard[this.betaMode]}</div>
             <div class="code-line cmd">
               <span class="code-prompt">$</span>
-              <span>coderclaw onboard</span>
-              ${this.renderCopyButton("onboard", "coderclaw onboard")}
+              <span>builderforce onboard</span>
+              ${this.renderCopyButton("onboard", "builderforce onboard")}
             </div>
           </div>
 
@@ -231,27 +231,27 @@ export class CclQuickstart extends LitElement {
               <div class="code-line comment"># For those who read source code for fun</div>
               <div class="code-line cmd">
                 <span class="code-prompt">$</span>
-                <span class="os-cmd-hackable">curl -fsSL https://coderclaw.ai/install.sh | bash -s -- --install-method git</span>
-                ${this.renderCopyButton("hackable-installer", "curl -fsSL https://coderclaw.ai/install.sh | bash -s -- --install-method git")}
+                <span class="os-cmd-hackable">curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git</span>
+                ${this.renderCopyButton("hackable-installer", "curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git")}
               </div>
             </div>
             <div style=${this.currentHackable === "pnpm" ? "display:block" : "display:none"}>
               <div class="code-line comment"># You clearly know what you're doing</div>
               <div class="code-line cmd">
                 <span class="code-prompt">$</span>
-                <span>git clone https://github.com/seanhogg/coderclaw.git</span>
-                ${this.renderCopyButton("clone", "git clone https://github.com/seanhogg/coderclaw.git")}
+                <span>git clone https://github.com/seanhogg/agents.git</span>
+                ${this.renderCopyButton("clone", "git clone https://github.com/seanhogg/agents.git")}
               </div>
               <div class="code-line cmd">
                 <span class="code-prompt">$</span>
-                <span>cd coderclaw && pnpm install && pnpm run build</span>
-                ${this.renderCopyButton("build", "cd coderclaw && pnpm install && pnpm run build")}
+                <span>cd builderforce-agents && pnpm install && pnpm run build</span>
+                ${this.renderCopyButton("build", "cd builderforce-agents && pnpm install && pnpm run build")}
               </div>
               <div class="code-line comment"># You built it, now meet it</div>
               <div class="code-line cmd">
                 <span class="code-prompt">$</span>
-                <span>pnpm run coderclaw onboard</span>
-                ${this.renderCopyButton("hackable-onboard", "node coderclaw.mjs onboard")}
+                <span>pnpm run builderforce onboard</span>
+                ${this.renderCopyButton("hackable-onboard", "node builderforce.mjs onboard")}
               </div>
             </div>
           </div>
@@ -262,7 +262,7 @@ export class CclQuickstart extends LitElement {
                 <span class="macos-tagline">Companion App (Beta)</span>
                 <span class="macos-subtitle">Menubar access to your lobster. Works great alongside the CLI.</span>
               </div>
-              <a href="https://github.com/SeanHogg/coderClaw/releases/latest" class="macos-download-btn" target="_blank" rel="noopener">
+              <a href="https://github.com/SeanHogg/BuilderForce Agents/releases/latest" class="macos-download-btn" target="_blank" rel="noopener">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                   <polyline points="7 10 12 15 17 10"/>

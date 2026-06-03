@@ -1,12 +1,12 @@
 ---
-summary: "CLI reference for `coderclaw logs` (tail gateway logs via RPC)"
+summary: "CLI reference for `builderforce logs` (tail gateway logs via RPC)"
 read_when:
   - You need to tail Gateway logs remotely (without SSH)
   - You want JSON log lines for tooling
 title: "logs"
 ---
 
-# `coderclaw logs`
+# `builderforce logs`
 
 Tail Gateway file logs over RPC (works in remote mode).
 
@@ -17,12 +17,12 @@ Related:
 ## Examples
 
 ```bash
-coderclaw logs
-coderclaw logs --follow
-coderclaw logs --json
-coderclaw logs --limit 500
-coderclaw logs --local-time
-coderclaw logs --follow --local-time
+builderforce logs
+builderforce logs --follow
+builderforce logs --json
+builderforce logs --limit 500
+builderforce logs --local-time
+builderforce logs --follow --local-time
 ```
 
 Use `--local-time` to render timestamps in your local timezone.

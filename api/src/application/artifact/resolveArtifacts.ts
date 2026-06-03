@@ -1,7 +1,7 @@
 /**
  * Resolves the effective set of artifacts (skills, personas, content) for a
  * given execution context by querying all scope levels and merging with
- * precedence: task > project > claw > tenant.
+ * precedence: task > project > agentHost > tenant.
  *
  * Higher-precedence scopes *add* to the set; they don't remove lower-scope
  * assignments. This gives users a union of everything assigned across the
@@ -23,7 +23,7 @@ import type { Db } from '../../infrastructure/database/connection';
 export type ResolutionContext = {
   tenantId:   number;
   taskId?:    number;
-  clawId?:    number;
+  agentHostId?:    number;
   projectId?: number;
   /** project_agents.id — when executing as a specific agent, fold in its per-agent assignments. */
   agentAssignmentId?: number;
@@ -50,12 +50,12 @@ export async function resolveArtifacts(
     ),
   );
 
-  // Claw-level
-  if (ctx.clawId != null) {
+  // AgentHost-level
+  if (ctx.agentHostId != null) {
     scopeConditions.push(
       and(
-        eq(artifactAssignments.scope, AssignmentScope.CLAW),
-        eq(artifactAssignments.scopeId, ctx.clawId),
+        eq(artifactAssignments.scope, AssignmentScope.HOST),
+        eq(artifactAssignments.scopeId, ctx.agentHostId),
       ),
     );
   }

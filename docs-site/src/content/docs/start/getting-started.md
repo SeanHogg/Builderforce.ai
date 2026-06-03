@@ -1,5 +1,5 @@
 ---
-summary: "Get CoderClaw installed and run your first chat in minutes."
+summary: "Get BuilderForce Agents installed and run your first chat in minutes."
 read_when:
   - First time setup from zero
   - You want the fastest path to a working chat
@@ -11,9 +11,9 @@ title: "Getting Started"
 Goal: go from zero to a first working chat with minimal setup.
 
 <Info>
-Fastest chat: open the Control UI (no channel setup needed). Run `coderclaw dashboard`
+Fastest chat: open the Control UI (no channel setup needed). Run `builderforce dashboard`
 and chat in the browser, or open `http://127.0.0.1:18789/` on the
-<Tooltip headline="Gateway host" tip="The machine running the CoderClaw gateway service.">gateway host</Tooltip>.
+<Tooltip headline="Gateway host" tip="The machine running the BuilderForce Agents gateway service.">gateway host</Tooltip>.
 Docs: [Dashboard](/web/dashboard) and [Control UI](/web/control-ui).
 </Info>
 
@@ -28,11 +28,11 @@ Check your Node version with `node --version` if you are unsure.
 ## Quick setup (CLI)
 
 <Steps>
-  <Step title="Install CoderClaw (recommended)">
+  <Step title="Install BuilderForce Agents (recommended)">
     <Tabs>
       <Tab title="macOS/Linux">
         ```bash
-        curl -fsSL https://coderclaw.ai/install.sh | bash
+        curl -fsSL https://builderforce.ai/install.sh | bash
         ```
         <img
   src="/assets/install-script.svg"
@@ -42,20 +42,20 @@ Check your Node version with `node --version` if you are unsure.
       </Tab>
       <Tab title="Windows (PowerShell)">
         ```powershell
-        iwr -useb https://coderclaw.ai/install.ps1 | iex
+        iwr -useb https://builderforce.ai/install.ps1 | iex
         ```
       </Tab>
     </Tabs>
 
     <Note>
     Other install methods and requirements: [Install](/install).
-    Built on [CoderClaw](https://github.com/SeanHogg/coderClaw)'s multi-channel gateway with Phase 2 enhancements.
+    Built on [BuilderForce Agents](https://github.com/SeanHogg/Builderforce.ai)'s multi-channel gateway with Phase 2 enhancements.
     </Note>
 
   </Step>
   <Step title="Run the onboarding wizard">
     ```bash
-    coderclaw onboard --install-daemon
+    builderforce onboard --install-daemon
     ```
 
     The wizard configures auth, gateway settings, and optional channels.
@@ -66,13 +66,13 @@ Check your Node version with `node --version` if you are unsure.
     If you installed the service, it should already be running:
 
     ```bash
-    coderclaw gateway status
+    builderforce gateway status
     ```
 
   </Step>
   <Step title="Open the Control UI">
     ```bash
-    coderclaw dashboard
+    builderforce dashboard
     ```
   </Step>
 </Steps>
@@ -88,7 +88,7 @@ If the Control UI loads, your Gateway is ready for use.
     Useful for quick tests or troubleshooting.
 
     ```bash
-    coderclaw gateway --port 18789
+    builderforce gateway --port 18789
     ```
 
   </Accordion>
@@ -96,7 +96,7 @@ If the Control UI loads, your Gateway is ready for use.
     Requires a configured channel.
 
     ```bash
-    coderclaw message send --target +15555550123 --message "Hello from CoderClaw"
+    builderforce message send --target +15555550123 --message "Hello from BuilderForce Agents"
     ```
 
   </Accordion>
@@ -104,29 +104,29 @@ If the Control UI loads, your Gateway is ready for use.
 
 ## Useful environment variables
 
-If you run CoderClaw as a service account or want custom config/state locations:
+If you run BuilderForce Agents as a service account or want custom config/state locations:
 
-- `CODERCLAW_HOME` sets the home directory used for internal path resolution.
-- `CODERCLAW_STATE_DIR` overrides the state directory.
-- `CODERCLAW_CONFIG_PATH` overrides the config file path.
+- `BUILDERFORCE_AGENTS_HOME` sets the home directory used for internal path resolution.
+- `BUILDERFORCE_AGENTS_STATE_DIR` overrides the state directory.
+- `BUILDERFORCE_AGENTS_CONFIG_PATH` overrides the config file path.
 
 Full environment variable reference: [Environment vars](/help/environment).
 
-## CoderClaw dev workflows (quick start)
+## BuilderForce Agents dev workflows (quick start)
 
-Once your Gateway is running, initialize CoderClaw in any project and start running multi-agent workflows.
+Once your Gateway is running, initialize BuilderForce Agents in any project and start running multi-agent workflows.
 
 <Steps>
   <Step title="Initialize your project">
     ```bash
     cd my-project
-    coderclaw init
+    builderforce init
     ```
 
-    This creates a `.coderClaw/` directory with persistent project context:
+    This creates a `.builderforce/` directory with persistent project context:
 
     ```
-    .coderClaw/
+    .builderforce/
     ├── context.yaml    # project metadata (languages, frameworks, dependencies)
     ├── architecture.md # design docs
     ├── rules.yaml      # coding standards
@@ -141,20 +141,20 @@ Once your Gateway is running, initialize CoderClaw in any project and start runn
     Run the **Planning workflow** before writing any code. It produces a PRD, architecture spec, and ordered task list.
 
     ```bash
-    coderclaw agent --message "Plan a real-time collaboration feature" --thinking high
+    builderforce agent --message "Plan a real-time collaboration feature" --thinking high
     ```
 
   </Step>
   <Step title="Build with multi-agent workflows">
     ```bash
     # Feature: Architecture Advisor → Code Creator → Test Generator + Code Reviewer
-    coderclaw agent --message "Implement the authentication module" --thinking high
+    builderforce agent --message "Implement the authentication module" --thinking high
 
     # Bug fix: Bug Analyzer → Code Creator → Test Generator + Code Reviewer
-    coderclaw agent --message "Fix the memory leak in the parser" --thinking high
+    builderforce agent --message "Fix the memory leak in the parser" --thinking high
 
     # Adversarial review (built-in critique pass):
-    coderclaw agent --message "Adversarially review the API design" --thinking high
+    builderforce agent --message "Adversarially review the API design" --thinking high
     ```
 
   </Step>
@@ -162,15 +162,15 @@ Once your Gateway is running, initialize CoderClaw in any project and start runn
     At the end of each session, save a handoff so the next one resumes instantly.
 
     ```bash
-    coderclaw agent --message "Save a session handoff for today's work" --thinking low
+    builderforce agent --message "Save a session handoff for today's work" --thinking low
     ```
 
-    CoderClaw writes a structured YAML to `.coderClaw/sessions/` covering decisions, next steps, and open questions. The next session loads it automatically.
+    BuilderForce Agents writes a structured YAML to `.builderforce/sessions/` covering decisions, next steps, and open questions. The next session loads it automatically.
 
   </Step>
 </Steps>
 
-Full workflow reference: [CoderClaw Workflows](/coderclaw-workflows)
+Full workflow reference: [BuilderForce Agents Workflows](/agents-workflows)
 
 ## Go deeper
 
@@ -191,7 +191,7 @@ Full workflow reference: [CoderClaw Workflows](/coderclaw-workflows)
 
 ## Next steps
 
-- CoderClaw Phase 2 Features: [Phase 2 Documentation](/phase2)
+- BuilderForce Agents Phase 2 Features: [Phase 2 Documentation](/phase2)
 - DM safety and approvals: [Pairing](/channels/pairing)
 - Connect more channels: [Channels](/channels)
 - Advanced workflows and from source: [Setup](/start/setup)

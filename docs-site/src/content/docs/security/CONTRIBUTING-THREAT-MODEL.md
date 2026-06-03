@@ -1,27 +1,27 @@
 ---
-title: "Contributing to the CoderClaw Threat Model"
+title: "Contributing to the BuilderForce Agents Threat Model"
 ---
 
-# Contributing to the CoderClaw Threat Model
+# Contributing to the BuilderForce Agents Threat Model
 
-Thanks for helping make CoderClaw more secure. This threat model is a living document and we welcome contributions from anyone - you don't need to be a security expert.
+Thanks for helping make BuilderForce Agents more secure. This threat model is a living document and we welcome contributions from anyone - you don't need to be a security expert.
 
 ## Ways to Contribute
 
 ### Add a Threat
 
-Spotted an attack vector or risk we haven't covered? Open an issue on [SeanHogg/coderClaw-trust](https://github.com/SeanHogg/coderClaw-trust/issues) and describe it in your own words. You don't need to know any frameworks or fill in every field - just describe the scenario.
+Spotted an attack vector or risk we haven't covered? Open an issue on [SeanHogg/Builderforce.ai-trust](https://github.com/SeanHogg/Builderforce.ai-trust/issues) and describe it in your own words. You don't need to know any frameworks or fill in every field - just describe the scenario.
 
 **Helpful to include (but not required):**
 
 - The attack scenario and how it could be exploited
-- Which parts of CoderClaw are affected (CLI, gateway, channels, ClawHub, MCP servers, etc.)
+- Which parts of BuilderForce Agents are affected (CLI, gateway, channels, AgentHub, MCP servers, etc.)
 - How severe you think it is (low / medium / high / critical)
 - Any links to related research, CVEs, or real-world examples
 
 We'll handle the ATLAS mapping, threat IDs, and risk assessment during review. If you want to include those details, great - but it's not expected.
 
-> **This is for adding to the threat model, not reporting live vulnerabilities.** If you've found an exploitable vulnerability, see our [Trust page](https://coderclaw.ai/trust/) for responsible disclosure instructions.
+> **This is for adding to the threat model, not reporting live vulnerabilities.** If you've found an exploitable vulnerability, see our [Trust page](https://builderforce.ai/trust/) for responsible disclosure instructions.
 
 ### Suggest a Mitigation
 
@@ -81,14 +81,14 @@ If you're unsure about the risk level, just describe the impact and we'll assess
 - [ATLAS Website](https://atlas.mitre.org/)
 - [ATLAS Techniques](https://atlas.mitre.org/techniques/)
 - [ATLAS Case Studies](https://atlas.mitre.org/studies/)
-- [CoderClaw Threat Model](./THREAT-MODEL-ATLAS.md)
+- [BuilderForce Agents Threat Model](./THREAT-MODEL-ATLAS.md)
 
 ## Contact
 
-- **Security vulnerabilities:** See our [Trust page](https://coderclaw.ai/trust/) for reporting instructions
-- **Threat model questions:** Open an issue on [SeanHogg/coderClaw-trust](https://github.com/SeanHogg/coderClaw-trust/issues)
+- **Security vulnerabilities:** See our [Trust page](https://builderforce.ai/trust/) for reporting instructions
+- **Threat model questions:** Open an issue on [SeanHogg/Builderforce.ai-trust](https://github.com/SeanHogg/Builderforce.ai-trust/issues)
 - **General chat:** Discord #security channel
 
 ## Recognition
 
-Contributors to the threat model are recognized in the threat model acknowledgments, release notes, and the CoderClaw security hall of fame for significant contributions.
+Contributors to the threat model are recognized in the threat model acknowledgments, release notes, and the BuilderForce Agents security hall of fame for significant contributions.

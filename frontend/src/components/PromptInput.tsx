@@ -8,9 +8,9 @@ export interface PromptInputProps {
   onSubmit: () => void;
   placeholder?: string;
   disabled?: boolean;
-  /** Button label when enabled (e.g. "Send" or "Send to Claw"). */
+  /** Button label when enabled (e.g. "Send" or "Send to AgentHost"). */
   submitLabel?: string;
-  /** Optional link below the input (e.g. "Manage workforce / claws"). */
+  /** Optional link below the input (e.g. "Manage workforce / agentHosts"). */
   secondaryLink?: { label: string; href: string };
   /** Number of visible rows for the input (1 = single line, 2 = compact multiline). Default 1. */
   rows?: number;

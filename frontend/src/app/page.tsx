@@ -7,10 +7,10 @@ import { useState } from 'react';
 import JsonLd from '@/components/JsonLd';
 import MarketingHeader from '@/components/MarketingHeader';
 import { homepageSchema } from '@/lib/structured-data';
-import { HOMEPAGE_FAQ } from '@/lib/content';
+import { HOMEPAGE_FAQ, MARKETING_NAV_LINKS, FOOTER_LINKS } from '@/lib/content';
 import { savePendingPrompt } from '@/lib/brain';
 
-// register CoderClaw quickstart web component
+// register BuilderForce Agents quickstart web component
 import '../components/ccl-quickstart';
 
 const HERO_PROMPT_EXAMPLES = [
@@ -74,7 +74,7 @@ export default function LandingPage() {
           gap: 0;
         }
 
-        /* Prompt + mascot row. The prompt is the left column; the claw mascot
+        /* Prompt + mascot row. The prompt is the left column; the agentHost mascot
            sits in a right column on tablet/desktop and is hidden on mobile. */
         .lp-prompt-row {
           display: flex;
@@ -93,7 +93,7 @@ export default function LandingPage() {
           max-width: 640px;
         }
 
-        /* Claw mascot — hidden on mobile, shown as the right column ≥820px */
+        /* AgentHost mascot — hidden on mobile, shown as the right column ≥820px */
         .lp-hero-mascot {
           display: none;
           width: clamp(180px, 22vw, 260px);
@@ -513,16 +513,7 @@ export default function LandingPage() {
       <div className="lp">
 
         {/* ── Nav ── */}
-        <MarketingHeader
-          links={[
-            { label: 'Workforce', href: '/marketplace' },
-            { label: 'CoderClaw', href: '/coderclaw' },
-            { label: 'Blog', href: '/blog' },
-            { label: 'Features', href: '#features' },
-            { label: 'Pricing', href: '#pricing' },
-            { label: 'Sign In', href: '/login' },
-          ]}
-        />
+        <MarketingHeader links={MARKETING_NAV_LINKS} />
 
         <main>
         {/* ── Hero ── */}
@@ -543,7 +534,7 @@ export default function LandingPage() {
             an audit trail. Tell it what you need; it gets to work.
           </p>
 
-          {/* Prompt input (primary action) + claw mascot as a right-hand
+          {/* Prompt input (primary action) + agentHost mascot as a right-hand
               column on tablet/desktop; the mascot is hidden on mobile. */}
           <div className="lp-prompt-row">
             <div className="lp-prompt-col">
@@ -573,7 +564,7 @@ export default function LandingPage() {
             </div>
 
             <Image
-              src="/claw.png"
+              src="/agentHost.png"
               alt="Builderforce AI"
               width={240}
               height={240}
@@ -615,7 +606,7 @@ export default function LandingPage() {
         <section className="lp-section" style={{ background: 'var(--surface-card-strong)' }}>
           <div className="lp-features">
             <h2 className="section-title">
-              <span className="claw-accent">⟩</span> Builderforce vs. Conventional Workflows
+              <span className="agentHost-accent">⟩</span> Builderforce vs. Conventional Workflows
             </h2>
             <p style={{maxWidth: '800px',margin:'0 auto 32px',color:'var(--text-secondary)'}}>
               Purpose‑built for AI agents from the ground up — not another cloud notebook or plugin.
@@ -656,7 +647,7 @@ export default function LandingPage() {
         <section className="lp-section">
           <div className="lp-features">
             <h2 className="section-title">
-              <span className="claw-accent">⟩</span> Up and running in three steps
+              <span className="agentHost-accent">⟩</span> Up and running in three steps
             </h2>
             <div className="lp-grid" style={{gap:'24px'}}>
               {[
@@ -677,7 +668,7 @@ export default function LandingPage() {
         {/* ── Features ── */}
         <section className="lp-features" id="features">
           <h2 className="section-title">
-            <span className="claw-accent">⟩</span> Your AI executive team
+            <span className="agentHost-accent">⟩</span> Your AI executive team
           </h2>
           <div className="lp-grid">
             {[
@@ -706,7 +697,7 @@ export default function LandingPage() {
         <section className="lp-section" id="pricing" style={{background:'var(--surface-2)'}}>
           <div className="lp-features">
             <h2 className="section-title">
-              <span className="claw-accent">⟩</span> Pricing
+              <span className="agentHost-accent">⟩</span> Pricing
             </h2>
             <div className="lp-grid" style={{gap:'18px',marginTop:'24px'}}>
               {[
@@ -729,7 +720,7 @@ export default function LandingPage() {
         <section className="lp-section">
           <div className="lp-features" style={{maxWidth:'700px',margin:'0 auto'}}>
             <h2 className="section-title">
-              <span className="claw-accent">⟩</span> Stay in the loop
+              <span className="agentHost-accent">⟩</span> Stay in the loop
             </h2>
             <p style={{color:'var(--text-secondary)',marginBottom:'24px'}}>Get updates on new features, agents, and platform improvements. No spam, unsubscribe anytime.</p>
             <form onSubmit={handleNewsletterSubmit} style={{display:'flex',gap:'6px',flexWrap:'wrap',justifyContent:'center'}}>
@@ -759,7 +750,7 @@ export default function LandingPage() {
         <section className="lp-section" style={{background:'var(--surface-card-strong)'}}>
           <div className="lp-features" style={{maxWidth:'800px',margin:'0 auto'}}>
             <h2 className="section-title">
-              <span className="claw-accent">⟩</span> Frequently asked questions
+              <span className="agentHost-accent">⟩</span> Frequently asked questions
             </h2>
             {HOMEPAGE_FAQ.map((faq) => (
               <details key={faq.question}><summary>{faq.question}</summary>
@@ -790,11 +781,9 @@ export default function LandingPage() {
         <footer className="lp-footer">
           <div className="lp-footer-inner">
             <ul className="lp-footer-links">
-              <li><Link href="/marketplace">Workforce Registry</Link></li>
-              <li><Link href="/blog">Blog</Link></li>
-              <li><Link href="/login">Sign In</Link></li>
-              <li><Link href="/register">Get Started</Link></li>
-              <li><Link href="/coderclaw">CoderClaw</Link></li>
+              {FOOTER_LINKS.map((l) => (
+                <li key={l.href}><Link href={l.href}>{l.label}</Link></li>
+              ))}
             </ul>
             <p className="lp-footer-copy">
               Built by{' '}

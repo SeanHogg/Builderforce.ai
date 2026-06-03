@@ -12,7 +12,7 @@ vi.mock('@/lib/builderforceApi', () => {
       create: vi.fn().mockResolvedValue({}),
       delete: vi.fn().mockResolvedValue(undefined),
     },
-    claws: { list: vi.fn().mockResolvedValue([]) },
+    agentHosts: { list: vi.fn().mockResolvedValue([]) },
     runtimeApi: {
       submitExecution: vi.fn().mockResolvedValue({}),
       listRecent: vi.fn().mockResolvedValue([]),

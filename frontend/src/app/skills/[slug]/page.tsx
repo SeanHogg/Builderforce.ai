@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import { artifactAssignments, marketplaceStats, claws, listMarketplaceSkills } from '@/lib/builderforceApi';
+import { artifactAssignments, marketplaceStats, agentHosts, listMarketplaceSkills } from '@/lib/builderforceApi';
 import { BUILTIN_SKILLS, type BuiltinSkill } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
 
@@ -19,7 +19,7 @@ export default function SkillDetailPage() {
   const [skill, setSkill] = useState<BuiltinSkill | { name: string; slug: string; description: string; category?: string; author?: string; version?: string } | null>(null);
   const [stats, setStats] = useState<{ likes: number; installs: number; liked: boolean } | null>(null);
   const [installed, setInstalled] = useState(false);
-  const [hasClaws, setHasClaws] = useState(false);
+  const [hasAgentHosts, setHasAgentHosts] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -28,12 +28,12 @@ export default function SkillDetailPage() {
       setSkill(builtin);
       (async () => {
         try {
-          const [clawList, assignList, s] = await Promise.all([
-            claws.list().catch(() => []),
+          const [agentHostList, assignList, s] = await Promise.all([
+            agentHosts.list().catch(() => []),
             tenantNum ? artifactAssignments.list('tenant', tenantNum, 'skill').catch(() => []) : [],
             marketplaceStats.getStats('skill', [slug]).then((r) => r[slug] ?? { likes: 0, installs: 0, liked: false }),
           ]);
-          setHasClaws(clawList.length > 0);
+          setHasAgentHosts(agentHostList.length > 0);
           setInstalled(assignList.some((a) => a.artifactSlug === slug));
           setStats(s);
         } catch {
@@ -58,12 +58,12 @@ export default function SkillDetailPage() {
             version: apiSkill.version ?? undefined,
           });
         }
-        const [clawList, assignList, s] = await Promise.all([
-          claws.list().catch(() => []),
+        const [agentHostList, assignList, s] = await Promise.all([
+          agentHosts.list().catch(() => []),
           tenantNum ? artifactAssignments.list('tenant', tenantNum, 'skill').catch(() => []) : [],
           marketplaceStats.getStats('skill', [slug]).then((r) => r[slug] ?? { likes: 0, installs: 0, liked: false }),
         ]);
-        setHasClaws(clawList.length > 0);
+        setHasAgentHosts(agentHostList.length > 0);
         setInstalled(assignList.some((a) => a.artifactSlug === slug));
         setStats(s);
       } catch {
@@ -132,8 +132,8 @@ export default function SkillDetailPage() {
           </button>
           <span style={{ fontSize: 13, color: 'var(--muted)' }}>⬇️ {stats?.installs ?? 0} installs</span>
           <ArtifactAssigner artifactType="skill" artifactSlug={skill.slug} artifactName={skill.name} />
-          <button type="button" className={`btn btn-sm ${installed ? 'btn-secondary' : 'btn-primary'}`} disabled={!hasClaws} onClick={toggleInstall}>
-            {!hasClaws ? 'Register claw first' : installed ? 'Uninstall' : 'Install'}
+          <button type="button" className={`btn btn-sm ${installed ? 'btn-secondary' : 'btn-primary'}`} disabled={!hasAgentHosts} onClick={toggleInstall}>
+            {!hasAgentHosts ? 'Register agentHost first' : installed ? 'Uninstall' : 'Install'}
           </button>
         </div>
       </div>

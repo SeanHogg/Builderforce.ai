@@ -1,11 +1,11 @@
-import { ExecutionId, TaskId, AgentId, TenantId, ClawId, ExecutionStatus } from '../shared/types';
+import { ExecutionId, TaskId, AgentId, TenantId, AgentHostId, ExecutionStatus } from '../shared/types';
 import { ValidationError } from '../shared/errors';
 
 export interface ExecutionProps {
   id:           ExecutionId;
   taskId:       TaskId;
   agentId:      AgentId | null;
-  clawId:       ClawId | null;
+  agentHostId:       AgentHostId | null;
   tenantId:     TenantId;
   submittedBy:  string;           // userId
   sessionId:    string | null;
@@ -41,7 +41,7 @@ export class Execution {
   static create(props: {
     taskId:      TaskId;
     agentId:     AgentId | null;
-    clawId:      ClawId | null;
+    agentHostId:      AgentHostId | null;
     tenantId:    TenantId;
     submittedBy: string;
     sessionId:   string | null;
@@ -72,7 +72,7 @@ export class Execution {
   get id():           ExecutionId      { return this.props.id; }
   get taskId():       TaskId           { return this.props.taskId; }
   get agentId():      AgentId | null   { return this.props.agentId; }
-  get clawId():       ClawId | null    { return this.props.clawId; }
+  get agentHostId():       AgentHostId | null    { return this.props.agentHostId; }
   get tenantId():     TenantId         { return this.props.tenantId; }
   get submittedBy():  string           { return this.props.submittedBy; }
   get sessionId():    string | null    { return this.props.sessionId; }

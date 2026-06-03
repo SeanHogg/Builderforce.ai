@@ -92,7 +92,7 @@ export default function RegisterPageClient() {
       }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
-            <Image src="/claw.png" alt="" width={28} height={28} style={{ filter: 'drop-shadow(0 0 8px var(--logo-glow))' }} />
+            <Image src="/agentHost.png" alt="" width={28} height={28} style={{ filter: 'drop-shadow(0 0 8px var(--logo-glow))' }} />
             <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>
               Builderforce.ai
             </span>
@@ -121,7 +121,7 @@ export default function RegisterPageClient() {
         <div style={{ width: '100%', maxWidth: 420 }}>
           {/* Heading */}
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
-            <Image src="/claw.png" alt="" width={56} height={56} className="auth-mascot" style={{ filter: 'drop-shadow(0 0 16px var(--logo-glow))', marginBottom: 16 }} />
+            <Image src="/agentHost.png" alt="" width={56} height={56} className="auth-mascot" style={{ filter: 'drop-shadow(0 0 16px var(--logo-glow))', marginBottom: 16 }} />
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.75rem', fontWeight: 700, marginBottom: 6, color: 'var(--text-primary)' }}>
               Create your account
             </h1>
@@ -315,7 +315,7 @@ export default function RegisterPageClient() {
           .auth-split-grid { grid-template-columns: 1fr 1fr !important; }
           .auth-marketing-panel { display: flex !important; }
         }
-        /* The decorative claw mascot is hidden on mobile to save vertical space. */
+        /* The decorative agentHost mascot is hidden on mobile to save vertical space. */
         @media (max-width: 640px) {
           .auth-mascot { display: none !important; }
         }

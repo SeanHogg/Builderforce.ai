@@ -14,6 +14,7 @@ import {
   BLOG_FAQ,
   DEFINED_TERMS,
   PRICING_PLANS,
+  PRODUCT_SECTIONS,
   type FaqItem,
 } from './content';
 
@@ -206,6 +207,45 @@ export function blogPostSchema(post: {
         { name: 'Home', url: BRAND.url },
         { name: 'Blog', url: `${BRAND.url}/blog` },
         { name: post.title, url: `${BRAND.url}/blog/${post.slug}` },
+      ),
+    ],
+  };
+}
+
+/** Product tour page: SoftwareApplication + ItemList of capabilities + BreadcrumbList */
+export function productSchema() {
+  const surfaces = PRODUCT_SECTIONS.flatMap((s) => s.surfaces);
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      organization,
+      {
+        '@type': 'SoftwareApplication',
+        '@id': `${BRAND.url}/#app`,
+        name: BRAND.name,
+        description:
+          'Builderforce.ai is an AI platform that builds, trains, orchestrates, and governs a custom AI agent workforce — dataset generation, in-browser WebGPU LoRA training, AI evaluation, a skills marketplace, workflow orchestration, a workforce mesh, and full approvals + audit.',
+        url: `${BRAND.url}/product`,
+        applicationCategory: 'DeveloperApplication',
+        operatingSystem: 'Web',
+        author: { '@id': `${BRAND.url}/#organization` },
+        dateModified: BRAND.dateModified,
+        featureList: surfaces.map((f) => f.title),
+      },
+      {
+        '@type': 'ItemList',
+        name: 'Builderforce.ai product capabilities',
+        itemListElement: surfaces.map((f, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          name: f.title,
+          description: f.desc,
+          url: `${BRAND.url}${f.href}`,
+        })),
+      },
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Product', url: `${BRAND.url}/product` },
       ),
     ],
   };

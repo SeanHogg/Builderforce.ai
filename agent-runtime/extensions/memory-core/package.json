@@ -1,0 +1,18 @@
+{
+  "name": "@builderforce/memory-core",
+  "version": "2026.3.21",
+  "private": true,
+  "description": "BuilderForceAgents core memory search plugin",
+  "type": "module",
+  "devDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*"
+  },
+  "peerDependencies": {
+    "@seanhogg/builderforce-agents": ">=2026.1.26"
+  },
+  "builderforce": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

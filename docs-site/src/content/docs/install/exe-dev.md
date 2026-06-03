@@ -1,5 +1,5 @@
 ---
-summary: "Run CoderClaw Gateway on exe.dev (VM + HTTPS proxy) for remote access"
+summary: "Run BuilderForce Agents Gateway on exe.dev (VM + HTTPS proxy) for remote access"
 read_when:
   - You want a cheap always-on Linux host for the Gateway
   - You want remote Control UI access without running your own VPS
@@ -8,13 +8,13 @@ title: "exe.dev"
 
 # exe.dev
 
-Goal: CoderClaw Gateway running on an exe.dev VM, reachable from your laptop via: `https://<vm-name>.exe.xyz`
+Goal: BuilderForce Agents Gateway running on an exe.dev VM, reachable from your laptop via: `https://<vm-name>.exe.xyz`
 
 This page assumes exe.dev's default **exeuntu** image. If you picked a different distro, map packages accordingly.
 
 ## Beginner quick path
 
-1. [https://exe.new/coderclaw](https://exe.new/coderclaw)
+1. [https://exe.new/builderforce](https://exe.new/builderforce)
 2. Fill in your auth key/token as needed
 3. Click on "Agent" next to your VM, and wait...
 4. ???
@@ -27,11 +27,11 @@ This page assumes exe.dev's default **exeuntu** image. If you picked a different
 
 ## Automated Install with Shelley
 
-Shelley, [exe.dev](https://exe.dev)'s agent, can install CoderClaw instantly with our
+Shelley, [exe.dev](https://exe.dev)'s agent, can install BuilderForce Agents instantly with our
 prompt. The prompt used is as below:
 
 ```
-Set up CoderClaw (https://builderforce.ai/docs/install) on this VM. Use the non-interactive and accept-risk flags for coderclaw onboarding. Add the supplied auth or token as needed. Configure nginx to forward from the default port 18789 to the root location on the default enabled site config, making sure to enable Websocket support. Pairing is done by "coderclaw devices list" and "coderclaw device approve <request id>". Make sure the dashboard shows that CoderClaw's health is OK. exe.dev handles forwarding from port 8000 to port 80/443 and HTTPS for us, so the final "reachable" should be <vm-name>.exe.xyz, without port specification.
+Set up BuilderForce Agents (https://builderforce.ai/docs/install) on this VM. Use the non-interactive and accept-risk flags for builderforce onboarding. Add the supplied auth or token as needed. Configure nginx to forward from the default port 18789 to the root location on the default enabled site config, making sure to enable Websocket support. Pairing is done by "builderforce devices list" and "builderforce device approve <request id>". Make sure the dashboard shows that BuilderForce Agents's health is OK. exe.dev handles forwarding from port 8000 to port 80/443 and HTTPS for us, so the final "reachable" should be <vm-name>.exe.xyz, without port specification.
 ```
 
 ## Manual installation
@@ -50,7 +50,7 @@ Then connect:
 ssh <vm-name>.exe.xyz
 ```
 
-Tip: keep this VM **stateful**. CoderClaw stores state under `~/.coderclaw/` and `~/.coderclaw/workspace/`.
+Tip: keep this VM **stateful**. BuilderForce Agents stores state under `~/.builderforce/` and `~/.builderforce/workspace/`.
 
 ## 2) Install prerequisites (on the VM)
 
@@ -59,15 +59,15 @@ sudo apt-get update
 sudo apt-get install -y git curl jq ca-certificates openssl
 ```
 
-## 3) Install CoderClaw
+## 3) Install BuilderForce Agents
 
-Run the CoderClaw install script:
+Run the BuilderForce Agents install script:
 
 ```bash
-curl -fsSL https://coderclaw.ai/install.sh | bash
+curl -fsSL https://builderforce.ai/install.sh | bash
 ```
 
-## 4) Setup nginx to proxy CoderClaw to port 8000
+## 4) Setup nginx to proxy BuilderForce Agents to port 8000
 
 Edit `/etc/nginx/sites-enabled/default` with
 
@@ -101,12 +101,12 @@ server {
 }
 ```
 
-## 5) Access CoderClaw and grant privileges
+## 5) Access BuilderForce Agents and grant privileges
 
 Access `https://<vm-name>.exe.xyz/` (see the Control UI output from onboarding). If it prompts for auth, paste the
-token from `gateway.auth.token` on the VM (retrieve with `coderclaw config get gateway.auth.token`, or generate one
-with `coderclaw doctor --generate-gateway-token`). Approve devices with `coderclaw devices list` and
-`coderclaw devices approve <requestId>`. When in doubt, use Shelley from your browser!
+token from `gateway.auth.token` on the VM (retrieve with `builderforce config get gateway.auth.token`, or generate one
+with `builderforce doctor --generate-gateway-token`). Approve devices with `builderforce devices list` and
+`builderforce devices approve <requestId>`. When in doubt, use Shelley from your browser!
 
 ## Remote Access
 
@@ -117,10 +117,10 @@ with email auth.
 ## Updating
 
 ```bash
-npm i -g coderclaw@latest
-coderclaw doctor
-coderclaw gateway restart
-coderclaw health
+npm i -g builderforce@latest
+builderforce doctor
+builderforce gateway restart
+builderforce health
 ```
 
 Guide: [Updating](/install/updating)

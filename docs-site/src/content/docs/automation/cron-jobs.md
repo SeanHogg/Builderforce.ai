@@ -22,7 +22,7 @@ Troubleshooting: [/automation/troubleshooting](/automation/troubleshooting)
 ## TL;DR
 
 - Cron runs **inside the Gateway** (not inside the model).
-- Jobs persist under `~/.coderclaw/cron/` so restarts don’t lose schedules.
+- Jobs persist under `~/.builderforce/cron/` so restarts don’t lose schedules.
 - Two execution styles:
   - **Main session**: enqueue a system event, then run on the next heartbeat.
   - **Isolated**: run a dedicated agent turn in `cron:<jobId>`, with delivery (announce by default or none).
@@ -35,7 +35,7 @@ Troubleshooting: [/automation/troubleshooting](/automation/troubleshooting)
 Create a one-shot reminder, verify it exists, and run it immediately:
 
 ```bash
-coderclaw cron add \
+builderforce cron add \
   --name "Reminder" \
   --at "2026-02-01T16:00:00Z" \
   --session main \
@@ -43,15 +43,15 @@ coderclaw cron add \
   --wake now \
   --delete-after-run
 
-coderclaw cron list
-coderclaw cron run <job-id>
-coderclaw cron runs --id <job-id>
+builderforce cron list
+builderforce cron run <job-id>
+builderforce cron runs --id <job-id>
 ```
 
 Schedule a recurring isolated job with delivery:
 
 ```bash
-coderclaw cron add \
+builderforce cron add \
   --name "Morning brief" \
   --cron "0 7 * * *" \
   --tz "America/Los_Angeles" \
@@ -68,9 +68,9 @@ For the canonical JSON shapes and examples, see [JSON schema for tool calls](/au
 
 ## Where cron jobs are stored
 
-Cron jobs are persisted on the Gateway host at `~/.coderclaw/cron/jobs.json` by default.
+Cron jobs are persisted on the Gateway host at `~/.builderforce/cron/jobs.json` by default.
 The Gateway loads the file into memory and writes it back on changes, so manual edits
-are only safe when the Gateway is stopped. Prefer `coderclaw cron add/edit` or the cron
+are only safe when the Gateway is stopped. Prefer `builderforce cron add/edit` or the cron
 tool call API for changes.
 
 ## Beginner-friendly overview
@@ -120,7 +120,7 @@ Cron supports three schedule kinds:
 Cron expressions use `croner`. If a timezone is omitted, the Gateway host’s
 local timezone is used.
 
-To reduce top-of-hour load spikes across many gateways, CoderClaw applies a
+To reduce top-of-hour load spikes across many gateways, BuilderForce Agents applies a
 deterministic per-job stagger window of up to 5 minutes for recurring
 top-of-hour expressions (for example `0 * * * *`, `0 */2 * * *`). Fixed-hour
 expressions such as `0 7 * * *` remain exact.
@@ -187,7 +187,7 @@ Delivery config:
 Announce delivery suppresses messaging tool sends for the run; use `delivery.channel`/`delivery.to`
 to target the chat instead. When `delivery.mode = "none"`, no summary is posted to the main session.
 
-If `delivery` is omitted for isolated jobs, CoderClaw defaults to `announce`.
+If `delivery` is omitted for isolated jobs, BuilderForce Agents defaults to `announce`.
 
 #### Announce delivery flow
 
@@ -348,8 +348,8 @@ Notes:
 
 ## Storage & history
 
-- Job store: `~/.coderclaw/cron/jobs.json` (Gateway-managed JSON).
-- Run history: `~/.coderclaw/cron/runs/<jobId>.jsonl` (JSONL, auto-pruned).
+- Job store: `~/.builderforce/cron/jobs.json` (Gateway-managed JSON).
+- Run history: `~/.builderforce/cron/runs/<jobId>.jsonl` (JSONL, auto-pruned).
 - Override store path: `cron.store` in config.
 
 ## Configuration
@@ -358,7 +358,7 @@ Notes:
 {
   cron: {
     enabled: true, // default true
-    store: "~/.coderclaw/cron/jobs.json",
+    store: "~/.builderforce/cron/jobs.json",
     maxConcurrentRuns: 1, // default 1
     webhook: "https://example.invalid/legacy", // deprecated fallback for stored notify:true jobs
     webhookToken: "replace-with-dedicated-webhook-token", // optional bearer token for webhook mode
@@ -378,14 +378,14 @@ Webhook behavior:
 Disable cron entirely:
 
 - `cron.enabled: false` (config)
-- `CODERCLAW_SKIP_CRON=1` (env)
+- `BUILDERFORCE_AGENTS_SKIP_CRON=1` (env)
 
 ## CLI quickstart
 
 One-shot reminder (UTC ISO, auto-delete after success):
 
 ```bash
-coderclaw cron add \
+builderforce cron add \
   --name "Send reminder" \
   --at "2026-01-12T18:00:00Z" \
   --session main \
@@ -397,7 +397,7 @@ coderclaw cron add \
 One-shot reminder (main session, wake immediately):
 
 ```bash
-coderclaw cron add \
+builderforce cron add \
   --name "Calendar check" \
   --at "20m" \
   --session main \
@@ -408,7 +408,7 @@ coderclaw cron add \
 Recurring isolated job (announce to WhatsApp):
 
 ```bash
-coderclaw cron add \
+builderforce cron add \
   --name "Morning status" \
   --cron "0 7 * * *" \
   --tz "America/Los_Angeles" \
@@ -422,7 +422,7 @@ coderclaw cron add \
 Recurring cron job with explicit 30-second stagger:
 
 ```bash
-coderclaw cron add \
+builderforce cron add \
   --name "Minute watcher" \
   --cron "0 * * * * *" \
   --tz "UTC" \
@@ -435,7 +435,7 @@ coderclaw cron add \
 Recurring isolated job (deliver to a Telegram topic):
 
 ```bash
-coderclaw cron add \
+builderforce cron add \
   --name "Nightly summary (topic)" \
   --cron "0 22 * * *" \
   --tz "America/Los_Angeles" \
@@ -449,7 +449,7 @@ coderclaw cron add \
 Isolated job with model and thinking override:
 
 ```bash
-coderclaw cron add \
+builderforce cron add \
   --name "Deep analysis" \
   --cron "0 6 * * 1" \
   --tz "America/Los_Angeles" \
@@ -466,24 +466,24 @@ Agent selection (multi-agent setups):
 
 ```bash
 # Pin a job to agent "ops" (falls back to default if that agent is missing)
-coderclaw cron add --name "Ops sweep" --cron "0 6 * * *" --session isolated --message "Check ops queue" --agent ops
+builderforce cron add --name "Ops sweep" --cron "0 6 * * *" --session isolated --message "Check ops queue" --agent ops
 
 # Switch or clear the agent on an existing job
-coderclaw cron edit <jobId> --agent ops
-coderclaw cron edit <jobId> --clear-agent
+builderforce cron edit <jobId> --agent ops
+builderforce cron edit <jobId> --clear-agent
 ```
 
 Manual run (force is the default, use `--due` to only run when due):
 
 ```bash
-coderclaw cron run <jobId>
-coderclaw cron run <jobId> --due
+builderforce cron run <jobId>
+builderforce cron run <jobId> --due
 ```
 
 Edit an existing job (patch fields):
 
 ```bash
-coderclaw cron edit <jobId> \
+builderforce cron edit <jobId> \
   --message "Updated prompt" \
   --model "opus" \
   --thinking low
@@ -492,35 +492,35 @@ coderclaw cron edit <jobId> \
 Force an existing cron job to run exactly on schedule (no stagger):
 
 ```bash
-coderclaw cron edit <jobId> --exact
+builderforce cron edit <jobId> --exact
 ```
 
 Run history:
 
 ```bash
-coderclaw cron runs --id <jobId> --limit 50
+builderforce cron runs --id <jobId> --limit 50
 ```
 
 Immediate system event without creating a job:
 
 ```bash
-coderclaw system event --mode now --text "Next heartbeat: check battery."
+builderforce system event --mode now --text "Next heartbeat: check battery."
 ```
 
 ## Portal-managed cron (Builderforce)
 
-When CoderClaw is connected to Builderforce, cron jobs can also be created and managed from the portal — not just locally via the CLI.
+When BuilderForce Agents is connected to Builderforce, cron jobs can also be created and managed from the portal — not just locally via the CLI.
 
-Portal-managed jobs are fetched from Builderforce at claw startup:
-
-```
-GET /api/claws/:id/cron
-```
-
-The response is a list of scheduled jobs. CoderClaw schedules them locally using the same cron engine, then reports back after each run:
+Portal-managed jobs are fetched from Builderforce at agent startup:
 
 ```
-PATCH /api/claws/:id/cron/:jobId
+GET /api/agents/:id/cron
+```
+
+The response is a list of scheduled jobs. BuilderForce Agents schedules them locally using the same cron engine, then reports back after each run:
+
+```
+PATCH /api/agents/:id/cron/:jobId
 { "lastRunAt": "2026-03-21T09:00:00.000Z", "lastStatus": "ok" }
 ```
 
@@ -535,33 +535,33 @@ Portal-managed cron jobs support 5-field cron expressions. The supported field s
 | Ranges (`1-5`) | No | Use `*/n` instead |
 | Lists (`1,3,5`) | No | Create multiple jobs instead |
 
-If an unsupported expression is configured in the portal, the claw logs a warning and skips that job.
+If an unsupported expression is configured in the portal, the agent logs a warning and skips that job.
 
 ### Dispatch format
 
-Each portal-managed job fires as a `chat.send` message to the claw gateway, equivalent to typing a message into the chat interface. The message is the `description` field set on the job in the portal.
+Each portal-managed job fires as a `chat.send` message to the agent gateway, equivalent to typing a message into the chat interface. The message is the `description` field set on the job in the portal.
 
 ### Re-sync interval
 
-Portal-managed jobs are re-synced from the portal every 5 minutes. New jobs added in the portal are picked up automatically without a claw restart.
+Portal-managed jobs are re-synced from the portal every 5 minutes. New jobs added in the portal are picked up automatically without a agent restart.
 
 ## Gateway API surface
 
 - `cron.list`, `cron.status`, `cron.add`, `cron.update`, `cron.remove`
 - `cron.run` (force or due), `cron.runs`
-  For immediate system events without a job, use [`coderclaw system event`](/cli/system).
+  For immediate system events without a job, use [`builderforce system event`](/cli/system).
 
 ## Troubleshooting
 
 ### “Nothing runs”
 
-- Check cron is enabled: `cron.enabled` and `CODERCLAW_SKIP_CRON`.
+- Check cron is enabled: `cron.enabled` and `BUILDERFORCE_AGENTS_SKIP_CRON`.
 - Check the Gateway is running continuously (cron runs inside the Gateway process).
 - For `cron` schedules: confirm timezone (`--tz`) vs the host timezone.
 
 ### A recurring job keeps delaying after failures
 
-- CoderClaw applies exponential retry backoff for recurring jobs after consecutive errors:
+- BuilderForce Agents applies exponential retry backoff for recurring jobs after consecutive errors:
   30s, 1m, 5m, 15m, then 60m between retries.
 - Backoff resets automatically after the next successful run.
 - One-shot (`at`) jobs disable after a terminal run (`ok`, `error`, or `skipped`) and do not retry.

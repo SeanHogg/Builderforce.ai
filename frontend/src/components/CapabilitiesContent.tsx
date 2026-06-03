@@ -17,9 +17,9 @@ const SECTIONS: { id: CapabilitySection; label: string }[] = [
 ];
 
 export interface CapabilitiesContentProps {
-  scope: 'claw' | 'project' | 'agent';
+  scope: 'host' | 'project' | 'agent';
   scopeId: number;
-  /** Required for governance editing (project ID). For claw scope, pass associated project id if available. */
+  /** Required for governance editing (project ID). For agentHost scope, pass associated project id if available. */
   projectId?: number;
   /** When scope is 'agent', the agent whose governance is edited. */
   agentAssignment?: ProjectAgent;

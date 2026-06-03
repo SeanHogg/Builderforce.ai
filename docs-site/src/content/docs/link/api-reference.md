@@ -16,7 +16,7 @@ description: Complete REST + WebSocket endpoint reference for api.builderforce.a
 - [Projects](#projects)
 - [Tasks](#tasks)
 - [Tenants & Members](#tenants--members)
-- [Claws (AI Agent Instances)](#claws-ai-agent-instances)
+- [Agents (AI Agent Instances)](#agents-ai-agent-instances)
 - [Agents & Skills](#agents--skills)
 - [Runtime — Execution Lifecycle](#runtime--execution-lifecycle)
 - [Specs (Planning)](#specs-planning)
@@ -25,10 +25,10 @@ description: Complete REST + WebSocket endpoint reference for api.builderforce.a
 - [Audit Log](#audit-log)
 - [Chat Persistence](#chat-persistence)
 - [Skill Assignments](#skill-assignments)
-- [coderClawLLM Proxy](#coderclawllm-proxy)
+- [BuilderForce AgentsLLM Proxy](#builderforcellm-proxy)
 - [Marketplace](#marketplace)
 - [Fleet Capability Management](#fleet-capability-management)
-- [Claw Telemetry](#claw-telemetry)
+- [Agent Telemetry](#agent-telemetry)
 - [Admin (Superadmin only)](#admin-superadmin-only)
 - [RBAC Reference](#rbac-reference)
 - [WebSocket Relay Frames](#websocket-relay-frames)
@@ -126,8 +126,8 @@ Content-Type: application/json
 | `DELETE` | `/api/tenants/:id` | OWNER | Delete tenant |
 | `POST` | `/api/tenants/:id/members` | OWNER | Add member |
 | `DELETE` | `/api/tenants/:id/members/:userId` | OWNER | Remove member |
-| `GET` | `/api/tenants/:id/default-claw` | VIEWER | Get tenant default claw |
-| `PUT` | `/api/tenants/:id/default-claw` | MANAGER | Set or clear default claw |
+| `GET` | `/api/tenants/:id/default-agent` | VIEWER | Get tenant default agent |
+| `PUT` | `/api/tenants/:id/default-agent` | MANAGER | Set or clear default agent |
 | `GET` | `/api/tenants/:id/subscription` | VIEWER | Current plan + usage metrics |
 | `POST` | `/api/tenants/:id/subscription/checkout` | MANAGER | Initiate Pro upgrade — returns `checkoutUrl` (redirect) or `null` (manual) |
 | `POST` | `/api/tenants/:id/subscription/pro` | MANAGER | Legacy: direct upgrade (manual provider only; new code use `/checkout`) |
@@ -137,59 +137,59 @@ Content-Type: application/json
 
 ---
 
-## Claws (AI Agent Instances)
+## Agents (AI Agent Instances)
 
-A **Claw** is a registered CoderClaw runtime connected to a Builderforce tenant. Claws authenticate with their own API key (not a user JWT).
+A **Agent** is a registered BuilderForce Agents runtime connected to a Builderforce tenant. Agents authenticate with their own API key (not a user JWT).
 
 ### Portal endpoints (JWT auth)
 
 | Method | Path | Min Role | Description |
 |--------|------|----------|-------------|
-| `GET` | `/api/claws` | VIEWER | List claws for tenant |
-| `POST` | `/api/claws` | MANAGER | Register new claw |
-| `GET` | `/api/claws/:id` | VIEWER | Get claw |
-| `PATCH` | `/api/claws/:id` | MANAGER | Update claw name/config |
-| `DELETE` | `/api/claws/:id` | MANAGER | Deactivate claw |
-| `POST` | `/api/claws/:id/forward` | MANAGER | Forward relay frame to claw WebSocket |
-| `GET` | `/api/claws/:id/directories` | VIEWER | List synced directories |
-| `GET` | `/api/claws/:id/directories/:dirId/files` | VIEWER | List files in directory |
-| `GET` | `/api/claws/:id/directories/:dirId/files/:fileId/content` | VIEWER | Get file content |
-| `GET` | `/api/claws/:id/sync-history` | VIEWER | Directory sync history |
-| `GET` | `/api/claws/:id/usage-snapshots` | VIEWER | Context window usage history |
-| `GET` | `/api/claws/:id/tool-audit` | MANAGER | Tool call audit log (query params: `runId`, `sessionKey`, `limit` ≤ 500) |
-| `PATCH` | `/api/claws/:id/capabilities` | MANAGER | Update declared capabilities |
+| `GET` | `/api/agents` | VIEWER | List agents for tenant |
+| `POST` | `/api/agents` | MANAGER | Register new agent |
+| `GET` | `/api/agents/:id` | VIEWER | Get agent |
+| `PATCH` | `/api/agents/:id` | MANAGER | Update agent name/config |
+| `DELETE` | `/api/agents/:id` | MANAGER | Deactivate agent |
+| `POST` | `/api/agents/:id/forward` | MANAGER | Forward relay frame to agent WebSocket |
+| `GET` | `/api/agents/:id/directories` | VIEWER | List synced directories |
+| `GET` | `/api/agents/:id/directories/:dirId/files` | VIEWER | List files in directory |
+| `GET` | `/api/agents/:id/directories/:dirId/files/:fileId/content` | VIEWER | Get file content |
+| `GET` | `/api/agents/:id/sync-history` | VIEWER | Directory sync history |
+| `GET` | `/api/agents/:id/usage-snapshots` | VIEWER | Context window usage history |
+| `GET` | `/api/agents/:id/tool-audit` | MANAGER | Tool call audit log (query params: `runId`, `sessionKey`, `limit` ≤ 500) |
+| `PATCH` | `/api/agents/:id/capabilities` | MANAGER | Update declared capabilities |
 
-### Claw-to-claw endpoints (claw API key auth)
+### Agent-to-agent endpoints (agent API key auth)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/claws/fleet?from=&key=` | Discover all claws in same tenant (for peer routing) |
-| `GET` | `/api/claws/fleet/route?requires=<cap1,cap2>` | Best-matching claw for required capabilities |
-| `GET` | `/api/claws/:id/skills` | Fetch merged skill list (tenant + claw assignments) for this claw |
-| `GET` | `/api/claws/:id/cron` | Fetch portal-managed cron jobs for this claw |
-| `PATCH` | `/api/claws/:id/cron/:jobId` | Update lastRunAt / lastStatus after a cron job fires |
-| `PATCH` | `/api/claws/:id/executions/:eid/state` | Report execution state change (`running`, `completed`, `failed`) |
+| `GET` | `/api/agents/fleet?from=&key=` | Discover all agents in same tenant (for peer routing) |
+| `GET` | `/api/agents/fleet/route?requires=<cap1,cap2>` | Best-matching agent for required capabilities |
+| `GET` | `/api/agents/:id/skills` | Fetch merged skill list (tenant + agent assignments) for this agent |
+| `GET` | `/api/agents/:id/cron` | Fetch portal-managed cron jobs for this agent |
+| `PATCH` | `/api/agents/:id/cron/:jobId` | Update lastRunAt / lastStatus after a cron job fires |
+| `PATCH` | `/api/agents/:id/executions/:eid/state` | Report execution state change (`running`, `completed`, `failed`) |
 
 ### WebSocket relay
 
 #### Browser client (portal)
 
 ```
-GET wss://api.builderforce.ai/api/claws/:clawId/ws?token=<jwt>
+GET wss://api.builderforce.ai/api/agents/:agentNodeId/ws?token=<jwt>
 ```
 
 - The portal uses the tenant JWT (`token=`) to authenticate.
-- The server validates the JWT and ensures it belongs to the same tenant as the claw.
+- The server validates the JWT and ensures it belongs to the same tenant as the agent.
 
-#### CoderClaw runtime (upstream)
+#### BuilderForce Agents runtime (upstream)
 
 ```
-GET wss://api.builderforce.ai/api/claws/:clawId/upstream?key=<clawApiKey>
+GET wss://api.builderforce.ai/api/agents/:agentNodeId/upstream?key=<agentNodeApiKey>
 ```
 
-- The Claw authenticates using its API key (query param `key=`).
+- The Agent authenticates using its API key (query param `key=`).
 
-Bi-directional real-time channel between the portal and the coderClaw runtime. See [WebSocket Relay Frames](#websocket-relay-frames).
+Bi-directional real-time channel between the portal and the BuilderForce Agents runtime. See [WebSocket Relay Frames](#websocket-relay-frames).
 
 ---
 
@@ -219,7 +219,7 @@ PENDING / SUBMITTED / RUNNING → CANCELLED
 
 > **Legacy compatibility:** Older builderforce.ai transport adapter paths (`/api/runtime/sessions`, `/api/runtime/tasks/submit`, etc.) are supported for backward compatibility.
 
-**Legacy endpoints (ClawLink compatibility)**
+**Legacy endpoints (AgentLink compatibility)**
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -257,13 +257,13 @@ The connection closes automatically when the execution reaches a terminal state.
 
 ## Specs (Planning)
 
-Specs are structured planning documents produced by the coderClaw `/spec` command.
+Specs are structured planning documents produced by the BuilderForce Agents `/spec` command.
 
 **Statuses:** `draft` → `reviewed` → `approved` → `in_progress` → `done`
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `POST` | `/api/specs` | JWT or claw key | Create / upsert a spec |
+| `POST` | `/api/specs` | JWT or agent key | Create / upsert a spec |
 | `GET` | `/api/specs` | JWT | List specs (`?projectId=&status=`) |
 | `GET` | `/api/specs/:id` | JWT | Get spec detail |
 | `PATCH` | `/api/specs/:id` | JWT | Update status / content |
@@ -271,7 +271,7 @@ Specs are structured planning documents produced by the coderClaw `/spec` comman
 | `GET` | `/api/specs/:id/workflows` | JWT | List workflows linked to spec |
 | `POST` | `/api/specs/:id/workflows` | JWT | Link existing workflow to spec |
 
-**Claw-key auth:** append `?clawId=<id>&key=<apiKey>` to any spec write endpoint.
+**Agent-key auth:** append `?agentNodeId=<id>&key=<apiKey>` to any spec write endpoint.
 
 ---
 
@@ -281,8 +281,8 @@ Workflows track the full execution DAG for a multi-step plan.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `POST` | `/api/workflows` | JWT or claw key | Register a workflow |
-| `GET` | `/api/workflows` | JWT | List workflows (`?status=&workflowType=&clawId=`) |
+| `POST` | `/api/workflows` | JWT or agent key | Register a workflow |
+| `GET` | `/api/workflows` | JWT | List workflows (`?status=&workflowType=&agentNodeId=`) |
 | `GET` | `/api/workflows/:id` | JWT | Get workflow + tasks |
 | `PATCH` | `/api/workflows/:id` | JWT | Update status / description |
 | `GET` | `/api/workflows/:id/tasks` | JWT | List tasks for workflow |
@@ -297,8 +297,8 @@ Agents request human approval before executing destructive or high-risk actions.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `POST` | `/api/approvals` | JWT or claw key | Create pending approval |
-| `GET` | `/api/approvals` | JWT | List approvals (`?status=&clawId=`) |
+| `POST` | `/api/approvals` | JWT or agent key | Create pending approval |
+| `GET` | `/api/approvals` | JWT | List approvals (`?status=&agentNodeId=`) |
 | `GET` | `/api/approvals/:id` | JWT | Get approval detail |
 | `PATCH` | `/api/approvals/:id` | JWT, MANAGER+ | Approve or reject |
 
@@ -322,14 +322,14 @@ All state changes are recorded in an immutable audit trail.
 
 ## Chat Persistence
 
-Persistent session chat history for all Claw interactions.
+Persistent session chat history for all Agent interactions.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `POST` | `/api/claws/:clawId/messages?key=` | Claw API key | Bulk-insert session messages (upserts session row) |
+| `POST` | `/api/agents/:agentNodeId/messages?key=` | Agent API key | Bulk-insert session messages (upserts session row) |
 | `GET` | `/api/chats` | JWT | List all chat sessions for tenant |
 | `GET` | `/api/chats/:sessionId/messages` | JWT | Get messages for a session |
-| `GET` | `/api/claws/:clawId/sessions/:sessionKey/messages` | JWT | Get messages by session key |
+| `GET` | `/api/agents/:agentNodeId/sessions/:sessionKey/messages` | JWT | Get messages by session key |
 
 **Message body:**
 ```json
@@ -346,7 +346,7 @@ Persistent session chat history for all Claw interactions.
 
 ## Skill Assignments
 
-Assign marketplace skills at the tenant level (all claws inherit) or scoped to a specific claw.
+Assign marketplace skills at the tenant level (all agents inherit) or scoped to a specific agent.
 
 **Tenant-level** (MANAGER+ required for writes):
 
@@ -356,13 +356,13 @@ Assign marketplace skills at the tenant level (all claws inherit) or scoped to a
 | `POST` | `/api/skill-assignments/tenant` | Assign skill to tenant (`{ slug }`) |
 | `DELETE` | `/api/skill-assignments/tenant/:slug` | Remove tenant-level assignment |
 
-**Claw-level** (MANAGER+ required for writes):
+**Agent-level** (MANAGER+ required for writes):
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/skill-assignments/claws/:clawId` | List claw-level skill assignments |
-| `POST` | `/api/skill-assignments/claws/:clawId` | Assign skill to claw (`{ slug }`) |
-| `DELETE` | `/api/skill-assignments/claws/:clawId/:slug` | Remove claw-level assignment |
+| `GET` | `/api/skill-assignments/agents/:agentNodeId` | List agent-level skill assignments |
+| `POST` | `/api/skill-assignments/agents/:agentNodeId` | Assign skill to agent (`{ slug }`) |
+| `DELETE` | `/api/skill-assignments/agents/:agentNodeId/:slug` | Remove agent-level assignment |
 
 ---
 
@@ -387,7 +387,7 @@ const client = new OpenAI({
 });
 
 const response = await client.chat.completions.create({
-  model: "coderclawllm/auto",  // auto-selects best available model
+  model: "builderforcellm/auto",  // auto-selects best available model
   messages: [{ role: "user", content: "Review this PR" }],
 });
 ```
@@ -416,22 +416,22 @@ See [Marketplace](/link/marketplace/) for full guide. Quick reference:
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/api/claws/fleet?from=&key=` | Claw API key | Discover all claws in the same tenant |
-| `GET` | `/api/claws/fleet/route?requires=<cap1,cap2>` | JWT | Best-matching claw for required capabilities |
-| `PATCH` | `/api/claws/:id/capabilities` | JWT, MANAGER+ | Update declared capabilities for a claw |
+| `GET` | `/api/agents/fleet?from=&key=` | Agent API key | Discover all agents in the same tenant |
+| `GET` | `/api/agents/fleet/route?requires=<cap1,cap2>` | JWT | Best-matching agent for required capabilities |
+| `PATCH` | `/api/agents/:id/capabilities` | JWT, MANAGER+ | Update declared capabilities for a agent |
 
 ---
 
-## Claw Telemetry
+## Agent Telemetry
 
-Claw-authenticated endpoints for pushing telemetry from the agent runtime.
+Agent-authenticated endpoints for pushing telemetry from the agent runtime.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/claws/:id/relay-result?key=` | Route `remote.result` to source claw relay |
-| `POST` | `/api/claws/:id/usage-snapshot?key=` | Persist context window / token usage snapshot |
-| `POST` | `/api/claws/:id/tool-audit?key=` | Persist tool call audit event |
-| `POST` | `/api/claws/:id/approval-request?key=` | Create pending approval from claw |
+| `POST` | `/api/agents/:id/relay-result?key=` | Route `remote.result` to source agent relay |
+| `POST` | `/api/agents/:id/usage-snapshot?key=` | Persist context window / token usage snapshot |
+| `POST` | `/api/agents/:id/tool-audit?key=` | Persist tool call audit event |
+| `POST` | `/api/agents/:id/approval-request?key=` | Create pending approval from agent |
 
 ---
 
@@ -487,7 +487,7 @@ Requires a WebJWT with `sa: true`. Not available on managed cloud to regular use
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/admin/users` | All platform users + tenant membership counts |
-| `GET` | `/api/admin/tenants` | All tenants + member/claw counts |
+| `GET` | `/api/admin/tenants` | All tenants + member/agent counts |
 | `GET` | `/api/admin/health` | System health (DB ping, model pool, row counts) |
 | `GET` | `/api/admin/errors` | Recent API error log (last 200 entries) |
 | `POST` | `/api/admin/impersonate` | Issue a tenant JWT for any user+tenant pair |
@@ -503,38 +503,38 @@ Roles (ascending authority): `viewer` → `developer` → `manager` → `owner`
 |-----------|----------|
 | Read all resources | VIEWER |
 | Create / update tasks, projects, specs, workflows | DEVELOPER |
-| Register / deactivate agents and claws, view audit log, manage skill assignments | MANAGER |
+| Register / deactivate agents and agents, view audit log, manage skill assignments | MANAGER |
 | Manage members, upgrade subscription, full admin | OWNER |
 
 ---
 
 ## WebSocket Relay Frames
 
-The `ClawRelayDO` Durable Object at `wss://api.builderforce.ai/api/relay/:clawId` brokers all real-time frames between the portal and the claw runtime.
+The `AgentHostRelayDO` Durable Object at `wss://api.builderforce.ai/api/relay/:agentNodeId` brokers all real-time frames between the portal and the agent runtime.
 
-### Outbound (portal → claw)
+### Outbound (portal → agent)
 
 ```jsonc
 // Approval decision
 { "type": "approval.decision", "approvalId": "…", "status": "approved" | "rejected", "reviewNote": "…" }
 
-// Remote task forwarded to claw
+// Remote task forwarded to agent
 { "type": "remote.task", "correlationId": "<uuid>", "task": "…" }
 ```
 
-### Inbound (claw → portal)
+### Inbound (agent → portal)
 
 ```jsonc
 // Execution state change
 { "type": "status_change", "executionId": "…", "status": "running" | "completed" | "failed" }
 
 // Remote task result
-{ "type": "remote.result", "taskCorrelationId": "<uuid>", "fromClawId": "<clawId>", "result": "…", "status": "completed" | "failed", "error": "<optional>" }
+{ "type": "remote.result", "taskCorrelationId": "<uuid>", "fromAgentNodeId": "<agentNodeId>", "result": "…", "status": "completed" | "failed", "error": "<optional>" }
 
 // Workflow live update
 { "type": "workflow.update", "workflowId": "…", "status": "…", "taskId": "…" }
 
-// Approval requested by claw
+// Approval requested by agent
 { "type": "approval.request", "approvalId": "…", "actionType": "…", "description": "…" }
 
 // Usage snapshot, tool.audit — see repo for full frame schemas
