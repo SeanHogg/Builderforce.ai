@@ -1431,6 +1431,17 @@ full `api/src` rename (`Claw*`→`AgentHost*`, table `coderclaw_instances`→`ag
 `/api/agent-hosts`, DO `ClawRelayDO`→`AgentHostRelayDO` + wrangler `v4` migration) — `tsc` clean,
 350 tests pass. Remaining roadmap items:
 
+- **Broken image assets from the rename are now FIXED (frontend).** Root cause: the file sweep
+  excluded binary extensions, so `.png` *references* got rebranded but the *files* didn't —
+  `/claw.png`→`/agentHost.png` (11 refs) and `coderclaw.png`→`/agents.png` (2 refs on `/agents`)
+  pointed at non-existent files (404 in prod; the report showed a `522` on `/agentHost.png`, but that
+  `522` is Cloudflare-can't-reach-origin — a **deploy/infra** issue, separate from the missing file).
+  Fix: renamed `public/claw.png`→`agentHost.png`, restored `coderclaw.png` as `public/agents.png`,
+  fixed `public/sw.js` precache + bumped its cache `v1`→`v2`. All `src` asset refs now resolve;
+  docs-site + agent-runtime/ui were checked and have no `claw`/`agent*` image-ref breakage. CAUTION
+  for future asset sweeps: an image is only "dead" if NO reference (including its *renamed* form)
+  resolves to it — I briefly mis-deleted `coderclaw.png` before realising `/agents.png` was its
+  orphaned reference, and recovered it from `git show HEAD:`.
 - **Two CI failures from the rebrand are now FIXED + verified** (root cause: `tsc`/`tsgo` were used
   as the local gate, but they don't run the checks CI does). (1) **Frontend** — `blogData.ts`
   imported `@/content/blog/agents-and-agent-integration.md` while the renamed file is
