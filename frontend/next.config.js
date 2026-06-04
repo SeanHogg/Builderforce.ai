@@ -6,6 +6,10 @@ const nextConfig = {
     NEXT_PUBLIC_APP_VERSION: version,
   },
   outputFileTracingRoot: __dirname,
+  // Cloudflare Pages (next-on-pages) does not run Next's default image
+  // optimizer endpoint (/_next/image), so optimized <Image> requests 404 and
+  // render broken. Serve images unoptimized — they emit plain <img src> tags.
+  images: { unoptimized: true },
   transpilePackages: ['@monaco-editor/react', 'monaco-editor', '@seanhogg/builderforce-studio', '@seanhogg/builderforce-studio-embedded', '@seanhogg/builderforce-sdk'],
   webpack(config) {
     config.module.rules.push({

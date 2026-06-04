@@ -7,26 +7,80 @@ import { useState } from 'react';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 import { useModalDismiss } from '@/hooks/useModalDismiss';
 import { isNavItemActive } from '@/lib/nav';
-
-export interface MarketingNavLink {
-  label: string;
-  href: string;
-}
+import type { NavLink } from '@/lib/content';
 
 interface MarketingHeaderProps {
   /** Right-side nav links (everything except the Get Started CTA). */
-  links: MarketingNavLink[];
+  links: NavLink[];
   /** CTA shown in the header on every breakpoint. */
   ctaLabel?: string;
   ctaHref?: string;
 }
 
 /**
- * Shared sticky header for the Builderforce marketing pages (landing, blog).
- *
- * Responsive behaviour: on desktop all links + theme toggle + CTA render inline.
- * On mobile the links and theme toggle collapse into a slide-out menu behind a
- * hamburger button; the Get Started CTA always stays visible in the header.
+ * Desktop nav item that owns a mega-menu. The label stays a real link (to the
+ * full tour at `item.href`); the panel opens on hover/focus and lists every
+ * product surface so visitors see what the platform consists of without leaving
+ * the page. Self-contained — manages its own open state.
+ */
+function MegaItem({ item, active }: { item: NavLink; active: boolean }) {
+  const [open, setOpen] = useState(false);
+  const sections = item.menu ?? [];
+
+  return (
+    <div
+      className="mh-mega-wrap"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false);
+      }}
+    >
+      <Link
+        href={item.href}
+        className={`mh-nav-link mh-mega-trigger${active ? ' active' : ''}`}
+        aria-haspopup="true"
+        aria-expanded={open}
+        onClick={() => setOpen(false)}
+      >
+        {item.label}
+        <svg className="mh-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </Link>
+
+      <div className={`mh-mega${open ? ' open' : ''}`} role="menu">
+        <div className="mh-mega-grid">
+          {sections.map((sec) => (
+            <div key={sec.id} className="mh-mega-col">
+              <div className="mh-mega-col-title">{sec.title}</div>
+              {sec.surfaces.map((s) => (
+                <Link key={s.title} href={s.href} className="mh-mega-link" role="menuitem" onClick={() => setOpen(false)}>
+                  <span className="mh-mega-ico">{s.icon}</span>
+                  <span className="mh-mega-txt">
+                    <span className="mh-mega-name">{s.title}</span>
+                    <span className="mh-mega-desc">{s.desc}</span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          ))}
+        </div>
+        <Link href={item.href} className="mh-mega-foot" onClick={() => setOpen(false)}>
+          See the full product tour →
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Shared sticky header for the Builderforce marketing pages (landing, blog,
+ * product). Responsive: on desktop all links + theme toggle + CTA render inline,
+ * with mega-menu items opening a dropdown; on mobile everything collapses into a
+ * slide-out where mega-menu items expand their sections inline. The Get Started
+ * CTA stays visible at every breakpoint.
  *
  * Links decide their own active state from `usePathname()`, so consumers just
  * pass the link list — no prop-drilled active flags.
@@ -40,9 +94,10 @@ export default function MarketingHeader({
   const [open, setOpen] = useState(false);
 
   const isActive = (href: string) => isNavItemActive(pathname, { href });
+  const close = () => setOpen(false);
 
   // Lock body scroll + close on Escape while the menu is open.
-  useModalDismiss(open, () => setOpen(false));
+  useModalDismiss(open, close);
 
   return (
     <header className="mh-nav" aria-label="Main navigation">
@@ -55,15 +110,19 @@ export default function MarketingHeader({
         <div className="mh-nav-right">
           {/* Desktop: inline links + theme toggle (hidden on mobile) */}
           <div className="mh-desktop">
-            {links.map((l) => (
-              <Link
-                key={l.href}
-                href={l.href}
-                className={`mh-nav-link${isActive(l.href) ? ' active' : ''}`}
-              >
-                {l.label}
-              </Link>
-            ))}
+            {links.map((l) =>
+              l.menu ? (
+                <MegaItem key={l.href} item={l} active={isActive(l.href)} />
+              ) : (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className={`mh-nav-link${isActive(l.href) ? ' active' : ''}`}
+                >
+                  {l.label}
+                </Link>
+              ),
+            )}
             <ThemeToggleButton />
           </div>
 
@@ -93,7 +152,7 @@ export default function MarketingHeader({
       {/* Slide-out menu + backdrop */}
       <div
         className={`mh-backdrop${open ? ' open' : ''}`}
-        onClick={() => setOpen(false)}
+        onClick={close}
         aria-hidden="true"
       />
       <aside
@@ -107,7 +166,7 @@ export default function MarketingHeader({
             type="button"
             className="mh-menu-close"
             aria-label="Close menu"
-            onClick={() => setOpen(false)}
+            onClick={close}
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -117,14 +176,30 @@ export default function MarketingHeader({
         </div>
         <nav className="mh-menu-links">
           {links.map((l) => (
-            <Link
-              key={l.href}
-              href={l.href}
-              className={`mh-menu-link${isActive(l.href) ? ' active' : ''}`}
-              onClick={() => setOpen(false)}
-            >
-              {l.label}
-            </Link>
+            <div key={l.href} className="mh-mobile-group">
+              <Link
+                href={l.href}
+                className={`mh-menu-link${isActive(l.href) ? ' active' : ''}`}
+                onClick={close}
+              >
+                {l.label}
+              </Link>
+              {l.menu && (
+                <div className="mh-msec">
+                  {l.menu.map((sec) => (
+                    <div key={sec.id} className="mh-msec-block">
+                      <div className="mh-msec-title">{sec.title}</div>
+                      {sec.surfaces.map((s) => (
+                        <Link key={s.title} href={s.href} className="mh-msec-link" onClick={close}>
+                          <span aria-hidden="true">{s.icon}</span>
+                          {s.title}
+                        </Link>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           ))}
         </nav>
         <div className="mh-menu-foot">
@@ -233,6 +308,47 @@ export default function MarketingHeader({
         }
         .mh-hamburger:hover { background: var(--surface-interactive); }
 
+        /* ── Desktop mega-menu ── */
+        .mh-mega-wrap { position: relative; display: inline-flex; }
+        .mh-mega-trigger { display: inline-flex; align-items: center; gap: 4px; }
+        .mh-caret { transition: transform 0.2s ease; opacity: 0.7; }
+        .mh-mega-wrap:hover .mh-caret { transform: rotate(180deg); }
+        .mh-mega {
+          position: absolute;
+          top: calc(100% + 10px);
+          left: 50%;
+          transform: translateX(-50%) translateY(6px);
+          width: min(720px, 92vw);
+          padding: 16px;
+          border-radius: 16px;
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.18s ease, transform 0.18s ease;
+          z-index: 150;
+        }
+        .mh-mega.open { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0); }
+        .mh-mega-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 14px; }
+        @media (min-width: 1180px) { .mh-mega-grid { grid-template-columns: repeat(4, 1fr); } }
+        .mh-mega-col { display: flex; flex-direction: column; }
+        .mh-mega-col-title {
+          font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+          color: var(--text-muted); padding: 8px 8px 4px;
+        }
+        .mh-mega-link { display: flex; gap: 10px; padding: 8px; border-radius: 10px; text-decoration: none; transition: background 0.15s ease; }
+        .mh-mega-link:hover { background: var(--surface-interactive); }
+        .mh-mega-ico { font-size: 1.05rem; line-height: 1.3; flex-shrink: 0; }
+        .mh-mega-txt { display: flex; flex-direction: column; min-width: 0; }
+        .mh-mega-name { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+        .mh-mega-desc { font-size: 0.73rem; color: var(--text-muted); line-height: 1.35; }
+        .mh-mega-foot {
+          display: inline-block; margin: 8px 4px 0; padding: 8px;
+          font-size: 0.82rem; font-weight: 600; color: var(--coral-bright); text-decoration: none;
+        }
+        .mh-mega-foot:hover { text-decoration: underline; }
+
         /* ── Slide-out menu ── */
         .mh-backdrop {
           position: fixed;
@@ -250,7 +366,7 @@ export default function MarketingHeader({
           right: 0;
           z-index: 201;
           height: 100dvh;
-          width: min(82vw, 320px);
+          width: min(86vw, 360px);
           display: flex;
           flex-direction: column;
           background: var(--bg-surface);
@@ -267,6 +383,7 @@ export default function MarketingHeader({
           height: 62px;
           padding: 0 16px 0 20px;
           border-bottom: 1px solid var(--border-subtle);
+          flex-shrink: 0;
         }
         .mh-menu-title {
           font-family: var(--font-display);
@@ -295,6 +412,7 @@ export default function MarketingHeader({
           gap: 2px;
           overflow-y: auto;
         }
+        .mh-mobile-group { display: flex; flex-direction: column; }
         .mh-menu-link {
           font-size: 1rem;
           color: var(--text-secondary);
@@ -308,6 +426,24 @@ export default function MarketingHeader({
           color: var(--text-primary);
           background: var(--surface-interactive);
         }
+        .mh-msec {
+          display: flex;
+          flex-direction: column;
+          margin: 2px 0 8px 8px;
+          padding-left: 8px;
+          border-left: 2px solid var(--border-subtle);
+        }
+        .mh-msec-title {
+          font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+          color: var(--text-muted); padding: 10px 12px 2px;
+        }
+        .mh-msec-link {
+          display: flex; align-items: center; gap: 9px;
+          padding: 9px 12px; border-radius: 8px;
+          font-size: 0.92rem; color: var(--text-secondary); text-decoration: none;
+          transition: color 0.2s ease, background 0.2s ease;
+        }
+        .mh-msec-link:hover { color: var(--text-primary); background: var(--surface-interactive); }
         .mh-menu-foot {
           margin-top: auto;
           display: flex;
@@ -315,6 +451,7 @@ export default function MarketingHeader({
           justify-content: space-between;
           padding: 16px 20px;
           border-top: 1px solid var(--border-subtle);
+          flex-shrink: 0;
         }
         .mh-menu-foot-label {
           font-size: 0.875rem;
