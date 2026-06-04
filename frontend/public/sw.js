@@ -14,12 +14,12 @@
  *   5. Page reloads with the new version
  */
 
-const CACHE_NAME = 'bf-cache-v1';
+const CACHE_NAME = 'bf-cache-v2';
 
 const PRECACHE_URLS = [
   '/manifest.json',
   '/icon-192.png',
-  '/claw.png',
+  '/agentHost.png',
 ];
 
 // ---------------------------------------------------------------------------
