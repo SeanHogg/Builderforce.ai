@@ -386,39 +386,6 @@ export const DEFINED_TERMS: DefinedTermEntry[] = [
   },
 ];
 
-/* ════════════════════ NAV LINKS ════════════════════ */
-
-export interface NavLink {
-  href: string;
-  label: string;
-}
-
-/**
- * Single source of truth for the marketing header links. Consumed by the
- * landing page (and any other marketing surface) so the public nav can't drift.
- * "Product" leads with the capability tour so logged-out visitors can discover
- * what the platform actually does before signing up.
- */
-export const MARKETING_NAV_LINKS: NavLink[] = [
-  { href: '/product', label: 'Product' },
-  { href: '/marketplace', label: 'Workforce' },
-  { href: '/agents', label: 'BuilderForce Agents' },
-  { href: '/blog', label: 'Blog' },
-  { href: '/pricing', label: 'Pricing' },
-  { href: '/login', label: 'Sign In' },
-];
-
-export const FOOTER_LINKS: NavLink[] = [
-  { href: '/', label: 'Home' },
-  { href: '/product', label: 'Product' },
-  { href: '/marketplace', label: 'Workforce Registry' },
-  { href: '/agents', label: 'BuilderForce Agents' },
-  { href: '/blog', label: 'Blog' },
-  { href: '/pricing', label: 'Pricing' },
-  { href: '/login', label: 'Sign In' },
-  { href: '/register', label: 'Get Started' },
-];
-
 /* ════════════════════ PRODUCT SURFACES (public capability tour) ════════════════════ */
 
 export interface ProductSurface {
@@ -489,4 +456,44 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
       { icon: '🏢', title: 'Tenants & Workspaces', desc: 'Multi-tenant workspaces with per-seat roles, members, and cost controls.', href: '/tenants' },
     ],
   },
+];
+
+/* ════════════════════ NAV LINKS ════════════════════ */
+
+export interface NavLink {
+  href: string;
+  label: string;
+  /**
+   * When present, this header item opens a mega-menu panel built from these
+   * sections (desktop dropdown / mobile inline expand). Lets logged-out
+   * visitors see the whole product surface without leaving the page — while the
+   * item's own `href` stays a real link (the full /product tour).
+   */
+  menu?: ProductSection[];
+}
+
+/**
+ * Single source of truth for the marketing header links. Consumed by the
+ * landing page (and any other marketing surface) so the public nav can't drift.
+ * "Product" carries the full capability tour as a mega-menu so visitors can
+ * discover what the platform consists of before signing up.
+ */
+export const MARKETING_NAV_LINKS: NavLink[] = [
+  { href: '/product', label: 'Product', menu: PRODUCT_SECTIONS },
+  { href: '/marketplace', label: 'Workforce' },
+  { href: '/agents', label: 'BuilderForce Agents' },
+  { href: '/blog', label: 'Blog' },
+  { href: '/pricing', label: 'Pricing' },
+  { href: '/login', label: 'Sign In' },
+];
+
+export const FOOTER_LINKS: NavLink[] = [
+  { href: '/', label: 'Home' },
+  { href: '/product', label: 'Product' },
+  { href: '/marketplace', label: 'Workforce Registry' },
+  { href: '/agents', label: 'BuilderForce Agents' },
+  { href: '/blog', label: 'Blog' },
+  { href: '/pricing', label: 'Pricing' },
+  { href: '/login', label: 'Sign In' },
+  { href: '/register', label: 'Get Started' },
 ];
