@@ -7,7 +7,7 @@ status: active
 
 # Sandbox vs Tool Policy vs Elevated
 
-CoderClaw has three related (but different) controls:
+BuilderForce Agents has three related (but different) controls:
 
 1. **Sandbox** (`agents.defaults.sandbox.*` / `agents.list[].sandbox.*`) decides **where tools run** (Docker vs host).
 2. **Tool policy** (`tools.*`, `tools.sandbox.tools.*`, `agents.list[].tools.*`) decides **which tools are available/allowed**.
@@ -15,13 +15,13 @@ CoderClaw has three related (but different) controls:
 
 ## Quick debug
 
-Use the inspector to see what CoderClaw is _actually_ doing:
+Use the inspector to see what BuilderForce Agents is _actually_ doing:
 
 ```bash
-coderclaw sandbox explain
-coderclaw sandbox explain --session agent:main:main
-coderclaw sandbox explain --agent work
-coderclaw sandbox explain --json
+builderforce sandbox explain
+builderforce sandbox explain --session agent:main:main
+builderforce sandbox explain --agent work
+builderforce sandbox explain --json
 ```
 
 It prints:
@@ -93,7 +93,7 @@ Available groups:
 - `group:automation`: `cron`, `gateway`
 - `group:messaging`: `message`
 - `group:nodes`: `nodes`
-- `group:coderclaw`: all built-in CoderClaw tools (excludes provider plugins)
+- `group:builderforce`: all built-in BuilderForce Agents tools (excludes provider plugins)
 
 ## Elevated: exec-only “run on host”
 

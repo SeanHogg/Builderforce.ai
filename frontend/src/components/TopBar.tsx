@@ -81,7 +81,7 @@ export default function TopBar() {
       <div className="topbar-left">
         <Link href="/dashboard" className="brand" style={{ textDecoration: 'none' }}>
           <Image
-            src="/claw.png"
+            src="/agentHost.png"
             alt="Builderforce"
             width={28}
             height={28}

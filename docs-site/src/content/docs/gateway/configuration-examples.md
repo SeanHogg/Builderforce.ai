@@ -1,9 +1,9 @@
 ---
-summary: "Schema-accurate configuration examples for common CoderClaw setups"
+summary: "Schema-accurate configuration examples for common BuilderForce Agents setups"
 read_when:
-  - Learning how to configure CoderClaw
+  - Learning how to configure BuilderForce Agents
   - Looking for configuration examples
-  - Setting up CoderClaw for the first time
+  - Setting up BuilderForce Agents for the first time
 title: "Configuration Examples"
 ---
 
@@ -17,24 +17,24 @@ Examples below are aligned with the current config schema. For the exhaustive re
 
 ```json5
 {
-  agent: { workspace: "~/.coderclaw/workspace" },
+  agent: { workspace: "~/.builderforce/workspace" },
   channels: { whatsapp: { allowFrom: ["+15555550123"] } },
 }
 ```
 
-Save to `~/.coderclaw/coderclaw.json` and you can DM the bot from that number.
+Save to `~/.builderforce/builderforce.json` and you can DM the bot from that number.
 
 ### Recommended starter
 
 ```json5
 {
   identity: {
-    name: "CoderClaw",
+    name: "BuilderForce Agents",
     theme: "helpful assistant",
     emoji: "🦞",
   },
   agent: {
-    workspace: "~/.coderclaw/workspace",
+    workspace: "~/.builderforce/workspace",
     model: { primary: "anthropic/claude-sonnet-4-5" },
   },
   channels: {
@@ -93,7 +93,7 @@ Save to `~/.coderclaw/coderclaw.json` and you can DM the bot from that number.
   // Logging
   logging: {
     level: "info",
-    file: "/tmp/coderclaw/coderclaw.log",
+    file: "/tmp/builderforce/builderforce.log",
     consoleLevel: "info",
     consoleStyle: "pretty",
     redactSensitive: "tools",
@@ -101,7 +101,7 @@ Save to `~/.coderclaw/coderclaw.json` and you can DM the bot from that number.
 
   // Message formatting
   messages: {
-    messagePrefix: "[coderclaw]",
+    messagePrefix: "[builderforce]",
     responsePrefix: ">",
     ackReaction: "👀",
     ackReactionScope: "group-mentions",
@@ -110,7 +110,7 @@ Save to `~/.coderclaw/coderclaw.json` and you can DM the bot from that number.
   // Routing + queue
   routing: {
     groupChat: {
-      mentionPatterns: ["@coderclaw", "coderclaw"],
+      mentionPatterns: ["@builderforce", "builderforce"],
       historyLimit: 50,
     },
     queue: {
@@ -163,7 +163,7 @@ Save to `~/.coderclaw/coderclaw.json` and you can DM the bot from that number.
       discord: { mode: "idle", idleMinutes: 10080 },
     },
     resetTriggers: ["/new", "/reset"],
-    store: "~/.coderclaw/agents/default/sessions/sessions.json",
+    store: "~/.builderforce/agents/default/sessions/sessions.json",
     maintenance: {
       mode: "warn",
       pruneAfter: "30d",
@@ -202,7 +202,7 @@ Save to `~/.coderclaw/coderclaw.json` and you can DM the bot from that number.
       dm: { enabled: true, allowFrom: ["steipete"] },
       guilds: {
         "123456789012345678": {
-          slug: "friends-of-coderclaw",
+          slug: "friends-of-builderforce",
           requireMention: false,
           channels: {
             general: { allow: true },
@@ -222,7 +222,7 @@ Save to `~/.coderclaw/coderclaw.json` and you can DM the bot from that number.
       dm: { enabled: true, allowFrom: ["U123"] },
       slashCommand: {
         enabled: true,
-        name: "coderclaw",
+        name: "builderforce",
         sessionPrefix: "slack:slash",
         ephemeral: true,
       },
@@ -232,7 +232,7 @@ Save to `~/.coderclaw/coderclaw.json` and you can DM the bot from that number.
   // Agent runtime
   agents: {
     defaults: {
-      workspace: "~/.coderclaw/workspace",
+      workspace: "~/.builderforce/workspace",
       userTimezone: "America/Chicago",
       model: {
         primary: "anthropic/claude-sonnet-4-5",
@@ -285,9 +285,9 @@ Save to `~/.coderclaw/coderclaw.json` and you can DM the bot from that number.
       sandbox: {
         mode: "non-main",
         perSession: true,
-        workspaceRoot: "~/.coderclaw/sandboxes",
+        workspaceRoot: "~/.builderforce/sandboxes",
         docker: {
-          image: "coderclaw-sandbox:bookworm-slim",
+          image: "builderforce-sandbox:bookworm-slim",
           workdir: "/workspace",
           readOnlyRoot: true,
           tmpfs: ["/tmp", "/var/tmp", "/run"],
@@ -352,7 +352,7 @@ Save to `~/.coderclaw/coderclaw.json` and you can DM the bot from that number.
   // Cron jobs
   cron: {
     enabled: true,
-    store: "~/.coderclaw/cron/cron.json",
+    store: "~/.builderforce/cron/cron.json",
     maxConcurrentRuns: 2,
     sessionRetention: "24h",
   },
@@ -363,7 +363,7 @@ Save to `~/.coderclaw/coderclaw.json` and you can DM the bot from that number.
     path: "/hooks",
     token: "shared-secret",
     presets: ["gmail"],
-    transformsDir: "~/.coderclaw/hooks/transforms",
+    transformsDir: "~/.builderforce/hooks/transforms",
     mappings: [
       {
         id: "gmail-hook",
@@ -386,7 +386,7 @@ Save to `~/.coderclaw/coderclaw.json` and you can DM the bot from that number.
       },
     ],
     gmail: {
-      account: "coderclaw@gmail.com",
+      account: "builderforce@gmail.com",
       label: "INBOX",
       topic: "projects/<project-id>/topics/gog-gmail-watch",
       subscription: "gog-gmail-watch-push",
@@ -405,7 +405,7 @@ Save to `~/.coderclaw/coderclaw.json` and you can DM the bot from that number.
     mode: "local",
     port: 18789,
     bind: "loopback",
-    controlUi: { enabled: true, basePath: "/coderclaw" },
+    controlUi: { enabled: true, basePath: "/builderforce" },
     auth: {
       mode: "token",
       token: "gateway-token",
@@ -443,7 +443,7 @@ Save to `~/.coderclaw/coderclaw.json` and you can DM the bot from that number.
 
 ```json5
 {
-  agent: { workspace: "~/.coderclaw/workspace" },
+  agent: { workspace: "~/.builderforce/workspace" },
   channels: {
     whatsapp: { allowFrom: ["+15555550123"] },
     telegram: {
@@ -507,7 +507,7 @@ If more than one person can DM your bot (multiple entries in `allowFrom`, pairin
     },
   },
   agent: {
-    workspace: "~/.coderclaw/workspace",
+    workspace: "~/.builderforce/workspace",
     model: {
       primary: "anthropic/claude-sonnet-4-5",
       fallbacks: ["anthropic/claude-opus-4-6"],
@@ -546,7 +546,7 @@ If more than one person can DM your bot (multiple entries in `allowFrom`, pairin
     },
   },
   agent: {
-    workspace: "~/.coderclaw/workspace",
+    workspace: "~/.builderforce/workspace",
     model: {
       primary: "anthropic/claude-opus-4-6",
       fallbacks: ["minimax/MiniMax-M2.1"],
@@ -564,7 +564,7 @@ If more than one person can DM your bot (multiple entries in `allowFrom`, pairin
     theme: "professional assistant",
   },
   agent: {
-    workspace: "~/work-coderclaw",
+    workspace: "~/work-builderforce",
     elevated: { enabled: false },
   },
   channels: {
@@ -585,7 +585,7 @@ If more than one person can DM your bot (multiple entries in `allowFrom`, pairin
 ```json5
 {
   agent: {
-    workspace: "~/.coderclaw/workspace",
+    workspace: "~/.builderforce/workspace",
     model: { primary: "lmstudio/minimax-m2.1-gs32" },
   },
   models: {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { RepoService, normalizePrStatus, type ClawDispatcher } from './RepoService';
+import { RepoService, normalizePrStatus, type AgentHostDispatcher } from './RepoService';
 import {
   projectRepositories,
   pullRequests,
@@ -97,7 +97,7 @@ describe('normalizePrStatus', () => {
 describe('RepoService.dispatchPrCreation', () => {
   it('returns task_not_found when no task row', () => {
     const { db } = makeFakeDb({ selectByTable: new Map([[tasks, []]]) });
-    const dispatcher: ClawDispatcher = vi.fn(async () => true);
+    const dispatcher: AgentHostDispatcher = vi.fn(async () => true);
     const svc = new RepoService(db, dispatcher);
     return svc.dispatchPrCreation(99, TENANT).then((res) => {
       expect(res).toEqual({ ok: false, code: 'task_not_found', reason: 'Task not found' });
@@ -105,28 +105,28 @@ describe('RepoService.dispatchPrCreation', () => {
     });
   });
 
-  it('returns no_claw (409 mapping) when task has no assigned claw', async () => {
+  it('returns no_agent_host (409 mapping) when task has no assigned agentHost', async () => {
     const { db } = makeFakeDb({
       selectByTable: new Map([
-        [tasks, [{ id: 5, projectId: 10, title: 'T', description: null, status: 'ready', specId: null, source: null, assignedClawId: null }]],
+        [tasks, [{ id: 5, projectId: 10, title: 'T', description: null, status: 'ready', specId: null, source: null, assignedAgentHostId: null }]],
       ]),
     });
-    const dispatcher: ClawDispatcher = vi.fn(async () => true);
+    const dispatcher: AgentHostDispatcher = vi.fn(async () => true);
     const svc = new RepoService(db, dispatcher);
     const res = await svc.dispatchPrCreation(5, TENANT);
     expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.code).toBe('no_claw');
+    if (!res.ok) expect(res.code).toBe('no_agent_host');
     expect(dispatcher).not.toHaveBeenCalled();
   });
 
   it('returns no_repo when no repo resolves (no repos at all)', async () => {
     const { db } = makeFakeDb({
       selectByTable: new Map<TableRef, unknown[]>([
-        [tasks, [{ id: 5, projectId: 10, title: 'T', description: 'desc', status: 'ready', specId: null, source: null, assignedClawId: 7 }]],
+        [tasks, [{ id: 5, projectId: 10, title: 'T', description: 'desc', status: 'ready', specId: null, source: null, assignedAgentHostId: 7 }]],
         [projectRepositories, []],
       ]),
     });
-    const dispatcher: ClawDispatcher = vi.fn(async () => true);
+    const dispatcher: AgentHostDispatcher = vi.fn(async () => true);
     const svc = new RepoService(db, dispatcher);
     const res = await svc.dispatchPrCreation(5, TENANT);
     expect(res.ok).toBe(false);
@@ -150,26 +150,26 @@ describe('RepoService.dispatchPrCreation', () => {
     };
     const { db, inserts } = makeFakeDb({
       selectByTable: new Map<TableRef, unknown[]>([
-        [tasks, [{ id: 5, projectId: 10, title: 'Add feature', description: 'unrelated', status: 'ready', specId: null, source: 'JIRA-1', assignedClawId: 7 }]],
+        [tasks, [{ id: 5, projectId: 10, title: 'Add feature', description: 'unrelated', status: 'ready', specId: null, source: 'JIRA-1', assignedAgentHostId: 7 }]],
         [projectRepositories, [repoRow]],
       ]),
     });
-    const dispatcher: ClawDispatcher = vi.fn(async () => true);
+    const dispatcher: AgentHostDispatcher = vi.fn(async () => true);
     const svc = new RepoService(db, dispatcher);
 
     const res = await svc.dispatchPrCreation(5, TENANT);
 
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.clawId).toBe(7);
+      expect(res.agentHostId).toBe(7);
       expect(res.message.type).toBe('create_pr');
       expect(res.message.branchName).toBe('task/jira-1-add-feature');
       expect(res.message.base).toBe('main');
     }
-    // dispatcher called with the resolved claw id and the create_pr message.
+    // dispatcher called with the resolved agentHost id and the create_pr message.
     expect(dispatcher).toHaveBeenCalledTimes(1);
-    const [clawId, message] = (dispatcher as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]!;
-    expect(clawId).toBe(7);
+    const [agentHostId, message] = (dispatcher as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]!;
+    expect(agentHostId).toBe(7);
     expect((message as { type: string }).type).toBe('create_pr');
 
     // both a repoBranches and a pullRequests row were inserted.
@@ -182,7 +182,7 @@ describe('RepoService.dispatchPrCreation', () => {
     expect(branchInsert?.values.name).toBe('task/jira-1-add-feature');
   });
 
-  it('returns dispatch_failed when the claw does not acknowledge (but still records the PR)', async () => {
+  it('returns dispatch_failed when the agentHost does not acknowledge (but still records the PR)', async () => {
     const repoRow = {
       id: 'repo-1', tenantId: TENANT, segmentId: null, projectId: 10,
       provider: 'github', host: 'github.com', owner: 'acme', repo: 'web',
@@ -190,11 +190,11 @@ describe('RepoService.dispatchPrCreation', () => {
     };
     const { db, inserts } = makeFakeDb({
       selectByTable: new Map<TableRef, unknown[]>([
-        [tasks, [{ id: 5, projectId: 10, title: 'T', description: 'd', status: 'ready', specId: null, source: null, assignedClawId: 7 }]],
+        [tasks, [{ id: 5, projectId: 10, title: 'T', description: 'd', status: 'ready', specId: null, source: null, assignedAgentHostId: 7 }]],
         [projectRepositories, [repoRow]],
       ]),
     });
-    const dispatcher: ClawDispatcher = vi.fn(async () => false);
+    const dispatcher: AgentHostDispatcher = vi.fn(async () => false);
     const svc = new RepoService(db, dispatcher);
     const res = await svc.dispatchPrCreation(5, TENANT);
     expect(res.ok).toBe(false);

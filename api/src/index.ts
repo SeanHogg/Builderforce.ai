@@ -30,7 +30,7 @@ import { AuthService }     from './application/auth/AuthService';
 import { AgentService }    from './application/agent/AgentService';
 import { RuntimeService }  from './application/runtime/RuntimeService';
 import { AuditService }    from './application/audit/AuditService';
-import { ClawService }     from './application/claw/ClawService';
+import { AgentHostService }     from './application/agentHost/AgentHostService';
 
 // Routes
 import { createProjectRoutes }     from './presentation/routes/projectRoutes';
@@ -51,9 +51,9 @@ import { createAgentRoutes, createSkillRoutes } from './presentation/routes/agen
 import { createRuntimeRoutes }     from './presentation/routes/runtimeRoutes';
 import { createAuditRoutes }       from './presentation/routes/auditRoutes';
 import { createMarketplaceRoutes } from './presentation/routes/marketplaceRoutes';
-import { createClawRoutes }        from './presentation/routes/clawRoutes';
-import { ClawRepository }          from './infrastructure/repositories/ClawRepository';
-import { IClawRepository }         from './domain/claw/IClawRepository';
+import { createAgentHostRoutes }        from './presentation/routes/agentHostRoutes';
+import { AgentHostRepository }          from './infrastructure/repositories/AgentHostRepository';
+import { IAgentHostRepository }         from './domain/agentHost/IAgentHostRepository';
 import { createSkillAssignmentRoutes } from './presentation/routes/skillAssignmentRoutes';
 import { createArtifactAssignmentRoutes } from './presentation/routes/artifactAssignmentRoutes';
 import { createProjectAgentRoutes } from './presentation/routes/projectAgentRoutes';
@@ -64,6 +64,7 @@ import { createAdminRoutes }        from './presentation/routes/adminRoutes';
 import { createChatRoutes }         from './presentation/routes/chatRoutes';
 import { createSpecRoutes }         from './presentation/routes/specRoutes';
 import { createWorkflowRoutes }     from './presentation/routes/workflowRoutes';
+import { createWorkflowDefinitionRoutes } from './presentation/routes/workflowDefinitionRoutes';
 import { createApprovalRoutes }     from './presentation/routes/approvalRoutes';
 import { createApprovalRuleRoutes } from './presentation/routes/approvalRuleRoutes';
 import { createTelemetryRoutes }    from './presentation/routes/telemetryRoutes';
@@ -81,7 +82,7 @@ import { createIdeAiRoutes }       from './presentation/routes/ideAiRoutes';
 import { BrainService }            from './application/brain/BrainService';
 import { buildPaymentProvider }    from './infrastructure/payment';
 import { createWebhookRoutes }     from './presentation/routes/webhookRoutes';
-import { createManagedClawRoutes }     from './presentation/routes/managedClawRoutes';
+import { createManagedAgentHostRoutes }     from './presentation/routes/managedAgentHostRoutes';
 import { createGitHubWebhookRoutes }   from './presentation/routes/githubWebhookRoutes';
 import { createCostForecastRoutes }    from './presentation/routes/costForecastRoutes';
 import { createDashboardRoutes }       from './presentation/routes/dashboardRoutes';
@@ -112,7 +113,7 @@ import { rateLimitMiddleware } from './presentation/middleware/rateLimitMiddlewa
 import { emulationMiddleware } from './presentation/middleware/emulationMiddleware';
 
 // Durable Objects (must be re-exported so the Workers runtime can instantiate them)
-export { ClawRelayDO } from './infrastructure/relay/ClawRelayDO';
+export { AgentHostRelayDO } from './infrastructure/relay/AgentHostRelayDO';
 export { SessionRoomDO } from './infrastructure/relay/SessionRoomDO';
 export { AnalysisRunnerDO } from './infrastructure/relay/AnalysisRunnerDO';
 export { TenantRateLimiterDO } from './infrastructure/ratelimit/TenantRateLimiterDO';
@@ -134,7 +135,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   const skillRepo      = new SkillRepository(db);
   const executionRepo = new ExecutionRepository(db);
   const auditRepo     = new AuditRepository(db);
-  const clawRepo      = new ClawRepository(db);
+  const agentHostRepo      = new AgentHostRepository(db);
 
   // --- Payment provider (selected by PAYMENT_PROVIDER env var, defaults to "manual") ---
   const paymentProvider = buildPaymentProvider(env);
@@ -147,7 +148,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   const agentService    = new AgentService(agentRepo, skillRepo, auditRepo);
   const runtimeService  = new RuntimeService(executionRepo, taskRepo, agentRepo, auditRepo);
   const auditService    = new AuditService(auditRepo);
-  const clawService     = new ClawService(clawRepo);
+  const agentHostService     = new AgentHostService(agentHostRepo);
   const brainService    = new BrainService(db);
 
   // --- Presentation ---
@@ -164,27 +165,27 @@ function buildApp(env: Env): Hono<HonoEnv> {
 
   app.get('/health', (c) => c.json({ status: 'ok', worker: 'api.builderforce.ai', version: API_VERSION }));
 
-  // OpenAPI 3.1 document — CoderClaw-facing endpoints (P4-4)
+  // OpenAPI 3.1 document — BuilderForce Agents-facing endpoints (P4-4)
   app.get('/api/openapi.json', (c) => {
     const doc = {
       openapi: OPENAPI_VERSION,
       info: { title: OPENAPI_TITLE, description: OPENAPI_DESCRIPTION, version: API_VERSION },
       servers: [{ url: 'https://api.builderforce.ai', description: 'Production' }],
       paths: {
-        '/api/claws': {
-          post: { summary: 'Register a CoderClaw instance', operationId: 'registerClaw', tags: ['Claws'] },
+        '/api/agent-hosts': {
+          post: { summary: 'Register a BuilderForce Agents instance', operationId: 'registerAgentHost', tags: ['AgentHosts'] },
         },
-        '/api/claws/{id}/heartbeat': {
-          patch: { summary: 'Send heartbeat', operationId: 'heartbeat', tags: ['Claws'] },
+        '/api/agent-hosts/{id}/heartbeat': {
+          patch: { summary: 'Send heartbeat', operationId: 'heartbeat', tags: ['AgentHosts'] },
         },
-        '/api/claws/{id}/forward': {
-          post: { summary: 'Forward a remote task to a claw', operationId: 'forwardTask', tags: ['Claws'] },
+        '/api/agent-hosts/{id}/forward': {
+          post: { summary: 'Forward a remote task to a agentHost', operationId: 'forwardTask', tags: ['AgentHosts'] },
         },
-        '/api/claws/{id}/context-bundle': {
-          get: { summary: 'Get last-synced .coderClaw/ context bundle', operationId: 'getContextBundle', tags: ['Claws'] },
+        '/api/agent-hosts/{id}/context-bundle': {
+          get: { summary: 'Get last-synced .builderforce/ context bundle', operationId: 'getContextBundle', tags: ['AgentHosts'] },
         },
-        '/api/claws/fleet': {
-          get: { summary: 'List online claws in the fleet', operationId: 'getFleet', tags: ['Claws'] },
+        '/api/agent-hosts/fleet': {
+          get: { summary: 'List online agentHosts in the fleet', operationId: 'getFleet', tags: ['AgentHosts'] },
         },
         '/api/telemetry/spans': {
           post: { summary: 'Ingest telemetry spans', operationId: 'ingestSpans', tags: ['Telemetry'] },
@@ -206,7 +207,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
     return c.json(doc);
   });
 
-  // builderforceLLM — OpenAI-compatible multi-vendor LLM proxy (tenant or claw API key auth)
+  // builderforceLLM — OpenAI-compatible multi-vendor LLM proxy (tenant or agentHost API key auth)
   app.route('/llm', createLlmRoutes());
 
   // Marketplace (no JWT required for read, required for write)
@@ -228,14 +229,18 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/auth',    createAuthRoutes(authService, db));
   app.route('/api/auth',    createOAuthRoutes(db));
 
-  // CoderClaw instances + skill assignments (tenant JWT inside each router)
-  app.route('/api/claws',            createClawRoutes(db, clawService));
+  // BuilderForce Agents instances + skill assignments (tenant JWT inside each router)
+  app.route('/api/agent-hosts',            createAgentHostRoutes(db, agentHostService));
+  // @deprecated back-compat aliases for the old CoderClaw "claw" routes. Field agents
+  // built before the BuilderForce Agents rebrand still call /api/claws. Remove once the
+  // deployed agent fleet has upgraded to the /api/agent-hosts paths (see Gap Register).
+  app.route('/api/claws',                  createAgentHostRoutes(db, agentHostService));
   app.route('/api/skill-assignments', createSkillAssignmentRoutes(db));
   app.route('/api/artifact-assignments', createArtifactAssignmentRoutes(db));
   app.route('/api/project-agents', createProjectAgentRoutes(db));
   app.route('/api/marketplace-stats', createMarketplaceStatsRoutes(db));
 
-  // Chat persistence (claw-auth writes + tenant-JWT reads)
+  // Chat persistence (agentHost-auth writes + tenant-JWT reads)
   app.route('/api', createChatRoutes(db));
 
   // Protected endpoints (JWT injected by authMiddleware inside each router)
@@ -259,6 +264,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/admin',    createAdminRoutes());
   app.route('/api/specs',    createSpecRoutes(db));
   app.route('/api/workflows', createWorkflowRoutes(db));
+  app.route('/api/workflow-definitions', createWorkflowDefinitionRoutes(db));
   app.route('/api/approvals',       createApprovalRoutes(db));
   app.route('/api/approval-rules',  createApprovalRuleRoutes(db));
   app.route('/api/telemetry',       createTelemetryRoutes(db));
@@ -272,7 +278,8 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/reports',         createReportRoutes(db));
   app.route('/api/analytics',       createAnalyticsRoutes(db));
   app.route('/api/prompts',         createPromptLibraryRoutes(db));
-  app.route('/api/managed-claws',   createManagedClawRoutes(db));
+  app.route('/api/managed-agent-hosts',   createManagedAgentHostRoutes(db));
+  app.route('/api/managed-claws',          createManagedAgentHostRoutes(db)); // @deprecated back-compat alias
   app.route('/api/cost-forecast',   createCostForecastRoutes(db));
   app.route('/api/dashboard',       createDashboardRoutes(db));
   app.route('/api/brain',     createBrainRoutes(brainService, db));
@@ -339,9 +346,9 @@ export default {
           'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
           // SDK-emitted custom headers must be in this list or the browser
           // will block the preflight: `Idempotency-Key` (cron retries),
-          // `X-Emulation-Token` (admin emulation flow), `X-Claw-Signature`
-          // (claw-relay HMAC).
-          'Access-Control-Allow-Headers': 'Content-Type,Authorization,Idempotency-Key,X-Emulation-Token,X-Claw-Signature',
+          // `X-Emulation-Token` (admin emulation flow), `X-AgentHost-Signature`
+          // (agentHost-relay HMAC).
+          'Access-Control-Allow-Headers': 'Content-Type,Authorization,Idempotency-Key,X-Emulation-Token,X-AgentHost-Signature',
           // Echo the daily-budget snapshot headers so SDK consumers in the
           // browser can pre-emptively throttle without a second fetch.
           'Access-Control-Expose-Headers': 'x-request-id,x-builderforce-model,x-builderforce-retries,x-builderforce-product,x-builderforce-effective-plan,x-builderforce-daily-tokens-used,x-builderforce-daily-tokens-limit,x-builderforce-daily-tokens-remaining',

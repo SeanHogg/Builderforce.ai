@@ -22,7 +22,7 @@ const TENANT_TOKEN_KEY = 'bf_tenant_token';
 const USER_KEY = 'bf_user';
 const TENANT_KEY = 'bf_tenant';
 const LAST_PROJECT_KEY = 'bf_last_project_id';
-/** Default tenant for auto-selection when user has multiple workspaces (CoderClawLink-style). */
+/** Default tenant for auto-selection when user has multiple workspaces (BuilderForceAgentsLink-style). */
 const DEFAULT_TENANT_KEY = 'bf_default_tenant_id';
 
 function isBrowser(): boolean {

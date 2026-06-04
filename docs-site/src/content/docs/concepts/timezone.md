@@ -8,7 +8,7 @@ title: "Timezones"
 
 # Timezones
 
-CoderClaw standardizes timestamps so the model sees a **single reference time**.
+BuilderForce Agents standardizes timestamps so the model sees a **single reference time**.
 
 ## Message envelopes (local by default)
 
@@ -73,7 +73,7 @@ Raw provider fields are preserved.
 ## User timezone for the system prompt
 
 Set `agents.defaults.userTimezone` to tell the model the user's local time zone. If it is
-unset, CoderClaw resolves the **host timezone at runtime** (no config write).
+unset, BuilderForce Agents resolves the **host timezone at runtime** (no config write).
 
 ```json5
 {

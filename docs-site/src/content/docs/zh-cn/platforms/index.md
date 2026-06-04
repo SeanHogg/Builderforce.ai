@@ -15,7 +15,7 @@ x-i18n:
 
 # 平台
 
-CoderClaw 核心使用 TypeScript 编写。**Node 是推荐的运行时**。
+BuilderForce Agents 核心使用 TypeScript 编写。**Node 是推荐的运行时**。
 不推荐 Bun 用于 Gateway 网关（WhatsApp/Telegram 存在 bug）。
 
 配套应用适用于 macOS（菜单栏应用）和移动节点（iOS/Android）。Windows 和
@@ -43,18 +43,18 @@ Windows 原生配套应用也在计划中；推荐通过 WSL2 使用 Gateway 网
 - 安装指南：[入门指南](/start/getting-started)
 - Gateway 网关运行手册：[Gateway 网关](/gateway)
 - Gateway 网关配置：[配置](/gateway/configuration)
-- 服务状态：`coderclaw gateway status`
+- 服务状态：`builderforce gateway status`
 
 ## Gateway 网关服务安装（CLI）
 
 使用以下任一方式（均支持）：
 
-- 向导（推荐）：`coderclaw onboard --install-daemon`
-- 直接安装：`coderclaw gateway install`
-- 配置流程：`coderclaw configure` → 选择 **Gateway service**
-- 修复/迁移：`coderclaw doctor`（提供安装或修复服务）
+- 向导（推荐）：`builderforce onboard --install-daemon`
+- 直接安装：`builderforce gateway install`
+- 配置流程：`builderforce configure` → 选择 **Gateway service**
+- 修复/迁移：`builderforce doctor`（提供安装或修复服务）
 
 服务目标取决于操作系统：
 
-- macOS：LaunchAgent（`bot.molt.gateway` 或 `bot.molt.<profile>`；旧版 `com.coderclaw.*`）
-- Linux/WSL2：systemd 用户服务（`coderclaw-gateway[-<profile>].service`）
+- macOS：LaunchAgent（`bot.molt.gateway` 或 `bot.molt.<profile>`；旧版 `com.builderforce.*`）
+- Linux/WSL2：systemd 用户服务（`builderforce-gateway[-<profile>].service`）

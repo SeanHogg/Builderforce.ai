@@ -1,5 +1,5 @@
 ---
-summary: "CoderClaw plugins/extensions: discovery, config, and safety"
+summary: "BuilderForce Agents plugins/extensions: discovery, config, and safety"
 read_when:
   - Adding or modifying plugins/extensions
   - Documenting plugin install or load rules
@@ -10,11 +10,11 @@ title: "Plugins"
 
 ## Quick start (new to plugins?)
 
-A plugin is just a **small code module** that extends CoderClaw with extra
+A plugin is just a **small code module** that extends BuilderForce Agents with extra
 features (commands, tools, and Gateway RPC).
 
 Most of the time, you’ll use plugins when you want a feature that’s not built
-into core CoderClaw yet (or you want to keep optional features out of your main
+into core BuilderForce Agents yet (or you want to keep optional features out of your main
 install).
 
 Fast path:
@@ -22,13 +22,13 @@ Fast path:
 1. See what’s already loaded:
 
 ```bash
-coderclaw plugins list
+builderforce plugins list
 ```
 
 2. Install an official plugin (example: Voice Call):
 
 ```bash
-coderclaw plugins install @coderclaw/voice-call
+builderforce plugins install @builderforce/voice-call
 ```
 
 Npm specs are **registry-only** (package name + optional version/tag). Git/URL/file
@@ -41,21 +41,21 @@ Looking for third-party listings? See [Community plugins](/plugins/community).
 
 ## Available plugins (official)
 
-- Microsoft Teams is plugin-only as of 2026.1.15; install `@coderclaw/msteams` if you use Teams.
+- Microsoft Teams is plugin-only as of 2026.1.15; install `@builderforce/msteams` if you use Teams.
 - Memory (Core) — bundled memory search plugin (enabled by default via `plugins.slots.memory`)
 - Memory (LanceDB) — bundled long-term memory plugin (auto-recall/capture; set `plugins.slots.memory = "memory-lancedb"`)
-- [Voice Call](/plugins/voice-call) — `@coderclaw/voice-call`
-- [Zalo Personal](/plugins/zalouser) — `@coderclaw/zalouser`
-- [Matrix](/channels/matrix) — `@coderclaw/matrix`
-- [Nostr](/channels/nostr) — `@coderclaw/nostr`
-- [Zalo](/channels/zalo) — `@coderclaw/zalo`
-- [Microsoft Teams](/channels/msteams) — `@coderclaw/msteams`
+- [Voice Call](/plugins/voice-call) — `@builderforce/voice-call`
+- [Zalo Personal](/plugins/zalouser) — `@builderforce/zalouser`
+- [Matrix](/channels/matrix) — `@builderforce/matrix`
+- [Nostr](/channels/nostr) — `@builderforce/nostr`
+- [Zalo](/channels/zalo) — `@builderforce/zalo`
+- [Microsoft Teams](/channels/msteams) — `@builderforce/msteams`
 - Google Antigravity OAuth (provider auth) — bundled as `google-antigravity-auth` (disabled by default)
 - Gemini CLI OAuth (provider auth) — bundled as `google-gemini-cli-auth` (disabled by default)
 - Qwen OAuth (provider auth) — bundled as `qwen-portal-auth` (disabled by default)
 - Copilot Proxy (provider auth) — local VS Code Copilot Proxy bridge; distinct from built-in `github-copilot` device login (bundled, disabled by default)
 
-CoderClaw plugins are **TypeScript modules** loaded at runtime via jiti. **Config
+BuilderForce Agents plugins are **TypeScript modules** loaded at runtime via jiti. **Config
 validation does not execute plugin code**; it uses the plugin manifest and JSON
 Schema instead. See [Plugin manifest](/plugins/manifest).
 
@@ -79,7 +79,7 @@ Plugins can access selected core helpers via `api.runtime`. For telephony TTS:
 
 ```ts
 const result = await api.runtime.tts.textToSpeechTelephony({
-  text: "Hello from CoderClaw",
+  text: "Hello from BuilderForce Agents",
   cfg: api.config,
 });
 ```
@@ -92,7 +92,7 @@ Notes:
 
 ## Discovery & precedence
 
-CoderClaw scans, in order:
+BuilderForce Agents scans, in order:
 
 1. Config paths
 
@@ -100,23 +100,23 @@ CoderClaw scans, in order:
 
 2. Workspace extensions
 
-- `<workspace>/.coderclaw/extensions/*.ts`
-- `<workspace>/.coderclaw/extensions/*/index.ts`
+- `<workspace>/.builderforce/extensions/*.ts`
+- `<workspace>/.builderforce/extensions/*/index.ts`
 
 3. Global extensions
 
-- `~/.coderclaw/extensions/*.ts`
-- `~/.coderclaw/extensions/*/index.ts`
+- `~/.builderforce/extensions/*.ts`
+- `~/.builderforce/extensions/*/index.ts`
 
-4. Bundled extensions (shipped with CoderClaw, **disabled by default**)
+4. Bundled extensions (shipped with BuilderForce Agents, **disabled by default**)
 
-- `<coderclaw>/extensions/*`
+- `<builderforce>/extensions/*`
 
 Bundled plugins must be enabled explicitly via `plugins.entries.<id>.enabled`
-or `coderclaw plugins enable <id>`. Installed plugins are enabled by default,
+or `builderforce plugins enable <id>`. Installed plugins are enabled by default,
 but can be disabled the same way.
 
-Each plugin must include a `coderclaw.plugin.json` file in its root. If a path
+Each plugin must include a `builderforce.plugin.json` file in its root. If a path
 points at a file, the plugin root is the file's directory and must contain the
 manifest.
 
@@ -125,12 +125,12 @@ wins and lower-precedence copies are ignored.
 
 ### Package packs
 
-A plugin directory may include a `package.json` with `coderclaw.extensions`:
+A plugin directory may include a `package.json` with `builderforce.extensions`:
 
 ```json
 {
   "name": "my-pack",
-  "coderclaw": {
+  "builderforce": {
     "extensions": ["./src/safety.ts", "./src/tools.ts"]
   }
 }
@@ -142,21 +142,21 @@ becomes `name/<fileBase>`.
 If your plugin imports npm deps, install them in that directory so
 `node_modules` is available (`npm install` / `pnpm install`).
 
-Security note: `coderclaw plugins install` installs plugin dependencies with
+Security note: `builderforce plugins install` installs plugin dependencies with
 `npm install --ignore-scripts` (no lifecycle scripts). Keep plugin dependency
 trees "pure JS/TS" and avoid packages that require `postinstall` builds.
 
 ### Channel catalog metadata
 
-Channel plugins can advertise onboarding metadata via `coderclaw.channel` and
-install hints via `coderclaw.install`. This keeps the core catalog data-free.
+Channel plugins can advertise onboarding metadata via `builderforce.channel` and
+install hints via `builderforce.install`. This keeps the core catalog data-free.
 
 Example:
 
 ```json
 {
-  "name": "@coderclaw/nextcloud-talk",
-  "coderclaw": {
+  "name": "@builderforce/nextcloud-talk",
+  "builderforce": {
     "extensions": ["./index.ts"],
     "channel": {
       "id": "nextcloud-talk",
@@ -169,7 +169,7 @@ Example:
       "aliases": ["nc-talk", "nc"]
     },
     "install": {
-      "npmSpec": "@coderclaw/nextcloud-talk",
+      "npmSpec": "@builderforce/nextcloud-talk",
       "localPath": "extensions/nextcloud-talk",
       "defaultChoice": "npm"
     }
@@ -177,16 +177,16 @@ Example:
 }
 ```
 
-CoderClaw can also merge **external channel catalogs** (for example, an MPM
+BuilderForce Agents can also merge **external channel catalogs** (for example, an MPM
 registry export). Drop a JSON file at one of:
 
-- `~/.coderclaw/mpm/plugins.json`
-- `~/.coderclaw/mpm/catalog.json`
-- `~/.coderclaw/plugins/catalog.json`
+- `~/.builderforce/mpm/plugins.json`
+- `~/.builderforce/mpm/catalog.json`
+- `~/.builderforce/plugins/catalog.json`
 
-Or point `CODERCLAW_PLUGIN_CATALOG_PATHS` (or `CODERCLAW_MPM_CATALOG_PATHS`) at
+Or point `BUILDERFORCE_AGENTS_PLUGIN_CATALOG_PATHS` (or `BUILDERFORCE_AGENTS_MPM_CATALOG_PATHS`) at
 one or more JSON files (comma/semicolon/`PATH`-delimited). Each file should
-contain `{ "entries": [ { "name": "@scope/pkg", "coderclaw": { "channel": {...}, "install": {...} } } ] }`.
+contain `{ "entries": [ { "name": "@scope/pkg", "builderforce": { "channel": {...}, "install": {...} } } ] }`.
 
 ## Plugin IDs
 
@@ -195,7 +195,7 @@ Default plugin ids:
 - Package packs: `package.json` `name`
 - Standalone file: file base name (`~/.../voice-call.ts` → `voice-call`)
 
-If a plugin exports `id`, CoderClaw uses it but warns when it doesn’t match the
+If a plugin exports `id`, BuilderForce Agents uses it but warns when it doesn’t match the
 configured id.
 
 ## Config
@@ -230,7 +230,7 @@ Validation rules (strict):
 - Unknown `channels.<id>` keys are **errors** unless a plugin manifest declares
   the channel id.
 - Plugin config is validated using the JSON Schema embedded in
-  `coderclaw.plugin.json` (`configSchema`).
+  `builderforce.plugin.json` (`configSchema`).
 - If a plugin is disabled, its config is preserved and a **warning** is emitted.
 
 ## Plugin slots (exclusive categories)
@@ -255,7 +255,7 @@ are disabled with diagnostics.
 
 The Control UI uses `config.schema` (JSON Schema + `uiHints`) to render better forms.
 
-CoderClaw augments `uiHints` at runtime based on discovered plugins:
+BuilderForce Agents augments `uiHints` at runtime based on discovered plugins:
 
 - Adds per-plugin labels for `plugins.entries.<id>` / `.enabled` / `.config`
 - Merges optional plugin-provided config field hints under:
@@ -287,24 +287,24 @@ Example:
 ## CLI
 
 ```bash
-coderclaw plugins list
-coderclaw plugins info <id>
-coderclaw plugins install <path>                 # copy a local file/dir into ~/.coderclaw/extensions/<id>
-coderclaw plugins install ./extensions/voice-call # relative path ok
-coderclaw plugins install ./plugin.tgz           # install from a local tarball
-coderclaw plugins install ./plugin.zip           # install from a local zip
-coderclaw plugins install -l ./extensions/voice-call # link (no copy) for dev
-coderclaw plugins install @coderclaw/voice-call # install from npm
-coderclaw plugins update <id>
-coderclaw plugins update --all
-coderclaw plugins enable <id>
-coderclaw plugins disable <id>
-coderclaw plugins doctor
+builderforce plugins list
+builderforce plugins info <id>
+builderforce plugins install <path>                 # copy a local file/dir into ~/.builderforce/extensions/<id>
+builderforce plugins install ./extensions/voice-call # relative path ok
+builderforce plugins install ./plugin.tgz           # install from a local tarball
+builderforce plugins install ./plugin.zip           # install from a local zip
+builderforce plugins install -l ./extensions/voice-call # link (no copy) for dev
+builderforce plugins install @builderforce/voice-call # install from npm
+builderforce plugins update <id>
+builderforce plugins update --all
+builderforce plugins enable <id>
+builderforce plugins disable <id>
+builderforce plugins doctor
 ```
 
 `plugins update` only works for npm installs tracked under `plugins.installs`.
 
-Plugins may also register their own top‑level commands (example: `coderclaw voicecall`).
+Plugins may also register their own top‑level commands (example: `builderforce voicecall`).
 
 ## Plugin API (overview)
 
@@ -321,7 +321,7 @@ event-driven automation without a separate hook pack install.
 ### Example
 
 ```
-import { registerPluginHooksFromDir } from "coderclaw/plugin-sdk";
+import { registerPluginHooksFromDir } from "builderforce/plugin-sdk";
 
 export default function register(api) {
   registerPluginHooksFromDir(api, "./hooks");
@@ -332,18 +332,18 @@ Notes:
 
 - Hook directories follow the normal hook structure (`HOOK.md` + `handler.ts`).
 - Hook eligibility rules still apply (OS/bins/env/config requirements).
-- Plugin-managed hooks show up in `coderclaw hooks list` with `plugin:<id>`.
-- You cannot enable/disable plugin-managed hooks via `coderclaw hooks`; enable/disable the plugin instead.
+- Plugin-managed hooks show up in `builderforce hooks list` with `plugin:<id>`.
+- You cannot enable/disable plugin-managed hooks via `builderforce hooks`; enable/disable the plugin instead.
 
 ## Provider plugins (model auth)
 
 Plugins can register **model provider auth** flows so users can run OAuth or
-API-key setup inside CoderClaw (no external scripts needed).
+API-key setup inside BuilderForce Agents (no external scripts needed).
 
 Register a provider via `api.registerProvider(...)`. Each provider exposes one
 or more auth methods (OAuth, API key, device code, etc.). These methods power:
 
-- `coderclaw models auth login --provider <id> [--method <id>]`
+- `builderforce models auth login --provider <id> [--method <id>]`
 
 Example:
 
@@ -569,7 +569,7 @@ Command handler context:
 - `isAuthorizedSender`: Whether the sender is an authorized user
 - `args`: Arguments passed after the command (if `acceptsArgs: true`)
 - `commandBody`: The full command text
-- `config`: The current CoderClaw config
+- `config`: The current BuilderForce Agents config
 
 Command options:
 
@@ -632,14 +632,14 @@ it’s present in your workspace/managed skills locations.
 
 Recommended packaging:
 
-- Main package: `coderclaw` (this repo)
-- Plugins: separate npm packages under `@coderclaw/*` (example: `@coderclaw/voice-call`)
+- Main package: `builderforce` (this repo)
+- Plugins: separate npm packages under `@builderforce/*` (example: `@builderforce/voice-call`)
 
 Publishing contract:
 
-- Plugin `package.json` must include `coderclaw.extensions` with one or more entry files.
+- Plugin `package.json` must include `builderforce.extensions` with one or more entry files.
 - Entry files can be `.js` or `.ts` (jiti loads TS at runtime).
-- `coderclaw plugins install <npm-spec>` uses `npm pack`, extracts into `~/.coderclaw/extensions/<id>/`, and enables it in config.
+- `builderforce plugins install <npm-spec>` uses `npm pack`, extracts into `~/.builderforce/extensions/<id>/`, and enables it in config.
 - Config key stability: scoped packages are normalized to the **unscoped** id for `plugins.entries.*`.
 
 ## Example plugin: Voice Call
@@ -648,7 +648,7 @@ This repo includes a voice‑call plugin (Twilio or log fallback):
 
 - Source: `extensions/voice-call`
 - Skill: `skills/voice-call`
-- CLI: `coderclaw voicecall start|status`
+- CLI: `builderforce voicecall start|status`
 - Tool: `voice_call`
 - RPC: `voicecall.start`, `voicecall.status`
 - Config (twilio): `provider: "twilio"` + `twilio.accountSid/authToken/from` (optional `statusCallbackUrl`, `twimlUrl`)
@@ -669,4 +669,4 @@ Plugins run in-process with the Gateway. Treat them as trusted code:
 Plugins can (and should) ship tests:
 
 - In-repo plugins can keep Vitest tests under `src/**` (example: `src/plugins/voice-call.plugin.test.ts`).
-- Separately published plugins should run their own CI (lint/build/test) and validate `coderclaw.extensions` points at the built entrypoint (`dist/index.js`).
+- Separately published plugins should run their own CI (lint/build/test) and validate `builderforce.extensions` points at the built entrypoint (`dist/index.js`).

@@ -4,7 +4,7 @@
  * All routes require a WebJWT with sa: true (enforced by superAdminMiddleware).
  *
  * GET  /api/admin/users                — all platform users + tenant counts
- * GET  /api/admin/tenants              — all tenants + member/claw counts
+ * GET  /api/admin/tenants              — all tenants + member/agentHost counts
  * GET  /api/admin/health               — system health (DB ping, model pool, counts)
  * GET  /api/admin/errors               — recent API error log (last 200 entries)
  * POST /api/admin/impersonate          — issue a tenant JWT for any user+tenant pair
@@ -25,7 +25,7 @@ import {
   users,
   tenants,
   tenantMembers,
-  coderclawInstances,
+  agentHosts,
   apiErrorLog,
   llmUsageLog,
   userMfaRecoveryCodes,
@@ -1267,10 +1267,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' THEN 'pro' ELSE 'free' END AS "effectivePlan",
         t.created_at AS "createdAt",
         COUNT(DISTINCT tm.user_id)::int  AS "memberCount",
-        COUNT(DISTINCT ci.id)::int       AS "clawCount"
+        COUNT(DISTINCT ci.id)::int       AS "agentHostCount"
       FROM tenants t
       LEFT JOIN tenant_members tm ON tm.tenant_id = t.id AND tm.is_active = true
-      LEFT JOIN coderclaw_instances ci ON ci.tenant_id = t.id
+      LEFT JOIN agent_hosts ci ON ci.tenant_id = t.id
       GROUP BY t.id, t.name, t.slug, t.status, t.plan, t.billing_status, t.billing_email, t.billing_updated_at, t.external_customer_id, t.external_subscription_id, t.token_daily_limit_override, t.premium_override, t.created_at
       ORDER BY t.created_at DESC
       LIMIT 500
@@ -1385,12 +1385,12 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       SELECT
         (SELECT COUNT(*)::int FROM users)                   AS "userCount",
         (SELECT COUNT(*)::int FROM tenants)                 AS "tenantCount",
-        (SELECT COUNT(*)::int FROM coderclaw_instances)     AS "clawCount",
+        (SELECT COUNT(*)::int FROM agent_hosts)     AS "agentHostCount",
         (SELECT COUNT(*)::int FROM executions)              AS "executionCount",
         (SELECT COUNT(*)::int FROM api_error_log)           AS "errorCount",
         (SELECT COUNT(*)::int FROM tenants WHERE plan = 'pro' AND billing_status = 'active') AS "paidTenantCount"
     `)).rows as Array<{
-      userCount: number; tenantCount: number; clawCount: number;
+      userCount: number; tenantCount: number; agentHostCount: number;
       executionCount: number; errorCount: number; paidTenantCount: number;
     }>;
 

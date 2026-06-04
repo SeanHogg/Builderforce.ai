@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
-import { approvalsApi, claws, type Approval, type ApprovalStatus, type Claw } from '@/lib/builderforceApi';
+import { approvalsApi, agentHosts, type Approval, type ApprovalStatus, type AgentHost } from '@/lib/builderforceApi';
 
 const STATUS_OPTIONS: Array<{ value: '' | ApprovalStatus; label: string }> = [
   { value: '', label: 'All statuses' },
@@ -32,33 +32,33 @@ export default function ApprovalsPage() {
   const { isAuthenticated, hasTenant } = useAuth();
 
   const [rows, setRows] = useState<Approval[]>([]);
-  const [clawList, setClawList] = useState<Claw[]>([]);
+  const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<'' | ApprovalStatus>('pending');
-  const [clawId, setClawId] = useState<string>('');
+  const [agentHostId, setAgentHostId] = useState<string>('');
   const [query, setQuery] = useState<string>('');
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [approvals, clawsData] = await Promise.all([
+      const [approvals, agentHostsData] = await Promise.all([
         approvalsApi.list({
           status: status || undefined,
-          clawId: clawId ? Number(clawId) : undefined,
+          agentHostId: agentHostId ? Number(agentHostId) : undefined,
         }),
-        claws.list().catch(() => [] as Claw[]),
+        agentHosts.list().catch(() => [] as AgentHost[]),
       ]);
       setRows(approvals);
-      setClawList(clawsData);
+      setAgentHostList(agentHostsData);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load approvals');
     } finally {
       setLoading(false);
     }
-  }, [status, clawId]);
+  }, [status, agentHostId]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -72,11 +72,11 @@ export default function ApprovalsPage() {
     void load();
   }, [isAuthenticated, hasTenant, router, load]);
 
-  const clawNameById = useMemo(() => {
+  const agentHostNameById = useMemo(() => {
     const map = new Map<number, string>();
-    for (const claw of clawList) map.set(claw.id, claw.name);
+    for (const agentHost of agentHostList) map.set(agentHost.id, agentHost.name);
     return map;
-  }, [clawList]);
+  }, [agentHostList]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -111,7 +111,7 @@ export default function ApprovalsPage() {
         <div style={{ marginBottom: 20 }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 4 }}>Approvals</h1>
           <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
-            Review pending high-risk actions requested by claws and approve or reject them.
+            Review pending high-risk actions requested by agentHosts and approve or reject them.
           </p>
         </div>
 
@@ -130,11 +130,11 @@ export default function ApprovalsPage() {
 
           <select
             className="admin-select"
-            value={clawId}
-            onChange={(e) => setClawId(e.target.value)}
+            value={agentHostId}
+            onChange={(e) => setAgentHostId(e.target.value)}
           >
-            <option value="">All claws</option>
-            {clawList.map((c) => (
+            <option value="">All agentHosts</option>
+            {agentHostList.map((c) => (
               <option key={c.id} value={String(c.id)}>
                 {c.name}
               </option>
@@ -178,7 +178,7 @@ export default function ApprovalsPage() {
                 <th>Status</th>
                 <th>Action</th>
                 <th>Description</th>
-                <th>Claw</th>
+                <th>AgentHost</th>
                 <th>Requested By</th>
                 <th>Requested</th>
                 <th>Expires</th>
@@ -208,7 +208,7 @@ export default function ApprovalsPage() {
                       <td title={row.description} style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {row.description}
                       </td>
-                      <td>{row.clawId != null ? clawNameById.get(row.clawId) ?? `#${row.clawId}` : '-'}</td>
+                      <td>{row.agentHostId != null ? agentHostNameById.get(row.agentHostId) ?? `#${row.agentHostId}` : '-'}</td>
                       <td>{row.requestedBy ?? '-'}</td>
                       <td className="text-muted" style={{ whiteSpace: 'nowrap' }}>{fmtDate(row.createdAt)}</td>
                       <td className="text-muted" style={{ whiteSpace: 'nowrap' }}>{fmtDate(row.expiresAt)}</td>

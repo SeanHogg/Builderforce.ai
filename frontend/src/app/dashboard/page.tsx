@@ -11,14 +11,14 @@ import { ChatInput } from '@/components/ChatInput';
 import { ProjectCard } from '@/components/ProjectCard';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { ClawSlideOutPanel } from '@/components/ClawSlideOutPanel';
+import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { OnboardingStepper } from '@/components/OnboardingStepper';
-import { claws, tasksApi, runtimeApi, approvalsApi, isAwaitingApprovalExecution, type Claw, type Task } from '@/lib/builderforceApi';
+import { agentHosts, tasksApi, runtimeApi, approvalsApi, isAwaitingApprovalExecution, type AgentHost, type Task } from '@/lib/builderforceApi';
 
 const ONBOARDING_DISMISSED_KEY = 'bf_onboarding_dismissed';
 
 /**
- * Dashboard (home) — CoderClawLink-style: "What should we build?" chat input,
+ * Dashboard (home) — BuilderForceAgentsLink-style: "What should we build?" chat input,
  * projects preview (View all → /projects), and Workforce section with agent list.
  */
 export default function DashboardPage() {
@@ -26,15 +26,15 @@ export default function DashboardPage() {
   const { isAuthenticated, hasTenant, webToken, tenantToken, tenant, selectTenant } = useAuth();
 
   const [projects, setProjects] = useState<Project[]>([]);
-  const [clawList, setClawList] = useState<Claw[]>([]);
+  const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
   const [loading, setLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
   const [detailsProject, setDetailsProject] = useState<Project | null>(null);
-  const [selectedClaw, setSelectedClaw] = useState<Claw | null>(null);
+  const [selectedAgentHost, setSelectedAgentHost] = useState<AgentHost | null>(null);
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const [activeTab, setActiveTab] = useState<'projects' | 'workforce'>('projects');
   const [confirmProject, setConfirmProject] = useState<Project | null>(null);
-  const [sendingToClaw, setSendingToClaw] = useState(false);
+  const [sendingToAgentHost, setSendingToAgentHost] = useState(false);
   const [promptError, setPromptError] = useState<string | null>(null);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [taskStats, setTaskStats] = useState<{ total: number; inProgress: number; done: number } | null>(null);
@@ -102,13 +102,13 @@ export default function DashboardPage() {
     setLoading(true);
     Promise.all([
       fetchProjects().catch(() => [] as Project[]),
-      claws.list().catch(() => [] as Claw[]),
+      agentHosts.list().catch(() => [] as AgentHost[]),
       approvalsApi.list({ status: 'pending' }).catch(() => []),
       tasksApi.list().catch(() => [] as Task[]),
     ])
-      .then(([projs, clawsData, approvalsData, tasksData]) => {
+      .then(([projs, agentHostsData, approvalsData, tasksData]) => {
         setProjects(Array.isArray(projs) ? projs : []);
-        setClawList(Array.isArray(clawsData) ? clawsData : []);
+        setAgentHostList(Array.isArray(agentHostsData) ? agentHostsData : []);
         setPendingApprovalsCount(Array.isArray(approvalsData) ? approvalsData.length : 0);
         if (Array.isArray(tasksData)) {
           setTaskStats({
@@ -131,17 +131,17 @@ export default function DashboardPage() {
       return;
     }
     setPromptError(null);
-    setSendingToClaw(true);
+    setSendingToAgentHost(true);
     try {
       const task = await tasksApi.create({
         projectId: project.id,
         title: p.slice(0, 200) || p,
         description: p.length > 200 ? p : undefined,
-        assignedClawId: connectedClaws[0]?.id ?? undefined,
+        assignedAgentHostId: connectedAgentHosts[0]?.id ?? undefined,
       });
       const execution = await runtimeApi.submitExecution({
         taskId: task.id,
-        clawId: task.assignedClawId ?? undefined,
+        agentHostId: task.assignedAgentHostId ?? undefined,
       });
 
       if (isAwaitingApprovalExecution(execution)) {
@@ -153,13 +153,13 @@ export default function DashboardPage() {
       setPrompt('');
       router.push('/tasks');
     } catch (e) {
-      setPromptError(e instanceof Error ? e.message : 'Failed to send to claw');
+      setPromptError(e instanceof Error ? e.message : 'Failed to send to agentHost');
     } finally {
-      setSendingToClaw(false);
+      setSendingToAgentHost(false);
     }
   };
 
-  const connectedClaws = clawList.filter((c) => c.connectedAt);
+  const connectedAgentHosts = agentHostList.filter((c) => c.connectedAt);
 
   if (!isAuthenticated) return null;
 
@@ -214,8 +214,8 @@ export default function DashboardPage() {
               onChange={setPrompt}
               onSubmit={handlePromptSubmit}
               placeholder="Build a budget tracker with Material UI components…"
-              submitLabel={sendingToClaw ? 'Sending…' : 'Send to Claw'}
-              disabled={sendingToClaw}
+              submitLabel={sendingToAgentHost ? 'Sending…' : 'Send to AgentHost'}
+              disabled={sendingToAgentHost}
               rows={1}
               submitOnEnter={false}
               showBrainIcon={true}
@@ -227,10 +227,10 @@ export default function DashboardPage() {
             )}
           </div>
           <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
-            {connectedClaws.length > 0
-              ? `${connectedClaws.length} agent${connectedClaws.length !== 1 ? 's' : ''} connected · ${connectedClaws.map((c) => c.name).join(', ')}`
+            {connectedAgentHosts.length > 0
+              ? `${connectedAgentHosts.length} agent${connectedAgentHosts.length !== 1 ? 's' : ''} connected · ${connectedAgentHosts.map((c) => c.name).join(', ')}`
               : 'No agents connected — '}
-            {connectedClaws.length === 0 && (
+            {connectedAgentHosts.length === 0 && (
               <Link href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
                 set up in Workforce
               </Link>
@@ -273,10 +273,10 @@ export default function DashboardPage() {
               },
               {
                 label: 'Agents online',
-                value: connectedClaws.length,
-                sub: `${clawList.length} registered`,
+                value: connectedAgentHosts.length,
+                sub: `${agentHostList.length} registered`,
                 href: '/workforce',
-                color: connectedClaws.length > 0 ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)',
+                color: connectedAgentHosts.length > 0 ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)',
               },
               {
                 label: 'Pending approvals',
@@ -326,7 +326,7 @@ export default function DashboardPage() {
         >
           {([
             { key: 'projects', label: 'Projects', count: projects.length },
-            { key: 'workforce', label: 'Workforce', count: clawList.length },
+            { key: 'workforce', label: 'Workforce', count: agentHostList.length },
           ] as const).map(({ key, label, count }) => {
             const active = activeTab === key;
             return (
@@ -494,8 +494,8 @@ export default function DashboardPage() {
                   onDetailsClick={setDetailsProject}
                   showDetailsButton
                   onAssignedAgentClick={(ac) => {
-                    const claw = clawList.find((c) => c.id === ac.id);
-                    if (claw) setSelectedClaw(claw);
+                    const agentHost = agentHostList.find((c) => c.id === ac.id);
+                    if (agentHost) setSelectedAgentHost(agentHost);
                   }}
                   onDelete={async (proj) => {
                     try {
@@ -529,12 +529,12 @@ export default function DashboardPage() {
                         {project.description ?? '—'}
                       </td>
                       <td style={{ padding: '12px 16px' }}>
-                        {project.assignedClaw ? (
+                        {project.assignedAgentHost ? (
                           <button
                             type="button"
                             onClick={() => {
-                              const claw = clawList.find((c) => c.id === project.assignedClaw!.id);
-                              if (claw) setSelectedClaw(claw);
+                              const agentHost = agentHostList.find((c) => c.id === project.assignedAgentHost!.id);
+                              if (agentHost) setSelectedAgentHost(agentHost);
                             }}
                             style={{
                               fontSize: 12,
@@ -547,7 +547,7 @@ export default function DashboardPage() {
                               textDecoration: 'underline',
                             }}
                           >
-                            {project.assignedClaw.name}
+                            {project.assignedAgentHost.name}
                           </button>
                         ) : (
                           <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
@@ -640,7 +640,7 @@ export default function DashboardPage() {
             open={!!detailsProject}
             onClose={() => setDetailsProject(null)}
             onProjectUpdate={(updated) => {
-              setProjects((prev) => prev.map((p) => (p.id === updated.id ? { ...updated, assignedClaw: p.assignedClaw } : p)));
+              setProjects((prev) => prev.map((p) => (p.id === updated.id ? { ...updated, assignedAgentHost: p.assignedAgentHost } : p)));
               setDetailsProject((p) => (p && p.id === updated.id ? updated : p));
             }}
             onDelete={async (p) => {
@@ -656,11 +656,11 @@ export default function DashboardPage() {
           />
         )}
 
-        {selectedClaw && (
-          <ClawSlideOutPanel
-            claw={selectedClaw}
-            open={!!selectedClaw}
-            onClose={() => setSelectedClaw(null)}
+        {selectedAgentHost && (
+          <AgentHostSlideOutPanel
+            agentHost={selectedAgentHost}
+            open={!!selectedAgentHost}
+            onClose={() => setSelectedAgentHost(null)}
           />
         )}
         <ConfirmDialog
@@ -714,7 +714,7 @@ export default function DashboardPage() {
 
           {loading ? (
             <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '12px 0' }}>Loading…</div>
-          ) : clawList.length === 0 ? (
+          ) : agentHostList.length === 0 ? (
             <div
               style={{
                 padding: 28,
@@ -747,7 +747,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-              {clawList.map((c) => (
+              {agentHostList.map((c) => (
                 <div
                   key={c.id}
                   style={{

@@ -1,0 +1,14 @@
+{
+  "name": "@builderforce/irc",
+  "version": "2026.3.21",
+  "description": "BuilderForceAgents IRC channel plugin",
+  "type": "module",
+  "devDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*"
+  },
+  "builderforce": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

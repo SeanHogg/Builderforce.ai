@@ -1,20 +1,20 @@
 ---
 title: Workflow Telemetry
-description: How CoderClaw records and forwards workflow spans — locally as JSONL and live to the Builderforce portal
+description: How BuilderForce Agents records and forwards workflow spans — locally as JSONL and live to the Builderforce portal
 ---
 
 # Workflow Telemetry
 
-CoderClaw records structured telemetry for every workflow execution. Spans are written locally as JSONL and, when a Builderforce connection is configured, forwarded to the portal in real time so you can monitor workflows without touching the machine running the agent.
+BuilderForce Agents records structured telemetry for every workflow execution. Spans are written locally as JSONL and, when a Builderforce connection is configured, forwarded to the portal in real time so you can monitor workflows without touching the machine running the agent.
 
 ---
 
 ## Local JSONL files
 
-Spans are appended to daily files under `.coderClaw/telemetry/`:
+Spans are appended to daily files under `.builderforce/telemetry/`:
 
 ```
-.coderClaw/
+.builderforce/
   telemetry/
     2026-03-21.jsonl
     2026-03-20.jsonl
@@ -57,21 +57,21 @@ Because each line is valid JSON, standard Unix tools work:
 
 ```bash
 # All failed tasks today
-jq 'select(.kind == "task.fail")' .coderClaw/telemetry/$(date +%Y-%m-%d).jsonl
+jq 'select(.kind == "task.fail")' .builderforce/telemetry/$(date +%Y-%m-%d).jsonl
 
 # Workflow durations (completed workflows only)
 jq 'select(.kind == "workflow.complete") | {id: .workflowId, ms: .data.durationMs}' \
-  .coderClaw/telemetry/*.jsonl
+  .builderforce/telemetry/*.jsonl
 
 # Count spans by kind
-jq -r '.kind' .coderClaw/telemetry/*.jsonl | sort | uniq -c | sort -rn
+jq -r '.kind' .builderforce/telemetry/*.jsonl | sort | uniq -c | sort -rn
 ```
 
 ---
 
 ## Builderforce portal sync
 
-When CoderClaw starts with a Builderforce connection configured (`CODERCLAW_LINK_URL` + `CODERCLAW_LINK_API_KEY`), telemetry is forwarded live to the portal:
+When BuilderForce Agents starts with a Builderforce connection configured (`BUILDERFORCE_AGENTS_LINK_URL` + `BUILDERFORCE_AGENTS_LINK_API_KEY`), telemetry is forwarded live to the portal:
 
 | Span kind | Portal action |
 |-----------|---------------|
@@ -90,7 +90,7 @@ Navigate to [Workflows](/link/multi-agent-orchestration/) in the Builderforce po
 - Per-step status, role, and timing
 - Any error message from a failed step
 
-The tool audit log (separate from workflow telemetry) records every individual tool call made by an agent. Find it under the claw detail panel → **Tool Audit** tab.
+The tool audit log (separate from workflow telemetry) records every individual tool call made by an agent. Find it under the agent detail panel → **Tool Audit** tab.
 
 ---
 
@@ -99,15 +99,15 @@ The tool audit log (separate from workflow telemetry) records every individual t
 No extra configuration is needed beyond the standard Builderforce connection:
 
 ```bash
-export CODERCLAW_LINK_URL=https://api.builderforce.ai
-export CODERCLAW_LINK_API_KEY=<your-claw-api-key>
-coderclaw start
+export BUILDERFORCE_AGENTS_LINK_URL=https://api.builderforce.ai
+export BUILDERFORCE_AGENTS_LINK_API_KEY=<your-agent-api-key>
+builderforce start
 ```
 
 To disable local JSONL writing (not recommended — it is the ground truth):
 
 ```bash
-export CODERCLAW_TELEMETRY_DISABLED=1
+export BUILDERFORCE_AGENTS_TELEMETRY_DISABLED=1
 ```
 
 ---
@@ -116,10 +116,10 @@ export CODERCLAW_TELEMETRY_DISABLED=1
 
 **Spans appear in JSONL but not in the portal**
 
-- Check that `CODERCLAW_LINK_URL` and `CODERCLAW_LINK_API_KEY` are set and correct.
-- The claw must be registered in the portal before telemetry is accepted. Register at [Dashboard](/link/getting-started/) → Add Claw.
-- Network errors are logged at `warn` level — check `coderclaw logs` for `[telemetry]` entries.
+- Check that `BUILDERFORCE_AGENTS_LINK_URL` and `BUILDERFORCE_AGENTS_LINK_API_KEY` are set and correct.
+- The agent must be registered in the portal before telemetry is accepted. Register at [Dashboard](/link/getting-started/) → Add Agent.
+- Network errors are logged at `warn` level — check `builderforce logs` for `[telemetry]` entries.
 
-**Workflow shows as `in_progress` in the portal but the claw is done**
+**Workflow shows as `in_progress` in the portal but the agent is done**
 
 - A `workflow.complete` or `workflow.fail` span may have failed to sync. Re-running the workflow will create a new record; the stale one can be manually closed via `PATCH /api/workflows/:id`.

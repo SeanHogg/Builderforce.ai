@@ -1,19 +1,19 @@
 ---
-summary: "CLI reference for `coderclaw configure` (interactive configuration prompts)"
+summary: "CLI reference for `builderforce configure` (interactive configuration prompts)"
 read_when:
   - You want to tweak credentials, devices, or agent defaults interactively
 title: "configure"
 ---
 
-# `coderclaw configure`
+# `builderforce configure`
 
 Interactive prompt to set up credentials, devices, and agent defaults.
 
 Note: The **Model** section now includes a multi-select for the
 `agents.defaults.models` allowlist (what shows up in `/model` and the model picker).
 
-Tip: `coderclaw config` without a subcommand opens the same wizard. Use
-`coderclaw config get|set|unset` for non-interactive edits.
+Tip: `builderforce config` without a subcommand opens the same wizard. Use
+`builderforce config get|set|unset` for non-interactive edits.
 
 Related:
 
@@ -28,6 +28,6 @@ Notes:
 ## Examples
 
 ```bash
-coderclaw configure
-coderclaw configure --section models --section channels
+builderforce configure
+builderforce configure --section models --section channels
 ```

@@ -15,7 +15,7 @@ Quick provider overview + examples: [/concepts/model-providers](/concepts/model-
 
 ## How model selection works
 
-CoderClaw selects models in this order:
+BuilderForce Agents selects models in this order:
 
 1. **Primary** model (`agents.defaults.model.primary` or `agents.defaults.model`).
 2. **Fallbacks** in `agents.defaults.model.fallbacks` (in order).
@@ -24,7 +24,7 @@ CoderClaw selects models in this order:
 
 Related:
 
-- `agents.defaults.models` is the allowlist/catalog of models CoderClaw can use (plus aliases).
+- `agents.defaults.models` is the allowlist/catalog of models BuilderForce Agents can use (plus aliases).
 - `agents.defaults.imageModel` is used **only when** the primary model can’t accept images.
 - Per-agent defaults can override `agents.defaults.model` via `agents.list[].model` plus bindings (see [/concepts/multi-agent](/concepts/multi-agent)).
 
@@ -38,7 +38,7 @@ Related:
 If you don’t want to hand-edit config, run the onboarding wizard:
 
 ```bash
-coderclaw onboard
+builderforce onboard
 ```
 
 It can set up model + auth for common providers, including **OpenAI Code (Codex)
@@ -62,7 +62,7 @@ Provider configuration examples (including OpenCode Zen) live in
 
 If `agents.defaults.models` is set, it becomes the **allowlist** for `/model` and for
 session overrides. When a user selects a model that isn’t in that allowlist,
-CoderClaw returns:
+BuilderForce Agents returns:
 
 ```
 Model "provider/model" is not allowed. Use /model to list available models.
@@ -108,34 +108,34 @@ Notes:
 - `/model status` is the detailed view (auth candidates and, when configured, provider endpoint `baseUrl` + `api` mode).
 - Model refs are parsed by splitting on the **first** `/`. Use `provider/model` when typing `/model <ref>`.
 - If the model ID itself contains `/` (OpenRouter-style), you must include the provider prefix (example: `/model openrouter/moonshotai/kimi-k2`).
-- If you omit the provider, CoderClaw treats the input as an alias or a model for the **default provider** (only works when there is no `/` in the model ID).
+- If you omit the provider, BuilderForce Agents treats the input as an alias or a model for the **default provider** (only works when there is no `/` in the model ID).
 
 Full command behavior/config: [Slash commands](/tools/slash-commands).
 
 ## CLI commands
 
 ```bash
-coderclaw models list
-coderclaw models status
-coderclaw models set <provider/model>
-coderclaw models set-image <provider/model>
+builderforce models list
+builderforce models status
+builderforce models set <provider/model>
+builderforce models set-image <provider/model>
 
-coderclaw models aliases list
-coderclaw models aliases add <alias> <provider/model>
-coderclaw models aliases remove <alias>
+builderforce models aliases list
+builderforce models aliases add <alias> <provider/model>
+builderforce models aliases remove <alias>
 
-coderclaw models fallbacks list
-coderclaw models fallbacks add <provider/model>
-coderclaw models fallbacks remove <provider/model>
-coderclaw models fallbacks clear
+builderforce models fallbacks list
+builderforce models fallbacks add <provider/model>
+builderforce models fallbacks remove <provider/model>
+builderforce models fallbacks clear
 
-coderclaw models image-fallbacks list
-coderclaw models image-fallbacks add <provider/model>
-coderclaw models image-fallbacks remove <provider/model>
-coderclaw models image-fallbacks clear
+builderforce models image-fallbacks list
+builderforce models image-fallbacks add <provider/model>
+builderforce models image-fallbacks remove <provider/model>
+builderforce models image-fallbacks clear
 ```
 
-`coderclaw models` (no subcommand) is a shortcut for `models status`.
+`builderforce models` (no subcommand) is a shortcut for `models status`.
 
 ### `models list`
 
@@ -163,12 +163,12 @@ Preferred Anthropic auth is the Claude Code CLI setup-token (run anywhere; paste
 
 ```bash
 claude setup-token
-coderclaw models status
+builderforce models status
 ```
 
 ## Scanning (OpenRouter free models)
 
-`coderclaw models scan` inspects OpenRouter’s **free model catalog** and can
+`builderforce models scan` inspects OpenRouter’s **free model catalog** and can
 optionally probe models for tool and image support.
 
 Key flags:
@@ -204,5 +204,5 @@ mode, pass `--yes` to accept defaults.
 ## Models registry (`models.json`)
 
 Custom providers in `models.providers` are written into `models.json` under the
-agent directory (default `~/.coderclaw/agents/<agentId>/models.json`). This file
+agent directory (default `~/.builderforce/agents/<agentId>/models.json`). This file
 is merged by default unless `models.mode` is set to `replace`.

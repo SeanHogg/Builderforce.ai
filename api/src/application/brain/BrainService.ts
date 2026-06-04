@@ -508,16 +508,16 @@ export class BrainService {
   }
 
   // -----------------------------------------------------------------------
-  // Claw session summarisation — bridges claw chat history into brain memory
+  // AgentHost session summarisation — bridges agentHost chat history into brain memory
   // -----------------------------------------------------------------------
 
-  async summarizeClawSession(sessionId: number, tenantId: number, apiKey: string) {
+  async summarizeAgentHostSession(sessionId: number, tenantId: number, apiKey: string) {
     // Verify session belongs to tenant
     const [session] = await this.db
       .select({
         id: chatSessions.id,
         projectId: chatSessions.projectId,
-        clawId: chatSessions.clawId,
+        agentHostId: chatSessions.agentHostId,
       })
       .from(chatSessions)
       .where(and(eq(chatSessions.id, sessionId), eq(chatSessions.tenantId, tenantId)))
@@ -539,7 +539,7 @@ export class BrainService {
     const transcript = msgs.map(m => `${m.role}: ${m.content}`).join('\n\n');
 
     const systemPrompt = [
-      'You are a summarization assistant. Compress the following claw coding session into a concise memory.',
+      'You are a summarization assistant. Compress the following agentHost coding session into a concise memory.',
       'Focus on: what was worked on, key decisions, code changes, bugs found, and important context.',
       'Output only the summary, no preamble.',
     ].join('\n');
@@ -562,17 +562,17 @@ export class BrainService {
       return { summary: null, reason: 'LLM returned empty response' };
     }
 
-    // Store in chatMemories linked via clawSessionId for project memory consolidation
+    // Store in chatMemories linked via agentHostSessionId for project memory consolidation
     await this.db
       .insert(chatMemories)
       .values({
         tenantId,
-        clawSessionId: sessionId,
+        agentHostSessionId: sessionId,
         projectId: session.projectId,
         summary,
       })
       .onConflictDoUpdate({
-        target: chatMemories.clawSessionId,
+        target: chatMemories.agentHostSessionId,
         set: { summary, projectId: session.projectId, updatedAt: new Date() },
       });
 

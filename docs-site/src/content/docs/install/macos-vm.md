@@ -1,14 +1,14 @@
 ---
-summary: "Run CoderClaw in a sandboxed macOS VM (local or hosted) when you need isolation or iMessage"
+summary: "Run BuilderForce Agents in a sandboxed macOS VM (local or hosted) when you need isolation or iMessage"
 read_when:
-  - You want CoderClaw isolated from your main macOS environment
+  - You want BuilderForce Agents isolated from your main macOS environment
   - You want iMessage integration (BlueBubbles) in a sandbox
   - You want a resettable macOS environment you can clone
   - You want to compare local vs hosted macOS VM options
 title: "macOS VMs"
 ---
 
-# CoderClaw on macOS VMs (Sandboxing)
+# BuilderForce Agents on macOS VMs (Sandboxing)
 
 ## Recommended default (most users)
 
@@ -22,7 +22,7 @@ Use a macOS VM when you specifically need macOS-only capabilities (iMessage/Blue
 
 ### Local VM on your Apple Silicon Mac (Lume)
 
-Run CoderClaw in a sandboxed macOS VM on your existing Apple Silicon Mac using [Lume](https://cua.ai/docs/lume).
+Run BuilderForce Agents in a sandboxed macOS VM on your existing Apple Silicon Mac using [Lume](https://cua.ai/docs/lume).
 
 This gives you:
 
@@ -45,10 +45,10 @@ Once you have SSH access to a macOS VM, continue at step 6 below.
 ## Quick path (Lume, experienced users)
 
 1. Install Lume
-2. `lume create coderclaw --os macos --ipsw latest`
+2. `lume create builderforce --os macos --ipsw latest`
 3. Complete Setup Assistant, enable Remote Login (SSH)
-4. `lume run coderclaw --no-display`
-5. SSH in, install CoderClaw, configure channels
+4. `lume run builderforce --no-display`
+5. SSH in, install BuilderForce Agents, configure channels
 6. Done
 
 ---
@@ -87,7 +87,7 @@ Docs: [Lume Installation](https://cua.ai/docs/lume/guide/getting-started/install
 ## 2) Create the macOS VM
 
 ```bash
-lume create coderclaw --os macos --ipsw latest
+lume create builderforce --os macos --ipsw latest
 ```
 
 This downloads macOS and creates the VM. A VNC window opens automatically.
@@ -115,7 +115,7 @@ After setup completes, enable SSH:
 ## 4) Get the VM's IP address
 
 ```bash
-lume get coderclaw
+lume get builderforce
 ```
 
 Look for the IP address (usually `192.168.64.x`).
@@ -132,13 +132,13 @@ Replace `youruser` with the account you created, and the IP with your VM's IP.
 
 ---
 
-## 6) Install CoderClaw
+## 6) Install BuilderForce Agents
 
 Inside the VM:
 
 ```bash
-npm install -g coderclaw@latest
-coderclaw onboard --install-daemon
+npm install -g builderforce@latest
+builderforce onboard --install-daemon
 ```
 
 Follow the onboarding prompts to set up your model provider (Anthropic, OpenAI, etc.).
@@ -150,7 +150,7 @@ Follow the onboarding prompts to set up your model provider (Anthropic, OpenAI, 
 Edit the config file:
 
 ```bash
-nano ~/.coderclaw/coderclaw.json
+nano ~/.builderforce/builderforce.json
 ```
 
 Add your channels:
@@ -172,7 +172,7 @@ Add your channels:
 Then login to WhatsApp (scan QR):
 
 ```bash
-coderclaw channels login
+builderforce channels login
 ```
 
 ---
@@ -182,23 +182,23 @@ coderclaw channels login
 Stop the VM and restart without display:
 
 ```bash
-lume stop coderclaw
-lume run coderclaw --no-display
+lume stop builderforce
+lume run builderforce --no-display
 ```
 
-The VM runs in the background. CoderClaw's daemon keeps the gateway running.
+The VM runs in the background. BuilderForce Agents's daemon keeps the gateway running.
 
 To check status:
 
 ```bash
-ssh youruser@192.168.64.X "coderclaw status"
+ssh youruser@192.168.64.X "builderforce status"
 ```
 
 ---
 
 ## Bonus: iMessage integration
 
-This is the killer feature of running on macOS. Use [BlueBubbles](https://bluebubbles.app) to add iMessage to CoderClaw.
+This is the killer feature of running on macOS. Use [BlueBubbles](https://bluebubbles.app) to add iMessage to BuilderForce Agents.
 
 Inside the VM:
 
@@ -207,7 +207,7 @@ Inside the VM:
 3. Enable the Web API and set a password
 4. Point BlueBubbles webhooks at your gateway (example: `https://your-gateway-host:3000/bluebubbles-webhook?password=<password>`)
 
-Add to your CoderClaw config:
+Add to your BuilderForce Agents config:
 
 ```json
 {
@@ -232,16 +232,16 @@ Full setup details: [BlueBubbles channel](/channels/bluebubbles)
 Before customizing further, snapshot your clean state:
 
 ```bash
-lume stop coderclaw
-lume clone coderclaw coderclaw-golden
+lume stop builderforce
+lume clone builderforce builderforce-golden
 ```
 
 Reset anytime:
 
 ```bash
-lume stop coderclaw && lume delete coderclaw
-lume clone coderclaw-golden coderclaw
-lume run coderclaw --no-display
+lume stop builderforce && lume delete builderforce
+lume clone builderforce-golden builderforce
+lume run builderforce --no-display
 ```
 
 ---
@@ -263,9 +263,9 @@ For true always-on, consider a dedicated Mac mini or a small VPS. See [VPS hosti
 | Problem                  | Solution                                                                            |
 | ------------------------ | ----------------------------------------------------------------------------------- |
 | Can't SSH into VM        | Check "Remote Login" is enabled in VM's System Settings                             |
-| VM IP not showing        | Wait for VM to fully boot, run `lume get coderclaw` again                           |
+| VM IP not showing        | Wait for VM to fully boot, run `lume get builderforce` again                           |
 | Lume command not found   | Add `~/.local/bin` to your PATH                                                     |
-| WhatsApp QR not scanning | Ensure you're logged into the VM (not host) when running `coderclaw channels login` |
+| WhatsApp QR not scanning | Ensure you're logged into the VM (not host) when running `builderforce channels login` |
 
 ---
 

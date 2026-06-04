@@ -3,13 +3,13 @@
  *
  * Unified team-performance analytics that merge HUMAN contributors (git/PR
  * activity, already aggregated into contributor_daily_metrics) with AI AGENT
- * contributors (CoderClaw telemetry: task spans + tool-audit events). Agents are
- * first-class contributors (contributors.kind = 'agent', linked by claw_id), so
- * the activity calendar shows the whole team — people and claws — on one
+ * contributors (BuilderForce Agents telemetry: task spans + tool-audit events). Agents are
+ * first-class contributors (contributors.kind = 'agent', linked by agent_host_id), so
+ * the activity calendar shows the whole team — people and agentHosts — on one
  * GitHub-style heatmap.
  *
  * GET  /api/analytics/activity-calendar   365-day unified heatmap (MANAGER+)
- * POST /api/analytics/sync-agents         Upsert an agent contributor per claw (MANAGER+)
+ * POST /api/analytics/sync-agents         Upsert an agent contributor per agentHost (MANAGER+)
  */
 
 import { Hono } from 'hono';
@@ -20,7 +20,7 @@ import {
   contributorDailyMetrics,
   telemetrySpans,
   toolAuditEvents,
-  coderclawInstances,
+  agentHosts,
 } from '../../infrastructure/database/schema';
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
@@ -86,10 +86,10 @@ export function createAnalyticsRoutes(db: Db): Hono<HonoEnv> {
         lte(contributorDailyMetrics.date, toDate),
       ));
 
-    // 3. Agent activity — task spans + tool-audit events, grouped by claw + day.
+    // 3. Agent activity — task spans + tool-audit events, grouped by agentHost + day.
     const spanRows = await db
       .select({
-        clawId: telemetrySpans.clawId,
+        agentHostId: telemetrySpans.agentHostId,
         day: sql<string>`to_char(date_trunc('day', ${telemetrySpans.ts}), 'YYYY-MM-DD')`,
         c: sql<number>`count(*)::int`,
       })
@@ -100,11 +100,11 @@ export function createAnalyticsRoutes(db: Db): Hono<HonoEnv> {
         lte(telemetrySpans.ts, toDate),
         sql`${telemetrySpans.kind} like 'task.%'`,
       ))
-      .groupBy(telemetrySpans.clawId, sql`date_trunc('day', ${telemetrySpans.ts})`);
+      .groupBy(telemetrySpans.agentHostId, sql`date_trunc('day', ${telemetrySpans.ts})`);
 
     const toolRows = await db
       .select({
-        clawId: toolAuditEvents.clawId,
+        agentHostId: toolAuditEvents.agentHostId,
         day: sql<string>`to_char(date_trunc('day', ${toolAuditEvents.ts}), 'YYYY-MM-DD')`,
         c: sql<number>`count(*)::int`,
       })
@@ -114,18 +114,18 @@ export function createAnalyticsRoutes(db: Db): Hono<HonoEnv> {
         gte(toolAuditEvents.ts, fromFloor),
         lte(toolAuditEvents.ts, toDate),
       ))
-      .groupBy(toolAuditEvents.clawId, sql`date_trunc('day', ${toolAuditEvents.ts})`);
+      .groupBy(toolAuditEvents.agentHostId, sql`date_trunc('day', ${toolAuditEvents.ts})`);
 
-    // Index agent activity by clawId → (day → count).
-    const agentByClaw = new Map<number, Map<string, number>>();
-    const addAgent = (clawId: number | null, day: string, n: number) => {
-      if (clawId == null) return;
-      let m = agentByClaw.get(clawId);
-      if (!m) { m = new Map(); agentByClaw.set(clawId, m); }
+    // Index agent activity by agentHostId → (day → count).
+    const agentByAgentHost = new Map<number, Map<string, number>>();
+    const addAgent = (agentHostId: number | null, day: string, n: number) => {
+      if (agentHostId == null) return;
+      let m = agentByAgentHost.get(agentHostId);
+      if (!m) { m = new Map(); agentByAgentHost.set(agentHostId, m); }
       m.set(day, (m.get(day) ?? 0) + n);
     };
-    for (const r of spanRows) addAgent(r.clawId, r.day, Number(r.c));
-    for (const r of toolRows) addAgent(r.clawId, r.day, Number(r.c));
+    for (const r of spanRows) addAgent(r.agentHostId, r.day, Number(r.c));
+    for (const r of toolRows) addAgent(r.agentHostId, r.day, Number(r.c));
 
     // Index human activity by contributorId → (day → score).
     const humanByContributor = new Map<number, Map<string, number>>();
@@ -141,8 +141,8 @@ export function createAnalyticsRoutes(db: Db): Hono<HonoEnv> {
     let maxCount = 0;
 
     const perContributor = people.map((p) => {
-      const map = p.kind === 'agent' && p.clawId != null
-        ? (agentByClaw.get(p.clawId) ?? new Map<string, number>())
+      const map = p.kind === 'agent' && p.agentHostId != null
+        ? (agentByAgentHost.get(p.agentHostId) ?? new Map<string, number>())
         : (humanByContributor.get(p.id) ?? new Map<string, number>());
 
       let total = 0;
@@ -161,7 +161,7 @@ export function createAnalyticsRoutes(db: Db): Hono<HonoEnv> {
         kind: p.kind,
         avatarUrl: p.avatarUrl,
         jobTitle: p.jobTitle,
-        clawId: p.clawId,
+        agentHostId: p.agentHostId,
         total,
         days: days.map((d) => ({ ...d, level: 0 })), // levels filled below (need maxCount)
       };
@@ -186,43 +186,43 @@ export function createAnalyticsRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ── POST /api/analytics/sync-agents ───────────────────────────────────────
-  // Ensure every CoderClaw instance has an agent contributor so its telemetry
+  // Ensure every BuilderForce Agents instance has an agent contributor so its telemetry
   // shows up on the calendar alongside human teammates.
   router.post('/sync-agents', async (c) => {
     const tenantId = c.get('tenantId') as number;
 
-    const claws = await db
+    const hostRows = await db
       .select()
-      .from(coderclawInstances)
-      .where(eq(coderclawInstances.tenantId, tenantId));
+      .from(agentHosts)
+      .where(eq(agentHosts.tenantId, tenantId));
 
     let created = 0;
     let updated = 0;
-    for (const claw of claws) {
+    for (const agentHost of hostRows) {
       const [existing] = await db
         .select({ id: contributors.id })
         .from(contributors)
-        .where(and(eq(contributors.tenantId, tenantId), eq(contributors.clawId, claw.id)));
+        .where(and(eq(contributors.tenantId, tenantId), eq(contributors.agentHostId, agentHost.id)));
 
       if (existing) {
         await db
           .update(contributors)
-          .set({ displayName: claw.name, isActive: claw.status === 'active', updatedAt: new Date() })
+          .set({ displayName: agentHost.name, isActive: agentHost.status === 'active', updatedAt: new Date() })
           .where(eq(contributors.id, existing.id));
         updated++;
       } else {
         await db.insert(contributors).values({
           tenantId,
-          displayName: claw.name,
+          displayName: agentHost.name,
           kind: 'agent',
-          clawId: claw.id,
+          agentHostId: agentHost.id,
           roleType: 'agent',
         });
         created++;
       }
     }
 
-    return c.json({ created, updated, total: claws.length });
+    return c.json({ created, updated, total: hostRows.length });
   });
 
   return router;

@@ -265,7 +265,7 @@ export default function BlogPageClient() {
               <li><Link href="/blog">Blog</Link></li>
               <li><Link href="/login">Sign In</Link></li>
               <li><Link href="/register">Get Started</Link></li>
-              <li><a href="https://coderclaw.ai" target="_blank" rel="noopener">CoderClaw</a></li>
+              <li><a href="https://builderforce.ai" target="_blank" rel="noopener">BuilderForce Agents</a></li>
             </ul>
             <p className="blog-footer-copy">
               Built by{' '}

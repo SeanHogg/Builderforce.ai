@@ -20,7 +20,7 @@ export interface TenantProps {
   name: string;
   slug: string;
   status: TenantStatus;
-  defaultClawId: number | null;
+  defaultAgentHostId: number | null;
   plan: TenantPlan;
   billingCycle: TenantBillingCycle | null;
   billingStatus: TenantBillingStatus;
@@ -66,7 +66,7 @@ export class Tenant {
       name: name.trim(),
       slug,
       status: TenantStatus.ACTIVE,
-      defaultClawId: null,
+      defaultAgentHostId: null,
       plan: TenantPlan.FREE,
       billingCycle: null,
       billingStatus: TenantBillingStatus.NONE,
@@ -97,7 +97,7 @@ export class Tenant {
   get name(): string { return this.props.name; }
   get slug(): string { return this.props.slug; }
   get status(): TenantStatus { return this.props.status; }
-  get defaultClawId(): number | null { return this.props.defaultClawId; }
+  get defaultAgentHostId(): number | null { return this.props.defaultAgentHostId; }
   get plan(): TenantPlan { return this.props.plan; }
   get billingCycle(): TenantBillingCycle | null { return this.props.billingCycle; }
   get billingStatus(): TenantBillingStatus { return this.props.billingStatus; }
@@ -159,10 +159,10 @@ export class Tenant {
     return new Tenant({ ...this.props, status: TenantStatus.SUSPENDED, updatedAt: new Date() });
   }
 
-  setDefaultClaw(clawId: number | null): Tenant {
+  setDefaultAgentHost(agentHostId: number | null): Tenant {
     return new Tenant({
       ...this.props,
-      defaultClawId: clawId,
+      defaultAgentHostId: agentHostId,
       updatedAt: new Date(),
     });
   }

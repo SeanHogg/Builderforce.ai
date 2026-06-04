@@ -29,7 +29,7 @@ export async function verifySecret(value: string, storedHash: string): Promise<b
  * Generates a new random API key in the format `<prefix>_<32 hex chars>`.
  *
  * Prefix conventions (each means one thing — never overload):
- *   - `clk` — CoderClaw instance API key (`coderclaw_instances.api_key_hash`)
+ *   - `clk` — BuilderForce Agents instance API key (`agent_hosts.api_key_hash`)
  *   - `clu` — Legacy user-bootstrap API key (`users.api_key_hash`)
  *   - `bfk` — Tenant API key for the LLM gateway (`tenant_api_keys.key_hash`)
  *   - `bfai` — Developer API key for the public read-only API (`developer_api_keys.key_hash`)

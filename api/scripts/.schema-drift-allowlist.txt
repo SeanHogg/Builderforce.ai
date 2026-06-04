@@ -13,14 +13,14 @@
 # phantom column entries that have now been removed). Do not re-add mis-
 # attributed columns; if a real table/column is missing a migration, add the
 # migration instead of grandfathering it.
-Column 'coderclaw_instances.api_key_hash' is declared in schema.ts but never created/added by any migration.
-Column 'coderclaw_instances.created_at' is declared in schema.ts but never created/added by any migration.
-Column 'coderclaw_instances.id' is declared in schema.ts but never created/added by any migration.
-Column 'coderclaw_instances.last_seen_at' is declared in schema.ts but never created/added by any migration.
-Column 'coderclaw_instances.name' is declared in schema.ts but never created/added by any migration.
-Column 'coderclaw_instances.registered_by' is declared in schema.ts but never created/added by any migration.
-Column 'coderclaw_instances.slug' is declared in schema.ts but never created/added by any migration.
-Column 'coderclaw_instances.tenant_id' is declared in schema.ts but never created/added by any migration.
+Column 'agent_hosts.api_key_hash' is declared in schema.ts but never created/added by any migration.
+Column 'agent_hosts.created_at' is declared in schema.ts but never created/added by any migration.
+Column 'agent_hosts.id' is declared in schema.ts but never created/added by any migration.
+Column 'agent_hosts.last_seen_at' is declared in schema.ts but never created/added by any migration.
+Column 'agent_hosts.name' is declared in schema.ts but never created/added by any migration.
+Column 'agent_hosts.registered_by' is declared in schema.ts but never created/added by any migration.
+Column 'agent_hosts.slug' is declared in schema.ts but never created/added by any migration.
+Column 'agent_hosts.tenant_id' is declared in schema.ts but never created/added by any migration.
 Column 'executions.agent_id' is declared in schema.ts but never created/added by any migration.
 Column 'executions.completed_at' is declared in schema.ts but never created/added by any migration.
 Column 'executions.created_at' is declared in schema.ts but never created/added by any migration.
@@ -64,7 +64,6 @@ Column 'tasks.description' is declared in schema.ts but never created/added by a
 Column 'tasks.id' is declared in schema.ts but never created/added by any migration.
 Column 'tasks.key' is declared in schema.ts but never created/added by any migration.
 Column 'tasks.project_id' is declared in schema.ts but never created/added by any migration.
-Column 'tasks.status' is declared in schema.ts but never created/added by any migration.
 Column 'tasks.title' is declared in schema.ts but never created/added by any migration.
 Column 'tasks.updated_at' is declared in schema.ts but never created/added by any migration.
 Column 'tenants.created_at' is declared in schema.ts but never created/added by any migration.
@@ -83,12 +82,12 @@ Column 'users.password_hash' is declared in schema.ts but never created/added by
 Column 'users.updated_at' is declared in schema.ts but never created/added by any migration.
 Column 'users.username' is declared in schema.ts but never created/added by any migration.
 Table 'audit_events' is declared in schema.ts but never created by any migration.
-Table 'managed_claw_requests' is declared in schema.ts but never created by any migration.
+Table 'managed_agent_host_requests' is declared in schema.ts but never created by any migration.
 Table 'marketplace_skill_likes' is declared in schema.ts but never created by any migration.
 Table 'skills' is declared in schema.ts but never created by any migration.
 Table 'tenant_members' is declared in schema.ts but never created by any migration.
 Table 'tenant_skill_assignments' is declared in schema.ts but never created by any migration.
-Table 'claw_skill_assignments' is declared in schema.ts but never created by any migration.
+Table 'agent_host_skill_assignments' is declared in schema.ts but never created by any migration.
 Column 'agents.id' is declared in schema.ts but never created/added by any migration.
 Column 'agents.tenant_id' is declared in schema.ts but never created/added by any migration.
 Column 'agents.name' is declared in schema.ts but never created/added by any migration.

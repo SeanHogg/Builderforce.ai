@@ -1,6 +1,6 @@
 /**
  * API client for api.builderforce.ai app endpoints:
- * Brain (chats, messages), Claws (list, register).
+ * Brain (chats, messages), AgentHosts (list, register).
  * Uses tenant JWT from auth.
  */
 
@@ -220,10 +220,10 @@ export async function llmChat(
 }
 
 // ---------------------------------------------------------------------------
-// Claws (Workforce / Agent registration)
+// AgentHosts (Workforce / Agent registration)
 // ---------------------------------------------------------------------------
 
-export interface Claw {
+export interface AgentHost {
   id: number;
   name: string;
   tenantId: number;
@@ -236,29 +236,29 @@ export interface Claw {
   updatedAt: string;
 }
 
-export interface ClawRegistration extends Claw {
+export interface AgentHostRegistration extends AgentHost {
   apiKey: string;
 }
 
-export const claws = {
-  list: () => request<{ claws: Claw[] }>('/api/claws').then((r) => r.claws),
+export const agentHosts = {
+  list: () => request<{ agentHosts: AgentHost[] }>('/api/agent-hosts').then((r) => r.agentHosts),
 
   register: (name: string) =>
-    request<{ claw: Claw; apiKey: string }>('/api/claws', {
+    request<{ agentHost: AgentHost; apiKey: string }>('/api/agent-hosts', {
       method: 'POST',
       body: JSON.stringify({ name: name.trim() }),
-    }).then((r) => ({ ...r.claw, apiKey: r.apiKey } as ClawRegistration)),
+    }).then((r) => ({ ...r.agentHost, apiKey: r.apiKey } as AgentHostRegistration)),
 
-  /** WebSocket URL for claw relay (gateway). Pass tenant token via ?token=. */
-  wsUrl: (clawId: number): string => {
+  /** WebSocket URL for agentHost relay (gateway). Pass tenant token via ?token=. */
+  wsUrl: (agentHostId: number): string => {
     const base = (AUTH_API_URL || '').replace(/^http/, 'ws');
     const token = getStoredTenantToken();
-    return `${base}/api/claws/${clawId}/ws?token=${encodeURIComponent(token || '')}`;
+    return `${base}/api/agent-hosts/${agentHostId}/ws?token=${encodeURIComponent(token || '')}`;
   },
 
   /** Tool audit events for timeline/observability. */
   toolAuditEvents: (
-    clawId: number,
+    agentHostId: number,
     params?: { runId?: string; sessionKey?: string; limit?: number }
   ) => {
     const q = new URLSearchParams();
@@ -267,7 +267,7 @@ export const claws = {
     if (params?.limit != null) q.set('limit', String(params.limit));
     const query = q.toString();
     return request<{ events: ToolAuditEvent[] }>(
-      `/api/claws/${clawId}/tool-audit${query ? `?${query}` : ''}`
+      `/api/agent-hosts/${agentHostId}/tool-audit${query ? `?${query}` : ''}`
     ).then((r) => r.events);
   },
 };
@@ -287,7 +287,7 @@ export interface ToolAuditEvent {
 
 export interface Workflow {
   id: string;
-  clawId: number;
+  agentHostId: number;
   specId?: string | null;
   workflowType: string;
   status: string;
@@ -339,11 +339,11 @@ export interface WorkflowGraph {
 }
 
 export const workflows = {
-  list: (params?: { status?: string; workflowType?: string; clawId?: number }) => {
+  list: (params?: { status?: string; workflowType?: string; agentHostId?: number }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set('status', params.status);
     if (params?.workflowType) q.set('workflowType', params.workflowType);
-    if (params?.clawId != null) q.set('clawId', String(params.clawId));
+    if (params?.agentHostId != null) q.set('agentHostId', String(params.agentHostId));
     const query = q.toString();
     return request<{ workflows: Workflow[] }>(
       `/api/workflows${query ? `?${query}` : ''}`
@@ -353,15 +353,93 @@ export const workflows = {
   getGraph: (id: string) => request<WorkflowGraph>(`/api/workflows/${id}/graph`),
 };
 
-/** Tenant default claw (for workforce "Set as default"). */
-export const tenantDefaultClaw = {
+// ---------------------------------------------------------------------------
+// Workflow definitions — the visually-authored agentic workflow graphs produced
+// by the builder canvas. Mirrors api/src/domain/workflowGraph.ts (no shared
+// package in this repo — keep the two in sync, same as Workflow/WorkflowTask).
+// ---------------------------------------------------------------------------
+
+export type WorkflowNodeKind =
+  | 'trigger' | 'agent' | 'memory' | 'knowledge' | 'train'
+  | 'transform' | 'filter' | 'branch' | 'output';
+
+export interface WorkflowDefNode {
+  id: string;
+  kind: WorkflowNodeKind;
+  label: string;
+  position: { x: number; y: number };
+  config: Record<string, unknown>;
+}
+
+export interface WorkflowDefEdge {
+  id: string;
+  source: string;
+  target: string;
+}
+
+export interface WorkflowDefinitionGraph {
+  nodes: WorkflowDefNode[];
+  edges: WorkflowDefEdge[];
+}
+
+/** List-row shape (graph omitted for the index). */
+export interface WorkflowDefinitionSummary {
+  id: string;
+  name: string;
+  description?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Full record incl. the parsed graph. */
+export interface WorkflowDefinitionDetail extends WorkflowDefinitionSummary {
+  definition: WorkflowDefinitionGraph;
+}
+
+export const workflowDefinitions = {
+  list: () =>
+    request<{ definitions: WorkflowDefinitionSummary[] }>('/api/workflow-definitions').then((r) => r.definitions),
+  get: (id: string) => request<WorkflowDefinitionDetail>(`/api/workflow-definitions/${id}`),
+  create: (body: { name: string; description?: string; definition?: WorkflowDefinitionGraph }) =>
+    request<WorkflowDefinitionSummary>('/api/workflow-definitions', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  update: (id: string, body: { name?: string; description?: string; definition?: WorkflowDefinitionGraph }) =>
+    request<WorkflowDefinitionDetail>(`/api/workflow-definitions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  remove: (id: string) =>
+    request<{ ok: boolean }>(`/api/workflow-definitions/${id}`, { method: 'DELETE' }),
+  run: (id: string, agentHostId: number) =>
+    request<{ workflowId: string; taskCount: number }>(`/api/workflow-definitions/${id}/run`, {
+      method: 'POST',
+      body: JSON.stringify({ agentHostId }),
+    }),
+  /** Export a definition as YAML text (for download / hand-editing). */
+  exportYaml: async (id: string): Promise<string> => {
+    const res = await fetch(`${AUTH_API_URL}/api/workflow-definitions/${id}/export`, { headers: authHeaders() });
+    if (!res.ok) throw new Error('Export failed');
+    return res.text();
+  },
+  /** Create a definition from a hand-authored YAML/JSON document. */
+  importYaml: (name: string, yaml: string) =>
+    request<WorkflowDefinitionSummary>('/api/workflow-definitions/import', {
+      method: 'POST',
+      body: JSON.stringify({ name, yaml }),
+    }),
+};
+
+/** Tenant default agentHost (for workforce "Set as default"). */
+export const tenantDefaultAgentHost = {
   get: (tenantId: number) =>
-    request<{ defaultClawId: number | null }>(`/api/tenants/${tenantId}/default-claw`).then((r) => r.defaultClawId),
-  set: (tenantId: number, clawId: number | null) =>
-    request<{ defaultClawId: number | null }>(`/api/tenants/${tenantId}/default-claw`, {
+    request<{ defaultAgentHostId: number | null }>(`/api/tenants/${tenantId}/default-agentHost`).then((r) => r.defaultAgentHostId),
+  set: (tenantId: number, agentHostId: number | null) =>
+    request<{ defaultAgentHostId: number | null }>(`/api/tenants/${tenantId}/default-agentHost`, {
       method: 'PUT',
-      body: JSON.stringify({ clawId }),
-    }).then((r) => r.defaultClawId),
+      body: JSON.stringify({ agentHostId }),
+    }).then((r) => r.defaultAgentHostId),
 };
 
 // ---------------------------------------------------------------------------
@@ -414,11 +492,11 @@ export async function listMarketplaceSkills(params?: {
 }
 
 // ---------------------------------------------------------------------------
-// Artifact assignments (skills, personas, content → tenant/claw/project/task/agent)
+// Artifact assignments (skills, personas, content → tenant/agentHost/project/task/agent)
 // ---------------------------------------------------------------------------
 
 export type ArtifactType = 'skill' | 'persona' | 'content';
-export type AssignmentScope = 'tenant' | 'claw' | 'project' | 'task' | 'agent';
+export type AssignmentScope = 'tenant' | 'host' | 'project' | 'task' | 'agent';
 
 export interface ArtifactAssignment {
   tenantId: number;
@@ -571,7 +649,7 @@ export interface Task {
   status: string;
   priority: TaskPriority;
   assignedAgentType: string | null;
-  assignedClawId: number | null;
+  assignedAgentHostId: number | null;
   githubPrUrl: string | null;
   githubPrNumber: number | null;
   startDate: string | null;
@@ -604,7 +682,7 @@ export const tasksApi = {
     title: string;
     description?: string | null;
     priority?: TaskPriority;
-    assignedClawId?: number | null;
+    assignedAgentHostId?: number | null;
     dueDate?: string | null;
   }): Promise<Task> =>
     request<Task>('/api/tasks', {
@@ -619,7 +697,7 @@ export const tasksApi = {
       description: string | null;
       status: string;
       priority: TaskPriority;
-      assignedClawId: number | null;
+      assignedAgentHostId: number | null;
       dueDate: string | null;
       archived: boolean;
     }>
@@ -633,12 +711,12 @@ export const tasksApi = {
     request<void>(`/api/tasks/${id}`, { method: 'DELETE' }),
 };
 
-/** Runtime executions – submit tasks to claws for agent execution. */
+/** Runtime executions – submit tasks to agentHosts for agent execution. */
 export interface Execution {
   id: number;
   taskId: number;
   status: string;
-  clawId?: number | null;
+  agentHostId?: number | null;
   agentId?: number | null;
   submittedBy?: string;
   submittedAt?: string;
@@ -683,10 +761,10 @@ export interface ExecutionTrace {
 }
 
 export const runtimeApi = {
-  /** Submit a task for execution. Dispatches to assigned claw or all connected claws. */
+  /** Submit a task for execution. Dispatches to assigned agentHost or all connected agentHosts. */
   submitExecution: (body: {
     taskId: number;
-    clawId?: number | null;
+    agentHostId?: number | null;
     sessionId?: string;
     payload?: string;
   }): Promise<SubmitExecutionResponse> =>
@@ -721,7 +799,7 @@ export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired';
 export interface Approval {
   id: string;
   tenantId: number;
-  clawId: number | null;
+  agentHostId: number | null;
   requestedBy: string | null;
   actionType: string;
   description: string;
@@ -735,10 +813,10 @@ export interface Approval {
 }
 
 export const approvalsApi = {
-  list: (params?: { status?: ApprovalStatus; clawId?: number | null }): Promise<Approval[]> => {
+  list: (params?: { status?: ApprovalStatus; agentHostId?: number | null }): Promise<Approval[]> => {
     const q = new URLSearchParams();
     if (params?.status) q.set('status', params.status);
-    if (params?.clawId != null) q.set('clawId', String(params.clawId));
+    if (params?.agentHostId != null) q.set('agentHostId', String(params.agentHostId));
     const query = q.toString();
     return request<{ approvals: Approval[] }>(`/api/approvals${query ? `?${query}` : ''}`).then((r) => r.approvals ?? []);
   },
@@ -794,13 +872,13 @@ export const specsApi = {
 };
 
 // ---------------------------------------------------------------------------
-// Cron Jobs (claw-scoped, optionally project-associated)
+// Cron Jobs (agentHost-scoped, optionally project-associated)
 // ---------------------------------------------------------------------------
 
 export interface CronJob {
   id: string;
   tenantId: number;
-  clawId: number;
+  agentHostId: number;
   projectId: number | null;
   name: string;
   schedule: string;
@@ -814,12 +892,12 @@ export interface CronJob {
 }
 
 export const cronApi = {
-  list: (clawId: number, projectId?: number): Promise<CronJob[]> => {
+  list: (agentHostId: number, projectId?: number): Promise<CronJob[]> => {
     const q = projectId != null ? `?projectId=${projectId}` : '';
-    return request<{ jobs: CronJob[] }>(`/api/claws/${clawId}/cron${q}`).then((r) => r.jobs ?? []);
+    return request<{ jobs: CronJob[] }>(`/api/agent-hosts/${agentHostId}/cron${q}`).then((r) => r.jobs ?? []);
   },
 
-  create: (clawId: number, body: {
+  create: (agentHostId: number, body: {
     id?: string;
     name: string;
     schedule: string;
@@ -827,25 +905,25 @@ export const cronApi = {
     projectId?: number | null;
     enabled?: boolean;
   }): Promise<CronJob> =>
-    request<CronJob>(`/api/claws/${clawId}/cron`, {
+    request<CronJob>(`/api/agent-hosts/${agentHostId}/cron`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
 
-  update: (clawId: number, jobId: string, body: Partial<{
+  update: (agentHostId: number, jobId: string, body: Partial<{
     name: string;
     schedule: string;
     taskId: number | null;
     projectId: number | null;
     enabled: boolean;
   }>): Promise<CronJob> =>
-    request<CronJob>(`/api/claws/${clawId}/cron/${jobId}`, {
+    request<CronJob>(`/api/agent-hosts/${agentHostId}/cron/${jobId}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
 
-  delete: (clawId: number, jobId: string): Promise<void> =>
-    request<void>(`/api/claws/${clawId}/cron/${jobId}`, { method: 'DELETE' }),
+  delete: (agentHostId: number, jobId: string): Promise<void> =>
+    request<void>(`/api/agent-hosts/${agentHostId}/cron/${jobId}`, { method: 'DELETE' }),
 };
 
 /** @deprecated Use tasksApi.list for full Task[]; kept for ArtifactAssigner. */
@@ -861,12 +939,12 @@ export async function listTasks(projectId?: number): Promise<TaskSummary[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Chat Sessions (claw chat history)
+// Chat Sessions (agentHost chat history)
 // ---------------------------------------------------------------------------
 
 export interface ChatSession {
   id: string;
-  clawId: number;
+  agentHostId: number;
   sessionKey: string;
   projectId: number | null;
   startedAt: string;
@@ -886,12 +964,12 @@ export interface ChatMessage {
 }
 
 export const chatSessionsApi = {
-  list: (clawId: number): Promise<ChatSession[]> => {
-    return request<{ sessions: ChatSession[] }>(`/api/chats?clawId=${clawId}`).then((r) => r.sessions ?? []);
+  list: (agentHostId: number): Promise<ChatSession[]> => {
+    return request<{ sessions: ChatSession[] }>(`/api/chats?agentHostId=${agentHostId}`).then((r) => r.sessions ?? []);
   },
 
-  listAll: (limit = 100): Promise<(ChatSession & { clawName?: string })[]> => {
-    return request<{ sessions: (ChatSession & { clawName?: string })[] }>(`/api/chats?limit=${limit}`).then((r) => r.sessions ?? []);
+  listAll: (limit = 100): Promise<(ChatSession & { agentHostName?: string })[]> => {
+    return request<{ sessions: (ChatSession & { agentHostName?: string })[] }>(`/api/chats?limit=${limit}`).then((r) => r.sessions ?? []);
   },
 
   getMessages: (sessionId: string, limit = 100): Promise<ChatMessage[]> => {
@@ -942,12 +1020,12 @@ export const securityApi = {
 };
 
 // ---------------------------------------------------------------------------
-// Usage Snapshots (token telemetry from claws)
+// Usage Snapshots (token telemetry from agentHosts)
 // ---------------------------------------------------------------------------
 
 export interface UsageSnapshot {
   id: number;
-  clawId: number;
+  agentHostId: number;
   sessionKey: string | null;
   inputTokens: number;
   outputTokens: number;
@@ -958,19 +1036,19 @@ export interface UsageSnapshot {
 }
 
 export const usageApi = {
-  list: (clawId: number, limit = 50): Promise<UsageSnapshot[]> =>
-    request<{ snapshots: UsageSnapshot[] }>(`/api/claws/${clawId}/usage?limit=${limit}`).then(
+  list: (agentHostId: number, limit = 50): Promise<UsageSnapshot[]> =>
+    request<{ snapshots: UsageSnapshot[] }>(`/api/agent-hosts/${agentHostId}/usage?limit=${limit}`).then(
       (r) => r.snapshots ?? []
     ),
 };
 
 // ---------------------------------------------------------------------------
-// Claw Workspace (synced directories + files)
+// AgentHost Workspace (synced directories + files)
 // ---------------------------------------------------------------------------
 
-export interface ClawDirectory {
+export interface AgentHostDirectory {
   id: number;
-  clawId: number;
+  agentHostId: number;
   projectId: number | null;
   absPath: string;
   pathHash: string;
@@ -979,7 +1057,7 @@ export interface ClawDirectory {
   fileCount?: number;
 }
 
-export interface ClawDirectoryFile {
+export interface AgentHostDirectoryFile {
   id: number;
   directoryId: number;
   relPath: string;
@@ -989,29 +1067,29 @@ export interface ClawDirectoryFile {
 }
 
 export const workspaceApi = {
-  listDirectories: (clawId: number): Promise<ClawDirectory[]> =>
-    request<{ directories: ClawDirectory[] }>(`/api/claws/${clawId}/directories`).then(
+  listDirectories: (agentHostId: number): Promise<AgentHostDirectory[]> =>
+    request<{ directories: AgentHostDirectory[] }>(`/api/agent-hosts/${agentHostId}/directories`).then(
       (r) => r.directories ?? []
     ),
 
-  listFiles: (clawId: number, directoryId: number): Promise<ClawDirectoryFile[]> =>
-    request<{ files: ClawDirectoryFile[] }>(
-      `/api/claws/${clawId}/directories/${directoryId}/files`
+  listFiles: (agentHostId: number, directoryId: number): Promise<AgentHostDirectoryFile[]> =>
+    request<{ files: AgentHostDirectoryFile[] }>(
+      `/api/agent-hosts/${agentHostId}/directories/${directoryId}/files`
     ).then((r) => r.files ?? []),
 
-  getFileContent: (clawId: number, directoryId: number, fileId: number): Promise<{ content: string }> =>
-    request<{ content: string }>(`/api/claws/${clawId}/directories/${directoryId}/files/${fileId}/content`),
+  getFileContent: (agentHostId: number, directoryId: number, fileId: number): Promise<{ content: string }> =>
+    request<{ content: string }>(`/api/agent-hosts/${agentHostId}/directories/${directoryId}/files/${fileId}/content`),
 
-  triggerSync: (clawId: number, directoryId: number): Promise<void> =>
-    request<void>(`/api/claws/${clawId}/directories/${directoryId}/sync`, { method: 'POST' }),
+  triggerSync: (agentHostId: number, directoryId: number): Promise<void> =>
+    request<void>(`/api/agent-hosts/${agentHostId}/directories/${directoryId}/sync`, { method: 'POST' }),
 };
 
 // ---------------------------------------------------------------------------
-// Claw Projects (project ↔ claw associations)
+// AgentHost Projects (project ↔ agentHost associations)
 // ---------------------------------------------------------------------------
 
-export interface ClawProject {
-  clawId: number;
+export interface AgentHostProject {
+  agentHostId: number;
   projectId: number;
   role: string | null;
   project?: {
@@ -1022,22 +1100,22 @@ export interface ClawProject {
   };
 }
 
-export const clawProjectsApi = {
-  list: (clawId: number): Promise<ClawProject[]> =>
-    request<{ projects: ClawProject[] }>(`/api/claws/${clawId}/projects`).then((r) => r.projects ?? []),
+export const agentHostProjectsApi = {
+  list: (agentHostId: number): Promise<AgentHostProject[]> =>
+    request<{ projects: AgentHostProject[] }>(`/api/agent-hosts/${agentHostId}/projects`).then((r) => r.projects ?? []),
 
-  assign: (clawId: number, projectId: number, role?: string): Promise<void> =>
-    request<void>(`/api/claws/${clawId}/projects/${projectId}`, {
+  assign: (agentHostId: number, projectId: number, role?: string): Promise<void> =>
+    request<void>(`/api/agent-hosts/${agentHostId}/projects/${projectId}`, {
       method: 'PUT',
       body: JSON.stringify({ role }),
     }),
 
-  unassign: (clawId: number, projectId: number): Promise<void> =>
-    request<void>(`/api/claws/${clawId}/projects/${projectId}`, { method: 'DELETE' }),
+  unassign: (agentHostId: number, projectId: number): Promise<void> =>
+    request<void>(`/api/agent-hosts/${agentHostId}/projects/${projectId}`, { method: 'DELETE' }),
 };
 
 // ---------------------------------------------------------------------------
-// Claw Channels (multi-channel messaging integrations)
+// AgentHost Channels (multi-channel messaging integrations)
 // ---------------------------------------------------------------------------
 
 export type ChannelPlatform =
@@ -1050,9 +1128,9 @@ export type ChannelPlatform =
   | 'teams'
   | 'webhook';
 
-export interface ClawChannel {
+export interface AgentHostChannel {
   id: string;
-  clawId: number;
+  agentHostId: number;
   platform: ChannelPlatform;
   name: string;
   config: string | null; // JSON config (webhook URL, token, etc.)
@@ -1062,42 +1140,42 @@ export interface ClawChannel {
 }
 
 export const channelsApi = {
-  list: (clawId: number): Promise<ClawChannel[]> =>
-    request<{ channels: ClawChannel[] }>(`/api/claws/${clawId}/channels`).then((r) => r.channels ?? []),
+  list: (agentHostId: number): Promise<AgentHostChannel[]> =>
+    request<{ channels: AgentHostChannel[] }>(`/api/agent-hosts/${agentHostId}/channels`).then((r) => r.channels ?? []),
 
   create: (
-    clawId: number,
+    agentHostId: number,
     body: { platform: ChannelPlatform; name: string; config?: string; enabled?: boolean }
-  ): Promise<ClawChannel> =>
-    request<ClawChannel>(`/api/claws/${clawId}/channels`, {
+  ): Promise<AgentHostChannel> =>
+    request<AgentHostChannel>(`/api/agent-hosts/${agentHostId}/channels`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
 
   update: (
-    clawId: number,
+    agentHostId: number,
     channelId: string,
     body: Partial<{ name: string; config: string; enabled: boolean }>
-  ): Promise<ClawChannel> =>
-    request<ClawChannel>(`/api/claws/${clawId}/channels/${channelId}`, {
+  ): Promise<AgentHostChannel> =>
+    request<AgentHostChannel>(`/api/agent-hosts/${agentHostId}/channels/${channelId}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
 
-  delete: (clawId: number, channelId: string): Promise<void> =>
-    request<void>(`/api/claws/${clawId}/channels/${channelId}`, { method: 'DELETE' }),
+  delete: (agentHostId: number, channelId: string): Promise<void> =>
+    request<void>(`/api/agent-hosts/${agentHostId}/channels/${channelId}`, { method: 'DELETE' }),
 };
 
 // ---------------------------------------------------------------------------
-// Claw Skills (tenant + claw-scoped skill assignments)
+// AgentHost Skills (tenant + agentHost-scoped skill assignments)
 // ---------------------------------------------------------------------------
 
-export interface ClawSkillAssignment {
+export interface AgentHostSkillAssignment {
   id: number;
-  clawId: number | null;
+  agentHostId: number | null;
   tenantId: number;
   skillSlug: string;
-  scope: 'tenant' | 'claw';
+  scope: 'tenant' | 'host';
   assignedBy: string | null;
   assignedAt: string;
   skill?: {
@@ -1109,16 +1187,16 @@ export interface ClawSkillAssignment {
   };
 }
 
-export const clawSkillsApi = {
-  list: (clawId: number): Promise<ClawSkillAssignment[]> => {
-    const q = new URLSearchParams({ clawId: String(clawId) });
-    return request<{ assignments: ClawSkillAssignment[] }>(`/api/skill-assignments?${q}`).then(
+export const agentHostSkillsApi = {
+  list: (agentHostId: number): Promise<AgentHostSkillAssignment[]> => {
+    const q = new URLSearchParams({ agentHostId: String(agentHostId) });
+    return request<{ assignments: AgentHostSkillAssignment[] }>(`/api/skill-assignments?${q}`).then(
       (r) => r.assignments ?? []
     );
   },
 
-  assignToClaw: (clawId: number, skillSlug: string): Promise<void> =>
-    request<void>(`/api/skill-assignments/claw/${clawId}`, {
+  assignToAgentHost: (agentHostId: number, skillSlug: string): Promise<void> =>
+    request<void>(`/api/skill-assignments/agentHost/${agentHostId}`, {
       method: 'POST',
       body: JSON.stringify({ skillSlug }),
     }),
@@ -1183,27 +1261,27 @@ export const llmApi = {
 };
 
 // ---------------------------------------------------------------------------
-// Dispatch (send command to claw via relay)
+// Dispatch (send command to agentHost via relay)
 // ---------------------------------------------------------------------------
 
 export const dispatchApi = {
-  send: (clawId: number, payload: unknown): Promise<{ ok: boolean }> =>
-    request<{ ok: boolean }>(`/api/claws/${clawId}/dispatch`, {
+  send: (agentHostId: number, payload: unknown): Promise<{ ok: boolean }> =>
+    request<{ ok: boolean }>(`/api/agent-hosts/${agentHostId}/dispatch`, {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
 };
 
 // ---------------------------------------------------------------------------
-// Claw Config (runtime configuration JSON)
+// AgentHost Config (runtime configuration JSON)
 // ---------------------------------------------------------------------------
 
-export const clawConfigApi = {
-  get: (clawId: number): Promise<{ config: Record<string, unknown> | null }> =>
-    request<{ config: Record<string, unknown> | null }>(`/api/claws/${clawId}/config`),
+export const agentHostConfigApi = {
+  get: (agentHostId: number): Promise<{ config: Record<string, unknown> | null }> =>
+    request<{ config: Record<string, unknown> | null }>(`/api/agent-hosts/${agentHostId}/config`),
 
-  update: (clawId: number, config: Record<string, unknown>): Promise<{ config: Record<string, unknown> }> =>
-    request<{ config: Record<string, unknown> }>(`/api/claws/${clawId}/config`, {
+  update: (agentHostId: number, config: Record<string, unknown>): Promise<{ config: Record<string, unknown> }> =>
+    request<{ config: Record<string, unknown> }>(`/api/agent-hosts/${agentHostId}/config`, {
       method: 'PUT',
       body: JSON.stringify({ config }),
     }),
@@ -1292,10 +1370,10 @@ export interface MarketplaceSkillDraft {
 }
 
 // ---------------------------------------------------------------------------
-// Claw nodes (cluster node management)
+// AgentHost nodes (cluster node management)
 // ---------------------------------------------------------------------------
 
-export interface ClawNode {
+export interface AgentHostNode {
   id: string;
   name: string;
   capabilities: string[];
@@ -1304,12 +1382,12 @@ export interface ClawNode {
   status: 'connected' | 'disconnected';
 }
 
-export const clawNodesApi = {
-  list: (clawId: number): Promise<ClawNode[]> =>
-    request<ClawNode[]>(`/api/claws/${clawId}/nodes`),
+export const agentHostNodesApi = {
+  list: (agentHostId: number): Promise<AgentHostNode[]> =>
+    request<AgentHostNode[]>(`/api/agent-hosts/${agentHostId}/nodes`),
 
-  unpair: (clawId: number, nodeId: string): Promise<void> =>
-    request<void>(`/api/claws/${clawId}/nodes/${nodeId}`, { method: 'DELETE' }),
+  unpair: (agentHostId: number, nodeId: string): Promise<void> =>
+    request<void>(`/api/agent-hosts/${agentHostId}/nodes/${nodeId}`, { method: 'DELETE' }),
 };
 
 export const marketplacePublisherApi = {
@@ -1609,7 +1687,7 @@ export interface ContributorCalendar {
   kind: 'human' | 'agent';
   avatarUrl: string | null;
   jobTitle: string | null;
-  clawId: number | null;
+  agentHostId: number | null;
   total: number;
   days: CalendarCell[];
 }

@@ -22,18 +22,18 @@ x-i18n:
 
 - 模型引用使用 `provider/model` 格式（例如：`opencode/claude-opus-4-5`）。
 - 如果设置了 `agents.defaults.models`，它将成为允许列表。
-- CLI 辅助工具：`coderclaw onboard`、`coderclaw models list`、`coderclaw models set <provider/model>`。
+- CLI 辅助工具：`builderforce onboard`、`builderforce models list`、`builderforce models set <provider/model>`。
 
 ## 内置提供商（pi-ai 目录）
 
-CoderClaw 附带 pi-ai 目录。这些提供商**不需要** `models.providers` 配置；只需设置认证 + 选择模型。
+BuilderForce Agents 附带 pi-ai 目录。这些提供商**不需要** `models.providers` 配置；只需设置认证 + 选择模型。
 
 ### OpenAI
 
 - 提供商：`openai`
 - 认证：`OPENAI_API_KEY`
 - 示例模型：`openai/gpt-5.2`
-- CLI：`coderclaw onboard --auth-choice openai-api-key`
+- CLI：`builderforce onboard --auth-choice openai-api-key`
 
 ```json5
 {
@@ -46,7 +46,7 @@ CoderClaw 附带 pi-ai 目录。这些提供商**不需要** `models.providers` 
 - 提供商：`anthropic`
 - 认证：`ANTHROPIC_API_KEY` 或 `claude setup-token`
 - 示例模型：`anthropic/claude-opus-4-5`
-- CLI：`coderclaw onboard --auth-choice token`（粘贴 setup-token）或 `coderclaw models auth paste-token --provider anthropic`
+- CLI：`builderforce onboard --auth-choice token`（粘贴 setup-token）或 `builderforce models auth paste-token --provider anthropic`
 
 ```json5
 {
@@ -59,7 +59,7 @@ CoderClaw 附带 pi-ai 目录。这些提供商**不需要** `models.providers` 
 - 提供商：`openai-codex`
 - 认证：OAuth (ChatGPT)
 - 示例模型：`openai-codex/gpt-5.2`
-- CLI：`coderclaw onboard --auth-choice openai-codex` 或 `coderclaw models auth login --provider openai-codex`
+- CLI：`builderforce onboard --auth-choice openai-codex` 或 `builderforce models auth login --provider openai-codex`
 
 ```json5
 {
@@ -72,7 +72,7 @@ CoderClaw 附带 pi-ai 目录。这些提供商**不需要** `models.providers` 
 - 提供商：`opencode`
 - 认证：`OPENCODE_API_KEY`（或 `OPENCODE_ZEN_API_KEY`）
 - 示例模型：`opencode/claude-opus-4-5`
-- CLI：`coderclaw onboard --auth-choice opencode-zen`
+- CLI：`builderforce onboard --auth-choice opencode-zen`
 
 ```json5
 {
@@ -85,26 +85,26 @@ CoderClaw 附带 pi-ai 目录。这些提供商**不需要** `models.providers` 
 - 提供商：`google`
 - 认证：`GEMINI_API_KEY`
 - 示例模型：`google/gemini-3-pro-preview`
-- CLI：`coderclaw onboard --auth-choice gemini-api-key`
+- CLI：`builderforce onboard --auth-choice gemini-api-key`
 
 ### Google Vertex、Antigravity 和 Gemini CLI
 
 - 提供商：`google-vertex`、`google-antigravity`、`google-gemini-cli`
 - 认证：Vertex 使用 gcloud ADC；Antigravity/Gemini CLI 使用各自的认证流程
 - Antigravity OAuth 作为捆绑插件提供（`google-antigravity-auth`，默认禁用）。
-  - 启用：`coderclaw plugins enable google-antigravity-auth`
-  - 登录：`coderclaw models auth login --provider google-antigravity --set-default`
+  - 启用：`builderforce plugins enable google-antigravity-auth`
+  - 登录：`builderforce models auth login --provider google-antigravity --set-default`
 - Gemini CLI OAuth 作为捆绑插件提供（`google-gemini-cli-auth`，默认禁用）。
-  - 启用：`coderclaw plugins enable google-gemini-cli-auth`
-  - 登录：`coderclaw models auth login --provider google-gemini-cli --set-default`
-  - 注意：你**不需要**将客户端 ID 或密钥粘贴到 `coderclaw.json` 中。CLI 登录流程将令牌存储在 Gateway 网关主机的认证配置文件中。
+  - 启用：`builderforce plugins enable google-gemini-cli-auth`
+  - 登录：`builderforce models auth login --provider google-gemini-cli --set-default`
+  - 注意：你**不需要**将客户端 ID 或密钥粘贴到 `builderforce.json` 中。CLI 登录流程将令牌存储在 Gateway 网关主机的认证配置文件中。
 
 ### Z.AI (GLM)
 
 - 提供商：`zai`
 - 认证：`ZAI_API_KEY`
 - 示例模型：`zai/glm-4.7`
-- CLI：`coderclaw onboard --auth-choice zai-api-key`
+- CLI：`builderforce onboard --auth-choice zai-api-key`
   - 别名：`z.ai/*` 和 `z-ai/*` 规范化为 `zai/*`
 
 ### Vercel AI Gateway
@@ -112,7 +112,7 @@ CoderClaw 附带 pi-ai 目录。这些提供商**不需要** `models.providers` 
 - 提供商：`vercel-ai-gateway`
 - 认证：`AI_GATEWAY_API_KEY`
 - 示例模型：`vercel-ai-gateway/anthropic/claude-opus-4.5`
-- CLI：`coderclaw onboard --auth-choice ai-gateway-api-key`
+- CLI：`builderforce onboard --auth-choice ai-gateway-api-key`
 
 ### 其他内置提供商
 
@@ -191,8 +191,8 @@ Qwen 通过设备码流程提供对 Qwen Coder + Vision 的 OAuth 访问。
 启用捆绑插件，然后登录：
 
 ```bash
-coderclaw plugins enable qwen-portal-auth
-coderclaw models auth login --provider qwen-portal --set-default
+builderforce plugins enable qwen-portal-auth
+builderforce models auth login --provider qwen-portal --set-default
 ```
 
 模型引用：
@@ -209,7 +209,7 @@ Synthetic 通过 `synthetic` 提供商提供 Anthropic 兼容模型：
 - 提供商：`synthetic`
 - 认证：`SYNTHETIC_API_KEY`
 - 示例模型：`synthetic/hf:MiniMaxAI/MiniMax-M2.1`
-- CLI：`coderclaw onboard --auth-choice synthetic-api-key`
+- CLI：`builderforce onboard --auth-choice synthetic-api-key`
 
 ```json5
 {
@@ -301,7 +301,7 @@ ollama pull llama3.3
 注意事项：
 
 - 对于自定义提供商，`reasoning`、`input`、`cost`、`contextWindow` 和 `maxTokens` 是可选的。
-  省略时，CoderClaw 默认为：
+  省略时，BuilderForce Agents 默认为：
   - `reasoning: false`
   - `input: ["text"]`
   - `cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }`
@@ -312,9 +312,9 @@ ollama pull llama3.3
 ## CLI 示例
 
 ```bash
-coderclaw onboard --auth-choice opencode-zen
-coderclaw models set opencode/claude-opus-4-5
-coderclaw models list
+builderforce onboard --auth-choice opencode-zen
+builderforce models set opencode/claude-opus-4-5
+builderforce models list
 ```
 
 另请参阅：[/gateway/configuration](/gateway/configuration) 了解完整配置示例。

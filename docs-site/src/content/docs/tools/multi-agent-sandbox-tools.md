@@ -26,14 +26,14 @@ when the container is created.
 Auth is per-agent: each agent reads from its own `agentDir` auth store at:
 
 ```
-~/.coderclaw/agents/<agentId>/agent/auth-profiles.json
+~/.builderforce/agents/<agentId>/agent/auth-profiles.json
 ```
 
 Credentials are **not** shared between agents. Never reuse `agentDir` across agents.
 If you want to share creds, copy `auth-profiles.json` into the other agent's `agentDir`.
 
 For how sandboxing behaves at runtime, see [Sandboxing](/gateway/sandboxing).
-For debugging “why is this blocked?”, see [Sandbox vs Tool Policy vs Elevated](/gateway/sandbox-vs-tool-policy-vs-elevated) and `coderclaw sandbox explain`.
+For debugging “why is this blocked?”, see [Sandbox vs Tool Policy vs Elevated](/gateway/sandbox-vs-tool-policy-vs-elevated) and `builderforce sandbox explain`.
 
 ---
 
@@ -49,13 +49,13 @@ For debugging “why is this blocked?”, see [Sandbox vs Tool Policy vs Elevate
         "id": "main",
         "default": true,
         "name": "Personal Assistant",
-        "workspace": "~/.coderclaw/workspace",
+        "workspace": "~/.builderforce/workspace",
         "sandbox": { "mode": "off" }
       },
       {
         "id": "family",
         "name": "Family Bot",
-        "workspace": "~/.coderclaw/workspace-family",
+        "workspace": "~/.builderforce/workspace-family",
         "sandbox": {
           "mode": "all",
           "scope": "agent"
@@ -98,12 +98,12 @@ For debugging “why is this blocked?”, see [Sandbox vs Tool Policy vs Elevate
     "list": [
       {
         "id": "personal",
-        "workspace": "~/.coderclaw/workspace-personal",
+        "workspace": "~/.builderforce/workspace-personal",
         "sandbox": { "mode": "off" }
       },
       {
         "id": "work",
-        "workspace": "~/.coderclaw/workspace-work",
+        "workspace": "~/.builderforce/workspace-work",
         "sandbox": {
           "mode": "all",
           "scope": "shared",
@@ -158,14 +158,14 @@ For debugging “why is this blocked?”, see [Sandbox vs Tool Policy vs Elevate
     "list": [
       {
         "id": "main",
-        "workspace": "~/.coderclaw/workspace",
+        "workspace": "~/.builderforce/workspace",
         "sandbox": {
           "mode": "off" // Override: main never sandboxed
         }
       },
       {
         "id": "public",
-        "workspace": "~/.coderclaw/workspace-public",
+        "workspace": "~/.builderforce/workspace-public",
         "sandbox": {
           "mode": "all", // Override: public always sandboxed
           "scope": "agent"
@@ -234,7 +234,7 @@ Tool policies (global, agent, sandbox) support `group:*` entries that expand to 
 - `group:automation`: `cron`, `gateway`
 - `group:messaging`: `message`
 - `group:nodes`: `nodes`
-- `group:coderclaw`: all built-in CoderClaw tools (excludes provider plugins)
+- `group:builderforce`: all built-in BuilderForce Agents tools (excludes provider plugins)
 
 ### Elevated Mode
 
@@ -257,7 +257,7 @@ Mitigation patterns:
 {
   "agents": {
     "defaults": {
-      "workspace": "~/.coderclaw/workspace",
+      "workspace": "~/.builderforce/workspace",
       "sandbox": {
         "mode": "non-main"
       }
@@ -283,7 +283,7 @@ Mitigation patterns:
       {
         "id": "main",
         "default": true,
-        "workspace": "~/.coderclaw/workspace",
+        "workspace": "~/.builderforce/workspace",
         "sandbox": { "mode": "off" }
       }
     ]
@@ -291,7 +291,7 @@ Mitigation patterns:
 }
 ```
 
-Legacy `agent.*` configs are migrated by `coderclaw doctor`; prefer `agents.defaults` + `agents.list` going forward.
+Legacy `agent.*` configs are migrated by `builderforce doctor`; prefer `agents.defaults` + `agents.list` going forward.
 
 ---
 
@@ -349,13 +349,13 @@ After configuring multi-agent sandbox and tools:
 1. **Check agent resolution:**
 
    ```exec
-   coderclaw agents list --bindings
+   builderforce agents list --bindings
    ```
 
 2. **Verify sandbox containers:**
 
    ```exec
-   docker ps --filter "name=coderclaw-sbx-"
+   docker ps --filter "name=builderforce-sbx-"
    ```
 
 3. **Test tool restrictions:**
@@ -365,7 +365,7 @@ After configuring multi-agent sandbox and tools:
 4. **Monitor logs:**
 
    ```exec
-   tail -f "${CODERCLAW_STATE_DIR:-$HOME/.coderclaw}/logs/gateway.log" | grep -E "routing|sandbox|tools"
+   tail -f "${BUILDERFORCE_AGENTS_STATE_DIR:-$HOME/.builderforce}/logs/gateway.log" | grep -E "routing|sandbox|tools"
    ```
 
 ---

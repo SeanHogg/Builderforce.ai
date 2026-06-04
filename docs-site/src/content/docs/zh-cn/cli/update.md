@@ -2,7 +2,7 @@
 read_when:
   - 你想安全地更新源码检出
   - 你需要了解 `--update` 简写行为
-summary: "`coderclaw update` 的 CLI 参考（相对安全的源码更新 + Gateway 网关自动重启）"
+summary: "`builderforce update` 的 CLI 参考（相对安全的源码更新 + Gateway 网关自动重启）"
 title: update
 x-i18n:
   generated_at: "2026-02-03T07:45:34Z"
@@ -13,24 +13,24 @@ x-i18n:
   workflow: 15
 ---
 
-# `coderclaw update`
+# `builderforce update`
 
-安全更新 CoderClaw 并在 stable/beta/dev 渠道之间切换。
+安全更新 BuilderForce Agents 并在 stable/beta/dev 渠道之间切换。
 
 如果你通过 **npm/pnpm** 安装（全局安装，无 git 元数据），更新通过 [更新](/install/updating) 中的包管理器流程进行。
 
 ## 用法
 
 ```bash
-coderclaw update
-coderclaw update status
-coderclaw update wizard
-coderclaw update --channel beta
-coderclaw update --channel dev
-coderclaw update --tag beta
-coderclaw update --no-restart
-coderclaw update --json
-coderclaw --update
+builderforce update
+builderforce update status
+builderforce update wizard
+builderforce update --channel beta
+builderforce update --channel dev
+builderforce update --tag beta
+builderforce update --no-restart
+builderforce update --json
+builderforce --update
 ```
 
 ## 选项
@@ -48,9 +48,9 @@ coderclaw --update
 显示当前更新渠道 + git 标签/分支/SHA（对于源码检出），以及更新可用性。
 
 ```bash
-coderclaw update status
-coderclaw update status --json
-coderclaw update status --timeout 10
+builderforce update status
+builderforce update status --json
+builderforce update status --timeout 10
 ```
 
 选项：
@@ -64,9 +64,9 @@ coderclaw update status --timeout 10
 
 ## 工作原理
 
-当你显式切换渠道（`--channel ...`）时，CoderClaw 也会保持安装方式一致：
+当你显式切换渠道（`--channel ...`）时，BuilderForce Agents 也会保持安装方式一致：
 
-- `dev` → 确保存在 git 检出（默认：`~/coderclaw`，可通过 `CODERCLAW_GIT_DIR` 覆盖），更新它，并从该检出安装全局 CLI。
+- `dev` → 确保存在 git 检出（默认：`~/builderforce`，可通过 `BUILDERFORCE_AGENTS_GIT_DIR` 覆盖），更新它，并从该检出安装全局 CLI。
 - `stable`/`beta` → 使用匹配的 dist-tag 从 npm 安装。
 
 ## Git 检出流程
@@ -86,16 +86,16 @@ coderclaw update status --timeout 10
 5. Rebase 到所选提交（仅 dev）。
 6. 安装依赖（优先使用 pnpm；npm 作为备选）。
 7. 构建 + 构建控制界面。
-8. 运行 `coderclaw doctor` 作为最终的"安全更新"检查。
+8. 运行 `builderforce doctor` 作为最终的"安全更新"检查。
 9. 将插件同步到当前渠道（dev 使用捆绑的扩展；stable/beta 使用 npm）并更新 npm 安装的插件。
 
 ## `--update` 简写
 
-`coderclaw --update` 会重写为 `coderclaw update`（便于 shell 和启动脚本使用）。
+`builderforce --update` 会重写为 `builderforce update`（便于 shell 和启动脚本使用）。
 
 ## 另请参阅
 
-- `coderclaw doctor`（在 git 检出上会提供先运行更新的选项）
+- `builderforce doctor`（在 git 检出上会提供先运行更新的选项）
 - [开发渠道](/install/development-channels)
 - [更新](/install/updating)
 - [CLI 参考](/cli)

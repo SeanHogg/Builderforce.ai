@@ -11,13 +11,13 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   task_submitted: 'var(--coral-bright, #f4726e)',
   execution_completed: 'rgba(34,197,94,0.9)',
   execution_failed: 'var(--coral-bright, #f4726e)',
-  claw_registered: 'var(--text-secondary)',
+  agent_host_registered: 'var(--text-secondary)',
   approval_created: 'rgba(245,158,11,0.9)',
   approval_decided: 'rgba(245,158,11,0.9)',
 };
 
 const RESOURCE_TYPE_OPTIONS = [
-  '', 'user', 'tenant', 'project', 'task', 'claw', 'execution', 'approval',
+  '', 'user', 'tenant', 'project', 'task', 'host', 'execution', 'approval',
 ];
 
 const EVENT_TYPE_OPTIONS = [
@@ -25,7 +25,7 @@ const EVENT_TYPE_OPTIONS = [
   'user_registered', 'user_login',
   'task_created', 'task_updated', 'task_submitted',
   'execution_completed', 'execution_failed',
-  'claw_registered',
+  'agent_host_registered',
   'approval_created', 'approval_decided',
 ];
 

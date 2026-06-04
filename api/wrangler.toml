@@ -22,8 +22,8 @@ NOTIFICATION_EMAIL_FROM = "Builderforce <notifications@builderforce.ai>"
 
 # Wrangler dev overrides (local only, never committed)
 [[durable_objects.bindings]]
-name = "CLAW_RELAY"
-class_name = "ClawRelayDO"
+name = "AGENT_HOST_RELAY"
+class_name = "AgentHostRelayDO"
 
 [[durable_objects.bindings]]
 name = "SESSION_ROOM"
@@ -59,6 +59,13 @@ tag = "v3"
 # AnalysisRunnerDO uses storage alarms to advance the repo-analysis pipeline one
 # stage per tick; alarms require a SQLite-backed Durable Object class.
 new_sqlite_classes = ["AnalysisRunnerDO"]
+
+[[migrations]]
+tag = "v4"
+# Rebrand: the agent-host relay Durable Object was renamed ClawRelayDO ->
+# AgentHostRelayDO (CoderClaw -> BuilderForce Agents). renamed_classes preserves
+# existing DO instances/storage across the rename. Binding: AGENT_HOST_RELAY.
+renamed_classes = [{ from = "ClawRelayDO", to = "AgentHostRelayDO" }]
 
 # Cron triggers — see scheduled() in src/index.ts
 # 09:00 UTC daily: probe every registered LLM vendor and email superadmins on status change.

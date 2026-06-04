@@ -1,5 +1,5 @@
 ---
-summary: "How CoderClaw builds prompt context and reports token usage + costs"
+summary: "How BuilderForce Agents builds prompt context and reports token usage + costs"
 read_when:
   - Explaining token usage, costs, or context windows
   - Debugging context growth or compaction behavior
@@ -8,12 +8,12 @@ title: "Token Use and Costs"
 
 # Token use & costs
 
-CoderClaw tracks **tokens**, not characters. Tokens are model-specific, but most
+BuilderForce Agents tracks **tokens**, not characters. Tokens are model-specific, but most
 OpenAI-style models average ~4 characters per token for English text.
 
 ## How the system prompt is built
 
-CoderClaw assembles its own system prompt on every run. It includes:
+BuilderForce Agents assembles its own system prompt on every run. It includes:
 
 - Tool list + short descriptions
 - Skills list (only metadata; instructions are loaded on demand with `read`)
@@ -36,7 +36,7 @@ Everything the model receives counts toward the context limit:
 - Compaction summaries and pruning artifacts
 - Provider wrappers or safety headers (not visible, but still counted)
 
-For images, CoderClaw downscales transcript/tool image payloads before provider calls.
+For images, BuilderForce Agents downscales transcript/tool image payloads before provider calls.
 Use `agents.defaults.imageMaxDimensionPx` (default: `1200`) to tune this:
 
 - Lower values usually reduce vision-token usage and payload size.
@@ -53,12 +53,12 @@ Use these in chat:
 - `/usage off|tokens|full` → appends a **per-response usage footer** to every reply.
   - Persists per session (stored as `responseUsage`).
   - OAuth auth **hides cost** (tokens only).
-- `/usage cost` → shows a local cost summary from CoderClaw session logs.
+- `/usage cost` → shows a local cost summary from BuilderForce Agents session logs.
 
 Other surfaces:
 
 - **TUI/Web TUI:** `/status` + `/usage` are supported.
-- **CLI:** `coderclaw status --usage` and `coderclaw channels list` show
+- **CLI:** `builderforce status --usage` and `builderforce channels list` show
   provider quota windows (not per-response costs).
 
 ## Cost estimation (when shown)
@@ -70,12 +70,12 @@ models.providers.<provider>.models[].cost
 ```
 
 These are **USD per 1M tokens** for `input`, `output`, `cacheRead`, and
-`cacheWrite`. If pricing is missing, CoderClaw shows tokens only. OAuth tokens
+`cacheWrite`. If pricing is missing, BuilderForce Agents shows tokens only. OAuth tokens
 never show dollar cost.
 
 ## Cache TTL and pruning impact
 
-Provider prompt caching only applies within the cache TTL window. CoderClaw can
+Provider prompt caching only applies within the cache TTL window. BuilderForce Agents can
 optionally run **cache-ttl pruning**: it prunes the session once the cache TTL
 has expired, then resets the cache window so subsequent requests can re-use the
 freshly cached context instead of re-caching the full history. This keeps cache
@@ -110,7 +110,7 @@ agents:
 
 ### Example: enable Anthropic 1M context beta header
 
-Anthropic's 1M context window is currently beta-gated. CoderClaw can inject the
+Anthropic's 1M context window is currently beta-gated. BuilderForce Agents can inject the
 required `anthropic-beta` value when you enable `context1m` on supported Opus
 or Sonnet models.
 

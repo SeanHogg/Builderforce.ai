@@ -1,11 +1,11 @@
 ---
-summary: "CLI reference for `coderclaw agents` (list/add/delete/set identity)"
+summary: "CLI reference for `builderforce agents` (list/add/delete/set identity)"
 read_when:
   - You want multiple isolated agents (workspaces + routing + auth)
 title: "agents"
 ---
 
-# `coderclaw agents`
+# `builderforce agents`
 
 Manage isolated agents (workspaces + auth + routing).
 
@@ -17,18 +17,18 @@ Related:
 ## Examples
 
 ```bash
-coderclaw agents list
-coderclaw agents add work --workspace ~/.coderclaw/workspace-work
-coderclaw agents set-identity --workspace ~/.coderclaw/workspace --from-identity
-coderclaw agents set-identity --agent main --avatar avatars/coderclaw.png
-coderclaw agents delete work
+builderforce agents list
+builderforce agents add work --workspace ~/.builderforce/workspace-work
+builderforce agents set-identity --workspace ~/.builderforce/workspace --from-identity
+builderforce agents set-identity --agent main --avatar avatars/builderforce.png
+builderforce agents delete work
 ```
 
 ## Identity files
 
 Each agent workspace can include an `IDENTITY.md` at the workspace root:
 
-- Example path: `~/.coderclaw/workspace/IDENTITY.md`
+- Example path: `~/.builderforce/workspace/IDENTITY.md`
 - `set-identity --from-identity` reads from the workspace root (or an explicit `--identity-file`)
 
 Avatar paths resolve relative to the workspace root.
@@ -45,13 +45,13 @@ Avatar paths resolve relative to the workspace root.
 Load from `IDENTITY.md`:
 
 ```bash
-coderclaw agents set-identity --workspace ~/.coderclaw/workspace --from-identity
+builderforce agents set-identity --workspace ~/.builderforce/workspace --from-identity
 ```
 
 Override fields explicitly:
 
 ```bash
-coderclaw agents set-identity --agent main --name "CoderClaw" --emoji "🦞" --avatar avatars/coderclaw.png
+builderforce agents set-identity --agent main --name "BuilderForce Agents" --emoji "🦞" --avatar avatars/builderforce.png
 ```
 
 Config sample:
@@ -63,10 +63,10 @@ Config sample:
       {
         id: "main",
         identity: {
-          name: "CoderClaw",
+          name: "BuilderForce Agents",
           theme: "space lobster",
           emoji: "🦞",
-          avatar: "avatars/coderclaw.png",
+          avatar: "avatars/builderforce.png",
         },
       },
     ],

@@ -1,18 +1,18 @@
 ---
-summary: "CLI reference for `coderclaw health` (gateway health endpoint via RPC)"
+summary: "CLI reference for `builderforce health` (gateway health endpoint via RPC)"
 read_when:
   - You want to quickly check the running Gateway’s health
 title: "health"
 ---
 
-# `coderclaw health`
+# `builderforce health`
 
 Fetch health from the running Gateway.
 
 ```bash
-coderclaw health
-coderclaw health --json
-coderclaw health --verbose
+builderforce health
+builderforce health --json
+builderforce health --verbose
 ```
 
 Notes:

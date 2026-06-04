@@ -24,8 +24,8 @@ describe('encodeAgentRole', () => {
     expect(encodeAgentRole('reviewer', 'cloud', 'fleet-7')).toBe('remote:fleet-7:reviewer');
   });
 
-  it('prefixes remote runtime with the target claw id', () => {
-    expect(encodeAgentRole('tester', 'remote', 'claw-42')).toBe('remote:claw-42:tester');
+  it('prefixes remote runtime with the target agentHost id', () => {
+    expect(encodeAgentRole('tester', 'remote', 'agentHost-42')).toBe('remote:agentHost-42:tester');
   });
 
   it('emits an unassigned marker for remote runtime missing a target', () => {
@@ -103,14 +103,14 @@ describe('compileStage — ordering and uniqueness', () => {
     const specs = compileStage(
       [
         a({ id: 'r1', role: 'impl', runtime: 'local', position: 0 }),
-        a({ id: 'r2', role: 'rev', runtime: 'remote', target: 'claw-9', position: 1 }),
+        a({ id: 'r2', role: 'rev', runtime: 'remote', target: 'agentHost-9', position: 1 }),
         a({ id: 'r3', role: 'qa', runtime: 'cloud', position: 2 }),
       ],
       'parallel',
       'mix',
     );
     expect(specs[0]!.agentRole).toBe('impl');
-    expect(specs[1]!.agentRole).toBe('remote:claw-9:rev');
+    expect(specs[1]!.agentRole).toBe('remote:agentHost-9:rev');
     expect(specs[2]!.agentRole).toBe('remote:cloud:qa');
   });
 

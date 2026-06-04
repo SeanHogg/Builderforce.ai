@@ -1,20 +1,20 @@
 ---
-summary: "Gmail Pub/Sub push wired into CoderClaw webhooks via gogcli"
+summary: "Gmail Pub/Sub push wired into BuilderForce Agents webhooks via gogcli"
 read_when:
-  - Wiring Gmail inbox triggers to CoderClaw
+  - Wiring Gmail inbox triggers to BuilderForce Agents
   - Setting up Pub/Sub push for agent wake
 title: "Gmail PubSub"
 ---
 
-# Gmail Pub/Sub -> CoderClaw
+# Gmail Pub/Sub -> BuilderForce Agents
 
-Goal: Gmail watch -> Pub/Sub push -> `gog gmail watch serve` -> CoderClaw webhook.
+Goal: Gmail watch -> Pub/Sub push -> `gog gmail watch serve` -> BuilderForce Agents webhook.
 
 ## Prereqs
 
 - `gcloud` installed and logged in ([install guide](https://docs.cloud.google.com/sdk/docs/install-sdk)).
 - `gog` (gogcli) installed and authorized for the Gmail account ([gogcli.sh](https://gogcli.sh/)).
-- CoderClaw hooks enabled (see [Webhooks](/automation/webhook)).
+- BuilderForce Agents hooks enabled (see [Webhooks](/automation/webhook)).
 - `tailscale` logged in ([tailscale.com](https://tailscale.com/)). Supported setup uses Tailscale Funnel for the public HTTPS endpoint.
   Other tunnel services can work, but are DIY/unsupported and require manual wiring.
   Right now, Tailscale is what we support.
@@ -25,7 +25,7 @@ Example hook config (enable Gmail preset mapping):
 {
   hooks: {
     enabled: true,
-    token: "CODERCLAW_HOOK_TOKEN",
+    token: "BUILDERFORCE_AGENTS_HOOK_TOKEN",
     path: "/hooks",
     presets: ["gmail"],
   },
@@ -39,7 +39,7 @@ that sets `deliver` + optional `channel`/`to`:
 {
   hooks: {
     enabled: true,
-    token: "CODERCLAW_HOOK_TOKEN",
+    token: "BUILDERFORCE_AGENTS_HOOK_TOKEN",
     presets: ["gmail"],
     mappings: [
       {
@@ -88,24 +88,24 @@ Notes:
   To disable (dangerous), set `hooks.gmail.allowUnsafeExternalContent: true`.
 
 To customize payload handling further, add `hooks.mappings` or a JS/TS transform module
-under `~/.coderclaw/hooks/transforms` (see [Webhooks](/automation/webhook)).
+under `~/.builderforce/hooks/transforms` (see [Webhooks](/automation/webhook)).
 
 ## Wizard (recommended)
 
-Use the CoderClaw helper to wire everything together (installs deps on macOS via brew):
+Use the BuilderForce Agents helper to wire everything together (installs deps on macOS via brew):
 
 ```bash
-coderclaw webhooks gmail setup \
-  --account coderclaw@gmail.com
+builderforce webhooks gmail setup \
+  --account builderforce@gmail.com
 ```
 
 Defaults:
 
 - Uses Tailscale Funnel for the public push endpoint.
-- Writes `hooks.gmail` config for `coderclaw webhooks gmail run`.
+- Writes `hooks.gmail` config for `builderforce webhooks gmail run`.
 - Enables the Gmail hook preset (`hooks.presets: ["gmail"]`).
 
-Path note: when `tailscale.mode` is enabled, CoderClaw automatically sets
+Path note: when `tailscale.mode` is enabled, BuilderForce Agents automatically sets
 `hooks.gmail.serve.path` to `/` and keeps the public path at
 `hooks.gmail.tailscale.path` (default `/gmail-pubsub`) because Tailscale
 strips the set-path prefix before proxying.
@@ -122,14 +122,14 @@ Gateway auto-start (recommended):
 
 - When `hooks.enabled=true` and `hooks.gmail.account` is set, the Gateway starts
   `gog gmail watch serve` on boot and auto-renews the watch.
-- Set `CODERCLAW_SKIP_GMAIL_WATCHER=1` to opt out (useful if you run the daemon yourself).
+- Set `BUILDERFORCE_AGENTS_SKIP_GMAIL_WATCHER=1` to opt out (useful if you run the daemon yourself).
 - Do not run the manual daemon at the same time, or you will hit
   `listen tcp 127.0.0.1:8788: bind: address already in use`.
 
 Manual daemon (starts `gog gmail watch serve` + auto-renew):
 
 ```bash
-coderclaw webhooks gmail run
+builderforce webhooks gmail run
 ```
 
 ## One-time setup
@@ -167,7 +167,7 @@ gcloud pubsub topics add-iam-policy-binding gog-gmail-watch \
 
 ```bash
 gog gmail watch start \
-  --account coderclaw@gmail.com \
+  --account builderforce@gmail.com \
   --label INBOX \
   --topic projects/<project-id>/topics/gog-gmail-watch
 ```
@@ -180,13 +180,13 @@ Local example (shared token auth):
 
 ```bash
 gog gmail watch serve \
-  --account coderclaw@gmail.com \
+  --account builderforce@gmail.com \
   --bind 127.0.0.1 \
   --port 8788 \
   --path /gmail-pubsub \
   --token <shared> \
   --hook-url http://127.0.0.1:18789/hooks/gmail \
-  --hook-token CODERCLAW_HOOK_TOKEN \
+  --hook-token BUILDERFORCE_AGENTS_HOOK_TOKEN \
   --include-body \
   --max-bytes 20000
 ```
@@ -194,10 +194,10 @@ gog gmail watch serve \
 Notes:
 
 - `--token` protects the push endpoint (`x-gog-token` or `?token=`).
-- `--hook-url` points to CoderClaw `/hooks/gmail` (mapped; isolated run + summary to main).
-- `--include-body` and `--max-bytes` control the body snippet sent to CoderClaw.
+- `--hook-url` points to BuilderForce Agents `/hooks/gmail` (mapped; isolated run + summary to main).
+- `--include-body` and `--max-bytes` control the body snippet sent to BuilderForce Agents.
 
-Recommended: `coderclaw webhooks gmail run` wraps the same flow and auto-renews the watch.
+Recommended: `builderforce webhooks gmail run` wraps the same flow and auto-renews the watch.
 
 ## Expose the handler (advanced, unsupported)
 
@@ -228,8 +228,8 @@ Send a message to the watched inbox:
 
 ```bash
 gog gmail send \
-  --account coderclaw@gmail.com \
-  --to coderclaw@gmail.com \
+  --account builderforce@gmail.com \
+  --to builderforce@gmail.com \
   --subject "watch test" \
   --body "ping"
 ```
@@ -237,8 +237,8 @@ gog gmail send \
 Check watch state and history:
 
 ```bash
-gog gmail watch status --account coderclaw@gmail.com
-gog gmail history --account coderclaw@gmail.com --since <historyId>
+gog gmail watch status --account builderforce@gmail.com
+gog gmail history --account builderforce@gmail.com --since <historyId>
 ```
 
 ## Troubleshooting
@@ -250,7 +250,7 @@ gog gmail history --account coderclaw@gmail.com --since <historyId>
 ## Cleanup
 
 ```bash
-gog gmail watch stop --account coderclaw@gmail.com
+gog gmail watch stop --account builderforce@gmail.com
 gcloud pubsub subscriptions delete gog-gmail-watch-push
 gcloud pubsub topics delete gog-gmail-watch
 ```

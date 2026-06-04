@@ -100,7 +100,7 @@ function codingPrompt(role: string, input: string): string {
   return [
     `You are the "${role}" coding agent. Implement the task below by editing the repository.`,
     'Return ONLY JSON of the form:',
-    '{ "branch": "claw/<slug>", "commitMessage": "...", "summary": "...", "files": [ { "path": "relative/path", "content": "FULL new file contents" } ] }',
+    '{ "branch": "agentHost/<slug>", "commitMessage": "...", "summary": "...", "files": [ { "path": "relative/path", "content": "FULL new file contents" } ] }',
     'Include the COMPLETE contents of each file you change. Do not include explanations outside the JSON.',
     '',
     'TASK:',
@@ -126,7 +126,7 @@ export function createCodingDeps(opts: {
 
   const propose: CodingDeps['propose'] = async ({ role, input }) => {
     const text = await opts.callModel({ model, prompt: codingPrompt(role, input) });
-    return parseProposedChanges(text, { fallbackBranch: `claw/${slug(input)}` });
+    return parseProposedChanges(text, { fallbackBranch: `agentHost/${slug(input)}` });
   };
 
   const build = opts.buildCommand

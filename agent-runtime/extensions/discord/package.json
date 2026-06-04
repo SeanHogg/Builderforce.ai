@@ -1,0 +1,14 @@
+{
+  "name": "@builderforce/discord",
+  "version": "2026.3.21",
+  "description": "BuilderForceAgents Discord channel plugin",
+  "type": "module",
+  "devDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*"
+  },
+  "builderforce": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

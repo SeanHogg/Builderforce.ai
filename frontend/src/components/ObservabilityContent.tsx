@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { claws, workflows, type Claw, type ToolAuditEvent, type Workflow } from '@/lib/builderforceApi';
-import { ClawGateway } from '@/lib/clawGateway';
+import { agentHosts, workflows, type AgentHost, type ToolAuditEvent, type Workflow } from '@/lib/builderforceApi';
+import { AgentHostGateway } from '@/lib/agentHostGateway';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -21,18 +21,18 @@ export interface ObservabilityContentProps {
   className?: string;
   /** Optional inline style for the root wrapper. */
   style?: React.CSSProperties;
-  /** When set (e.g. from claw panel), scope observability to this claw. */
-  clawId?: number;
-  /** Display name for the claw when clawId is set. */
-  clawName?: string;
+  /** When set (e.g. from agentHost panel), scope observability to this agentHost. */
+  agentHostId?: number;
+  /** Display name for the agentHost when agentHostId is set. */
+  agentHostName?: string;
 }
 
 interface LogLine {
   ts: string;
   level: string;
   msg: string;
-  clawId: number;
-  clawName: string;
+  agentHostId: number;
+  agentHostName: string;
 }
 
 interface TimelineTrack {
@@ -42,8 +42,8 @@ interface TimelineTrack {
   endMs: number;
   status: string;
   detail?: string;
-  clawId: number;
-  clawName: string;
+  agentHostId: number;
+  agentHostName: string;
 }
 
 function truncate(s: unknown, n: number): string {
@@ -65,7 +65,7 @@ function fmtDuration(ms: number): string {
   return `${(ms / 60000).toFixed(1)}m`;
 }
 
-const CLAW_COLORS = [
+const AGENT_HOST_COLORS = [
   'var(--coral-bright, #f97316)',
   'var(--accent, #6366f1)',
   'var(--green, #22c55e)',
@@ -73,25 +73,25 @@ const CLAW_COLORS = [
   'var(--amber, #f59e0b)',
 ];
 
-function clawColor(index: number): string {
-  return CLAW_COLORS[index % CLAW_COLORS.length];
+function agentHostColor(index: number): string {
+  return AGENT_HOST_COLORS[index % AGENT_HOST_COLORS.length];
 }
 
 export function ObservabilityContent({
   initialView = 'logs',
   className,
   style,
-  clawId: propClawId,
-  clawName: propClawName,
+  agentHostId: propAgentHostId,
+  agentHostName: propAgentHostName,
 }: ObservabilityContentProps) {
   const [view, setView] = useState<ObservabilityView>(initialView);
-  const [clawList, setClawList] = useState<Claw[]>([]);
-  const [clawListLoading, setClawListLoading] = useState(true);
-  const [clawListError, setClawListError] = useState<string | null>(null);
-  const [selectedClawIds, setSelectedClawIds] = useState<Set<number>>(
-    propClawId != null ? new Set([propClawId]) : new Set()
+  const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
+  const [agentHostListLoading, setAgentHostListLoading] = useState(true);
+  const [agentHostListError, setAgentHostListError] = useState<string | null>(null);
+  const [selectedAgentHostIds, setSelectedAgentHostIds] = useState<Set<number>>(
+    propAgentHostId != null ? new Set([propAgentHostId]) : new Set()
   );
-  const selectedIds = propClawId != null ? [propClawId] : Array.from(selectedClawIds);
+  const selectedIds = propAgentHostId != null ? [propAgentHostId] : Array.from(selectedAgentHostIds);
   const selectedIdsKey = selectedIds.join(',');
 
   // Log streaming state
@@ -100,39 +100,39 @@ export function ObservabilityContent({
   const [connState, setConnState] = useState<'connecting' | 'connected' | 'offline' | 'disconnected'>('disconnected');
   const [autoScroll, setAutoScroll] = useState(true);
   const logEndRef = useRef<HTMLDivElement | null>(null);
-  const gatewaysRef = useRef<Map<number, ClawGateway>>(new Map());
+  const gatewaysRef = useRef<Map<number, AgentHostGateway>>(new Map());
 
   // Timeline state
-  const [eventsByClaw, setEventsByClaw] = useState<Map<number, ToolAuditEvent[]>>(new Map());
-  const [wfListByClaw, setWfListByClaw] = useState<Map<number, Workflow[]>>(new Map());
+  const [eventsByAgentHost, setEventsByAgentHost] = useState<Map<number, ToolAuditEvent[]>>(new Map());
+  const [wfListByAgentHost, setWfListByAgentHost] = useState<Map<number, Workflow[]>>(new Map());
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineError, setTimelineError] = useState<string | null>(null);
   const [timelineViewMode, setTimelineViewMode] = useState<'list' | 'timeline'>('list');
   const [categoryFilter, setCategoryFilter] = useState('');
 
-  const clawById = useRef<Map<number, Claw>>(new Map());
-  clawById.current = new Map(clawList.map((c) => [c.id, c]));
+  const agentHostById = useRef<Map<number, AgentHost>>(new Map());
+  agentHostById.current = new Map(agentHostList.map((c) => [c.id, c]));
 
-  // Load claws when no propClawId
+  // Load agentHosts when no propAgentHostId
   useEffect(() => {
-    if (propClawId != null) return;
-    setClawListLoading(true);
-    setClawListError(null);
-    claws
+    if (propAgentHostId != null) return;
+    setAgentHostListLoading(true);
+    setAgentHostListError(null);
+    agentHosts
       .list()
       .then((list) => {
-        setClawList(list);
-        setClawListError(null);
+        setAgentHostList(list);
+        setAgentHostListError(null);
       })
       .catch((e) => {
-        setClawList([]);
-        setClawListError(e instanceof Error ? e.message : 'Failed to load agents');
+        setAgentHostList([]);
+        setAgentHostListError(e instanceof Error ? e.message : 'Failed to load agents');
       })
-      .finally(() => setClawListLoading(false));
-  }, [propClawId]);
+      .finally(() => setAgentHostListLoading(false));
+  }, [propAgentHostId]);
 
-  const toggleClaw = useCallback((id: number) => {
-    setSelectedClawIds((prev) => {
+  const toggleAgentHost = useCallback((id: number) => {
+    setSelectedAgentHostIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -140,15 +140,15 @@ export function ObservabilityContent({
     });
   }, []);
 
-  const selectAllClaws = useCallback(() => {
-    setSelectedClawIds(new Set(clawList.map((c) => c.id)));
-  }, [clawList]);
+  const selectAllAgentHosts = useCallback(() => {
+    setSelectedAgentHostIds(new Set(agentHostList.map((c) => c.id)));
+  }, [agentHostList]);
 
-  const clearClaws = useCallback(() => {
-    setSelectedClawIds(new Set());
+  const clearAgentHosts = useCallback(() => {
+    setSelectedAgentHostIds(new Set());
   }, []);
 
-  // Log streaming: connect to each selected claw WS, subscribe to logs
+  // Log streaming: connect to each selected agentHost WS, subscribe to logs
   useEffect(() => {
     if (selectedIds.length === 0) {
       setConnState('disconnected');
@@ -160,28 +160,28 @@ export function ObservabilityContent({
     setConnState('connecting');
     setLogLines([]);
 
-    const gateways = new Map<number, ClawGateway>();
+    const gateways = new Map<number, AgentHostGateway>();
     const connectedIds = new Set<number>();
 
     const updateConnState = () => {
       setConnState(connectedIds.size > 0 ? 'connected' : 'offline');
     };
 
-    for (const clawId of selectedIds) {
-      const claw = clawById.current.get(clawId);
-      const clawName = claw?.name ?? `Claw ${clawId}`;
-      const url = claws.wsUrl(clawId);
-      const gw = new ClawGateway({
+    for (const agentHostId of selectedIds) {
+      const agentHost = agentHostById.current.get(agentHostId);
+      const agentHostName = agentHost?.name ?? `AgentHost ${agentHostId}`;
+      const url = agentHosts.wsUrl(agentHostId);
+      const gw = new AgentHostGateway({
         url,
         onEvent: (ev) => {
-          if (ev.type === 'connected' || ev.type === 'claw_online') {
+          if (ev.type === 'connected' || ev.type === 'agent_host_online') {
             gw.send({ type: 'logs.subscribe' });
-            connectedIds.add(clawId);
+            connectedIds.add(agentHostId);
             updateConnState();
             return;
           }
-          if (ev.type === 'claw_offline' || ev.type === 'disconnected') {
-            connectedIds.delete(clawId);
+          if (ev.type === 'agent_host_offline' || ev.type === 'disconnected') {
+            connectedIds.delete(agentHostId);
             updateConnState();
             return;
           }
@@ -195,15 +195,15 @@ export function ObservabilityContent({
                   ts: msg.ts ?? new Date().toISOString(),
                   level: msg.level ?? 'info',
                   msg: msg.message ?? '',
-                  clawId,
-                  clawName,
+                  agentHostId,
+                  agentHostName,
                 },
               ]
             );
           }
         },
       });
-      gateways.set(clawId, gw);
+      gateways.set(agentHostId, gw);
     }
 
     gatewaysRef.current.forEach((gw) => gw.destroy());
@@ -223,7 +223,7 @@ export function ObservabilityContent({
     if (autoScroll) logEndRef.current?.scrollIntoView();
   }, [logLines, autoScroll]);
 
-  // Timeline: fetch tool-audit and workflows from all selected claws
+  // Timeline: fetch tool-audit and workflows from all selected agentHosts
   const loadTimeline = useCallback(async () => {
     if (selectedIds.length === 0) return;
     setTimelineLoading(true);
@@ -233,19 +233,19 @@ export function ObservabilityContent({
       const wfMap = new Map<number, Workflow[]>();
 
       await Promise.all(
-        selectedIds.map(async (clawId) => {
+        selectedIds.map(async (agentHostId) => {
           const [evts, wfsRaw] = await Promise.all([
-            claws.toolAuditEvents(clawId, { limit: 200 }),
-            workflows.list({ clawId }).catch(() => [] as Workflow[]),
+            agentHosts.toolAuditEvents(agentHostId, { limit: 200 }),
+            workflows.list({ agentHostId }).catch(() => [] as Workflow[]),
           ]);
-          evMap.set(clawId, evts);
+          evMap.set(agentHostId, evts);
           const wfs = await Promise.all(wfsRaw.map((w) => workflows.get(w.id).catch(() => w)));
-          wfMap.set(clawId, wfs);
+          wfMap.set(agentHostId, wfs);
         })
       );
 
-      setEventsByClaw(evMap);
-      setWfListByClaw(wfMap);
+      setEventsByAgentHost(evMap);
+      setWfListByAgentHost(wfMap);
     } catch (e) {
       setTimelineError((e as Error).message ?? 'Failed to load timeline');
     } finally {
@@ -264,11 +264,11 @@ export function ObservabilityContent({
   const filteredLogs =
     logLevel === 'all' ? logLines : logLines.filter((l) => l.level === logLevel);
 
-  // Build timeline tracks from all claws, tagged by claw
+  // Build timeline tracks from all agentHosts, tagged by agentHost
   const tracks: TimelineTrack[] = [];
-  for (const [clawId, evts] of eventsByClaw) {
-    const claw = clawById.current.get(clawId);
-    const clawName = claw?.name ?? `Claw ${clawId}`;
+  for (const [agentHostId, evts] of eventsByAgentHost) {
+    const agentHost = agentHostById.current.get(agentHostId);
+    const agentHostName = agentHost?.name ?? `AgentHost ${agentHostId}`;
     for (const ev of evts) {
       if (categoryFilter && !(ev.category ?? '').includes(categoryFilter)) continue;
       const startMs = new Date(ev.ts).getTime();
@@ -280,14 +280,14 @@ export function ObservabilityContent({
         endMs,
         status: 'completed',
         detail: ev.args ? truncate(ev.args, 120) : undefined,
-        clawId,
-        clawName,
+        agentHostId,
+        agentHostName,
       });
     }
   }
-  for (const [clawId, wfList] of wfListByClaw) {
-    const claw = clawById.current.get(clawId);
-    const clawName = claw?.name ?? `Claw ${clawId}`;
+  for (const [agentHostId, wfList] of wfListByAgentHost) {
+    const agentHost = agentHostById.current.get(agentHostId);
+    const agentHostName = agentHost?.name ?? `AgentHost ${agentHostId}`;
     for (const wf of wfList) {
       if (!wf.tasks) continue;
       for (const t of wf.tasks) {
@@ -302,8 +302,8 @@ export function ObservabilityContent({
           endMs,
           status: t.status,
           detail: t.output ? truncate(t.output, 120) : undefined,
-          clawId,
-          clawName,
+          agentHostId,
+          agentHostName,
         });
       }
     }
@@ -317,17 +317,17 @@ export function ObservabilityContent({
       className={className}
       style={{ display: 'flex', flexDirection: 'column', gap: 20, ...style }}
     >
-      {/* Active Claw — above tabs */}
+      {/* Active AgentHost — above tabs */}
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
             Active Agents
           </span>
-          {propClawId == null && clawList.length > 0 && (
+          {propAgentHostId == null && agentHostList.length > 0 && (
             <>
               <button
                 type="button"
-                onClick={selectAllClaws}
+                onClick={selectAllAgentHosts}
                 style={{
                   padding: '4px 10px',
                   fontSize: 11,
@@ -342,7 +342,7 @@ export function ObservabilityContent({
               </button>
               <button
                 type="button"
-                onClick={clearClaws}
+                onClick={clearAgentHosts}
                 style={{
                   padding: '4px 10px',
                   fontSize: 11,
@@ -358,13 +358,13 @@ export function ObservabilityContent({
             </>
           )}
         </div>
-        {propClawId != null ? (
+        {propAgentHostId != null ? (
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            {propClawName ?? `Claw ${propClawId}`} (scoped from panel)
+            {propAgentHostName ?? `AgentHost ${propAgentHostId}`} (scoped from panel)
           </div>
-        ) : clawListLoading ? (
+        ) : agentHostListLoading ? (
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading agents…</div>
-        ) : clawList.length === 0 ? (
+        ) : agentHostList.length === 0 ? (
           <div
             style={{
               fontSize: 13,
@@ -375,11 +375,11 @@ export function ObservabilityContent({
               border: '1px solid var(--border-subtle)',
             }}
           >
-            {clawListError ? (
-              <span>{clawListError}</span>
+            {agentHostListError ? (
+              <span>{agentHostListError}</span>
             ) : (
               <>
-                No agents connected. Register a CoderClaw instance in{' '}
+                No agents connected. Register a BuilderForce Agents instance in{' '}
                 <Link href="/workforce" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>
                   Workforce
                 </Link>{' '}
@@ -395,8 +395,8 @@ export function ObservabilityContent({
               gap: 8,
             }}
           >
-            {clawList.map((c, idx) => {
-              const checked = selectedClawIds.has(c.id);
+            {agentHostList.map((c, idx) => {
+              const checked = selectedAgentHostIds.has(c.id);
               return (
                 <label
                   key={c.id}
@@ -416,7 +416,7 @@ export function ObservabilityContent({
                   <input
                     type="checkbox"
                     checked={checked}
-                    onChange={() => toggleClaw(c.id)}
+                    onChange={() => toggleAgentHost(c.id)}
                     style={{ accentColor: 'var(--coral-bright)' }}
                   />
                   <span
@@ -424,7 +424,7 @@ export function ObservabilityContent({
                       width: 8,
                       height: 8,
                       borderRadius: '50%',
-                      background: clawColor(idx),
+                      background: agentHostColor(idx),
                       flexShrink: 0,
                     }}
                   />
@@ -569,7 +569,7 @@ export function ObservabilityContent({
           >
             {!hasSelection ? (
               <div style={{ color: 'var(--text-muted)' }}>
-                {clawList.length === 0 && !clawListLoading
+                {agentHostList.length === 0 && !agentHostListLoading
                   ? 'Register an agent in Workforce first, then select above.'
                   : 'Select one or more agents above to stream logs.'}
               </div>
@@ -579,8 +579,8 @@ export function ObservabilityContent({
               </div>
             ) : (
               filteredLogs.map((l, i) => {
-                const clawIdx = selectedIds.indexOf(l.clawId);
-                const color = clawColor(clawIdx >= 0 ? clawIdx : 0);
+                const agentHostIdx = selectedIds.indexOf(l.agentHostId);
+                const color = agentHostColor(agentHostIdx >= 0 ? agentHostIdx : 0);
                 return (
                   <div
                     key={i}
@@ -610,7 +610,7 @@ export function ObservabilityContent({
                         opacity: 0.9,
                       }}
                     >
-                      {l.clawName}
+                      {l.agentHostName}
                     </span>
                     <span
                       style={{
@@ -733,14 +733,14 @@ export function ObservabilityContent({
                   >
                     <div>No timeline events</div>
                     <div style={{ fontSize: 12 }}>
-                      Tool audit events and workflow tasks will appear here once the claws run.
+                      Tool audit events and workflow tasks will appear here once the agentHosts run.
                     </div>
                   </div>
                 ) : timelineViewMode === 'list' ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {tracks.map((t, i) => {
-                      const clawIdx = selectedIds.indexOf(t.clawId);
-                      const color = clawColor(clawIdx >= 0 ? clawIdx : 0);
+                      const agentHostIdx = selectedIds.indexOf(t.agentHostId);
+                      const color = agentHostColor(agentHostIdx >= 0 ? agentHostIdx : 0);
                       return (
                         <div
                           key={i}
@@ -794,7 +794,7 @@ export function ObservabilityContent({
                                   flexShrink: 0,
                                 }}
                               >
-                                {t.clawName}
+                                {t.agentHostName}
                               </span>
                               <span
                                 style={{
@@ -848,7 +848,7 @@ export function ObservabilityContent({
                     })}
                   </div>
                 ) : (
-                  <TimelineBarView tracks={tracks} selectedIds={selectedIds} clawById={clawById.current} />
+                  <TimelineBarView tracks={tracks} selectedIds={selectedIds} agentHostById={agentHostById.current} />
                 )}
               </div>
             </>
@@ -866,7 +866,7 @@ export function ObservabilityContent({
                 gap: 8,
               }}
             >
-              {clawList.length === 0 && !clawListLoading ? (
+              {agentHostList.length === 0 && !agentHostListLoading ? (
                 <>
                   <span>Register an agent in Workforce first.</span>
                   <Link href="/workforce" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>
@@ -887,11 +887,11 @@ export function ObservabilityContent({
 function TimelineBarView({
   tracks,
   selectedIds,
-  clawById,
+  agentHostById,
 }: {
   tracks: TimelineTrack[];
   selectedIds: number[];
-  clawById: Map<number, Claw>;
+  agentHostById: Map<number, AgentHost>;
 }) {
   const minMs = Math.min(...tracks.map((t) => t.startMs));
   const maxMs = Math.max(...tracks.map((t) => t.endMs || t.startMs + 1));
@@ -939,10 +939,10 @@ function TimelineBarView({
           const y = PAD + i * (ROW_H + 4);
           const barX = LABEL_W + ((t.startMs - minMs) / totalMs) * BAR_W;
           const barW = Math.max(((t.endMs - t.startMs) / totalMs) * BAR_W, 4);
-          const clawIdx = selectedIds.indexOf(t.clawId);
+          const agentHostIdx = selectedIds.indexOf(t.agentHostId);
           const color =
             t.kind === 'tool'
-              ? clawIdx >= 0 ? CLAW_COLORS[clawIdx % CLAW_COLORS.length] : 'var(--accent, #6366f1)'
+              ? agentHostIdx >= 0 ? AGENT_HOST_COLORS[agentHostIdx % AGENT_HOST_COLORS.length] : 'var(--accent, #6366f1)'
               : t.status === 'completed'
                 ? 'var(--green, #22c55e)'
                 : t.status === 'failed'
@@ -950,7 +950,7 @@ function TimelineBarView({
                   : t.status === 'running'
                     ? 'var(--blue, #3b82f6)'
                     : 'var(--text-muted)';
-          const label = `[${t.clawName}] ${truncate(t.label, 20)}`;
+          const label = `[${t.agentHostName}] ${truncate(t.label, 20)}`;
           return (
             <g key={i}>
               <text
@@ -972,7 +972,7 @@ function TimelineBarView({
                 opacity={0.85}
               >
                 <title>
-                  {t.clawName}: {t.label}
+                  {t.agentHostName}: {t.label}
                   {'\n'}
                   {fmtTime(t.startMs)} → {fmtTime(t.endMs)}
                   {'\n'}

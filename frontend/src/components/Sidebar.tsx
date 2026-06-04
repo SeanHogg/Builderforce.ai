@@ -5,14 +5,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { getStoredTenant } from '@/lib/auth';
+import { isNavItemActive, type NavMatch } from '@/lib/nav';
 
-interface NavItem {
-  href: string;
+interface NavItem extends NavMatch {
   label: string;
   icon: React.ReactNode;
-  activePaths?: string[];
-  /** When true, only href exact match is active (no prefix match) */
-  exactMatch?: boolean;
   /** When true, use warning (yellow) color for this nav item */
   highlight?: boolean;
   /** When true, only show on mobile (hidden on desktop via CSS) */
@@ -30,6 +27,7 @@ const mainNav: NavItem[] = [
     activePaths: ['/ide'],
   },
   { href: '/architect', label: 'Architect', icon: '🏛' },
+  { href: '/workflows/builder', label: 'Workflow Builder', icon: '🔀', activePaths: ['/workflows'] },
   { href: '/tasks', label: 'Task Mgmt', icon: '☑' },
   { href: '/contributors', label: 'Contributors', icon: '📈' },
   { href: '/training', label: 'Training', icon: '🎓' },
@@ -79,14 +77,6 @@ function PlatformAdminNavSection({ collapsed, pathname }: { collapsed: boolean; 
   );
 }
 
-function isActive(pathname: string, item: NavItem): boolean {
-  if (item.exactMatch) return pathname === item.href;
-  if (pathname === item.href) return true;
-  if (item.href !== '/dashboard' && pathname.startsWith(item.href)) return true;
-  if (item.activePaths?.some((p) => pathname.startsWith(p))) return true;
-  return false;
-}
-
 function NavSection({
   items,
   collapsed,
@@ -99,7 +89,7 @@ function NavSection({
   return (
     <div className="nav-section">
       {items.map((item) => {
-        const active = isActive(pathname, item);
+        const active = isNavItemActive(pathname, item);
         return (
           <Link
             key={item.href + item.label}

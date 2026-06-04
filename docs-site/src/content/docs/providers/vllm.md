@@ -1,16 +1,16 @@
 ---
-summary: "Run CoderClaw with vLLM (OpenAI-compatible local server)"
+summary: "Run BuilderForce Agents with vLLM (OpenAI-compatible local server)"
 read_when:
-  - You want to run CoderClaw against a local vLLM server
+  - You want to run BuilderForce Agents against a local vLLM server
   - You want OpenAI-compatible /v1 endpoints with your own models
 title: "vLLM"
 ---
 
 # vLLM
 
-vLLM can serve open-source (and some custom) models via an **OpenAI-compatible** HTTP API. CoderClaw can connect to vLLM using the `openai-completions` API.
+vLLM can serve open-source (and some custom) models via an **OpenAI-compatible** HTTP API. BuilderForce Agents can connect to vLLM using the `openai-completions` API.
 
-CoderClaw can also **auto-discover** available models from vLLM when you opt in with `VLLM_API_KEY` (any value works if your server doesn’t enforce auth) and you do not define an explicit `models.providers.vllm` entry.
+BuilderForce Agents can also **auto-discover** available models from vLLM when you opt in with `VLLM_API_KEY` (any value works if your server doesn’t enforce auth) and you do not define an explicit `models.providers.vllm` entry.
 
 ## Quick start
 
@@ -40,7 +40,7 @@ export VLLM_API_KEY="vllm-local"
 
 ## Model discovery (implicit provider)
 
-When `VLLM_API_KEY` is set (or an auth profile exists) and you **do not** define `models.providers.vllm`, CoderClaw will query:
+When `VLLM_API_KEY` is set (or an auth profile exists) and you **do not** define `models.providers.vllm`, BuilderForce Agents will query:
 
 - `GET http://127.0.0.1:8000/v1/models`
 

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { chatSessionsApi, type ChatSession, type ChatMessage } from '@/lib/builderforceApi';
 
-type SessionWithName = ChatSession & { clawName?: string };
+type SessionWithName = ChatSession & { agentHostName?: string };
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -49,7 +49,7 @@ export default function ChatsPage() {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Chats</h1>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
-            All chat sessions across claws in this workspace
+            All chat sessions across agentHosts in this workspace
           </p>
         </div>
         <button
@@ -76,7 +76,7 @@ export default function ChatsPage() {
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading sessions…</div>
       ) : sessions.length === 0 ? (
         <div style={{ ...cardStyle, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>
-          No chat sessions yet. Chat history will appear here once claws start receiving messages.
+          No chat sessions yet. Chat history will appear here once agentHosts start receiving messages.
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 340px) 1fr', gap: 16, height: 'clamp(420px, calc(100dvh - 280px), 760px)' }}>
@@ -107,7 +107,7 @@ export default function ChatsPage() {
                 </div>
                 <div style={{ display: 'flex', width: '100%', gap: 4, marginTop: 3, fontSize: 11, color: 'var(--text-muted)' }}>
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {s.clawName ?? `claw ${s.clawId}`}
+                    {s.agentHostName ?? `agentHost ${s.agentHostId}`}
                   </span>
                   <span>{s.lastMsgAt ? new Date(s.lastMsgAt).toLocaleString() : '—'}</span>
                 </div>
@@ -126,7 +126,7 @@ export default function ChatsPage() {
                 <div style={{ flexShrink: 0, marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid var(--border-subtle)' }}>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600 }}>{selected.sessionKey}</span>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>
-                    {selected.clawName ?? `claw ${selected.clawId}`} · {selected.startedAt ? new Date(selected.startedAt).toLocaleString() : '—'}
+                    {selected.agentHostName ?? `agentHost ${selected.agentHostId}`} · {selected.startedAt ? new Date(selected.startedAt).toLocaleString() : '—'}
                   </span>
                 </div>
                 <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>

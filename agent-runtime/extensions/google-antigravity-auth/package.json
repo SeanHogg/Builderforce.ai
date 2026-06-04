@@ -1,0 +1,15 @@
+{
+  "name": "@builderforce/google-antigravity-auth",
+  "version": "2026.3.21",
+  "private": true,
+  "description": "BuilderForceAgents Google Antigravity OAuth provider plugin",
+  "type": "module",
+  "devDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*"
+  },
+  "builderforce": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

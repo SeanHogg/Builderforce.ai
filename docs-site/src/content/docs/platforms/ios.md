@@ -22,7 +22,7 @@ Availability: internal preview. The iOS app is not publicly distributed yet.
 - Gateway running on another device (macOS, Linux, or Windows via WSL2).
 - Network path:
   - Same LAN via Bonjour, **or**
-  - Tailnet via unicast DNS-SD (example domain: `coderclaw.internal.`), **or**
+  - Tailnet via unicast DNS-SD (example domain: `builderforce.internal.`), **or**
   - Manual host/port (fallback).
 
 ## Quick start (pair + connect)
@@ -30,7 +30,7 @@ Availability: internal preview. The iOS app is not publicly distributed yet.
 1. Start the Gateway:
 
 ```bash
-coderclaw gateway --port 18789
+builderforce gateway --port 18789
 ```
 
 2. In the iOS app, open Settings and pick a discovered gateway (or enable Manual Host and enter host/port).
@@ -38,26 +38,26 @@ coderclaw gateway --port 18789
 3. Approve the pairing request on the gateway host:
 
 ```bash
-coderclaw nodes pending
-coderclaw nodes approve <requestId>
+builderforce nodes pending
+builderforce nodes approve <requestId>
 ```
 
 4. Verify connection:
 
 ```bash
-coderclaw nodes status
-coderclaw gateway call node.list --params "{}"
+builderforce nodes status
+builderforce gateway call node.list --params "{}"
 ```
 
 ## Discovery paths
 
 ### Bonjour (LAN)
 
-The Gateway advertises `_coderclaw-gw._tcp` on `local.`. The iOS app lists these automatically.
+The Gateway advertises `_builderforce-gw._tcp` on `local.`. The iOS app lists these automatically.
 
 ### Tailnet (cross-network)
 
-If mDNS is blocked, use a unicast DNS-SD zone (choose a domain; example: `coderclaw.internal.`) and Tailscale split DNS.
+If mDNS is blocked, use a unicast DNS-SD zone (choose a domain; example: `builderforce.internal.`) and Tailscale split DNS.
 See [Bonjour](/gateway/bonjour) for the CoreDNS example.
 
 ### Manual host/port
@@ -69,12 +69,12 @@ In Settings, enable **Manual Host** and enter the gateway host + port (default `
 The iOS node renders a WKWebView canvas. Use `node.invoke` to drive it:
 
 ```bash
-coderclaw nodes invoke --node "iOS Node" --command canvas.navigate --params '{"url":"http://<gateway-host>:18789/__coderclaw__/canvas/"}'
+builderforce nodes invoke --node "iOS Node" --command canvas.navigate --params '{"url":"http://<gateway-host>:18789/__builderforce__/canvas/"}'
 ```
 
 Notes:
 
-- The Gateway canvas host serves `/__coderclaw__/canvas/` and `/__coderclaw__/a2ui/`.
+- The Gateway canvas host serves `/__builderforce__/canvas/` and `/__builderforce__/a2ui/`.
 - It is served from the Gateway HTTP server (same port as `gateway.port`, default `18789`).
 - The iOS node auto-navigates to A2UI on connect when a canvas host URL is advertised.
 - Return to the built-in scaffold with `canvas.navigate` and `{"url":""}`.
@@ -82,11 +82,11 @@ Notes:
 ### Canvas eval / snapshot
 
 ```bash
-coderclaw nodes invoke --node "iOS Node" --command canvas.eval --params '{"javaScript":"(() => { const {ctx} = window.__coderclaw; ctx.clearRect(0,0,innerWidth,innerHeight); ctx.lineWidth=6; ctx.strokeStyle=\"#ff2d55\"; ctx.beginPath(); ctx.moveTo(40,40); ctx.lineTo(innerWidth-40, innerHeight-40); ctx.stroke(); return \"ok\"; })()"}'
+builderforce nodes invoke --node "iOS Node" --command canvas.eval --params '{"javaScript":"(() => { const {ctx} = window.__builderforce; ctx.clearRect(0,0,innerWidth,innerHeight); ctx.lineWidth=6; ctx.strokeStyle=\"#ff2d55\"; ctx.beginPath(); ctx.moveTo(40,40); ctx.lineTo(innerWidth-40, innerHeight-40); ctx.stroke(); return \"ok\"; })()"}'
 ```
 
 ```bash
-coderclaw nodes invoke --node "iOS Node" --command canvas.snapshot --params '{"maxWidth":900,"format":"jpeg"}'
+builderforce nodes invoke --node "iOS Node" --command canvas.snapshot --params '{"maxWidth":900,"format":"jpeg"}'
 ```
 
 ## Voice wake + talk mode
@@ -98,7 +98,7 @@ coderclaw nodes invoke --node "iOS Node" --command canvas.snapshot --params '{"m
 
 - `NODE_BACKGROUND_UNAVAILABLE`: bring the iOS app to the foreground (canvas/camera/screen commands require it).
 - `A2UI_HOST_NOT_CONFIGURED`: the Gateway did not advertise a canvas host URL; check `canvasHost` in [Gateway configuration](/gateway/configuration).
-- Pairing prompt never appears: run `coderclaw nodes pending` and approve manually.
+- Pairing prompt never appears: run `builderforce nodes pending` and approve manually.
 - Reconnect fails after reinstall: the Keychain pairing token was cleared; re-pair the node.
 
 ## Related docs

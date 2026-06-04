@@ -33,9 +33,9 @@ x-i18n:
 
 ## 探测工作原理
 
-- 应用每约 60 秒和按需时通过 `ShellExecutor` 运行 `coderclaw health --json`。探测加载凭证并报告状态，不发送消息。
+- 应用每约 60 秒和按需时通过 `ShellExecutor` 运行 `builderforce health --json`。探测加载凭证并报告状态，不发送消息。
 - 分别缓存上次成功的快照和上次错误以避免闪烁；显示每个的时间戳。
 
 ## 有疑问时
 
-- 你仍然可以使用 [Gateway 网关健康](/gateway/health) 中的 CLI 流程（`coderclaw status`、`coderclaw status --deep`、`coderclaw health --json`），并在 `/tmp/coderclaw/coderclaw-*.log` 中跟踪 `web-heartbeat` / `web-reconnect`。
+- 你仍然可以使用 [Gateway 网关健康](/gateway/health) 中的 CLI 流程（`builderforce status`、`builderforce status --deep`、`builderforce health --json`），并在 `/tmp/builderforce/builderforce-*.log` 中跟踪 `web-heartbeat` / `web-reconnect`。

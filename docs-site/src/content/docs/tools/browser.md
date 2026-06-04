@@ -2,31 +2,31 @@
 summary: "Integrated browser control service + action commands"
 read_when:
   - Adding agent-controlled browser automation
-  - Debugging why coderclaw is interfering with your own Chrome
+  - Debugging why builderforce is interfering with your own Chrome
   - Implementing browser settings + lifecycle in the macOS app
-title: "Browser (CoderClaw-managed)"
+title: "Browser (BuilderForce Agents-managed)"
 ---
 
-# Browser (coderclaw-managed)
+# Browser (builderforce-managed)
 
-CoderClaw can run a **dedicated Chrome/Brave/Edge/Chromium profile** that the agent controls.
+BuilderForce Agents can run a **dedicated Chrome/Brave/Edge/Chromium profile** that the agent controls.
 It is isolated from your personal browser and is managed through a small local
 control service inside the Gateway (loopback only).
 
 Beginner view:
 
 - Think of it as a **separate, agent-only browser**.
-- The `coderclaw` profile does **not** touch your personal browser profile.
+- The `builderforce` profile does **not** touch your personal browser profile.
 - The agent can **open tabs, read pages, click, and type** in a safe lane.
 - The default `chrome` profile uses the **system default Chromium browser** via the
-  extension relay; switch to `coderclaw` for the isolated managed browser.
+  extension relay; switch to `builderforce` for the isolated managed browser.
 
 ## What you get
 
-- A separate browser profile named **coderclaw** (orange accent by default).
+- A separate browser profile named **builderforce** (orange accent by default).
 - Deterministic tab control (list/open/focus/close).
 - Agent actions (click/type/drag/select), snapshots, screenshots, PDFs.
-- Optional multi-profile support (`coderclaw`, `work`, `remote`, ...).
+- Optional multi-profile support (`builderforce`, `work`, `remote`, ...).
 
 This browser is **not** your daily driver. It is a safe, isolated surface for
 agent automation and verification.
@@ -34,26 +34,26 @@ agent automation and verification.
 ## Quick start
 
 ```bash
-coderclaw browser --browser-profile coderclaw status
-coderclaw browser --browser-profile coderclaw start
-coderclaw browser --browser-profile coderclaw open https://example.com
-coderclaw browser --browser-profile coderclaw snapshot
+builderforce browser --browser-profile builderforce status
+builderforce browser --browser-profile builderforce start
+builderforce browser --browser-profile builderforce open https://example.com
+builderforce browser --browser-profile builderforce snapshot
 ```
 
 If you get “Browser disabled”, enable it in config (see below) and restart the
 Gateway.
 
-## Profiles: `coderclaw` vs `chrome`
+## Profiles: `builderforce` vs `chrome`
 
-- `coderclaw`: managed, isolated browser (no extension required).
-- `chrome`: extension relay to your **system browser** (requires the CoderClaw
+- `builderforce`: managed, isolated browser (no extension required).
+- `chrome`: extension relay to your **system browser** (requires the BuilderForce Agents
   extension to be attached to a tab).
 
-Set `browser.defaultProfile: "coderclaw"` if you want managed mode by default.
+Set `browser.defaultProfile: "builderforce"` if you want managed mode by default.
 
 ## Configuration
 
-Browser settings live in `~/.coderclaw/coderclaw.json`.
+Browser settings live in `~/.builderforce/builderforce.json`.
 
 ```json5
 {
@@ -69,7 +69,7 @@ Browser settings live in `~/.coderclaw/coderclaw.json`.
     attachOnly: false,
     executablePath: "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
     profiles: {
-      coderclaw: { cdpPort: 18800, color: "#FF4500" },
+      builderforce: { cdpPort: 18800, color: "#FF4500" },
       work: { cdpPort: 18801, color: "#0066CC" },
       remote: { cdpUrl: "http://10.0.0.42:9222", color: "#00AA00" },
     },
@@ -81,27 +81,27 @@ Notes:
 
 - The browser control service binds to loopback on a port derived from `gateway.port`
   (default: `18791`, which is gateway + 2). The relay uses the next port (`18792`).
-- If you override the Gateway port (`gateway.port` or `CODERCLAW_GATEWAY_PORT`),
+- If you override the Gateway port (`gateway.port` or `BUILDERFORCE_AGENTS_GATEWAY_PORT`),
   the derived browser ports shift to stay in the same “family”.
 - `cdpUrl` defaults to the relay port when unset.
 - `remoteCdpTimeoutMs` applies to remote (non-loopback) CDP reachability checks.
 - `remoteCdpHandshakeTimeoutMs` applies to remote CDP WebSocket reachability checks.
 - `attachOnly: true` means “never launch a local browser; only attach if it is already running.”
 - `color` + per-profile `color` tint the browser UI so you can see which profile is active.
-- Default profile is `chrome` (extension relay). Use `defaultProfile: "coderclaw"` for the managed browser.
+- Default profile is `chrome` (extension relay). Use `defaultProfile: "builderforce"` for the managed browser.
 - Auto-detect order: system default browser if Chromium-based; otherwise Chrome → Brave → Edge → Chromium → Chrome Canary.
-- Local `coderclaw` profiles auto-assign `cdpPort`/`cdpUrl` — set those only for remote CDP.
+- Local `builderforce` profiles auto-assign `cdpPort`/`cdpUrl` — set those only for remote CDP.
 
 ## Use Brave (or another Chromium-based browser)
 
 If your **system default** browser is Chromium-based (Chrome/Brave/Edge/etc),
-CoderClaw uses it automatically. Set `browser.executablePath` to override
+BuilderForce Agents uses it automatically. Set `browser.executablePath` to override
 auto-detection:
 
 CLI example:
 
 ```bash
-coderclaw config set browser.executablePath "/usr/bin/google-chrome"
+builderforce config set browser.executablePath "/usr/bin/google-chrome"
 ```
 
 ```json5
@@ -132,20 +132,20 @@ coderclaw config set browser.executablePath "/usr/bin/google-chrome"
 - **Local control (default):** the Gateway starts the loopback control service and can launch a local browser.
 - **Remote control (node host):** run a node host on the machine that has the browser; the Gateway proxies browser actions to it.
 - **Remote CDP:** set `browser.profiles.<name>.cdpUrl` (or `browser.cdpUrl`) to
-  attach to a remote Chromium-based browser. In this case, CoderClaw will not launch a local browser.
+  attach to a remote Chromium-based browser. In this case, BuilderForce Agents will not launch a local browser.
 
 Remote CDP URLs can include auth:
 
 - Query tokens (e.g., `https://provider.example?token=<token>`)
 - HTTP Basic auth (e.g., `https://user:pass@provider.example`)
 
-CoderClaw preserves the auth when calling `/json/*` endpoints and when connecting
+BuilderForce Agents preserves the auth when calling `/json/*` endpoints and when connecting
 to the CDP WebSocket. Prefer environment variables or secrets managers for
 tokens instead of committing them to config files.
 
 ## Node browser proxy (zero-config default)
 
-If you run a **node host** on the machine that has your browser, CoderClaw can
+If you run a **node host** on the machine that has your browser, BuilderForce Agents can
 auto-route browser tool calls to that node without any extra browser config.
 This is the default path for remote gateways.
 
@@ -160,7 +160,7 @@ Notes:
 ## Browserless (hosted remote CDP)
 
 [Browserless](https://browserless.io) is a hosted Chromium service that exposes
-CDP endpoints over HTTPS. You can point a CoderClaw browser profile at a
+CDP endpoints over HTTPS. You can point a BuilderForce Agents browser profile at a
 Browserless region endpoint and authenticate with your API key.
 
 Example:
@@ -192,7 +192,7 @@ Notes:
 Key ideas:
 
 - Browser control is loopback-only; access flows through the Gateway’s auth or node pairing.
-- If browser control is enabled and no auth is configured, CoderClaw auto-generates `gateway.auth.token` on startup and persists it to config.
+- If browser control is enabled and no auth is configured, BuilderForce Agents auto-generates `gateway.auth.token` on startup and persists it to config.
 - Keep the Gateway and any node hosts on a private network (Tailscale); avoid public exposure.
 - Treat remote CDP URLs/tokens as secrets; prefer env vars or a secrets manager.
 
@@ -203,15 +203,15 @@ Remote CDP tips:
 
 ## Profiles (multi-browser)
 
-CoderClaw supports multiple named profiles (routing configs). Profiles can be:
+BuilderForce Agents supports multiple named profiles (routing configs). Profiles can be:
 
-- **coderclaw-managed**: a dedicated Chromium-based browser instance with its own user data directory + CDP port
+- **builderforce-managed**: a dedicated Chromium-based browser instance with its own user data directory + CDP port
 - **remote**: an explicit CDP URL (Chromium-based browser running elsewhere)
 - **extension relay**: your existing Chrome tab(s) via the local relay + Chrome extension
 
 Defaults:
 
-- The `coderclaw` profile is auto-created if missing.
+- The `builderforce` profile is auto-created if missing.
 - The `chrome` profile is built-in for the Chrome extension relay (points at `http://127.0.0.1:18792` by default).
 - Local CDP ports allocate from **18800–18899** by default.
 - Deleting a profile moves its local data directory to Trash.
@@ -220,7 +220,7 @@ All control endpoints accept `?profile=<name>`; the CLI uses `--browser-profile`
 
 ## Chrome extension relay (use your existing Chrome)
 
-CoderClaw can also drive **your existing Chrome tabs** (no separate “coderclaw” Chrome instance) via a local CDP relay + a Chrome extension.
+BuilderForce Agents can also drive **your existing Chrome tabs** (no separate “builderforce” Chrome instance) via a local CDP relay + a Chrome extension.
 
 Full guide: [Chrome extension](/tools/chrome-extension)
 
@@ -228,7 +228,7 @@ Flow:
 
 - The Gateway runs locally (same machine) or a node host runs on the browser machine.
 - A local **relay server** listens at a loopback `cdpUrl` (default: `http://127.0.0.1:18792`).
-- You click the **CoderClaw Browser Relay** extension icon on a tab to attach (it does not auto-attach).
+- You click the **BuilderForce Agents Browser Relay** extension icon on a tab to attach (it does not auto-attach).
 - The agent controls that tab via the normal `browser` tool, by selecting the right profile.
 
 If the Gateway runs elsewhere, run a node host on the browser machine so the Gateway can proxy browser actions.
@@ -246,22 +246,22 @@ Chrome extension relay takeover requires host browser control, so either:
 1. Load the extension (dev/unpacked):
 
 ```bash
-coderclaw browser extension install
+builderforce browser extension install
 ```
 
 - Chrome → `chrome://extensions` → enable “Developer mode”
-- “Load unpacked” → select the directory printed by `coderclaw browser extension path`
+- “Load unpacked” → select the directory printed by `builderforce browser extension path`
 - Pin the extension, then click it on the tab you want to control (badge shows `ON`).
 
 2. Use it:
 
-- CLI: `coderclaw browser --browser-profile chrome tabs`
+- CLI: `builderforce browser --browser-profile chrome tabs`
 - Agent tool: `browser` with `profile="chrome"`
 
 Optional: if you want a different name or relay port, create your own profile:
 
 ```bash
-coderclaw browser create-profile \
+builderforce browser create-profile \
   --name my-chrome \
   --driver extension \
   --cdp-url http://127.0.0.1:18792 \
@@ -281,7 +281,7 @@ Notes:
 
 ## Browser selection
 
-When launching locally, CoderClaw picks the first available:
+When launching locally, BuilderForce Agents picks the first available:
 
 1. Chrome
 2. Brave
@@ -319,18 +319,18 @@ All endpoints accept `?profile=<name>`.
 If gateway auth is configured, browser HTTP routes require auth too:
 
 - `Authorization: Bearer <gateway token>`
-- `x-coderclaw-password: <gateway password>` or HTTP Basic auth with that password
+- `x-builderforce-password: <gateway password>` or HTTP Basic auth with that password
 
 ### Playwright requirement
 
 Some features (navigate/act/AI snapshot/role snapshot, element screenshots, PDF) require
 Playwright. If Playwright isn’t installed, those endpoints return a clear 501
-error. ARIA snapshots and basic screenshots still work for coderclaw-managed Chrome.
+error. ARIA snapshots and basic screenshots still work for builderforce-managed Chrome.
 For the Chrome extension relay driver, ARIA snapshots and screenshots require Playwright.
 
 If you see `Playwright is not available in this gateway build`, install the full
 Playwright package (not `playwright-core`) and restart the gateway, or reinstall
-CoderClaw with browser support.
+BuilderForce Agents with browser support.
 
 #### Docker Playwright install
 
@@ -338,13 +338,13 @@ If your Gateway runs in Docker, avoid `npx playwright` (npm override conflicts).
 Use the bundled CLI instead:
 
 ```bash
-docker compose run --rm coderclaw-cli \
+docker compose run --rm builderforce-cli \
   node /app/node_modules/playwright-core/cli.js install chromium
 ```
 
 To persist browser downloads, set `PLAYWRIGHT_BROWSERS_PATH` (for example,
 `/home/node/.cache/ms-playwright`) and make sure `/home/node` is persisted via
-`CODERCLAW_HOME_VOLUME` or a bind mount. See [Docker](/install/docker).
+`BUILDERFORCE_AGENTS_HOME_VOLUME` or a bind mount. See [Docker](/install/docker).
 
 ## How it works (internal)
 
@@ -366,95 +366,95 @@ All commands also accept `--json` for machine-readable output (stable payloads).
 
 Basics:
 
-- `coderclaw browser status`
-- `coderclaw browser start`
-- `coderclaw browser stop`
-- `coderclaw browser tabs`
-- `coderclaw browser tab`
-- `coderclaw browser tab new`
-- `coderclaw browser tab select 2`
-- `coderclaw browser tab close 2`
-- `coderclaw browser open https://example.com`
-- `coderclaw browser focus abcd1234`
-- `coderclaw browser close abcd1234`
+- `builderforce browser status`
+- `builderforce browser start`
+- `builderforce browser stop`
+- `builderforce browser tabs`
+- `builderforce browser tab`
+- `builderforce browser tab new`
+- `builderforce browser tab select 2`
+- `builderforce browser tab close 2`
+- `builderforce browser open https://example.com`
+- `builderforce browser focus abcd1234`
+- `builderforce browser close abcd1234`
 
 Inspection:
 
-- `coderclaw browser screenshot`
-- `coderclaw browser screenshot --full-page`
-- `coderclaw browser screenshot --ref 12`
-- `coderclaw browser screenshot --ref e12`
-- `coderclaw browser snapshot`
-- `coderclaw browser snapshot --format aria --limit 200`
-- `coderclaw browser snapshot --interactive --compact --depth 6`
-- `coderclaw browser snapshot --efficient`
-- `coderclaw browser snapshot --labels`
-- `coderclaw browser snapshot --selector "#main" --interactive`
-- `coderclaw browser snapshot --frame "iframe#main" --interactive`
-- `coderclaw browser console --level error`
-- `coderclaw browser errors --clear`
-- `coderclaw browser requests --filter api --clear`
-- `coderclaw browser pdf`
-- `coderclaw browser responsebody "**/api" --max-chars 5000`
+- `builderforce browser screenshot`
+- `builderforce browser screenshot --full-page`
+- `builderforce browser screenshot --ref 12`
+- `builderforce browser screenshot --ref e12`
+- `builderforce browser snapshot`
+- `builderforce browser snapshot --format aria --limit 200`
+- `builderforce browser snapshot --interactive --compact --depth 6`
+- `builderforce browser snapshot --efficient`
+- `builderforce browser snapshot --labels`
+- `builderforce browser snapshot --selector "#main" --interactive`
+- `builderforce browser snapshot --frame "iframe#main" --interactive`
+- `builderforce browser console --level error`
+- `builderforce browser errors --clear`
+- `builderforce browser requests --filter api --clear`
+- `builderforce browser pdf`
+- `builderforce browser responsebody "**/api" --max-chars 5000`
 
 Actions:
 
-- `coderclaw browser navigate https://example.com`
-- `coderclaw browser resize 1280 720`
-- `coderclaw browser click 12 --double`
-- `coderclaw browser click e12 --double`
-- `coderclaw browser type 23 "hello" --submit`
-- `coderclaw browser press Enter`
-- `coderclaw browser hover 44`
-- `coderclaw browser scrollintoview e12`
-- `coderclaw browser drag 10 11`
-- `coderclaw browser select 9 OptionA OptionB`
-- `coderclaw browser download e12 report.pdf`
-- `coderclaw browser waitfordownload report.pdf`
-- `coderclaw browser upload /tmp/coderclaw/uploads/file.pdf`
-- `coderclaw browser fill --fields '[{"ref":"1","type":"text","value":"Ada"}]'`
-- `coderclaw browser dialog --accept`
-- `coderclaw browser wait --text "Done"`
-- `coderclaw browser wait "#main" --url "**/dash" --load networkidle --fn "window.ready===true"`
-- `coderclaw browser evaluate --fn '(el) => el.textContent' --ref 7`
-- `coderclaw browser highlight e12`
-- `coderclaw browser trace start`
-- `coderclaw browser trace stop`
+- `builderforce browser navigate https://example.com`
+- `builderforce browser resize 1280 720`
+- `builderforce browser click 12 --double`
+- `builderforce browser click e12 --double`
+- `builderforce browser type 23 "hello" --submit`
+- `builderforce browser press Enter`
+- `builderforce browser hover 44`
+- `builderforce browser scrollintoview e12`
+- `builderforce browser drag 10 11`
+- `builderforce browser select 9 OptionA OptionB`
+- `builderforce browser download e12 report.pdf`
+- `builderforce browser waitfordownload report.pdf`
+- `builderforce browser upload /tmp/builderforce/uploads/file.pdf`
+- `builderforce browser fill --fields '[{"ref":"1","type":"text","value":"Ada"}]'`
+- `builderforce browser dialog --accept`
+- `builderforce browser wait --text "Done"`
+- `builderforce browser wait "#main" --url "**/dash" --load networkidle --fn "window.ready===true"`
+- `builderforce browser evaluate --fn '(el) => el.textContent' --ref 7`
+- `builderforce browser highlight e12`
+- `builderforce browser trace start`
+- `builderforce browser trace stop`
 
 State:
 
-- `coderclaw browser cookies`
-- `coderclaw browser cookies set session abc123 --url "https://example.com"`
-- `coderclaw browser cookies clear`
-- `coderclaw browser storage local get`
-- `coderclaw browser storage local set theme dark`
-- `coderclaw browser storage session clear`
-- `coderclaw browser set offline on`
-- `coderclaw browser set headers --headers-json '{"X-Debug":"1"}'`
-- `coderclaw browser set credentials user pass`
-- `coderclaw browser set credentials --clear`
-- `coderclaw browser set geo 37.7749 -122.4194 --origin "https://example.com"`
-- `coderclaw browser set geo --clear`
-- `coderclaw browser set media dark`
-- `coderclaw browser set timezone America/New_York`
-- `coderclaw browser set locale en-US`
-- `coderclaw browser set device "iPhone 14"`
+- `builderforce browser cookies`
+- `builderforce browser cookies set session abc123 --url "https://example.com"`
+- `builderforce browser cookies clear`
+- `builderforce browser storage local get`
+- `builderforce browser storage local set theme dark`
+- `builderforce browser storage session clear`
+- `builderforce browser set offline on`
+- `builderforce browser set headers --headers-json '{"X-Debug":"1"}'`
+- `builderforce browser set credentials user pass`
+- `builderforce browser set credentials --clear`
+- `builderforce browser set geo 37.7749 -122.4194 --origin "https://example.com"`
+- `builderforce browser set geo --clear`
+- `builderforce browser set media dark`
+- `builderforce browser set timezone America/New_York`
+- `builderforce browser set locale en-US`
+- `builderforce browser set device "iPhone 14"`
 
 Notes:
 
 - `upload` and `dialog` are **arming** calls; run them before the click/press
   that triggers the chooser/dialog.
-- Download and trace output paths are constrained to CoderClaw temp roots:
-  - traces: `/tmp/coderclaw` (fallback: `${os.tmpdir()}/coderclaw`)
-  - downloads: `/tmp/coderclaw/downloads` (fallback: `${os.tmpdir()}/coderclaw/downloads`)
-- Upload paths are constrained to an CoderClaw temp uploads root:
-  - uploads: `/tmp/coderclaw/uploads` (fallback: `${os.tmpdir()}/coderclaw/uploads`)
+- Download and trace output paths are constrained to BuilderForce Agents temp roots:
+  - traces: `/tmp/builderforce` (fallback: `${os.tmpdir()}/builderforce`)
+  - downloads: `/tmp/builderforce/downloads` (fallback: `${os.tmpdir()}/builderforce/downloads`)
+- Upload paths are constrained to an BuilderForce Agents temp uploads root:
+  - uploads: `/tmp/builderforce/uploads` (fallback: `${os.tmpdir()}/builderforce/uploads`)
 - `upload` can also set file inputs directly via `--input-ref` or `--element`.
 - `snapshot`:
   - `--format ai` (default when Playwright is installed): returns an AI snapshot with numeric refs (`aria-ref="<n>"`).
   - `--format aria`: returns the accessibility tree (no refs; inspection only).
   - `--efficient` (or `--mode efficient`): compact role snapshot preset (interactive + compact + depth + lower maxChars).
-  - Config default (tool/CLI only): set `browser.snapshotDefaults.mode: "efficient"` to use efficient snapshots when the caller does not pass a mode (see [Gateway configuration](/gateway/configuration#browser-coderclaw-managed-browser)).
+  - Config default (tool/CLI only): set `browser.snapshotDefaults.mode: "efficient"` to use efficient snapshots when the caller does not pass a mode (see [Gateway configuration](/gateway/configuration#browser-builderforce-managed-browser)).
   - Role snapshot options (`--interactive`, `--compact`, `--depth`, `--selector`) force a role-based snapshot with refs like `ref=e12`.
   - `--frame "<iframe selector>"` scopes role snapshots to an iframe (pairs with role refs like `e12`).
   - `--interactive` outputs a flat, easy-to-pick list of interactive elements (best for driving actions).
@@ -464,16 +464,16 @@ Notes:
 
 ## Snapshots and refs
 
-CoderClaw supports two “snapshot” styles:
+BuilderForce Agents supports two “snapshot” styles:
 
-- **AI snapshot (numeric refs)**: `coderclaw browser snapshot` (default; `--format ai`)
+- **AI snapshot (numeric refs)**: `builderforce browser snapshot` (default; `--format ai`)
   - Output: a text snapshot that includes numeric refs.
-  - Actions: `coderclaw browser click 12`, `coderclaw browser type 23 "hello"`.
+  - Actions: `builderforce browser click 12`, `builderforce browser type 23 "hello"`.
   - Internally, the ref is resolved via Playwright’s `aria-ref`.
 
-- **Role snapshot (role refs like `e12`)**: `coderclaw browser snapshot --interactive` (or `--compact`, `--depth`, `--selector`, `--frame`)
+- **Role snapshot (role refs like `e12`)**: `builderforce browser snapshot --interactive` (or `--compact`, `--depth`, `--selector`, `--frame`)
   - Output: a role-based list/tree with `[ref=e12]` (and optional `[nth=1]`).
-  - Actions: `coderclaw browser click e12`, `coderclaw browser highlight e12`.
+  - Actions: `builderforce browser click e12`, `builderforce browser highlight e12`.
   - Internally, the ref is resolved via `getByRole(...)` (plus `nth()` for duplicates).
   - Add `--labels` to include a viewport screenshot with overlayed `e12` labels.
 
@@ -487,18 +487,18 @@ Ref behavior:
 You can wait on more than just time/text:
 
 - Wait for URL (globs supported by Playwright):
-  - `coderclaw browser wait --url "**/dash"`
+  - `builderforce browser wait --url "**/dash"`
 - Wait for load state:
-  - `coderclaw browser wait --load networkidle`
+  - `builderforce browser wait --load networkidle`
 - Wait for a JS predicate:
-  - `coderclaw browser wait --fn "window.ready===true"`
+  - `builderforce browser wait --fn "window.ready===true"`
 - Wait for a selector to become visible:
-  - `coderclaw browser wait "#main"`
+  - `builderforce browser wait "#main"`
 
 These can be combined:
 
 ```bash
-coderclaw browser wait "#main" \
+builderforce browser wait "#main" \
   --url "**/dash" \
   --load networkidle \
   --fn "window.ready===true" \
@@ -509,16 +509,16 @@ coderclaw browser wait "#main" \
 
 When an action fails (e.g. “not visible”, “strict mode violation”, “covered”):
 
-1. `coderclaw browser snapshot --interactive`
+1. `builderforce browser snapshot --interactive`
 2. Use `click <ref>` / `type <ref>` (prefer role refs in interactive mode)
-3. If it still fails: `coderclaw browser highlight <ref>` to see what Playwright is targeting
+3. If it still fails: `builderforce browser highlight <ref>` to see what Playwright is targeting
 4. If the page behaves oddly:
-   - `coderclaw browser errors --clear`
-   - `coderclaw browser requests --filter api --clear`
+   - `builderforce browser errors --clear`
+   - `builderforce browser requests --filter api --clear`
 5. For deep debugging: record a trace:
-   - `coderclaw browser trace start`
+   - `builderforce browser trace start`
    - reproduce the issue
-   - `coderclaw browser trace stop` (prints `TRACE:<path>`)
+   - `builderforce browser trace stop` (prints `TRACE:<path>`)
 
 ## JSON output
 
@@ -527,10 +527,10 @@ When an action fails (e.g. “not visible”, “strict mode violation”, “co
 Examples:
 
 ```bash
-coderclaw browser status --json
-coderclaw browser snapshot --interactive --json
-coderclaw browser requests --filter api --json
-coderclaw browser cookies --json
+builderforce browser status --json
+builderforce browser snapshot --interactive --json
+builderforce browser requests --filter api --json
+builderforce browser cookies --json
 ```
 
 Role snapshots in JSON include `refs` plus a small `stats` block (lines/chars/refs/interactive) so tools can reason about payload size and density.
@@ -553,8 +553,8 @@ These are useful for “make the site behave like X” workflows:
 
 ## Security & privacy
 
-- The coderclaw browser profile may contain logged-in sessions; treat it as sensitive.
-- `browser act kind=evaluate` / `coderclaw browser evaluate` and `wait --fn`
+- The builderforce browser profile may contain logged-in sessions; treat it as sensitive.
+- `browser act kind=evaluate` / `builderforce browser evaluate` and `wait --fn`
   execute arbitrary JavaScript in the page context. Prompt injection can steer
   this. Disable it with `browser.evaluateEnabled=false` if you do not need it.
 - For logins and anti-bot notes (X/Twitter, etc.), see [Browser login + X/Twitter posting](/tools/browser-login).
@@ -578,7 +578,7 @@ How it maps:
 - `browser act` uses the snapshot `ref` IDs to click/type/drag/select.
 - `browser screenshot` captures pixels (full page or element).
 - `browser` accepts:
-  - `profile` to choose a named browser profile (coderclaw, chrome, or remote CDP).
+  - `profile` to choose a named browser profile (builderforce, chrome, or remote CDP).
   - `target` (`sandbox` | `host` | `node`) to select where the browser lives.
   - In sandboxed sessions, `target: "host"` requires `agents.defaults.sandbox.browser.allowHostControl=true`.
   - If `target` is omitted: sandboxed sessions default to `sandbox`, non-sandbox sessions default to `host`.

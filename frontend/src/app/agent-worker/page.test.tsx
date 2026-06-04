@@ -48,7 +48,7 @@ describe('AgentWorker tab', () => {
   });
 
   it('runs CODING mode for a repo-targeted dispatch (clone/edit/push in-browser)', async () => {
-    const code = vi.fn(async () => ({ status: 'completed' as const, output: 'pushed claw/x' }));
+    const code = vi.fn(async () => ({ status: 'completed' as const, output: 'pushed agentHost/x' }));
     let claimed = false;
     const transport: BrowserRuntimeTransport = {
       claim: vi.fn(async () => {
@@ -67,7 +67,7 @@ describe('AgentWorker tab', () => {
       expect(getByTestId('worker-summary').textContent).toContain('Completed 1');
     });
     expect(code).toHaveBeenCalled();
-    expect(transport.report).toHaveBeenCalledWith('d1', { status: 'completed', output: 'pushed claw/x' });
+    expect(transport.report).toHaveBeenCalledWith('d1', { status: 'completed', output: 'pushed agentHost/x' });
   });
 
   it('surfaces a failure outcome without throwing', async () => {

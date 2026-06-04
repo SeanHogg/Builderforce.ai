@@ -1,9 +1,9 @@
 ---
 read_when:
-  - 在 Raspberry Pi 上设置 CoderClaw 时
-  - 在 ARM 设备上运行 CoderClaw 时
+  - 在 Raspberry Pi 上设置 BuilderForce Agents 时
+  - 在 ARM 设备上运行 BuilderForce Agents 时
   - 构建低成本常驻个人 AI 时
-summary: 在 Raspberry Pi 上运行 CoderClaw（低成本自托管设置）
+summary: 在 Raspberry Pi 上运行 BuilderForce Agents（低成本自托管设置）
 title: Raspberry Pi
 x-i18n:
   generated_at: "2026-02-03T07:53:30Z"
@@ -14,11 +14,11 @@ x-i18n:
   workflow: 15
 ---
 
-# 在 Raspberry Pi 上运行 CoderClaw
+# 在 Raspberry Pi 上运行 BuilderForce Agents
 
 ## 目标
 
-在 Raspberry Pi 上运行持久、常驻的 CoderClaw Gateway 网关，**一次性成本约 $35-80**（无月费）。
+在 Raspberry Pi 上运行持久、常驻的 BuilderForce Agents Gateway 网关，**一次性成本约 $35-80**（无月费）。
 
 适用于：
 
@@ -114,19 +114,19 @@ echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
 sudo sysctl -p
 ```
 
-## 6) 安装 CoderClaw
+## 6) 安装 BuilderForce Agents
 
 ### 选项 A：标准安装（推荐）
 
 ```bash
-curl -fsSL https://coderclaw.ai/install.sh | bash
+curl -fsSL https://builderforce.ai/install.sh | bash
 ```
 
 ### 选项 B：可修改安装（用于调试）
 
 ```bash
-git clone https://github.com/SeanHogg/coderClaw.git
-cd coderclaw
+git clone https://github.com/SeanHogg/Builderforce.ai.git
+cd builderforce
 npm install
 npm run build
 npm link
@@ -137,7 +137,7 @@ npm link
 ## 7) 运行新手引导
 
 ```bash
-coderclaw onboard --install-daemon
+builderforce onboard --install-daemon
 ```
 
 按照向导操作：
@@ -151,13 +151,13 @@ coderclaw onboard --install-daemon
 
 ```bash
 # 检查状态
-coderclaw status
+builderforce status
 
 # 检查服务
-sudo systemctl status coderclaw
+sudo systemctl status builderforce
 
 # 查看日志
-journalctl -u coderclaw -f
+journalctl -u builderforce -f
 ```
 
 ## 9) 访问仪表板
@@ -180,8 +180,8 @@ curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up
 
 # 更新配置
-coderclaw config set gateway.bind tailnet
-sudo systemctl restart coderclaw
+builderforce config set gateway.bind tailnet
+sudo systemctl restart builderforce
 ```
 
 ---
@@ -228,7 +228,7 @@ htop
 
 ### 二进制兼容性
 
-大多数 CoderClaw 功能在 ARM64 上可用，但某些外部二进制文件可能需要 ARM 构建：
+大多数 BuilderForce Agents 功能在 ARM64 上可用，但某些外部二进制文件可能需要 ARM 构建：
 
 | 工具               | ARM64 状态 | 说明                                |
 | ------------------ | ---------- | ----------------------------------- |
@@ -278,13 +278,13 @@ uname -m
 
 ```bash
 # 检查服务是否已启用
-sudo systemctl is-enabled coderclaw
+sudo systemctl is-enabled builderforce
 
 # 如果没有则启用
-sudo systemctl enable coderclaw
+sudo systemctl enable builderforce
 
 # 开机启动
-sudo systemctl start coderclaw
+sudo systemctl start builderforce
 ```
 
 ---
@@ -311,12 +311,12 @@ free -h
 
 ```bash
 # 检查日志
-journalctl -u coderclaw --no-pager -n 100
+journalctl -u builderforce --no-pager -n 100
 
 # 常见修复：重新构建
-cd ~/coderclaw  # 如果使用可修改安装
+cd ~/builderforce  # 如果使用可修改安装
 npm run build
-sudo systemctl restart coderclaw
+sudo systemctl restart builderforce
 ```
 
 ### ARM 二进制问题

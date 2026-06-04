@@ -47,7 +47,7 @@ Supported keys:
 - `seed`, `normalize`, `lang`, `output_format`, `latency_tier`
 - `once`
 
-## Config (`~/.coderclaw/coderclaw.json`)
+## Config (`~/.builderforce/builderforce.json`)
 
 ```json5
 {

@@ -872,7 +872,7 @@ export default function AdminPage() {
           `LLM daily token limit reached (${used?.toLocaleString() ?? '?'} / ${limit?.toLocaleString() ?? '?'} tokens used today).` +
           (hours != null ? ` Resets in ~${hours}h.` : '')
         );
-      } else if (err.code === 'claw_token_limit_exceeded') {
+      } else if (err.code === 'agent_host_token_limit_exceeded') {
         setUsageAiError(err.message);
       } else {
         setUsageAiError(err.message || String(e));
@@ -949,8 +949,8 @@ export default function AdminPage() {
                     <div className="health-value">{fmtNum(health.platform.paidTenantCount)}</div>
                   </div>
                   <div className="health-card">
-                    <div className="health-label">Claws</div>
-                    <div className="health-value">{fmtNum(health.platform.clawCount)}</div>
+                    <div className="health-label">AgentHosts</div>
+                    <div className="health-value">{fmtNum(health.platform.agentHostCount)}</div>
                   </div>
                   <div className="health-card">
                     <div className="health-label">Executions</div>
@@ -1122,7 +1122,7 @@ export default function AdminPage() {
                         <th>Plan</th>
                         <th>Billing</th>
                         <th>Members</th>
-                        <th>Claws</th>
+                        <th>AgentHosts</th>
                         <th>Created</th>
                       </tr>
                     </thead>
@@ -1167,7 +1167,7 @@ export default function AdminPage() {
                             </td>
                             <td className="text-muted">{t.billingStatus}</td>
                             <td>{t.memberCount}</td>
-                            <td>{t.clawCount}</td>
+                            <td>{t.agentHostCount}</td>
                             <td className="text-muted">{fmtDate(t.createdAt)}</td>
                           </tr>
                           {expandedTenantId === t.id && (

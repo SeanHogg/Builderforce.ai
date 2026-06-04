@@ -7,13 +7,13 @@ title: "Credits"
 
 ## The name
 
-CoderClaw = CLAW + TARDIS, because every space lobster needs a time and space machine.
+BuilderForce Agents = CLAW + TARDIS, because every space lobster needs a time and space machine.
 
 ## Credits
 
 - **Peter Steinberger** ([@steipete](https://x.com/steipete)) - Creator, lobster whisperer
 - **Mario Zechner** ([@badlogicc](https://x.com/badlogicgames)) - Pi creator, security pen tester
-- **CoderClaw** - The space lobster who demanded a better name
+- **BuilderForce Agents** - The space lobster who demanded a better name
 
 ## Core contributors
 

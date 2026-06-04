@@ -6,14 +6,14 @@ import { Execution } from '../../domain/execution/Execution';
 import { AuditEvent } from '../../domain/audit/AuditEvent';
 import {
   AuditEventType, ExecutionStatus,
-  asExecutionId, asTaskId, asAgentId, asClawId, asTenantId, TaskStatus,
+  asExecutionId, asTaskId, asAgentId, asAgentHostId, asTenantId, TaskStatus,
 } from '../../domain/shared/types';
 import { NotFoundError, ForbiddenError } from '../../domain/shared/errors';
 
 export interface SubmitTaskDto {
   taskId:      number;
   agentId?:    number;
-  clawId?:     number | null;
+  agentHostId?:     number | null;
   tenantId:    number;
   submittedBy: string;
   sessionId?:  string | null;
@@ -54,7 +54,7 @@ export class RuntimeService {
       Execution.create({
         taskId:      asTaskId(dto.taskId),
         agentId:     dto.agentId != null ? asAgentId(dto.agentId) : null,
-        clawId:      dto.clawId != null ? asClawId(dto.clawId) : null,
+        agentHostId:      dto.agentHostId != null ? asAgentHostId(dto.agentHostId) : null,
         tenantId:    asTenantId(dto.tenantId),
         submittedBy: dto.submittedBy,
         sessionId:   dto.sessionId ?? null,
@@ -71,7 +71,7 @@ export class RuntimeService {
       metadata:     JSON.stringify({
         taskId: dto.taskId,
         agentId: dto.agentId,
-        clawId: dto.clawId ?? null,
+        agentHostId: dto.agentHostId ?? null,
         sessionId: dto.sessionId ?? null,
       }),
     }));

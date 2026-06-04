@@ -2,27 +2,27 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { claws, tenantDefaultClaw, type Claw, type ClawRegistration } from '@/lib/builderforceApi';
+import { agentHosts, tenantDefaultAgentHost, type AgentHost, type AgentHostRegistration } from '@/lib/builderforceApi';
 import { listAgents, hireAgent } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
-import { ClawSlideOutPanel } from '@/components/ClawSlideOutPanel';
+import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { FleetMeshContent } from '@/components/FleetMeshContent';
 import { CloudAgentsSection } from '@/components/workforce/CloudAgentsSection';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import type { PublishedAgent } from '@/lib/types';
 
-function ClawCard({
-  claw,
+function AgentHostCard({
+  agentHost,
   isDefault,
   onClick,
 }: {
-  claw: Claw;
+  agentHost: AgentHost;
   isDefault?: boolean;
   onClick: () => void;
 }) {
-  const connected = !!claw.connectedAt;
-  const lastSeen = claw.lastSeenAt ? new Date(claw.lastSeenAt).toLocaleString() : '—';
+  const connected = !!agentHost.connectedAt;
+  const lastSeen = agentHost.lastSeenAt ? new Date(agentHost.lastSeenAt).toLocaleString() : '—';
 
   return (
     <div
@@ -50,8 +50,8 @@ function ClawCard({
           {connected ? 'ONLINE' : 'OFFLINE'}
         </span>
       </div>
-      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-strong)' }}>{claw.name}</div>
-      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{claw.slug ?? claw.name}</div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-strong)' }}>{agentHost.name}</div>
+      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{agentHost.slug ?? agentHost.name}</div>
       <div style={{ fontSize: 12, color: 'var(--muted)' }}>Last seen {lastSeen}</div>
       <div style={{ marginTop: 4 }}>
         <button
@@ -68,52 +68,52 @@ function ClawCard({
 
 export default function WorkforcePage() {
   const { tenant } = useAuth();
-  const [clawList, setClawList] = useState<Claw[]>([]);
-  const [loadingClaws, setLoadingClaws] = useState(true);
-  const [clawError, setClawError] = useState('');
+  const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
+  const [loadingAgentHosts, setLoadingAgentHosts] = useState(true);
+  const [agentHostError, setAgentHostError] = useState('');
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [registerName, setRegisterName] = useState('');
   const [registering, setRegistering] = useState(false);
   const [registerError, setRegisterError] = useState('');
-  const [newClaw, setNewClaw] = useState<ClawRegistration | null>(null);
+  const [newAgentHost, setNewAgentHost] = useState<AgentHostRegistration | null>(null);
   const [apiKeyCopied, setApiKeyCopied] = useState(false);
 
-  const [selectedClaw, setSelectedClaw] = useState<Claw | null>(null);
-  const [defaultClawId, setDefaultClawId] = useState<number | null>(null);
+  const [selectedAgentHost, setSelectedAgentHost] = useState<AgentHost | null>(null);
+  const [defaultAgentHostId, setDefaultAgentHostId] = useState<number | null>(null);
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
 
   const [agents, setAgents] = useState<PublishedAgent[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
   const [hiringId, setHiringId] = useState<string | null>(null);
 
-  const loadClaws = useCallback(async () => {
-    setLoadingClaws(true);
-    setClawError('');
+  const loadAgentHosts = useCallback(async () => {
+    setLoadingAgentHosts(true);
+    setAgentHostError('');
     try {
-      const list = await claws.list();
-      setClawList(list);
+      const list = await agentHosts.list();
+      setAgentHostList(list);
     } catch (e) {
-      setClawError(e instanceof Error ? e.message : 'Failed to load claws');
+      setAgentHostError(e instanceof Error ? e.message : 'Failed to load agentHosts');
     } finally {
-      setLoadingClaws(false);
+      setLoadingAgentHosts(false);
     }
   }, []);
 
   useEffect(() => {
-    loadClaws();
-  }, [loadClaws]);
+    loadAgentHosts();
+  }, [loadAgentHosts]);
 
   const tenantId = tenant?.id != null ? Number(tenant.id) : undefined;
   useEffect(() => {
     if (tenantId == null) return;
-    tenantDefaultClaw.get(tenantId).then(setDefaultClawId).catch(() => setDefaultClawId(null));
+    tenantDefaultAgentHost.get(tenantId).then(setDefaultAgentHostId).catch(() => setDefaultAgentHostId(null));
   }, [tenantId]);
 
-  const handleSetDefaultClaw = useCallback(
-    async (clawId: number | null) => {
+  const handleSetDefaultAgentHost = useCallback(
+    async (agentHostId: number | null) => {
       if (tenantId == null) return;
-      const next = await tenantDefaultClaw.set(tenantId, clawId);
-      setDefaultClawId(next);
+      const next = await tenantDefaultAgentHost.set(tenantId, agentHostId);
+      setDefaultAgentHostId(next);
     },
     [tenantId]
   );
@@ -131,9 +131,9 @@ export default function WorkforcePage() {
     setRegistering(true);
     setRegisterError('');
     try {
-      const result = await claws.register(registerName.trim());
-      setNewClaw(result);
-      setClawList((prev) => [result, ...prev]);
+      const result = await agentHosts.register(registerName.trim());
+      setNewAgentHost(result);
+      setAgentHostList((prev) => [result, ...prev]);
       setRegisterName('');
     } catch (e) {
       if (isPlanLimitError(e)) {
@@ -149,16 +149,16 @@ export default function WorkforcePage() {
 
   const closeRegisterModal = () => {
     setShowRegisterModal(false);
-    setNewClaw(null);
+    setNewAgentHost(null);
     setRegisterName('');
     setRegisterError('');
     setApiKeyCopied(false);
   };
 
   const copyApiKey = async () => {
-    if (!newClaw?.apiKey) return;
+    if (!newAgentHost?.apiKey) return;
     try {
-      await navigator.clipboard.writeText(newClaw.apiKey);
+      await navigator.clipboard.writeText(newAgentHost.apiKey);
       setApiKeyCopied(true);
       setTimeout(() => setApiKeyCopied(false), 2000);
     } catch { /* ignore */ }
@@ -181,7 +181,7 @@ export default function WorkforcePage() {
         <div>
           <h1 className="page-title" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-strong)', margin: 0 }}>Workforce</h1>
           <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
-            Create cloud agents, register remote agents (claws), and connect them to your workspace. Publish agents to the marketplace to earn revenue.
+            Create cloud agents, register remote agents (agentHosts), and connect them to your workspace. Publish agents to the marketplace to earn revenue.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -204,19 +204,19 @@ export default function WorkforcePage() {
         </div>
       </div>
 
-      {clawError && (
+      {agentHostError && (
         <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 8 }}>
-          {clawError}
+          {agentHostError}
         </div>
       )}
 
-      {loadingClaws ? (
-        <div style={{ color: 'var(--muted)', fontSize: 14, padding: 24 }}>Loading claws…</div>
-      ) : clawList.length === 0 ? (
+      {loadingAgentHosts ? (
+        <div style={{ color: 'var(--muted)', fontSize: 14, padding: 24 }}>Loading agentHosts…</div>
+      ) : agentHostList.length === 0 ? (
         <div className="empty-state" style={{ padding: 48 }}>
           <div className="empty-state-icon">📁</div>
           <div className="empty-state-title">No remote agents yet</div>
-          <div className="empty-state-sub">Register a CoderClaw instance to add it to your workforce, or create a cloud agent below.</div>
+          <div className="empty-state-sub">Register a BuilderForce Agents instance to add it to your workforce, or create a cloud agent below.</div>
           <button
             type="button"
             onClick={() => setShowRegisterModal(true)}
@@ -227,32 +227,32 @@ export default function WorkforcePage() {
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-          {clawList.map((claw) => (
-            <ClawCard
-              key={claw.id}
-              claw={claw}
-              isDefault={defaultClawId != null && claw.id === defaultClawId}
-              onClick={() => setSelectedClaw(claw)}
+          {agentHostList.map((agentHost) => (
+            <AgentHostCard
+              key={agentHost.id}
+              agentHost={agentHost}
+              isDefault={defaultAgentHostId != null && agentHost.id === defaultAgentHostId}
+              onClick={() => setSelectedAgentHost(agentHost)}
             />
           ))}
         </div>
       )}
 
-      {selectedClaw && (
-        <ClawSlideOutPanel
-          claw={selectedClaw}
-          open={!!selectedClaw}
-          onClose={() => setSelectedClaw(null)}
+      {selectedAgentHost && (
+        <AgentHostSlideOutPanel
+          agentHost={selectedAgentHost}
+          open={!!selectedAgentHost}
+          onClose={() => setSelectedAgentHost(null)}
           tenantId={tenantId ?? undefined}
-          defaultClawId={defaultClawId}
-          onSetDefaultClaw={tenantId != null ? handleSetDefaultClaw : undefined}
+          defaultAgentHostId={defaultAgentHostId}
+          onSetDefaultAgentHost={tenantId != null ? handleSetDefaultAgentHost : undefined}
         />
       )}
 
       {/* Fleet mesh visualization */}
-      {clawList.length > 1 && (
+      {agentHostList.length > 1 && (
         <section style={{ marginTop: 36 }}>
-          <FleetMeshContent claws={clawList} />
+          <FleetMeshContent agentHosts={agentHostList} />
         </section>
       )}
 
@@ -289,7 +289,7 @@ export default function WorkforcePage() {
         )}
       </section>
 
-      {/* Register claw modal */}
+      {/* Register agentHost modal */}
       {showRegisterModal && (
         <div
           className="modal-overlay"
@@ -300,10 +300,10 @@ export default function WorkforcePage() {
             style={{ maxWidth: 440, width: '100%', padding: 28 }}
             onClick={(e) => e.stopPropagation()}
           >
-            {!newClaw ? (
+            {!newAgentHost ? (
               <>
                 <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-strong)', marginBottom: 4 }}>Register a remote agent</h3>
-                <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 24 }}>Give your remote agent (CoderClaw instance) a name. You’ll get an API key to paste into its config.</p>
+                <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 24 }}>Give your remote agent (BuilderForce Agents instance) a name. You’ll get an API key to paste into its config.</p>
                 <form onSubmit={handleRegister}>
                   <div style={{ marginBottom: 16 }}>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--text-strong)', marginBottom: 6 }}>Name</label>
@@ -335,7 +335,7 @@ export default function WorkforcePage() {
                     <input
                       type="password"
                       readOnly
-                      value={newClaw.apiKey}
+                      value={newAgentHost.apiKey}
                       style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-elevated)', color: 'var(--text)', fontSize: 12, fontFamily: 'var(--font-mono)' }}
                     />
                     <button type="button" onClick={copyApiKey} style={{ padding: '8px 14px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>

@@ -36,7 +36,7 @@ export interface AdminTenant {
   isPaid: boolean;
   createdAt: string;
   memberCount: number;
-  clawCount: number;
+  agentHostCount: number;
   /**
    * Superadmin override for the daily token cap.
    *   null → use plan default
@@ -56,7 +56,7 @@ export interface AdminHealth {
   platform: {
     userCount: number;
     tenantCount: number;
-    clawCount: number;
+    agentHostCount: number;
     executionCount: number;
     errorCount: number;
     paidTenantCount: number;
@@ -117,7 +117,7 @@ export interface AdminLlmTraceAttempt {
 export interface AdminLlmTraceDetail extends AdminLlmTraceSummary {
   effectivePlan: string | null;
   premiumOverride: boolean;
-  clawId: number | null;
+  agentHostId: number | null;
   tenantApiKeyId: string | null;
   promptTokens: number;
   completionTokens: number;
@@ -296,7 +296,7 @@ export interface AdminSecurityDetails {
   }>;
   tokens: Array<{
     jti: string;
-    tokenType: 'web' | 'tenant' | 'api' | 'claw';
+    tokenType: 'web' | 'tenant' | 'api' | 'host';
     tenantId?: number | null;
     sessionId?: string | null;
     issuedAt: string;

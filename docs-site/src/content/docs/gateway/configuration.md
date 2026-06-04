@@ -1,7 +1,7 @@
 ---
 summary: "Configuration overview: common tasks, quick setup, and links to the full reference"
 read_when:
-  - Setting up CoderClaw for the first time
+  - Setting up BuilderForce Agents for the first time
   - Looking for common configuration patterns
   - Navigating to specific config sections
 title: "Configuration"
@@ -9,9 +9,9 @@ title: "Configuration"
 
 # Configuration
 
-CoderClaw reads an optional <Tooltip tip="JSON5 supports comments and trailing commas">**JSON5**</Tooltip> config from `~/.coderclaw/coderclaw.json`.
+BuilderForce Agents reads an optional <Tooltip tip="JSON5 supports comments and trailing commas">**JSON5**</Tooltip> config from `~/.builderforce/builderforce.json`.
 
-If the file is missing, CoderClaw uses safe defaults. Common reasons to add a config:
+If the file is missing, BuilderForce Agents uses safe defaults. Common reasons to add a config:
 
 - Connect channels and control who can message the bot
 - Set models, tools, sandboxing, or automation (cron, hooks)
@@ -20,15 +20,15 @@ If the file is missing, CoderClaw uses safe defaults. Common reasons to add a co
 See the [full reference](/gateway/configuration-reference) for every available field.
 
 <Tip>
-**New to configuration?** Start with `coderclaw onboard` for interactive setup, or check out the [Configuration Examples](/gateway/configuration-examples) guide for complete copy-paste configs.
+**New to configuration?** Start with `builderforce onboard` for interactive setup, or check out the [Configuration Examples](/gateway/configuration-examples) guide for complete copy-paste configs.
 </Tip>
 
 ## Minimal config
 
 ```json5
-// ~/.coderclaw/coderclaw.json
+// ~/.builderforce/builderforce.json
 {
-  agents: { defaults: { workspace: "~/.coderclaw/workspace" } },
+  agents: { defaults: { workspace: "~/.builderforce/workspace" } },
   channels: { whatsapp: { allowFrom: ["+15555550123"] } },
 }
 ```
@@ -38,15 +38,15 @@ See the [full reference](/gateway/configuration-reference) for every available f
 <Tabs>
   <Tab title="Interactive wizard">
     ```bash
-    coderclaw onboard       # full setup wizard
-    coderclaw configure     # config wizard
+    builderforce onboard       # full setup wizard
+    builderforce configure     # config wizard
     ```
   </Tab>
   <Tab title="CLI (one-liners)">
     ```bash
-    coderclaw config get agents.defaults.workspace
-    coderclaw config set agents.defaults.heartbeat.every "2h"
-    coderclaw config unset tools.web.search.apiKey
+    builderforce config get agents.defaults.workspace
+    builderforce config set agents.defaults.heartbeat.every "2h"
+    builderforce config unset tools.web.search.apiKey
     ```
   </Tab>
   <Tab title="Control UI">
@@ -54,22 +54,22 @@ See the [full reference](/gateway/configuration-reference) for every available f
     The Control UI renders a form from the config schema, with a **Raw JSON** editor as an escape hatch.
   </Tab>
   <Tab title="Direct edit">
-    Edit `~/.coderclaw/coderclaw.json` directly. The Gateway watches the file and applies changes automatically (see [hot reload](#config-hot-reload)).
+    Edit `~/.builderforce/builderforce.json` directly. The Gateway watches the file and applies changes automatically (see [hot reload](#config-hot-reload)).
   </Tab>
 </Tabs>
 
 ## Strict validation
 
 <Warning>
-CoderClaw only accepts configurations that fully match the schema. Unknown keys, malformed types, or invalid values cause the Gateway to **refuse to start**. The only root-level exception is `$schema` (string), so editors can attach JSON Schema metadata.
+BuilderForce Agents only accepts configurations that fully match the schema. Unknown keys, malformed types, or invalid values cause the Gateway to **refuse to start**. The only root-level exception is `$schema` (string), so editors can attach JSON Schema metadata.
 </Warning>
 
 When validation fails:
 
 - The Gateway does not boot
-- Only diagnostic commands work (`coderclaw doctor`, `coderclaw logs`, `coderclaw health`, `coderclaw status`)
-- Run `coderclaw doctor` to see exact issues
-- Run `coderclaw doctor --fix` (or `--yes`) to apply repairs
+- Only diagnostic commands work (`builderforce doctor`, `builderforce logs`, `builderforce health`, `builderforce status`)
+- Run `builderforce doctor` to see exact issues
+- Run `builderforce doctor --fix` (or `--yes`) to apply repairs
 
 ## Common tasks
 
@@ -156,7 +156,7 @@ When validation fails:
           {
             id: "main",
             groupChat: {
-              mentionPatterns: ["@coderclaw", "coderclaw"],
+              mentionPatterns: ["@builderforce", "builderforce"],
             },
           },
         ],
@@ -289,8 +289,8 @@ When validation fails:
     {
       agents: {
         list: [
-          { id: "home", default: true, workspace: "~/.coderclaw/workspace-home" },
-          { id: "work", workspace: "~/.coderclaw/workspace-work" },
+          { id: "home", default: true, workspace: "~/.builderforce/workspace-home" },
+          { id: "work", workspace: "~/.builderforce/workspace-work" },
         ],
       },
       bindings: [
@@ -308,7 +308,7 @@ When validation fails:
     Use `$include` to organize large configs:
 
     ```json5
-    // ~/.coderclaw/coderclaw.json
+    // ~/.builderforce/builderforce.json
     {
       gateway: { port: 18789 },
       agents: { $include: "./agents.json5" },
@@ -330,7 +330,7 @@ When validation fails:
 
 ## Config hot reload
 
-The Gateway watches `~/.coderclaw/coderclaw.json` and applies changes automatically — no manual restart needed for most settings.
+The Gateway watches `~/.builderforce/builderforce.json` and applies changes automatically — no manual restart needed for most settings.
 
 ### Reload modes
 
@@ -375,7 +375,7 @@ Most fields hot-apply without downtime. In `hybrid` mode, restart-required chang
     Validates + writes the full config and restarts the Gateway in one step.
 
     <Warning>
-    `config.apply` replaces the **entire config**. Use `config.patch` for partial updates, or `coderclaw config set` for single keys.
+    `config.apply` replaces the **entire config**. Use `config.patch` for partial updates, or `builderforce config set` for single keys.
     </Warning>
 
     Params:
@@ -387,9 +387,9 @@ Most fields hot-apply without downtime. In `hybrid` mode, restart-required chang
     - `restartDelayMs` (optional) — delay before restart (default 2000)
 
     ```bash
-    coderclaw gateway call config.get --params '{}'  # capture payload.hash
-    coderclaw gateway call config.apply --params '{
-      "raw": "{ agents: { defaults: { workspace: \"~/.coderclaw/workspace\" } } }",
+    builderforce gateway call config.get --params '{}'  # capture payload.hash
+    builderforce gateway call config.apply --params '{
+      "raw": "{ agents: { defaults: { workspace: \"~/.builderforce/workspace\" } } }",
       "baseHash": "<hash>",
       "sessionKey": "agent:main:whatsapp:dm:+15555550123"
     }'
@@ -411,7 +411,7 @@ Most fields hot-apply without downtime. In `hybrid` mode, restart-required chang
     - `sessionKey`, `note`, `restartDelayMs` — same as `config.apply`
 
     ```bash
-    coderclaw gateway call config.patch --params '{
+    builderforce gateway call config.patch --params '{
       "raw": "{ channels: { telegram: { groups: { \"*\": { requireMention: false } } } } }",
       "baseHash": "<hash>"
     }'
@@ -422,10 +422,10 @@ Most fields hot-apply without downtime. In `hybrid` mode, restart-required chang
 
 ## Environment variables
 
-CoderClaw reads env vars from the parent process plus:
+BuilderForce Agents reads env vars from the parent process plus:
 
 - `.env` from the current working directory (if present)
-- `~/.coderclaw/.env` (global fallback)
+- `~/.builderforce/.env` (global fallback)
 
 Neither file overrides existing env vars. You can also set inline env vars in config:
 
@@ -439,7 +439,7 @@ Neither file overrides existing env vars. You can also set inline env vars in co
 ```
 
 <Accordion title="Shell env import (optional)">
-  If enabled and expected keys aren't set, CoderClaw runs your login shell and imports only the missing keys:
+  If enabled and expected keys aren't set, BuilderForce Agents runs your login shell and imports only the missing keys:
 
 ```json5
 {
@@ -449,7 +449,7 @@ Neither file overrides existing env vars. You can also set inline env vars in co
 }
 ```
 
-Env var equivalent: `CODERCLAW_LOAD_SHELL_ENV=1`
+Env var equivalent: `BUILDERFORCE_AGENTS_LOAD_SHELL_ENV=1`
 </Accordion>
 
 <Accordion title="Env var substitution in config values">
@@ -457,7 +457,7 @@ Env var equivalent: `CODERCLAW_LOAD_SHELL_ENV=1`
 
 ```json5
 {
-  gateway: { auth: { token: "${CODERCLAW_GATEWAY_TOKEN}" } },
+  gateway: { auth: { token: "${BUILDERFORCE_AGENTS_GATEWAY_TOKEN}" } },
   models: { providers: { custom: { apiKey: "${CUSTOM_API_KEY}" } } },
 }
 ```

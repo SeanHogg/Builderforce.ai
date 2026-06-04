@@ -5,66 +5,76 @@
  *
  * P1-2: Workflow Execution Portal API
  *
- * POST   /api/workflows                  Register a workflow (push from claw or portal)
- * GET    /api/workflows                  List workflows (filterable by status, type, claw)
+ * POST   /api/workflows                  Register a workflow (push from agentHost or portal)
+ * GET    /api/workflows                  List workflows (filterable by status, type, agentHost)
  * GET    /api/workflows/:id              Get workflow detail + tasks
  * PATCH  /api/workflows/:id              Update status / description
  * GET    /api/workflows/:id/tasks        List tasks for a workflow
  * POST   /api/workflows/:id/tasks        Add a task to a workflow
  * PATCH  /api/workflows/:id/tasks/:tid   Update individual task state
  */
-import { Hono } from 'hono';
-import { eq, and } from 'drizzle-orm';
+import { Hono, type Context } from 'hono';
+import { eq, and, asc } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { workflows, workflowTasks, coderclawInstances, telemetrySpans } from '../../infrastructure/database/schema';
+import { workflows, workflowTasks, agentHosts, telemetrySpans } from '../../infrastructure/database/schema';
 import { verifySecret } from '../../infrastructure/auth/HashService';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 type WorkflowHonoEnv = HonoEnv;
 
-async function verifyClawApiKey(db: Db, id: number, key?: string | null): Promise<{ id: number; tenantId: number } | null> {
+async function verifyAgentHostApiKey(db: Db, id: number, key?: string | null): Promise<{ id: number; tenantId: number } | null> {
   if (!key) return null;
-  const [claw] = await db
-    .select({ id: coderclawInstances.id, tenantId: coderclawInstances.tenantId, apiKeyHash: coderclawInstances.apiKeyHash })
-    .from(coderclawInstances)
-    .where(eq(coderclawInstances.id, id));
-  if (!claw) return null;
-  const valid = await verifySecret(key, claw.apiKeyHash);
-  return valid ? claw : null;
+  const [agentHost] = await db
+    .select({ id: agentHosts.id, tenantId: agentHosts.tenantId, apiKeyHash: agentHosts.apiKeyHash })
+    .from(agentHosts)
+    .where(eq(agentHosts.id, id));
+  if (!agentHost) return null;
+  const valid = await verifySecret(key, agentHost.apiKeyHash);
+  return valid ? agentHost : null;
 }
 
-/** Resolve a claw from Bearer token + X-Claw-Id header (used by workflow-telemetry forwarding). */
-async function verifyBearerClaw(db: Db, authHeader: string | undefined, clawIdHeader: string | undefined): Promise<{ id: number; tenantId: number } | null> {
-  if (!authHeader?.startsWith('Bearer ') || !clawIdHeader) return null;
+/** Resolve a agentHost from Bearer token + X-AgentHost-Id header (used by workflow-telemetry forwarding). */
+async function verifyBearerAgentHost(db: Db, authHeader: string | undefined, agentHostIdHeader: string | undefined): Promise<{ id: number; tenantId: number } | null> {
+  if (!authHeader?.startsWith('Bearer ') || !agentHostIdHeader) return null;
   const key = authHeader.slice(7);
-  const id = Number(clawIdHeader);
+  const id = Number(agentHostIdHeader);
   if (!Number.isFinite(id) || id <= 0) return null;
-  return verifyClawApiKey(db, id, key);
+  return verifyAgentHostApiKey(db, id, key);
+}
+
+/** Resolve an authenticated agentHost from either Bearer+header or ?agentHostId=&key=. */
+async function resolveHostAuth(db: Db, c: Context): Promise<{ id: number; tenantId: number } | null> {
+  const bearer = await verifyBearerAgentHost(db, c.req.header('Authorization'), c.req.header('X-AgentHost-Id'));
+  if (bearer) return bearer;
+  const idParam = Number(c.req.query('agentHostId') ?? '');
+  const key = c.req.query('key');
+  if (!Number.isNaN(idParam) && idParam > 0 && key) return verifyAgentHostApiKey(db, idParam, key);
+  return null;
 }
 
 export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
   const router = new Hono<WorkflowHonoEnv>();
 
   // POST /api/workflows – register a workflow
-  // Accepts Bearer token + X-Claw-Id header (preferred, used by workflow-telemetry),
-  // claw API key (?clawId=&key=), or tenant JWT.
+  // Accepts Bearer token + X-AgentHost-Id header (preferred, used by workflow-telemetry),
+  // agentHost API key (?agentHostId=&key=), or tenant JWT.
   router.post('/', async (c) => {
     let tenantId: number;
-    let resolvedClawId: number | null = null;
+    let resolvedAgentHostId: number | null = null;
 
-    const bearerClaw = await verifyBearerClaw(db, c.req.header('Authorization'), c.req.header('X-Claw-Id'));
-    if (bearerClaw) {
-      tenantId = bearerClaw.tenantId;
-      resolvedClawId = bearerClaw.id;
+    const bearerAgentHost = await verifyBearerAgentHost(db, c.req.header('Authorization'), c.req.header('X-AgentHost-Id'));
+    if (bearerAgentHost) {
+      tenantId = bearerAgentHost.tenantId;
+      resolvedAgentHostId = bearerAgentHost.id;
     } else {
-      const clawIdParam = Number(c.req.query('clawId') ?? '');
+      const agentHostIdParam = Number(c.req.query('agentHostId') ?? '');
       const apiKey = c.req.query('key');
-      if (!Number.isNaN(clawIdParam) && clawIdParam > 0 && apiKey) {
-        const claw = await verifyClawApiKey(db, clawIdParam, apiKey);
-        if (!claw) return c.text('Unauthorized', 401);
-        tenantId = claw.tenantId;
-        resolvedClawId = claw.id;
+      if (!Number.isNaN(agentHostIdParam) && agentHostIdParam > 0 && apiKey) {
+        const agentHost = await verifyAgentHostApiKey(db, agentHostIdParam, apiKey);
+        if (!agentHost) return c.text('Unauthorized', 401);
+        tenantId = agentHost.tenantId;
+        resolvedAgentHostId = agentHost.id;
       } else {
         await authMiddleware(c, async () => {});
         const tid = (c as unknown as { get: (k: string) => unknown }).get('tenantId');
@@ -75,15 +85,15 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
 
     const body = await c.req.json<{
       id?:           string;
-      clawId?:       number;
+      agentHostId?:       number;
       specId?:       string;
       workflowType?: 'feature' | 'bugfix' | 'refactor' | 'planning' | 'adversarial' | 'custom';
       status?:       'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
       description?:  string;
     }>();
 
-    const effectiveClawId = resolvedClawId ?? body.clawId;
-    if (!effectiveClawId) return c.json({ error: 'clawId is required' }, 400);
+    const effectiveAgentHostId = resolvedAgentHostId ?? body.agentHostId;
+    if (!effectiveAgentHostId) return c.json({ error: 'agentHostId is required' }, 400);
 
     const workflowId = body.id ?? crypto.randomUUID();
     const now = new Date();
@@ -93,7 +103,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
       .values({
         id:           workflowId,
         tenantId,
-        clawId:       effectiveClawId,
+        agentHostId:       effectiveAgentHostId,
         specId:       body.specId ?? null,
         workflowType: body.workflowType ?? 'custom',
         status:       body.status ?? 'pending',
@@ -115,21 +125,96 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
     return c.json(row, 201);
   });
 
+  // ── AgentHost execution loop (host-authed; registered before the tenant JWT
+  //    middleware so a agentHost can claim + report portal-authored workflows) ──
+
+  // POST /api/workflows/claim — a agentHost claims the oldest pending workflow
+  // assigned to it (created by the workflow-definition run endpoint), flipping it
+  // to running and returning its compiled tasks so the host's orchestrator can
+  // execute them (LLM-logic nodes natively, agent nodes via its runtimes).
+  router.post('/claim', async (c) => {
+    const host = await resolveHostAuth(db, c);
+    if (!host) return c.text('Unauthorized', 401);
+
+    const [next] = await db
+      .select()
+      .from(workflows)
+      .where(and(eq(workflows.agentHostId, host.id), eq(workflows.status, 'pending')))
+      .orderBy(asc(workflows.createdAt))
+      .limit(1);
+    if (!next) return c.json({ workflow: null });
+
+    // Race guard: only claim if still pending.
+    const [claimed] = await db
+      .update(workflows)
+      .set({ status: 'running', updatedAt: new Date() })
+      .where(and(eq(workflows.id, next.id), eq(workflows.status, 'pending')))
+      .returning();
+    if (!claimed) return c.json({ workflow: null });
+
+    const tasks = await db.select().from(workflowTasks).where(eq(workflowTasks.workflowId, next.id));
+    return c.json({ workflow: claimed, tasks });
+  });
+
+  // POST /api/workflows/:id/host-result — a agentHost reports terminal task
+  // results + the final workflow status after executing a claimed workflow.
+  router.post('/:id/host-result', async (c) => {
+    const host = await resolveHostAuth(db, c);
+    if (!host) return c.text('Unauthorized', 401);
+    const id = c.req.param('id');
+
+    const [wf] = await db
+      .select({ id: workflows.id, agentHostId: workflows.agentHostId })
+      .from(workflows)
+      .where(eq(workflows.id, id));
+    if (!wf || wf.agentHostId !== host.id) return c.json({ error: 'Workflow not found' }, 404);
+
+    const body = await c.req.json<{
+      tasks?: Array<{ id: string; status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'; output?: string; error?: string }>;
+      status?: 'running' | 'completed' | 'failed' | 'cancelled';
+    }>();
+    const now = new Date();
+    const isTerminal = (s: string) => s === 'completed' || s === 'failed' || s === 'cancelled';
+
+    for (const t of body.tasks ?? []) {
+      await db
+        .update(workflowTasks)
+        .set({
+          status: t.status,
+          ...(t.output !== undefined ? { output: t.output } : {}),
+          ...(t.error !== undefined ? { error: t.error } : {}),
+          ...(t.status === 'running' ? { startedAt: now } : {}),
+          ...(isTerminal(t.status) ? { completedAt: now } : {}),
+          updatedAt: now,
+        })
+        .where(and(eq(workflowTasks.id, t.id), eq(workflowTasks.workflowId, id)));
+    }
+
+    if (body.status) {
+      await db
+        .update(workflows)
+        .set({ status: body.status, ...(isTerminal(body.status) ? { completedAt: now } : {}), updatedAt: now })
+        .where(eq(workflows.id, id));
+    }
+
+    return c.json({ ok: true });
+  });
+
   // All remaining routes require tenant JWT
   router.use('*', authMiddleware);
 
-  // GET /api/workflows?status=&workflowType=&clawId=
+  // GET /api/workflows?status=&workflowType=&agentHostId=
   router.get('/', async (c) => {
     const tenantId      = c.get('tenantId') as number;
     const statusFilter  = c.req.query('status');
     const typeFilter    = c.req.query('workflowType');
-    const clawIdFilter  = c.req.query('clawId') ? Number(c.req.query('clawId')) : null;
+    const agentHostIdFilter  = c.req.query('agentHostId') ? Number(c.req.query('agentHostId')) : null;
 
     let rows = await db.select().from(workflows).where(eq(workflows.tenantId, tenantId));
 
     if (statusFilter) rows = rows.filter((r) => r.status === statusFilter);
     if (typeFilter)   rows = rows.filter((r) => r.workflowType === typeFilter);
-    if (clawIdFilter != null) rows = rows.filter((r) => r.clawId === clawIdFilter);
+    if (agentHostIdFilter != null) rows = rows.filter((r) => r.agentHostId === agentHostIdFilter);
 
     return c.json({ workflows: rows });
   });
@@ -229,7 +314,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
   });
 
   // GET /api/workflows/:id/graph – task dependency graph (P4-1)
-  // Builds a DAG from telemetry spans stored by CoderClaw workflow-telemetry module.
+  // Builds a DAG from telemetry spans stored by BuilderForce Agents workflow-telemetry module.
   router.get('/:id/graph', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const workflowId = c.req.param('id');

@@ -11,7 +11,7 @@ title: "Agent Workspace"
 The workspace is the agent's home. It is the only working directory used for
 file tools and for workspace context. Keep it private and treat it as memory.
 
-This is separate from `~/.coderclaw/`, which stores config, credentials, and
+This is separate from `~/.builderforce/`, which stores config, credentials, and
 sessions.
 
 **Important:** the workspace is the **default cwd**, not a hard sandbox. Tools
@@ -19,24 +19,24 @@ resolve relative paths against the workspace, but absolute paths can still reach
 elsewhere on the host unless sandboxing is enabled. If you need isolation, use
 [`agents.defaults.sandbox`](/gateway/sandboxing) (and/or per‑agent sandbox config).
 When sandboxing is enabled and `workspaceAccess` is not `"rw"`, tools operate
-inside a sandbox workspace under `~/.coderclaw/sandboxes`, not your host workspace.
+inside a sandbox workspace under `~/.builderforce/sandboxes`, not your host workspace.
 
 ## Default location
 
-- Default: `~/.coderclaw/workspace`
-- If `CODERCLAW_PROFILE` is set and not `"default"`, the default becomes
-  `~/.coderclaw/workspace-<profile>`.
-- Override in `~/.coderclaw/coderclaw.json`:
+- Default: `~/.builderforce/workspace`
+- If `BUILDERFORCE_AGENTS_PROFILE` is set and not `"default"`, the default becomes
+  `~/.builderforce/workspace-<profile>`.
+- Override in `~/.builderforce/builderforce.json`:
 
 ```json5
 {
   agent: {
-    workspace: "~/.coderclaw/workspace",
+    workspace: "~/.builderforce/workspace",
   },
 }
 ```
 
-`coderclaw onboard`, `coderclaw configure`, or `coderclaw setup` will create the
+`builderforce onboard`, `builderforce configure`, or `builderforce setup` will create the
 workspace and seed the bootstrap files if they are missing.
 
 If you already manage the workspace files yourself, you can disable bootstrap
@@ -48,20 +48,20 @@ file creation:
 
 ## Extra workspace folders
 
-Older installs may have created `~/coderclaw`. Keeping multiple workspace
+Older installs may have created `~/builderforce`. Keeping multiple workspace
 directories around can cause confusing auth or state drift, because only one
 workspace is active at a time.
 
 **Recommendation:** keep a single active workspace. If you no longer use the
-extra folders, archive or move them to Trash (for example `trash ~/coderclaw`).
+extra folders, archive or move them to Trash (for example `trash ~/builderforce`).
 If you intentionally keep multiple workspaces, make sure
 `agents.defaults.workspace` points to the active one.
 
-`coderclaw doctor` warns when it detects extra workspace directories.
+`builderforce doctor` warns when it detects extra workspace directories.
 
 ## Workspace file map (what each file means)
 
-These are the standard files CoderClaw expects inside the workspace:
+These are the standard files BuilderForce Agents expects inside the workspace:
 
 - `AGENTS.md`
   - Operating instructions for the agent and how it should use memory.
@@ -114,21 +114,21 @@ See [Memory](/concepts/memory) for the workflow and automatic memory flush.
 - `canvas/` (optional)
   - Canvas UI files for node displays (for example `canvas/index.html`).
 
-If any bootstrap file is missing, CoderClaw injects a "missing file" marker into
+If any bootstrap file is missing, BuilderForce Agents injects a "missing file" marker into
 the session and continues. Large bootstrap files are truncated when injected;
 adjust limits with `agents.defaults.bootstrapMaxChars` (default: 20000) and
 `agents.defaults.bootstrapTotalMaxChars` (default: 150000).
-`coderclaw setup` can recreate missing defaults without overwriting existing
+`builderforce setup` can recreate missing defaults without overwriting existing
 files.
 
 ## What is NOT in the workspace
 
-These live under `~/.coderclaw/` and should NOT be committed to the workspace repo:
+These live under `~/.builderforce/` and should NOT be committed to the workspace repo:
 
-- `~/.coderclaw/coderclaw.json` (config)
-- `~/.coderclaw/credentials/` (OAuth tokens, API keys)
-- `~/.coderclaw/agents/<agentId>/sessions/` (session transcripts + metadata)
-- `~/.coderclaw/skills/` (managed skills)
+- `~/.builderforce/builderforce.json` (config)
+- `~/.builderforce/credentials/` (OAuth tokens, API keys)
+- `~/.builderforce/agents/<agentId>/sessions/` (session transcripts + metadata)
+- `~/.builderforce/skills/` (managed skills)
 
 If you need to migrate sessions or config, copy them separately and keep them
 out of version control.
@@ -147,7 +147,7 @@ If git is installed, brand-new workspaces are initialized automatically. If this
 workspace is not already a repo, run:
 
 ```bash
-cd ~/.coderclaw/workspace
+cd ~/.builderforce/workspace
 git init
 git add AGENTS.md SOUL.md TOOLS.md IDENTITY.md USER.md HEARTBEAT.md memory/
 git commit -m "Add agent workspace"
@@ -172,7 +172,7 @@ Option B: GitHub CLI (`gh`)
 
 ```bash
 gh auth login
-gh repo create coderclaw-workspace --private --source . --remote origin --push
+gh repo create builderforce-workspace --private --source . --remote origin --push
 ```
 
 Option C: GitLab web UI
@@ -202,11 +202,11 @@ git push
 Even in a private repo, avoid storing secrets in the workspace:
 
 - API keys, OAuth tokens, passwords, or private credentials.
-- Anything under `~/.coderclaw/`.
+- Anything under `~/.builderforce/`.
 - Raw dumps of chats or sensitive attachments.
 
 If you must store sensitive references, use placeholders and keep the real
-secret elsewhere (password manager, environment variables, or `~/.coderclaw/`).
+secret elsewhere (password manager, environment variables, or `~/.builderforce/`).
 
 Suggested `.gitignore` starter:
 
@@ -220,10 +220,10 @@ Suggested `.gitignore` starter:
 
 ## Moving the workspace to a new machine
 
-1. Clone the repo to the desired path (default `~/.coderclaw/workspace`).
-2. Set `agents.defaults.workspace` to that path in `~/.coderclaw/coderclaw.json`.
-3. Run `coderclaw setup --workspace <path>` to seed any missing files.
-4. If you need sessions, copy `~/.coderclaw/agents/<agentId>/sessions/` from the
+1. Clone the repo to the desired path (default `~/.builderforce/workspace`).
+2. Set `agents.defaults.workspace` to that path in `~/.builderforce/builderforce.json`.
+3. Run `builderforce setup --workspace <path>` to seed any missing files.
+4. If you need sessions, copy `~/.builderforce/agents/<agentId>/sessions/` from the
    old machine separately.
 
 ## Advanced notes

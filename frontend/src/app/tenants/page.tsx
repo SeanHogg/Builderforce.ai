@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { getDefaultTenantId, setDefaultTenantId, clearDefaultTenantId, createTenant as apiCreateTenant } from '@/lib/auth';
 import type { Tenant } from '@/lib/types';
 
-/** Auto-select tenant when there is only one or a default is set (CoderClawLink-style). Returns the tenant to select or null. */
+/** Auto-select tenant when there is only one or a default is set (BuilderForceAgentsLink-style). Returns the tenant to select or null. */
 function resolveAutoSelectTenant(list: Tenant[]): Tenant | null {
   if (list.length === 0) return null;
   if (list.length === 1) return list[0];

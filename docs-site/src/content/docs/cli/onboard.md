@@ -1,11 +1,11 @@
 ---
-summary: "CLI reference for `coderclaw onboard` (interactive onboarding wizard)"
+summary: "CLI reference for `builderforce onboard` (interactive onboarding wizard)"
 read_when:
   - You want guided setup for gateway, workspace, auth, channels, and skills
 title: "onboard"
 ---
 
-# `coderclaw onboard`
+# `builderforce onboard`
 
 Interactive onboarding wizard (local or remote Gateway setup).
 
@@ -20,16 +20,16 @@ Interactive onboarding wizard (local or remote Gateway setup).
 ## Examples
 
 ```bash
-coderclaw onboard
-coderclaw onboard --flow quickstart
-coderclaw onboard --flow manual
-coderclaw onboard --mode remote --remote-url ws://gateway-host:18789
+builderforce onboard
+builderforce onboard --flow quickstart
+builderforce onboard --flow manual
+builderforce onboard --mode remote --remote-url ws://gateway-host:18789
 ```
 
 Non-interactive custom provider:
 
 ```bash
-coderclaw onboard --non-interactive \
+builderforce onboard --non-interactive \
   --auth-choice custom-api-key \
   --custom-base-url "https://llm.example.com/v1" \
   --custom-model-id "foo-large" \
@@ -46,7 +46,7 @@ If you specifically want the GLM Coding Plan endpoints, pick `zai-coding-global`
 
 ```bash
 # Promptless endpoint selection
-coderclaw onboard --non-interactive \
+builderforce onboard --non-interactive \
   --auth-choice zai-coding-global \
   --zai-api-key "$ZAI_API_KEY"
 
@@ -60,15 +60,15 @@ Flow notes:
 
 - `quickstart`: minimal prompts, auto-generates a gateway token.
 - `manual`: full prompts for port/bind/auth (alias of `advanced`).
-- Fastest first chat: `coderclaw dashboard` (Control UI, no channel setup).
+- Fastest first chat: `builderforce dashboard` (Control UI, no channel setup).
 - Custom Provider: connect any OpenAI or Anthropic compatible endpoint,
   including hosted providers not listed. Use Unknown to auto-detect.
 
 ## Common follow-up commands
 
 ```bash
-coderclaw configure
-coderclaw agents add <name>
+builderforce configure
+builderforce agents add <name>
 ```
 
 <Note>

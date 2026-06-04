@@ -1,12 +1,12 @@
 ---
-summary: "CLI reference for `coderclaw webhooks` (webhook helpers + Gmail Pub/Sub)"
+summary: "CLI reference for `builderforce webhooks` (webhook helpers + Gmail Pub/Sub)"
 read_when:
-  - You want to wire Gmail Pub/Sub events into CoderClaw
+  - You want to wire Gmail Pub/Sub events into BuilderForce Agents
   - You want webhook helper commands
 title: "webhooks"
 ---
 
-# `coderclaw webhooks`
+# `builderforce webhooks`
 
 Webhook helpers and integrations (Gmail Pub/Sub, webhook helpers).
 
@@ -18,8 +18,8 @@ Related:
 ## Gmail
 
 ```bash
-coderclaw webhooks gmail setup --account you@example.com
-coderclaw webhooks gmail run
+builderforce webhooks gmail setup --account you@example.com
+builderforce webhooks gmail run
 ```
 
 See [Gmail Pub/Sub documentation](/automation/gmail-pubsub) for details.

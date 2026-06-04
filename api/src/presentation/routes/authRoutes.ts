@@ -8,7 +8,7 @@ import {
   adminImpersonationSessions,
   authTokens,
   authUserSessions,
-  coderclawInstances,
+  agentHosts,
   legalDocuments,
   newsletterEvents,
   newsletterSubscribers,
@@ -93,13 +93,13 @@ const DEFAULT_LEGAL: Record<'terms' | 'privacy', Omit<LegalDocResponse, 'documen
   terms: {
     version: '1.0.0',
     title: 'Terms of Use',
-    content: 'By using CoderClawLink, you agree to these Terms of Use. Continued use of the service indicates acceptance of current terms.',
+    content: 'By using BuilderForce Link, you agree to these Terms of Use. Continued use of the service indicates acceptance of current terms.',
     publishedAt: new Date(0).toISOString(),
   },
   privacy: {
     version: '1.0.0',
     title: 'Privacy Policy',
-    content: 'CoderClawLink processes account, usage, and operational metadata to provide and secure the service.',
+    content: 'BuilderForce Link processes account, usage, and operational metadata to provide and secure the service.',
     publishedAt: new Date(0).toISOString(),
   },
 };
@@ -271,7 +271,7 @@ async function replaceRecoveryCodes(db: Db, userId: string, codes: string[]) {
  *
  * API-key flow (SDK / CLI):
  *   POST /api/auth/register  – create user + get API key (one-time)
- *   POST /api/auth/token     – exchange API key + tenantId for JWT (backward compat / claw auth)
+ *   POST /api/auth/token     – exchange API key + tenantId for JWT (backward compat / agentHost auth)
  *
  * Web / marketplace flow (email + password):
  *   POST /api/auth/web/register   – create account, returns WebJWT + user
@@ -830,30 +830,30 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     });
   });
 
-  // POST /api/auth/claw-token – a CoderClaw instance authenticates with its API key
-  // Returns a tenant-scoped JWT so the claw can call all tenant APIs.
-  router.post('/claw-token', async (c) => {
+  // POST /api/auth/agentHost-token – a BuilderForce Agents instance authenticates with its API key
+  // Returns a tenant-scoped JWT so the agentHost can call all tenant APIs.
+  router.post('/agentHost-token', async (c) => {
     const body = await c.req.json<{ apiKey: string }>();
     if (!body.apiKey) return c.json({ error: 'apiKey is required' }, 400);
 
     const keyHash = await hashSecret(body.apiKey);
-    const [claw] = await db
+    const [agentHost] = await db
       .select()
-      .from(coderclawInstances)
-      .where(eq(coderclawInstances.apiKeyHash, keyHash))
+      .from(agentHosts)
+      .where(eq(agentHosts.apiKeyHash, keyHash))
       .limit(1);
 
-    if (!claw || claw.status !== 'active') {
+    if (!agentHost || agentHost.status !== 'active') {
       return c.json({ error: 'Invalid or inactive API key' }, 401);
     }
 
     const expiresIn = 3600;
     const token = await signJwt(
-      { sub: `claw:${claw.id}`, tid: claw.tenantId, role: TenantRole.DEVELOPER },
+      { sub: `agentHost:${agentHost.id}`, tid: agentHost.tenantId, role: TenantRole.DEVELOPER },
       c.env.JWT_SECRET,
       expiresIn,
     );
-    return c.json({ token, expiresIn, clawId: claw.id, tenantId: claw.tenantId });
+    return c.json({ token, expiresIn, agentHostId: agentHost.id, tenantId: agentHost.tenantId });
   });
 
   // GET /api/auth/my-tenants  (requires WebJWT)
@@ -936,7 +936,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const otpauthUrl = buildOtpAuthUrl({
       accountName: user.email,
       secret,
-      issuer: 'CoderClawLink',
+      issuer: 'BuilderForce Link',
     });
 
     return c.json({

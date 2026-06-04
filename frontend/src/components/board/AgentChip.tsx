@@ -20,7 +20,7 @@ export const EXECUTION_STATUS_COLOR: Record<string, string> = {
 export const ACTIVE_EXECUTION_STATUSES = new Set(['running', 'submitted', 'pending']);
 
 export interface AgentChipProps {
-  /** Primary label — agent role or claw name. */
+  /** Primary label — agent role or agentHost name. */
   label: string;
   /** Live execution status; omit for a configured (not-yet-running) agent. */
   status?: string;

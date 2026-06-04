@@ -14,13 +14,13 @@ import type { PublishedAgent } from '@/lib/types';
 
 /**
  * Workforce → "Your agents". Create a cloud agent, declare which runtime(s) it
- * supports (cloud / remote claw / both + a best-experience hint), and publish it
+ * supports (cloud / remote agentHost / both + a best-experience hint), and publish it
  * to the marketplace with a price to generate revenue.
  */
 
 const RUNTIME_LABELS: Record<AgentRuntimeSupport, string> = {
   cloud: 'Cloud only',
-  claw: 'Remote (claw) only',
+  host: 'Remote (self-hosted) only',
   both: 'Cloud + Remote',
 };
 
@@ -46,7 +46,7 @@ interface FormState {
   skills: string;
   baseModel: string;
   runtimeSupport: AgentRuntimeSupport;
-  preferredRuntime: 'cloud' | 'claw';
+  preferredRuntime: 'cloud' | 'host';
 }
 
 const EMPTY_FORM: FormState = {
@@ -85,7 +85,7 @@ export function CloudAgentsSection() {
       skills: (a.skills ?? []).join(', '),
       baseModel: a.base_model === 'builderforce-default' ? '' : a.base_model,
       runtimeSupport: a.runtime_support ?? 'cloud',
-      preferredRuntime: (a.preferred_runtime as 'cloud' | 'claw') ?? 'cloud',
+      preferredRuntime: (a.preferred_runtime as 'cloud' | 'host') ?? 'cloud',
     });
     setFormOpen(true); setError('');
   };
@@ -224,9 +224,9 @@ export function CloudAgentsSection() {
               {form.runtimeSupport === 'both' && (
                 <div>
                   <label style={labelStyle}>Best experience on</label>
-                  <select style={inputStyle} value={form.preferredRuntime} onChange={(e) => setForm({ ...form, preferredRuntime: e.target.value as 'cloud' | 'claw' })}>
+                  <select style={inputStyle} value={form.preferredRuntime} onChange={(e) => setForm({ ...form, preferredRuntime: e.target.value as 'cloud' | 'host' })}>
                     <option value="cloud">Cloud</option>
-                    <option value="claw">Remote (claw)</option>
+                    <option value="host">Remote (agentHost)</option>
                   </select>
                 </div>
               )}

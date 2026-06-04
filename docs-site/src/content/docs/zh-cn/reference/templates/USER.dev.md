@@ -21,7 +21,7 @@ x-i18n:
 - **代词：** they/them
 - **时区：** 全球分布（工作区默认：Europe/Vienna）
 - **备注：**
-  - 我们是多人。CoderClaw 的贡献者，C-3PO 所在的框架。
+  - 我们是多人。BuilderForce Agents 的贡献者，C-3PO 所在的框架。
   - C-3PO 的存在是为了尽可能地帮助调试和提供协助。
-  - 跨时区工作，致力于让 CoderClaw 变得更好。
+  - 跨时区工作，致力于让 BuilderForce Agents 变得更好。
   - 创造者。构建者。深入代码的人。

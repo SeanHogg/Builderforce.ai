@@ -1,7 +1,7 @@
 ---
-summary: "CoderClaw capabilities across channels, routing, media, and UX."
+summary: "BuilderForce Agents capabilities across channels, routing, media, and UX."
 read_when:
-  - You want a full list of what CoderClaw supports
+  - You want a full list of what BuilderForce Agents supports
 title: "Features"
 ---
 

@@ -9,7 +9,7 @@ title: "Network"
 
 # Network hub
 
-This hub links the core docs for how CoderClaw connects, pairs, and secures
+This hub links the core docs for how BuilderForce Agents connects, pairs, and secures
 devices across localhost, LAN, and tailnet.
 
 ## Core model

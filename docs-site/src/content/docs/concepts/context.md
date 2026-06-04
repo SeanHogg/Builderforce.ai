@@ -1,7 +1,7 @@
 ---
 summary: "Context: what the model sees, how it is built, and how to inspect it"
 read_when:
-  - You want to understand what “context” means in CoderClaw
+  - You want to understand what “context” means in BuilderForce Agents
   - You are debugging why the model “knows” something (or forgot it)
   - You want to reduce context overhead (/context, /status, /compact)
 title: "Context"
@@ -9,11 +9,11 @@ title: "Context"
 
 # Context
 
-“Context” is **everything CoderClaw sends to the model for a run**. It is bounded by the model’s **context window** (token limit).
+“Context” is **everything BuilderForce Agents sends to the model for a run**. It is bounded by the model’s **context window** (token limit).
 
 Beginner mental model:
 
-- **System prompt** (CoderClaw-built): rules, tools, skills list, time/runtime, and injected workspace files.
+- **System prompt** (BuilderForce Agents-built): rules, tools, skills list, time/runtime, and injected workspace files.
 - **Conversation history**: your messages + the assistant’s messages for this session.
 - **Tool calls/results + attachments**: command output, file reads, images/audio, etc.
 
@@ -87,9 +87,9 @@ Everything the model receives counts, including:
 - Compaction summaries and pruning artifacts.
 - Provider “wrappers” or hidden headers (not visible, still counted).
 
-## How CoderClaw builds the system prompt
+## How BuilderForce Agents builds the system prompt
 
-The system prompt is **CoderClaw-owned** and rebuilt each run. It includes:
+The system prompt is **BuilderForce Agents-owned** and rebuilt each run. It includes:
 
 - Tool list + short descriptions.
 - Skills list (metadata only; see below).
@@ -102,7 +102,7 @@ Full breakdown: [System Prompt](/concepts/system-prompt).
 
 ## Injected workspace files (Project Context)
 
-By default, CoderClaw injects a fixed set of workspace files (if present):
+By default, BuilderForce Agents injects a fixed set of workspace files (if present):
 
 - `AGENTS.md`
 - `SOUL.md`
@@ -112,7 +112,7 @@ By default, CoderClaw injects a fixed set of workspace files (if present):
 - `HEARTBEAT.md`
 - `BOOTSTRAP.md` (first-run only)
 
-Large files are truncated per-file using `agents.defaults.bootstrapMaxChars` (default `20000` chars). CoderClaw also enforces a total bootstrap injection cap across files with `agents.defaults.bootstrapTotalMaxChars` (default `150000` chars). `/context` shows **raw vs injected** sizes and whether truncation happened.
+Large files are truncated per-file using `agents.defaults.bootstrapMaxChars` (default `20000` chars). BuilderForce Agents also enforces a total bootstrap injection cap across files with `agents.defaults.bootstrapTotalMaxChars` (default `150000` chars). `/context` shows **raw vs injected** sizes and whether truncation happened.
 
 ## Skills: what’s injected vs loaded on-demand
 

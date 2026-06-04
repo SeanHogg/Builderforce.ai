@@ -1,15 +1,15 @@
 ---
-summary: "CLI reference for `coderclaw browser` (profiles, tabs, actions, extension relay)"
+summary: "CLI reference for `builderforce browser` (profiles, tabs, actions, extension relay)"
 read_when:
-  - You use `coderclaw browser` and want examples for common tasks
+  - You use `builderforce browser` and want examples for common tasks
   - You want to control a browser running on another machine via a node host
   - You want to use the Chrome extension relay (attach/detach via toolbar button)
 title: "browser"
 ---
 
-# `coderclaw browser`
+# `builderforce browser`
 
-Manage CoderClaw’s browser control server and run browser actions (tabs, snapshots, screenshots, navigation, clicks, typing).
+Manage BuilderForce Agents’s browser control server and run browser actions (tabs, snapshots, screenshots, navigation, clicks, typing).
 
 Related:
 
@@ -27,38 +27,38 @@ Related:
 ## Quick start (local)
 
 ```bash
-coderclaw browser --browser-profile chrome tabs
-coderclaw browser --browser-profile coderclaw start
-coderclaw browser --browser-profile coderclaw open https://example.com
-coderclaw browser --browser-profile coderclaw snapshot
+builderforce browser --browser-profile chrome tabs
+builderforce browser --browser-profile builderforce start
+builderforce browser --browser-profile builderforce open https://example.com
+builderforce browser --browser-profile builderforce snapshot
 ```
 
 ## Profiles
 
 Profiles are named browser routing configs. In practice:
 
-- `coderclaw`: launches/attaches to a dedicated CoderClaw-managed Chrome instance (isolated user data dir).
+- `builderforce`: launches/attaches to a dedicated BuilderForce Agents-managed Chrome instance (isolated user data dir).
 - `chrome`: controls your existing Chrome tab(s) via the Chrome extension relay.
 
 ```bash
-coderclaw browser profiles
-coderclaw browser create-profile --name work --color "#FF5A36"
-coderclaw browser delete-profile --name work
+builderforce browser profiles
+builderforce browser create-profile --name work --color "#FF5A36"
+builderforce browser delete-profile --name work
 ```
 
 Use a specific profile:
 
 ```bash
-coderclaw browser --browser-profile work tabs
+builderforce browser --browser-profile work tabs
 ```
 
 ## Tabs
 
 ```bash
-coderclaw browser tabs
-coderclaw browser open https://builderforce.ai/docs
-coderclaw browser focus <targetId>
-coderclaw browser close <targetId>
+builderforce browser tabs
+builderforce browser open https://builderforce.ai/docs
+builderforce browser focus <targetId>
+builderforce browser close <targetId>
 ```
 
 ## Snapshot / screenshot / actions
@@ -66,21 +66,21 @@ coderclaw browser close <targetId>
 Snapshot:
 
 ```bash
-coderclaw browser snapshot
+builderforce browser snapshot
 ```
 
 Screenshot:
 
 ```bash
-coderclaw browser screenshot
+builderforce browser screenshot
 ```
 
 Navigate/click/type (ref-based UI automation):
 
 ```bash
-coderclaw browser navigate https://example.com
-coderclaw browser click <ref>
-coderclaw browser type <ref> "hello"
+builderforce browser navigate https://example.com
+builderforce browser click <ref>
+builderforce browser type <ref> "hello"
 ```
 
 ## Chrome extension relay (attach via toolbar button)
@@ -90,8 +90,8 @@ This mode lets the agent control an existing Chrome tab that you attach manually
 Install the unpacked extension to a stable path:
 
 ```bash
-coderclaw browser extension install
-coderclaw browser extension path
+builderforce browser extension install
+builderforce browser extension path
 ```
 
 Then Chrome → `chrome://extensions` → enable “Developer mode” → “Load unpacked” → select the printed folder.

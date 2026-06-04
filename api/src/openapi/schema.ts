@@ -1,35 +1,35 @@
 /**
- * Shared OpenAPI contract types between CoderClaw and Builderforce.ai (P4-4).
+ * Shared OpenAPI contract types between BuilderForce Agents and Builderforce.ai (P4-4).
  *
- * These types form the single source of truth for the CoderClaw ↔ Builderforce
- * HTTP interface.  CoderClaw imports the equivalent declarations from
+ * These types form the single source of truth for the BuilderForce Agents ↔ Builderforce
+ * HTTP interface.  BuilderForce Agents imports the equivalent declarations from
  * `src/infra/api-contract.ts` (which re-declares the same types locally so
- * the claw does not take a runtime dependency on this package).
+ * the agentHost does not take a runtime dependency on this package).
  *
  * NOTE: Plain TypeScript interfaces are used here (no Zod runtime dependency)
  * because Cloudflare Workers bundle size is a concern.  If Zod is already a
  * dependency, validators can be layered on top of these type definitions.
  */
 
-// ── CoderClaw → Builderforce ──────────────────────────────────────────────────
+// ── BuilderForce Agents → Builderforce ──────────────────────────────────────────────────
 
-/** POST /api/claws — register a CoderClaw instance with Builderforce. */
-export interface ClawRegistration {
+/** POST /api/agent-hosts — register a BuilderForce Agents instance with Builderforce. */
+export interface AgentHostRegistration {
   /** Proposed instance name (human-readable). */
   name: string;
-  /** Workspace directory on the claw's host machine. */
+  /** Workspace directory on the agentHost's host machine. */
   workspaceDirectory?: string;
   /** Gateway port the local HTTP server is listening on. Default: 18789. */
   gatewayPort?: number;
   /** Publicly reachable tunnel URL (if Cloudflare Tunnel / ngrok is active). */
   tunnelUrl?: string;
-  /** Capabilities this claw supports, e.g. ["chat","tasks","relay","remote-dispatch"]. */
+  /** Capabilities this agentHost supports, e.g. ["chat","tasks","relay","remote-dispatch"]. */
   capabilities?: string[];
   /** Machine profile for diagnostics. */
   machineProfile?: Record<string, unknown>;
 }
 
-/** PATCH /api/claws/:id/heartbeat — keep lastSeenAt fresh. */
+/** PATCH /api/agent-hosts/:id/heartbeat — keep lastSeenAt fresh. */
 export interface HeartbeatPayload {
   /** Current capability list (may change at runtime). */
   capabilities?: string[];
@@ -37,19 +37,19 @@ export interface HeartbeatPayload {
   machineProfile?: Record<string, unknown>;
 }
 
-/** POST /api/claws/:id/forward — dispatch a task to a remote claw. */
+/** POST /api/agent-hosts/:id/forward — dispatch a task to a remote agentHost. */
 export interface RemoteTaskPayload {
   type: 'remote.task';
   /** Natural-language task description. */
   task: string;
-  /** Originating claw's numeric ID (as string). */
-  fromClawId: string;
+  /** Originating agentHost's numeric ID (as string). */
+  fromAgentHostId: string;
   /** ISO-8601 timestamp. */
   timestamp: string;
   /** Correlation ID for result routing. */
   correlationId?: string;
-  /** Claw ID that should receive the result callback. */
-  callbackClawId?: string;
+  /** AgentHost ID that should receive the result callback. */
+  callbackAgentHostId?: string;
   /** Base URL of the originating Builderforce instance. */
   callbackBaseUrl?: string;
 }
@@ -72,13 +72,13 @@ export interface TelemetrySpan {
   error?: string;
   /** Trace ID for correlating spans across a distributed workflow. */
   traceId?: string;
-  /** Originating claw ID (as string). */
-  clawId?: string;
+  /** Originating agentHost ID (as string). */
+  agentHostId?: string;
   /** Retry attempt number (only on kind === "task.retry"). */
   attempt?: number;
 }
 
-/** PUT /api/claws/:id/directories/sync — sync .coderClaw/ files to Builderforce. */
+/** PUT /api/agent-hosts/:id/directories/sync — sync .builderforce/ files to Builderforce. */
 export interface DirectorySyncPayload {
   projectId?: number;
   absPath: string;
@@ -97,9 +97,9 @@ export interface DirectorySyncPayload {
   }>;
 }
 
-// ── Builderforce → CoderClaw (relay messages) ─────────────────────────────────
+// ── Builderforce → BuilderForce Agents (relay messages) ─────────────────────────────────
 
-/** Relay message: assign a task to this specific claw. */
+/** Relay message: assign a task to this specific agentHost. */
 export interface TaskAssignMessage {
   type: 'task.assign';
   task: {
@@ -115,7 +115,7 @@ export interface TaskAssignMessage {
   };
 }
 
-/** Relay message: broadcast a task to all online claws. */
+/** Relay message: broadcast a task to all online agentHosts. */
 export interface TaskBroadcastMessage {
   type: 'task.broadcast';
   task: {
@@ -141,7 +141,7 @@ export interface ApprovalDecisionMessage {
 
 // ── Shared ────────────────────────────────────────────────────────────────────
 
-/** An entry in the claw fleet listing. */
+/** An entry in the agentHost fleet listing. */
 export interface FleetEntry {
   id: number;
   name: string;
@@ -184,11 +184,11 @@ export interface WorkflowGraph {
 
 // ── Team memory (P4-5) ────────────────────────────────────────────────────────
 
-/** POST /api/teams/memory — store a memory entry from a claw. */
+/** POST /api/teams/memory — store a memory entry from a agentHost. */
 export interface TeamMemoryEntry {
   id?: string;
   tenantId?: number;
-  clawId: string;
+  agentHostId: string;
   runId: string;
   summary: string;
   tags?: string[];
@@ -198,9 +198,9 @@ export interface TeamMemoryEntry {
 
 // ── Context bundle (P4-2) ─────────────────────────────────────────────────────
 
-/** GET /api/claws/:id/context-bundle — response shape. */
+/** GET /api/agent-hosts/:id/context-bundle — response shape. */
 export interface ContextBundleResponse {
-  clawId: number;
+  agentHostId: number;
   files: Array<{
     path: string;
     content: string;
@@ -212,6 +212,6 @@ export interface ContextBundleResponse {
 // ── OpenAPI document helpers ──────────────────────────────────────────────────
 
 export const OPENAPI_VERSION = '3.1.0';
-export const OPENAPI_TITLE = 'Builderforce CoderClaw API';
+export const OPENAPI_TITLE = 'BuilderForce Agents API';
 export const OPENAPI_DESCRIPTION =
-  'Shared contract between CoderClaw instances and the Builderforce.ai platform.';
+  'Shared contract between BuilderForce Agents instances and the Builderforce.ai platform.';

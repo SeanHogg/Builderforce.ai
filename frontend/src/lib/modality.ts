@@ -1,7 +1,7 @@
 /**
  * Project modality — the "mode" the IDE is operating in for a single project.
  *
- * One project, many modalities. A project named "CoderClaw" is built across:
+ * One project, many modalities. A project named "BuilderForce Agents" is built across:
  *   - designer : the default app/agent builder (Preview + Code + WebContainer)
  *   - video    : client-side AI video generation (WebGPU/WebNN diffusion)
  *   - llm      : build + train a custom model whose output feeds the others

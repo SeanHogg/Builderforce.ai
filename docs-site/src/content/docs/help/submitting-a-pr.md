@@ -5,11 +5,11 @@ summary: "What we expect from contributors opening pull requests."
 
 # Submitting a PR
 
-Thanks for contributing to CoderClaw! Here's what we expect before you open a pull request.
+Thanks for contributing to BuilderForce Agents! Here's what we expect before you open a pull request.
 
 ## Before You Open a PR
 
-- **Test locally** — run your changes against a real CoderClaw instance
+- **Test locally** — run your changes against a real BuilderForce Agents instance
 - **Run the full gate:**
   ```sh
   pnpm build && pnpm check && pnpm test
@@ -51,7 +51,7 @@ If there's a relevant docs URL, include it. If there isn't one yet, leave it out
 ## PR Scope
 
 - **Bugs and small fixes** — open a PR directly
-- **New features / architecture** — start a [GitHub Discussion](https://github.com/seanhogg/coderclaw/discussions) or ask in Discord first
+- **New features / architecture** — start a [GitHub Discussion](https://github.com/seanhogg/builderforce/discussions) or ask in Discord first
 - **Questions** — Discord `#setup-help`
 
 ## Control UI Decorators
@@ -67,7 +67,7 @@ The root `tsconfig.json` is configured for legacy decorators (`experimentalDecor
 
 ## Review Checklist
 
-- [ ] Locally tested with a real CoderClaw instance
+- [ ] Locally tested with a real BuilderForce Agents instance
 - [ ] `pnpm build && pnpm check && pnpm test` passes
 - [ ] Changelog entry added (if user-facing)
 - [ ] PR description explains what and why
@@ -77,6 +77,6 @@ The root `tsconfig.json` is configured for legacy decorators (`experimentalDecor
 
 ## See Also
 
-- [Contributing Guide](https://github.com/seanhogg/coderclaw/blob/main/CONTRIBUTING.md)
-- [Project overview](/coderclaw-overview)
-- [Discord](https://discord.gg/coderclaw) — `#setup-help` for questions
+- [Contributing Guide](https://github.com/seanhogg/builderforce/blob/main/CONTRIBUTING.md)
+- [Project overview](/agents-overview)
+- [Discord](https://discord.gg/builderforce) — `#setup-help` for questions

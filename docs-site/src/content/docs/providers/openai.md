@@ -1,7 +1,7 @@
 ---
-summary: "Use OpenAI via API keys or Codex subscription in CoderClaw"
+summary: "Use OpenAI via API keys or Codex subscription in BuilderForce Agents"
 read_when:
-  - You want to use OpenAI models in CoderClaw
+  - You want to use OpenAI models in BuilderForce Agents
   - You want Codex subscription auth instead of API keys
 title: "OpenAI"
 ---
@@ -19,9 +19,9 @@ Get your API key from the OpenAI dashboard.
 ### CLI setup
 
 ```bash
-coderclaw onboard --auth-choice openai-api-key
+builderforce onboard --auth-choice openai-api-key
 # or non-interactive
-coderclaw onboard --openai-api-key "$OPENAI_API_KEY"
+builderforce onboard --openai-api-key "$OPENAI_API_KEY"
 ```
 
 ### Config snippet
@@ -42,10 +42,10 @@ Codex cloud requires ChatGPT sign-in, while the Codex CLI supports ChatGPT or AP
 
 ```bash
 # Run Codex OAuth in the wizard
-coderclaw onboard --auth-choice openai-codex
+builderforce onboard --auth-choice openai-codex
 
 # Or run OAuth directly
-coderclaw models auth login --provider openai-codex
+builderforce models auth login --provider openai-codex
 ```
 
 ### Config snippet (Codex subscription)

@@ -6,31 +6,31 @@ read_when:
 title: "Skills"
 ---
 
-# Skills (CoderClaw)
+# Skills (BuilderForce Agents)
 
-CoderClaw uses **[AgentSkills](https://agentskills.io)-compatible** skill folders to teach the agent how to use tools. Each skill is a directory containing a `SKILL.md` with YAML frontmatter and instructions. CoderClaw loads **bundled skills** plus optional local overrides, and filters them at load time based on environment, config, and binary presence.
+BuilderForce Agents uses **[AgentSkills](https://agentskills.io)-compatible** skill folders to teach the agent how to use tools. Each skill is a directory containing a `SKILL.md` with YAML frontmatter and instructions. BuilderForce Agents loads **bundled skills** plus optional local overrides, and filters them at load time based on environment, config, and binary presence.
 
 ## Locations and precedence
 
 Skills are loaded from **three** places:
 
-1. **Bundled skills**: shipped with the install (npm package or CoderClaw.app)
-2. **Managed/local skills**: `~/.coderclaw/skills`
+1. **Bundled skills**: shipped with the install (npm package or BuilderForce Agents.app)
+2. **Managed/local skills**: `~/.builderforce/skills`
 3. **Workspace skills**: `<workspace>/skills`
 
 If a skill name conflicts, precedence is:
 
-`<workspace>/skills` (highest) → `~/.coderclaw/skills` → bundled skills (lowest)
+`<workspace>/skills` (highest) → `~/.builderforce/skills` → bundled skills (lowest)
 
 Additionally, you can configure extra skill folders (lowest precedence) via
-`skills.load.extraDirs` in `~/.coderclaw/coderclaw.json`.
+`skills.load.extraDirs` in `~/.builderforce/builderforce.json`.
 
 ## Per-agent vs shared skills
 
 In **multi-agent** setups, each agent has its own workspace. That means:
 
 - **Per-agent skills** live in `<workspace>/skills` for that agent only.
-- **Shared skills** live in `~/.coderclaw/skills` (managed/local) and are visible
+- **Shared skills** live in `~/.builderforce/skills` (managed/local) and are visible
   to **all agents** on the same machine.
 - **Shared folders** can also be added via `skills.load.extraDirs` (lowest
   precedence) if you want a common skills pack used by multiple agents.
@@ -41,29 +41,29 @@ applies: workspace wins, then managed/local, then bundled.
 ## Plugins + skills
 
 Plugins can ship their own skills by listing `skills` directories in
-`coderclaw.plugin.json` (paths relative to the plugin root). Plugin skills load
+`builderforce.plugin.json` (paths relative to the plugin root). Plugin skills load
 when the plugin is enabled and participate in the normal skill precedence rules.
-You can gate them via `metadata.coderclaw.requires.config` on the plugin’s config
+You can gate them via `metadata.builderforce.requires.config` on the plugin’s config
 entry. See [Plugins](/tools/plugin) for discovery/config and [Tools](/tools) for the
 tool surface those skills teach.
 
-## ClawHub (install + sync)
+## AgentHub (install + sync)
 
-ClawHub is the public skills registry for CoderClaw. Browse at
-[https://clawhub.com](https://clawhub.com). Use it to discover, install, update, and back up skills.
-Full guide: [ClawHub](/tools/clawhub).
+AgentHub is the public skills registry for BuilderForce Agents. Browse at
+[https://agenthub.com](https://agenthub.com). Use it to discover, install, update, and back up skills.
+Full guide: [AgentHub](/tools/agenthub).
 
 Common flows:
 
 - Install a skill into your workspace:
-  - `clawhub install <skill-slug>`
+  - `agenthub install <skill-slug>`
 - Update all installed skills:
-  - `clawhub update --all`
+  - `agenthub update --all`
 - Sync (scan + publish updates):
-  - `clawhub sync --all`
+  - `agenthub sync --all`
 
-By default, `clawhub` installs into `./skills` under your current working
-directory (or falls back to the configured CoderClaw workspace). CoderClaw picks
+By default, `agenthub` installs into `./skills` under your current working
+directory (or falls back to the configured BuilderForce Agents workspace). BuilderForce Agents picks
 that up as `<workspace>/skills` on the next session.
 
 ## Security notes
@@ -92,7 +92,7 @@ Notes:
 - `metadata` should be a **single-line JSON object**.
 - Use `{baseDir}` in instructions to reference the skill folder path.
 - Optional frontmatter keys:
-  - `homepage` — URL surfaced as “Website” in the macOS Skills UI (also supported via `metadata.coderclaw.homepage`).
+  - `homepage` — URL surfaced as “Website” in the macOS Skills UI (also supported via `metadata.builderforce.homepage`).
   - `user-invocable` — `true|false` (default: `true`). When `true`, the skill is exposed as a user slash command.
   - `disable-model-invocation` — `true|false` (default: `false`). When `true`, the skill is excluded from the model prompt (still available via user invocation).
   - `command-dispatch` — `tool` (optional). When set to `tool`, the slash command bypasses the model and dispatches directly to a tool.
@@ -104,7 +104,7 @@ Notes:
 
 ## Gating (load-time filters)
 
-CoderClaw **filters skills at load time** using `metadata` (single-line JSON):
+BuilderForce Agents **filters skills at load time** using `metadata` (single-line JSON):
 
 ```markdown
 ---
@@ -112,7 +112,7 @@ name: nano-banana-pro
 description: Generate or edit images via Gemini 3 Pro Image
 metadata:
   {
-    "coderclaw":
+    "builderforce":
       {
         "requires": { "bins": ["uv"], "env": ["GEMINI_API_KEY"], "config": ["browser.enabled"] },
         "primaryEnv": "GEMINI_API_KEY",
@@ -121,7 +121,7 @@ metadata:
 ---
 ```
 
-Fields under `metadata.coderclaw`:
+Fields under `metadata.builderforce`:
 
 - `always: true` — always include the skill (skip other gates).
 - `emoji` — optional emoji used by the macOS Skills UI.
@@ -130,7 +130,7 @@ Fields under `metadata.coderclaw`:
 - `requires.bins` — list; each must exist on `PATH`.
 - `requires.anyBins` — list; at least one must exist on `PATH`.
 - `requires.env` — list; env var must exist **or** be provided in config.
-- `requires.config` — list of `coderclaw.json` paths that must be truthy.
+- `requires.config` — list of `builderforce.json` paths that must be truthy.
 - `primaryEnv` — env var name associated with `skills.entries.<name>.apiKey`.
 - `install` — optional array of installer specs used by the macOS Skills UI (brew/node/go/uv/download).
 
@@ -152,7 +152,7 @@ name: gemini
 description: Use Gemini CLI for coding assistance and Google search lookups.
 metadata:
   {
-    "coderclaw":
+    "builderforce":
       {
         "emoji": "♊️",
         "requires": { "bins": ["gemini"] },
@@ -174,18 +174,18 @@ metadata:
 Notes:
 
 - If multiple installers are listed, the gateway picks a **single** preferred option (brew when available, otherwise node).
-- If all installers are `download`, CoderClaw lists each entry so you can see the available artifacts.
+- If all installers are `download`, BuilderForce Agents lists each entry so you can see the available artifacts.
 - Installer specs can include `os: ["darwin"|"linux"|"win32"]` to filter options by platform.
-- Node installs honor `skills.install.nodeManager` in `coderclaw.json` (default: npm; options: npm/pnpm/yarn/bun).
+- Node installs honor `skills.install.nodeManager` in `builderforce.json` (default: npm; options: npm/pnpm/yarn/bun).
   This only affects **skill installs**; the Gateway runtime should still be Node
   (Bun is not recommended for WhatsApp/Telegram).
 - Go installs: if `go` is missing and `brew` is available, the gateway installs Go via Homebrew first and sets `GOBIN` to Homebrew’s `bin` when possible.
-- Download installs: `url` (required), `archive` (`tar.gz` | `tar.bz2` | `zip`), `extract` (default: auto when archive detected), `stripComponents`, `targetDir` (default: `~/.coderclaw/tools/<skillKey>`).
+- Download installs: `url` (required), `archive` (`tar.gz` | `tar.bz2` | `zip`), `extract` (default: auto when archive detected), `stripComponents`, `targetDir` (default: `~/.builderforce/tools/<skillKey>`).
 
-If no `metadata.coderclaw` is present, the skill is always eligible (unless
+If no `metadata.builderforce` is present, the skill is always eligible (unless
 disabled in config or blocked by `skills.allowBundled` for bundled skills).
 
-## Config overrides (`~/.coderclaw/coderclaw.json`)
+## Config overrides (`~/.builderforce/builderforce.json`)
 
 Bundled/managed skills can be toggled and supplied with env values:
 
@@ -214,20 +214,20 @@ Bundled/managed skills can be toggled and supplied with env values:
 Note: if the skill name contains hyphens, quote the key (JSON5 allows quoted keys).
 
 Config keys match the **skill name** by default. If a skill defines
-`metadata.coderclaw.skillKey`, use that key under `skills.entries`.
+`metadata.builderforce.skillKey`, use that key under `skills.entries`.
 
 Rules:
 
 - `enabled: false` disables the skill even if it’s bundled/installed.
 - `env`: injected **only if** the variable isn’t already set in the process.
-- `apiKey`: convenience for skills that declare `metadata.coderclaw.primaryEnv`.
+- `apiKey`: convenience for skills that declare `metadata.builderforce.primaryEnv`.
 - `config`: optional bag for custom per-skill fields; custom keys must live here.
 - `allowBundled`: optional allowlist for **bundled** skills only. If set, only
   bundled skills in the list are eligible (managed/workspace skills unaffected).
 
 ## Environment injection (per agent run)
 
-When an agent run starts, CoderClaw:
+When an agent run starts, BuilderForce Agents:
 
 1. Reads skill metadata.
 2. Applies any `skills.entries.<key>.env` or `skills.entries.<key>.apiKey` to
@@ -239,19 +239,19 @@ This is **scoped to the agent run**, not a global shell environment.
 
 ## Session snapshot (performance)
 
-CoderClaw snapshots the eligible skills **when a session starts** and reuses that list for subsequent turns in the same session. Changes to skills or config take effect on the next new session.
+BuilderForce Agents snapshots the eligible skills **when a session starts** and reuses that list for subsequent turns in the same session. Changes to skills or config take effect on the next new session.
 
 Skills can also refresh mid-session when the skills watcher is enabled or when a new eligible remote node appears (see below). Think of this as a **hot reload**: the refreshed list is picked up on the next agent turn.
 
 ## Remote macOS nodes (Linux gateway)
 
-If the Gateway is running on Linux but a **macOS node** is connected **with `system.run` allowed** (Exec approvals security not set to `deny`), CoderClaw can treat macOS-only skills as eligible when the required binaries are present on that node. The agent should execute those skills via the `nodes` tool (typically `nodes.run`).
+If the Gateway is running on Linux but a **macOS node** is connected **with `system.run` allowed** (Exec approvals security not set to `deny`), BuilderForce Agents can treat macOS-only skills as eligible when the required binaries are present on that node. The agent should execute those skills via the `nodes` tool (typically `nodes.run`).
 
 This relies on the node reporting its command support and on a bin probe via `system.run`. If the macOS node goes offline later, the skills remain visible; invocations may fail until the node reconnects.
 
 ## Skills watcher (auto-refresh)
 
-By default, CoderClaw watches skill folders and bumps the skills snapshot when `SKILL.md` files change. Configure this under `skills.load`:
+By default, BuilderForce Agents watches skill folders and bumps the skills snapshot when `SKILL.md` files change. Configure this under `skills.load`:
 
 ```json5
 {
@@ -266,7 +266,7 @@ By default, CoderClaw watches skill folders and bumps the skills snapshot when `
 
 ## Token impact (skills list)
 
-When skills are eligible, CoderClaw injects a compact XML list of available skills into the system prompt (via `formatSkillsForPrompt` in `pi-coding-agent`). The cost is deterministic:
+When skills are eligible, BuilderForce Agents injects a compact XML list of available skills into the system prompt (via `formatSkillsForPrompt` in `pi-coding-agent`). The cost is deterministic:
 
 - **Base overhead (only when ≥1 skill):** 195 characters.
 - **Per skill:** 97 characters + the length of the XML-escaped `<name>`, `<description>`, and `<location>` values.
@@ -284,8 +284,8 @@ Notes:
 
 ## Managed skills lifecycle
 
-CoderClaw ships a baseline set of skills as **bundled skills** as part of the
-install (npm package or CoderClaw.app). `~/.coderclaw/skills` exists for local
+BuilderForce Agents ships a baseline set of skills as **bundled skills** as part of the
+install (npm package or BuilderForce Agents.app). `~/.builderforce/skills` exists for local
 overrides (for example, pinning/patching a skill without changing the bundled
 copy). Workspace skills are user-owned and override both on name conflicts.
 
@@ -295,6 +295,6 @@ See [Skills config](/tools/skills-config) for the full configuration schema.
 
 ## Looking for more skills?
 
-Browse [https://clawhub.com](https://clawhub.com).
+Browse [https://agenthub.com](https://agenthub.com).
 
 ---

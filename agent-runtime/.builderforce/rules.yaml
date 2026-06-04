@@ -1,0 +1,20 @@
+version: 1
+codeStyle:
+  indentation: spaces
+  indentSize: 2
+  lineLength: 100
+  namingConventions: {}
+testing:
+  required: true
+  coverage: 80
+  frameworks: []
+documentation:
+  required: true
+  format: markdown
+  location: docs/
+git:
+  branchNaming: feature/*, fix/*, docs/*
+  commitFormat: conventional
+  requireReview: true
+constraints: []
+customRules: []

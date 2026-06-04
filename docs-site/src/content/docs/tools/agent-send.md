@@ -1,13 +1,13 @@
 ---
-summary: "Direct `coderclaw agent` CLI runs (with optional delivery)"
+summary: "Direct `builderforce agent` CLI runs (with optional delivery)"
 read_when:
   - Adding or modifying the agent CLI entrypoint
 title: "Agent Send"
 ---
 
-# `coderclaw agent` (direct agent runs)
+# `builderforce agent` (direct agent runs)
 
-`coderclaw agent` runs a single agent turn without needing an inbound chat message.
+`builderforce agent` runs a single agent turn without needing an inbound chat message.
 By default it goes **through the Gateway**; add `--local` to force the embedded
 runtime on the current machine.
 
@@ -23,7 +23,7 @@ runtime on the current machine.
 - Output:
   - default: prints reply text (plus `MEDIA:<url>` lines)
   - `--json`: prints structured payload + metadata
-- Optional delivery back to a channel with `--deliver` + `--channel` (target formats match `coderclaw message --target`).
+- Optional delivery back to a channel with `--deliver` + `--channel` (target formats match `builderforce message --target`).
 - Use `--reply-channel`/`--reply-to`/`--reply-account` to override delivery without changing the session.
 
 If the Gateway is unreachable, the CLI **falls back** to the embedded local run.
@@ -31,12 +31,12 @@ If the Gateway is unreachable, the CLI **falls back** to the embedded local run.
 ## Examples
 
 ```bash
-coderclaw agent --to +15555550123 --message "status update"
-coderclaw agent --agent ops --message "Summarize logs"
-coderclaw agent --session-id 1234 --message "Summarize inbox" --thinking medium
-coderclaw agent --to +15555550123 --message "Trace logs" --verbose on --json
-coderclaw agent --to +15555550123 --message "Summon reply" --deliver
-coderclaw agent --agent ops --message "Generate report" --deliver --reply-channel slack --reply-to "#reports"
+builderforce agent --to +15555550123 --message "status update"
+builderforce agent --agent ops --message "Summarize logs"
+builderforce agent --session-id 1234 --message "Summarize inbox" --thinking medium
+builderforce agent --to +15555550123 --message "Trace logs" --verbose on --json
+builderforce agent --to +15555550123 --message "Summon reply" --deliver
+builderforce agent --agent ops --message "Generate report" --deliver --reply-channel slack --reply-to "#reports"
 ```
 
 ## Flags

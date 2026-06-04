@@ -7,9 +7,9 @@ import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
-import { coderclawInstances, executions, projectInsightEvents, projects, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
+import { agentHosts, executions, projectInsightEvents, projects, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
 import { approvals } from '../../infrastructure/database/schema';
-import type { ClawRelayDO } from '../../infrastructure/relay/ClawRelayDO';
+import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 
 /**
  * Runtime routes – task execution lifecycle.
@@ -24,7 +24,7 @@ import type { ClawRelayDO } from '../../infrastructure/relay/ClawRelayDO';
  */
 type RuntimeHonoEnv = HonoEnv & {
   Bindings: HonoEnv['Bindings'] & {
-    CLAW_RELAY: DurableObjectNamespace<ClawRelayDO>;
+    AGENT_HOST_RELAY: DurableObjectNamespace<AgentHostRelayDO>;
   };
 };
 
@@ -44,7 +44,7 @@ type ExecutionTaskRow = {
   id: number;
   title: string;
   description: string | null;
-  assignedClawId: number | null;
+  assignedAgentHostId: number | null;
   priority: 'low' | 'medium' | 'high' | 'urgent';
 };
 
@@ -135,7 +135,7 @@ async function evaluateExecutionApprovalGate(
   tenantId: number,
   requestedBy: string,
   task: ExecutionTaskRow,
-  requestedClawId: number | null,
+  requestedAgentHostId: number | null,
 ): Promise<ExecutionApprovalGateResult> {
   if (!requiresTaskExecutionApproval(task)) {
     return { allowed: true };
@@ -179,7 +179,7 @@ async function evaluateExecutionApprovalGate(
   await db.insert(approvals).values({
     id: approvalId,
     tenantId,
-    clawId: task.assignedClawId ?? requestedClawId,
+    agentHostId: task.assignedAgentHostId ?? requestedAgentHostId,
     requestedBy,
     actionType: 'task.execution',
     description: `Approve execution of task #${task.id}: ${task.title}`,
@@ -259,9 +259,9 @@ function extractCodeChangesFromResult(result?: string): number | null {
   return null;
 }
 
-async function dispatchToClaw(env: RuntimeHonoEnv['Bindings'], clawId: number, message: DispatchMessage): Promise<boolean> {
-  if (!env.CLAW_RELAY) return false;
-  const stub = env.CLAW_RELAY.get(env.CLAW_RELAY.idFromName(String(clawId)));
+async function dispatchToAgentHost(env: RuntimeHonoEnv['Bindings'], agentHostId: number, message: DispatchMessage): Promise<boolean> {
+  if (!env.AGENT_HOST_RELAY) return false;
+  const stub = env.AGENT_HOST_RELAY.get(env.AGENT_HOST_RELAY.idFromName(String(agentHostId)));
   const response = await stub.fetch('https://relay.internal/dispatch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -270,27 +270,27 @@ async function dispatchToClaw(env: RuntimeHonoEnv['Bindings'], clawId: number, m
   return response.ok;
 }
 
-async function getDispatchTargets(db: Db, tenantId: number, assignedClawId?: number | null): Promise<number[]> {
-  if (assignedClawId != null) {
+async function getDispatchTargets(db: Db, tenantId: number, assignedAgentHostId?: number | null): Promise<number[]> {
+  if (assignedAgentHostId != null) {
     const [row] = await db
-      .select({ id: coderclawInstances.id })
-      .from(coderclawInstances)
+      .select({ id: agentHosts.id })
+      .from(agentHosts)
       .where(
         and(
-          eq(coderclawInstances.id, assignedClawId),
-          eq(coderclawInstances.tenantId, tenantId),
+          eq(agentHosts.id, assignedAgentHostId),
+          eq(agentHosts.tenantId, tenantId),
         ),
       );
     return row ? [row.id] : [];
   }
 
   const rows = await db
-    .select({ id: coderclawInstances.id })
-    .from(coderclawInstances)
+    .select({ id: agentHosts.id })
+    .from(agentHosts)
     .where(
       and(
-        eq(coderclawInstances.tenantId, tenantId),
-        isNotNull(coderclawInstances.connectedAt),
+        eq(agentHosts.tenantId, tenantId),
+        isNotNull(agentHosts.connectedAt),
       ),
     );
   return rows.map((row) => row.id);
@@ -300,8 +300,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   const router = new Hono<RuntimeHonoEnv>();
   router.use('*', authMiddleware);
 
-  // Legacy compatibility (coderClawLink) ----------------------------------------------------
-  // The original ClawLink transport adapter used /api/runtime/sessions and
+  // Legacy compatibility (BuilderForce Link) ----------------------------------------------------
+  // The original AgentHostLink transport adapter used /api/runtime/sessions and
   // /api/runtime/tasks/submit. These endpoints are kept for CLI/agent compatibility.
 
   router.post('/sessions', async (c) => {
@@ -314,19 +314,19 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const body = await c.req.json<{
       taskId:   number;
       agentId?: number;
-      clawId?:  number | null;
+      agentHostId?:  number | null;
       sessionId?: string;
       payload?: string;
     }>();
 
-    const clawIdFromHeader = parseOptionalNumber(c.req.header('X-Claw-Id'));
+    const agentHostIdFromHeader = parseOptionalNumber(c.req.header('X-AgentHost-Id'));
 
     const [taskRow] = await db
       .select({
         id: tasks.id,
         title: tasks.title,
         description: tasks.description,
-        assignedClawId: tasks.assignedClawId,
+        assignedAgentHostId: tasks.assignedAgentHostId,
         priority: tasks.priority,
       })
       .from(tasks)
@@ -347,7 +347,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       c.get('tenantId'),
       c.get('userId'),
       taskRow,
-      clawIdFromHeader ?? body.clawId ?? null,
+      agentHostIdFromHeader ?? body.agentHostId ?? null,
     );
     if (!gate.allowed) {
       return c.json(
@@ -364,7 +364,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const execution = await runtimeService.submit({
       taskId:      body.taskId,
       agentId:     body.agentId,
-      clawId:      clawIdFromHeader ?? body.clawId,
+      agentHostId:      agentHostIdFromHeader ?? body.agentHostId,
       tenantId:    c.get('tenantId'),
       submittedBy: c.get('userId'),
       sessionId:   body.sessionId,
@@ -372,13 +372,13 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     });
 
     if (taskRow) {
-      const targets = await getDispatchTargets(db, c.get('tenantId'), taskRow.assignedClawId);
-      const dispatchType: DispatchMessage['type'] = taskRow.assignedClawId != null ? 'task.assign' : 'task.broadcast';
+      const targets = await getDispatchTargets(db, c.get('tenantId'), taskRow.assignedAgentHostId);
+      const dispatchType: DispatchMessage['type'] = taskRow.assignedAgentHostId != null ? 'task.assign' : 'task.broadcast';
 
       const artifacts = await resolveArtifacts(db, {
         tenantId:  c.get('tenantId'),
         taskId:    taskRow.id,
-        clawId:    taskRow.assignedClawId ?? undefined,
+        agentHostId:    taskRow.assignedAgentHostId ?? undefined,
       });
 
       const message: DispatchMessage = {
@@ -393,7 +393,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         artifacts,
       };
 
-      await Promise.all(targets.map((targetId) => dispatchToClaw(c.env, targetId, message).catch(() => false)));
+      await Promise.all(targets.map((targetId) => dispatchToAgentHost(c.env, targetId, message).catch(() => false)));
     }
 
     notifyExecutionSubscribers(execution.id, {
@@ -424,18 +424,18 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const body = await c.req.json<{
       taskId:   number;
       agentId?: number;
-      clawId?:  number | null;
+      agentHostId?:  number | null;
       sessionId?: string;
       payload?: string;
     }>();
-    const clawIdFromHeader = parseOptionalNumber(c.req.header('X-Claw-Id'));
+    const agentHostIdFromHeader = parseOptionalNumber(c.req.header('X-AgentHost-Id'));
 
     const [taskRow] = await db
       .select({
         id: tasks.id,
         title: tasks.title,
         description: tasks.description,
-        assignedClawId: tasks.assignedClawId,
+        assignedAgentHostId: tasks.assignedAgentHostId,
         priority: tasks.priority,
       })
       .from(tasks)
@@ -456,7 +456,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       c.get('tenantId'),
       c.get('userId'),
       taskRow,
-      clawIdFromHeader ?? body.clawId ?? null,
+      agentHostIdFromHeader ?? body.agentHostId ?? null,
     );
     if (!gate.allowed) {
       return c.json(
@@ -473,7 +473,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const execution = await runtimeService.submit({
       taskId:      body.taskId,
       agentId:     body.agentId,
-      clawId:      clawIdFromHeader ?? body.clawId,
+      agentHostId:      agentHostIdFromHeader ?? body.agentHostId,
       tenantId:    c.get('tenantId'),
       submittedBy: c.get('userId'),
       sessionId:   body.sessionId,
@@ -481,14 +481,14 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     });
 
     if (taskRow) {
-      const targets = await getDispatchTargets(db, c.get('tenantId'), taskRow.assignedClawId);
-      const dispatchType: DispatchMessage['type'] = taskRow.assignedClawId != null ? 'task.assign' : 'task.broadcast';
+      const targets = await getDispatchTargets(db, c.get('tenantId'), taskRow.assignedAgentHostId);
+      const dispatchType: DispatchMessage['type'] = taskRow.assignedAgentHostId != null ? 'task.assign' : 'task.broadcast';
 
       // Resolve assigned artifacts across all scope levels for this execution
       const artifacts = await resolveArtifacts(db, {
         tenantId:  c.get('tenantId'),
         taskId:    taskRow.id,
-        clawId:    taskRow.assignedClawId ?? undefined,
+        agentHostId:    taskRow.assignedAgentHostId ?? undefined,
       });
 
       const message: DispatchMessage = {
@@ -503,7 +503,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         artifacts,
       };
 
-      await Promise.all(targets.map((targetId) => dispatchToClaw(c.env, targetId, message).catch(() => false)));
+      await Promise.all(targets.map((targetId) => dispatchToAgentHost(c.env, targetId, message).catch(() => false)));
     }
 
     notifyExecutionSubscribers(execution.id, {
@@ -549,8 +549,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     let durationSamples = 0;
     let durationTotalMs = 0;
 
-    const clawStats = new Map<number, {
-      clawId: number;
+    const agentHostStats = new Map<number, {
+      agentHostId: number;
       totalExecutions: number;
       completed: number;
       failed: number;
@@ -587,9 +587,9 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         durationTotalMs += new Date(execution.completedAt).getTime() - new Date(execution.startedAt).getTime();
       }
 
-      if (execution.clawId != null) {
-        const current = clawStats.get(execution.clawId) ?? {
-          clawId: execution.clawId,
+      if (execution.agentHostId != null) {
+        const current = agentHostStats.get(execution.agentHostId) ?? {
+          agentHostId: execution.agentHostId,
           totalExecutions: 0,
           completed: 0,
           failed: 0,
@@ -611,7 +611,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
           current.lastExecutionAt = createdAtIso;
         }
 
-        clawStats.set(execution.clawId, current);
+        agentHostStats.set(execution.agentHostId, current);
       }
     }
 
@@ -619,20 +619,20 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     totals.successRate = terminalCount > 0 ? totals.completed / terminalCount : 0;
     totals.avgDurationMs = durationSamples > 0 ? Math.round(durationTotalMs / durationSamples) : 0;
 
-    const clawIds = Array.from(clawStats.keys());
-    const clawNames = new Map<number, string>();
-    if (clawIds.length > 0) {
-      const claws = await db
-        .select({ id: coderclawInstances.id, name: coderclawInstances.name })
-        .from(coderclawInstances)
-        .where(inArray(coderclawInstances.id, clawIds));
-      claws.forEach((claw) => clawNames.set(claw.id, claw.name));
+    const agentHostIds = Array.from(agentHostStats.keys());
+    const agentHostNames = new Map<number, string>();
+    if (agentHostIds.length > 0) {
+      const hostRows = await db
+        .select({ id: agentHosts.id, name: agentHosts.name })
+        .from(agentHosts)
+        .where(inArray(agentHosts.id, agentHostIds));
+      hostRows.forEach((agentHost) => agentHostNames.set(agentHost.id, agentHost.name));
     }
 
-    const byClaw = Array.from(clawStats.values())
+    const byAgentHost = Array.from(agentHostStats.values())
       .map((entry) => ({
         ...entry,
-        name: clawNames.get(entry.clawId) ?? `Claw ${entry.clawId}`,
+        name: agentHostNames.get(entry.agentHostId) ?? `AgentHost ${entry.agentHostId}`,
         successRate: entry.completed + entry.failed + entry.cancelled > 0
           ? entry.completed / (entry.completed + entry.failed + entry.cancelled)
           : 0,
@@ -643,7 +643,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       tenantId,
       window: { sampledExecutions: executionsPlain.length, limit },
       totals,
-      byClaw,
+      byAgentHost,
     });
   });
 
@@ -681,8 +681,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       return c.json({ error: 'Execution not found' }, 404);
     }
 
-    if (plain.clawId == null || !plain.sessionId) {
-      return c.json({ id, status: 'ignored', reason: 'execution_missing_claw_or_session' });
+    if (plain.agentHostId == null || !plain.sessionId) {
+      return c.json({ id, status: 'ignored', reason: 'execution_missing_agent_host_or_session' });
     }
 
     const num = (v: unknown): number => {
@@ -695,7 +695,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
     await db.insert(usageSnapshots).values({
       tenantId: plain.tenantId,
-      clawId: plain.clawId,
+      agentHostId: plain.agentHostId,
       sessionKey: plain.sessionId,
       inputTokens: num(body.inputTokens),
       outputTokens: num(body.outputTokens),
@@ -718,7 +718,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       return c.json({ error: 'Execution not found' }, 404);
     }
 
-    if (plain.clawId == null || !plain.sessionId) {
+    if (plain.agentHostId == null || !plain.sessionId) {
       return c.json({
         execution: plain,
         trace: {
@@ -743,7 +743,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       .where(
         and(
           eq(usageSnapshots.tenantId, plain.tenantId),
-          eq(usageSnapshots.clawId, plain.clawId),
+          eq(usageSnapshots.agentHostId, plain.agentHostId),
           eq(usageSnapshots.sessionKey, plain.sessionId),
         ),
       )
@@ -766,7 +766,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       .where(
         and(
           eq(toolAuditEvents.tenantId, plain.tenantId),
-          eq(toolAuditEvents.clawId, plain.clawId),
+          eq(toolAuditEvents.agentHostId, plain.agentHostId),
           eq(toolAuditEvents.sessionKey, plain.sessionId),
         ),
       )
@@ -905,7 +905,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     return c.json(executions.map(e => e.toPlain()));
   });
 
-  // Broadcast an existing task to all currently connected claws in the tenant.
+  // Broadcast an existing task to all currently connected agentHosts in the tenant.
   router.post('/tasks/:taskId/broadcast', async (c) => {
     const taskId = Number(c.req.param('taskId'));
     const body = await c.req.json<{ payload?: string }>().catch((): { payload?: string } => ({}));
@@ -949,8 +949,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     };
 
     const results = await Promise.all(targets.map(async (targetId) => ({
-      clawId: targetId,
-      delivered: await dispatchToClaw(c.env, targetId, message).catch(() => false),
+      agentHostId: targetId,
+      delivered: await dispatchToAgentHost(c.env, targetId, message).catch(() => false),
     })));
 
     return c.json({

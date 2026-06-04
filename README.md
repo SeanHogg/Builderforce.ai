@@ -1166,6 +1166,9 @@ Roadmap entries that remain after this pass. Items closed in this pass have been
 - **Board agent-status chips are a load-time snapshot, not live.** The running-agent chip on each task card/row ([TaskMgmtContent.tsx](frontend/src/components/TaskMgmtContent.tsx) `latestExecByTask`, fed by `runtimeApi.listRecent()`) is fetched once in `load()` and only refreshes on a full board reload (status change, task CRUD). A task whose agent transitions running→completed while the board sits open keeps showing the stale status until the next reload. The drawer's Agent tab is live per-execution, but the board overview is not. Fixing (poll `runtimeApi.listRecent()` on an interval while any task has an active execution, or subscribe to the existing `/api/runtime/executions/:id/stream` SSE for visible active tasks) unblocks: accurate at-a-glance agent status without manually reloading.
 - **`telemetry_spans` had no `CREATE TABLE` migration — fixed in 0073; `agents` + `approval_rules` remain push-only.** Same drift class as 0068a (contributor cluster) and the `0073`-style note above: [telemetrySpans](api/src/infrastructure/database/schema.ts) was declared in schema.ts and queried unguarded by [GET /api/analytics/activity-calendar](api/src/presentation/routes/analyticsRoutes.ts), but only ever existed via the `drizzle-kit push` baseline — no tracked migration created it, and 0056's `to_regclass()` guard silently no-op'd its `segment_id` block against the absent table. Production (migration-only provisioning) 500'd with `relation "telemetry_spans" does not exist`. Closed this pass by [0073_telemetry_spans_table.sql](api/migrations/0073_telemetry_spans_table.sql) (idempotent `CREATE TABLE IF NOT EXISTS` matching schema.ts, replaying 0056's `segment_id` column + default-fill trigger + `NOT NULL` + index since 0056 runs first and skipped it) and dropping the `telemetry_spans.*` rows from [.schema-drift-allowlist.txt](api/scripts/.schema-drift-allowlist.txt). **Still latent:** `agents` and `approval_rules` are the last two schema.ts tables still grandfathered as push-only (no `CREATE TABLE` migration) — they have not 500'd yet (likely present in the original baseline) but carry the identical prod-crash risk the moment a migration-only environment queries them. Fixing (fold both into a `CREATE TABLE IF NOT EXISTS` migration alongside the base-table cluster from the entry above, drop their allowlist rows) plus gating [check-schema-drift.mjs](api/scripts/check-schema-drift.mjs) in CI (still open per the 0068a entry) unblocks: zero remaining untracked-table drift and PR-time detection instead of prod-time crashes.
 - **Legal documents render with chat-message typography.** The new shared [LegalDocPreview](frontend/src/components/admin/LegalDocPreview.tsx) control (used by the admin legal tab, the editor drawer preview, and the public footer modal) renders Markdown through [ChatMessageContent](frontend/src/components/ChatMessageContent.tsx) — a renderer tuned for chat bubbles (0.82rem body text, uppercase code-fence chrome with a "Copy" button). The three previews are now consistent with each other and with the live footer modal, but the typography is sub-optimal for long-form legal prose. Fixing (give `LegalDocPreview` its own document-scale Markdown component map — larger body/heading sizes, prose line-length — instead of delegating to the chat renderer) unblocks: legal docs that read like documents rather than chat transcripts, without re-diverging the three call sites.
+- **Marketplace / prompt detail views are client-side overlays with no per-entity route — individual agents, skills, personas, and prompts are unindexable and have no rich link previews.** Both [marketplace/page.tsx](frontend/src/app/marketplace/page.tsx) and [prompts/page.tsx](frontend/src/app/prompts/page.tsx) open detail in an in-page modal/drawer, so there is no `/marketplace/{slug}` or `/prompts/{slug}` URL. The listing pages now have per-page metadata + a dynamic OG image (added this pass via [seo.ts](frontend/src/lib/seo.ts) + [og.tsx](frontend/src/lib/og.tsx)), but an individual published agent/skill/prompt has no crawlable page, no per-entity `<title>`/description/JSON-LD, and no per-entity OG card. Fixing (add server `…/[slug]/page.tsx` routes with `generateMetadata` driven by a shared `buildEntitySeo(kind, record)` adapter + a per-entity `opengraph-image.tsx`, and emit them into [sitemap.ts](frontend/src/app/sitemap.ts) from the live API — cached read-through, verified/public-only, thin-entity gated) unblocks: indexable long-tail marketplace/prompt pages and correct Slack/LinkedIn/X previews when a specific agent or prompt is shared. This is the SPA-style "UGC detail" surface the marketing-presence review flagged.
+- **`/skills/[slug]` and `/personas/[slug]` carry edge-runtime + OG-image scaffolding yet are crawler-blocked and absent from the sitemap.** Both routes ([skills/[slug]/page.tsx](frontend/src/app/skills/%5Bslug%5D/page.tsx), [personas/[slug]/page.tsx](frontend/src/app/personas/%5Bslug%5D/page.tsx)) run on the edge and look intended for public sharing, but `/skills` and `/personas` are `Disallow`-ed in [robots.txt](frontend/public/robots.txt) (they double as authenticated app surfaces) and neither appears in [sitemap.ts](frontend/src/app/sitemap.ts). So if these detail pages are meant to be the public, shareable face of a published skill/persona, they are currently invisible to search + AI crawlers; if they are purely in-app, the per-route edge runtime is dead ceremony. Fixing (decide public-vs-app: either split a public `/workforce/skills/{slug}` surface with metadata + sitemap + a robots `Allow`, or drop the edge runtime and treat them as app-only) unblocks: a coherent public/app boundary and, if public, skill/persona SEO. Related to the marketplace-detail entry above — same "Workforce content has no public, indexable home" root cause.
+- **No programmatic SEO surface for integrations or competitor comparisons.** The new [/product](frontend/src/app/product/page.tsx) page (added this pass) is the capability *hub*, and [agents/integrations](frontend/src/app/agents/integrations/page.tsx) lists integrations, but there are no per-integration (`/integrations/{tool}`) or per-comparison (`/compare/{competitor}`) leaf pages to capture long-tail search intent — the bounded-generation play the marketing-presence review recommended in place of the (irrelevant for a B2B gateway) geo/local-SEO pattern. Fixing (a bounded set of statically-generated leaf pages driven by a data table in [content.ts](frontend/src/lib/content.ts), each with `generateMetadata` + JSON-LD + sitemap entries) unblocks: search capture for "Builderforce + {tool}" and "{competitor} alternative" queries without thin-page bloat.
 
 ### Agent / Capabilities + Brain Chat panel (added 2026-06-02 — migration 0075; per-agent capability scoping)
 
@@ -1180,6 +1183,18 @@ This pass renamed the project panel's **Capabilities** tab to **Agent / Capabili
 Execution + autonomous advancement + in-browser coding are now wired and tested (migration 0068 `agent_dispatches`): `SwimlaneCoordinator.startTicket` compiles the lane's agents into dispatches and routes them (claw push via `ClawStageDispatcher`/`CLAW_RELAY`, or browser PULL); `reportDispatchResult` aggregates the stage and autonomously advances the ticket (or routes to needs_attention — never a silent advance). The user-facing worker tab ([frontend/src/app/agent-worker/page.tsx](frontend/src/app/agent-worker/page.tsx)) claims `browser` dispatches; for a repo-targeted task it CODES in-browser — the agent's model proposes file edits, which are applied and pushed through the server-side git-proxy via isomorphic-git (`frontend/src/lib/browserRuntime/{gitClient,coding,factory}.ts`), with an optional WebContainer build/test gate that blocks a push on failure. Backed by `POST /api/agent-runtime/claim` + `/result` and `POST /api/git-proxy/:repoId/...`. Orchestration is unit/render-tested; the live WebContainer boot + isomorphic-git↔git-proxy round-trip are integration-validated in a real tab only. Remaining roadmap items:
 
 - **The worker route needs COOP/COEP headers for the WebContainer build gate to boot.** The in-browser clone/edit/push path works without a WebContainer; the optional build/test gate ([frontend/src/lib/browserRuntime/webcontainer.ts](frontend/src/lib/browserRuntime/webcontainer.ts) + `factory.bootWebContainer`) requires cross-origin isolation, so the `/agent-worker` route must be served with `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp` (a Next.js header config). Until then `createCodingDeps` is called without a `buildCommand` and agents push without the local build gate. Fixing (add the COOP/COEP headers for that route and pass the project's build command) unblocks: pre-push build/test validation in the browser.
+
+### Agentic Workflow Builder (added 2026-06-02 — migration 0060; visual IPAAS-style workflow authoring + LLM-logic nodes)
+
+A drag-and-drop builder ([WorkflowBuilder](frontend/src/components/workflow-builder/WorkflowBuilder.tsx) on `@xyflow/react`, route `/workflows/builder`) lets tenants compose workflow graphs from a node palette that includes LLM-logic nodes — **memory** (recall/write), **knowledge base** (query/ingest), **train** — plus **agent-run** and ETL/trigger/output nodes. Graphs persist as reusable `workflow_definitions` (migration [0060](api/migrations/0060_workflow_definitions.sql), [schema.ts](api/src/infrastructure/database/schema.ts), [workflowDefinitionRoutes.ts](api/src/presentation/routes/workflowDefinitionRoutes.ts)) and compile through the shared contract ([domain/workflowGraph.ts](api/src/domain/workflowGraph.ts)) into orchestrator steps; CoderClaw's [orchestrator](../coderClaw/product/src/coderclaw/orchestrator.ts) now executes the LLM-logic/ETL node kinds in-process via dedicated handlers. The shape mirrors the existing execution-record + telemetry-graph surfaces, so a definition run appears in the monitoring UI for free.
+
+The six original roadmap items were closed in a follow-up pass: **portal→host execution** (host-authed `POST /api/workflows/claim` + `/:id/host-result` in [workflowRoutes.ts](api/src/presentation/routes/workflowRoutes.ts), a [WorkflowPollerService](../coderClaw/product/src/infra/workflow-poller.ts) wired in [server-startup.ts](../coderClaw/product/src/gateway/server-startup.ts), and `orchestrator.createWorkflowFromTasks`); **memory-write / KB-ingest / train** (real delegates on [SsmMemoryAdapter](../coderClaw/product/src/infra/orchestrator-ports-adapter.ts) → `remember`/`learn`/`distillAndSave`, plus a `train` port); **ETL evaluation** ([node-eval.ts](../coderClaw/product/src/coderclaw/node-eval.ts) — safe, eval-free predicate/transform); **YAML isomorphism** (`definitionToYaml`/`yamlToDefinition` + `/:id/export` + `/import`); and **caching** (canonical [getOrSetCached](api/src/infrastructure/cache/readThroughCache.ts) L1+L2 on the definitions list). Residual items:
+
+- **Branch nodes annotate but don't prune downstream edges.** [executeNode](../coderClaw/product/src/coderclaw/orchestrator.ts) evaluates a branch condition and tags the payload `[branch:true|false]`, but `executeWorkflow` still runs *all* dependents regardless of the result — there is no conditional edge pruning, so a `false` branch's downstream nodes execute anyway. Fixing (have the executor skip the dependents of the untaken branch by marking them cancelled) unblocks: true conditional routing rather than annotate-and-continue.
+- **Transform nodes are `{{var}}` template-substitution only.** [applyTransform](../coderClaw/product/src/coderclaw/node-eval.ts) interpolates context variables but cannot map/reshape structured payloads (no JSONata-style engine). Sufficient for simple shaping; richer transforms need a fuller (still-sandboxed) expression runtime. Fixing unblocks: structural payload transforms, not just string interpolation.
+- **The claim→execute→report loop is typecheck-verified, not integration-tested.** [WorkflowPollerService](../coderClaw/product/src/infra/workflow-poller.ts) + the host-authed claim/host-result endpoints compile and are unit-reasoned, but the live host round-trip (claim → orchestrator run → result writeback) has no end-to-end test. Fixing (an integration test that stands up a fake host against the claim/result endpoints) unblocks: confidence the portal→host loop survives refactors.
+- **train / memory-write / KB-ingest are no-ops on GPU-less hosts.** The handlers delegate to [SsmMemoryService](../coderClaw/product/src/infra/ssm-memory-service.ts), whose `learn`/`distillAndSave` guard on `gpuAvailable`; on a CPU-only host these nodes complete but persist/adapt nothing (`remember` still works for memory-write). Environmental, not a code defect — operators running training/ingest nodes need a WebGPU-capable host.
+- **`claw`→`agentHost` rename left 3 columns without a creating migration — `check:schema` is red.** `cron_jobs.agent_host_id`, `contributors.agent_host_id`, and `team_memory.agent_host_id` are declared in [schema.ts](api/src/infrastructure/database/schema.ts) but no migration creates/renames them, so `npm run check:schema` fails. This is collateral of the in-progress agentHost rename, **not** the workflow builder (whose `workflow_definitions` migration [0060](api/migrations/0060_workflow_definitions.sql) passes). Fixing (a rename/add migration for the three columns, mirroring the 0068a backfill pattern, or allowlist entries) unblocks: green schema-drift CI.
 - **`/api/agent-runtime` claim/result and `/api/git-proxy` are tenant-JWT auth only.** A claw posting its dispatch result (or a headless cloud worker) would need a claw-API-key auth branch mirroring [specRoutes.ts `verifyClawApiKey`](api/src/presentation/routes/specRoutes.ts). Today claw-runtime dispatches are pushed via `CLAW_RELAY` but their terminal result must come back through `/result` under a tenant token. Fixing unblocks: non-browser executors closing the loop without a user JWT.
 - **"Train your own LLM" (custom SSM) is the separate brain/MambaKit subsystem, not these slices.** An agent's "own LLM" here is the model string carried on the swimlane assignment → dispatch → browser runner (routed through the gateway). Training a bespoke on-device SSM model is the `brain-embedded` / MambaKit path and is tracked separately.
 - **No scheduled poller drives external board sync; outbox writeback is not triggered.** [SyncEngine.syncConnection](api/src/application/boardsync/SyncEngine.ts) + `drainOutbox` are implemented and unit-tested but only run via `POST /api/board-connections/:id/sync`. No `scheduled()` cron/queue iterates active `board_connections` to poll on their `poll_interval_sec`, and nothing periodically drains `board_sync_outbox`. Fixing (a Cloudflare `scheduled()` handler in [index.ts](api/src/index.ts) — mirroring `runVendorHealthCron` — that calls `syncConnection` + `drainOutbox` per active connection using `drizzleStore` + `createBoardProvider`) unblocks: hands-off inbound polling + reliable reverse-sync.
@@ -1397,6 +1412,116 @@ Shipped: create a cloud agent on [/workforce](frontend/src/app/workforce/page.ts
 - **Publishing an agent sets `published`+price but agents are NOT yet a marketplace artifact type, so there is no purchase/payout path.** The marketplace artifact enum is `skill | persona | content` ([schema.ts](api/src/infrastructure/database/schema.ts)); `marketplace_purchases` + the Stripe-intent purchase route ([marketplaceRoutes.ts](api/src/presentation/routes/marketplaceRoutes.ts)) don't know about agents. So a published agent's price is stored + displayed but cannot actually be transacted, and "revenue" isn't collected/paid out. Fixing (add `'agent'` to `artifactTypeEnum`, surface published agents in the marketplace listing/detail, and wire the purchase + payout path for agents) unblocks: real agent monetization end-to-end.
 - **"Hire" is still only a counter — it does not provision/deploy the agent.** [POST /api/ide/agents/:id/hire](api/src/presentation/routes/ideRoutes.ts) increments `hire_count`; there's no instantiation of the hired agent into the hirer's workspace (no claw bind / cloud-runtime registration). Fixing (on hire, create a tenant-scoped agent instance or bind to a runtime per the agent's `runtime_support`) unblocks: hiring that actually puts an agent to work.
 - **`runtime_support` / `preferred_runtime` are declared metadata but not enforced at execution dispatch.** An agent can say it supports only `claw`, yet nothing in the runtime/swimlane dispatch path ([runtimeRoutes.ts](api/src/presentation/routes/runtimeRoutes.ts), [SwimlaneCoordinator](api/src/application/swimlane/SwimlaneCoordinator.ts)) reads these fields to route to the right runtime or reject an unsupported one. Fixing (validate the chosen runtime against `runtime_support` and default to `preferred_runtime`) unblocks: honoring an agent's declared best/only experience.
+
+---
+
+### CoderClaw → BuilderForce Agents rebrand (branch `rebrand/builderforce-agents`, 2026-06-02 → 2026-06-03)
+
+Status: **all 8 phases done in-environment** — api/frontend/docs-site/cross-repo rebranded + verified
+(`tsc` clean, 350 api tests pass), DB migration `0078` **applied + verified live**, the product
+deep-renamed + **folded into `agent-runtime/`** (install + `tsgo` + `build` green), and the GitHub
+repo renamed. The only items NOT done are external/credentialed ops (npm publish — `npm whoami` 401;
+DNS) and cosmetic polish (mascot/`pnpm format`). Details below.
+
+The "CoderClaw"/"Claw" brand is being retired in favour of **BuilderForce Agents**. The live
+runtime-host entity `Claw` was renamed to **`AgentHost`** (NOT `Agent` — that persona entity
+already exists; NOT `AgentRuntime` — that route surface already exists). Done + verified: DB rename
+migration [0078](api/migrations/0078_rename_claw_to_agent_host.sql) (+ [rollback](api/scripts/rollback-0078-claw-rename.sql)),
+full `api/src` rename (`Claw*`→`AgentHost*`, table `coderclaw_instances`→`agent_hosts`, routes
+`/api/agent-hosts`, DO `ClawRelayDO`→`AgentHostRelayDO` + wrangler `v4` migration) — `tsc` clean,
+350 tests pass. Remaining roadmap items:
+
+- **Two CI failures from the rebrand are now FIXED + verified** (root cause: `tsc`/`tsgo` were used
+  as the local gate, but they don't run the checks CI does). (1) **Frontend** — `blogData.ts`
+  imported `@/content/blog/agents-and-agent-integration.md` while the renamed file is
+  `builderforce-agents-and-agent-integration.md`; `tsc` can't resolve vite's markdown-alias imports
+  so it slipped through. Fixed the import; full `vitest run` now green (17 files / 153 tests).
+  (2) **API `npm run check:schema`** — `check-schema-drift.mjs` statically parsed only `CREATE TABLE`
+  / `ADD COLUMN`, so it couldn't follow migration 0078's dynamic `DO`-block `claw`→`agent_host`
+  renames and flagged 21 `agent_host_*` columns/tables as "uncreated". My first instinct (grandfather
+  the 21) was WRONG — that masks drift instead of proving schema.ts matches the migrations. **Proper
+  fix shipped:** made the checker **rename-aware** — it now follows explicit `ALTER … RENAME TO` /
+  `RENAME COLUMN` statements AND declarative `-- @schema-drift-rename-table` /
+  `-- @schema-drift-rename-replace` directives (added to 0078, comments only — execution unchanged,
+  since the dynamic loop is more complete than any explicit list). The 16 migration-created `claw_id`
+  columns + 4 workspace tables now **resolve through the rename (NOT grandfathered)**; only the genuine
+  baseline-push (`drizzle-kit push`) items remain grandfathered (93, down from the masking 106). `npm
+  test` green (schema check + 350 tests). **Lesson:** the real gates are `npm test` (api),
+  `pnpm test`/`vitest run` (frontend), `pnpm build` (agent-runtime) — not just type checks.
+- **Migration 0078 is APPLIED + verified live** (`npm run db:migrate`, 2026-06-03): the configured
+  Neon DB now has `agent_hosts` (+ all `agent_host_*` tables), `assignment_scope` = `{agent, host,
+  project, task, tenant}`, and **0 columns still containing "claw"**. It is metadata-only renames in
+  one atomic, idempotent `DO` block (rollback script in `api/scripts/`). NOTE: deploy the renamed
+  `api` in lockstep — any still-running pre-rebrand worker against this DB now needs the new code
+  (the `/api/claws` alias covers in-flight field agents).
+- **Back-compat alias routes `/api/claws` + `/api/managed-claws` were added** ([index.ts](api/src/index.ts))
+  so already-deployed field agents (pre-rebrand) keep working. They forward to the new
+  `/api/agent-hosts` handlers. Removing them once the deployed agent fleet has upgraded unblocks a
+  clean route surface; leaving them indefinitely is harmless but is brand debt.
+- **Kebab route `/agentHost-sessions/:id/summarize` is camelCase-inconsistent** ([brainRoutes.ts](api/src/presentation/routes/brainRoutes.ts))
+  — the old `/claw-sessions` path was mechanically renamed and should be `/agent-host-sessions`.
+  Frontend callers (if any) must change in the same pass. Low priority, cosmetic.
+- **Backwards-compat brand strings intentionally left intact**: the GitHub dispatch label
+  `'coderclaw'` ([githubWebhookRoutes.ts](api/src/presentation/routes/githubWebhookRoutes.ts)) and
+  the `coderclawllm/workforce-*` model-id prefix ([ideAiRoutes.ts](api/src/presentation/routes/ideAiRoutes.ts))
+  still accept the old token for existing integrations. Adding the new `builderforce`/`agent` token
+  (keeping both) and later dropping the old one unblocks full brand removal without breaking callers.
+- **Frontend (`frontend/src`) is now rebranded + verified** (`tsc` clean): `Claw*`→`AgentHost*`
+  components, API client, the marketing route moved `app/coderclaw`→`app/agents` with a
+  `/coderclaw`→`/agents` redirect ([next.config.js](frontend/next.config.js)), WS event names
+  aligned to the API. The `runtime_support` value `'claw'`→`'host'`. Intentionally preserved: the
+  separate **OpenClaw** upstream refs and the external malware IOC `ClawdAuthenticatorTool` in
+  `data/agents/threats.yaml`.
+- **Docs-site + cross-repo prose are now rebranded** (Phases 5–6): `docs-site` `coderclaw-*.md`
+  → `agents-*.md` (609 docs reworded, Astro + `_redirects` slug redirects added, logo + GitHub
+  URL updated); root `README.md`, `mambacodejs/README.md`, `SSMjs/README.md`, `ide-architecture`
+  reworded. **Follow-up:** the docs-site still has ~90 **code-example identifiers** (`clawId`,
+  `ClawRelayDO`, `claw_fleet`, `CLAWHUB_*`, `ClawLink*`) left from before the product rename. They
+  now need reconciling with the final code, minding the split: **platform** concepts use the
+  `AgentHost` family (e.g. `ClawRelayDO`→`AgentHostRelayDO`, `/api/claws`→`/api/agent-hosts`) while
+  **product/runtime** concepts use the `AgentNode`/`AgentHub`/`agent_fleet` family. Left unswept to
+  avoid a wrong blind rename across the two namespaces.
+- **The CoderClaw product is now fully renamed AND folded into this monorepo at `agent-runtime/`
+  (Phase 4 complete).** The whole product (`@seanhogg/builderforce-agents`, CLI `builderforce`,
+  binary `builderforce.mjs`) was deep-renamed: `CoderClaw*`→`BuilderForceAgents*`, bare
+  `Claw`→`AgentNode`, `ClawLink`→`AgentLink`, `ClawHub`→`AgentHub`, the runtime workspace dir
+  `.coderClaw/`→`.builderforce/`, `CODERCLAW_*`→`BUILDERFORCE_AGENTS_*` env, and the 40
+  `coderclaw.plugin.json` manifests → `builderforce.plugin.json` (files + discovery code). The
+  product's `tsgo` typecheck passed **0 errors**, then it was moved to `agent-runtime/` and
+  **`pnpm install` + `tsgo` + `pnpm build` all pass green** (build: 287 bundles, plugin-sdk dts
+  compiled, exit 0), and the full **`pnpm test` suite ran (6435 tests)**. The initial run surfaced
+  two failure classes, both now resolved: (a) **rename-induced test-data inconsistencies** —
+  `CoderClaw`→`BuilderForceAgents` (no space) vs `coderclaw`→`builderforce` made brand strings in 4
+  test files diverge (discord slug `friends-of-builderforce` vs normalized `…agents`, an
+  `\bbuilderforce\b` pattern vs `BUILDERFORCE_AGENTS` input, a stale `.toSorted()` order, and a
+  `Dockerfile`/`.swift`/dotfile category my extension-scoped sweep had MISSED) — **all fixed +
+  verified passing**; and (b) **environmental flakiness** (`gateway-lock.test.ts` etc. pass in
+  isolation, flake only under the heavily-parallel runner). A **final all-file-types sweep** then
+  cleaned `.swift` (Swabble), Dockerfiles, `.env.example`/`.gitignore`, and `*.dev.md`; the only
+  residual `claw` is the **`Clawd` mascot family** (`Clawd`/`Clawdbot`/`Clawdock`/`ClawdAuth`),
+  intentionally preserved. **Final full-suite re-run after the fixes: 755 files passed / 10 skipped
+  / 0 failed.** A rename artifact was also fixed
+  along the way: two extension `peerDependencies` pointed at unscoped `builderforce` (404) →
+  repointed to `@seanhogg/builderforce-agents`. Only follow-up: `pnpm format`/`oxlint` polish
+  (cosmetic — the mass renames changed line contents so `pnpm format` will reflow the diff).
+- **The `Clawd` lobster mascot was deliberately preserved** across the product (incl. the
+  `ui/public/favicon.svg` "Left/Right Claw" shape comments). Renaming/replacing the mascot is a
+  creative-branding decision for the product owner — when chosen, sweep `Clawd`/the lobster
+  artwork to the new mascot.
+- **Repo renamed: `SeanHogg/coderClaw` → `SeanHogg/BuilderForceAgents`** (done via `gh`; old URLs
+  redirect; local remote updated). The product content now lives in this Builderforce.ai monorepo;
+  the renamed repo retains the mobile `apps/` + brand assets (fold those next if desired).
+- **Blocked — external ops that need credentials/access this environment does not have:**
+  (1) **npm: `npm deprecate @seanhogg/coderclaw` (exists @ 2026.3.21) + publish
+  `@seanhogg/builderforce-agents` (404, unpublished)** — BLOCKED: `npm whoami` returns **401**, no
+  valid publish token here. The package now builds, so this is a one-command release once
+  authenticated. (2) **`coderclaw.ai`→`builderforce.ai` DNS/301** + the install-script endpoint +
+  Discord handle — need registrar/Cloudflare DNS access (app-level `_redirects` + Astro redirects
+  are already in place). (3) The generated `docs-site/src/assets/install-script.svg` + the
+  `credits.md` "CLAW + TARDIS" easter-egg still say "claw" — cosmetic, regenerate/reword when the
+  mascot decision lands.
+- The Gap Register entries further above that mention "claw" (cloud-agents / runtime_support) are
+  historical context and were intentionally left as-is.
 
 ---
 

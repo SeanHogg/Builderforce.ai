@@ -2,7 +2,7 @@
  * Cost forecast routes — /api/cost-forecast
  *
  * Estimates token usage and cost before an execution starts.
- * Called from the CoderClaw portal "Run" confirmation dialog and the TUI before
+ * Called from the BuilderForce Agents portal "Run" confirmation dialog and the TUI before
  * dispatching a workflow, so users know the expected budget impact before committing.
  *
  * POST /api/cost-forecast

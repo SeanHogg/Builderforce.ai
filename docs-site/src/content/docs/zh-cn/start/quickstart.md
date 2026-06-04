@@ -1,7 +1,7 @@
 ---
 read_when:
   - 你希望以最快的方式从安装到运行一个可用的 Gateway 网关
-summary: 安装 CoderClaw，完成 Gateway 网关新手引导，并配对你的第一个渠道。
+summary: 安装 BuilderForce Agents，完成 Gateway 网关新手引导，并配对你的第一个渠道。
 title: 快速开始
 x-i18n:
   generated_at: "2026-02-04T17:53:21Z"
@@ -13,7 +13,7 @@ x-i18n:
 ---
 
 <Note>
-CoderClaw 需要 Node 22 或更新版本。
+BuilderForce Agents 需要 Node 22 或更新版本。
 </Note>
 
 ## 安装
@@ -21,12 +21,12 @@ CoderClaw 需要 Node 22 或更新版本。
 <Tabs>
   <Tab title="npm">
     ```bash
-    npm install -g coderclaw@latest
+    npm install -g builderforce@latest
     ```
   </Tab>
   <Tab title="pnpm">
     ```bash
-    pnpm add -g coderclaw@latest
+    pnpm add -g builderforce@latest
     ```
   </Tab>
 </Tabs>
@@ -36,47 +36,47 @@ CoderClaw 需要 Node 22 或更新版本。
 <Steps>
   <Step title="新手引导并安装服务">
     ```bash
-    coderclaw onboard --install-daemon
+    builderforce onboard --install-daemon
     ```
   </Step>
   <Step title="配对 WhatsApp">
     ```bash
-    coderclaw channels login
+    builderforce channels login
     ```
   </Step>
   <Step title="启动 Gateway 网关">
     ```bash
-    coderclaw gateway --port 18789
+    builderforce gateway --port 18789
     ```
   </Step>
 </Steps>
 
-完成新手引导后，Gateway 网关将通过用户服务运行。你也可以使用 `coderclaw gateway` 手动启动。
+完成新手引导后，Gateway 网关将通过用户服务运行。你也可以使用 `builderforce gateway` 手动启动。
 
 <Info>
 之后在 npm 安装和 git 安装之间切换非常简单。安装另一种方式后，运行
-`coderclaw doctor` 即可更新 Gateway 网关服务入口点。
+`builderforce doctor` 即可更新 Gateway 网关服务入口点。
 </Info>
 
 ## 从源码安装（开发）
 
 ```bash
-git clone https://github.com/SeanHogg/coderClaw.git
-cd coderclaw
+git clone https://github.com/SeanHogg/Builderforce.ai.git
+cd builderforce
 pnpm install
 pnpm ui:build # 首次运行时会自动安装 UI 依赖
 pnpm build
-coderclaw onboard --install-daemon
+builderforce onboard --install-daemon
 ```
 
-如果你还没有全局安装，可以在仓库目录中通过 `pnpm coderclaw ...` 运行新手引导。
+如果你还没有全局安装，可以在仓库目录中通过 `pnpm builderforce ...` 运行新手引导。
 
 ## 多实例快速开始（可选）
 
 ```bash
-CODERCLAW_CONFIG_PATH=~/.coderclaw/a.json \
-CODERCLAW_STATE_DIR=~/.coderclaw-a \
-coderclaw gateway --port 19001
+BUILDERFORCE_AGENTS_CONFIG_PATH=~/.builderforce/a.json \
+BUILDERFORCE_AGENTS_STATE_DIR=~/.builderforce-a \
+builderforce gateway --port 19001
 ```
 
 ## 发送测试消息
@@ -84,5 +84,5 @@ coderclaw gateway --port 19001
 需要一个正在运行的 Gateway 网关。
 
 ```bash
-coderclaw message send --target +15555550123 --message "Hello from CoderClaw"
+builderforce message send --target +15555550123 --message "Hello from BuilderForce Agents"
 ```

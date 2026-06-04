@@ -7,13 +7,13 @@ title: "Agent Runtime"
 
 # Agent Runtime 🤖
 
-CoderClaw runs a single embedded agent runtime derived from **pi-mono**.
+BuilderForce Agents runs a single embedded agent runtime derived from **pi-mono**.
 
 ## Workspace (required)
 
-CoderClaw uses a single agent workspace directory (`agents.defaults.workspace`) as the agent’s **only** working directory (`cwd`) for tools and context.
+BuilderForce Agents uses a single agent workspace directory (`agents.defaults.workspace`) as the agent’s **only** working directory (`cwd`) for tools and context.
 
-Recommended: use `coderclaw setup` to create `~/.coderclaw/coderclaw.json` if missing and initialize the workspace files.
+Recommended: use `builderforce setup` to create `~/.builderforce/builderforce.json` if missing and initialize the workspace files.
 
 Full workspace layout + backup guide: [Agent workspace](/concepts/agent-workspace)
 
@@ -23,7 +23,7 @@ per-session workspaces under `agents.defaults.sandbox.workspaceRoot` (see
 
 ## Bootstrap files (injected)
 
-Inside `agents.defaults.workspace`, CoderClaw expects these user-editable files:
+Inside `agents.defaults.workspace`, BuilderForce Agents expects these user-editable files:
 
 - `AGENTS.md` — operating instructions + “memory”
 - `SOUL.md` — persona, boundaries, tone
@@ -32,11 +32,11 @@ Inside `agents.defaults.workspace`, CoderClaw expects these user-editable files:
 - `IDENTITY.md` — agent name/vibe/emoji
 - `USER.md` — user profile + preferred address
 
-On the first turn of a new session, CoderClaw injects the contents of these files directly into the agent context.
+On the first turn of a new session, BuilderForce Agents injects the contents of these files directly into the agent context.
 
 Blank files are skipped. Large files are trimmed and truncated with a marker so prompts stay lean (read the file for full content).
 
-If a file is missing, CoderClaw injects a single “missing file” marker line (and `coderclaw setup` will create a safe default template).
+If a file is missing, BuilderForce Agents injects a single “missing file” marker line (and `builderforce setup` will create a safe default template).
 
 `BOOTSTRAP.md` is only created for a **brand new workspace** (no other bootstrap files present). If you delete it after completing the ritual, it should not be recreated on later restarts.
 
@@ -55,17 +55,17 @@ guidance for how _you_ want them used.
 
 ## Skills
 
-CoderClaw loads skills from three locations (workspace wins on name conflict):
+BuilderForce Agents loads skills from three locations (workspace wins on name conflict):
 
 - Bundled (shipped with the install)
-- Managed/local: `~/.coderclaw/skills`
+- Managed/local: `~/.builderforce/skills`
 - Workspace: `<workspace>/skills`
 
 Skills can be gated by config/env (see `skills` in [Gateway configuration](/gateway/configuration)).
 
 ## pi-mono integration
 
-CoderClaw reuses pieces of the pi-mono codebase (models/tools), but **session management, discovery, and tool wiring are CoderClaw-owned**.
+BuilderForce Agents reuses pieces of the pi-mono codebase (models/tools), but **session management, discovery, and tool wiring are BuilderForce Agents-owned**.
 
 - No pi-coding agent runtime.
 - No `~/.pi/agent` or `<workspace>/.pi` settings are consulted.
@@ -74,9 +74,9 @@ CoderClaw reuses pieces of the pi-mono codebase (models/tools), but **session ma
 
 Session transcripts are stored as JSONL at:
 
-- `~/.coderclaw/agents/<agentId>/sessions/<SessionId>.jsonl`
+- `~/.builderforce/agents/<agentId>/sessions/<SessionId>.jsonl`
 
-The session ID is stable and chosen by CoderClaw.
+The session ID is stable and chosen by BuilderForce Agents.
 Legacy Pi/Tau session folders are **not** read.
 
 ## Steering while streaming
@@ -109,7 +109,7 @@ Model refs in config (for example `agents.defaults.model` and `agents.defaults.m
 
 - Use `provider/model` when configuring models.
 - If the model ID itself contains `/` (OpenRouter-style), include the provider prefix (example: `openrouter/moonshotai/kimi-k2`).
-- If you omit the provider, CoderClaw treats the input as an alias or a model for the **default provider** (only works when there is no `/` in the model ID).
+- If you omit the provider, BuilderForce Agents treats the input as an alias or a model for the **default provider** (only works when there is no `/` in the model ID).
 
 ## Configuration (minimal)
 

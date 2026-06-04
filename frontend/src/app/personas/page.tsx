@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/AuthContext';
 import {
   artifactAssignments,
   marketplaceStats,
-  claws,
+  agentHosts,
   type ArtifactAssignment,
   type ArtifactStats,
 } from '@/lib/builderforceApi';
@@ -40,7 +40,7 @@ export default function PersonasPage() {
   const [assigned, setAssigned] = useState<ArtifactAssignment[]>([]);
   const [userPersonas, setUserPersonas] = useState<UserPersona[]>([]);
   const [stats, setStats] = useState<Record<string, ArtifactStats>>({});
-  const [hasClaws, setHasClaws] = useState(true);
+  const [hasAgentHosts, setHasAgentHosts] = useState(true);
   const [installedSlugs, setInstalledSlugs] = useState<Set<string>>(new Set());
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -59,12 +59,12 @@ export default function PersonasPage() {
     setLoading(true);
     setError('');
     try {
-      const [all, clawList] = await Promise.all([
+      const [all, agentHostList] = await Promise.all([
         tenantNum ? artifactAssignments.list('tenant', tenantNum, 'persona').catch(() => []) : [],
-        claws.list().catch(() => []),
+        agentHosts.list().catch(() => []),
       ]);
       setAssigned(all);
-      setHasClaws(clawList.length > 0);
+      setHasAgentHosts(agentHostList.length > 0);
       setInstalledSlugs(new Set(all.map((a) => a.artifactSlug)));
       const slugs = BUILTIN_PERSONAS.map((p) => p.name);
       if (slugs.length > 0) {
@@ -176,10 +176,10 @@ export default function PersonasPage() {
   const sourceBadge = (source: Persona['source']) => {
     const map: Record<string, { label: string; color: string }> = {
       builtin: { label: 'Built-in', color: 'var(--accent,#6366f1)' },
-      clawhub: { label: 'ClawHub', color: '#22c55e' },
+      agenthub: { label: 'AgentHostHub', color: '#22c55e' },
       'project-local': { label: 'Project', color: '#f59e0b' },
       'user-global': { label: 'User', color: '#06b6d4' },
-      'clawlink-assigned': { label: 'Assigned', color: '#ec4899' },
+      'agentlink-assigned': { label: 'Assigned', color: '#ec4899' },
     };
     const m = map[source] ?? { label: source, color: 'var(--muted)' };
     return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: m.color, color: '#fff', textTransform: 'uppercase' }}>{m.label}</span>;

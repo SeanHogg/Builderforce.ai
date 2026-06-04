@@ -8,7 +8,7 @@ title: "Channel Location Parsing"
 
 # Channel location parsing
 
-CoderClaw normalizes shared locations from chat channels into:
+BuilderForce Agents normalizes shared locations from chat channels into:
 
 - human-readable text appended to the inbound body, and
 - structured fields in the auto-reply context payload.

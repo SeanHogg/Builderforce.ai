@@ -8,7 +8,7 @@ title: Feishu
 
 # Feishu bot
 
-Feishu (Lark) is a team chat platform used by companies for messaging and collaboration. This plugin connects CoderClaw to a Feishu/Lark bot using the platform’s WebSocket event subscription so messages can be received without exposing a public webhook URL.
+Feishu (Lark) is a team chat platform used by companies for messaging and collaboration. This plugin connects BuilderForce Agents to a Feishu/Lark bot using the platform’s WebSocket event subscription so messages can be received without exposing a public webhook URL.
 
 ---
 
@@ -17,13 +17,13 @@ Feishu (Lark) is a team chat platform used by companies for messaging and collab
 Install the Feishu plugin:
 
 ```bash
-coderclaw plugins install @coderclaw/feishu
+builderforce plugins install @builderforce/feishu
 ```
 
 Local checkout (when running from a git repo):
 
 ```bash
-coderclaw plugins install ./extensions/feishu
+builderforce plugins install ./extensions/feishu
 ```
 
 ---
@@ -34,38 +34,38 @@ There are two ways to add the Feishu channel:
 
 ### Method 1: onboarding wizard (recommended)
 
-If you just installed CoderClaw, run the wizard:
+If you just installed BuilderForce Agents, run the wizard:
 
 ```bash
-coderclaw onboard
+builderforce onboard
 ```
 
 The wizard guides you through:
 
 1. Creating a Feishu app and collecting credentials
-2. Configuring app credentials in CoderClaw
+2. Configuring app credentials in BuilderForce Agents
 3. Starting the gateway
 
 ✅ **After configuration**, check gateway status:
 
-- `coderclaw gateway status`
-- `coderclaw logs --follow`
+- `builderforce gateway status`
+- `builderforce logs --follow`
 
 ### Method 2: CLI setup
 
 If you already completed initial install, add the channel via CLI:
 
 ```bash
-coderclaw channels add
+builderforce channels add
 ```
 
 Choose **Feishu**, then enter the App ID and App Secret.
 
 ✅ **After configuration**, manage the gateway:
 
-- `coderclaw gateway status`
-- `coderclaw gateway restart`
-- `coderclaw logs --follow`
+- `builderforce gateway status`
+- `builderforce gateway restart`
+- `builderforce logs --follow`
 
 ---
 
@@ -141,8 +141,8 @@ In **App Capability** > **Bot**:
 
 ⚠️ **Important:** before setting event subscription, make sure:
 
-1. You already ran `coderclaw channels add` for Feishu
-2. The gateway is running (`coderclaw gateway status`)
+1. You already ran `builderforce channels add` for Feishu
+2. The gateway is running (`builderforce gateway status`)
 
 In **Event Subscription**:
 
@@ -161,19 +161,19 @@ In **Event Subscription**:
 
 ---
 
-## Step 2: Configure CoderClaw
+## Step 2: Configure BuilderForce Agents
 
 ### Configure with the wizard (recommended)
 
 ```bash
-coderclaw channels add
+builderforce channels add
 ```
 
 Choose **Feishu** and paste your App ID + App Secret.
 
 ### Configure via config file
 
-Edit `~/.coderclaw/coderclaw.json`:
+Edit `~/.builderforce/builderforce.json`:
 
 ```json5
 {
@@ -227,7 +227,7 @@ If your tenant is on Lark (international), set the domain to `lark` (or a full d
 ### 1. Start the gateway
 
 ```bash
-coderclaw gateway
+builderforce gateway
 ```
 
 ### 2. Send a test message
@@ -239,7 +239,7 @@ In Feishu, find your bot and send a message.
 By default, the bot replies with a pairing code. Approve it:
 
 ```bash
-coderclaw pairing approve feishu <CODE>
+builderforce pairing approve feishu <CODE>
 ```
 
 After approval, you can chat normally.
@@ -263,8 +263,8 @@ After approval, you can chat normally.
 - **Approve pairing**:
 
   ```bash
-  coderclaw pairing list feishu
-  coderclaw pairing approve feishu <CODE>
+  builderforce pairing list feishu
+  builderforce pairing approve feishu <CODE>
   ```
 
 - **Allowlist mode**: set `channels.feishu.allowFrom` with allowed Open IDs
@@ -337,7 +337,7 @@ Group IDs look like `oc_xxx`.
 **Method 1 (recommended)**
 
 1. Start the gateway and @mention the bot in the group
-2. Run `coderclaw logs --follow` and look for `chat_id`
+2. Run `builderforce logs --follow` and look for `chat_id`
 
 **Method 2**
 
@@ -350,14 +350,14 @@ User IDs look like `ou_xxx`.
 **Method 1 (recommended)**
 
 1. Start the gateway and DM the bot
-2. Run `coderclaw logs --follow` and look for `open_id`
+2. Run `builderforce logs --follow` and look for `open_id`
 
 **Method 2**
 
 Check pairing requests for user Open IDs:
 
 ```bash
-coderclaw pairing list feishu
+builderforce pairing list feishu
 ```
 
 ---
@@ -376,11 +376,11 @@ coderclaw pairing list feishu
 
 | Command                     | Description                   |
 | --------------------------- | ----------------------------- |
-| `coderclaw gateway status`  | Show gateway status           |
-| `coderclaw gateway install` | Install/start gateway service |
-| `coderclaw gateway stop`    | Stop gateway service          |
-| `coderclaw gateway restart` | Restart gateway service       |
-| `coderclaw logs --follow`   | Tail gateway logs             |
+| `builderforce gateway status`  | Show gateway status           |
+| `builderforce gateway install` | Install/start gateway service |
+| `builderforce gateway stop`    | Stop gateway service          |
+| `builderforce gateway restart` | Restart gateway service       |
+| `builderforce logs --follow`   | Tail gateway logs             |
 
 ---
 
@@ -391,7 +391,7 @@ coderclaw pairing list feishu
 1. Ensure the bot is added to the group
 2. Ensure you @mention the bot (default behavior)
 3. Check `groupPolicy` is not set to `"disabled"`
-4. Check logs: `coderclaw logs --follow`
+4. Check logs: `builderforce logs --follow`
 
 ### Bot does not receive messages
 
@@ -399,8 +399,8 @@ coderclaw pairing list feishu
 2. Ensure event subscription includes `im.message.receive_v1`
 3. Ensure **long connection** is enabled
 4. Ensure app permissions are complete
-5. Ensure the gateway is running: `coderclaw gateway status`
-6. Check logs: `coderclaw logs --follow`
+5. Ensure the gateway is running: `builderforce gateway status`
+6. Check logs: `builderforce logs --follow`
 
 ### App Secret leak
 
@@ -474,14 +474,14 @@ Use `bindings` to route Feishu DMs or groups to different agents.
     list: [
       { id: "main" },
       {
-        id: "coderclaw-fan",
-        workspace: "/home/user/coderclaw-fan",
-        agentDir: "/home/user/.coderclaw/agents/coderclaw-fan/agent",
+        id: "builderforce-fan",
+        workspace: "/home/user/builderforce-fan",
+        agentDir: "/home/user/.builderforce/agents/builderforce-fan/agent",
       },
       {
-        id: "coderclaw-xi",
-        workspace: "/home/user/coderclaw-xi",
-        agentDir: "/home/user/.coderclaw/agents/coderclaw-xi/agent",
+        id: "builderforce-xi",
+        workspace: "/home/user/builderforce-xi",
+        agentDir: "/home/user/.builderforce/agents/builderforce-xi/agent",
       },
     ],
   },
@@ -494,14 +494,14 @@ Use `bindings` to route Feishu DMs or groups to different agents.
       },
     },
     {
-      agentId: "coderclaw-fan",
+      agentId: "builderforce-fan",
       match: {
         channel: "feishu",
         peer: { kind: "direct", id: "ou_yyy" },
       },
     },
     {
-      agentId: "coderclaw-xi",
+      agentId: "builderforce-xi",
       match: {
         channel: "feishu",
         peer: { kind: "group", id: "oc_zzz" },

@@ -1,5 +1,5 @@
 ---
-summary: "What the CoderClaw system prompt contains and how it is assembled"
+summary: "What the BuilderForce Agents system prompt contains and how it is assembled"
 read_when:
   - Editing system prompt text, tools list, or time/heartbeat sections
   - Changing workspace bootstrap or skills injection behavior
@@ -8,9 +8,9 @@ title: "System Prompt"
 
 # System Prompt
 
-CoderClaw builds a custom system prompt for every agent run. The prompt is **CoderClaw-owned** and does not use the pi-coding-agent default prompt.
+BuilderForce Agents builds a custom system prompt for every agent run. The prompt is **BuilderForce Agents-owned** and does not use the pi-coding-agent default prompt.
 
-The prompt is assembled by CoderClaw and injected into each agent run.
+The prompt is assembled by BuilderForce Agents and injected into each agent run.
 
 ## Structure
 
@@ -19,9 +19,9 @@ The prompt is intentionally compact and uses fixed sections:
 - **Tooling**: current tool list + short descriptions.
 - **Safety**: short guardrail reminder to avoid power-seeking behavior or bypassing oversight.
 - **Skills** (when available): tells the model how to load skill instructions on demand.
-- **CoderClaw Self-Update**: how to run `config.apply` and `update.run`.
+- **BuilderForce Agents Self-Update**: how to run `config.apply` and `update.run`.
 - **Workspace**: working directory (`agents.defaults.workspace`).
-- **Documentation**: local path to CoderClaw docs (repo or npm package) and when to read them.
+- **Documentation**: local path to BuilderForce Agents docs (repo or npm package) and when to read them.
 - **Workspace Files (injected)**: indicates bootstrap files are included below.
 - **Sandbox** (when enabled): indicates sandboxed runtime, sandbox paths, and whether elevated exec is available.
 - **Current Date & Time**: user-local time, timezone, and time format.
@@ -34,11 +34,11 @@ Safety guardrails in the system prompt are advisory. They guide model behavior b
 
 ## Prompt modes
 
-CoderClaw can render smaller system prompts for sub-agents. The runtime sets a
+BuilderForce Agents can render smaller system prompts for sub-agents. The runtime sets a
 `promptMode` for each run (not a user-facing config):
 
 - `full` (default): includes all sections above.
-- `minimal`: used for sub-agents; omits **Skills**, **Memory Recall**, **CoderClaw
+- `minimal`: used for sub-agents; omits **Skills**, **Memory Recall**, **BuilderForce Agents
   Self-Update**, **Model Aliases**, **User Identity**, **Reply Tags**,
   **Messaging**, **Silent Replies**, and **Heartbeats**. Tooling, **Safety**,
   Workspace, Sandbox, Current Date & Time (when known), Runtime, and injected
@@ -101,7 +101,7 @@ See [Date & Time](/date-time) for full behavior details.
 
 ## Skills
 
-When eligible skills exist, CoderClaw injects a compact **available skills list**
+When eligible skills exist, BuilderForce Agents injects a compact **available skills list**
 (`formatSkillsForPrompt`) that includes the **file path** for each skill. The
 prompt instructs the model to use `read` to load the SKILL.md at the listed
 location (workspace, managed, or bundled). If no skills are eligible, the
@@ -122,8 +122,8 @@ This keeps the base prompt small while still enabling targeted skill usage.
 ## Documentation
 
 When available, the system prompt includes a **Documentation** section that points to the
-local CoderClaw docs directory (either `docs/` in the repo workspace or the bundled npm
+local BuilderForce Agents docs directory (either `docs/` in the repo workspace or the bundled npm
 package docs) and also notes the public mirror, source repo, community Discord, and
-ClawHub ([https://clawhub.com](https://clawhub.com)) for skills discovery. The prompt instructs the model to consult local docs first
-for CoderClaw behavior, commands, configuration, or architecture, and to run
-`coderclaw status` itself when possible (asking the user only when it lacks access).
+AgentHub ([https://agenthub.com](https://agenthub.com)) for skills discovery. The prompt instructs the model to consult local docs first
+for BuilderForce Agents behavior, commands, configuration, or architecture, and to run
+`builderforce status` itself when possible (asking the user only when it lacks access).
