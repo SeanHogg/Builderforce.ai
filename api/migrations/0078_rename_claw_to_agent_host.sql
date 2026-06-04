@@ -23,6 +23,14 @@
 --   enum value assignment_scope 'claw'   -> 'host'
 --   enum value auth_token_type  'claw'   -> 'host'
 --   indexes *claw*                       -> replace 'claw'->'agent_host'
+--
+-- The renames below are performed dynamically (a DO-block looping over
+-- information_schema), so they have no literal old->new pairs for the static
+-- schema-drift checker to read. These directives declare the same transformation
+-- so check-schema-drift.mjs can reconstruct the post-rename schema and verify it
+-- matches schema.ts — WITHOUT grandfathering. Keep them in sync with the DO-block.
+-- @schema-drift-rename-table coderclaw_instances -> agent_hosts
+-- @schema-drift-rename-replace claw -> agent_host
 
 DO $$
 DECLARE

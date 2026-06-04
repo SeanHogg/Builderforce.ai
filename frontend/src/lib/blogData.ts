@@ -16,7 +16,7 @@ import webgpuLora from '@/content/blog/webgpu-lora-explained.md';
 import multiAgent from '@/content/blog/multi-agent-orchestration.md';
 import datasetBestPractices from '@/content/blog/ai-dataset-generation-best-practices.md';
 import introductionAndOverview from '@/content/blog/introduction-and-overview.md';
-import builderforceIntegration from '@/content/blog/agents-and-agent-integration.md';
+import builderforceIntegration from '@/content/blog/builderforce-agents-and-agent-integration.md';
 import productIdeation from '@/content/blog/product-ideation-with-builderforce.md';
 
 export interface BlogPost {
