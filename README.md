@@ -1431,6 +1431,23 @@ full `api/src` rename (`Claw*`→`AgentHost*`, table `coderclaw_instances`→`ag
 `/api/agent-hosts`, DO `ClawRelayDO`→`AgentHostRelayDO` + wrangler `v4` migration) — `tsc` clean,
 350 tests pass. Remaining roadmap items:
 
+- **Two CI failures from the rebrand are now FIXED + verified** (root cause: `tsc`/`tsgo` were used
+  as the local gate, but they don't run the checks CI does). (1) **Frontend** — `blogData.ts`
+  imported `@/content/blog/agents-and-agent-integration.md` while the renamed file is
+  `builderforce-agents-and-agent-integration.md`; `tsc` can't resolve vite's markdown-alias imports
+  so it slipped through. Fixed the import; full `vitest run` now green (17 files / 153 tests).
+  (2) **API `npm run check:schema`** — `check-schema-drift.mjs` statically parsed only `CREATE TABLE`
+  / `ADD COLUMN`, so it couldn't follow migration 0078's dynamic `DO`-block `claw`→`agent_host`
+  renames and flagged 21 `agent_host_*` columns/tables as "uncreated". My first instinct (grandfather
+  the 21) was WRONG — that masks drift instead of proving schema.ts matches the migrations. **Proper
+  fix shipped:** made the checker **rename-aware** — it now follows explicit `ALTER … RENAME TO` /
+  `RENAME COLUMN` statements AND declarative `-- @schema-drift-rename-table` /
+  `-- @schema-drift-rename-replace` directives (added to 0078, comments only — execution unchanged,
+  since the dynamic loop is more complete than any explicit list). The 16 migration-created `claw_id`
+  columns + 4 workspace tables now **resolve through the rename (NOT grandfathered)**; only the genuine
+  baseline-push (`drizzle-kit push`) items remain grandfathered (93, down from the masking 106). `npm
+  test` green (schema check + 350 tests). **Lesson:** the real gates are `npm test` (api),
+  `pnpm test`/`vitest run` (frontend), `pnpm build` (agent-runtime) — not just type checks.
 - **Migration 0078 is APPLIED + verified live** (`npm run db:migrate`, 2026-06-03): the configured
   Neon DB now has `agent_hosts` (+ all `agent_host_*` tables), `assignment_scope` = `{agent, host,
   project, task, tenant}`, and **0 columns still containing "claw"**. It is metadata-only renames in
