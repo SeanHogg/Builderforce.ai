@@ -6,7 +6,6 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getPostBySlug } from '@/lib/blogData';
 import JsonLd from '@/components/JsonLd';
-import MarketingHeader from '@/components/MarketingHeader';
 import { blogPostSchema } from '@/lib/structured-data';
 
 export default function BlogPostClient({ params }: { params: Promise<{ slug: string }> }) {
@@ -240,15 +239,6 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
       {post && <JsonLd data={blogPostSchema(post)} />}
 
       <div className="bpost-page">
-        {/* ── Nav ── */}
-        <MarketingHeader
-          links={[
-            { label: 'Workforce', href: '/workforce' },
-            { label: 'Blog', href: '/blog' },
-            { label: 'Sign In', href: '/login' },
-          ]}
-        />
-
         {/* ── Content ── */}
         <main className="bpost-main">
           <Link href="/blog" className="bpost-back">← Back to Blog</Link>

@@ -398,6 +398,8 @@ export interface ProductSurface {
 
 export interface ProductSection {
   id: string;
+  /** Emoji used as the section's icon in the sidebar product map. */
+  icon: string;
   title: string;
   blurb: string;
   surfaces: ProductSurface[];
@@ -413,6 +415,7 @@ export interface ProductSection {
 export const PRODUCT_SECTIONS: ProductSection[] = [
   {
     id: 'build',
+    icon: '🛠',
     title: 'Build & Train',
     blurb: 'Go from an idea to a trained, evaluated AI agent — all in the browser.',
     surfaces: [
@@ -425,6 +428,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
   },
   {
     id: 'orchestrate',
+    icon: '🔀',
     title: 'Orchestrate',
     blurb: 'Coordinate work across agents, workflows, and a mesh of remote AgentHosts.',
     surfaces: [
@@ -436,6 +440,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
   },
   {
     id: 'extend',
+    icon: '🧩',
     title: 'Extend',
     blurb: 'A marketplace of skills, personas, prompts, and content to supercharge agents.',
     surfaces: [
@@ -447,6 +452,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
   },
   {
     id: 'govern',
+    icon: '🛡',
     title: 'Govern & Operate',
     blurb: 'Approvals, security, and full observability — your AI Security Officer.',
     surfaces: [
@@ -463,29 +469,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
 export interface NavLink {
   href: string;
   label: string;
-  /**
-   * When present, this header item opens a mega-menu panel built from these
-   * sections (desktop dropdown / mobile inline expand). Lets logged-out
-   * visitors see the whole product surface without leaving the page — while the
-   * item's own `href` stays a real link (the full /product tour).
-   */
-  menu?: ProductSection[];
 }
-
-/**
- * Single source of truth for the marketing header links. Consumed by the
- * landing page (and any other marketing surface) so the public nav can't drift.
- * "Product" carries the full capability tour as a mega-menu so visitors can
- * discover what the platform consists of before signing up.
- */
-export const MARKETING_NAV_LINKS: NavLink[] = [
-  { href: '/product', label: 'Product', menu: PRODUCT_SECTIONS },
-  { href: '/marketplace', label: 'Workforce' },
-  { href: '/agents', label: 'BuilderForce Agents' },
-  { href: '/blog', label: 'Blog' },
-  { href: '/pricing', label: 'Pricing' },
-  { href: '/login', label: 'Sign In' },
-];
 
 export const FOOTER_LINKS: NavLink[] = [
   { href: '/', label: 'Home' },

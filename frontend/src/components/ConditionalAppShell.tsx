@@ -3,94 +3,79 @@
 import { usePathname } from 'next/navigation';
 import AppShell from './AppShell';
 import AppFooter from './AppFooter';
-import TopBar from './TopBar';
+import PublicShell from './PublicShell';
 import OnboardingGate from './OnboardingGate';
-import { useAuth } from '@/lib/AuthContext';
 import { BrainActionsProvider, BrainContextProvider, BrainProvider, brainConfig } from '@/lib/brain';
 import { FloatingBrain } from './brain/FloatingBrain';
 import { McpExtensionsBridge } from './brain/McpExtensionsBridge';
-
-const APP_SHELL_PATHS = ['/dashboard', '/ide', '/training', '/tenants'];
+import { useAuth } from '@/lib/AuthContext';
 
 const FOOTER_ONLY_PATHS = ['/login', '/register'];
 
-/** True when path is /projects/:id (IDE page) */
+// Full-screen routes that render their own UI with no shell chrome.
+const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/'];
+
+// Marketing + public-browse routes. These render in PublicShell (auth-aware
+// sidebar) for EVERYONE: logged-out visitors get the marketing nav + product
+// map, signed-in users get the app nav — but the page stays publicly viewable.
+const PUBLIC_SHELL_PREFIXES = ['/product', '/blog', '/agents', '/pricing', '/marketplace', '/prompts'];
+
+// Authenticated app routes — gated behind OnboardingGate inside AppShell.
+const APP_SHELL_EXACT = ['/dashboard', '/ide', '/training', '/tenants'];
+const APP_SHELL_PREFIXES = [
+  '/ide', '/projects', '/tasks', '/workflows', '/architect', '/agent-worker',
+  '/workforce', '/contributors', '/chats', '/brainstorm', '/content-manager',
+  '/skills', '/personas', '/approvals', '/security', '/settings', '/admin',
+  '/observability', '/debug', '/logs', '/timeline',
+];
+
 function isProjectIdPage(pathname: string): boolean {
   return /^\/projects\/[^/]+$/.test(pathname);
 }
 
-/** Routes that are fully public (no auth needed) but still show the TopBar */
-function isPublicBrowsePath(pathname: string): boolean {
-  return pathname.startsWith('/marketplace') || pathname.startsWith('/prompts');
+function isNoChrome(pathname: string): boolean {
+  return NO_CHROME_PREFIXES.some((p) => pathname.startsWith(p));
 }
 
-function useShowAppShell(): boolean {
-  const pathname = usePathname();
-  if (!pathname) return false;
+function isPublicShellPath(pathname: string): boolean {
+  if (pathname === '/') return true;
+  return PUBLIC_SHELL_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+function isAppShellPath(pathname: string): boolean {
   if (isProjectIdPage(pathname)) return true;
-  if (pathname.startsWith('/ide')) return true;
-  if (APP_SHELL_PATHS.some((p) => pathname === p)) return true;
-  if (pathname.startsWith('/projects')) return true;
-  if (pathname.startsWith('/tasks')) return true;
-  if (pathname.startsWith('/workflows')) return true;
-  if (pathname.startsWith('/architect')) return true;
-  if (pathname.startsWith('/agent-worker')) return true;
-  if (pathname.startsWith('/workforce')) return true;
-  if (pathname.startsWith('/contributors')) return true;
-  if (pathname.startsWith('/prompts')) return true;
-  if (pathname.startsWith('/marketplace')) return true;
-  if (pathname.startsWith('/chats')) return true;
-  if (pathname.startsWith('/brainstorm')) return true;
-  if (pathname.startsWith('/content-manager')) return true;
-  if (pathname.startsWith('/skills')) return true;
-  if (pathname.startsWith('/personas')) return true;
-  if (pathname.startsWith('/pricing')) return true;
-  if (pathname.startsWith('/approvals')) return true;
-  if (pathname.startsWith('/security')) return true;
-  if (pathname.startsWith('/settings')) return true;
-  if (pathname.startsWith('/admin')) return true;
-  if (pathname.startsWith('/observability')) return true;
-  if (pathname.startsWith('/debug')) return true;
-  if (pathname.startsWith('/logs')) return true;
-  if (pathname.startsWith('/timeline')) return true;
-  return false;
+  if (APP_SHELL_EXACT.includes(pathname)) return true;
+  return APP_SHELL_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-function useShowFooterOnly(): boolean {
-  const pathname = usePathname();
-  if (!pathname) return false;
-  if (FOOTER_ONLY_PATHS.some((p) => pathname === p)) return true;
-  return false;
-}
-
-/**
- * Thin shell for public marketplace browsing: TopBar + page content + footer.
- * No sidebar — unauthenticated users shouldn't see workspace nav.
- */
-function PublicBrowseShell({ children }: { children: React.ReactNode }) {
+/** Footer-only chrome for the auth screens (login/register). */
+function FooterOnlyShell({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <TopBar />
-      <main style={{ flex: 1, overflowY: 'auto', padding: '48px 0 0' }}>{children}</main>
+    <div
+      className="layout-footer-only"
+      style={{ height: '100vh', maxHeight: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+    >
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        {children}
+      </div>
       <AppFooter />
     </div>
   );
 }
 
-/** Pick the shell chrome for the current route (no Brain — that's mounted globally below). */
+/** Pick the shell chrome for the current route (Brain is mounted globally below). */
 function useShellContent(children: React.ReactNode): React.ReactNode {
-  const showShell = useShowAppShell();
-  const showFooterOnly = useShowFooterOnly();
-  const pathname = usePathname();
-  const { isAuthenticated } = useAuth();
+  const pathname = usePathname() || '';
 
-  // Marketplace: full AppShell (with sidebar) when authenticated;
-  // public browse shell (TopBar only, no sidebar) when not authenticated.
-  if (pathname && isPublicBrowsePath(pathname) && !isAuthenticated) {
-    return <PublicBrowseShell>{children}</PublicBrowseShell>;
-  }
+  if (isNoChrome(pathname)) return <>{children}</>;
+  if (FOOTER_ONLY_PATHS.includes(pathname)) return <FooterOnlyShell>{children}</FooterOnlyShell>;
 
-  if (showShell) {
+  // Marketing + public browse → auth-aware PublicShell (renders for logged-out
+  // visitors; the app's OnboardingGate would otherwise blank the page pre-auth).
+  if (isPublicShellPath(pathname)) return <PublicShell>{children}</PublicShell>;
+
+  // Authenticated app routes → AppShell behind the onboarding/terms gate.
+  if (isAppShellPath(pathname)) {
     return (
       <OnboardingGate renderShell={(gated) => <AppShell>{gated}</AppShell>}>
         {children}
@@ -98,34 +83,8 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
     );
   }
 
-  if (showFooterOnly) {
-    return (
-      <div
-        className="layout-footer-only"
-        style={{
-          height: '100vh',
-          maxHeight: '100vh',
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        <div
-          style={{
-            flex: 1,
-            minHeight: 0,
-            overflowY: 'auto',
-            WebkitOverflowScrolling: 'touch',
-          }}
-        >
-          {children}
-        </div>
-        <AppFooter />
-      </div>
-    );
-  }
-
-  return <>{children}</>;
+  // Default: any other route still gets the public chrome so the menu is present.
+  return <PublicShell>{children}</PublicShell>;
 }
 
 export default function ConditionalAppShell({ children }: { children: React.ReactNode }) {
