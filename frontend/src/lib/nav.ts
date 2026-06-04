@@ -1,7 +1,6 @@
 /**
- * Shared active-link logic for every nav surface (Sidebar, MarketingHeader,
- * agents MarketingNav). One matcher so the "which item is active" rule can't
- * drift between the app shell and the marketing chrome.
+ * Shared active-link logic for the Sidebar (and any future nav surface). One
+ * matcher so the "which item is active" rule can't drift.
  *
  * Consumers pass the current `usePathname()` value plus the nav item; the item
  * only needs an `href`, with two optional escape hatches:

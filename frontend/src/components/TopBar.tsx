@@ -66,7 +66,7 @@ function CartButton() {
 }
 
 export default function TopBar() {
-  const { tenant, logout, user } = useAuth();
+  const { tenant, logout, user, isAuthenticated } = useAuth();
   const { previewRole, startPreview, exitPreview } = useRolePreview();
   const { emulation } = useEmulation();
 
@@ -79,7 +79,7 @@ export default function TopBar() {
   return (
     <header className={`topbar${previewRole ? ' topbar--role-preview' : ''}`}>
       <div className="topbar-left">
-        <Link href="/dashboard" className="brand" style={{ textDecoration: 'none' }}>
+        <Link href={isAuthenticated ? '/dashboard' : '/'} className="brand" style={{ textDecoration: 'none' }}>
           <Image
             src="/agentHost.png"
             alt="Builderforce"
@@ -109,7 +109,27 @@ export default function TopBar() {
         )}
       </div>
       <div className="topbar-right">
-        {tenant && (
+        {!isAuthenticated && (
+          <>
+            <Link href="/login" className="tenant-chip" style={{ textDecoration: 'none' }}>
+              Sign In
+            </Link>
+            <Link
+              href="/register"
+              className="tenant-chip"
+              style={{
+                textDecoration: 'none',
+                color: '#fff',
+                border: 'none',
+                background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
+              }}
+            >
+              Get Started →
+            </Link>
+          </>
+        )}
+
+        {isAuthenticated && tenant && (
           <Link href="/tenants" className="tenant-chip" style={{ textDecoration: 'none' }} title={tenant.name}>
             {tenant.name || tenant.id}
             <svg viewBox="0 0 24 24" style={{ width: 12, height: 12, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
@@ -119,7 +139,7 @@ export default function TopBar() {
         )}
 
         {/* Role preview — superadmin only, not during emulation */}
-        {user?.isSuperadmin && !emulation && (
+        {isAuthenticated && user?.isSuperadmin && !emulation && (
           <div className="topbar-role-preview">
             {previewRole ? (
               <>
@@ -154,27 +174,29 @@ export default function TopBar() {
         <CartButton />
 
         <ThemeToggleButton />
-        <button
-          type="button"
-          onClick={handleSignOut}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--text-muted)',
-            cursor: 'pointer',
-            padding: 6,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          title="Sign out"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
-          </svg>
-        </button>
+        {isAuthenticated && (
+          <button
+            type="button"
+            onClick={handleSignOut}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              padding: 6,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            title="Sign out"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </button>
+        )}
       </div>
     </header>
   );

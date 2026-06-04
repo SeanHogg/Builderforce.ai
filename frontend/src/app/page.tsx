@@ -5,9 +5,8 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import JsonLd from '@/components/JsonLd';
-import MarketingHeader from '@/components/MarketingHeader';
 import { homepageSchema } from '@/lib/structured-data';
-import { HOMEPAGE_FAQ, MARKETING_NAV_LINKS, FOOTER_LINKS } from '@/lib/content';
+import { HOMEPAGE_FAQ, FOOTER_LINKS } from '@/lib/content';
 import { savePendingPrompt } from '@/lib/brain';
 
 // register BuilderForce Agents quickstart web component
@@ -511,10 +510,6 @@ export default function LandingPage() {
       <JsonLd data={homepageSchema()} />
 
       <div className="lp">
-
-        {/* ── Nav ── */}
-        <MarketingHeader links={MARKETING_NAV_LINKS} />
-
         <main>
         {/* ── Hero ── */}
         <section className="lp-hero">

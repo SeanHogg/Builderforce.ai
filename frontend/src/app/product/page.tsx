@@ -1,14 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import JsonLd from '@/components/JsonLd';
-import MarketingHeader from '@/components/MarketingHeader';
 import { productSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
 import {
   BRAND,
   STATS,
   PRODUCT_SECTIONS,
-  MARKETING_NAV_LINKS,
   FOOTER_LINKS,
 } from '@/lib/content';
 
@@ -105,8 +103,6 @@ export default function ProductPage() {
       `}</style>
 
       <div className="pp">
-        <MarketingHeader links={MARKETING_NAV_LINKS} />
-
         <main>
           <section className="pp-hero">
             <div className="pp-eyebrow">The Platform</div>

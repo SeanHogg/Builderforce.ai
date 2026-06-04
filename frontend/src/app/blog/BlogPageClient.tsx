@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { BLOG_POSTS } from '@/lib/blogData';
 import JsonLd from '@/components/JsonLd';
-import MarketingHeader from '@/components/MarketingHeader';
 import { blogIndexSchema } from '@/lib/structured-data';
 
 export default function BlogPageClient() {
@@ -201,15 +200,6 @@ export default function BlogPageClient() {
       <JsonLd data={blogIndexSchema(BLOG_POSTS)} />
 
       <div className="blog-page">
-        {/* ── Nav ── */}
-        <MarketingHeader
-          links={[
-            { label: 'Workforce', href: '/workforce' },
-            { label: 'Blog', href: '/blog' },
-            { label: 'Sign In', href: '/login' },
-          ]}
-        />
-
         {/* ── Hero ── */}
         <div className="blog-hero">
           <div className="blog-hero-badge">📝 Latest Articles</div>
