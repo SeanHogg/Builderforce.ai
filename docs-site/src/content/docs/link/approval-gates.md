@@ -1,15 +1,15 @@
 ---
 title: Approval Gates (Human-in-the-Loop)
-description: How CoderClaw blocks on human approval before executing high-risk actions — and how Builderforce manages the approval workflow
+description: How BuilderForce Agents blocks on human approval before executing high-risk actions — and how Builderforce manages the approval workflow
 ---
 
 # Approval Gates — Human-in-the-Loop Control
 
-CoderClaw supports **approval gates**: agent-initiated pauses that block execution until a human approves or rejects the pending action. This is separate from the local exec-approval system (which governs which shell commands are allowed). Approval gates apply to higher-level agentic decisions — destructive operations, production deployments, large-scale refactors, or anything your team has decided needs a human sign-off.
+BuilderForce Agents supports **approval gates**: agent-initiated pauses that block execution until a human approves or rejects the pending action. This is separate from the local exec-approval system (which governs which shell commands are allowed). Approval gates apply to higher-level agentic decisions — destructive operations, production deployments, large-scale refactors, or anything your team has decided needs a human sign-off.
 
 > **Exec approvals vs approval gates**
 >
-> - **Exec approvals** (`coderclaw approvals`) — allowlist for shell commands that the agent may run without prompting. Local, filesystem-managed.
+> - **Exec approvals** (`builderforce approvals`) — allowlist for shell commands that the agent may run without prompting. Local, filesystem-managed.
 > - **Approval gates** (this page) — Builderforce-mediated pauses for significant agentic actions. Require portal connectivity; auto-approve in standalone mode.
 
 ---
@@ -18,14 +18,14 @@ CoderClaw supports **approval gates**: agent-initiated pauses that block executi
 
 When an agent calls `requestApproval()` internally (or a tool explicitly triggers a gate):
 
-1. CoderClaw POSTs an approval request to Builderforce:
+1. BuilderForce Agents POSTs an approval request to Builderforce:
    ```
-   POST /api/claws/:id/approval-request
+   POST /api/agents/:id/approval-request
    ```
 2. The portal creates a pending approval record and pushes an `approval.request` frame to the relay WebSocket — which surfaces in the Builderforce UI as a notification.
-3. The claw **blocks** on that approval, waiting for an `approval.decision` relay frame.
+3. The agent **blocks** on that approval, waiting for an `approval.decision` relay frame.
 4. A manager or owner in the portal reviews the request and clicks **Approve** or **Reject**.
-5. The decision arrives via the relay; the claw unblocks and continues (or aborts) accordingly.
+5. The decision arrives via the relay; the agent unblocks and continues (or aborts) accordingly.
 
 ### Timeout
 
@@ -35,7 +35,7 @@ Approval requests time out after 10 minutes by default. A timed-out request reso
 
 ## Standalone mode (no Builderforce)
 
-If CoderClaw is running without a Builderforce connection, approval gates **auto-approve**. The agent logs a warning:
+If BuilderForce Agents is running without a Builderforce connection, approval gates **auto-approve**. The agent logs a warning:
 
 ```
 [approval-gate] No Builderforce connection — auto-approving: deploy production database migration
@@ -50,7 +50,7 @@ This means standalone mode is fully autonomous. If you need enforced gates witho
 In a workflow YAML, mark a step as requiring approval by adding `requiresApproval: true`:
 
 ```yaml
-# .coderClaw/workflows/deploy.yaml
+# .builderforce/workflows/deploy.yaml
 steps:
   - role: planner
     description: "Plan the deployment sequence"
@@ -88,7 +88,7 @@ Navigate to [Approvals](/link/api-reference/#approvals-human-in-the-loop) in the
 - **Rejected** — decisions that caused the agent to abort
 - **Timed out** — requests that expired before a human responded
 
-Each approval record shows: action type, description, requesting claw, timestamp, and any reviewer note left on the decision.
+Each approval record shows: action type, description, requesting agent, timestamp, and any reviewer note left on the decision.
 
 ### Who can approve?
 
@@ -100,14 +100,14 @@ Approval decisions require the **MANAGER** role or higher. Viewers and developer
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `POST` | `/api/claws/:id/approval-request` | Claw key | Create pending approval from agent |
-| `GET` | `/api/approvals` | JWT | List approvals (`?status=&clawId=`) |
+| `POST` | `/api/agents/:id/approval-request` | Agent key | Create pending approval from agent |
+| `GET` | `/api/approvals` | JWT | List approvals (`?status=&agentNodeId=`) |
 | `GET` | `/api/approvals/:id` | JWT | Get approval detail |
 | `PATCH` | `/api/approvals/:id` | JWT, MANAGER+ | Approve or reject |
 
 ### Relay frames
 
-**Portal → claw** (after decision):
+**Portal → agent** (after decision):
 ```json
 {
   "type": "approval.decision",
@@ -117,7 +117,7 @@ Approval decisions require the **MANAGER** role or higher. Viewers and developer
 }
 ```
 
-**Claw → portal** (on request):
+**Agent → portal** (on request):
 ```json
 {
   "type": "approval.request",

@@ -1,5 +1,5 @@
 ---
-summary: "Use OpenCode Zen (curated models) with CoderClaw"
+summary: "Use OpenCode Zen (curated models) with BuilderForce Agents"
 read_when:
   - You want OpenCode Zen for model access
   - You want a curated list of coding-friendly models
@@ -15,9 +15,9 @@ Zen is currently in beta.
 ## CLI setup
 
 ```bash
-coderclaw onboard --auth-choice opencode-zen
+builderforce onboard --auth-choice opencode-zen
 # or non-interactive
-coderclaw onboard --opencode-zen-api-key "$OPENCODE_API_KEY"
+builderforce onboard --opencode-zen-api-key "$OPENCODE_API_KEY"
 ```
 
 ## Config snippet

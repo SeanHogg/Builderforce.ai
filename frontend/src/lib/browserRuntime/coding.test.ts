@@ -41,7 +41,7 @@ function fakeGit() {
 }
 
 const changes = (over: Partial<ProposedChanges> = {}): ProposedChanges => ({
-  branch: 'claw/task-1',
+  branch: 'agentHost/task-1',
   commitMessage: 'feat: implement',
   files: [{ path: 'src/x.ts', content: 'export const x = 1;' }],
   summary: 'did the thing',
@@ -58,11 +58,11 @@ describe('runCodingDispatch', () => {
     const res = await runCodingDispatch(dispatch, repo, deps);
 
     expect(git.clone).toHaveBeenCalledWith('main');
-    expect(git.createBranch).toHaveBeenCalledWith('claw/task-1');
+    expect(git.createBranch).toHaveBeenCalledWith('agentHost/task-1');
     expect(git.writeFiles).toHaveBeenCalledWith(changes().files);
     expect(git.commitAll).toHaveBeenCalledWith('feat: implement');
-    expect(git.push).toHaveBeenCalledWith('claw/task-1');
-    expect(res).toMatchObject({ pushed: true, branch: 'claw/task-1', commitSha: 'sha1' });
+    expect(git.push).toHaveBeenCalledWith('agentHost/task-1');
+    expect(res).toMatchObject({ pushed: true, branch: 'agentHost/task-1', commitSha: 'sha1' });
   });
 
   it('does nothing destructive when the model proposes no files', async () => {

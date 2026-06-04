@@ -1,28 +1,28 @@
 ---
-summary: "Run CoderClaw Gateway 24/7 on a cheap Hetzner VPS (Docker) with durable state and baked-in binaries"
+summary: "Run BuilderForce Agents Gateway 24/7 on a cheap Hetzner VPS (Docker) with durable state and baked-in binaries"
 read_when:
-  - You want CoderClaw running 24/7 on a cloud VPS (not your laptop)
+  - You want BuilderForce Agents running 24/7 on a cloud VPS (not your laptop)
   - You want a production-grade, always-on Gateway on your own VPS
   - You want full control over persistence, binaries, and restart behavior
-  - You are running CoderClaw in Docker on Hetzner or a similar provider
+  - You are running BuilderForce Agents in Docker on Hetzner or a similar provider
 title: "Hetzner"
 ---
 
-# CoderClaw on Hetzner (Docker, Production VPS Guide)
+# BuilderForce Agents on Hetzner (Docker, Production VPS Guide)
 
 ## Goal
 
-Run a persistent CoderClaw Gateway on a Hetzner VPS using Docker, with durable state, baked-in binaries, and safe restart behavior.
+Run a persistent BuilderForce Agents Gateway on a Hetzner VPS using Docker, with durable state, baked-in binaries, and safe restart behavior.
 
-If you want “CoderClaw 24/7 for ~$5”, this is the simplest reliable setup.
+If you want “BuilderForce Agents 24/7 for ~$5”, this is the simplest reliable setup.
 Hetzner pricing changes; pick the smallest Debian/Ubuntu VPS and scale up if you hit OOMs.
 
 ## What are we doing (simple terms)?
 
 - Rent a small Linux server (Hetzner VPS)
 - Install Docker (isolated app runtime)
-- Start the CoderClaw Gateway in Docker
-- Persist `~/.coderclaw` + `~/.coderclaw/workspace` on the host (survives restarts/rebuilds)
+- Start the BuilderForce Agents Gateway in Docker
+- Persist `~/.builderforce` + `~/.builderforce/workspace` on the host (survives restarts/rebuilds)
 - Access the Control UI from your laptop via an SSH tunnel
 
 The Gateway can be accessed via:
@@ -40,7 +40,7 @@ For the generic Docker flow, see [Docker](/install/docker).
 
 1. Provision Hetzner VPS
 2. Install Docker
-3. Clone CoderClaw repository
+3. Clone BuilderForce Agents repository
 4. Create persistent host directories
 5. Configure `.env` and `docker-compose.yml`
 6. Bake required binaries into the image
@@ -96,11 +96,11 @@ docker compose version
 
 ---
 
-## 3) Clone the CoderClaw repository
+## 3) Clone the BuilderForce Agents repository
 
 ```bash
-git clone https://github.com/SeanHogg/coderClaw.git
-cd coderClaw
+git clone https://github.com/SeanHogg/Builderforce.ai.git
+cd BuilderForce Agents
 ```
 
 This guide assumes you will build a custom image to guarantee binary persistence.
@@ -113,10 +113,10 @@ Docker containers are ephemeral.
 All long-lived state must live on the host.
 
 ```bash
-mkdir -p /root/.coderclaw/workspace
+mkdir -p /root/.builderforce/workspace
 
 # Set ownership to the container user (uid 1000):
-chown -R 1000:1000 /root/.coderclaw
+chown -R 1000:1000 /root/.builderforce
 ```
 
 ---
@@ -126,16 +126,16 @@ chown -R 1000:1000 /root/.coderclaw
 Create `.env` in the repository root.
 
 ```bash
-CODERCLAW_IMAGE=coderclaw:latest
-CODERCLAW_GATEWAY_TOKEN=change-me-now
-CODERCLAW_GATEWAY_BIND=lan
-CODERCLAW_GATEWAY_PORT=18789
+BUILDERFORCE_AGENTS_IMAGE=builderforce:latest
+BUILDERFORCE_AGENTS_GATEWAY_TOKEN=change-me-now
+BUILDERFORCE_AGENTS_GATEWAY_BIND=lan
+BUILDERFORCE_AGENTS_GATEWAY_PORT=18789
 
-CODERCLAW_CONFIG_DIR=/root/.coderclaw
-CODERCLAW_WORKSPACE_DIR=/root/.coderclaw/workspace
+BUILDERFORCE_AGENTS_CONFIG_DIR=/root/.builderforce
+BUILDERFORCE_AGENTS_WORKSPACE_DIR=/root/.builderforce/workspace
 
 GOG_KEYRING_PASSWORD=change-me-now
-XDG_CONFIG_HOME=/home/node/.coderclaw
+XDG_CONFIG_HOME=/home/node/.builderforce
 ```
 
 Generate strong secrets:
@@ -154,8 +154,8 @@ Create or update `docker-compose.yml`.
 
 ```yaml
 services:
-  coderclaw-gateway:
-    image: ${CODERCLAW_IMAGE}
+  builderforce-gateway:
+    image: ${BUILDERFORCE_AGENTS_IMAGE}
     build: .
     restart: unless-stopped
     env_file:
@@ -164,28 +164,28 @@ services:
       - HOME=/home/node
       - NODE_ENV=production
       - TERM=xterm-256color
-      - CODERCLAW_GATEWAY_BIND=${CODERCLAW_GATEWAY_BIND}
-      - CODERCLAW_GATEWAY_PORT=${CODERCLAW_GATEWAY_PORT}
-      - CODERCLAW_GATEWAY_TOKEN=${CODERCLAW_GATEWAY_TOKEN}
+      - BUILDERFORCE_AGENTS_GATEWAY_BIND=${BUILDERFORCE_AGENTS_GATEWAY_BIND}
+      - BUILDERFORCE_AGENTS_GATEWAY_PORT=${BUILDERFORCE_AGENTS_GATEWAY_PORT}
+      - BUILDERFORCE_AGENTS_GATEWAY_TOKEN=${BUILDERFORCE_AGENTS_GATEWAY_TOKEN}
       - GOG_KEYRING_PASSWORD=${GOG_KEYRING_PASSWORD}
       - XDG_CONFIG_HOME=${XDG_CONFIG_HOME}
       - PATH=/home/linuxbrew/.linuxbrew/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:
-      - ${CODERCLAW_CONFIG_DIR}:/home/node/.coderclaw
-      - ${CODERCLAW_WORKSPACE_DIR}:/home/node/.coderclaw/workspace
+      - ${BUILDERFORCE_AGENTS_CONFIG_DIR}:/home/node/.builderforce
+      - ${BUILDERFORCE_AGENTS_WORKSPACE_DIR}:/home/node/.builderforce/workspace
     ports:
       # Recommended: keep the Gateway loopback-only on the VPS; access via SSH tunnel.
       # To expose it publicly, remove the `127.0.0.1:` prefix and firewall accordingly.
-      - "127.0.0.1:${CODERCLAW_GATEWAY_PORT}:18789"
+      - "127.0.0.1:${BUILDERFORCE_AGENTS_GATEWAY_PORT}:18789"
     command:
       [
         "node",
         "dist/index.js",
         "gateway",
         "--bind",
-        "${CODERCLAW_GATEWAY_BIND}",
+        "${BUILDERFORCE_AGENTS_GATEWAY_BIND}",
         "--port",
-        "${CODERCLAW_GATEWAY_PORT}",
+        "${BUILDERFORCE_AGENTS_GATEWAY_PORT}",
         "--allow-unconfigured",
       ]
 ```
@@ -261,15 +261,15 @@ CMD ["node","dist/index.js"]
 
 ```bash
 docker compose build
-docker compose up -d coderclaw-gateway
+docker compose up -d builderforce-gateway
 ```
 
 Verify binaries:
 
 ```bash
-docker compose exec coderclaw-gateway which gog
-docker compose exec coderclaw-gateway which goplaces
-docker compose exec coderclaw-gateway which wacli
+docker compose exec builderforce-gateway which gog
+docker compose exec builderforce-gateway which goplaces
+docker compose exec builderforce-gateway which wacli
 ```
 
 Expected output:
@@ -285,7 +285,7 @@ Expected output:
 ## 9) Verify Gateway
 
 ```bash
-docker compose logs -f coderclaw-gateway
+docker compose logs -f builderforce-gateway
 ```
 
 Success:
@@ -310,17 +310,17 @@ Paste your gateway token.
 
 ## What persists where (source of truth)
 
-CoderClaw runs in Docker, but Docker is not the source of truth.
+BuilderForce Agents runs in Docker, but Docker is not the source of truth.
 All long-lived state must survive restarts, rebuilds, and reboots.
 
 | Component           | Location                           | Persistence mechanism  | Notes                             |
 | ------------------- | ---------------------------------- | ---------------------- | --------------------------------- |
-| Gateway config      | `/home/node/.coderclaw/`           | Host volume mount      | Includes `coderclaw.json`, tokens |
-| Model auth profiles | `/home/node/.coderclaw/`           | Host volume mount      | OAuth tokens, API keys            |
-| Skill configs       | `/home/node/.coderclaw/skills/`    | Host volume mount      | Skill-level state                 |
-| Agent workspace     | `/home/node/.coderclaw/workspace/` | Host volume mount      | Code and agent artifacts          |
-| WhatsApp session    | `/home/node/.coderclaw/`           | Host volume mount      | Preserves QR login                |
-| Gmail keyring       | `/home/node/.coderclaw/`           | Host volume + password | Requires `GOG_KEYRING_PASSWORD`   |
+| Gateway config      | `/home/node/.builderforce/`           | Host volume mount      | Includes `builderforce.json`, tokens |
+| Model auth profiles | `/home/node/.builderforce/`           | Host volume mount      | OAuth tokens, API keys            |
+| Skill configs       | `/home/node/.builderforce/skills/`    | Host volume mount      | Skill-level state                 |
+| Agent workspace     | `/home/node/.builderforce/workspace/` | Host volume mount      | Code and agent artifacts          |
+| WhatsApp session    | `/home/node/.builderforce/`           | Host volume mount      | Preserves QR login                |
+| Gmail keyring       | `/home/node/.builderforce/`           | Host volume + password | Requires `GOG_KEYRING_PASSWORD`   |
 | External binaries   | `/usr/local/bin/`                  | Docker image           | Must be baked at build time       |
 | Node runtime        | Container filesystem               | Docker image           | Rebuilt every image build         |
 | OS packages         | Container filesystem               | Docker image           | Do not install at runtime         |
@@ -340,8 +340,8 @@ For teams preferring infrastructure-as-code workflows, a community-maintained Te
 
 **Repositories:**
 
-- Infrastructure: [coderclaw-terraform-hetzner](https://github.com/andreesg/coderclaw-terraform-hetzner)
-- Docker config: [coderclaw-docker-config](https://github.com/andreesg/coderclaw-docker-config)
+- Infrastructure: [builderforce-terraform-hetzner](https://github.com/andreesg/builderforce-terraform-hetzner)
+- Docker config: [builderforce-docker-config](https://github.com/andreesg/builderforce-docker-config)
 
 This approach complements the Docker setup above with reproducible deployments, version-controlled infrastructure, and automated disaster recovery.
 

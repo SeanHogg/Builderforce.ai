@@ -15,7 +15,7 @@ x-i18n:
 
 # Bonjour / mDNS 设备发现
 
-CoderClaw 使用 Bonjour（mDNS / DNS‑SD）作为**仅限局域网的便捷方式**来发现
+BuilderForce Agents 使用 Bonjour（mDNS / DNS‑SD）作为**仅限局域网的便捷方式**来发现
 活跃的 Gateway 网关（WebSocket 端点）。这是尽力而为的，**不能**替代 SSH 或
 基于 Tailnet 的连接。
 
@@ -28,12 +28,12 @@ CoderClaw 使用 Bonjour（mDNS / DNS‑SD）作为**仅限局域网的便捷方
 概要步骤：
 
 1. 在 Gateway 网关主机上运行 DNS 服务器（可通过 Tailnet 访问）。
-2. 在专用区域下发布 `_coderclaw-gw._tcp` 的 DNS‑SD 记录
-   （示例：`coderclaw.internal.`）。
+2. 在专用区域下发布 `_builderforce-gw._tcp` 的 DNS‑SD 记录
+   （示例：`builderforce.internal.`）。
 3. 配置 Tailscale **分割 DNS**，使你选择的域名通过该
    DNS 服务器为客户端（包括 iOS）解析。
 
-CoderClaw 支持任何发现域名；`coderclaw.internal.` 只是一个示例。
+BuilderForce Agents 支持任何发现域名；`builderforce.internal.` 只是一个示例。
 iOS/Android 节点同时浏览 `local.` 和你配置的广域域名。
 
 ### Gateway 网关配置（推荐）
@@ -48,19 +48,19 @@ iOS/Android 节点同时浏览 `local.` 和你配置的广域域名。
 ### 一次性 DNS 服务器设置（Gateway 网关主机）
 
 ```bash
-coderclaw dns setup --apply
+builderforce dns setup --apply
 ```
 
 这会安装 CoreDNS 并配置它：
 
 - 仅在 Gateway 网关的 Tailscale 接口上监听 53 端口
-- 从 `~/.coderclaw/dns/<domain>.db` 提供你选择的域名服务（示例：`coderclaw.internal.`）
+- 从 `~/.builderforce/dns/<domain>.db` 提供你选择的域名服务（示例：`builderforce.internal.`）
 
 从 Tailnet 连接的机器上验证：
 
 ```bash
-dns-sd -B _coderclaw-gw._tcp coderclaw.internal.
-dig @<TAILNET_IPV4> -p 53 _coderclaw-gw._tcp.coderclaw.internal PTR +short
+dns-sd -B _builderforce-gw._tcp builderforce.internal.
+dig @<TAILNET_IPV4> -p 53 _builderforce-gw._tcp.builderforce.internal PTR +short
 ```
 
 ### Tailscale DNS 设置
@@ -71,7 +71,7 @@ dig @<TAILNET_IPV4> -p 53 _coderclaw-gw._tcp.coderclaw.internal PTR +short
 - 添加分割 DNS，使你的发现域名使用该名称服务器。
 
 一旦客户端接受 Tailnet DNS，iOS 节点就可以在
-你的发现域名中浏览 `_coderclaw-gw._tcp`，无需多播。
+你的发现域名中浏览 `_builderforce-gw._tcp`，无需多播。
 
 ### Gateway 网关监听器安全（推荐）
 
@@ -80,16 +80,16 @@ Gateway 网关 WS 端口（默认 `18789`）默认绑定到 loopback。对于局
 
 对于仅 Tailnet 的设置：
 
-- 在 `~/.coderclaw/coderclaw.json` 中设置 `gateway.bind: "tailnet"`。
+- 在 `~/.builderforce/builderforce.json` 中设置 `gateway.bind: "tailnet"`。
 - 重启 Gateway 网关（或重启 macOS 菜单栏应用）。
 
 ## 什么在广播
 
-只有 Gateway 网关广播 `_coderclaw-gw._tcp`。
+只有 Gateway 网关广播 `_builderforce-gw._tcp`。
 
 ## 服务类型
 
-- `_coderclaw-gw._tcp` — Gateway 网关传输信标（被 macOS/iOS/Android 节点使用）。
+- `_builderforce-gw._tcp` — Gateway 网关传输信标（被 macOS/iOS/Android 节点使用）。
 
 ## TXT 键（非机密提示）
 
@@ -104,7 +104,7 @@ Gateway 网关广播小型非机密提示以方便 UI 流程：
 - `canvasPort=<port>`（仅当画布主机启用时；默认 `18793`）
 - `sshPort=<port>`（未覆盖时默认为 22）
 - `transport=gateway`
-- `cliPath=<path>`（可选；可运行的 `coderclaw` 入口点的绝对路径）
+- `cliPath=<path>`（可选；可运行的 `builderforce` 入口点的绝对路径）
 - `tailnetDns=<magicdns>`（当 Tailnet 可用时的可选提示）
 
 ## 在 macOS 上调试
@@ -113,11 +113,11 @@ Gateway 网关广播小型非机密提示以方便 UI 流程：
 
 - 浏览实例：
   ```bash
-  dns-sd -B _coderclaw-gw._tcp local.
+  dns-sd -B _builderforce-gw._tcp local.
   ```
 - 解析单个实例（替换 `<instance>`）：
   ```bash
-  dns-sd -L "<instance>" _coderclaw-gw._tcp local.
+  dns-sd -L "<instance>" _builderforce-gw._tcp local.
   ```
 
 如果浏览有效但解析失败，你通常遇到的是局域网策略或
@@ -134,7 +134,7 @@ Gateway 网关会写入滚动日志文件（启动时打印为
 
 ## 在 iOS 节点上调试
 
-iOS 节点使用 `NWBrowser` 来发现 `_coderclaw-gw._tcp`。
+iOS 节点使用 `NWBrowser` 来发现 `_builderforce-gw._tcp`。
 
 要捕获日志：
 
@@ -162,11 +162,11 @@ Bonjour/DNS‑SD 经常将服务实例名称中的字节转义为十进制 `\DDD
 
 ## 禁用 / 配置
 
-- `CODERCLAW_DISABLE_BONJOUR=1` 禁用广播（旧版：`CODERCLAW_DISABLE_BONJOUR`）。
-- `~/.coderclaw/coderclaw.json` 中的 `gateway.bind` 控制 Gateway 网关绑定模式。
-- `CODERCLAW_SSH_PORT` 覆盖 TXT 中广播的 SSH 端口（旧版：`CODERCLAW_SSH_PORT`）。
-- `CODERCLAW_TAILNET_DNS` 在 TXT 中发布 MagicDNS 提示（旧版：`CODERCLAW_TAILNET_DNS`）。
-- `CODERCLAW_CLI_PATH` 覆盖广播的 CLI 路径（旧版：`CODERCLAW_CLI_PATH`）。
+- `BUILDERFORCE_AGENTS_DISABLE_BONJOUR=1` 禁用广播（旧版：`BUILDERFORCE_AGENTS_DISABLE_BONJOUR`）。
+- `~/.builderforce/builderforce.json` 中的 `gateway.bind` 控制 Gateway 网关绑定模式。
+- `BUILDERFORCE_AGENTS_SSH_PORT` 覆盖 TXT 中广播的 SSH 端口（旧版：`BUILDERFORCE_AGENTS_SSH_PORT`）。
+- `BUILDERFORCE_AGENTS_TAILNET_DNS` 在 TXT 中发布 MagicDNS 提示（旧版：`BUILDERFORCE_AGENTS_TAILNET_DNS`）。
+- `BUILDERFORCE_AGENTS_CLI_PATH` 覆盖广播的 CLI 路径（旧版：`BUILDERFORCE_AGENTS_CLI_PATH`）。
 
 ## 相关文档
 

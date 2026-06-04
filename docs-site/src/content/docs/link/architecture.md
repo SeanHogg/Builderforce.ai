@@ -1,6 +1,6 @@
 ---
 title: Architecture
-description: Four-layer DDD API, Lit 3 SPA, ClawRelayDO Durable Object, and how the pieces connect
+description: Four-layer DDD API, Lit 3 SPA, AgentHostRelayDO Durable Object, and how the pieces connect
 ---
 
 # Builderforce — Technical Architecture
@@ -19,8 +19,8 @@ Browser (builderforce.ai)
   ▼
 Cloudflare Worker (api.builderforce.ai)  ──  Hono 4 router
   │
-  ├─── Durable Object: ClawRelayDO  ──►  WebSocket ──►  coderClaw runtime (local machine)
-  │         (one DO per Claw)
+  ├─── Durable Object: AgentHostRelayDO  ──►  WebSocket ──►  BuilderForce Agents runtime (local machine)
+  │         (one DO per Agent)
   │
   ├─── Cloudflare Hyperdrive  ──►  Postgres (Neon / Supabase / self-managed)
   │
@@ -87,7 +87,7 @@ Concrete adapters — depend on application ports.
 |---|---|
 | `auth/` | `JwtService` (HMAC-SHA-256, Web Crypto), `HashService` (PBKDF2 passwords, bcrypt-compatible API keys), `MfaService` (TOTP — AES-GCM encrypted secrets, recovery codes) |
 | `database/` | Drizzle ORM schema, Cloudflare Hyperdrive connection factory |
-| `relay/` | `ClawRelayDO` — Durable Object WebSocket broker |
+| `relay/` | `AgentHostRelayDO` — Durable Object WebSocket broker |
 | `repositories/` | Drizzle/Postgres implementations of all domain ports |
 
 ### Layer 4 — Presentation
@@ -102,15 +102,15 @@ Hono routes + middleware. Depends on application services.
 | `projectRoutes.ts` | `/api/projects` | CRUD + scaffold + insights |
 | `taskRoutes.ts` | `/api/tasks` | CRUD + status |
 | `tenantRoutes.ts` | `/api/tenants` | Tenant + member + subscription management |
-| `clawRoutes.ts` | `/api/claws` | Claw CRUD, directories, file browser, relay forward |
+| `agentNodeRoutes.ts` | `/api/agents` | Agent CRUD, directories, file browser, relay forward |
 | `agentRoutes.ts` | `/api/agents` | Agent + skill CRUD |
 | `runtimeRoutes.ts` | `/api/runtime` | Execution lifecycle + WebSocket stream |
 | `specRoutes.ts` | `/api/specs` | Planning document CRUD |
 | `workflowRoutes.ts` | `/api/workflows` | Workflow DAG CRUD |
 | `approvalRoutes.ts` | `/api/approvals` | Human-in-the-loop gates |
 | `auditRoutes.ts` | `/api/audit` | Immutable event log |
-| `chatRoutes.ts` | `/api/chats`, `/api/claws/:id/messages` | Chat session persistence |
-| `skillAssignmentRoutes.ts` | `/api/skill-assignments` | Tenant + claw skill assignments |
+| `chatRoutes.ts` | `/api/chats`, `/api/agents/:id/messages` | Chat session persistence |
+| `skillAssignmentRoutes.ts` | `/api/skill-assignments` | Tenant + agent skill assignments |
 | `llmRoutes.ts` | `/llm/v1` | OpenAI-compatible LLM proxy |
 | `marketplaceRoutes.ts` | `/marketplace` | Public skills registry + auth |
 | `adminRoutes.ts` | `/api/admin` | Superadmin panel |
@@ -135,7 +135,7 @@ The SPA is built with **Lit 3** (web components) and **Vite**, served by a minim
 |------|-------------|
 | `app.ts` | Root `<ccl-app>` — auth state machine + client-side routing |
 | `api.ts` | Typed fetch wrapper — manages JWT refresh, dispatches `ccl:unauthorized` event |
-| `gateway.ts` | `ClawGateway` — WebSocket client for the relay DO |
+| `gateway.ts` | `AgentGateway` — WebSocket client for the relay DO |
 | `main.ts` | Entry point — registers all custom elements |
 | `styles.css` | Design system — CSS custom properties, zero utility framework dependency |
 
@@ -143,12 +143,12 @@ The SPA is built with **Lit 3** (web components) and **Vite**, served by a minim
 
 | View file | Route | Description |
 |-----------|-------|-------------|
-| `dashboard.ts` | `/` | Overview — projects, tasks, claw status |
+| `dashboard.ts` | `/` | Overview — projects, tasks, agent status |
 | `projects.ts` | `/projects` | Project list + CRUD |
 | `tasks.ts` | `/tasks` | Task board + CRUD |
-| `claws.ts` | `/claws` | Claw registry |
+| `agents.ts` | `/agents` | Agent registry |
 | `agents.ts` | `/agents` | Agent + skill management |
-| `workspace.ts` | `/workspace` | Multi-claw workspace |
+| `workspace.ts` | `/workspace` | Multi-agent workspace |
 | `brain.ts` | `/brain` | AI project assistant (conversational UI) |
 | `logs.ts` | `/logs` | Execution logs (raw list + visual timeline) |
 | `execution-timeline.ts` | shared component | Visual timeline/list/graph debugger (see [Visual Debugging](/link/visual-debugging/)) |
@@ -164,26 +164,26 @@ The SPA is built with **Lit 3** (web components) and **Vite**, served by a minim
 
 ## 4. Real-Time Relay — Durable Objects
 
-The `ClawRelayDO` is a Cloudflare **Durable Object** — a stateful serverless primitive that maintains a persistent WebSocket connection per Claw.
+The `AgentHostRelayDO` is a Cloudflare **Durable Object** — a stateful serverless primitive that maintains a persistent WebSocket connection per Agent.
 
 ```
-coderClaw runtime
-  │  wss://api.builderforce.ai/api/relay/:clawId?key=<apiKey>
+BuilderForce Agents runtime
+  │  wss://api.builderforce.ai/api/relay/:agentNodeId?key=<apiKey>
   ▼
-ClawRelayDO (one instance per Claw ID)
+AgentHostRelayDO (one instance per Agent ID)
   │  Fanout to all connected browser clients
   ▼
-Browser (portal)  ──  ClawGateway WebSocket client
+Browser (portal)  ──  AgentGateway WebSocket client
 ```
 
 **How it works:**
-1. The coderClaw runtime opens a WebSocket to `/api/relay/:clawId?key=<apiKey>`.
-2. The DO authenticates the claw API key, then keeps the connection alive.
+1. The BuilderForce Agents runtime opens a WebSocket to `/api/relay/:agentNodeId?key=<apiKey>`.
+2. The DO authenticates the agent API key, then keeps the connection alive.
 3. Browser clients connect to the same DO endpoint (with a user JWT).
-4. The DO fans out inbound frames (from the claw) to all connected browser clients.
-5. The portal can push frames back to the claw (approvals, remote.task forwards).
+4. The DO fans out inbound frames (from the agent) to all connected browser clients.
+5. The portal can push frames back to the agent (approvals, remote.task forwards).
 
-**Persistence:** The DO persists chat messages (`POST /api/claws/:id/messages`), usage snapshots, and tool audit events to Postgres via REST callbacks on the API Worker.
+**Persistence:** The DO persists chat messages (`POST /api/agents/:id/messages`), usage snapshots, and tool audit events to Postgres via REST callbacks on the API Worker.
 
 ---
 
@@ -197,7 +197,7 @@ All tables use Postgres via Cloudflare Hyperdrive. Migrations are in `api/migrat
 | `auth_tokens` | One-time API keys issued at registration |
 | `tenants` | Tenant organisations |
 | `tenant_members` | User ↔ Tenant membership + role |
-| `coderclaw_instances` | Registered Claw instances (API key hash) |
+| `builderforce_instances` | Registered Agent instances (API key hash) |
 | `projects` | Project metadata |
 | `tasks` | Task entities with status + priority |
 | `agents` | Agent role definitions |
@@ -207,7 +207,7 @@ All tables use Postgres via Cloudflare Hyperdrive. Migrations are in `api/migrat
 | `workflows` | Multi-step execution DAGs |
 | `approvals` | Human-in-the-loop approval records |
 | `audit_events` | Immutable audit trail |
-| `chat_sessions` | Chat session metadata per Claw |
+| `chat_sessions` | Chat session metadata per Agent |
 | `chat_messages` | Individual messages (role, content, seq) |
 | `marketplace_skills` | Published skills in the public registry |
 | … | (see repo for full list) |
@@ -221,7 +221,7 @@ All tables use Postgres via Cloudflare Hyperdrive. Migrations are in `api/migrat
 | Scheme | Used by | Mechanism |
 |--------|---------|-----------|
 | User JWT | Browser portal | HMAC-SHA-256 signed, 24h expiry, carries `userId`, `tenantId`, `role` |
-| Claw API key | Agent runtime | PBKDF2-hashed key stored in `coderclaw_instances.api_key_hash` |
+| Agent API key | Agent runtime | PBKDF2-hashed key stored in `builderforce_instances.api_key_hash` |
 | Marketplace JWT | Marketplace users | HMAC-SHA-256, 24h expiry, carries `sub`, `tid: 0` (no tenant scope) |
 
 All cryptography uses the **Web Crypto API** — no third-party auth libraries in the critical path.

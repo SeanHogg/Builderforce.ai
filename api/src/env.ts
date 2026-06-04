@@ -180,7 +180,7 @@ export interface Vars {
    * request by the auth middleware via resolveSegment(): a 'single' tenant maps
    * to its default segment; a 'segmented' tenant maps to the end-client segment
    * carried by the token's account/company claims. Business writes/reads scope
-   * to this. Optional only because some unauthenticated/claw paths skip it.
+   * to this. Optional only because some unauthenticated/agentHost paths skip it.
    */
   segmentId?: string;
   role:     TenantRole;

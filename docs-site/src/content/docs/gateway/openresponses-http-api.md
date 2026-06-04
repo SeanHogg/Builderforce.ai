@@ -8,7 +8,7 @@ title: "OpenResponses API"
 
 # OpenResponses API (HTTP)
 
-CoderClaw’s Gateway can serve an OpenResponses-compatible `POST /v1/responses` endpoint.
+BuilderForce Agents’s Gateway can serve an OpenResponses-compatible `POST /v1/responses` endpoint.
 
 This endpoint is **disabled by default**. Enable it in config first.
 
@@ -16,7 +16,7 @@ This endpoint is **disabled by default**. Enable it in config first.
 - Same port as the Gateway (WS + HTTP multiplex): `http://<gateway-host>:<port>/v1/responses`
 
 Under the hood, requests are executed as a normal Gateway agent run (same codepath as
-`coderclaw agent`), so routing/permissions/config match your Gateway.
+`builderforce agent`), so routing/permissions/config match your Gateway.
 
 ## Authentication
 
@@ -26,24 +26,24 @@ Uses the Gateway auth configuration. Send a bearer token:
 
 Notes:
 
-- When `gateway.auth.mode="token"`, use `gateway.auth.token` (or `CODERCLAW_GATEWAY_TOKEN`).
-- When `gateway.auth.mode="password"`, use `gateway.auth.password` (or `CODERCLAW_GATEWAY_PASSWORD`).
+- When `gateway.auth.mode="token"`, use `gateway.auth.token` (or `BUILDERFORCE_AGENTS_GATEWAY_TOKEN`).
+- When `gateway.auth.mode="password"`, use `gateway.auth.password` (or `BUILDERFORCE_AGENTS_GATEWAY_PASSWORD`).
 - If `gateway.auth.rateLimit` is configured and too many auth failures occur, the endpoint returns `429` with `Retry-After`.
 
 ## Choosing an agent
 
 No custom headers required: encode the agent id in the OpenResponses `model` field:
 
-- `model: "coderclaw:<agentId>"` (example: `"coderclaw:main"`, `"coderclaw:beta"`)
+- `model: "builderforce:<agentId>"` (example: `"builderforce:main"`, `"builderforce:beta"`)
 - `model: "agent:<agentId>"` (alias)
 
-Or target a specific CoderClaw agent by header:
+Or target a specific BuilderForce Agents agent by header:
 
-- `x-coderclaw-agent-id: <agentId>` (default: `main`)
+- `x-builderforce-agent-id: <agentId>` (default: `main`)
 
 Advanced:
 
-- `x-coderclaw-session-key: <sessionKey>` to fully control session routing.
+- `x-builderforce-session-key: <sessionKey>` to fully control session routing.
 
 ## Enabling the endpoint
 
@@ -311,9 +311,9 @@ Non-streaming:
 curl -sS http://127.0.0.1:18789/v1/responses \
   -H 'Authorization: Bearer YOUR_TOKEN' \
   -H 'Content-Type: application/json' \
-  -H 'x-coderclaw-agent-id: main' \
+  -H 'x-builderforce-agent-id: main' \
   -d '{
-    "model": "coderclaw",
+    "model": "builderforce",
     "input": "hi"
   }'
 ```
@@ -324,9 +324,9 @@ Streaming:
 curl -N http://127.0.0.1:18789/v1/responses \
   -H 'Authorization: Bearer YOUR_TOKEN' \
   -H 'Content-Type: application/json' \
-  -H 'x-coderclaw-agent-id: main' \
+  -H 'x-builderforce-agent-id: main' \
   -d '{
-    "model": "coderclaw",
+    "model": "builderforce",
     "stream": true,
     "input": "hi"
   }'

@@ -8,7 +8,7 @@ import {
 import { contentStorageKey } from '@/lib/marketplaceData';
 
 export interface ContentAssignmentsContentProps {
-  scope: 'tenant' | 'claw' | 'project' | 'task' | 'agent';
+  scope: 'tenant' | 'host' | 'project' | 'task' | 'agent';
   scopeId: number;
   /** Tenant ID to look up localStorage content blocks for name resolution. */
   tenantId?: string;

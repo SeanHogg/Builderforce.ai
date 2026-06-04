@@ -10,8 +10,8 @@ import type { Db } from '../../infrastructure/database/connection';
 import {
   authTokens,
   authUserSessions,
-  coderclawInstances,
-  clawProjects,
+  agentHosts,
+  agentHostProjects,
   sourceControlIntegrations,
   tenantMembers,
   users,
@@ -72,40 +72,40 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     return c.json(tenant.toPlain());
   });
 
-  // GET /api/tenants/:id/default-claw
-  router.get('/:id/default-claw', async (c) => {
+  // GET /api/tenants/:id/default-agentHost
+  router.get('/:id/default-agentHost', async (c) => {
     const id = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
     if (id !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
     const tenant = await tenantService.getTenant(id);
-    return c.json({ defaultClawId: tenant.defaultClawId });
+    return c.json({ defaultAgentHostId: tenant.defaultAgentHostId });
   });
 
-  // PUT /api/tenants/:id/default-claw
-  router.put('/:id/default-claw', requireRole(TenantRole.MANAGER), async (c) => {
+  // PUT /api/tenants/:id/default-agentHost
+  router.put('/:id/default-agentHost', requireRole(TenantRole.MANAGER), async (c) => {
     const id = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
     if (id !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
 
-    const body = await c.req.json<{ clawId?: number | null }>();
-    const clawId = body.clawId ?? null;
+    const body = await c.req.json<{ agentHostId?: number | null }>();
+    const agentHostId = body.agentHostId ?? null;
 
-    if (clawId !== null) {
-      const [claw] = await db
-        .select({ id: coderclawInstances.id })
-        .from(coderclawInstances)
+    if (agentHostId !== null) {
+      const [agentHost] = await db
+        .select({ id: agentHosts.id })
+        .from(agentHosts)
         .where(
           and(
-            eq(coderclawInstances.id, clawId),
-            eq(coderclawInstances.tenantId, id),
+            eq(agentHosts.id, agentHostId),
+            eq(agentHosts.tenantId, id),
           ),
         )
         .limit(1);
-      if (!claw) return c.json({ error: 'Claw not found in workspace' }, 404);
+      if (!agentHost) return c.json({ error: 'AgentHost not found in workspace' }, 404);
     }
 
-    const tenant = await tenantService.setDefaultClaw(id, clawId);
-    return c.json({ defaultClawId: tenant.defaultClawId });
+    const tenant = await tenantService.setDefaultAgentHost(id, agentHostId);
+    return c.json({ defaultAgentHostId: tenant.defaultAgentHostId });
   });
 
   // GET /api/tenants/:id/subscription
@@ -291,8 +291,8 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     });
   });
 
-  // GET /api/tenants/:id/claws?status=online
-  router.get('/:id/claws', async (c) => {
+  // GET /api/tenants/:id/agentHosts?status=online
+  router.get('/:id/agentHosts', async (c) => {
     const tenantId = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
@@ -300,30 +300,30 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const status = (c.req.query('status') ?? '').trim().toLowerCase();
     const rows = await db
       .select({
-        id:           coderclawInstances.id,
-        name:         coderclawInstances.name,
-        slug:         coderclawInstances.slug,
-        status:       coderclawInstances.status,
-        connectedAt:  coderclawInstances.connectedAt,
-        lastSeenAt:   coderclawInstances.lastSeenAt,
-        capabilities: coderclawInstances.capabilities,
+        id:           agentHosts.id,
+        name:         agentHosts.name,
+        slug:         agentHosts.slug,
+        status:       agentHosts.status,
+        connectedAt:  agentHosts.connectedAt,
+        lastSeenAt:   agentHosts.lastSeenAt,
+        capabilities: agentHosts.capabilities,
       })
-      .from(coderclawInstances)
-      .where(eq(coderclawInstances.tenantId, tenantId));
+      .from(agentHosts)
+      .where(eq(agentHosts.tenantId, tenantId));
 
     const filtered = status === 'online'
       ? rows.filter((row) => row.connectedAt !== null)
       : rows;
 
-    const claws = await Promise.all(
+    const hostRows = await Promise.all(
       filtered.map(async (row) => {
         const associatedProjects = await db
-          .select({ projectId: clawProjects.projectId })
-          .from(clawProjects)
+          .select({ projectId: agentHostProjects.projectId })
+          .from(agentHostProjects)
           .where(
             and(
-              eq(clawProjects.tenantId, tenantId),
-              eq(clawProjects.clawId, row.id),
+              eq(agentHostProjects.tenantId, tenantId),
+              eq(agentHostProjects.agentHostId, row.id),
             ),
           );
         const capabilities: string[] = row.capabilities
@@ -342,7 +342,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       }),
     );
 
-    return c.json({ claws });
+    return c.json({ agentHosts: hostRows });
   });
 
   // GET /api/tenants/:id/source-control-integrations

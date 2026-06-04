@@ -4,12 +4,12 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   tasksApi,
-  claws,
+  agentHosts,
   runtimeApi,
   isAwaitingApprovalExecution,
   type Task,
   type TaskPriority,
-  type Claw,
+  type AgentHost,
   type Execution,
   type SwimlaneAgent,
 } from '@/lib/builderforceApi';
@@ -67,7 +67,7 @@ export function TaskMgmtContent({
 }: TaskMgmtContentProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>(projectsProp ?? []);
-  const [clawsList, setClawsList] = useState<Claw[]>([]);
+  const [agentHostsList, setAgentHostsList] = useState<AgentHost[]>([]);
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -104,13 +104,13 @@ export function TaskMgmtContent({
     setLoading(true);
     setError(null);
     try {
-      const [tasksData, clawsData, execData] = await Promise.all([
+      const [tasksData, agentHostsData, execData] = await Promise.all([
         tasksApi.list(projectId),
-        claws.list().catch(() => []),
+        agentHosts.list().catch(() => []),
         runtimeApi.listRecent().catch(() => []),
       ]);
       setTasks(tasksData);
-      setClawsList(clawsData);
+      setAgentHostsList(agentHostsData);
       setExecutions(execData);
       if (projectsProp === undefined && !projectId) {
         const projs = await fetchProjects().catch(() => []);
@@ -146,8 +146,8 @@ export function TaskMgmtContent({
 
   const projectNameById = (id?: number | null) =>
     id ? projects.find((p) => p.id === id)?.name ?? String(id) : '—';
-  const clawNameById = (id?: number | null) =>
-    id ? clawsList.find((c) => c.id === id)?.name ?? String(id) : 'Unassigned';
+  const agentHostNameById = (id?: number | null) =>
+    id ? agentHostsList.find((c) => c.id === id)?.name ?? String(id) : 'Unassigned';
 
   // The board being configured: the scoped project, or the single project chosen
   // in the filter. Null when viewing "All projects" — the cog stays visible but disabled.
@@ -210,8 +210,8 @@ export function TaskMgmtContent({
 
   // Resolve the human-facing name of whatever agent ran an execution.
   const execAgentLabel = (e: Execution): string =>
-    (e.clawId != null ? clawsList.find((c) => c.id === e.clawId)?.name : null) ??
-    (e.clawId != null ? `Claw ${e.clawId}` : null) ??
+    (e.agentHostId != null ? agentHostsList.find((c) => c.id === e.agentHostId)?.name : null) ??
+    (e.agentHostId != null ? `AgentHost ${e.agentHostId}` : null) ??
     (e.agentId != null ? `Agent ${e.agentId}` : 'Agent');
 
   const openCreate = () => {
@@ -242,7 +242,7 @@ export function TaskMgmtContent({
           description: form.description ?? null,
           status: form.status ?? editTarget.status,
           priority: (form.priority as TaskPriority) ?? editTarget.priority,
-          assignedClawId: form.assignedClawId ?? null,
+          assignedAgentHostId: form.assignedAgentHostId ?? null,
           dueDate: form.dueDate ?? null,
         });
         setTasks((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
@@ -258,7 +258,7 @@ export function TaskMgmtContent({
           title: form.title.trim(),
           description: form.description || undefined,
           priority: (form.priority as TaskPriority) ?? 'medium',
-          assignedClawId: form.assignedClawId ?? undefined,
+          assignedAgentHostId: form.assignedAgentHostId ?? undefined,
           dueDate: form.dueDate || undefined,
         });
         const statusToSet = form.status ?? 'todo';
@@ -299,12 +299,12 @@ export function TaskMgmtContent({
       setTasks((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
       if (drawerTask?.id === id) setDrawerTask(updated);
 
-      // Auto-send to claw when moving to To Do or In Progress (user expects execution to start)
+      // Auto-send to agentHost when moving to To Do or In Progress (user expects execution to start)
       if (!opts?.skipAutoSubmit && (status === 'todo' || status === 'in_progress')) {
         try {
           const result = await runtimeApi.submitExecution({
             taskId: id,
-            clawId: updated.assignedClawId ?? undefined,
+            agentHostId: updated.assignedAgentHostId ?? undefined,
           });
 
           if (isAwaitingApprovalExecution(result)) {
@@ -315,7 +315,7 @@ export function TaskMgmtContent({
             });
           }
         } catch {
-          // Non-blocking: status was updated; execution may fail if no claw connected
+          // Non-blocking: status was updated; execution may fail if no agentHost connected
         }
       }
     } catch (e) {
@@ -751,8 +751,8 @@ export function TaskMgmtContent({
                               openTask(task, 'agent');
                             }}
                           />
-                        ) : task.assignedClawId ? (
-                          <span>{clawNameById(task.assignedClawId)}</span>
+                        ) : task.assignedAgentHostId ? (
+                          <span>{agentHostNameById(task.assignedAgentHostId)}</span>
                         ) : null}
                         {task.githubPrUrl && (
                           <a
@@ -951,7 +951,7 @@ export function TaskMgmtContent({
                             onClick={() => openTask(task, 'agent')}
                           />
                         ) : (
-                          clawNameById(task.assignedClawId)
+                          agentHostNameById(task.assignedAgentHostId)
                         )}
                       </td>
                       <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>
@@ -1153,14 +1153,14 @@ export function TaskMgmtContent({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                    Assign to Claw
+                    Assign to AgentHost
                   </label>
                   <select
-                    value={form.assignedClawId ?? ''}
+                    value={form.assignedAgentHostId ?? ''}
                     onChange={(e) =>
                       setForm((f) => ({
                         ...f,
-                        assignedClawId: e.target.value ? Number(e.target.value) : null,
+                        assignedAgentHostId: e.target.value ? Number(e.target.value) : null,
                       }))
                     }
                     style={{
@@ -1174,7 +1174,7 @@ export function TaskMgmtContent({
                     }}
                   >
                     <option value="">Unassigned</option>
-                    {clawsList.map((c) => (
+                    {agentHostsList.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
@@ -1323,7 +1323,7 @@ export function TaskMgmtContent({
 
             {drawerTab === 'agent' ? (
               <div style={{ flex: 1, overflow: 'auto' }}>
-                <TaskAgentTab task={drawerTask} claws={clawsList} onTaskChanged={load} />
+                <TaskAgentTab task={drawerTask} agentHosts={agentHostsList} onTaskChanged={load} />
               </div>
             ) : drawerTab === 'prd' ? (
               <div style={{ flex: 1, overflow: 'auto' }}>
@@ -1365,7 +1365,7 @@ export function TaskMgmtContent({
                 <div style={{ display: 'grid', gap: 8 }}>
                   {[
                     ['Project', projectNameById(drawerTask.projectId)],
-                    ['Assignee', clawNameById(drawerTask.assignedClawId)],
+                    ['Assignee', agentHostNameById(drawerTask.assignedAgentHostId)],
                     ['Due date', formatDate(drawerTask.dueDate) || 'None'],
                     ['Created', formatDate(drawerTask.createdAt)],
                   ].filter(([, v]) => !!v).map(([label, val]) => (
@@ -1416,7 +1416,7 @@ export function TaskMgmtContent({
                 <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Run</div>
                 <RunAgentControl
                   task={drawerTask}
-                  claws={clawsList}
+                  agentHosts={agentHostsList}
                   onRan={() => { patchStatus(drawerTask.id, 'in_progress', { skipAutoSubmit: true }); setDrawerTab('agent'); }}
                   onAwaitingApproval={(g) => setApprovalGate({ approvalId: g.approvalId, taskId: g.taskId, reason: g.reason })}
                 />

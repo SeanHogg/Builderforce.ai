@@ -7,7 +7,7 @@ title: "Tlon"
 
 # Tlon (plugin)
 
-Tlon is a decentralized messenger built on Urbit. CoderClaw connects to your Urbit ship and can
+Tlon is a decentralized messenger built on Urbit. BuilderForce Agents connects to your Urbit ship and can
 respond to DMs and group chat messages. Group replies require an @ mention by default and can
 be further restricted via allowlists.
 
@@ -21,13 +21,13 @@ Tlon ships as a plugin and is not bundled with the core install.
 Install via CLI (npm registry):
 
 ```bash
-coderclaw plugins install @coderclaw/tlon
+builderforce plugins install @builderforce/tlon
 ```
 
 Local checkout (when running from a git repo):
 
 ```bash
-coderclaw plugins install ./extensions/tlon
+builderforce plugins install ./extensions/tlon
 ```
 
 Details: [Plugins](/tools/plugin)
@@ -57,7 +57,7 @@ Minimal config (single account):
 
 Private/LAN ship URLs (advanced):
 
-By default, CoderClaw blocks private/internal hostnames and IP ranges for this plugin (SSRF hardening).
+By default, BuilderForce Agents blocks private/internal hostnames and IP ranges for this plugin (SSRF hardening).
 If your ship URL is on a private network (for example `http://192.168.1.50:8080` or `http://localhost:8080`),
 you must explicitly opt in:
 
@@ -136,7 +136,7 @@ Group authorization (restricted by default):
 
 ## Delivery targets (CLI/cron)
 
-Use these with `coderclaw message send` or cron delivery:
+Use these with `builderforce message send` or cron delivery:
 
 - DM: `~sampel-palnet` or `dm/~sampel-palnet`
 - Group: `chat/~host-ship/channel` or `group:~host-ship/channel`
@@ -144,5 +144,5 @@ Use these with `coderclaw message send` or cron delivery:
 ## Notes
 
 - Group replies require a mention (e.g. `~your-bot-ship`) to respond.
-- Thread replies: if the inbound message is in a thread, CoderClaw replies in-thread.
+- Thread replies: if the inbound message is in a thread, BuilderForce Agents replies in-thread.
 - Media: `sendMedia` falls back to text + URL (no native upload).

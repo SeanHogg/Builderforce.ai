@@ -1,0 +1,30 @@
+{
+  "name": "@builderforce/line",
+  "version": "2026.3.21",
+  "private": true,
+  "description": "BuilderForceAgents LINE channel plugin",
+  "type": "module",
+  "devDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*"
+  },
+  "builderforce": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "channel": {
+      "id": "line",
+      "label": "LINE",
+      "selectionLabel": "LINE (Messaging API)",
+      "docsPath": "/channels/line",
+      "docsLabel": "line",
+      "blurb": "LINE Messaging API bot for Japan/Taiwan/Thailand markets.",
+      "order": 75,
+      "quickstartAllowFrom": true
+    },
+    "install": {
+      "npmSpec": "@builderforce/line",
+      "localPath": "extensions/line",
+      "defaultChoice": "npm"
+    }
+  }
+}

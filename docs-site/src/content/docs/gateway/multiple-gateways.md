@@ -1,5 +1,5 @@
 ---
-summary: "Run multiple CoderClaw Gateways on one host (isolation, ports, and profiles)"
+summary: "Run multiple BuilderForce Agents Gateways on one host (isolation, ports, and profiles)"
 read_when:
   - Running more than one Gateway on the same machine
   - You need isolated config/state/ports per Gateway
@@ -12,8 +12,8 @@ Most setups should use one Gateway because a single Gateway can handle multiple 
 
 ## Isolation checklist (required)
 
-- `CODERCLAW_CONFIG_PATH` — per-instance config file
-- `CODERCLAW_STATE_DIR` — per-instance sessions, creds, caches
+- `BUILDERFORCE_AGENTS_CONFIG_PATH` — per-instance config file
+- `BUILDERFORCE_AGENTS_STATE_DIR` — per-instance sessions, creds, caches
 - `agents.defaults.workspace` — per-instance workspace root
 - `gateway.port` (or `--port`) — unique per instance
 - Derived ports (browser/canvas) must not overlap
@@ -22,23 +22,23 @@ If these are shared, you will hit config races and port conflicts.
 
 ## Recommended: profiles (`--profile`)
 
-Profiles auto-scope `CODERCLAW_STATE_DIR` + `CODERCLAW_CONFIG_PATH` and suffix service names.
+Profiles auto-scope `BUILDERFORCE_AGENTS_STATE_DIR` + `BUILDERFORCE_AGENTS_CONFIG_PATH` and suffix service names.
 
 ```bash
 # main
-coderclaw --profile main setup
-coderclaw --profile main gateway --port 18789
+builderforce --profile main setup
+builderforce --profile main gateway --port 18789
 
 # rescue
-coderclaw --profile rescue setup
-coderclaw --profile rescue gateway --port 19001
+builderforce --profile rescue setup
+builderforce --profile rescue gateway --port 19001
 ```
 
 Per-profile services:
 
 ```bash
-coderclaw --profile main gateway install
-coderclaw --profile rescue gateway install
+builderforce --profile main gateway install
+builderforce --profile rescue gateway install
 ```
 
 ## Rescue-bot guide
@@ -59,11 +59,11 @@ Port spacing: leave at least 20 ports between base ports so the derived browser/
 ```bash
 # Main bot (existing or fresh, without --profile param)
 # Runs on port 18789 + Chrome CDC/Canvas/... Ports
-coderclaw onboard
-coderclaw gateway install
+builderforce onboard
+builderforce gateway install
 
 # Rescue bot (isolated profile + ports)
-coderclaw --profile rescue onboard
+builderforce --profile rescue onboard
 # Notes:
 # - workspace name will be postfixed with -rescue per default
 # - Port should be at least 18789 + 20 Ports,
@@ -71,12 +71,12 @@ coderclaw --profile rescue onboard
 # - rest of the onboarding is the same as normal
 
 # To install the service (if not happened automatically during onboarding)
-coderclaw --profile rescue gateway install
+builderforce --profile rescue gateway install
 ```
 
 ## Port mapping (derived)
 
-Base port = `gateway.port` (or `CODERCLAW_GATEWAY_PORT` / `--port`).
+Base port = `gateway.port` (or `BUILDERFORCE_AGENTS_GATEWAY_PORT` / `--port`).
 
 - browser control service port = base + 2 (loopback only)
 - canvas host is served on the Gateway HTTP server (same port as `gateway.port`)
@@ -94,19 +94,19 @@ If you override any of these in config or env, you must keep them unique per ins
 ## Manual env example
 
 ```bash
-CODERCLAW_CONFIG_PATH=~/.coderclaw/main.json \
-CODERCLAW_STATE_DIR=~/.coderclaw-main \
-coderclaw gateway --port 18789
+BUILDERFORCE_AGENTS_CONFIG_PATH=~/.builderforce/main.json \
+BUILDERFORCE_AGENTS_STATE_DIR=~/.builderforce-main \
+builderforce gateway --port 18789
 
-CODERCLAW_CONFIG_PATH=~/.coderclaw/rescue.json \
-CODERCLAW_STATE_DIR=~/.coderclaw-rescue \
-coderclaw gateway --port 19001
+BUILDERFORCE_AGENTS_CONFIG_PATH=~/.builderforce/rescue.json \
+BUILDERFORCE_AGENTS_STATE_DIR=~/.builderforce-rescue \
+builderforce gateway --port 19001
 ```
 
 ## Quick checks
 
 ```bash
-coderclaw --profile main status
-coderclaw --profile rescue status
-coderclaw --profile rescue browser status
+builderforce --profile main status
+builderforce --profile rescue status
+builderforce --profile rescue browser status
 ```

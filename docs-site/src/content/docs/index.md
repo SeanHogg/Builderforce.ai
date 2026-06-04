@@ -1,11 +1,11 @@
 ---
-summary: "CoderClaw is an AI-powered coding assistant with multi-channel integrations."
+summary: "BuilderForce Agents is an AI-powered coding assistant with multi-channel integrations."
 read_when:
-  - Introducing CoderClaw to newcomers
-title: "CoderClaw"
+  - Introducing BuilderForce Agents to newcomers
+title: "BuilderForce Agents"
 ---
 
-# CoderClaw 🦞
+# BuilderForce Agents 🦞
 
 > _"EXFOLIATE! EXFOLIATE!"_ — A space lobster, probably
 
@@ -16,23 +16,23 @@ title: "CoderClaw"
 
 <Columns>
   <Card title="Get Started" href="/start/getting-started" icon="rocket">
-    Install CoderClaw and bring up the Gateway in minutes.
+    Install BuilderForce Agents and bring up the Gateway in minutes.
   </Card>
   <Card title="Run the Wizard" href="/start/wizard" icon="sparkles">
-    Guided setup with `coderclaw onboard` and pairing flows.
+    Guided setup with `builderforce onboard` and pairing flows.
   </Card>
   <Card title="Open the Control UI" href="/web/control-ui" icon="layout-dashboard">
     Launch the browser dashboard for chat, config, and sessions.
   </Card>
 </Columns>
 
-## What is CoderClaw?
+## What is BuilderForce Agents?
 
-CoderClaw is a **distributed AI runtime** built on top of [CoderClaw](https://github.com/SeanHogg/coderClaw)'s self-hosted gateway. It connects your favorite chat apps — WhatsApp, Telegram, Discord, iMessage, and more — to AI coding agents, with added **Phase 2 capabilities** for secure orchestration, distributed task execution, and team collaboration.
+BuilderForce Agents is a **distributed AI runtime** built on top of [BuilderForce Agents](https://github.com/SeanHogg/Builderforce.ai)'s self-hosted gateway. It connects your favorite chat apps — WhatsApp, Telegram, Discord, iMessage, and more — to AI coding agents, with added **Phase 2 capabilities** for secure orchestration, distributed task execution, and team collaboration.
 
 **Who is it for?** Developers and teams who want a personal AI assistant with enterprise-ready features like RBAC, audit trails, and CI/CD integration — without giving up control of their data or relying on a hosted service.
 
-**What makes it different from CoderClaw?**
+**What makes it different from BuilderForce Agents?**
 
 - **Distributed Runtime**: Execute tasks locally or remotely with transport abstraction
 - **Enhanced Security**: RBAC, device trust levels, and granular policy enforcement
@@ -46,7 +46,7 @@ CoderClaw is a **distributed AI runtime** built on top of [CoderClaw](https://gi
 
 ```mermaid
 flowchart LR
-  A["Chat apps + plugins"] --> B["CoderClaw Gateway<br/>(CoderClaw + Phase 2)"]
+  A["Chat apps + plugins"] --> B["BuilderForce Agents Gateway<br/>(BuilderForce Agents + Phase 2)"]
   B --> C["Pi agent"]
   B --> D["CLI"]
   B --> E["Web Control UI"]
@@ -82,20 +82,20 @@ The Gateway is the single source of truth for sessions, routing, and channel con
 ## Quick start
 
 <Steps>
-  <Step title="Install CoderClaw">
+  <Step title="Install BuilderForce Agents">
     ```bash
-    npm install -g coderclaw@latest
+    npm install -g builderforce@latest
     ```
   </Step>
   <Step title="Onboard and install the service">
     ```bash
-    coderclaw onboard --install-daemon
+    builderforce onboard --install-daemon
     ```
   </Step>
   <Step title="Pair WhatsApp and start the Gateway">
     ```bash
-    coderclaw channels login
-    coderclaw gateway --port 18789
+    builderforce channels login
+    builderforce gateway --port 18789
     ```
   </Step>
 </Steps>
@@ -110,14 +110,14 @@ Open the browser Control UI after the Gateway starts.
 - Remote access: [Web surfaces](/web) and [Tailscale](/gateway/tailscale)
 
 <p align="center">
-  <img src="whatsapp-coderclaw.jpg" alt="CoderClaw Control UI" width="420" />
+  <img src="whatsapp-builderforce.jpg" alt="BuilderForce Agents Control UI" width="420" />
 </p>
 
 ## Configuration (optional)
 
-Config lives at `~/.coderclaw/coderclaw.json`.
+Config lives at `~/.builderforce/builderforce.json`.
 
-- If you **do nothing**, CoderClaw uses the bundled Pi binary in RPC mode with per-sender sessions.
+- If you **do nothing**, BuilderForce Agents uses the bundled Pi binary in RPC mode with per-sender sessions.
 - If you want to lock it down, start with `channels.whatsapp.allowFrom` and (for groups) mention rules.
 - For Phase 2 features, see [Phase 2 Configuration](/phase2#configuration).
 
@@ -131,7 +131,7 @@ Example:
       groups: { "*": { requireMention: true } },
     },
   },
-  messages: { groupChat: { mentionPatterns: ["@coderclaw"] } },
+  messages: { groupChat: { mentionPatterns: ["@builderforce"] } },
 }
 ```
 

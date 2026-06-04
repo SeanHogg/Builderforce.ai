@@ -2,7 +2,7 @@
 read_when:
   - 你正在批准设备配对请求
   - 你需要轮换或撤销设备 token
-summary: "`coderclaw devices` 的 CLI 参考（设备配对 + token 轮换/撤销）"
+summary: "`builderforce devices` 的 CLI 参考（设备配对 + token 轮换/撤销）"
 title: devices
 x-i18n:
   generated_at: "2026-02-03T07:44:52Z"
@@ -13,51 +13,51 @@ x-i18n:
   workflow: 15
 ---
 
-# `coderclaw devices`
+# `builderforce devices`
 
 管理设备配对请求和设备范围的 token。
 
 ## 命令
 
-### `coderclaw devices list`
+### `builderforce devices list`
 
 列出待处理的配对请求和已配对的设备。
 
 ```
-coderclaw devices list
-coderclaw devices list --json
+builderforce devices list
+builderforce devices list --json
 ```
 
-### `coderclaw devices approve <requestId>`
+### `builderforce devices approve <requestId>`
 
 批准待处理的设备配对请求。
 
 ```
-coderclaw devices approve <requestId>
+builderforce devices approve <requestId>
 ```
 
-### `coderclaw devices reject <requestId>`
+### `builderforce devices reject <requestId>`
 
 拒绝待处理的设备配对请求。
 
 ```
-coderclaw devices reject <requestId>
+builderforce devices reject <requestId>
 ```
 
-### `coderclaw devices rotate --device <id> --role <role> [--scope <scope...>]`
+### `builderforce devices rotate --device <id> --role <role> [--scope <scope...>]`
 
 为特定角色轮换设备 token（可选更新 scope）。
 
 ```
-coderclaw devices rotate --device <deviceId> --role operator --scope operator.read --scope operator.write
+builderforce devices rotate --device <deviceId> --role operator --scope operator.read --scope operator.write
 ```
 
-### `coderclaw devices revoke --device <id> --role <role>`
+### `builderforce devices revoke --device <id> --role <role>`
 
 为特定角色撤销设备 token。
 
 ```
-coderclaw devices revoke --device <deviceId> --role node
+builderforce devices revoke --device <deviceId> --role node
 ```
 
 ## 通用选项

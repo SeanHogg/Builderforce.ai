@@ -1,14 +1,14 @@
 ---
-summary: "Run CoderClaw with Ollama (local LLM runtime)"
+summary: "Run BuilderForce Agents with Ollama (local LLM runtime)"
 read_when:
-  - You want to run CoderClaw with local models via Ollama
+  - You want to run BuilderForce Agents with local models via Ollama
   - You need Ollama setup and configuration guidance
 title: "Ollama"
 ---
 
 # Ollama
 
-Ollama is a local LLM runtime that makes it easy to run open-source models on your machine. CoderClaw integrates with Ollama's native API (`/api/chat`), supporting streaming and tool calling, and can **auto-discover tool-capable models** when you opt in with `OLLAMA_API_KEY` (or an auth profile) and do not define an explicit `models.providers.ollama` entry.
+Ollama is a local LLM runtime that makes it easy to run open-source models on your machine. BuilderForce Agents integrates with Ollama's native API (`/api/chat`), supporting streaming and tool calling, and can **auto-discover tool-capable models** when you opt in with `OLLAMA_API_KEY` (or an auth profile) and do not define an explicit `models.providers.ollama` entry.
 
 ## Quick start
 
@@ -26,14 +26,14 @@ ollama pull qwen2.5-coder:32b
 ollama pull deepseek-r1:32b
 ```
 
-3. Enable Ollama for CoderClaw (any value works; Ollama doesn't require a real key):
+3. Enable Ollama for BuilderForce Agents (any value works; Ollama doesn't require a real key):
 
 ```bash
 # Set environment variable
 export OLLAMA_API_KEY="ollama-local"
 
 # Or configure in your config file
-coderclaw config set models.providers.ollama.apiKey "ollama-local"
+builderforce config set models.providers.ollama.apiKey "ollama-local"
 ```
 
 4. Use Ollama models:
@@ -50,7 +50,7 @@ coderclaw config set models.providers.ollama.apiKey "ollama-local"
 
 ## Model discovery (implicit provider)
 
-When you set `OLLAMA_API_KEY` (or an auth profile) and **do not** define `models.providers.ollama`, CoderClaw discovers models from the local Ollama instance at `http://127.0.0.1:11434`:
+When you set `OLLAMA_API_KEY` (or an auth profile) and **do not** define `models.providers.ollama`, BuilderForce Agents discovers models from the local Ollama instance at `http://127.0.0.1:11434`:
 
 - Queries `/api/tags` and `/api/show`
 - Keeps only models that report `tools` capability
@@ -65,7 +65,7 @@ To see what models are available:
 
 ```bash
 ollama list
-coderclaw models list
+builderforce models list
 ```
 
 To add a new model, simply pull it with Ollama:
@@ -121,7 +121,7 @@ Use explicit config when:
 }
 ```
 
-If `OLLAMA_API_KEY` is set, you can omit `apiKey` in the provider entry and CoderClaw will fill it for availability checks.
+If `OLLAMA_API_KEY` is set, you can omit `apiKey` in the provider entry and BuilderForce Agents will fill it for availability checks.
 
 ### Custom base URL (explicit config)
 
@@ -161,7 +161,7 @@ Once configured, all your Ollama models are available:
 
 ### Reasoning models
 
-CoderClaw marks models as reasoning-capable when Ollama reports `thinking` in `/api/show`:
+BuilderForce Agents marks models as reasoning-capable when Ollama reports `thinking` in `/api/show`:
 
 ```bash
 ollama pull deepseek-r1:32b
@@ -173,7 +173,7 @@ Ollama is free and runs locally, so all model costs are set to $0.
 
 ### Streaming Configuration
 
-CoderClaw's Ollama integration uses the **native Ollama API** (`/api/chat`) by default, which fully supports streaming and tool calling simultaneously. No special configuration is needed.
+BuilderForce Agents's Ollama integration uses the **native Ollama API** (`/api/chat`) by default, which fully supports streaming and tool calling simultaneously. No special configuration is needed.
 
 #### Legacy OpenAI-Compatible Mode
 
@@ -198,7 +198,7 @@ Note: The OpenAI-compatible endpoint may not support streaming + tool calling si
 
 ### Context windows
 
-For auto-discovered models, CoderClaw uses the context window reported by Ollama when available, otherwise it defaults to `8192`. You can override `contextWindow` and `maxTokens` in explicit provider config.
+For auto-discovered models, BuilderForce Agents uses the context window reported by Ollama when available, otherwise it defaults to `8192`. You can override `contextWindow` and `maxTokens` in explicit provider config.
 
 ## Troubleshooting
 
@@ -218,7 +218,7 @@ curl http://localhost:11434/api/tags
 
 ### No models available
 
-CoderClaw only auto-discovers models that report tool support. If your model isn't listed, either:
+BuilderForce Agents only auto-discovers models that report tool support. If your model isn't listed, either:
 
 - Pull a tool-capable model, or
 - Define the model explicitly in `models.providers.ollama`.

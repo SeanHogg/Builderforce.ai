@@ -1,16 +1,16 @@
 ---
-summary: "CoderClaw on DigitalOcean (simple paid VPS option)"
+summary: "BuilderForce Agents on DigitalOcean (simple paid VPS option)"
 read_when:
-  - Setting up CoderClaw on DigitalOcean
-  - Looking for cheap VPS hosting for CoderClaw
+  - Setting up BuilderForce Agents on DigitalOcean
+  - Looking for cheap VPS hosting for BuilderForce Agents
 title: "DigitalOcean"
 ---
 
-# CoderClaw on DigitalOcean
+# BuilderForce Agents on DigitalOcean
 
 ## Goal
 
-Run a persistent CoderClaw Gateway on DigitalOcean for **$6/month** (or $4/mo with reserved pricing).
+Run a persistent BuilderForce Agents Gateway on DigitalOcean for **$6/month** (or $4/mo with reserved pricing).
 
 If you want a $0/month option and don’t mind ARM + provider-specific setup, see the [Oracle Cloud guide](/platforms/oracle).
 
@@ -56,7 +56,7 @@ If you want a $0/month option and don’t mind ARM + provider-specific setup, se
 ssh root@YOUR_DROPLET_IP
 ```
 
-## 3) Install CoderClaw
+## 3) Install BuilderForce Agents
 
 ```bash
 # Update system
@@ -66,17 +66,17 @@ apt update && apt upgrade -y
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 apt install -y nodejs
 
-# Install CoderClaw
-curl -fsSL https://coderclaw.ai/install.sh | bash
+# Install BuilderForce Agents
+curl -fsSL https://builderforce.ai/install.sh | bash
 
 # Verify
-coderclaw --version
+builderforce --version
 ```
 
 ## 4) Run Onboarding
 
 ```bash
-coderclaw onboard --install-daemon
+builderforce onboard --install-daemon
 ```
 
 The wizard will walk you through:
@@ -90,13 +90,13 @@ The wizard will walk you through:
 
 ```bash
 # Check status
-coderclaw status
+builderforce status
 
 # Check service
-systemctl --user status coderclaw-gateway.service
+systemctl --user status builderforce-gateway.service
 
 # View logs
-journalctl --user -u coderclaw-gateway.service -f
+journalctl --user -u builderforce-gateway.service -f
 ```
 
 ## 6) Access the Dashboard
@@ -120,8 +120,8 @@ curl -fsSL https://tailscale.com/install.sh | sh
 tailscale up
 
 # Configure Gateway to use Tailscale Serve
-coderclaw config set gateway.tailscale.mode serve
-coderclaw gateway restart
+builderforce config set gateway.tailscale.mode serve
+builderforce gateway restart
 ```
 
 Open: `https://<magicdns>/`
@@ -134,8 +134,8 @@ Notes:
 **Option C: Tailnet bind (no Serve)**
 
 ```bash
-coderclaw config set gateway.bind tailnet
-coderclaw gateway restart
+builderforce config set gateway.bind tailnet
+builderforce gateway restart
 ```
 
 Open: `http://<tailscale-ip>:18789` (token required).
@@ -145,14 +145,14 @@ Open: `http://<tailscale-ip>:18789` (token required).
 ### Telegram
 
 ```bash
-coderclaw pairing list telegram
-coderclaw pairing approve telegram <CODE>
+builderforce pairing list telegram
+builderforce pairing approve telegram <CODE>
 ```
 
 ### WhatsApp
 
 ```bash
-coderclaw channels login whatsapp
+builderforce channels login whatsapp
 # Scan QR code
 ```
 
@@ -194,13 +194,13 @@ htop
 
 All state lives in:
 
-- `~/.coderclaw/` — config, credentials, session data
-- `~/.coderclaw/workspace/` — workspace (SOUL.md, memory, etc.)
+- `~/.builderforce/` — config, credentials, session data
+- `~/.builderforce/workspace/` — workspace (SOUL.md, memory, etc.)
 
 These survive reboots. Back them up periodically:
 
 ```bash
-tar -czvf coderclaw-backup.tar.gz ~/.coderclaw ~/.coderclaw/workspace
+tar -czvf builderforce-backup.tar.gz ~/.builderforce ~/.builderforce/workspace
 ```
 
 ---
@@ -230,9 +230,9 @@ For the full setup guide, see [Oracle Cloud](/platforms/oracle). For signup tips
 ### Gateway won't start
 
 ```bash
-coderclaw gateway status
-coderclaw doctor --non-interactive
-journalctl -u coderclaw --no-pager -n 50
+builderforce gateway status
+builderforce doctor --non-interactive
+journalctl -u builderforce --no-pager -n 50
 ```
 
 ### Port already in use

@@ -1,7 +1,7 @@
 ---
 title: Security and Multi-Tenant Architecture — How Builderforce Keeps Your Work Isolated
 date: 2026-03-16
-description: A deep dive into how Builderforce.ai handles multi-tenancy, role-based access control, session security, audit trails, and the trust model for CoderClaw agent authentication.
+description: A deep dive into how Builderforce.ai handles multi-tenancy, role-based access control, session security, audit trails, and the trust model for BuilderForce Agents agent authentication.
 tags: [security, multi-tenant, rbac, audit, authentication, compliance]
 author: Sean Hogg
 ---
@@ -16,7 +16,7 @@ This post explains the trust model, the access control system, how agent authent
 
 ## The Tenant Model
 
-A **tenant** is your organisation's isolated workspace on Builderforce. All resources — projects, tasks, claws, agents, skills, approvals, conversations — are scoped to a tenant. There is no cross-tenant visibility or sharing.
+A **tenant** is your organisation's isolated workspace on Builderforce. All resources — projects, tasks, agentHosts, agents, skills, approvals, conversations — are scoped to a tenant. There is no cross-tenant visibility or sharing.
 
 Users belong to one or more tenants with a specific **role** in each:
 
@@ -24,7 +24,7 @@ Users belong to one or more tenants with a specific **role** in each:
 |---|---|
 | `viewer` | Read-only access to projects, tasks, chat history, and observability |
 | `developer` | Read + write access to projects and tasks; can interact with the IDE and chat |
-| `manager` | Full developer access plus: approve/reject gates, manage claw instances, assign skills, manage members |
+| `manager` | Full developer access plus: approve/reject gates, manage agentHost instances, assign skills, manage members |
 | `owner` | Full manager access plus: billing, tenant deletion, source control integrations |
 
 Roles are enforced at the API layer — every protected endpoint checks the caller's role against the required minimum before processing the request. A developer attempting to approve an approval gate receives a `403`.
@@ -52,13 +52,13 @@ Users can enable TOTP-based MFA from [Settings → Security](/security). Once en
 
 Recovery codes are generated at MFA enable time — store them securely. They are hashed immediately and cannot be retrieved.
 
-### Claw API Keys
+### AgentHost API Keys
 
-CoderClaw instances do not use JWTs. Each registered claw receives a **one-time plaintext API key** at registration time. The key is hashed immediately and the plaintext is never stored — if you lose it, you generate a new one.
+BuilderForce Agents instances do not use JWTs. Each registered agentHost receives a **one-time plaintext API key** at registration time. The key is hashed immediately and the plaintext is never stored — if you lose it, you generate a new one.
 
-The claw sends this key via `Authorization: Bearer <key>` on every request. The API verifies it against the stored hash and resolves the tenant context from the claw's registration record.
+The agentHost sends this key via `Authorization: Bearer <key>` on every request. The API verifies it against the stored hash and resolves the tenant context from the agentHost's registration record.
 
-**Keys never appear in URLs.** This was a historical pattern in some Builderforce endpoints that has been migrated — all claw-authenticated endpoints now use the `Authorization` header only, keeping keys out of server access logs and CDN caches.
+**Keys never appear in URLs.** This was a historical pattern in some Builderforce endpoints that has been migrated — all agentHost-authenticated endpoints now use the `Authorization` header only, keeping keys out of server access logs and CDN caches.
 
 ---
 
@@ -81,22 +81,22 @@ Revoking a session invalidates all tokens issued within it. The user is logged o
 
 ---
 
-## CoderClaw Trust and Dispatch Security
+## BuilderForce Agents Trust and Dispatch Security
 
-The claw mesh introduces an additional trust surface: claw-to-claw dispatch. When Claw A sends a task to Claw B, Claw B needs to verify the request actually came from Claw A — not from an attacker who discovered Claw B's endpoint.
+The agentHost mesh introduces an additional trust surface: agentHost-to-agentHost dispatch. When AgentHost A sends a task to AgentHost B, AgentHost B needs to verify the request actually came from AgentHost A — not from an attacker who discovered AgentHost B's endpoint.
 
-Builderforce uses **HMAC-SHA256 payload signing** for all inter-claw dispatch:
+Builderforce uses **HMAC-SHA256 payload signing** for all inter-agentHost dispatch:
 
 ```
-Claw A sends:
-  POST /api/claws/:id/forward
-  Authorization: Bearer <clawApiKey>
-  X-Claw-Signature: sha256=<hmac>
-  X-Claw-From: <sourceClawId>
+AgentHost A sends:
+  POST /api/agent-hosts/:id/forward
+  Authorization: Bearer <agentHostApiKey>
+  X-AgentHost-Signature: sha256=<hmac>
+  X-AgentHost-From: <sourceAgentHostId>
   Body: { task: "..." }
 ```
 
-The HMAC is computed over the raw request body using the sending claw's API key as the secret. The receiving claw (via Builderforce's `verifyClawSignature`) recomputes the HMAC and compares. A mismatch returns `403` before the payload is processed.
+The HMAC is computed over the raw request body using the sending agentHost's API key as the secret. The receiving agentHost (via Builderforce's `verifyAgentHostSignature`) recomputes the HMAC and compares. A mismatch returns `403` before the payload is processed.
 
 If no signature is present, Builderforce accepts the request for backward compatibility — but logs the absence. In a future hardening release, the absence of a signature on forwarded tasks will become a hard rejection.
 
@@ -112,21 +112,21 @@ The audit log captures:
 |---|---|
 | `tenant.member_added` | User added to tenant |
 | `tenant.member_removed` | User removed from tenant |
-| `claw.registered` | New CoderClaw instance created |
-| `claw.status_changed` | Claw activated, deactivated, or suspended |
+| `agentHost.registered` | New BuilderForce Agents instance created |
+| `agentHost.status_changed` | AgentHost activated, deactivated, or suspended |
 | `approval.created` | Agent requested an approval gate |
 | `approval.decided` | Manager approved or rejected |
 | `task.created` | Task created on the board |
 | `execution.submitted` | Task submitted for execution |
 | `execution.state_changed` | Execution moved to running/completed/failed |
 | `project.created` | New project created |
-| `skill.assigned` | Skill assigned to tenant or claw |
+| `skill.assigned` | Skill assigned to tenant or agentHost |
 
 Each event records: who, what, when, which resource (type and ID), and structured metadata.
 
 ### Tool Audit Events
 
-Separate from the tenant audit log, the **tool audit log** records every tool call made by a CoderClaw agent: the tool name, input arguments, result, duration, and whether it succeeded or errored. This log is the ground truth for "what did the agent actually do" — useful for debugging and for compliance reviews.
+Separate from the tenant audit log, the **tool audit log** records every tool call made by a BuilderForce Agents agent: the tool name, input arguments, result, duration, and whether it succeeded or errored. This log is the ground truth for "what did the agent actually do" — useful for debugging and for compliance reviews.
 
 ---
 
@@ -150,7 +150,7 @@ const rows = await db
 
 There is no "select all" path that omits the tenant filter. Even if the application logic had a bug, the query would not return another tenant's data.
 
-CoderClaw instances are also tenant-scoped — a claw registered to Tenant A cannot receive tasks from Tenant B's dispatch, cannot appear in Tenant B's fleet view, and cannot read Tenant B's project context.
+BuilderForce Agents instances are also tenant-scoped — a agentHost registered to Tenant A cannot receive tasks from Tenant B's dispatch, cannot appear in Tenant B's fleet view, and cannot read Tenant B's project context.
 
 ---
 
@@ -176,7 +176,7 @@ When you connect a GitHub or Bitbucket account via the source control integratio
 - The host URL (for self-hosted GitHub Enterprise)
 - The integration type
 
-No OAuth tokens or PATs are stored in Builderforce's database. Token management is handled by the CoderClaw instance that performs the git operations.
+No OAuth tokens or PATs are stored in Builderforce's database. Token management is handled by the BuilderForce Agents instance that performs the git operations.
 
 ---
 
@@ -184,7 +184,7 @@ No OAuth tokens or PATs are stored in Builderforce's database. Token management 
 
 Several security enhancements are planned for Phase 2 and beyond:
 
-- **Mandatory HMAC signatures** — reject unsigned inter-claw dispatch with no backward-compat window
+- **Mandatory HMAC signatures** — reject unsigned inter-agentHost dispatch with no backward-compat window
 - **Device trust** — register trusted devices; require re-authentication from new devices
 - **IP allowlists** — restrict tenant access to specific CIDR ranges
 - **SSO** — SAML and OIDC for enterprise identity providers
@@ -194,7 +194,7 @@ Several security enhancements are planned for Phase 2 and beyond:
 
 ## Best Practices
 
-**Rotate claw API keys quarterly.** A key that has never been rotated is a key that has potentially been sitting in a shell history file for months. Register a new key, update the claw's environment variable, restart the claw, and revoke the old key.
+**Rotate agentHost API keys quarterly.** A key that has never been rotated is a key that has potentially been sitting in a shell history file for months. Register a new key, update the agentHost's environment variable, restart the agentHost, and revoke the old key.
 
 **Use the minimum role necessary.** Developers do not need `MANAGER` access. Reviewers do not need `DEVELOPER` access. Role assignment should match actual responsibility.
 

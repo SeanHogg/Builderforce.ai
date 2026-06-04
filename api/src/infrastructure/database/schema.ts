@@ -16,8 +16,8 @@ import {
 
 /**
  * Data model aligns with product flow (see README "Data model & API"):
- * Brain Storm (ideate) → Execute → Project → IDE (build) or Tasks + Workforce (assign to Claws).
- * Unified chats: ide_project_chats (origin + optional projectId). Tasks link projects to claws/executions.
+ * Brain Storm (ideate) → Execute → Project → IDE (build) or Tasks + Workforce (assign to AgentHosts).
+ * Unified chats: ide_project_chats (origin + optional projectId). Tasks link projects to agentHosts/executions.
  */
 
 // custom tsvector type for full-text search
@@ -89,7 +89,7 @@ export const sourceControlProviderEnum = pgEnum('source_control_provider', [
 ]);
 
 export const authTokenTypeEnum = pgEnum('auth_token_type', [
-  'web', 'tenant', 'api', 'claw',
+  'web', 'tenant', 'api', 'host',
 ]);
 
 export const legalDocumentTypeEnum = pgEnum('legal_document_type', [
@@ -126,8 +126,8 @@ export const auditEventTypeEnum = pgEnum('audit_event_type', [
   'task_created', 'task_updated',
 ]);
 
-export const clawStatusEnum = pgEnum('claw_status', ['active', 'inactive', 'suspended']);
-export const clawDirectoryStatusEnum = pgEnum('claw_directory_status', ['pending', 'synced', 'error']);
+export const agentHostStatusEnum = pgEnum('agent_host_status', ['active', 'inactive', 'suspended']);
+export const agentHostDirectoryStatusEnum = pgEnum('agent_host_directory_status', ['pending', 'synced', 'error']);
 
 export const specStatusEnum = pgEnum('spec_status', ['draft', 'reviewed', 'approved', 'in_progress', 'done']);
 export const workflowTypeEnum = pgEnum('workflow_type', ['feature', 'bugfix', 'refactor', 'planning', 'adversarial', 'custom']);
@@ -136,7 +136,7 @@ export const workflowTaskStatusEnum = pgEnum('workflow_task_status', ['pending',
 export const approvalStatusEnum = pgEnum('approval_status', ['pending', 'approved', 'rejected', 'expired']);
 
 export const artifactTypeEnum = pgEnum('artifact_type', ['skill', 'persona', 'content']);
-export const assignmentScopeEnum = pgEnum('assignment_scope', ['tenant', 'claw', 'project', 'task', 'agent']);
+export const assignmentScopeEnum = pgEnum('assignment_scope', ['tenant', 'host', 'project', 'task', 'agent']);
 export const pricingModelEnum = pgEnum('pricing_model', ['flat_fee', 'consumption']);
 
 // ---------------------------------------------------------------------------
@@ -354,7 +354,7 @@ export const llmTraces = pgTable('llm_traces', {
   traceId:           varchar('trace_id', { length: 48 }).notNull().unique(),
   tenantId:          integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
   userId:            varchar('user_id', { length: 36 }),
-  clawId:            integer('claw_id'),
+  agentHostId:            integer('agent_host_id'),
   tenantApiKeyId:    uuid('tenant_api_key_id'),
   llmProduct:        varchar('llm_product', { length: 32 }),
   /** chat | image | ide-chat | brain | dataset-gen | agent */
@@ -537,7 +537,7 @@ export const tenants = pgTable('tenants', {
   name:                   varchar('name', { length: 255 }).notNull(),
   slug:                   varchar('slug', { length: 255 }).notNull().unique(),
   status:                 tenantStatusEnum('status').notNull().default('active'),
-  defaultClawId:          integer('default_claw_id'),
+  defaultAgentHostId:          integer('default_agent_host_id'),
   plan:                   tenantPlanEnum('plan').notNull().default('free'),
   billingCycle:           tenantBillingCycleEnum('billing_cycle'),
   billingStatus:          tenantBillingStatusEnum('billing_status').notNull().default('none'),
@@ -607,23 +607,23 @@ export const tenantMembers = pgTable('tenant_members', {
   joinedAt:  timestamp('joined_at').notNull().defaultNow(),
 });
 
-export const managedClawRequestStatusEnum = pgEnum('managed_claw_request_status', [
+export const managedAgentHostRequestStatusEnum = pgEnum('managed_agent_host_request_status', [
   'pending', 'provisioning', 'active', 'cancelled', 'failed',
 ]);
 
 /**
- * Managed Claw hosting requests — tenants who want Builderforce to host their CoderClaw instance.
- * $49/mo per hosted Claw add-on.
+ * Managed AgentHost hosting requests — tenants who want Builderforce to host their BuilderForce Agents instance.
+ * $49/mo per hosted AgentHost add-on.
  */
-export const managedClawRequests = pgTable('managed_claw_requests', {
+export const managedAgentHostRequests = pgTable('managed_agent_host_requests', {
   id:           serial('id').primaryKey(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  status:       managedClawRequestStatusEnum('status').notNull().default('pending'),
-  clawName:     varchar('claw_name', { length: 255 }).notNull(),
+  status:       managedAgentHostRequestStatusEnum('status').notNull().default('pending'),
+  agentHostName:     varchar('agent_host_name', { length: 255 }).notNull(),
   region:       varchar('region', { length: 100 }).notNull().default('us-east'),
   notes:        text('notes'),
   provisionedAt: timestamp('provisioned_at'),
-  clawId:       integer('claw_id'),   // set once provisioned and linked to a Claw record
+  agentHostId:       integer('agent_host_id'),   // set once provisioned and linked to a AgentHost record
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 });
@@ -680,7 +680,7 @@ export const tasks = pgTable('tasks', {
   githubIssueUrl:    varchar('github_issue_url', { length: 500 }),
   githubPrUrl:       varchar('github_pr_url', { length: 500 }),
   githubPrNumber:    integer('github_pr_number'),
-  assignedClawId:    integer('assigned_claw_id').references(() => coderclawInstances.id, { onDelete: 'set null' }),
+  assignedAgentHostId:    integer('assigned_agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
   startDate:         timestamp('start_date'),
   dueDate:           timestamp('due_date'),
   persona:           varchar('persona', { length: 50 }),
@@ -718,18 +718,18 @@ export const skills = pgTable('skills', {
 });
 
 /**
- * CoderClaw instances — registered CoderClaw machines owned by a tenant.
+ * BuilderForce Agents instances — registered BuilderForce Agents machines owned by a tenant.
  * Each instance authenticates with its own API key (not a user credential).
- * A claw belongs to exactly one tenant; a tenant can have many claws (the mesh).
+ * A agentHost belongs to exactly one tenant; a tenant can have many agentHosts (the mesh).
  */
-export const coderclawInstances = pgTable('coderclaw_instances', {
+export const agentHosts = pgTable('agent_hosts', {
   id:           serial('id').primaryKey(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   name:         varchar('name', { length: 255 }).notNull(),
   slug:         varchar('slug', { length: 255 }).notNull(),
   apiKeyHash:   varchar('api_key_hash', { length: 64 }).notNull(),
-  status:       clawStatusEnum('status').notNull().default('active'),
+  status:       agentHostStatusEnum('status').notNull().default('active'),
   registeredBy: varchar('registered_by', { length: 36 }).references(() => users.id),
   machineName:  varchar('machine_name', { length: 255 }),
   machineIp:    varchar('machine_ip', { length: 64 }),
@@ -741,11 +741,11 @@ export const coderclawInstances = pgTable('coderclaw_instances', {
   tunnelStatus: varchar('tunnel_status', { length: 64 }),
   networkMetadata: text('network_metadata'),
   lastSeenAt:   timestamp('last_seen_at'),
-  connectedAt:  timestamp('connected_at'),   // set when claw's upstream WS connects; null = offline
+  connectedAt:  timestamp('connected_at'),   // set when agentHost's upstream WS connects; null = offline
   capabilities:         text('capabilities'),         // JSON array reported via heartbeat, e.g. '["chat","tasks","relay"]'
   declaredCapabilities: text('declared_capabilities'), // JSON array configured by user in the portal
-  localPersonas:        text('local_personas'),         // JSON array of custom role definitions reported by the claw
-  /** Per-claw token budget per calendar day. NULL = no per-claw limit (only plan-level limit applies). */
+  localPersonas:        text('local_personas'),         // JSON array of custom role definitions reported by the agentHost
+  /** Per-agentHost token budget per calendar day. NULL = no per-agentHost limit (only plan-level limit applies). */
   tokenDailyLimit:      integer('token_daily_limit'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
@@ -755,7 +755,7 @@ export const executions = pgTable('executions', {
   id:           serial('id').primaryKey(),
   taskId:       integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
   agentId:      integer('agent_id').references(() => agents.id),
-  clawId:       integer('claw_id').references(() => coderclawInstances.id, { onDelete: 'set null' }),
+  agentHostId:       integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   submittedBy:  varchar('submitted_by', { length: 36 }).notNull(),
@@ -783,13 +783,13 @@ export const auditEvents = pgTable('audit_events', {
 
 // ---------------------------------------------------------------------------
 // Skill assignments
-// A skill from the marketplace can be assigned to an entire tenant (all claws
-// inherit it) or to a specific CoderClaw instance.
+// A skill from the marketplace can be assigned to an entire tenant (all agentHosts
+// inherit it) or to a specific BuilderForce Agents instance.
 // ---------------------------------------------------------------------------
 
 /**
  * Tenant-level skill assignment.
- * When a skill is assigned here, every active claw in the tenant can use it.
+ * When a skill is assigned here, every active agentHost in the tenant can use it.
  * assignedBy is the userId of the owner/manager who made the assignment.
  */
 export const tenantSkillAssignments = pgTable('tenant_skill_assignments', {
@@ -803,18 +803,18 @@ export const tenantSkillAssignments = pgTable('tenant_skill_assignments', {
 ]);
 
 /**
- * Claw-level skill assignment.
- * Overrides or supplements the tenant-level assignment for a specific claw.
+ * AgentHost-level skill assignment.
+ * Overrides or supplements the tenant-level assignment for a specific agentHost.
  */
-export const clawSkillAssignments = pgTable('claw_skill_assignments', {
+export const agentHostSkillAssignments = pgTable('agent_host_skill_assignments', {
   id:         serial('id').primaryKey(),
-  clawId:     integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
+  agentHostId:     integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   skillSlug:  varchar('skill_slug', { length: 255 }).notNull(),
   assignedBy: varchar('assigned_by', { length: 36 }).references(() => users.id),
   assignedAt: timestamp('assigned_at').notNull().defaultNow(),
 }, (t) => [
-  primaryKey({ columns: [t.clawId, t.skillSlug] }),
+  primaryKey({ columns: [t.agentHostId, t.skillSlug] }),
 ]);
 
 // ---------------------------------------------------------------------------
@@ -822,9 +822,9 @@ export const clawSkillAssignments = pgTable('claw_skill_assignments', {
 // ---------------------------------------------------------------------------
 
 /**
- * Assigns an artifact (skill, persona, or content) to a scope (tenant, claw,
- * project, or task). Precedence during resolution: task > project > claw > tenant.
- * scopeId holds the FK for the scope entity (tenantId / clawId / projectId / taskId).
+ * Assigns an artifact (skill, persona, or content) to a scope (tenant, agentHost,
+ * project, or task). Precedence during resolution: task > project > agentHost > tenant.
+ * scopeId holds the FK for the scope entity (tenantId / agentHostId / projectId / taskId).
  */
 export const artifactAssignments = pgTable('artifact_assignments', {
   id:            serial('id').primaryKey(),
@@ -887,31 +887,31 @@ export const platformPersonas = pgTable('platform_personas', {
 });
 
 // ---------------------------------------------------------------------------
-// Claw ↔ Project associations and synced workspace directories
+// AgentHost ↔ Project associations and synced workspace directories
 // ---------------------------------------------------------------------------
 
-export const clawProjects = pgTable('claw_projects', {
+export const agentHostProjects = pgTable('agent_host_projects', {
   id:        serial('id').primaryKey(),
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  clawId:    integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
+  agentHostId:    integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
   projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   role:      varchar('role', { length: 64 }).notNull().default('default'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
-  primaryKey({ columns: [t.tenantId, t.clawId, t.projectId] }),
+  primaryKey({ columns: [t.tenantId, t.agentHostId, t.projectId] }),
 ]);
 
-export const clawDirectories = pgTable('claw_directories', {
+export const agentHostDirectories = pgTable('agent_host_directories', {
   id:           serial('id').primaryKey(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  clawId:       integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
+  agentHostId:       integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
   projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   absPath:      text('abs_path').notNull(),
   pathHash:     varchar('path_hash', { length: 128 }).notNull(),
-  status:       clawDirectoryStatusEnum('status').notNull().default('pending'),
+  status:       agentHostDirectoryStatusEnum('status').notNull().default('pending'),
   metadata:     text('metadata'),
   errorMessage: text('error_message'),
   lastSeenAt:   timestamp('last_seen_at'),
@@ -919,15 +919,15 @@ export const clawDirectories = pgTable('claw_directories', {
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
-  primaryKey({ columns: [t.tenantId, t.clawId, t.pathHash] }),
+  primaryKey({ columns: [t.tenantId, t.agentHostId, t.pathHash] }),
 ]);
 
-export const clawDirectoryFiles = pgTable('claw_directory_files', {
+export const agentHostDirectoryFiles = pgTable('agent_host_directory_files', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  clawId:      integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
-  directoryId: integer('directory_id').notNull().references(() => clawDirectories.id, { onDelete: 'cascade' }),
+  agentHostId:      integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
+  directoryId: integer('directory_id').notNull().references(() => agentHostDirectories.id, { onDelete: 'cascade' }),
   relPath:     text('rel_path').notNull(),
   contentHash: varchar('content_hash', { length: 128 }).notNull(),
   sizeBytes:   integer('size_bytes').notNull().default(0),
@@ -941,12 +941,12 @@ export const clawDirectoryFiles = pgTable('claw_directory_files', {
 // Sync history
 // ---------------------------------------------------------------------------
 
-export const clawSyncHistory = pgTable('claw_sync_history', {
+export const agentHostSyncHistory = pgTable('agent_host_sync_history', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  clawId:      integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
-  directoryId: integer('directory_id').references(() => clawDirectories.id, { onDelete: 'set null' }),
+  agentHostId:      integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
+  directoryId: integer('directory_id').references(() => agentHostDirectories.id, { onDelete: 'set null' }),
   triggeredBy: varchar('triggered_by', { length: 32 }).notNull().default('startup'),
   fileCount:   integer('file_count').notNull().default(0),
   bytesTotal:  integer('bytes_total').notNull().default(0),
@@ -963,7 +963,7 @@ export const chatSessions = pgTable('chat_sessions', {
   id:         serial('id').primaryKey(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  clawId:     integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
+  agentHostId:     integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
   sessionKey: varchar('session_key', { length: 255 }).notNull(),
   projectId:  integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   startedAt:  timestamp('started_at').notNull().defaultNow(),
@@ -976,7 +976,7 @@ export const chatMessages = pgTable('chat_messages', {
   id:        serial('id').primaryKey(),
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  clawId:    integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
+  agentHostId:    integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
   sessionId: integer('session_id').notNull().references(() => chatSessions.id, { onDelete: 'cascade' }),
   role:      varchar('role', { length: 16 }).notNull(),
   content:   text('content').notNull().default(''),
@@ -994,7 +994,7 @@ export const specs = pgTable('specs', {
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
-  clawId:      integer('claw_id').references(() => coderclawInstances.id, { onDelete: 'set null' }),
+  agentHostId:      integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
   goal:        text('goal').notNull(),
   status:      specStatusEnum('status').notNull().default('draft'),
   prd:         text('prd'),
@@ -1012,7 +1012,7 @@ export const workflows = pgTable('workflows', {
   id:           uuid('id').primaryKey(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  clawId:       integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
+  agentHostId:       integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
   specId:       uuid('spec_id').references(() => specs.id, { onDelete: 'set null' }),
   workflowType: workflowTypeEnum('workflow_type').notNull().default('custom'),
   status:       workflowStatusEnum('status').notNull().default('pending'),
@@ -1039,14 +1039,32 @@ export const workflowTasks = pgTable('workflow_tasks', {
 });
 
 // ---------------------------------------------------------------------------
-// Usage snapshots — context window and token telemetry from the claw agent
+// Workflow definitions — reusable, visually-authored agentic workflow graphs.
+// The design-time template the IPAAS-style builder canvas serializes to; at run
+// time it is compiled to orchestrator steps and instantiated as a `workflows`
+// execution record (see workflowDefinitionRoutes + domain/workflowGraph).
+// ---------------------------------------------------------------------------
+
+export const workflowDefinitions = pgTable('workflow_definitions', {
+  id:          uuid('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS
+  name:        varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  definition:  text('definition').notNull().default('{"nodes":[],"edges":[]}'),  // serialized WorkflowDefinition JSON
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Usage snapshots — context window and token telemetry from the agentHost agent
 // ---------------------------------------------------------------------------
 
 export const usageSnapshots = pgTable('usage_snapshots', {
   id:               serial('id').primaryKey(),
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  clawId:           integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
+  agentHostId:           integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
   sessionKey:       varchar('session_key', { length: 255 }).notNull(),
   inputTokens:      integer('input_tokens').notNull().default(0),
   outputTokens:     integer('output_tokens').notNull().default(0),
@@ -1065,7 +1083,7 @@ export const toolAuditEvents = pgTable('tool_audit_events', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  clawId:      integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
+  agentHostId:      integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
   runId:       varchar('run_id', { length: 255 }),
   sessionKey:  varchar('session_key', { length: 255 }),
   toolCallId:  varchar('tool_call_id', { length: 255 }),
@@ -1079,18 +1097,18 @@ export const toolAuditEvents = pgTable('tool_audit_events', {
 });
 
 // ---------------------------------------------------------------------------
-// OTel spans — W3C-compatible workflow trace spans forwarded from CoderClaw
+// OTel spans — W3C-compatible workflow trace spans forwarded from BuilderForce Agents
 // ---------------------------------------------------------------------------
 
 export const telemetrySpans = pgTable('telemetry_spans', {
   id:               serial('id').primaryKey(),
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  clawId:           integer('claw_id').references(() => coderclawInstances.id, { onDelete: 'set null' }),
+  agentHostId:           integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
   traceId:          varchar('trace_id', { length: 32 }).notNull(),
   workflowId:       varchar('workflow_id', { length: 36 }),
   taskId:           varchar('task_id', { length: 36 }),
-  kind:             varchar('kind', { length: 64 }).notNull(),     // SpanKind from CoderClaw
+  kind:             varchar('kind', { length: 64 }).notNull(),     // SpanKind from BuilderForce Agents
   agentRole:        varchar('agent_role', { length: 255 }),
   description:      text('description'),
   durationMs:       integer('duration_ms'),
@@ -1111,8 +1129,8 @@ export const approvals = pgTable('approvals', {
   id:          uuid('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  clawId:      integer('claw_id').references(() => coderclawInstances.id, { onDelete: 'set null' }),
-  requestedBy: varchar('requested_by', { length: 36 }),   // claw ID or user ID as string
+  agentHostId:      integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
+  requestedBy: varchar('requested_by', { length: 36 }),   // agentHost ID or user ID as string
   actionType:  varchar('action_type', { length: 255 }).notNull(),
   description: text('description').notNull(),
   metadata:    text('metadata'),
@@ -1180,7 +1198,7 @@ export const chatMemories = pgTable('chat_memories', {
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   chatId:         integer('chat_id').references(() => brainChats.id, { onDelete: 'cascade' }).unique(),
-  clawSessionId:  integer('claw_session_id').references(() => chatSessions.id, { onDelete: 'cascade' }).unique(),
+  agentHostSessionId:  integer('agent_host_session_id').references(() => chatSessions.id, { onDelete: 'cascade' }).unique(),
   projectId:      integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   summary:        text('summary').notNull().default(''),
   createdAt:      timestamp('created_at').notNull().defaultNow(),
@@ -1221,14 +1239,14 @@ export const ideProjectChats = pgTable('ide_project_chats', {
 });
 
 // ---------------------------------------------------------------------------
-// Cron jobs (claw-scoped, optionally project-associated, synced via GUID)
+// Cron jobs (agentHost-scoped, optionally project-associated, synced via GUID)
 // ---------------------------------------------------------------------------
 
 export const cronJobs = pgTable('cron_jobs', {
   id:          uuid('id').primaryKey().defaultRandom(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  clawId:      integer('claw_id').notNull().references(() => coderclawInstances.id, { onDelete: 'cascade' }),
+  agentHostId:      integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
   projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   name:        varchar('name', { length: 255 }).notNull(),
   schedule:    varchar('schedule', { length: 255 }).notNull(),
@@ -1371,10 +1389,10 @@ export const contributors = pgTable('contributors', {
   excludeFromMetrics: boolean('exclude_from_metrics').notNull().default(false),
   /** userId if this contributor is also a Builderforce user. */
   userId:        varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-  /** 'human' (git/PR contributor) | 'agent' (a CoderClaw acting as a teammate). */
+  /** 'human' (git/PR contributor) | 'agent' (a BuilderForce Agents acting as a teammate). */
   kind:          varchar('kind', { length: 16 }).notNull().default('human'),
-  /** For agent contributors: the coderclaw instance whose telemetry rolls up here. */
-  clawId:        integer('claw_id').references(() => coderclawInstances.id, { onDelete: 'set null' }),
+  /** For agent contributors: the agent host instance whose telemetry rolls up here. */
+  agentHostId:        integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
   isActive:      boolean('is_active').notNull().default(true),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
@@ -1537,20 +1555,20 @@ export const reportSubscriptions = pgTable('report_subscriptions', {
 ]);
 
 // ---------------------------------------------------------------------------
-// Team memory — cross-claw memory sharing mesh (P4-5)
+// Team memory — cross-agentHost memory sharing mesh (P4-5)
 // ---------------------------------------------------------------------------
 
 export const teamMemory = pgTable('team_memory', {
   id:        uuid('id').primaryKey().defaultRandom(),
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  /** Numeric claw ID stored as string for flexibility. */
-  clawId:    varchar('claw_id', { length: 64 }).notNull(),
+  /** Numeric agentHost ID stored as string for flexibility. */
+  agentHostId:    varchar('agent_host_id', { length: 64 }).notNull(),
   runId:     varchar('run_id', { length: 64 }).notNull(),
   summary:   text('summary').notNull(),
   /** JSON array of tag strings, stored as text. */
   tags:      text('tags').notNull().default('[]'),
-  /** ISO-8601 timestamp provided by the claw. */
+  /** ISO-8601 timestamp provided by the agentHost. */
   timestamp: varchar('timestamp', { length: 32 }).notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
@@ -2469,7 +2487,7 @@ export const swimlaneAgentAssignments = pgTable('swimlane_agent_assignments', {
   swimlaneId:           uuid('swimlane_id').notNull().references(() => swimlanes.id, { onDelete: 'cascade' }),
   role:                 varchar('role', { length: 120 }).notNull(),
   runtime:              varchar('runtime', { length: 16 }).notNull().default('cloud'),   // 'local' | 'cloud' | 'remote'
-  target:               varchar('target', { length: 120 }),   // remote claw id when runtime='remote'
+  target:               varchar('target', { length: 120 }),   // remote agentHost id when runtime='remote'
   taskTemplate:         text('task_template'),
   requiredCapabilities: text('required_capabilities'),         // JSON array stored as text
   model:                varchar('model', { length: 120 }),
@@ -2778,13 +2796,13 @@ export const repoAnalysisEvidence = pgTable('repo_analysis_evidence', {
   // Unique (run_id, repo_id) enforced by migration 0072.
 });
 
-// ── Slice 5: Runtime-agnostic agent dispatch (claw OR cloud OR browser) ──────
+// ── Slice 5: Runtime-agnostic agent dispatch (agentHost OR cloud OR browser) ──────
 
 /**
  * One unit of agent execution for a swimlane stage. A "stage" is the set of
  * dispatches sharing (ticket_run_id, swimlane_id, stage_seq). Each carries the
  * registered agent + its model (the user's own LLM), the runtime tier, and a
- * status the executor (a claw push, or a browser PULL worker) drives to a
+ * status the executor (a agentHost push, or a browser PULL worker) drives to a
  * terminal state. When all dispatches in a stage are terminal the coordinator
  * advances the ticket (autonomous mode) or routes it to needs-attention.
  */
@@ -2810,7 +2828,7 @@ export const agentDispatches = pgTable('agent_dispatches', {
   output:       text('output'),
   error:        text('error'),
   dependsOn:    text('depends_on'),     // JSON array of sibling dispatch ids
-  /** Claw correlation id, or the browser worker's claim token. */
+  /** AgentHost correlation id, or the browser worker's claim token. */
   externalRef:  varchar('external_ref', { length: 128 }),
   position:     integer('position').notNull().default(0),
   claimedAt:    timestamp('claimed_at'),

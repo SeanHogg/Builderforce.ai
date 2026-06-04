@@ -1,12 +1,12 @@
 ---
-summary: "CLI reference for `coderclaw tui` (terminal UI connected to the Gateway)"
+summary: "CLI reference for `builderforce tui` (terminal UI connected to the Gateway)"
 read_when:
   - You want a terminal UI for the Gateway (remote-friendly)
   - You want to pass url/token/session from scripts
 title: "tui"
 ---
 
-# `coderclaw tui`
+# `builderforce tui`
 
 Open the terminal UI connected to the Gateway.
 
@@ -17,7 +17,7 @@ Related:
 ## Examples
 
 ```bash
-coderclaw tui
-coderclaw tui --url ws://127.0.0.1:18789 --token <token>
-coderclaw tui --session main --deliver
+builderforce tui
+builderforce tui --url ws://127.0.0.1:18789 --token <token>
+builderforce tui --session main --deliver
 ```

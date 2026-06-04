@@ -1,7 +1,7 @@
 ---
 read_when:
-  - 你想从终端搜索实时 CoderClaw 文档
-summary: "`coderclaw docs` 的 CLI 参考（搜索实时文档索引）"
+  - 你想从终端搜索实时 BuilderForce Agents 文档
+summary: "`builderforce docs` 的 CLI 参考（搜索实时文档索引）"
 title: docs
 x-i18n:
   generated_at: "2026-02-03T07:44:50Z"
@@ -12,11 +12,11 @@ x-i18n:
   workflow: 15
 ---
 
-# `coderclaw docs`
+# `builderforce docs`
 
 搜索实时文档索引。
 
 ```bash
-coderclaw docs browser extension
-coderclaw docs sandbox allowHostControl
+builderforce docs browser extension
+builderforce docs sandbox allowHostControl
 ```

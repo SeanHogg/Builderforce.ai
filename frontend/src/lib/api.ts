@@ -431,7 +431,7 @@ export async function fetchAgentPackage(agentId: string): Promise<AgentPackage> 
 
 // --- Workforce cloud agents (tenant-scoped create / publish / manage) -------
 
-export type AgentRuntimeSupport = 'cloud' | 'claw' | 'both';
+export type AgentRuntimeSupport = 'cloud' | 'host' | 'both';
 export type AgentPricingModel = 'flat_fee' | 'consumption';
 
 export interface CloudAgentInput {
@@ -441,7 +441,7 @@ export interface CloudAgentInput {
   skills?: string[];
   baseModel?: string;
   runtimeSupport?: AgentRuntimeSupport;
-  preferredRuntime?: 'cloud' | 'claw' | null;
+  preferredRuntime?: 'cloud' | 'host' | null;
   /** Price in USD cents (0 = free). */
   priceCents?: number;
   pricingModel?: AgentPricingModel;

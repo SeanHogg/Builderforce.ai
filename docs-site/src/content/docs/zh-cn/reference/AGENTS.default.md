@@ -1,10 +1,10 @@
 ---
-title: "AGENTS.md — CoderClaw 个人助手（默认）"
+title: "AGENTS.md — BuilderForce Agents 个人助手（默认）"
 
 read_when:
-  - 启动新的 CoderClaw 智能体会话
+  - 启动新的 BuilderForce Agents 智能体会话
   - 启用或审计默认 Skills
-summary: 个人助手设置的默认 CoderClaw 智能体指令和 Skills 列表
+summary: 个人助手设置的默认 BuilderForce Agents 智能体指令和 Skills 列表
 x-i18n:
   generated_at: "2026-02-03T10:09:19Z"
   model: claude-opus-4-5
@@ -14,37 +14,37 @@ x-i18n:
   workflow: 15
 ---
 
-# AGENTS.md — CoderClaw 个人助手（默认）
+# AGENTS.md — BuilderForce Agents 个人助手（默认）
 
 ## 首次运行（推荐）
 
-CoderClaw 为智能体使用专用的工作区目录。默认：`~/.coderclaw/workspace`（可通过 `agents.defaults.workspace` 配置）。
+BuilderForce Agents 为智能体使用专用的工作区目录。默认：`~/.builderforce/workspace`（可通过 `agents.defaults.workspace` 配置）。
 
 1. 创建工作区（如果尚不存在）：
 
 ```bash
-mkdir -p ~/.coderclaw/workspace
+mkdir -p ~/.builderforce/workspace
 ```
 
 2. 将默认工作区模板复制到工作区：
 
 ```bash
-cp foundation/AGENTS.md ~/.coderclaw/workspace/AGENTS.md
-cp foundation/SOUL.md ~/.coderclaw/workspace/SOUL.md
-cp foundation/TOOLS.md ~/.coderclaw/workspace/TOOLS.md
+cp foundation/AGENTS.md ~/.builderforce/workspace/AGENTS.md
+cp foundation/SOUL.md ~/.builderforce/workspace/SOUL.md
+cp foundation/TOOLS.md ~/.builderforce/workspace/TOOLS.md
 ```
 
 3. 可选：如果你想要个人助手 Skills 列表，用此文件替换 AGENTS.md：
 
 ```bash
-cp docs/reference/AGENTS.default.md ~/.coderclaw/workspace/AGENTS.md
+cp docs/reference/AGENTS.default.md ~/.builderforce/workspace/AGENTS.md
 ```
 
 4. 可选：通过设置 `agents.defaults.workspace` 选择不同的工作区（支持 `~`）：
 
 ```json5
 {
-  agents: { defaults: { workspace: "~/.coderclaw/workspace" } },
+  agents: { defaults: { workspace: "~/.builderforce/workspace" } },
 }
 ```
 
@@ -85,20 +85,20 @@ cp docs/reference/AGENTS.default.md ~/.coderclaw/workspace/AGENTS.md
 
 ## 备份提示（推荐）
 
-如果你将此工作区视为 CoderClaw 的"记忆"，请将其设为 git 仓库（最好是私有的），这样 `AGENTS.md` 和你的记忆文件就会被备份。
+如果你将此工作区视为 BuilderForce Agents 的"记忆"，请将其设为 git 仓库（最好是私有的），这样 `AGENTS.md` 和你的记忆文件就会被备份。
 
 ```bash
-cd ~/.coderclaw/workspace
+cd ~/.builderforce/workspace
 git init
 git add AGENTS.md
-git commit -m "Add CoderClaw workspace"
+git commit -m "Add BuilderForce Agents workspace"
 # 可选：添加私有远程仓库 + push
 ```
 
-## CoderClaw 的功能
+## BuilderForce Agents 的功能
 
 - 运行 WhatsApp Gateway 网关 + Pi 编程智能体，使助手可以读写聊天、获取上下文，并通过主机 Mac 运行 Skills。
-- macOS 应用管理权限（屏幕录制、通知、麦克风）并通过其内置二进制文件暴露 `coderclaw` CLI。
+- macOS 应用管理权限（屏幕录制、通知、麦克风）并通过其内置二进制文件暴露 `builderforce` CLI。
 - 私聊默认折叠到智能体的 `main` 会话；群组保持隔离为 `agent:<agentId>:<channel>:group:<id>`（房间/频道：`agent:<agentId>:<channel>:channel:<id>`）；心跳保持后台任务存活。
 
 ## 核心 Skills（在设置 → Skills 中启用）
@@ -124,10 +124,10 @@ git commit -m "Add CoderClaw workspace"
 
 ## 使用说明
 
-- 脚本编写优先使用 `coderclaw` CLI；mac 应用处理权限。
+- 脚本编写优先使用 `builderforce` CLI；mac 应用处理权限。
 - 从 Skills 标签页运行安装；如果二进制文件已存在，它会隐藏按钮。
 - 保持心跳启用，以便助手可以安排提醒、监控收件箱和触发摄像头捕获。
 - Canvas UI 以全屏运行并带有原生叠加层。避免在左上/右上/底部边缘放置关键控件；在布局中添加显式边距，不要依赖安全区域内边距。
-- 对于浏览器驱动的验证，使用带有 CoderClaw 管理的 Chrome 配置文件的 `coderclaw browser`（tabs/status/screenshot）。
-- 对于 DOM 检查，使用 `coderclaw browser eval|query|dom|snapshot`（需要机器输出时使用 `--json`/`--out`）。
-- 对于交互，使用 `coderclaw browser click|type|hover|drag|select|upload|press|wait|navigate|back|evaluate|run`（click/type 需要 snapshot 引用；CSS 选择器使用 `evaluate`）。
+- 对于浏览器驱动的验证，使用带有 BuilderForce Agents 管理的 Chrome 配置文件的 `builderforce browser`（tabs/status/screenshot）。
+- 对于 DOM 检查，使用 `builderforce browser eval|query|dom|snapshot`（需要机器输出时使用 `--json`/`--out`）。
+- 对于交互，使用 `builderforce browser click|type|hover|drag|select|upload|press|wait|navigate|back|evaluate|run`（click/type 需要 snapshot 引用；CSS 选择器使用 `evaluate`）。

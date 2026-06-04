@@ -21,10 +21,10 @@ agent (with a session switcher for other sessions).
 - Auto‑open for testing:
 
   ```bash
-  dist/CoderClaw.app/Contents/MacOS/CoderClaw --webchat
+  dist/BuilderForce Agents.app/Contents/MacOS/BuilderForce Agents --webchat
   ```
 
-- Logs: `./scripts/clawlog.sh` (subsystem `bot.molt`, category `WebChatSwiftUI`).
+- Logs: `./scripts/agentlog.sh` (subsystem `bot.molt`, category `WebChatSwiftUI`).
 
 ## How it’s wired
 

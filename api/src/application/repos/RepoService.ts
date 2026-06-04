@@ -5,8 +5,8 @@
  * IO is funneled through two injected collaborators so the orchestration can be
  * unit-tested without a real database or durable object:
  *   - `db`         : a Drizzle Db (or a minimal fake exposing the same methods)
- *   - `dispatcher` : (clawId, message) => Promise<boolean> — in the route this
- *                    is wired to env.CLAW_RELAY.get(idFromName(clawId)).fetch(...)
+ *   - `dispatcher` : (agentHostId, message) => Promise<boolean> — in the route this
+ *                    is wired to env.AGENT_HOST_RELAY.get(idFromName(agentHostId)).fetch(...)
  *
  * Every query is tenant-scoped. JSON payload columns (matchHints) are stored as
  * text → JSON.stringify on write.
@@ -24,7 +24,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { resolveRepoForTask } from './resolveRepo';
 import { buildPrDispatchMessage, type CreatePrMessage } from './prDispatch';
 
-export type ClawDispatcher = (clawId: number, message: CreatePrMessage) => Promise<boolean>;
+export type AgentHostDispatcher = (agentHostId: number, message: CreatePrMessage) => Promise<boolean>;
 
 export type RepoMatchHints = {
   labels?: string[];
@@ -47,13 +47,13 @@ export type AddRepoInput = {
 };
 
 export type DispatchPrResult =
-  | { ok: true; prId: string; clawId: number; message: CreatePrMessage }
-  | { ok: false; code: 'task_not_found' | 'no_repo' | 'no_claw' | 'dispatch_failed'; reason: string };
+  | { ok: true; prId: string; agentHostId: number; message: CreatePrMessage }
+  | { ok: false; code: 'task_not_found' | 'no_repo' | 'no_agent_host' | 'dispatch_failed'; reason: string };
 
 export class RepoService {
   constructor(
     private readonly db: Db,
-    private readonly dispatcher: ClawDispatcher,
+    private readonly dispatcher: AgentHostDispatcher,
   ) {}
 
   /** List repos associated with a project (tenant-scoped). */
@@ -96,9 +96,9 @@ export class RepoService {
 
   /**
    * Resolve the repo for a task, build the create_pr message, dispatch it to the
-   * assigned claw, and record a pullRequests row (status 'open') + a repoBranches
+   * assigned agentHost, and record a pullRequests row (status 'open') + a repoBranches
    * row. Returns a discriminated result so the route maps it to HTTP codes
-   * (e.g. no_claw → 409, no_repo → 409, task_not_found → 404).
+   * (e.g. no_agent_host → 409, no_repo → 409, task_not_found → 404).
    */
   async dispatchPrCreation(taskId: number, tenantId: number): Promise<DispatchPrResult> {
     // Load the task scoped through its project to the tenant.
@@ -111,7 +111,7 @@ export class RepoService {
         status: tasks.status,
         specId: tasks.specId,
         source: tasks.source,
-        assignedClawId: tasks.assignedClawId,
+        assignedAgentHostId: tasks.assignedAgentHostId,
       })
       .from(tasks)
       .innerJoin(projects, eq(projects.id, tasks.projectId))
@@ -121,11 +121,11 @@ export class RepoService {
       return { ok: false, code: 'task_not_found', reason: 'Task not found' };
     }
 
-    if (taskRow.assignedClawId == null) {
+    if (taskRow.assignedAgentHostId == null) {
       return {
         ok: false,
-        code: 'no_claw',
-        reason: 'Task has no assigned claw; assign a claw before dispatching a pull request.',
+        code: 'no_agent_host',
+        reason: 'Task has no assigned agentHost; assign a agentHost before dispatching a pull request.',
       };
     }
 
@@ -179,12 +179,12 @@ export class RepoService {
       prd,
     );
 
-    const clawId = taskRow.assignedClawId;
-    const delivered = await this.dispatcher(clawId, message);
+    const agentHostId = taskRow.assignedAgentHostId;
+    const delivered = await this.dispatcher(agentHostId, message);
 
     const now = new Date();
 
-    // Record the branch we asked the claw to create.
+    // Record the branch we asked the agentHost to create.
     await this.db.insert(repoBranches).values({
       tenantId,
       segmentId: repoRow.segmentId ?? null,
@@ -192,11 +192,11 @@ export class RepoService {
       taskId: taskRow.id,
       name: message.branchName,
       baseBranch: message.base,
-      createdBy: `claw:${clawId}`,
+      createdBy: `agentHost:${agentHostId}`,
       createdAt: now,
     });
 
-    // Record the pull request as 'open' (the claw later calls recordPrResult).
+    // Record the pull request as 'open' (the agentHost later calls recordPrResult).
     const [prRow] = await this.db
       .insert(pullRequests)
       .values({
@@ -224,14 +224,14 @@ export class RepoService {
       return {
         ok: false,
         code: 'dispatch_failed',
-        reason: 'Pull request recorded but claw did not acknowledge dispatch.',
+        reason: 'Pull request recorded but agentHost did not acknowledge dispatch.',
       };
     }
 
-    return { ok: true, prId: prRow.id, clawId, message };
+    return { ok: true, prId: prRow.id, agentHostId, message };
   }
 
-  /** Claw callback: record the resulting PR number / url / status. */
+  /** AgentHost callback: record the resulting PR number / url / status. */
   async recordPrResult(
     prId: string,
     tenantId: number,

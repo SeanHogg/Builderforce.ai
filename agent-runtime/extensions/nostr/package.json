@@ -1,0 +1,33 @@
+{
+  "name": "@builderforce/nostr",
+  "version": "2026.3.21",
+  "description": "BuilderForceAgents Nostr channel plugin for NIP-04 encrypted DMs",
+  "type": "module",
+  "dependencies": {
+    "nostr-tools": "^2.23.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*"
+  },
+  "builderforce": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "channel": {
+      "id": "nostr",
+      "label": "Nostr",
+      "selectionLabel": "Nostr (NIP-04 DMs)",
+      "docsPath": "/channels/nostr",
+      "docsLabel": "nostr",
+      "blurb": "Decentralized protocol; encrypted DMs via NIP-04.",
+      "order": 55,
+      "quickstartAllowFrom": true
+    },
+    "install": {
+      "npmSpec": "@builderforce/nostr",
+      "localPath": "extensions/nostr",
+      "defaultChoice": "npm"
+    }
+  }
+}

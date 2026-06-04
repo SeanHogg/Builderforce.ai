@@ -14,7 +14,7 @@ x-i18n:
 
 # 会话管理
 
-CoderClaw 将**每个智能体的一个直接聊天会话**视为主会话。直接聊天折叠为 `agent:<agentId>:<mainKey>`（默认 `main`），而群组/频道聊天获得各自的键。`session.mainKey` 会被遵循。
+BuilderForce Agents 将**每个智能体的一个直接聊天会话**视为主会话。直接聊天折叠为 `agent:<agentId>:<mainKey>`（默认 `main`），而群组/频道聊天获得各自的键。`session.mainKey` 会被遵循。
 
 使用 `session.dmScope` 控制**私信**如何分组：
 
@@ -26,7 +26,7 @@ CoderClaw 将**每个智能体的一个直接聊天会话**视为主会话。直
 
 ## Gateway 网关是唯一数据源
 
-所有会话状态都**由 Gateway 网关拥有**（"主" CoderClaw）。UI 客户端（macOS 应用、WebChat 等）必须向 Gateway 网关查询会话列表和令牌计数，而不是读取本地文件。
+所有会话状态都**由 Gateway 网关拥有**（"主" BuilderForce Agents）。UI 客户端（macOS 应用、WebChat 等）必须向 Gateway 网关查询会话列表和令牌计数，而不是读取本地文件。
 
 - 在**远程模式**下，你关心的会话存储位于远程 Gateway 网关主机上，而不是你的 Mac 上。
 - UI 中显示的令牌计数来自 Gateway 网关的存储字段（`inputTokens`、`outputTokens`、`totalTokens`、`contextTokens`）。客户端不会解析 JSONL 对话记录来"修正"总数。
@@ -34,21 +34,21 @@ CoderClaw 将**每个智能体的一个直接聊天会话**视为主会话。直
 ## 状态存储位置
 
 - 在 **Gateway 网关主机**上：
-  - 存储文件：`~/.coderclaw/agents/<agentId>/sessions/sessions.json`（每个智能体）。
-- 对话记录：`~/.coderclaw/agents/<agentId>/sessions/<SessionId>.jsonl`（Telegram 话题会话使用 `.../<SessionId>-topic-<threadId>.jsonl`）。
+  - 存储文件：`~/.builderforce/agents/<agentId>/sessions/sessions.json`（每个智能体）。
+- 对话记录：`~/.builderforce/agents/<agentId>/sessions/<SessionId>.jsonl`（Telegram 话题会话使用 `.../<SessionId>-topic-<threadId>.jsonl`）。
 - 存储是一个映射 `sessionKey -> { sessionId, updatedAt, ... }`。删除条目是安全的；它们会按需重新创建。
 - 群组条目可能包含 `displayName`、`channel`、`subject`、`room` 和 `space` 以在 UI 中标记会话。
 - 会话条目包含 `origin` 元数据（标签 + 路由提示），以便 UI 可以解释会话的来源。
-- CoderClaw **不**读取旧版 Pi/Tau 会话文件夹。
+- BuilderForce Agents **不**读取旧版 Pi/Tau 会话文件夹。
 
 ## 会话修剪
 
-默认情况下，CoderClaw 在 LLM 调用之前从内存上下文中修剪**旧的工具结果**。
+默认情况下，BuilderForce Agents 在 LLM 调用之前从内存上下文中修剪**旧的工具结果**。
 这**不会**重写 JSONL 历史记录。参见 [/concepts/session-pruning](/concepts/session-pruning)。
 
 ## 压缩前记忆刷新
 
-当会话接近自动压缩时，CoderClaw 可以运行一个**静默记忆刷新**轮次，提醒模型将持久性笔记写入磁盘。这仅在工作区可写时运行。参见[记忆](/concepts/memory)和[压缩](/concepts/compaction)。
+当会话接近自动压缩时，BuilderForce Agents 可以运行一个**静默记忆刷新**轮次，提醒模型将持久性笔记写入磁盘。这仅在工作区可写时运行。参见[记忆](/concepts/memory)和[压缩](/concepts/compaction)。
 
 ## 传输到会话键的映射
 
@@ -73,10 +73,10 @@ CoderClaw 将**每个智能体的一个直接聊天会话**视为主会话。直
 - 重置策略：会话被重用直到过期，过期在下一条入站消息时评估。
 - 每日重置：默认为 **Gateway 网关主机本地时间凌晨 4:00**。当会话的最后更新早于最近的每日重置时间时，会话即为过期。
 - 空闲重置（可选）：`idleMinutes` 添加一个滑动空闲窗口。当同时配置每日和空闲重置时，**先过期者**强制新会话。
-- 旧版仅空闲模式：如果你设置了 `session.idleMinutes` 而没有任何 `session.reset`/`resetByType` 配置，CoderClaw 会保持仅空闲模式以保持向后兼容。
+- 旧版仅空闲模式：如果你设置了 `session.idleMinutes` 而没有任何 `session.reset`/`resetByType` 配置，BuilderForce Agents 会保持仅空闲模式以保持向后兼容。
 - 按类型覆盖（可选）：`resetByType` 允许你覆盖 `dm`、`group` 和 `thread` 会话的策略（thread = Slack/Discord 线程、Telegram 话题、连接器提供的 Matrix 线程）。
 - 按渠道覆盖（可选）：`resetByChannel` 覆盖渠道的重置策略（适用于该渠道的所有会话类型，优先于 `reset`/`resetByType`）。
-- 重置触发器：精确的 `/new` 或 `/reset`（加上 `resetTriggers` 中的任何额外项）启动新的会话 ID 并传递消息的其余部分。`/new <model>` 接受模型别名、`provider/model` 或提供商名称（模糊匹配）来设置新会话模型。如果单独发送 `/new` 或 `/reset`，CoderClaw 会运行一个简短的"问候"轮次来确认重置。
+- 重置触发器：精确的 `/new` 或 `/reset`（加上 `resetTriggers` 中的任何额外项）启动新的会话 ID 并传递消息的其余部分。`/new <model>` 接受模型别名、`provider/model` 或提供商名称（模糊匹配）来设置新会话模型。如果单独发送 `/new` 或 `/reset`，BuilderForce Agents 会运行一个简短的"问候"轮次来确认重置。
 - 手动重置：从存储中删除特定键或删除 JSONL 对话记录；下一条消息会重新创建它们。
 - 隔离的定时任务总是每次运行生成新的 `sessionId`（没有空闲重用）。
 
@@ -108,7 +108,7 @@ CoderClaw 将**每个智能体的一个直接聊天会话**视为主会话。直
 ## 配置（可选重命名示例）
 
 ```json5
-// ~/.coderclaw/coderclaw.json
+// ~/.builderforce/builderforce.json
 {
   session: {
     scope: "per-sender", // keep group keys separate
@@ -132,7 +132,7 @@ CoderClaw 将**每个智能体的一个直接聊天会话**视为主会话。直
       discord: { mode: "idle", idleMinutes: 10080 },
     },
     resetTriggers: ["/new", "/reset"],
-    store: "~/.coderclaw/agents/{agentId}/sessions/sessions.json",
+    store: "~/.builderforce/agents/{agentId}/sessions/sessions.json",
     mainKey: "main",
   },
 }
@@ -140,9 +140,9 @@ CoderClaw 将**每个智能体的一个直接聊天会话**视为主会话。直
 
 ## 检查
 
-- `coderclaw status` — 显示存储路径和最近的会话。
-- `coderclaw sessions --json` — 导出每个条目（使用 `--active <minutes>` 过滤）。
-- `coderclaw gateway call sessions.list --params '{}'` — 从运行中的 Gateway 网关获取会话（使用 `--url`/`--token` 进行远程 Gateway 网关访问）。
+- `builderforce status` — 显示存储路径和最近的会话。
+- `builderforce sessions --json` — 导出每个条目（使用 `--active <minutes>` 过滤）。
+- `builderforce gateway call sessions.list --params '{}'` — 从运行中的 Gateway 网关获取会话（使用 `--url`/`--token` 进行远程 Gateway 网关访问）。
 - 在聊天中单独发送 `/status` 消息可查看智能体是否可达、会话上下文使用了多少、当前的思考/详细模式开关，以及你的 WhatsApp Web 凭证上次刷新时间（有助于发现重新链接需求）。
 - 发送 `/context list` 或 `/context detail` 查看系统提示中的内容和注入的工作区文件（以及最大的上下文贡献者）。
 - 单独发送 `/stop` 消息可中止当前运行、清除该会话的排队后续操作，并停止从中生成的任何子智能体运行（回复包含已停止的数量）。

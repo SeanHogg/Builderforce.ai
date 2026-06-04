@@ -1,16 +1,16 @@
 ---
-summary: "CLI reference for `coderclaw dashboard` (open the Control UI)"
+summary: "CLI reference for `builderforce dashboard` (open the Control UI)"
 read_when:
   - You want to open the Control UI with your current token
   - You want to print the URL without launching a browser
 title: "dashboard"
 ---
 
-# `coderclaw dashboard`
+# `builderforce dashboard`
 
 Open the Control UI using your current auth.
 
 ```bash
-coderclaw dashboard
-coderclaw dashboard --no-open
+builderforce dashboard
+builderforce dashboard --no-open
 ```

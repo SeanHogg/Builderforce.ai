@@ -1,7 +1,7 @@
 ---
 summary: "Zalo personal account support via zca-cli (QR login), capabilities, and configuration"
 read_when:
-  - Setting up Zalo Personal for CoderClaw
+  - Setting up Zalo Personal for BuilderForce Agents
   - Debugging Zalo Personal login or message flow
 title: "Zalo Personal"
 ---
@@ -16,8 +16,8 @@ Status: experimental. This integration automates a **personal Zalo account** via
 
 Zalo Personal ships as a plugin and is not bundled with the core install.
 
-- Install via CLI: `coderclaw plugins install @coderclaw/zalouser`
-- Or from a source checkout: `coderclaw plugins install ./extensions/zalouser`
+- Install via CLI: `builderforce plugins install @builderforce/zalouser`
+- Or from a source checkout: `builderforce plugins install ./extensions/zalouser`
 - Details: [Plugins](/tools/plugin)
 
 ## Prerequisite: zca-cli
@@ -31,7 +31,7 @@ The Gateway machine must have the `zca` binary available in `PATH`.
 
 1. Install the plugin (see above).
 2. Login (QR, on the Gateway machine):
-   - `coderclaw channels login --channel zalouser`
+   - `builderforce channels login --channel zalouser`
    - Scan the QR code in the terminal with the Zalo mobile app.
 3. Enable the channel:
 
@@ -64,9 +64,9 @@ Channel id is `zalouser` to make it explicit this automates a **personal Zalo us
 Use the directory CLI to discover peers/groups and their IDs:
 
 ```bash
-coderclaw directory self --channel zalouser
-coderclaw directory peers list --channel zalouser --query "name"
-coderclaw directory groups list --channel zalouser --query "work"
+builderforce directory self --channel zalouser
+builderforce directory peers list --channel zalouser --query "name"
+builderforce directory groups list --channel zalouser --query "work"
 ```
 
 ## Limits
@@ -81,8 +81,8 @@ coderclaw directory groups list --channel zalouser --query "work"
 
 Approve via:
 
-- `coderclaw pairing list zalouser`
-- `coderclaw pairing approve zalouser <code>`
+- `builderforce pairing list zalouser`
+- `builderforce pairing approve zalouser <code>`
 
 ## Group access (optional)
 
@@ -92,7 +92,7 @@ Approve via:
   - `channels.zalouser.groups` (keys are group IDs or names)
 - Block all groups: `channels.zalouser.groupPolicy = "disabled"`.
 - The configure wizard can prompt for group allowlists.
-- On startup, CoderClaw resolves group/user names in allowlists to IDs and logs the mapping; unresolved entries are kept as typed.
+- On startup, BuilderForce Agents resolves group/user names in allowlists to IDs and logs the mapping; unresolved entries are kept as typed.
 
 Example:
 
@@ -136,5 +136,5 @@ Accounts map to zca profiles. Example:
 
 **Login doesn’t stick:**
 
-- `coderclaw channels status --probe`
-- Re-login: `coderclaw channels logout --channel zalouser && coderclaw channels login --channel zalouser`
+- `builderforce channels status --probe`
+- Re-login: `builderforce channels logout --channel zalouser && builderforce channels login --channel zalouser`

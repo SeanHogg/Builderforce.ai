@@ -1,59 +1,59 @@
 ---
-summary: "CLI reference for `coderclaw devices` (device pairing + token rotation/revocation)"
+summary: "CLI reference for `builderforce devices` (device pairing + token rotation/revocation)"
 read_when:
   - You are approving device pairing requests
   - You need to rotate or revoke device tokens
 title: "devices"
 ---
 
-# `coderclaw devices`
+# `builderforce devices`
 
 Manage device pairing requests and device-scoped tokens.
 
 ## Commands
 
-### `coderclaw devices list`
+### `builderforce devices list`
 
 List pending pairing requests and paired devices.
 
 ```
-coderclaw devices list
-coderclaw devices list --json
+builderforce devices list
+builderforce devices list --json
 ```
 
-### `coderclaw devices approve [requestId] [--latest]`
+### `builderforce devices approve [requestId] [--latest]`
 
-Approve a pending device pairing request. If `requestId` is omitted, CoderClaw
+Approve a pending device pairing request. If `requestId` is omitted, BuilderForce Agents
 automatically approves the most recent pending request.
 
 ```
-coderclaw devices approve
-coderclaw devices approve <requestId>
-coderclaw devices approve --latest
+builderforce devices approve
+builderforce devices approve <requestId>
+builderforce devices approve --latest
 ```
 
-### `coderclaw devices reject <requestId>`
+### `builderforce devices reject <requestId>`
 
 Reject a pending device pairing request.
 
 ```
-coderclaw devices reject <requestId>
+builderforce devices reject <requestId>
 ```
 
-### `coderclaw devices rotate --device <id> --role <role> [--scope <scope...>]`
+### `builderforce devices rotate --device <id> --role <role> [--scope <scope...>]`
 
 Rotate a device token for a specific role (optionally updating scopes).
 
 ```
-coderclaw devices rotate --device <deviceId> --role operator --scope operator.read --scope operator.write
+builderforce devices rotate --device <deviceId> --role operator --scope operator.read --scope operator.write
 ```
 
-### `coderclaw devices revoke --device <id> --role <role>`
+### `builderforce devices revoke --device <id> --role <role>`
 
 Revoke a device token for a specific role.
 
 ```
-coderclaw devices revoke --device <deviceId> --role node
+builderforce devices revoke --device <deviceId> --role node
 ```
 
 ## Common options

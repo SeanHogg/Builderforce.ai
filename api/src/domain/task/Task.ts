@@ -1,4 +1,4 @@
-import { TaskId, ProjectId, TaskStatus, TaskPriority, AgentType, ClawId } from '../shared/types';
+import { TaskId, ProjectId, TaskStatus, TaskPriority, AgentType, AgentHostId } from '../shared/types';
 import { ValidationError } from '../shared/errors';
 
 export interface TaskProps {
@@ -19,7 +19,7 @@ export interface TaskProps {
   githubIssueUrl: string | null;
   githubPrUrl: string | null;
   githubPrNumber: number | null;
-  assignedClawId: ClawId | null;
+  assignedAgentHostId: AgentHostId | null;
   startDate: Date | null;
   dueDate: Date | null;
   persona: string | null;
@@ -69,7 +69,7 @@ export class Task {
       githubIssueUrl: null,
       githubPrUrl: null,
       githubPrNumber: null,
-      assignedClawId: null,
+      assignedAgentHostId: null,
       startDate: props.startDate ?? null,
       dueDate: props.dueDate ?? null,
       persona: props.persona ?? null,
@@ -99,7 +99,7 @@ export class Task {
   get githubIssueUrl(): string | null { return this.props.githubIssueUrl; }
   get githubPrUrl(): string | null { return this.props.githubPrUrl; }
   get githubPrNumber(): number | null { return this.props.githubPrNumber; }
-  get assignedClawId(): ClawId | null { return this.props.assignedClawId; }
+  get assignedAgentHostId(): AgentHostId | null { return this.props.assignedAgentHostId; }
   get startDate(): Date | null { return this.props.startDate; }
   get dueDate(): Date | null { return this.props.dueDate; }
   get persona(): string | null { return this.props.persona; }
@@ -116,7 +116,7 @@ export class Task {
       Pick<
         TaskProps,
         'title' | 'description' | 'status' | 'priority' | 'assignedAgentType'
-        | 'githubPrUrl' | 'githubPrNumber' | 'assignedClawId' | 'startDate' | 'dueDate'
+        | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'startDate' | 'dueDate'
         | 'persona' | 'archived'
       >
     >,

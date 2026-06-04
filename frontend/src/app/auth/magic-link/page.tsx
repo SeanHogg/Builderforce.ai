@@ -63,7 +63,7 @@ export default function MagicLinkVerifyPage() {
           }}
         >
           <Image
-            src="/claw.png"
+            src="/agentHost.png"
             alt=""
             width={48}
             height={48}
@@ -116,7 +116,7 @@ export default function MagicLinkVerifyPage() {
     >
       <div style={{ textAlign: 'center' }}>
         <Image
-          src="/claw.png"
+          src="/agentHost.png"
           alt=""
           width={56}
           height={56}

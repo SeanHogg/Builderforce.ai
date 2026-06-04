@@ -3,7 +3,7 @@ title: "Together AI"
 
 summary: "Together AI setup (auth + model selection)"
 read_when:
-  - You want to use Together AI with CoderClaw
+  - You want to use Together AI with BuilderForce Agents
   - You need the API key env var or CLI auth choice
 ---
 
@@ -20,7 +20,7 @@ The [Together AI](https://together.ai) provides access to leading open-source mo
 1. Set the API key (recommended: store it for the Gateway):
 
 ```bash
-coderclaw onboard --auth-choice together-api-key
+builderforce onboard --auth-choice together-api-key
 ```
 
 2. Set a default model:
@@ -38,7 +38,7 @@ coderclaw onboard --auth-choice together-api-key
 ## Non-interactive example
 
 ```bash
-coderclaw onboard --non-interactive \
+builderforce onboard --non-interactive \
   --mode local \
   --auth-choice together-api-key \
   --together-api-key "$TOGETHER_API_KEY"
@@ -49,7 +49,7 @@ This will set `together/moonshotai/Kimi-K2.5` as the default model.
 ## Environment note
 
 If the Gateway runs as a daemon (launchd/systemd), make sure `TOGETHER_API_KEY`
-is available to that process (for example, in `~/.coderclaw/.env` or via
+is available to that process (for example, in `~/.builderforce/.env` or via
 `env.shellEnv`).
 
 ## Available models

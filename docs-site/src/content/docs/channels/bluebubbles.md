@@ -15,7 +15,7 @@ Status: bundled plugin that talks to the BlueBubbles macOS server over HTTP. **R
 
 - Runs on macOS via the BlueBubbles helper app ([bluebubbles.app](https://bluebubbles.app)).
 - Recommended/tested: macOS Sequoia (15). macOS Tahoe (26) works; edit is currently broken on Tahoe, and group icon updates may report success but not sync.
-- CoderClaw talks to it through its REST API (`GET /api/v1/ping`, `POST /message/text`, `POST /chat/:id/*`).
+- BuilderForce Agents talks to it through its REST API (`GET /api/v1/ping`, `POST /message/text`, `POST /chat/:id/*`).
 - Incoming messages arrive via webhooks; outgoing replies, typing indicators, read receipts, and tapbacks are REST calls.
 - Attachments and stickers are ingested as inbound media (and surfaced to the agent when possible).
 - Pairing/allowlist works the same way as other channels (`/channels/pairing` etc) with `channels.bluebubbles.allowFrom` + pairing codes.
@@ -26,7 +26,7 @@ Status: bundled plugin that talks to the BlueBubbles macOS server over HTTP. **R
 
 1. Install the BlueBubbles server on your Mac (follow the instructions at [bluebubbles.app/install](https://bluebubbles.app/install)).
 2. In the BlueBubbles config, enable the web API and set a password.
-3. Run `coderclaw onboard` and select BlueBubbles, or configure manually:
+3. Run `builderforce onboard` and select BlueBubbles, or configure manually:
 
    ```json5
    {
@@ -127,7 +127,7 @@ launchctl load ~/Library/LaunchAgents/com.user.poke-messages.plist
 BlueBubbles is available in the interactive setup wizard:
 
 ```
-coderclaw onboard
+builderforce onboard
 ```
 
 The wizard prompts for:
@@ -141,7 +141,7 @@ The wizard prompts for:
 You can also add BlueBubbles via CLI:
 
 ```
-coderclaw channels add bluebubbles --http-url http://192.168.1.100:1234 --password <password>
+builderforce channels add bluebubbles --http-url http://192.168.1.100:1234 --password <password>
 ```
 
 ## Access control (DMs + groups)
@@ -151,8 +151,8 @@ DMs:
 - Default: `channels.bluebubbles.dmPolicy = "pairing"`.
 - Unknown senders receive a pairing code; messages are ignored until approved (codes expire after 1 hour).
 - Approve via:
-  - `coderclaw pairing list bluebubbles`
-  - `coderclaw pairing approve bluebubbles <CODE>`
+  - `builderforce pairing list bluebubbles`
+  - `builderforce pairing approve bluebubbles <CODE>`
 - Pairing is the default token exchange. Details: [Pairing](/channels/pairing)
 
 Groups:
@@ -195,7 +195,7 @@ Per-group configuration:
 
 - **Typing indicators**: Sent automatically before and during response generation.
 - **Read receipts**: Controlled by `channels.bluebubbles.sendReadReceipts` (default: `true`).
-- **Typing indicators**: CoderClaw sends typing start events; BlueBubbles clears typing automatically on send or timeout (manual stop via DELETE is unreliable).
+- **Typing indicators**: BuilderForce Agents sends typing start events; BlueBubbles clears typing automatically on send or timeout (manual stop via DELETE is unreliable).
 
 ```json5
 {
@@ -250,7 +250,7 @@ Available actions:
 
 ### Message IDs (short vs full)
 
-CoderClaw may surface _short_ message IDs (e.g., `1`, `2`) to save tokens.
+BuilderForce Agents may surface _short_ message IDs (e.g., `1`, `2`) to save tokens.
 
 - `MessageSid` / `ReplyToId` can be short IDs.
 - `MessageSidFull` / `ReplyToIdFull` contain the provider full IDs.
@@ -323,7 +323,7 @@ Prefer `chat_guid` for stable routing:
 - `chat_id:123`
 - `chat_identifier:...`
 - Direct handles: `+15555550123`, `user@example.com`
-  - If a direct handle does not have an existing DM chat, CoderClaw will create one via `POST /api/v1/chat/new`. This requires the BlueBubbles Private API to be enabled.
+  - If a direct handle does not have an existing DM chat, BuilderForce Agents will create one via `POST /api/v1/chat/new`. This requires the BlueBubbles Private API to be enabled.
 
 ## Security
 
@@ -335,11 +335,11 @@ Prefer `chat_guid` for stable routing:
 ## Troubleshooting
 
 - If typing/read events stop working, check the BlueBubbles webhook logs and verify the gateway path matches `channels.bluebubbles.webhookPath`.
-- Pairing codes expire after one hour; use `coderclaw pairing list bluebubbles` and `coderclaw pairing approve bluebubbles <code>`.
+- Pairing codes expire after one hour; use `builderforce pairing list bluebubbles` and `builderforce pairing approve bluebubbles <code>`.
 - Reactions require the BlueBubbles private API (`POST /api/v1/message/react`); ensure the server version exposes it.
 - Edit/unsend require macOS 13+ and a compatible BlueBubbles server version. On macOS 26 (Tahoe), edit is currently broken due to private API changes.
 - Group icon updates can be flaky on macOS 26 (Tahoe): the API may return success but the new icon does not sync.
-- CoderClaw auto-hides known-broken actions based on the BlueBubbles server's macOS version. If edit still appears on macOS 26 (Tahoe), disable it manually with `channels.bluebubbles.actions.edit=false`.
-- For status/health info: `coderclaw status --all` or `coderclaw status --deep`.
+- BuilderForce Agents auto-hides known-broken actions based on the BlueBubbles server's macOS version. If edit still appears on macOS 26 (Tahoe), disable it manually with `channels.bluebubbles.actions.edit=false`.
+- For status/health info: `builderforce status --all` or `builderforce status --deep`.
 
 For general channel workflow reference, see [Channels](/channels) and the [Plugins](/tools/plugin) guide.

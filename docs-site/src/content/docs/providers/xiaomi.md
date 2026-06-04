@@ -1,7 +1,7 @@
 ---
-summary: "Use Xiaomi MiMo (mimo-v2-flash) with CoderClaw"
+summary: "Use Xiaomi MiMo (mimo-v2-flash) with BuilderForce Agents"
 read_when:
-  - You want Xiaomi MiMo models in CoderClaw
+  - You want Xiaomi MiMo models in BuilderForce Agents
   - You need XIAOMI_API_KEY setup
 title: "Xiaomi MiMo"
 ---
@@ -10,7 +10,7 @@ title: "Xiaomi MiMo"
 
 Xiaomi MiMo is the API platform for **MiMo** models. It provides REST APIs compatible with
 OpenAI and Anthropic formats and uses API keys for authentication. Create your API key in
-the [Xiaomi MiMo console](https://platform.xiaomimimo.com/#/console/api-keys). CoderClaw uses
+the [Xiaomi MiMo console](https://platform.xiaomimimo.com/#/console/api-keys). BuilderForce Agents uses
 the `xiaomi` provider with a Xiaomi MiMo API key.
 
 ## Model overview
@@ -22,9 +22,9 @@ the `xiaomi` provider with a Xiaomi MiMo API key.
 ## CLI setup
 
 ```bash
-coderclaw onboard --auth-choice xiaomi-api-key
+builderforce onboard --auth-choice xiaomi-api-key
 # or non-interactive
-coderclaw onboard --auth-choice xiaomi-api-key --xiaomi-api-key "$XIAOMI_API_KEY"
+builderforce onboard --auth-choice xiaomi-api-key --xiaomi-api-key "$XIAOMI_API_KEY"
 ```
 
 ## Config snippet

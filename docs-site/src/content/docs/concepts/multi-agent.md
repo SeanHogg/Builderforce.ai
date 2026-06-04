@@ -15,12 +15,12 @@ An **agent** is a fully scoped brain with its own:
 
 - **Workspace** (files, AGENTS.md/SOUL.md/USER.md, local notes, persona rules).
 - **State directory** (`agentDir`) for auth profiles, model registry, and per-agent config.
-- **Session store** (chat history + routing state) under `~/.coderclaw/agents/<agentId>/sessions`.
+- **Session store** (chat history + routing state) under `~/.builderforce/agents/<agentId>/sessions`.
 
 Auth profiles are **per-agent**. Each agent reads from its own:
 
 ```text
-~/.coderclaw/agents/<agentId>/agent/auth-profiles.json
+~/.builderforce/agents/<agentId>/agent/auth-profiles.json
 ```
 
 Main agent credentials are **not** shared automatically. Never reuse `agentDir`
@@ -28,7 +28,7 @@ across agents (it causes auth/session collisions). If you want to share creds,
 copy `auth-profiles.json` into the other agent's `agentDir`.
 
 Skills are per-agent via each workspace’s `skills/` folder, with shared skills
-available from `~/.coderclaw/skills`. See [Skills: per-agent vs shared](/tools/skills#per-agent-vs-shared-skills).
+available from `~/.builderforce/skills`. See [Skills: per-agent vs shared](/tools/skills#per-agent-vs-shared-skills).
 
 The Gateway can host **one agent** (default) or **many agents** side-by-side.
 
@@ -39,27 +39,27 @@ reach other host locations unless sandboxing is enabled. See
 
 ## Paths (quick map)
 
-- Config: `~/.coderclaw/coderclaw.json` (or `CODERCLAW_CONFIG_PATH`)
-- State dir: `~/.coderclaw` (or `CODERCLAW_STATE_DIR`)
-- Workspace: `~/.coderclaw/workspace` (or `~/.coderclaw/workspace-<agentId>`)
-- Agent dir: `~/.coderclaw/agents/<agentId>/agent` (or `agents.list[].agentDir`)
-- Sessions: `~/.coderclaw/agents/<agentId>/sessions`
+- Config: `~/.builderforce/builderforce.json` (or `BUILDERFORCE_AGENTS_CONFIG_PATH`)
+- State dir: `~/.builderforce` (or `BUILDERFORCE_AGENTS_STATE_DIR`)
+- Workspace: `~/.builderforce/workspace` (or `~/.builderforce/workspace-<agentId>`)
+- Agent dir: `~/.builderforce/agents/<agentId>/agent` (or `agents.list[].agentDir`)
+- Sessions: `~/.builderforce/agents/<agentId>/sessions`
 
 ### Single-agent mode (default)
 
-If you do nothing, CoderClaw runs a single agent:
+If you do nothing, BuilderForce Agents runs a single agent:
 
 - `agentId` defaults to **`main`**.
 - Sessions are keyed as `agent:main:<mainKey>`.
-- Workspace defaults to `~/.coderclaw/workspace` (or `~/.coderclaw/workspace-<profile>` when `CODERCLAW_PROFILE` is set).
-- State defaults to `~/.coderclaw/agents/main/agent`.
+- Workspace defaults to `~/.builderforce/workspace` (or `~/.builderforce/workspace-<profile>` when `BUILDERFORCE_AGENTS_PROFILE` is set).
+- State defaults to `~/.builderforce/agents/main/agent`.
 
 ## Agent helper
 
 Use the agent wizard to add a new isolated agent:
 
 ```bash
-coderclaw agents add work
+builderforce agents add work
 ```
 
 Then add `bindings` (or let the wizard do it) to route inbound messages.
@@ -67,7 +67,7 @@ Then add `bindings` (or let the wizard do it) to route inbound messages.
 Verify with:
 
 ```bash
-coderclaw agents list --bindings
+builderforce agents list --bindings
 ```
 
 ## Quick start
@@ -78,11 +78,11 @@ coderclaw agents list --bindings
 Use the wizard or create workspaces manually:
 
 ```bash
-coderclaw agents add coding
-coderclaw agents add social
+builderforce agents add coding
+builderforce agents add social
 ```
 
-Each agent gets its own workspace with `SOUL.md`, `AGENTS.md`, and optional `USER.md`, plus a dedicated `agentDir` and session store under `~/.coderclaw/agents/<agentId>`.
+Each agent gets its own workspace with `SOUL.md`, `AGENTS.md`, and optional `USER.md`, plus a dedicated `agentDir` and session store under `~/.builderforce/agents/<agentId>`.
 
   </Step>
 
@@ -95,7 +95,7 @@ Create one account per agent on your preferred channels:
 - WhatsApp: link each phone number per account.
 
 ```bash
-coderclaw channels login --channel whatsapp --account work
+builderforce channels login --channel whatsapp --account work
 ```
 
 See channel guides: [Discord](/channels/discord), [Telegram](/channels/telegram), [WhatsApp](/channels/whatsapp).
@@ -111,9 +111,9 @@ Add agents under `agents.list`, channel accounts under `channels.<channel>.accou
   <Step title="Restart and verify">
 
 ```bash
-coderclaw gateway restart
-coderclaw agents list --bindings
-coderclaw channels status --probe
+builderforce gateway restart
+builderforce agents list --bindings
+builderforce channels status --probe
 ```
 
   </Step>
@@ -141,8 +141,8 @@ Example:
 {
   agents: {
     list: [
-      { id: "alex", workspace: "~/.coderclaw/workspace-alex" },
-      { id: "mia", workspace: "~/.coderclaw/workspace-mia" },
+      { id: "alex", workspace: "~/.builderforce/workspace-alex" },
+      { id: "mia", workspace: "~/.builderforce/workspace-mia" },
     ],
   },
   bindings: [
@@ -208,8 +208,8 @@ Each Discord bot account maps to a unique `accountId`. Bind each account to an a
 {
   agents: {
     list: [
-      { id: "main", workspace: "~/.coderclaw/workspace-main" },
-      { id: "coding", workspace: "~/.coderclaw/workspace-coding" },
+      { id: "main", workspace: "~/.builderforce/workspace-main" },
+      { id: "coding", workspace: "~/.builderforce/workspace-coding" },
     ],
   },
   bindings: [
@@ -257,8 +257,8 @@ Notes:
 {
   agents: {
     list: [
-      { id: "main", workspace: "~/.coderclaw/workspace-main" },
-      { id: "alerts", workspace: "~/.coderclaw/workspace-alerts" },
+      { id: "main", workspace: "~/.builderforce/workspace-main" },
+      { id: "alerts", workspace: "~/.builderforce/workspace-alerts" },
     ],
   },
   bindings: [
@@ -293,11 +293,11 @@ Notes:
 Link each account before starting the gateway:
 
 ```bash
-coderclaw channels login --channel whatsapp --account personal
-coderclaw channels login --channel whatsapp --account biz
+builderforce channels login --channel whatsapp --account personal
+builderforce channels login --channel whatsapp --account biz
 ```
 
-`~/.coderclaw/coderclaw.json` (JSON5):
+`~/.builderforce/builderforce.json` (JSON5):
 
 ```js
 {
@@ -307,14 +307,14 @@ coderclaw channels login --channel whatsapp --account biz
         id: "home",
         default: true,
         name: "Home",
-        workspace: "~/.coderclaw/workspace-home",
-        agentDir: "~/.coderclaw/agents/home/agent",
+        workspace: "~/.builderforce/workspace-home",
+        agentDir: "~/.builderforce/agents/home/agent",
       },
       {
         id: "work",
         name: "Work",
-        workspace: "~/.coderclaw/workspace-work",
-        agentDir: "~/.coderclaw/agents/work/agent",
+        workspace: "~/.builderforce/workspace-work",
+        agentDir: "~/.builderforce/agents/work/agent",
       },
     ],
   },
@@ -347,12 +347,12 @@ coderclaw channels login --channel whatsapp --account biz
     whatsapp: {
       accounts: {
         personal: {
-          // Optional override. Default: ~/.coderclaw/credentials/whatsapp/personal
-          // authDir: "~/.coderclaw/credentials/whatsapp/personal",
+          // Optional override. Default: ~/.builderforce/credentials/whatsapp/personal
+          // authDir: "~/.builderforce/credentials/whatsapp/personal",
         },
         biz: {
-          // Optional override. Default: ~/.coderclaw/credentials/whatsapp/biz
-          // authDir: "~/.coderclaw/credentials/whatsapp/biz",
+          // Optional override. Default: ~/.builderforce/credentials/whatsapp/biz
+          // authDir: "~/.builderforce/credentials/whatsapp/biz",
         },
       },
     },
@@ -371,13 +371,13 @@ Split by channel: route WhatsApp to a fast everyday agent and Telegram to an Opu
       {
         id: "chat",
         name: "Everyday",
-        workspace: "~/.coderclaw/workspace-chat",
+        workspace: "~/.builderforce/workspace-chat",
         model: "anthropic/claude-sonnet-4-5",
       },
       {
         id: "opus",
         name: "Deep Work",
-        workspace: "~/.coderclaw/workspace-opus",
+        workspace: "~/.builderforce/workspace-opus",
         model: "anthropic/claude-opus-4-6",
       },
     ],
@@ -405,13 +405,13 @@ Keep WhatsApp on the fast agent, but route one DM to Opus:
       {
         id: "chat",
         name: "Everyday",
-        workspace: "~/.coderclaw/workspace-chat",
+        workspace: "~/.builderforce/workspace-chat",
         model: "anthropic/claude-sonnet-4-5",
       },
       {
         id: "opus",
         name: "Deep Work",
-        workspace: "~/.coderclaw/workspace-opus",
+        workspace: "~/.builderforce/workspace-opus",
         model: "anthropic/claude-opus-4-6",
       },
     ],
@@ -440,7 +440,7 @@ and a tighter tool policy:
       {
         id: "family",
         name: "Family",
-        workspace: "~/.coderclaw/workspace-family",
+        workspace: "~/.builderforce/workspace-family",
         identity: { name: "Family Bot" },
         groupChat: {
           mentionPatterns: ["@family", "@familybot", "@Family Bot"],
@@ -493,7 +493,7 @@ Starting with v2026.1.6, each agent can have its own sandbox and tool restrictio
     list: [
       {
         id: "personal",
-        workspace: "~/.coderclaw/workspace-personal",
+        workspace: "~/.builderforce/workspace-personal",
         sandbox: {
           mode: "off",  // No sandbox for personal agent
         },
@@ -501,7 +501,7 @@ Starting with v2026.1.6, each agent can have its own sandbox and tool restrictio
       },
       {
         id: "family",
-        workspace: "~/.coderclaw/workspace-family",
+        workspace: "~/.builderforce/workspace-family",
         sandbox: {
           mode: "all",     // Always sandboxed
           scope: "agent",  // One container per agent

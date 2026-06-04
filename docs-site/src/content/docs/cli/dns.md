@@ -1,12 +1,12 @@
 ---
-summary: "CLI reference for `coderclaw dns` (wide-area discovery helpers)"
+summary: "CLI reference for `builderforce dns` (wide-area discovery helpers)"
 read_when:
   - You want wide-area discovery (DNS-SD) via Tailscale + CoreDNS
-  - You’re setting up split DNS for a custom discovery domain (example: coderclaw.internal)
+  - You’re setting up split DNS for a custom discovery domain (example: builderforce.internal)
 title: "dns"
 ---
 
-# `coderclaw dns`
+# `builderforce dns`
 
 DNS helpers for wide-area discovery (Tailscale + CoreDNS). Currently focused on macOS + Homebrew CoreDNS.
 
@@ -18,6 +18,6 @@ Related:
 ## Setup
 
 ```bash
-coderclaw dns setup
-coderclaw dns setup --apply
+builderforce dns setup
+builderforce dns setup --apply
 ```

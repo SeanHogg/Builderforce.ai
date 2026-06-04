@@ -12,8 +12,8 @@
  *
  * **TTL is intentionally long (365 days) because every mutation that
  * affects auth resolution explicitly calls `invalidateKeyCache`** —
- * specifically: revoke, update (origin allowlist / name), claw deactivation,
- * claw daily-limit change. Mint creates no cache entry to invalidate (the
+ * specifically: revoke, update (origin allowlist / name), agentHost deactivation,
+ * agentHost daily-limit change. Mint creates no cache entry to invalidate (the
  * first call populates it). Tenant plan/billing changes don't need
  * invalidation because `resolveTenantPlan` runs fresh on every request,
  * outside the cached block.

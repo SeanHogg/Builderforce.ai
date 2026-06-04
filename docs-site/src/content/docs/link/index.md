@@ -1,6 +1,6 @@
 ---
 title: Orchestration (Builderforce)
-description: Documentation for the CoderClaw orchestration portal (Builderforce.ai replaces builderforce.ai)
+description: Documentation for the BuilderForce Agents orchestration portal (Builderforce.ai replaces builderforce.ai)
 ---
 
 # Documentation Index — Orchestration (Builderforce)
@@ -21,9 +21,9 @@ Welcome to the orchestration documentation. Builderforce.ai replaces builderforc
 
 | Document | Description |
 |----------|-------------|
-| [Multi-Agent Orchestration](/link/multi-agent-orchestration/) | Register claws, route tasks, delegate between agents, approval gates |
+| [Multi-Agent Orchestration](/link/multi-agent-orchestration/) | Register agents, route tasks, delegate between agents, approval gates |
 | [Skills Marketplace](/link/marketplace/) | Publish, discover, and install reusable agent skills |
-| [Skill Registry](/link/skill-registry/) | How CoderClaw fetches, merges, and applies portal-managed skills at startup |
+| [Skill Registry](/link/skill-registry/) | How BuilderForce Agents fetches, merges, and applies portal-managed skills at startup |
 | [Approval Gates](/link/approval-gates/) | Human-in-the-loop gates — block execution until a manager approves in the portal |
 | [Workflow Telemetry](/link/workflow-telemetry/) | Span schema, local JSONL files, and live portal sync |
 | [Workflow Recovery](/link/workflow-recovery/) | Checkpoint schema, resuming after failure, debugging stuck workflows |
@@ -46,8 +46,8 @@ Welcome to the orchestration documentation. Builderforce.ai replaces builderforc
 
 ## External links
 
-- [CoderClaw core agent runtime](https://github.com/SeanHogg/coderClaw)
+- [BuilderForce Agents core agent runtime](https://github.com/SeanHogg/Builderforce.ai)
 - [Builderforce.ai](https://builderforce.ai) · [Builderforce repo](https://github.com/SeanHogg/builderforce.ai)
 - [Discord community](https://discord.gg/qkhbAGHRBT)
-- [coderclaw.ai](https://coderclaw.ai)
+- [builderforce.ai](https://builderforce.ai)
 - [builderforce.ai](https://builderforce.ai)

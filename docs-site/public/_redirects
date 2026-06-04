@@ -2,7 +2,7 @@
 # All paths are prefixed with /docs/ because the docs site is mounted under
 # builderforce.ai/docs/* via Astro `base: '/docs'`.
 #
-# Cross-domain redirect from docs.coderclaw.ai is configured separately at the
+# Cross-domain redirect from docs.builderforce.ai is configured separately at the
 # Cloudflare Page Rules / Bulk Redirects level — see docs-site/README.md.
 
 /docs/messages /docs/concepts/messages 301
@@ -58,7 +58,7 @@
 /docs/bun /docs/install/bun 301
 /docs/auth-monitoring /docs/automation/auth-monitoring 301
 /docs/camera /docs/nodes/camera 301
-/docs/clawhub /docs/tools/clawhub 301
+/docs/clawhub /docs/tools/agenthub 301
 /docs/configuration /docs/gateway/configuration 301
 /docs/control-ui /docs/web/control-ui 301
 /docs/cron-jobs /docs/automation/cron-jobs 301
@@ -188,9 +188,9 @@
 /docs/gateway/trusted-proxy /docs/gateway/trusted-proxy-auth 301
 /docs/start/faq /docs/help/faq 301
 /docs/faq /docs/help/faq 301
-/docs/about /docs/coderclaw-overview 301
-/docs/workflows /docs/coderclaw-workflows 301
-/docs/vision /docs/coderclaw-overview 301
+/docs/about /docs/agents-overview 301
+/docs/workflows /docs/agents-workflows 301
+/docs/vision /docs/agents-overview 301
 /docs/bedrock /docs/providers/bedrock 301
 /docs/hooks /docs/automation/hooks 301
 /docs/msteams /docs/channels/msteams 301
@@ -205,5 +205,15 @@
 /docs/reference/templates/soul /docs/reference/templates/SOUL 301
 /docs/reference/templates/tools /docs/reference/templates/TOOLS 301
 /docs/reference/templates/user /docs/reference/templates/USER 301
-/docs/mcp.SearchCoderClaw /docs/cli/docs 301
+/docs/mcp.SearchBuilderForce Agents /docs/cli/docs 301
 /docs/plugin. /docs/tools/plugin 301
+
+# Rebrand: BuilderForce Agents doc slugs -> BuilderForce Agents
+/docs/builderforce /docs/agents 301
+/docs/builderforce-overview /docs/agents-overview 301
+/docs/builderforce-architecture /docs/agents-architecture 301
+/docs/builderforce-vs-alternatives /docs/agents-vs-alternatives 301
+/docs/builderforce-workflows /docs/agents-workflows 301
+/docs/builderforce-link /docs/agents-link 301
+/docs/start/builderforce /docs/start/agents 301
+/docs/tools/clawhub /docs/tools/agenthub 301

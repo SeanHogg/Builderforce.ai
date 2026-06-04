@@ -2,7 +2,7 @@
 read_when:
   - 你正在管理已配对的节点（摄像头、屏幕、画布）
   - 你需要批准请求或调用节点命令
-summary: "`coderclaw nodes` 的 CLI 参考（列表/状态/批准/调用，摄像头/画布/屏幕）"
+summary: "`builderforce nodes` 的 CLI 参考（列表/状态/批准/调用，摄像头/画布/屏幕）"
 title: nodes
 x-i18n:
   generated_at: "2026-02-03T10:04:26Z"
@@ -13,7 +13,7 @@ x-i18n:
   workflow: 15
 ---
 
-# `coderclaw nodes`
+# `builderforce nodes`
 
 管理已配对的节点（设备）并调用节点功能。
 
@@ -30,14 +30,14 @@ x-i18n:
 ## 常用命令
 
 ```bash
-coderclaw nodes list
-coderclaw nodes list --connected
-coderclaw nodes list --last-connected 24h
-coderclaw nodes pending
-coderclaw nodes approve <requestId>
-coderclaw nodes status
-coderclaw nodes status --connected
-coderclaw nodes status --last-connected 24h
+builderforce nodes list
+builderforce nodes list --connected
+builderforce nodes list --last-connected 24h
+builderforce nodes pending
+builderforce nodes approve <requestId>
+builderforce nodes status
+builderforce nodes status --connected
+builderforce nodes status --last-connected 24h
 ```
 
 `nodes list` 打印待处理/已配对表格。已配对行包含最近连接时长（Last Connect）。
@@ -47,10 +47,10 @@ coderclaw nodes status --last-connected 24h
 ## 调用 / 运行
 
 ```bash
-coderclaw nodes invoke --node <id|name|ip> --command <command> --params <json>
-coderclaw nodes run --node <id|name|ip> <command...>
-coderclaw nodes run --raw "git status"
-coderclaw nodes run --agent main --node <id|name|ip> --raw "git status"
+builderforce nodes invoke --node <id|name|ip> --command <command> --params <json>
+builderforce nodes run --node <id|name|ip> <command...>
+builderforce nodes run --raw "git status"
+builderforce nodes run --agent main --node <id|name|ip> --raw "git status"
 ```
 
 调用标志：

@@ -16,29 +16,29 @@ Start at [/help/troubleshooting](/help/troubleshooting) if you want the fast tri
 Run these first, in this order:
 
 ```bash
-coderclaw status
-coderclaw gateway status
-coderclaw logs --follow
-coderclaw doctor
-coderclaw channels status --probe
+builderforce status
+builderforce gateway status
+builderforce logs --follow
+builderforce doctor
+builderforce channels status --probe
 ```
 
 Expected healthy signals:
 
-- `coderclaw gateway status` shows `Runtime: running` and `RPC probe: ok`.
-- `coderclaw doctor` reports no blocking config/service issues.
-- `coderclaw channels status --probe` shows connected/ready channels.
+- `builderforce gateway status` shows `Runtime: running` and `RPC probe: ok`.
+- `builderforce doctor` reports no blocking config/service issues.
+- `builderforce channels status --probe` shows connected/ready channels.
 
 ## No replies
 
 If channels are up but nothing answers, check routing and policy before reconnecting anything.
 
 ```bash
-coderclaw status
-coderclaw channels status --probe
-coderclaw pairing list <channel>
-coderclaw config get channels
-coderclaw logs --follow
+builderforce status
+builderforce channels status --probe
+builderforce pairing list <channel>
+builderforce config get channels
+builderforce logs --follow
 ```
 
 Look for:
@@ -64,11 +64,11 @@ Related:
 When dashboard/control UI will not connect, validate URL, auth mode, and secure context assumptions.
 
 ```bash
-coderclaw gateway status
-coderclaw status
-coderclaw logs --follow
-coderclaw doctor
-coderclaw gateway status --json
+builderforce gateway status
+builderforce status
+builderforce logs --follow
+builderforce doctor
+builderforce gateway status --json
 ```
 
 Look for:
@@ -94,11 +94,11 @@ Related:
 Use this when service is installed but process does not stay up.
 
 ```bash
-coderclaw gateway status
-coderclaw status
-coderclaw logs --follow
-coderclaw doctor
-coderclaw gateway status --deep
+builderforce gateway status
+builderforce status
+builderforce logs --follow
+builderforce doctor
+builderforce gateway status --deep
 ```
 
 Look for:
@@ -109,7 +109,7 @@ Look for:
 
 Common signatures:
 
-- `Gateway start blocked: set gateway.mode=local` → local gateway mode is not enabled. Fix: set `gateway.mode="local"` in your config (or run `coderclaw configure`). If you are running CoderClaw via Podman using the dedicated `coderclaw` user, the config lives at `~coderclaw/.coderclaw/coderclaw.json`.
+- `Gateway start blocked: set gateway.mode=local` → local gateway mode is not enabled. Fix: set `gateway.mode="local"` in your config (or run `builderforce configure`). If you are running BuilderForce Agents via Podman using the dedicated `builderforce` user, the config lives at `~builderforce/.builderforce/builderforce.json`.
 - `refusing to bind gateway ... without auth` → non-loopback bind without token/password.
 - `another gateway instance is already listening` / `EADDRINUSE` → port conflict.
 
@@ -124,11 +124,11 @@ Related:
 If channel state is connected but message flow is dead, focus on policy, permissions, and channel specific delivery rules.
 
 ```bash
-coderclaw channels status --probe
-coderclaw pairing list <channel>
-coderclaw status --deep
-coderclaw logs --follow
-coderclaw config get channels
+builderforce channels status --probe
+builderforce pairing list <channel>
+builderforce status --deep
+builderforce logs --follow
+builderforce config get channels
 ```
 
 Look for:
@@ -155,11 +155,11 @@ Related:
 If cron or heartbeat did not run or did not deliver, verify scheduler state first, then delivery target.
 
 ```bash
-coderclaw cron status
-coderclaw cron list
-coderclaw cron runs --id <jobId> --limit 20
-coderclaw system heartbeat last
-coderclaw logs --follow
+builderforce cron status
+builderforce cron list
+builderforce cron runs --id <jobId> --limit 20
+builderforce system heartbeat last
+builderforce logs --follow
 ```
 
 Look for:
@@ -186,11 +186,11 @@ Related:
 If a node is paired but tools fail, isolate foreground, permission, and approval state.
 
 ```bash
-coderclaw nodes status
-coderclaw nodes describe --node <idOrNameOrIp>
-coderclaw approvals get --node <idOrNameOrIp>
-coderclaw logs --follow
-coderclaw status
+builderforce nodes status
+builderforce nodes describe --node <idOrNameOrIp>
+builderforce approvals get --node <idOrNameOrIp>
+builderforce logs --follow
+builderforce status
 ```
 
 Look for:
@@ -217,11 +217,11 @@ Related:
 Use this when browser tool actions fail even though the gateway itself is healthy.
 
 ```bash
-coderclaw browser status
-coderclaw browser start --browser-profile coderclaw
-coderclaw browser profiles
-coderclaw logs --follow
-coderclaw doctor
+builderforce browser status
+builderforce browser start --browser-profile builderforce
+builderforce browser profiles
+builderforce logs --follow
+builderforce doctor
 ```
 
 Look for:
@@ -250,10 +250,10 @@ Most post-upgrade breakage is config drift or stricter defaults now being enforc
 ### 1) Auth and URL override behavior changed
 
 ```bash
-coderclaw gateway status
-coderclaw config get gateway.mode
-coderclaw config get gateway.remote.url
-coderclaw config get gateway.auth.mode
+builderforce gateway status
+builderforce config get gateway.mode
+builderforce config get gateway.remote.url
+builderforce config get gateway.auth.mode
 ```
 
 What to check:
@@ -269,10 +269,10 @@ Common signatures:
 ### 2) Bind and auth guardrails are stricter
 
 ```bash
-coderclaw config get gateway.bind
-coderclaw config get gateway.auth.token
-coderclaw gateway status
-coderclaw logs --follow
+builderforce config get gateway.bind
+builderforce config get gateway.auth.token
+builderforce gateway status
+builderforce logs --follow
 ```
 
 What to check:
@@ -288,10 +288,10 @@ Common signatures:
 ### 3) Pairing and device identity state changed
 
 ```bash
-coderclaw devices list
-coderclaw pairing list <channel>
-coderclaw logs --follow
-coderclaw doctor
+builderforce devices list
+builderforce pairing list <channel>
+builderforce logs --follow
+builderforce doctor
 ```
 
 What to check:
@@ -307,8 +307,8 @@ Common signatures:
 If the service config and runtime still disagree after checks, reinstall service metadata from the same profile/state directory:
 
 ```bash
-coderclaw gateway install --force
-coderclaw gateway restart
+builderforce gateway install --force
+builderforce gateway restart
 ```
 
 Related:

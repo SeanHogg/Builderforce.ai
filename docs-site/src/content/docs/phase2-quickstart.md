@@ -1,5 +1,5 @@
 ---
-summary: "Quick start guide for CoderClaw Phase 2 distributed runtime features"
+summary: "Quick start guide for BuilderForce Agents Phase 2 distributed runtime features"
 read_when:
   - Getting started with Phase 2 features
   - Setting up distributed task execution
@@ -7,15 +7,15 @@ read_when:
 title: "Phase 2 Quick Start"
 ---
 
-# CoderClaw Phase 2 Quick Start
+# BuilderForce Agents Phase 2 Quick Start
 
-Get started with CoderClaw's distributed runtime, security, and team collaboration features.
+Get started with BuilderForce Agents's distributed runtime, security, and team collaboration features.
 
-> **Prerequisites**: CoderClaw installed and running. See [Getting Started](/start/getting-started) if you haven't set up the basic gateway yet.
+> **Prerequisites**: BuilderForce Agents installed and running. See [Getting Started](/start/getting-started) if you haven't set up the basic gateway yet.
 
 ## What is Phase 2?
 
-CoderClaw Phase 2 extends [CoderClaw](https://github.com/SeanHogg/coderClaw)'s multi-channel gateway with:
+BuilderForce Agents Phase 2 extends [BuilderForce Agents](https://github.com/SeanHogg/Builderforce.ai)'s multi-channel gateway with:
 
 - **🔄 Transport Abstraction**: Execute tasks locally or remotely with protocol-agnostic runtime
 - **📊 Task Lifecycle Management**: Formal state machine with persistence and audit trails
@@ -32,8 +32,8 @@ Phase 2 features are **backward compatible**. Your existing setup continues to w
 
 ```bash
 # Create Phase 2 runtime config
-mkdir -p ~/.coderclaw/.coderClaw
-cat > ~/.coderclaw/.coderClaw/runtime.yaml <<EOF
+mkdir -p ~/.builderforce/.BuilderForce Agents
+cat > ~/.builderforce/.builderforce/runtime.yaml <<EOF
 mode: local-only
 transport:
   type: local
@@ -50,11 +50,11 @@ EOF
 ### 2. Try a Simple Task
 
 ```typescript
-import { CoderClawRuntime, LocalTransportAdapter } from "coderclaw/transport";
+import { BuilderForce AgentsRuntime, LocalTransportAdapter } from "builderforce/transport";
 
 // Create runtime with local adapter
 const adapter = new LocalTransportAdapter(context);
-const runtime = new CoderClawRuntime(adapter, "local-only");
+const runtime = new BuilderForce AgentsRuntime(adapter, "local-only");
 
 // Submit a task
 const task = await runtime.submitTask({
@@ -93,7 +93,7 @@ console.log(`Available skills:`, skills);
 
 ```bash
 # Create security config
-cat > ~/.coderclaw/.coderClaw/security.yaml <<EOF
+cat > ~/.builderforce/.builderforce/security.yaml <<EOF
 identity:
   providers:
     - github
@@ -121,7 +121,7 @@ EOF
 ### 2. Configure Runtime for Remote Access
 
 ```bash
-cat > ~/.coderclaw/.coderClaw/runtime.yaml <<EOF
+cat > ~/.builderforce/.builderforce/runtime.yaml <<EOF
 mode: remote-enabled
 transport:
   type: local  # Use HTTP adapter for true remote (future)
@@ -141,7 +141,7 @@ EOF
 
 ```bash
 # Create repo-level security policy
-cat > .coderClaw/security.yaml <<EOF
+cat > .builderforce/security.yaml <<EOF
 enforceTrust: true
 minimumTrustLevel: verified
 allowedRoles:
@@ -174,7 +174,7 @@ EOF
 ### Example 1: Task Submission with Progress Tracking
 
 ```typescript
-import { DistributedTaskEngine, MemoryTaskStorage } from "coderclaw/transport";
+import { DistributedTaskEngine, MemoryTaskStorage } from "builderforce/transport";
 
 const taskEngine = new DistributedTaskEngine(new MemoryTaskStorage());
 
@@ -203,7 +203,7 @@ await taskEngine.updateTaskStatus(task.id, "completed");
 ### Example 2: Security Checks
 
 ```typescript
-import { SecurityService, MemorySecurityStorage } from "coderclaw/security";
+import { SecurityService, MemorySecurityStorage } from "builderforce/security";
 
 const securityService = new SecurityService(new MemorySecurityStorage());
 
@@ -271,7 +271,7 @@ const testTask = await taskEngine.createTask({
 
 ## Running the Examples
 
-CoderClaw includes working examples in `examples/phase2/`:
+BuilderForce Agents includes working examples in `examples/phase2/`:
 
 ```bash
 # Basic task submission
@@ -286,7 +286,7 @@ npx tsx examples/phase2/security-rbac.ts
 
 ## Configuration Reference
 
-### Runtime Configuration (`~/.coderclaw/.coderClaw/runtime.yaml`)
+### Runtime Configuration (`~/.builderforce/.builderforce/runtime.yaml`)
 
 ```yaml
 # Deployment mode: local-only | remote-enabled | distributed-cluster
@@ -307,7 +307,7 @@ deployment:
   maxConcurrentTasks: 10
 ```
 
-### Security Configuration (`~/.coderclaw/.coderClaw/security.yaml`)
+### Security Configuration (`~/.builderforce/.builderforce/security.yaml`)
 
 ```yaml
 identity:
@@ -328,7 +328,7 @@ roles:
       - config:write
 ```
 
-### Project Security (`.coderClaw/security.yaml`)
+### Project Security (`.builderforce/security.yaml`)
 
 ```yaml
 enforceTrust: true
@@ -351,7 +351,7 @@ skillPolicies:
 
 ## Built-in Roles
 
-CoderClaw includes these built-in roles:
+BuilderForce Agents includes these built-in roles:
 
 | Role        | Permissions                                          | Use Case                          |
 | ----------- | ---------------------------------------------------- | --------------------------------- |
@@ -382,10 +382,10 @@ Available permissions:
   <Card title="Security Guide" href="/gateway/security">
     Comprehensive security configuration and threat model
   </Card>
-  <Card title="Examples Directory" href="https://github.com/SeanHogg/coderClaw/tree/main/examples/phase2">
+  <Card title="Examples Directory" href="https://github.com/SeanHogg/Builderforce.ai/tree/main/examples/phase2">
     Working code examples for all Phase 2 features
   </Card>
-  <Card title="CoderClaw Developer Guide" href="/coderclaw">
+  <Card title="BuilderForce Agents Developer Guide" href="/builderforce">
     Multi-agent workflows and project-specific configuration
   </Card>
 </Columns>
@@ -398,7 +398,7 @@ Check your security configuration:
 
 ```bash
 # Verify runtime config
-cat ~/.coderclaw/.coderClaw/runtime.yaml
+cat ~/.builderforce/.builderforce/runtime.yaml
 
 # Check if authentication is required
 # If security.requireAuth: true, you need a valid session
@@ -409,7 +409,7 @@ cat ~/.coderclaw/.coderClaw/runtime.yaml
 Ensure your runtime is in `remote-enabled` mode:
 
 ```yaml
-# In ~/.coderclaw/.coderClaw/runtime.yaml
+# In ~/.builderforce/.builderforce/runtime.yaml
 mode: remote-enabled
 deployment:
   allowRemoteSessions: true
@@ -421,7 +421,7 @@ Review the security policy:
 
 ```bash
 # Check project-level policy
-cat .coderClaw/security.yaml
+cat .builderforce/security.yaml
 
 # Verify user roles and device trust level
 ```
@@ -429,6 +429,6 @@ cat .coderClaw/security.yaml
 ## Getting Help
 
 - [Full Documentation](/)
-- [GitHub Issues](https://github.com/SeanHogg/coderClaw/issues)
+- [GitHub Issues](https://github.com/SeanHogg/Builderforce.ai/issues)
 - [Discord Community](https://discord.gg/9gUsc2sNG6)
-- [Phase 2 Examples](https://github.com/SeanHogg/coderClaw/tree/main/examples/phase2)
+- [Phase 2 Examples](https://github.com/SeanHogg/Builderforce.ai/tree/main/examples/phase2)

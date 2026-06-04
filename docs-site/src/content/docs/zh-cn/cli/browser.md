@@ -1,9 +1,9 @@
 ---
 read_when:
-  - 你使用 `coderclaw browser` 并想要常见任务的示例
+  - 你使用 `builderforce browser` 并想要常见任务的示例
   - 你想通过 node host 控制在另一台机器上运行的浏览器
   - 你想使用 Chrome 扩展中继（通过工具栏按钮附加/分离）
-summary: "`coderclaw browser` 的 CLI 参考（配置文件、标签页、操作、扩展中继）"
+summary: "`builderforce browser` 的 CLI 参考（配置文件、标签页、操作、扩展中继）"
 title: browser
 x-i18n:
   generated_at: "2026-02-03T07:44:49Z"
@@ -14,9 +14,9 @@ x-i18n:
   workflow: 15
 ---
 
-# `coderclaw browser`
+# `builderforce browser`
 
-管理 CoderClaw 的浏览器控制服务器并运行浏览器操作（标签页、快照、截图、导航、点击、输入）。
+管理 BuilderForce Agents 的浏览器控制服务器并运行浏览器操作（标签页、快照、截图、导航、点击、输入）。
 
 相关：
 
@@ -34,38 +34,38 @@ x-i18n:
 ## 快速开始（本地）
 
 ```bash
-coderclaw browser --browser-profile chrome tabs
-coderclaw browser --browser-profile coderclaw start
-coderclaw browser --browser-profile coderclaw open https://example.com
-coderclaw browser --browser-profile coderclaw snapshot
+builderforce browser --browser-profile chrome tabs
+builderforce browser --browser-profile builderforce start
+builderforce browser --browser-profile builderforce open https://example.com
+builderforce browser --browser-profile builderforce snapshot
 ```
 
 ## 配置文件
 
 配置文件是命名的浏览器路由配置。实际上：
 
-- `coderclaw`：启动/附加到专用的 CoderClaw 管理的 Chrome 实例（隔离的用户数据目录）。
+- `builderforce`：启动/附加到专用的 BuilderForce Agents 管理的 Chrome 实例（隔离的用户数据目录）。
 - `chrome`：通过 Chrome 扩展中继控制你现有的 Chrome 标签页。
 
 ```bash
-coderclaw browser profiles
-coderclaw browser create-profile --name work --color "#FF5A36"
-coderclaw browser delete-profile --name work
+builderforce browser profiles
+builderforce browser create-profile --name work --color "#FF5A36"
+builderforce browser delete-profile --name work
 ```
 
 使用特定配置文件：
 
 ```bash
-coderclaw browser --browser-profile work tabs
+builderforce browser --browser-profile work tabs
 ```
 
 ## 标签页
 
 ```bash
-coderclaw browser tabs
-coderclaw browser open https://builderforce.ai/docs
-coderclaw browser focus <targetId>
-coderclaw browser close <targetId>
+builderforce browser tabs
+builderforce browser open https://builderforce.ai/docs
+builderforce browser focus <targetId>
+builderforce browser close <targetId>
 ```
 
 ## 快照 / 截图 / 操作
@@ -73,21 +73,21 @@ coderclaw browser close <targetId>
 快照：
 
 ```bash
-coderclaw browser snapshot
+builderforce browser snapshot
 ```
 
 截图：
 
 ```bash
-coderclaw browser screenshot
+builderforce browser screenshot
 ```
 
 导航/点击/输入（基于 ref 的 UI 自动化）：
 
 ```bash
-coderclaw browser navigate https://example.com
-coderclaw browser click <ref>
-coderclaw browser type <ref> "hello"
+builderforce browser navigate https://example.com
+builderforce browser click <ref>
+builderforce browser type <ref> "hello"
 ```
 
 ## Chrome 扩展中继（通过工具栏按钮附加）
@@ -97,8 +97,8 @@ coderclaw browser type <ref> "hello"
 将未打包的扩展安装到稳定路径：
 
 ```bash
-coderclaw browser extension install
-coderclaw browser extension path
+builderforce browser extension install
+builderforce browser extension path
 ```
 
 然后 Chrome → `chrome://extensions` → 启用"开发者模式" → "加载已解压的扩展程序" → 选择打印的文件夹。

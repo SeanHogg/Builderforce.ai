@@ -1,5 +1,5 @@
 ---
-summary: "CLI reference for `coderclaw system` (system events, heartbeat, presence)"
+summary: "CLI reference for `builderforce system` (system events, heartbeat, presence)"
 read_when:
   - You want to enqueue a system event without creating a cron job
   - You need to enable or disable heartbeats
@@ -7,7 +7,7 @@ read_when:
 title: "system"
 ---
 
-# `coderclaw system`
+# `builderforce system`
 
 System-level helpers for the Gateway: enqueue system events, control heartbeats,
 and view presence.
@@ -15,10 +15,10 @@ and view presence.
 ## Common commands
 
 ```bash
-coderclaw system event --text "Check for urgent follow-ups" --mode now
-coderclaw system heartbeat enable
-coderclaw system heartbeat last
-coderclaw system presence
+builderforce system event --text "Check for urgent follow-ups" --mode now
+builderforce system heartbeat enable
+builderforce system heartbeat last
+builderforce system presence
 ```
 
 ## `system event`

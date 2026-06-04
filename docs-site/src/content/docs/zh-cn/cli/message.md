@@ -2,7 +2,7 @@
 read_when:
   - 添加或修改消息 CLI 操作
   - 更改出站渠道行为
-summary: "`coderclaw message`（发送 + 渠道操作）的 CLI 参考"
+summary: "`builderforce message`（发送 + 渠道操作）的 CLI 参考"
 title: message
 x-i18n:
   generated_at: "2026-02-01T20:21:30Z"
@@ -13,7 +13,7 @@ x-i18n:
   workflow: 14
 ---
 
-# `coderclaw message`
+# `builderforce message`
 
 用于发送消息和渠道操作的单一出站命令
 （Discord/Google Chat/Slack/Mattermost（插件）/Telegram/WhatsApp/Signal/iMessage/MS Teams）。
@@ -21,7 +21,7 @@ x-i18n:
 ## 用法
 
 ```
-coderclaw message <subcommand> [flags]
+builderforce message <subcommand> [flags]
 ```
 
 渠道选择：
@@ -45,7 +45,7 @@ coderclaw message <subcommand> [flags]
 名称查找：
 
 - 对于支持的提供商（Discord/Slack 等），如 `Help` 或 `#help` 之类的频道名称会通过目录缓存进行解析。
-- 缓存未命中时，如果提供商支持，CoderClaw 将尝试实时目录查找。
+- 缓存未命中时，如果提供商支持，BuilderForce Agents 将尝试实时目录查找。
 
 ## 通用标志
 
@@ -193,14 +193,14 @@ coderclaw message <subcommand> [flags]
 发送 Discord 回复：
 
 ```
-coderclaw message send --channel discord \
+builderforce message send --channel discord \
   --target channel:123 --message "hi" --reply-to 456
 ```
 
 创建 Discord 投票：
 
 ```
-coderclaw message poll --channel discord \
+builderforce message poll --channel discord \
   --target channel:123 \
   --poll-question "Snack?" \
   --poll-option Pizza --poll-option Sushi \
@@ -210,14 +210,14 @@ coderclaw message poll --channel discord \
 发送 Teams 主动消息：
 
 ```
-coderclaw message send --channel msteams \
+builderforce message send --channel msteams \
   --target conversation:19:abc@thread.tacv2 --message "hi"
 ```
 
 创建 Teams 投票：
 
 ```
-coderclaw message poll --channel msteams \
+builderforce message poll --channel msteams \
   --target conversation:19:abc@thread.tacv2 \
   --poll-question "Lunch?" \
   --poll-option Pizza --poll-option Sushi
@@ -226,14 +226,14 @@ coderclaw message poll --channel msteams \
 在 Slack 中添加表情回应：
 
 ```
-coderclaw message react --channel slack \
+builderforce message react --channel slack \
   --target C123 --message-id 456 --emoji "✅"
 ```
 
 在 Signal 群组中添加表情回应：
 
 ```
-coderclaw message react --channel signal \
+builderforce message react --channel signal \
   --target signal:group:abc123 --message-id 1737630212345 \
   --emoji "✅" --target-author-uuid 123e4567-e89b-12d3-a456-426614174000
 ```
@@ -241,6 +241,6 @@ coderclaw message react --channel signal \
 发送 Telegram 内联按钮：
 
 ```
-coderclaw message send --channel telegram --target @mychat --message "Choose:" \
+builderforce message send --channel telegram --target @mychat --message "Choose:" \
   --buttons '[ [{"text":"Yes","callback_data":"cmd:yes"}], [{"text":"No","callback_data":"cmd:no"}] ]'
 ```

@@ -92,8 +92,64 @@ function recordColumns(table, sqlBlock) {
   }
 }
 
+// ── Rename-awareness ─────────────────────────────────────────────────────────
+//
+// A migration can RENAME a table/column it (or an earlier migration) created.
+// Without tracking that, the reconstructed model keeps the old name and reports
+// the new schema.ts name as "uncreated" drift. We follow renames from two
+// sources so the model reflects the true post-migration schema:
+//   1. Explicit static SQL:  ALTER TABLE [IF EXISTS] x RENAME TO y;
+//                            ALTER TABLE x RENAME COLUMN a TO b;
+//   2. Declarative directives (for migrations whose renames are dynamic — e.g.
+//      a DO-block that loops over information_schema and can't be parsed):
+//        -- @schema-drift-rename-table   old_name -> new_name
+//        -- @schema-drift-rename-replace old_substr -> new_substr   (applied to
+//           every table key + column name; mirrors `replace(name, a, b)`)
+
+function renameTableKey(oldT, newT) {
+  if (oldT === newT || !migratedColumns.has(oldT)) return;
+  const set = migratedColumns.get(oldT);
+  if (migratedColumns.has(newT)) {
+    for (const c of set) migratedColumns.get(newT).add(c);
+  } else {
+    migratedColumns.set(newT, set);
+  }
+  migratedColumns.delete(oldT);
+}
+
+function renameColumn(table, oldC, newC) {
+  const set = migratedColumns.get(table);
+  if (set && set.has(oldC)) { set.delete(oldC); set.add(newC); }
+}
+
+function replaceSubstr(a, b) {
+  for (const key of [...migratedColumns.keys()]) {
+    if (key.includes(a)) renameTableKey(key, key.split(a).join(b));
+  }
+  for (const set of migratedColumns.values()) {
+    for (const c of [...set]) {
+      if (c.includes(a)) { set.delete(c); set.add(c.split(a).join(b)); }
+    }
+  }
+}
+
+function applyRenames(raw, text) {
+  // Directives first: explicit table renames (special-cases) before substring
+  // replaces, mirroring how such migrations are written.
+  for (const m of raw.matchAll(/--\s*@schema-drift-rename-table\s+([a-z_][a-z_0-9]*)\s*->\s*([a-z_][a-z_0-9]*)/gi))
+    renameTableKey(m[1].toLowerCase(), m[2].toLowerCase());
+  for (const m of raw.matchAll(/--\s*@schema-drift-rename-replace\s+([a-z_][a-z_0-9]*)\s*->\s*([a-z_][a-z_0-9]*)/gi))
+    replaceSubstr(m[1].toLowerCase(), m[2].toLowerCase());
+  // Explicit static rename statements.
+  for (const m of text.matchAll(/ALTER TABLE\s+(?:IF EXISTS\s+)?([a-z_][a-z_0-9]*)\s+RENAME TO\s+([a-z_][a-z_0-9]*)/gi))
+    renameTableKey(m[1].toLowerCase(), m[2].toLowerCase());
+  for (const m of text.matchAll(/ALTER TABLE\s+(?:IF EXISTS\s+)?([a-z_][a-z_0-9]*)\s+RENAME COLUMN\s+([a-z_][a-z_0-9]*)\s+TO\s+([a-z_][a-z_0-9]*)/gi))
+    renameColumn(m[1].toLowerCase(), m[2].toLowerCase(), m[3].toLowerCase());
+}
+
 for (const file of sqlFiles) {
-  const text = readFileSync(resolve(migrationsDir, file), 'utf8').replace(/--[^\n]*/g, '');
+  const raw = readFileSync(resolve(migrationsDir, file), 'utf8');
+  const text = raw.replace(/--[^\n]*/g, '');
 
   // CREATE TABLE [IF NOT EXISTS] <name> ( <cols> );
   const createRe = /CREATE TABLE(?:\s+IF NOT EXISTS)?\s+([a-z_][a-z_0-9]*)\s*\(([\s\S]*?)\)\s*;/gi;
@@ -109,6 +165,10 @@ for (const file of sqlFiles) {
     const cols = m[2].matchAll(/ADD COLUMN(?:\s+IF NOT EXISTS)?\s+([a-z_][a-z_0-9]*)/gi);
     for (const c of cols) recordColumns(m[1].toLowerCase(), c[1]);
   }
+
+  // Apply this migration's renames AFTER its creates, in file order, so a later
+  // migration's rename mutates columns/tables added by earlier ones.
+  applyRenames(raw, text);
 }
 
 // ── Compare ─────────────────────────────────────────────────────────────────

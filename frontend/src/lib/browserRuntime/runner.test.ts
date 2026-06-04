@@ -62,7 +62,7 @@ describe('runOnce', () => {
 
 describe('runOnce — coding mode', () => {
   it('routes a repo-targeted dispatch to the code handler and reports its result', async () => {
-    const code = vi.fn(async () => ({ status: 'completed' as const, output: 'pushed claw/task-1' }));
+    const code = vi.fn(async () => ({ status: 'completed' as const, output: 'pushed agentHost/task-1' }));
     const report = vi.fn(async () => {});
     const t = fakeTransport({
       claim: vi.fn(async () => dispatch({ repo: { repoId: 'r1', defaultBranch: 'main' } })),
@@ -71,7 +71,7 @@ describe('runOnce — coding mode', () => {
     expect(await runOnce(t, { code })).toBe('completed');
     expect(code).toHaveBeenCalled();
     expect(t.callModel).not.toHaveBeenCalled(); // coding path, not plain reasoning
-    expect(report).toHaveBeenCalledWith('d1', { status: 'completed', output: 'pushed claw/task-1' });
+    expect(report).toHaveBeenCalledWith('d1', { status: 'completed', output: 'pushed agentHost/task-1' });
   });
 
   it('reports failed when the code handler throws', async () => {

@@ -1,12 +1,12 @@
 ---
-summary: "CLI reference for `coderclaw voicecall` (voice-call plugin command surface)"
+summary: "CLI reference for `builderforce voicecall` (voice-call plugin command surface)"
 read_when:
   - You use the voice-call plugin and want the CLI entry points
   - You want quick examples for `voicecall call|continue|status|tail|expose`
 title: "voicecall"
 ---
 
-# `coderclaw voicecall`
+# `builderforce voicecall`
 
 `voicecall` is a plugin-provided command. It only appears if the voice-call plugin is installed and enabled.
 
@@ -17,18 +17,18 @@ Primary doc:
 ## Common commands
 
 ```bash
-coderclaw voicecall status --call-id <id>
-coderclaw voicecall call --to "+15555550123" --message "Hello" --mode notify
-coderclaw voicecall continue --call-id <id> --message "Any questions?"
-coderclaw voicecall end --call-id <id>
+builderforce voicecall status --call-id <id>
+builderforce voicecall call --to "+15555550123" --message "Hello" --mode notify
+builderforce voicecall continue --call-id <id> --message "Any questions?"
+builderforce voicecall end --call-id <id>
 ```
 
 ## Exposing webhooks (Tailscale)
 
 ```bash
-coderclaw voicecall expose --mode serve
-coderclaw voicecall expose --mode funnel
-coderclaw voicecall unexpose
+builderforce voicecall expose --mode serve
+builderforce voicecall expose --mode funnel
+builderforce voicecall unexpose
 ```
 
 Security note: only expose the webhook endpoint to networks you trust. Prefer Tailscale Serve over Funnel when possible.

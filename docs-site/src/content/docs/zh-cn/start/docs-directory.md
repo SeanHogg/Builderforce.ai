@@ -1,7 +1,7 @@
 ---
 read_when:
   - 你想快速访问关键文档页面
-summary: 精选的常用 CoderClaw 文档链接。
+summary: 精选的常用 BuilderForce Agents 文档链接。
 title: 文档目录
 x-i18n:
   generated_at: "2026-02-04T17:53:20Z"
@@ -27,7 +27,7 @@ x-i18n:
 - [更新与回滚](/install/updating)
 - [配对（私信和节点）](/channels/pairing)
 - [Nix 模式](/install/nix)
-- [CoderClaw 助手设置](/start/coderclaw)
+- [BuilderForce Agents 助手设置](/start/builderforce)
 - [Skills](/tools/skills)
 - [Skills 配置](/tools/skills-config)
 - [工作区模板](/reference/templates/AGENTS)

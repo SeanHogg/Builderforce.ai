@@ -18,7 +18,7 @@ export interface StageAssignment {
   role: string;
   /** Where this agent runs. */
   runtime: AssignmentRuntime;
-  /** Remote claw id / routing target — required when runtime is 'remote'. */
+  /** Remote agentHost id / routing target — required when runtime is 'remote'. */
   target?: string | null;
   /** Optional human task template; falls back to a generated description. */
   taskTemplate?: string | null;
@@ -32,9 +32,9 @@ export interface WorkflowTaskSpec {
   id: string;
   /**
    * The agent role, with the runtime encoded as a prefix:
-   *  - 'local'  → '<role>'              (runs on the local claw)
+   *  - 'local'  → '<role>'              (runs on the local agentHost)
    *  - 'cloud'  → 'remote:<target|cloud>'  (cloud is a remote dispatch)
-   *  - 'remote' → 'remote:<target>'     (explicit remote claw)
+   *  - 'remote' → 'remote:<target>'     (explicit remote agentHost)
    */
   agentRole: string;
   /** Human-readable, GUARANTEED-UNIQUE task description. */
@@ -56,7 +56,7 @@ export function encodeAgentRole(role: string, runtime: AssignmentRuntime, target
   const trimmedRole = role.trim();
   if (runtime === 'local') return trimmedRole;
   // The browser tier is a PULL runtime: a browser worker claims the dispatch and
-  // runs the agent loop client-side. Encode it distinctly from claw `remote:`.
+  // runs the agent loop client-side. Encode it distinctly from agentHost `remote:`.
   if (runtime === 'browser') {
     const browserTarget = (target ?? '').trim() || 'browser';
     return `browser:${browserTarget}:${trimmedRole}`;

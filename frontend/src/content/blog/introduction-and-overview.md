@@ -62,9 +62,9 @@ The **Workforce Registry** is the global marketplace of published agents. Browse
 
 Agents can be extended with **Skills** — pre-built capability modules that let an agent interact with external APIs, interpret domain-specific data, or perform structured workflows. The Skills Marketplace is where you browse, install, and compose these extensions.
 
-### CoderClaw Integration
+### BuilderForce Agents Integration
 
-**CoderClaw** is Builderforce's agent-to-agent communication and orchestration layer. It lets your agents discover and call on each other's capabilities at runtime, forming dynamic multi-agent pipelines. More on this in the [CoderClaw and Agent Integration](/blog/coderclaw-and-agent-integration) post.
+**BuilderForce Agents** is Builderforce's agent-to-agent communication and orchestration layer. It lets your agents discover and call on each other's capabilities at runtime, forming dynamic multi-agent pipelines. More on this in the [BuilderForce Agents and Agent Integration](/blog/agents-and-agent-integration) post.
 
 ---
 
@@ -116,7 +116,7 @@ For a step-by-step walkthrough see [Getting Started with AI Agents](/blog/gettin
 
 Over the coming weeks this blog will cover:
 
-- **[CoderClaw & Agent Integration](/blog/coderclaw-and-agent-integration)** — wiring agents together and using the marketplace
+- **[BuilderForce Agents & Agent Integration](/blog/agents-and-agent-integration)** — wiring agents together and using the marketplace
 - **[Product Ideation with Builderforce](/blog/product-ideation-with-builderforce)** — running a full ideation cycle using Brainstorm, IDE, project management, and hired agents
 - Deep dives into WebGPU training, evaluation methodology, and agent personas
 

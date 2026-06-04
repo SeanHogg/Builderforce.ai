@@ -37,11 +37,11 @@ Pending requests expire automatically after **5 minutes**.
 ## CLI workflow (headless friendly)
 
 ```bash
-coderclaw nodes pending
-coderclaw nodes approve <requestId>
-coderclaw nodes reject <requestId>
-coderclaw nodes status
-coderclaw nodes rename --node <id|name|ip> --name "Living Room iPad"
+builderforce nodes pending
+builderforce nodes approve <requestId>
+builderforce nodes reject <requestId>
+builderforce nodes status
+builderforce nodes rename --node <id|name|ip> --name "Living Room iPad"
 ```
 
 `nodes status` shows paired/connected nodes and their capabilities.
@@ -80,12 +80,12 @@ If silent approval fails, it falls back to the normal “Approve/Reject” promp
 
 ## Storage (local, private)
 
-Pairing state is stored under the Gateway state directory (default `~/.coderclaw`):
+Pairing state is stored under the Gateway state directory (default `~/.builderforce`):
 
-- `~/.coderclaw/nodes/paired.json`
-- `~/.coderclaw/nodes/pending.json`
+- `~/.builderforce/nodes/paired.json`
+- `~/.builderforce/nodes/pending.json`
 
-If you override `CODERCLAW_STATE_DIR`, the `nodes/` folder moves with it.
+If you override `BUILDERFORCE_AGENTS_STATE_DIR`, the `nodes/` folder moves with it.
 
 Security notes:
 

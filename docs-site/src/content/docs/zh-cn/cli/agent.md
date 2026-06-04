@@ -1,7 +1,7 @@
 ---
 read_when:
   - 你想从脚本运行一个智能体回合（可选发送回复）
-summary: "`coderclaw agent` 的 CLI 参考（通过 Gateway 网关发送一个智能体回合）"
+summary: "`builderforce agent` 的 CLI 参考（通过 Gateway 网关发送一个智能体回合）"
 title: agent
 x-i18n:
   generated_at: "2026-02-03T07:44:38Z"
@@ -12,7 +12,7 @@ x-i18n:
   workflow: 15
 ---
 
-# `coderclaw agent`
+# `builderforce agent`
 
 通过 Gateway 网关运行智能体回合（使用 `--local` 进行嵌入式运行）。使用 `--agent <id>` 直接指定已配置的智能体。
 
@@ -23,8 +23,8 @@ x-i18n:
 ## 示例
 
 ```bash
-coderclaw agent --to +15555550123 --message "status update" --deliver
-coderclaw agent --agent ops --message "Summarize logs"
-coderclaw agent --session-id 1234 --message "Summarize inbox" --thinking medium
-coderclaw agent --agent ops --message "Generate report" --deliver --reply-channel slack --reply-to "#reports"
+builderforce agent --to +15555550123 --message "status update" --deliver
+builderforce agent --agent ops --message "Summarize logs"
+builderforce agent --session-id 1234 --message "Summarize inbox" --thinking medium
+builderforce agent --agent ops --message "Generate report" --deliver --reply-channel slack --reply-to "#reports"
 ```

@@ -8,7 +8,7 @@ title: "Brave Search"
 
 # Brave Search API
 
-CoderClaw (built on [CoderClaw](https://github.com/SeanHogg/coderClaw)) uses Brave Search as the default provider for `web_search`.
+BuilderForce Agents (built on [BuilderForce Agents](https://github.com/SeanHogg/Builderforce.ai)) uses Brave Search as the default provider for `web_search`.
 
 ## Get an API key
 

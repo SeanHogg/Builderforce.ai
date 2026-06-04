@@ -16,14 +16,14 @@ x-i18n:
 
 # オンボーディングウィザード（CLI）
 
-CLIオンボーディングウィザードは、macOS、Linux、Windows（WSL2経由）でCoderClawをセットアップする際の推奨パスです。ローカルGatewayまたはリモートGateway接続に加えて、ワークスペースのデフォルト設定、チャンネル、Skillsを構成します。
+CLIオンボーディングウィザードは、macOS、Linux、Windows（WSL2経由）でBuilderForce Agentsをセットアップする際の推奨パスです。ローカルGatewayまたはリモートGateway接続に加えて、ワークスペースのデフォルト設定、チャンネル、Skillsを構成します。
 
 ```bash
-coderclaw onboard
+builderforce onboard
 ```
 
 <Info>
-最速で初回チャットを開始する方法：Control UI を開きます（チャンネル設定は不要）。`coderclaw dashboard` を実行してブラウザでチャットできます。ドキュメント：[Dashboard](/web/dashboard)。
+最速で初回チャットを開始する方法：Control UI を開きます（チャンネル設定は不要）。`builderforce dashboard` を実行してブラウザでチャットできます。ドキュメント：[Dashboard](/web/dashboard)。
 </Info>
 
 ## クイックスタート vs 詳細設定
@@ -58,8 +58,8 @@ coderclaw onboard
 ## よく使うフォローアップコマンド
 
 ```bash
-coderclaw configure
-coderclaw agents add <name>
+builderforce configure
+builderforce agents add <name>
 ```
 
 <Note>
@@ -67,11 +67,11 @@ coderclaw agents add <name>
 </Note>
 
 <Tip>
-推奨：エージェントが `web_search` を使用できるように、Brave Search APIキーを設定してください（`web_fetch` はキーなしで動作します）。最も簡単な方法：`coderclaw configure --section web` を実行すると `tools.web.search.apiKey` が保存されます。ドキュメント：[Webツール](/tools/web)。
+推奨：エージェントが `web_search` を使用できるように、Brave Search APIキーを設定してください（`web_fetch` はキーなしで動作します）。最も簡単な方法：`builderforce configure --section web` を実行すると `tools.web.search.apiKey` が保存されます。ドキュメント：[Webツール](/tools/web)。
 </Tip>
 
 ## 関連ドキュメント
 
-- CLIコマンドリファレンス：[`coderclaw onboard`](/cli/onboard)
+- CLIコマンドリファレンス：[`builderforce onboard`](/cli/onboard)
 - macOSアプリのオンボーディング：[オンボーディング](/start/onboarding)
 - エージェント初回起動の手順：[エージェントブートストラップ](/start/bootstrapping)

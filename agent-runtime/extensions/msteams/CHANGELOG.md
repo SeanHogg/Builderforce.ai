@@ -1,0 +1,245 @@
+# Changelog
+
+## 2026.3.21
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.3.11
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.3.8
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.3.5
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.3.3
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.3.1-beta.2
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.3.1-beta.1
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.27-beta.2
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.27-beta.1
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.26
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.23
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.23-beta.11
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.23-beta.10
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.23-beta.8
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.23-beta.7
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.23-beta.6
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.23-beta.5
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.22
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.18
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.16
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.15
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.14
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.13
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.6-3
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.6-2
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.6
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.4
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.2.2
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.1.31
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.1.30
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.1.29
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.1.23
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.1.22
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.1.21
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.1.20
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.1.17-1
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.1.17
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.1.16
+
+### Changes
+
+- Version alignment with core BuilderForceAgents release numbers.
+
+## 2026.1.15
+
+### Features
+
+- Bot Framework gateway monitor (Express + JWT auth) with configurable webhook path/port and `/api/messages` fallback.
+- Onboarding flow for Azure Bot credentials (config + env var detection) and DM policy setup.
+- Channel capabilities: DMs, group chats, channels, threads, media, polls, and `teams` alias.
+- DM pairing/allowlist enforcement plus group policies with per-team/channel overrides and mention gating.
+- Inbound debounce + history context for room/group chats; mention tag stripping and timestamp parsing.
+- Proactive messaging via stored conversation references (file store with TTL/size pruning).
+- Outbound text/media send with markdown chunking, 4k limit, split/inline media handling.
+- Adaptive Card polls: build cards, parse votes, and persist poll state with vote tracking.
+- Attachment processing: placeholders + HTML summaries, inline image extraction (including data: URLs).
+- Media downloads with host allowlist, auth scope fallback, and Graph hostedContents/attachments fallback.
+- Retry/backoff on transient/throttled sends with classified errors + helpful hints.

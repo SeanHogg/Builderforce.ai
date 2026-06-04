@@ -21,6 +21,13 @@ const nextConfig = {
     config.resolve.symlinks = false;
     return config;
   },
+  async redirects() {
+    // Rebrand: the CoderClaw marketing route moved to /agents (BuilderForce Agents).
+    return [
+      { source: '/coderclaw', destination: '/agents', permanent: true },
+      { source: '/coderclaw/:path*', destination: '/agents/:path*', permanent: true },
+    ]
+  },
   async headers() {
     return [
       // WebContainer connect route: must NOT be cross-origin isolated so the

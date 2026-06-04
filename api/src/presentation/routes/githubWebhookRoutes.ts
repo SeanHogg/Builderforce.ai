@@ -2,7 +2,7 @@
  * GitHub webhook handler — /api/webhooks/github
  *
  * Receives GitHub App or repository webhook events and auto-dispatches
- * labelled issues as CoderClaw tasks.
+ * labelled issues as BuilderForce Agents tasks.
  *
  * SETUP:
  *   1. In GitHub, create a webhook (App or repo level) pointing to:
@@ -26,10 +26,10 @@ import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { projects, tasks, coderclawInstances } from '../../infrastructure/database/schema';
+import { projects, tasks, agentHosts } from '../../infrastructure/database/schema';
 
 /** Labels that trigger auto-dispatch. Lower-cased for comparison. */
-const DISPATCH_LABELS = new Set(['coderclaw', 'ai-task', 'claw', 'ai']);
+const DISPATCH_LABELS = new Set(['coderclaw', 'ai-task', 'host', 'ai']);
 
 /** Verify GitHub webhook HMAC-SHA256 signature (Web Crypto API — Worker-compatible). */
 async function verifyGitHubSignature(
@@ -161,19 +161,19 @@ export function createGitHubWebhookRoutes(db: Db): Hono<HonoEnv> {
       return c.json({ received: true, processed: false, reason: 'task already exists for this issue' });
     }
 
-    // Find the tenant's default claw for auto-assignment (optional)
+    // Find the tenant's default agentHost for auto-assignment (optional)
     const [tenantRow] = await db
-      .select({ defaultClawId: coderclawInstances.id })
-      .from(coderclawInstances)
+      .select({ defaultAgentHostId: agentHosts.id })
+      .from(agentHosts)
       .where(
         and(
-          eq(coderclawInstances.tenantId, project.tenantId),
-          eq(coderclawInstances.status, 'active'),
+          eq(agentHosts.tenantId, project.tenantId),
+          eq(agentHosts.status, 'active'),
         ),
       )
       .limit(1);
 
-    const assignedClawId = tenantRow?.defaultClawId ?? null;
+    const assignedAgentHostId = tenantRow?.defaultAgentHostId ?? null;
 
     // Build task key: GH-<repo>-<number> (truncated)
     const repoSlug = repository.full_name.replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 30);
@@ -196,11 +196,11 @@ export function createGitHubWebhookRoutes(db: Db): Hono<HonoEnv> {
         key: taskKey,
         title: issue.title,
         description,
-        status: assignedClawId ? 'ready' : 'backlog',
+        status: assignedAgentHostId ? 'ready' : 'backlog',
         priority: 'medium',
         githubIssueNumber: issue.number,
         githubIssueUrl: issue.html_url,
-        assignedClawId,
+        assignedAgentHostId,
       })
       .returning({ id: tasks.id, key: tasks.key });
 
@@ -209,7 +209,7 @@ export function createGitHubWebhookRoutes(db: Db): Hono<HonoEnv> {
       processed: true,
       taskId: inserted?.id,
       taskKey: inserted?.key,
-      assignedClawId,
+      assignedAgentHostId,
     }, 201);
   });
 

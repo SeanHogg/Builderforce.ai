@@ -1,9 +1,9 @@
 ---
 read_when:
-  - 学习如何配置 CoderClaw
+  - 学习如何配置 BuilderForce Agents
   - 寻找配置示例
-  - 首次设置 CoderClaw
-summary: 符合模式的常见 CoderClaw 设置配置示例
+  - 首次设置 BuilderForce Agents
+summary: 符合模式的常见 BuilderForce Agents 设置配置示例
 title: 配置示例
 x-i18n:
   generated_at: "2026-02-03T07:48:39Z"
@@ -24,24 +24,24 @@ x-i18n:
 
 ```json5
 {
-  agent: { workspace: "~/.coderclaw/workspace" },
+  agent: { workspace: "~/.builderforce/workspace" },
   channels: { whatsapp: { allowFrom: ["+15555550123"] } },
 }
 ```
 
-保存到 `~/.coderclaw/coderclaw.json`，你就可以从该号码私信机器人了。
+保存到 `~/.builderforce/builderforce.json`，你就可以从该号码私信机器人了。
 
 ### 推荐的入门配置
 
 ```json5
 {
   identity: {
-    name: "CoderClaw",
+    name: "BuilderForce Agents",
     theme: "helpful assistant",
     emoji: "🦞",
   },
   agent: {
-    workspace: "~/.coderclaw/workspace",
+    workspace: "~/.builderforce/workspace",
     model: { primary: "anthropic/claude-sonnet-4-5" },
   },
   channels: {
@@ -96,7 +96,7 @@ x-i18n:
   // 日志
   logging: {
     level: "info",
-    file: "/tmp/coderclaw/coderclaw.log",
+    file: "/tmp/builderforce/builderforce.log",
     consoleLevel: "info",
     consoleStyle: "pretty",
     redactSensitive: "tools",
@@ -104,7 +104,7 @@ x-i18n:
 
   // 消息格式
   messages: {
-    messagePrefix: "[coderclaw]",
+    messagePrefix: "[builderforce]",
     responsePrefix: ">",
     ackReaction: "👀",
     ackReactionScope: "group-mentions",
@@ -113,7 +113,7 @@ x-i18n:
   // 路由 + 队列
   routing: {
     groupChat: {
-      mentionPatterns: ["@coderclaw", "coderclaw"],
+      mentionPatterns: ["@builderforce", "builderforce"],
       historyLimit: 50,
     },
     queue: {
@@ -166,7 +166,7 @@ x-i18n:
       discord: { mode: "idle", idleMinutes: 10080 },
     },
     resetTriggers: ["/new", "/reset"],
-    store: "~/.coderclaw/agents/default/sessions/sessions.json",
+    store: "~/.builderforce/agents/default/sessions/sessions.json",
     typingIntervalSeconds: 5,
     sendPolicy: {
       default: "allow",
@@ -199,7 +199,7 @@ x-i18n:
       dm: { enabled: true, allowFrom: ["steipete"] },
       guilds: {
         "123456789012345678": {
-          slug: "friends-of-coderclaw",
+          slug: "friends-of-builderforce",
           requireMention: false,
           channels: {
             general: { allow: true },
@@ -219,7 +219,7 @@ x-i18n:
       dm: { enabled: true, allowFrom: ["U123"] },
       slashCommand: {
         enabled: true,
-        name: "coderclaw",
+        name: "builderforce",
         sessionPrefix: "slack:slash",
         ephemeral: true,
       },
@@ -229,7 +229,7 @@ x-i18n:
   // 智能体运行时
   agents: {
     defaults: {
-      workspace: "~/.coderclaw/workspace",
+      workspace: "~/.builderforce/workspace",
       userTimezone: "America/Chicago",
       model: {
         primary: "anthropic/claude-sonnet-4-5",
@@ -282,9 +282,9 @@ x-i18n:
       sandbox: {
         mode: "non-main",
         perSession: true,
-        workspaceRoot: "~/.coderclaw/sandboxes",
+        workspaceRoot: "~/.builderforce/sandboxes",
         docker: {
-          image: "coderclaw-sandbox:bookworm-slim",
+          image: "builderforce-sandbox:bookworm-slim",
           workdir: "/workspace",
           readOnlyRoot: true,
           tmpfs: ["/tmp", "/var/tmp", "/run"],
@@ -349,7 +349,7 @@ x-i18n:
   // Cron 作业
   cron: {
     enabled: true,
-    store: "~/.coderclaw/cron/cron.json",
+    store: "~/.builderforce/cron/cron.json",
     maxConcurrentRuns: 2,
   },
 
@@ -359,7 +359,7 @@ x-i18n:
     path: "/hooks",
     token: "shared-secret",
     presets: ["gmail"],
-    transformsDir: "~/.coderclaw/hooks",
+    transformsDir: "~/.builderforce/hooks",
     mappings: [
       {
         id: "gmail-hook",
@@ -379,7 +379,7 @@ x-i18n:
       },
     ],
     gmail: {
-      account: "coderclaw@gmail.com",
+      account: "builderforce@gmail.com",
       label: "INBOX",
       topic: "projects/<project-id>/topics/gog-gmail-watch",
       subscription: "gog-gmail-watch-push",
@@ -398,7 +398,7 @@ x-i18n:
     mode: "local",
     port: 18789,
     bind: "loopback",
-    controlUi: { enabled: true, basePath: "/coderclaw" },
+    controlUi: { enabled: true, basePath: "/builderforce" },
     auth: {
       mode: "token",
       token: "gateway-token",
@@ -436,7 +436,7 @@ x-i18n:
 
 ```json5
 {
-  agent: { workspace: "~/.coderclaw/workspace" },
+  agent: { workspace: "~/.builderforce/workspace" },
   channels: {
     whatsapp: { allowFrom: ["+15555550123"] },
     telegram: {
@@ -474,7 +474,7 @@ x-i18n:
     },
   },
   agent: {
-    workspace: "~/.coderclaw/workspace",
+    workspace: "~/.builderforce/workspace",
     model: {
       primary: "anthropic/claude-sonnet-4-5",
       fallbacks: ["anthropic/claude-opus-4-5"],
@@ -513,7 +513,7 @@ x-i18n:
     },
   },
   agent: {
-    workspace: "~/.coderclaw/workspace",
+    workspace: "~/.builderforce/workspace",
     model: {
       primary: "anthropic/claude-opus-4-5",
       fallbacks: ["minimax/MiniMax-M2.1"],
@@ -531,7 +531,7 @@ x-i18n:
     theme: "professional assistant",
   },
   agent: {
-    workspace: "~/work-coderclaw",
+    workspace: "~/work-builderforce",
     elevated: { enabled: false },
   },
   channels: {
@@ -552,7 +552,7 @@ x-i18n:
 ```json5
 {
   agent: {
-    workspace: "~/.coderclaw/workspace",
+    workspace: "~/.builderforce/workspace",
     model: { primary: "lmstudio/minimax-m2.1-gs32" },
   },
   models: {

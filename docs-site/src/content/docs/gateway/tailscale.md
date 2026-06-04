@@ -8,29 +8,29 @@ title: "Tailscale"
 
 # Tailscale (Gateway dashboard)
 
-CoderClaw can auto-configure Tailscale **Serve** (tailnet) or **Funnel** (public) for the
+BuilderForce Agents can auto-configure Tailscale **Serve** (tailnet) or **Funnel** (public) for the
 Gateway dashboard and WebSocket port. This keeps the Gateway bound to loopback while
 Tailscale provides HTTPS, routing, and (for Serve) identity headers.
 
 ## Modes
 
 - `serve`: Tailnet-only Serve via `tailscale serve`. The gateway stays on `127.0.0.1`.
-- `funnel`: Public HTTPS via `tailscale funnel`. CoderClaw requires a shared password.
+- `funnel`: Public HTTPS via `tailscale funnel`. BuilderForce Agents requires a shared password.
 - `off`: Default (no Tailscale automation).
 
 ## Auth
 
 Set `gateway.auth.mode` to control the handshake:
 
-- `token` (default when `CODERCLAW_GATEWAY_TOKEN` is set)
-- `password` (shared secret via `CODERCLAW_GATEWAY_PASSWORD` or config)
+- `token` (default when `BUILDERFORCE_AGENTS_GATEWAY_TOKEN` is set)
+- `password` (shared secret via `BUILDERFORCE_AGENTS_GATEWAY_PASSWORD` or config)
 
 When `tailscale.mode = "serve"` and `gateway.auth.allowTailscale` is `true`,
 valid Serve proxy requests can authenticate via Tailscale identity headers
-(`tailscale-user-login`) without supplying a token/password. CoderClaw verifies
+(`tailscale-user-login`) without supplying a token/password. BuilderForce Agents verifies
 the identity by resolving the `x-forwarded-for` address via the local Tailscale
 daemon (`tailscale whois`) and matching it to the header before accepting it.
-CoderClaw only treats a request as Serve when it arrives from loopback with
+BuilderForce Agents only treats a request as Serve when it arrives from loopback with
 Tailscale’s `x-forwarded-for`, `x-forwarded-proto`, and `x-forwarded-host`
 headers.
 To require explicit credentials, set `gateway.auth.allowTailscale: false` or
@@ -83,20 +83,20 @@ Note: loopback (`http://127.0.0.1:18789`) will **not** work in this mode.
 }
 ```
 
-Prefer `CODERCLAW_GATEWAY_PASSWORD` over committing a password to disk.
+Prefer `BUILDERFORCE_AGENTS_GATEWAY_PASSWORD` over committing a password to disk.
 
 ## CLI examples
 
 ```bash
-coderclaw gateway --tailscale serve
-coderclaw gateway --tailscale funnel --auth password
+builderforce gateway --tailscale serve
+builderforce gateway --tailscale funnel --auth password
 ```
 
 ## Notes
 
 - Tailscale Serve/Funnel requires the `tailscale` CLI to be installed and logged in.
 - `tailscale.mode: "funnel"` refuses to start unless auth mode is `password` to avoid public exposure.
-- Set `gateway.tailscale.resetOnExit` if you want CoderClaw to undo `tailscale serve`
+- Set `gateway.tailscale.resetOnExit` if you want BuilderForce Agents to undo `tailscale serve`
   or `tailscale funnel` configuration on shutdown.
 - `gateway.bind: "tailnet"` is a direct Tailnet bind (no HTTPS, no Serve/Funnel).
 - `gateway.bind: "auto"` prefers loopback; use `tailnet` if you want Tailnet-only.

@@ -19,22 +19,22 @@ x-i18n:
 ## 是什么
 
 - 拥有单一 Baileys/Telegram 连接和控制/事件平面的常驻进程。
-- 替代旧版 `gateway` 命令。CLI 入口点：`coderclaw gateway`。
+- 替代旧版 `gateway` 命令。CLI 入口点：`builderforce gateway`。
 - 运行直到停止；出现致命错误时以非零退出码退出，以便 supervisor 重启它。
 
 ## 如何运行（本地）
 
 ```bash
-coderclaw gateway --port 18789
+builderforce gateway --port 18789
 # 在 stdio 中获取完整的调试/追踪日志：
-coderclaw gateway --port 18789 --verbose
+builderforce gateway --port 18789 --verbose
 # 如果端口被占用，终止监听器然后启动：
-coderclaw gateway --force
+builderforce gateway --force
 # 开发循环（TS 更改时自动重载）：
 pnpm gateway:watch
 ```
 
-- 配置热重载监视 `~/.coderclaw/coderclaw.json`（或 `CODERCLAW_CONFIG_PATH`）。
+- 配置热重载监视 `~/.builderforce/builderforce.json`（或 `BUILDERFORCE_AGENTS_CONFIG_PATH`）。
   - 默认模式：`gateway.reload.mode="hybrid"`（热应用安全更改，关键更改时重启）。
   - 热重载在需要时通过 **SIGUSR1** 使用进程内重启。
   - 使用 `gateway.reload.mode="off"` 禁用。
@@ -43,15 +43,15 @@ pnpm gateway:watch
   - OpenAI Chat Completions（HTTP）：[`/v1/chat/completions`](/gateway/openai-http-api)。
   - OpenResponses（HTTP）：[`/v1/responses`](/gateway/openresponses-http-api)。
   - Tools Invoke（HTTP）：[`/tools/invoke`](/gateway/tools-invoke-http-api)。
-- 默认在 `canvasHost.port`（默认 `18793`）上启动 Canvas 文件服务器，从 `~/.coderclaw/workspace/canvas` 提供 `http://<gateway-host>:18793/__coderclaw__/canvas/`。使用 `canvasHost.enabled=false` 或 `CODERCLAW_SKIP_CANVAS_HOST=1` 禁用。
+- 默认在 `canvasHost.port`（默认 `18793`）上启动 Canvas 文件服务器，从 `~/.builderforce/workspace/canvas` 提供 `http://<gateway-host>:18793/__builderforce__/canvas/`。使用 `canvasHost.enabled=false` 或 `BUILDERFORCE_AGENTS_SKIP_CANVAS_HOST=1` 禁用。
 - 输出日志到 stdout；使用 launchd/systemd 保持运行并轮转日志。
 - 故障排除时传递 `--verbose` 以将调试日志（握手、请求/响应、事件）从日志文件镜像到 stdio。
 - `--force` 使用 `lsof` 查找所选端口上的监听器，发送 SIGTERM，记录它终止了什么，然后启动 Gateway 网关（如果缺少 `lsof` 则快速失败）。
 - 如果你在 supervisor（launchd/systemd/mac 应用子进程模式）下运行，stop/restart 通常发送 **SIGTERM**；旧版本可能将其显示为 `pnpm` `ELIFECYCLE` 退出码 **143**（SIGTERM），这是正常关闭，不是崩溃。
 - **SIGUSR1** 在授权时触发进程内重启（Gateway 网关工具/配置应用/更新，或启用 `commands.restart` 以进行手动重启）。
-- 默认需要 Gateway 网关认证：设置 `gateway.auth.token`（或 `CODERCLAW_GATEWAY_TOKEN`）或 `gateway.auth.password`。客户端必须发送 `connect.params.auth.token/password`，除非使用 Tailscale Serve 身份。
+- 默认需要 Gateway 网关认证：设置 `gateway.auth.token`（或 `BUILDERFORCE_AGENTS_GATEWAY_TOKEN`）或 `gateway.auth.password`。客户端必须发送 `connect.params.auth.token/password`，除非使用 Tailscale Serve 身份。
 - 向导现在默认生成令牌，即使在 loopback 上也是如此。
-- 端口优先级：`--port` > `CODERCLAW_GATEWAY_PORT` > `gateway.port` > 默认 `18789`。
+- 端口优先级：`--port` > `BUILDERFORCE_AGENTS_GATEWAY_PORT` > `gateway.port` > 默认 `18789`。
 
 ## 远程访问
 
@@ -70,15 +70,15 @@ pnpm gateway:watch
 
 服务名称是配置文件感知的：
 
-- macOS：`bot.molt.<profile>`（旧版 `com.coderclaw.*` 可能仍然存在）
-- Linux：`coderclaw-gateway-<profile>.service`
-- Windows：`CoderClaw Gateway (<profile>)`
+- macOS：`bot.molt.<profile>`（旧版 `com.builderforce.*` 可能仍然存在）
+- Linux：`builderforce-gateway-<profile>.service`
+- Windows：`BuilderForce Agents Gateway (<profile>)`
 
 安装元数据嵌入在服务配置中：
 
-- `CODERCLAW_SERVICE_MARKER=coderclaw`
-- `CODERCLAW_SERVICE_KIND=gateway`
-- `CODERCLAW_SERVICE_VERSION=<version>`
+- `BUILDERFORCE_AGENTS_SERVICE_MARKER=builderforce`
+- `BUILDERFORCE_AGENTS_SERVICE_KIND=gateway`
+- `BUILDERFORCE_AGENTS_SERVICE_VERSION=<version>`
 
 救援机器人模式：保持第二个 Gateway 网关隔离，使用自己的配置文件、状态目录、工作区和基础端口间隔。完整指南：[救援机器人指南](/gateway/multiple-gateways#rescue-bot-guide)。
 
@@ -87,49 +87,49 @@ pnpm gateway:watch
 快速路径：运行完全隔离的 dev 实例（配置/状态/工作区）而不触及你的主设置。
 
 ```bash
-coderclaw --dev setup
-coderclaw --dev gateway --allow-unconfigured
+builderforce --dev setup
+builderforce --dev gateway --allow-unconfigured
 # 然后定位到 dev 实例：
-coderclaw --dev status
-coderclaw --dev health
+builderforce --dev status
+builderforce --dev health
 ```
 
 默认值（可通过 env/flags/config 覆盖）：
 
-- `CODERCLAW_STATE_DIR=~/.coderclaw-dev`
-- `CODERCLAW_CONFIG_PATH=~/.coderclaw-dev/coderclaw.json`
-- `CODERCLAW_GATEWAY_PORT=19001`（Gateway 网关 WS + HTTP）
+- `BUILDERFORCE_AGENTS_STATE_DIR=~/.builderforce-dev`
+- `BUILDERFORCE_AGENTS_CONFIG_PATH=~/.builderforce-dev/builderforce.json`
+- `BUILDERFORCE_AGENTS_GATEWAY_PORT=19001`（Gateway 网关 WS + HTTP）
 - 浏览器控制服务端口 = `19003`（派生：`gateway.port+2`，仅 loopback）
 - `canvasHost.port=19005`（派生：`gateway.port+4`）
-- 当你在 `--dev` 下运行 `setup`/`onboard` 时，`agents.defaults.workspace` 默认变为 `~/.coderclaw/workspace-dev`。
+- 当你在 `--dev` 下运行 `setup`/`onboard` 时，`agents.defaults.workspace` 默认变为 `~/.builderforce/workspace-dev`。
 
 派生端口（经验法则）：
 
-- 基础端口 = `gateway.port`（或 `CODERCLAW_GATEWAY_PORT` / `--port`）
+- 基础端口 = `gateway.port`（或 `BUILDERFORCE_AGENTS_GATEWAY_PORT` / `--port`）
 - 浏览器控制服务端口 = 基础 + 2（仅 loopback）
-- `canvasHost.port = 基础 + 4`（或 `CODERCLAW_CANVAS_HOST_PORT` / 配置覆盖）
+- `canvasHost.port = 基础 + 4`（或 `BUILDERFORCE_AGENTS_CANVAS_HOST_PORT` / 配置覆盖）
 - 浏览器配置文件 CDP 端口从 `browser.controlPort + 9 .. + 108` 自动分配（按配置文件持久化）。
 
 每个实例的检查清单：
 
 - 唯一的 `gateway.port`
-- 唯一的 `CODERCLAW_CONFIG_PATH`
-- 唯一的 `CODERCLAW_STATE_DIR`
+- 唯一的 `BUILDERFORCE_AGENTS_CONFIG_PATH`
+- 唯一的 `BUILDERFORCE_AGENTS_STATE_DIR`
 - 唯一的 `agents.defaults.workspace`
 - 单独的 WhatsApp 号码（如果使用 WA）
 
 按配置文件安装服务：
 
 ```bash
-coderclaw --profile main gateway install
-coderclaw --profile rescue gateway install
+builderforce --profile main gateway install
+builderforce --profile rescue gateway install
 ```
 
 示例：
 
 ```bash
-CODERCLAW_CONFIG_PATH=~/.coderclaw/a.json CODERCLAW_STATE_DIR=~/.coderclaw-a coderclaw gateway --port 19001
-CODERCLAW_CONFIG_PATH=~/.coderclaw/b.json CODERCLAW_STATE_DIR=~/.coderclaw-b coderclaw gateway --port 19002
+BUILDERFORCE_AGENTS_CONFIG_PATH=~/.builderforce/a.json BUILDERFORCE_AGENTS_STATE_DIR=~/.builderforce-a builderforce gateway --port 19001
+BUILDERFORCE_AGENTS_CONFIG_PATH=~/.builderforce/b.json BUILDERFORCE_AGENTS_STATE_DIR=~/.builderforce-b builderforce gateway --port 19002
 ```
 
 ## 协议（运维视角）
@@ -145,7 +145,7 @@ CODERCLAW_CONFIG_PATH=~/.coderclaw/b.json CODERCLAW_STATE_DIR=~/.coderclaw-b cod
 
 ## 方法（初始集）
 
-- `health` — 完整健康快照（与 `coderclaw health --json` 形状相同）。
+- `health` — 完整健康快照（与 `builderforce health --json` 形状相同）。
 - `status` — 简短摘要。
 - `system-presence` — 当前 presence 列表。
 - `system-event` — 发布 presence/系统注释（结构化）。
@@ -205,26 +205,26 @@ CODERCLAW_CONFIG_PATH=~/.coderclaw/b.json CODERCLAW_STATE_DIR=~/.coderclaw-b cod
 ## 监管（macOS 示例）
 
 - 使用 launchd 保持服务存活：
-  - Program：`coderclaw` 的路径
+  - Program：`builderforce` 的路径
   - Arguments：`gateway`
   - KeepAlive：true
   - StandardOut/Err：文件路径或 `syslog`
 - 失败时，launchd 重启；致命的配置错误应保持退出，以便运维人员注意到。
 - LaunchAgents 是按用户的，需要已登录的会话；对于无头设置，使用自定义 LaunchDaemon（未随附）。
-  - `coderclaw gateway install` 写入 `~/Library/LaunchAgents/bot.molt.gateway.plist`
-    （或 `bot.molt.<profile>.plist`；旧版 `com.coderclaw.*` 会被清理）。
-  - `coderclaw doctor` 审计 LaunchAgent 配置，可以将其更新为当前默认值。
+  - `builderforce gateway install` 写入 `~/Library/LaunchAgents/bot.molt.gateway.plist`
+    （或 `bot.molt.<profile>.plist`；旧版 `com.builderforce.*` 会被清理）。
+  - `builderforce doctor` 审计 LaunchAgent 配置，可以将其更新为当前默认值。
 
 ## Gateway 网关服务管理（CLI）
 
 使用 Gateway 网关 CLI 进行 install/start/stop/restart/status：
 
 ```bash
-coderclaw gateway status
-coderclaw gateway install
-coderclaw gateway stop
-coderclaw gateway restart
-coderclaw logs --follow
+builderforce gateway status
+builderforce gateway install
+builderforce gateway stop
+builderforce gateway restart
+builderforce logs --follow
 ```
 
 注意事项：
@@ -237,43 +237,43 @@ coderclaw logs --follow
 - `gateway status` 打印配置路径 + 探测目标以避免"localhost vs LAN 绑定"混淆和配置文件不匹配。
 - `gateway status` 在服务看起来正在运行但端口已关闭时包含最后一行 Gateway 网关错误。
 - `logs` 通过 RPC 尾随 Gateway 网关文件日志（无需手动 `tail`/`grep`）。
-- 如果检测到其他类似 Gateway 网关的服务，CLI 会发出警告，除非它们是 CoderClaw 配置文件服务。
+- 如果检测到其他类似 Gateway 网关的服务，CLI 会发出警告，除非它们是 BuilderForce Agents 配置文件服务。
   我们仍然建议大多数设置**每台机器一个 Gateway 网关**；使用隔离的配置文件/端口进行冗余或救援机器人。参见[多个 Gateway 网关](/gateway/multiple-gateways)。
-  - 清理：`coderclaw gateway uninstall`（当前服务）和 `coderclaw doctor`（旧版迁移）。
-- `gateway install` 在已安装时是无操作的；使用 `coderclaw gateway install --force` 重新安装（配置文件/env/路径更改）。
+  - 清理：`builderforce gateway uninstall`（当前服务）和 `builderforce doctor`（旧版迁移）。
+- `gateway install` 在已安装时是无操作的；使用 `builderforce gateway install --force` 重新安装（配置文件/env/路径更改）。
 
 捆绑的 mac 应用：
 
-- CoderClaw.app 可以捆绑基于 Node 的 Gateway 网关中继并安装标记为
-  `bot.molt.gateway`（或 `bot.molt.<profile>`；旧版 `com.coderclaw.*` 标签仍能干净卸载）的按用户 LaunchAgent。
-- 要干净地停止它，使用 `coderclaw gateway stop`（或 `launchctl bootout gui/$UID/bot.molt.gateway`）。
-- 要重启，使用 `coderclaw gateway restart`（或 `launchctl kickstart -k gui/$UID/bot.molt.gateway`）。
-  - `launchctl` 仅在 LaunchAgent 已安装时有效；否则先使用 `coderclaw gateway install`。
+- BuilderForce Agents.app 可以捆绑基于 Node 的 Gateway 网关中继并安装标记为
+  `bot.molt.gateway`（或 `bot.molt.<profile>`；旧版 `com.builderforce.*` 标签仍能干净卸载）的按用户 LaunchAgent。
+- 要干净地停止它，使用 `builderforce gateway stop`（或 `launchctl bootout gui/$UID/bot.molt.gateway`）。
+- 要重启，使用 `builderforce gateway restart`（或 `launchctl kickstart -k gui/$UID/bot.molt.gateway`）。
+  - `launchctl` 仅在 LaunchAgent 已安装时有效；否则先使用 `builderforce gateway install`。
   - 运行命名配置文件时，将标签替换为 `bot.molt.<profile>`。
 
 ## 监管（systemd 用户单元）
 
-CoderClaw 在 Linux/WSL2 上默认安装 **systemd 用户服务**。我们
+BuilderForce Agents 在 Linux/WSL2 上默认安装 **systemd 用户服务**。我们
 建议单用户机器使用用户服务（更简单的 env，按用户配置）。
 对于多用户或常驻服务器使用**系统服务**（无需 lingering，
 共享监管）。
 
-`coderclaw gateway install` 写入用户单元。`coderclaw doctor` 审计
+`builderforce gateway install` 写入用户单元。`builderforce doctor` 审计
 单元并可以将其更新以匹配当前推荐的默认值。
 
-创建 `~/.config/systemd/user/coderclaw-gateway[-<profile>].service`：
+创建 `~/.config/systemd/user/builderforce-gateway[-<profile>].service`：
 
 ```
 [Unit]
-Description=CoderClaw Gateway (profile: <profile>, v<version>)
+Description=BuilderForce Agents Gateway (profile: <profile>, v<version>)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=/usr/local/bin/coderclaw gateway --port 18789
+ExecStart=/usr/local/bin/builderforce gateway --port 18789
 Restart=always
 RestartSec=5
-Environment=CODERCLAW_GATEWAY_TOKEN=
+Environment=BUILDERFORCE_AGENTS_GATEWAY_TOKEN=
 WorkingDirectory=/home/youruser
 
 [Install]
@@ -290,17 +290,17 @@ sudo loginctl enable-linger youruser
 然后启用服务：
 
 ```
-systemctl --user enable --now coderclaw-gateway[-<profile>].service
+systemctl --user enable --now builderforce-gateway[-<profile>].service
 ```
 
 **替代方案（系统服务）** - 对于常驻或多用户服务器，你可以
 安装 systemd **系统**单元而不是用户单元（无需 lingering）。
-创建 `/etc/systemd/system/coderclaw-gateway[-<profile>].service`（复制上面的单元，
+创建 `/etc/systemd/system/builderforce-gateway[-<profile>].service`（复制上面的单元，
 切换 `WantedBy=multi-user.target`，设置 `User=` + `WorkingDirectory=`），然后：
 
 ```
 sudo systemctl daemon-reload
-sudo systemctl enable --now coderclaw-gateway[-<profile>].service
+sudo systemctl enable --now builderforce-gateway[-<profile>].service
 ```
 
 ## Windows（WSL2）
@@ -322,14 +322,14 @@ Windows 安装应使用 **WSL2** 并遵循上面的 Linux systemd 部分。
 
 ## CLI 辅助工具
 
-- `coderclaw gateway health|status` — 通过 Gateway 网关 WS 请求 health/status。
-- `coderclaw message send --target <num> --message "hi" [--media ...]` — 通过 Gateway 网关发送（对 WhatsApp 是幂等的）。
-- `coderclaw agent --message "hi" --to <num>` — 运行智能体轮次（默认等待最终结果）。
-- `coderclaw gateway call <method> --params '{"k":"v"}'` — 用于调试的原始方法调用器。
-- `coderclaw gateway stop|restart` — 停止/重启受监管的 Gateway 网关服务（launchd/systemd）。
+- `builderforce gateway health|status` — 通过 Gateway 网关 WS 请求 health/status。
+- `builderforce message send --target <num> --message "hi" [--media ...]` — 通过 Gateway 网关发送（对 WhatsApp 是幂等的）。
+- `builderforce agent --message "hi" --to <num>` — 运行智能体轮次（默认等待最终结果）。
+- `builderforce gateway call <method> --params '{"k":"v"}'` — 用于调试的原始方法调用器。
+- `builderforce gateway stop|restart` — 停止/重启受监管的 Gateway 网关服务（launchd/systemd）。
 - Gateway 网关辅助子命令假设 `--url` 上有运行中的 Gateway 网关；它们不再自动生成一个。
 
 ## 迁移指南
 
-- 淘汰 `coderclaw gateway` 和旧版 TCP 控制端口的使用。
+- 淘汰 `builderforce gateway` 和旧版 TCP 控制端口的使用。
 - 更新客户端以使用带有强制 connect 和结构化 presence 的 WS 协议。

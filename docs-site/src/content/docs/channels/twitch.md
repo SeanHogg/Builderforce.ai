@@ -1,13 +1,13 @@
 ---
 summary: "Twitch chat bot configuration and setup"
 read_when:
-  - Setting up Twitch chat integration for CoderClaw
+  - Setting up Twitch chat integration for BuilderForce Agents
 title: "Twitch"
 ---
 
 # Twitch (plugin)
 
-Twitch chat support via IRC connection. CoderClaw connects as a Twitch user (bot account) to receive and send messages in channels.
+Twitch chat support via IRC connection. BuilderForce Agents connects as a Twitch user (bot account) to receive and send messages in channels.
 
 ## Plugin required
 
@@ -16,13 +16,13 @@ Twitch ships as a plugin and is not bundled with the core install.
 Install via CLI (npm registry):
 
 ```bash
-coderclaw plugins install @coderclaw/twitch
+builderforce plugins install @builderforce/twitch
 ```
 
 Local checkout (when running from a git repo):
 
 ```bash
-coderclaw plugins install ./extensions/twitch
+builderforce plugins install ./extensions/twitch
 ```
 
 Details: [Plugins](/tools/plugin)
@@ -36,7 +36,7 @@ Details: [Plugins](/tools/plugin)
    - Copy the **Client ID** and **Access Token**
 3. Find your Twitch user ID: [https://www.streamweasels.com/tools/convert-twitch-username-to-user-id/](https://www.streamweasels.com/tools/convert-twitch-username-to-user-id/)
 4. Configure the token:
-   - Env: `CODERCLAW_TWITCH_ACCESS_TOKEN=...` (default account only)
+   - Env: `BUILDERFORCE_AGENTS_TWITCH_ACCESS_TOKEN=...` (default account only)
    - Or config: `channels.twitch.accessToken`
    - If both are set, config takes precedence (env fallback is default-account only).
 5. Start the gateway.
@@ -50,8 +50,8 @@ Minimal config:
   channels: {
     twitch: {
       enabled: true,
-      username: "coderclaw", // Bot's Twitch account
-      accessToken: "oauth:abc123...", // OAuth Access Token (or use CODERCLAW_TWITCH_ACCESS_TOKEN env var)
+      username: "builderforce", // Bot's Twitch account
+      accessToken: "oauth:abc123...", // OAuth Access Token (or use BUILDERFORCE_AGENTS_TWITCH_ACCESS_TOKEN env var)
       clientId: "xyz789...", // Client ID from Token Generator
       channel: "vevisk", // Which Twitch channel's chat to join (required)
       allowFrom: ["123456789"], // (recommended) Your Twitch user ID only - get it from https://www.streamweasels.com/tools/convert-twitch-username-to-user-id/
@@ -84,7 +84,7 @@ No manual app registration needed. Tokens expire after several hours.
 **Env var (default account only):**
 
 ```bash
-CODERCLAW_TWITCH_ACCESS_TOKEN=oauth:abc123...
+BUILDERFORCE_AGENTS_TWITCH_ACCESS_TOKEN=oauth:abc123...
 ```
 
 **Or config:**
@@ -94,7 +94,7 @@ CODERCLAW_TWITCH_ACCESS_TOKEN=oauth:abc123...
   channels: {
     twitch: {
       enabled: true,
-      username: "coderclaw",
+      username: "builderforce",
       accessToken: "oauth:abc123...",
       clientId: "xyz789...",
       channel: "vevisk",
@@ -156,13 +156,13 @@ Example (one bot account in two channels):
     twitch: {
       accounts: {
         channel1: {
-          username: "coderclaw",
+          username: "builderforce",
           accessToken: "oauth:abc123...",
           clientId: "xyz789...",
           channel: "vevisk",
         },
         channel2: {
-          username: "coderclaw",
+          username: "builderforce",
           accessToken: "oauth:def456...",
           clientId: "uvw012...",
           channel: "secondchannel",
@@ -251,8 +251,8 @@ By default, `requireMention` is `true`. To disable and respond to all messages:
 First, run diagnostic commands:
 
 ```bash
-coderclaw doctor
-coderclaw channels status --probe
+builderforce doctor
+builderforce channels status --probe
 ```
 
 ### Bot doesn't respond to messages
@@ -317,7 +317,7 @@ Full example:
   channels: {
     twitch: {
       enabled: true,
-      username: "coderclaw",
+      username: "builderforce",
       accessToken: "oauth:abc123...",
       clientId: "xyz789...",
       channel: "vevisk",

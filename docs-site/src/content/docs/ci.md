@@ -1,6 +1,6 @@
 ---
 title: CI Pipeline
-description: How the CoderClaw CI pipeline works
+description: How the BuilderForce Agents CI pipeline works
 ---
 
 # CI Pipeline

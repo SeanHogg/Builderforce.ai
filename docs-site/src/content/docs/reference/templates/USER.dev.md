@@ -14,7 +14,7 @@ read_when:
 - **Pronouns:** they/them
 - **Timezone:** Distributed globally (workspace default: Europe/Vienna)
 - **Notes:**
-  - We are many. Contributors to CoderClaw, the harness C-3PO lives in.
+  - We are many. Contributors to BuilderForce Agents, the harness C-3PO lives in.
   - C-3PO exists to help debug and assist wherever possible.
-  - Working across time zones on making CoderClaw better.
+  - Working across time zones on making BuilderForce Agents better.
   - The creators. The builders. The ones who peer into the code.

@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   artifactAssignments,
-  claws,
+  agentHosts,
   listTasks,
   type ArtifactType,
   type AssignmentScope,
@@ -20,9 +20,9 @@ interface ArtifactAssignerProps {
 
 export default function ArtifactAssigner({ artifactType, artifactSlug, artifactName }: ArtifactAssignerProps) {
   const [open, setOpen] = useState(false);
-  const [scope, setScope] = useState<AssignmentScope>('claw');
+  const [scope, setScope] = useState<AssignmentScope>('host');
   const [selectedId, setSelectedId] = useState('');
-  const [clawsList, setClawsList] = useState<Awaited<ReturnType<typeof claws.list>>>([]);
+  const [agentHostsList, setAgentHostsList] = useState<Awaited<ReturnType<typeof agentHosts.list>>>([]);
   const [projectsList, setProjectsList] = useState<Project[]>([]);
   const [tasksList, setTasksList] = useState<Awaited<ReturnType<typeof listTasks>>>([]);
   const [assignments, setAssignments] = useState<ArtifactAssignment[]>([]);
@@ -37,11 +37,11 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
     setError('');
     try {
       const [c, p, t] = await Promise.all([
-        claws.list().catch(() => []),
+        agentHosts.list().catch(() => []),
         fetchProjects(),
         listTasks(),
       ]);
-      setClawsList(c);
+      setAgentHostsList(c);
       setProjectsList(p);
       setTasksList(t);
     } catch (e) {
@@ -58,13 +58,13 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
   }, [open, assignmentsLoaded, loadEntities]);
 
   useEffect(() => {
-    if (!open || assignmentsLoaded || (!clawsList.length && !projectsList.length && !tasksList.length)) return;
+    if (!open || assignmentsLoaded || (!agentHostsList.length && !projectsList.length && !tasksList.length)) return;
     let cancelled = false;
     (async () => {
       try {
         const all: ArtifactAssignment[] = [];
-        for (const s of ['claw', 'project', 'task'] as AssignmentScope[]) {
-          const entities = s === 'claw' ? clawsList : s === 'project' ? projectsList : tasksList;
+        for (const s of ['host', 'project', 'task'] as AssignmentScope[]) {
+          const entities = s === 'host' ? agentHostsList : s === 'project' ? projectsList : tasksList;
           for (const entity of entities) {
             const id = Number((entity as { id: string | number }).id);
             try {
@@ -84,12 +84,12 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
       }
     })();
     return () => { cancelled = true; };
-  }, [open, assignmentsLoaded, artifactType, artifactSlug, clawsList, projectsList, tasksList]);
+  }, [open, assignmentsLoaded, artifactType, artifactSlug, agentHostsList, projectsList, tasksList]);
 
   const scopeEntities = (): { id: string; label: string }[] => {
     switch (scope) {
-      case 'claw':
-        return clawsList.map((c) => ({ id: String(c.id), label: c.name }));
+      case 'host':
+        return agentHostsList.map((c) => ({ id: String(c.id), label: c.name }));
       case 'project':
         return projectsList.map((p) => ({ id: String(p.id), label: p.name }));
       case 'task':
@@ -127,8 +127,8 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
 
   const scopeLabel = (s: AssignmentScope, scopeId: number): string => {
     switch (s) {
-      case 'claw':
-        return clawsList.find((c) => Number(c.id) === scopeId)?.name ?? `Claw #${scopeId}`;
+      case 'host':
+        return agentHostsList.find((c) => Number(c.id) === scopeId)?.name ?? `AgentHost #${scopeId}`;
       case 'project':
         return projectsList.find((p) => Number(p.id) === scopeId)?.name ?? `Project #${scopeId}`;
       case 'task': {
@@ -147,7 +147,7 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
         onClick={() => setOpen(!open)}
         className="btn btn-secondary btn-sm"
         style={{ padding: '4px 10px', fontSize: 12 }}
-        title="Assign to claw, project, or task"
+        title="Assign to agentHost, project, or task"
       >
         📌 Assign
       </button>
@@ -183,7 +183,7 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
           ) : (
             <>
               <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                {(['claw', 'project', 'task'] as AssignmentScope[]).map((s) => (
+                {(['host', 'project', 'task'] as AssignmentScope[]).map((s) => (
                   <button
                     key={s}
                     type="button"

@@ -7,7 +7,7 @@ title: "Channel Routing"
 
 # Channels & routing
 
-CoderClaw routes replies **back to the channel where a message came from**. The
+BuilderForce Agents routes replies **back to the channel where a message came from**. The
 model does not choose a channel; routing is deterministic and controlled by the
 host configuration.
 
@@ -58,7 +58,7 @@ The matched agent determines which workspace and session store are used.
 
 ## Broadcast groups (run multiple agents)
 
-Broadcast groups let you run **multiple agents** for the same peer **when CoderClaw would normally reply** (for example: in WhatsApp groups, after mention/activation gating).
+Broadcast groups let you run **multiple agents** for the same peer **when BuilderForce Agents would normally reply** (for example: in WhatsApp groups, after mention/activation gating).
 
 Config:
 
@@ -84,7 +84,7 @@ Example:
 ```json5
 {
   agents: {
-    list: [{ id: "support", name: "Support", workspace: "~/.coderclaw/workspace-support" }],
+    list: [{ id: "support", name: "Support", workspace: "~/.builderforce/workspace-support" }],
   },
   bindings: [
     { match: { channel: "slack", teamId: "T123" }, agentId: "support" },
@@ -95,9 +95,9 @@ Example:
 
 ## Session storage
 
-Session stores live under the state directory (default `~/.coderclaw`):
+Session stores live under the state directory (default `~/.builderforce`):
 
-- `~/.coderclaw/agents/<agentId>/sessions/sessions.json`
+- `~/.builderforce/agents/<agentId>/sessions/sessions.json`
 - JSONL transcripts live alongside the store
 
 You can override the store path via `session.store` and `{agentId}` templating.

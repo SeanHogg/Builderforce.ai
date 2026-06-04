@@ -7,11 +7,11 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { coderclawInstances } from '../../infrastructure/database/schema';
+import { agentHosts } from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
 import type { BrainService } from '../../application/brain/BrainService';
 import type { Db } from '../../infrastructure/database/connection';
-import type { ClawRelayDO } from '../../infrastructure/relay/ClawRelayDO';
+import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -180,15 +180,15 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     return c.json(result);
   });
 
-  // POST /claw-sessions/:id/summarize — summarize a claw chat session into brain memory
-  router.post('/claw-sessions/:id/summarize', async (c) => {
+  // POST /agentHost-sessions/:id/summarize — summarize a agentHost chat session into brain memory
+  router.post('/agentHost-sessions/:id/summarize', async (c) => {
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid session id' }, 400);
 
     const apiKey = c.env.OPENROUTER_API_KEY;
     if (!apiKey) return c.json({ error: 'LLM not configured' }, 503);
 
-    const result = await brainService.summarizeClawSession(
+    const result = await brainService.summarizeAgentHostSession(
       id,
       c.get('tenantId') as number,
       apiKey,
@@ -263,14 +263,14 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     return new Response(obj.body, { headers });
   });
 
-  // POST /projects/:id/memory-sync — push consolidated project memory to all tenant claws
+  // POST /projects/:id/memory-sync — push consolidated project memory to all tenant agentHosts
   router.post('/projects/:id/memory-sync', async (c) => {
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid project id' }, 400);
 
     const tenantId = c.get('tenantId') as number;
-    const env = c.env as { CLAW_RELAY?: DurableObjectNamespace<ClawRelayDO> };
-    if (!env.CLAW_RELAY) return c.json({ error: 'Relay not configured' }, 503);
+    const env = c.env as { AGENT_HOST_RELAY?: DurableObjectNamespace<AgentHostRelayDO> };
+    if (!env.AGENT_HOST_RELAY) return c.json({ error: 'Relay not configured' }, 503);
 
     // Get the consolidated project memory
     const memory = await brainService.getProjectMemory(tenantId, id);
@@ -278,34 +278,34 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       return c.json({ error: 'No consolidated memory to sync' }, 404);
     }
 
-    // Find all claws in this tenant
-    const claws = await db
-      .select({ id: coderclawInstances.id })
-      .from(coderclawInstances)
-      .where(eq(coderclawInstances.tenantId, tenantId));
+    // Find all agentHosts in this tenant
+    const hostRows = await db
+      .select({ id: agentHosts.id })
+      .from(agentHosts)
+      .where(eq(agentHosts.tenantId, tenantId));
 
-    // Dispatch memory.sync to each claw via relay DO
+    // Dispatch memory.sync to each agentHost via relay DO
     const payload = {
       type: 'memory.sync',
       projectId: id,
       content: memory.consolidatedSummary,
-      path: `.coderClaw/project-memory-${id}.md`,
+      path: `.builderforce/project-memory-${id}.md`,
     };
 
     let dispatched = 0;
-    for (const claw of claws) {
+    for (const agentHost of hostRows) {
       try {
-        const stub = env.CLAW_RELAY.get(env.CLAW_RELAY.idFromName(String(claw.id)));
+        const stub = env.AGENT_HOST_RELAY.get(env.AGENT_HOST_RELAY.idFromName(String(agentHost.id)));
         const res = await stub.fetch(new Request('https://do/dispatch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         }));
         if (res.ok) dispatched++;
-      } catch { /* swallow — claw may be offline */ }
+      } catch { /* swallow — agentHost may be offline */ }
     }
 
-    return c.json({ ok: true, dispatched, total: claws.length });
+    return c.json({ ok: true, dispatched, total: hostRows.length });
   });
 
   // PATCH /messages/:id/feedback — store thumbs-up/down on a message

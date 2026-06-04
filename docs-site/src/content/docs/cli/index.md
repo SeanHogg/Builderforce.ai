@@ -1,5 +1,5 @@
 ---
-summary: "CoderClaw CLI reference for `coderclaw` commands, subcommands, and options"
+summary: "BuilderForce Agents CLI reference for `builderforce` commands, subcommands, and options"
 read_when:
   - Adding or modifying CLI commands or options
   - Documenting new command surfaces
@@ -54,10 +54,10 @@ This page describes the current CLI behavior. If commands change, update this do
 
 ## Global flags
 
-- `--dev`: isolate state under `~/.coderclaw-dev` and shift default ports.
-- `--profile <name>`: isolate state under `~/.coderclaw-<name>`.
+- `--dev`: isolate state under `~/.builderforce-dev` and shift default ports.
+- `--profile <name>`: isolate state under `~/.builderforce-<name>`.
 - `--no-color`: disable ANSI colors.
-- `--update`: shorthand for `coderclaw update` (source installs only).
+- `--update`: shorthand for `builderforce update` (source installs only).
 - `-V`, `--version`, `-v`: print version and exit.
 
 ## Output styling
@@ -70,7 +70,7 @@ This page describes the current CLI behavior. If commands change, update this do
 
 ## Color palette
 
-CoderClaw uses a lobster palette for CLI output.
+BuilderForce Agents uses a lobster palette for CLI output.
 
 - `accent` (#FF5A2D): headings, labels, primary highlights.
 - `accentBright` (#FF7A3D): command names, emphasis.
@@ -86,7 +86,7 @@ Palette source of truth: `src/terminal/palette.ts` (aka “lobster seam”).
 ## Command tree
 
 ```
-coderclaw [--dev] [--profile <name>] <command>
+builderforce [--dev] [--profile <name>] <command>
   setup
   onboard
   configure
@@ -237,23 +237,23 @@ coderclaw [--dev] [--profile <name>] <command>
   tui
 ```
 
-Note: plugins can add additional top-level commands (for example `coderclaw voicecall`).
+Note: plugins can add additional top-level commands (for example `builderforce voicecall`).
 
 ## Security
 
-- `coderclaw security audit` — audit config + local state for common security foot-guns.
-- `coderclaw security audit --deep` — best-effort live Gateway probe.
-- `coderclaw security audit --fix` — tighten safe defaults and chmod state/config.
+- `builderforce security audit` — audit config + local state for common security foot-guns.
+- `builderforce security audit --deep` — best-effort live Gateway probe.
+- `builderforce security audit --fix` — tighten safe defaults and chmod state/config.
 
 ## Plugins
 
 Manage extensions and their config:
 
-- `coderclaw plugins list` — discover plugins (use `--json` for machine output).
-- `coderclaw plugins info <id>` — show details for a plugin.
-- `coderclaw plugins install <path|.tgz|npm-spec>` — install a plugin (or add a plugin path to `plugins.load.paths`).
-- `coderclaw plugins enable <id>` / `disable <id>` — toggle `plugins.entries.<id>.enabled`.
-- `coderclaw plugins doctor` — report plugin load errors.
+- `builderforce plugins list` — discover plugins (use `--json` for machine output).
+- `builderforce plugins info <id>` — show details for a plugin.
+- `builderforce plugins install <path|.tgz|npm-spec>` — install a plugin (or add a plugin path to `plugins.load.paths`).
+- `builderforce plugins enable <id>` / `disable <id>` — toggle `plugins.entries.<id>.enabled`.
+- `builderforce plugins doctor` — report plugin load errors.
 
 Most plugin changes require a gateway restart. See [/plugin](/tools/plugin).
 
@@ -261,9 +261,9 @@ Most plugin changes require a gateway restart. See [/plugin](/tools/plugin).
 
 Vector search over `MEMORY.md` + `memory/*.md`:
 
-- `coderclaw memory status` — show index stats.
-- `coderclaw memory index` — reindex memory files.
-- `coderclaw memory search "<query>"` — semantic search over memory.
+- `builderforce memory status` — show index stats.
+- `builderforce memory index` — reindex memory files.
+- `builderforce memory search "<query>"` — semantic search over memory.
 
 ## Chat slash commands
 
@@ -283,7 +283,7 @@ Initialize config + workspace.
 
 Options:
 
-- `--workspace <dir>`: agent workspace path (default `~/.coderclaw/workspace`).
+- `--workspace <dir>`: agent workspace path (default `~/.builderforce/workspace`).
 - `--wizard`: run the onboarding wizard.
 - `--non-interactive`: run wizard without prompts.
 - `--mode <local|remote>`: wizard mode.
@@ -348,7 +348,7 @@ Interactive configuration wizard (models, channels, skills, gateway).
 
 ### `config`
 
-Non-interactive config helpers (get/set/unset). Running `coderclaw config` with no
+Non-interactive config helpers (get/set/unset). Running `builderforce config` with no
 subcommand launches the wizard.
 
 Subcommands:
@@ -377,8 +377,8 @@ Manage chat channel accounts (WhatsApp/Telegram/Discord/Google Chat/Slack/Matter
 Subcommands:
 
 - `channels list`: show configured channels and auth profiles.
-- `channels status`: check gateway reachability and channel health (`--probe` runs extra checks; use `coderclaw health` or `coderclaw status --deep` for gateway health probes).
-- Tip: `channels status` prints warnings with suggested fixes when it can detect common misconfigurations (then points you to `coderclaw doctor`).
+- `channels status`: check gateway reachability and channel health (`--probe` runs extra checks; use `builderforce health` or `builderforce status --deep` for gateway health probes).
+- Tip: `channels status` prints warnings with suggested fixes when it can detect common misconfigurations (then points you to `builderforce doctor`).
 - `channels logs`: show recent channel logs from the gateway log file.
 - `channels add`: wizard-style setup when no flags are passed; flags switch to non-interactive mode.
 - `channels remove`: disable by default; pass `--delete` to remove config entries without prompts.
@@ -418,11 +418,11 @@ More detail: [/concepts/oauth](/concepts/oauth)
 Examples:
 
 ```bash
-coderclaw channels add --channel telegram --account alerts --name "Alerts Bot" --token $TELEGRAM_BOT_TOKEN
-coderclaw channels add --channel discord --account work --name "Work Bot" --token $DISCORD_BOT_TOKEN
-coderclaw channels remove --channel discord --account work --delete
-coderclaw channels status --probe
-coderclaw status --deep
+builderforce channels add --channel telegram --account alerts --name "Alerts Bot" --token $TELEGRAM_BOT_TOKEN
+builderforce channels add --channel discord --account work --name "Work Bot" --token $DISCORD_BOT_TOKEN
+builderforce channels remove --channel discord --account work --delete
+builderforce channels status --probe
+builderforce status --deep
 ```
 
 ### `skills`
@@ -441,7 +441,7 @@ Options:
 - `--json`: output JSON (no styling).
 - `-v`, `--verbose`: include missing requirements detail.
 
-Tip: use `npx clawhub` to search, install, and sync skills (CLI command can be changed with `skills.registry.cli` if you run a different registry).
+Tip: use `npx agenthub` to search, install, and sync skills (CLI command can be changed with `skills.registry.cli` if you run a different registry).
 
 ### `pairing`
 
@@ -491,8 +491,8 @@ Subcommands:
 
 Examples:
 
-- `coderclaw message send --target +15555550123 --message "Hi"`
-- `coderclaw message poll --channel discord --target channel:123 --poll-question "Snack?" --poll-option Pizza --poll-option Sushi`
+- `builderforce message send --target +15555550123 --message "Hi"`
+- `builderforce message poll --channel discord --target channel:123 --poll-question "Snack?" --poll-option Pizza --poll-option Sushi`
 
 ### `agent`
 
@@ -577,12 +577,12 @@ Notes:
 
 ### Usage tracking
 
-CoderClaw can surface provider usage/quota when OAuth/API creds are available.
+BuilderForce Agents can surface provider usage/quota when OAuth/API creds are available.
 
 Surfaces:
 
 - `/status` (adds a short provider usage line when available)
-- `coderclaw status --usage` (prints full provider breakdown)
+- `builderforce status --usage` (prints full provider breakdown)
 - macOS menu bar (Usage section under Context)
 
 Notes:
@@ -692,7 +692,7 @@ Notes:
 
 - `gateway status` probes the Gateway RPC by default using the service’s resolved port/config (override with `--url/--token/--password`).
 - `gateway status` supports `--no-probe`, `--deep`, and `--json` for scripting.
-- `gateway status` also surfaces legacy or extra gateway services when it can detect them (`--deep` adds system-level scans). Profile-named CoderClaw services are treated as first-class and aren't flagged as "extra".
+- `gateway status` also surfaces legacy or extra gateway services when it can detect them (`--deep` adds system-level scans). Profile-named BuilderForce Agents services are treated as first-class and aren't flagged as "extra".
 - `gateway status` prints which config path the CLI uses vs which config the service likely uses (service env), plus the resolved probe target URL.
 - `gateway install|uninstall|start|stop|restart` support `--json` for scripting (default output stays human-friendly).
 - `gateway install` defaults to Node runtime; bun is **not recommended** (WhatsApp/Telegram bugs).
@@ -710,11 +710,11 @@ Notes:
 Examples:
 
 ```bash
-coderclaw logs --follow
-coderclaw logs --limit 200
-coderclaw logs --plain
-coderclaw logs --json
-coderclaw logs --no-color
+builderforce logs --follow
+builderforce logs --limit 200
+builderforce logs --plain
+builderforce logs --json
+builderforce logs --no-color
 ```
 
 ### `gateway <subcommand>`
@@ -750,13 +750,13 @@ Preferred Anthropic auth (setup-token):
 
 ```bash
 claude setup-token
-coderclaw models auth setup-token --provider anthropic
-coderclaw models status
+builderforce models auth setup-token --provider anthropic
+builderforce models status
 ```
 
 ### `models` (root)
 
-`coderclaw models` is an alias for `models status`.
+`builderforce models` is an alias for `models status`.
 
 Root options:
 
@@ -912,7 +912,7 @@ All `cron` commands accept `--url`, `--token`, `--timeout`, `--expect-final`.
 ## Node host
 
 `node` runs a **headless node host** or manages it as a background service. See
-[`coderclaw node`](/cli/node).
+[`builderforce node`](/cli/node).
 
 Subcommands:
 
@@ -967,7 +967,7 @@ Location:
 
 ## Browser
 
-Browser control CLI (dedicated Chrome/Brave/Edge/Chromium). See [`coderclaw browser`](/cli/browser) and the [Browser tool](/tools/browser).
+Browser control CLI (dedicated Chrome/Brave/Edge/Chromium). See [`builderforce browser`](/cli/browser) and the [Browser tool](/tools/browser).
 
 Common options:
 

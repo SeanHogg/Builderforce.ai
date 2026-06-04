@@ -1,9 +1,9 @@
 /**
- * Pure builders for the message a claw executes to open a pull request.
+ * Pure builders for the message a agentHost executes to open a pull request.
  *
  * No IO: callers supply the resolved repo, the task, and (optionally) the PRD /
  * spec reference. The resulting {type:'create_pr', ...} envelope is what gets
- * POSTed to the CLAW_RELAY durable object's /dispatch endpoint.
+ * POSTed to the AGENT_HOST_RELAY durable object's /dispatch endpoint.
  */
 
 export type PrDispatchRepo = {
@@ -110,7 +110,7 @@ export function buildPrBody(task: PrDispatchTask, prd?: PrDispatchPrd): string {
 }
 
 /**
- * Assemble the full create_pr message for a claw. PURE.
+ * Assemble the full create_pr message for a agentHost. PURE.
  */
 export function buildPrDispatchMessage(
   repo: PrDispatchRepo,

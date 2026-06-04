@@ -3,9 +3,9 @@ title: Go-to-Market Strategy
 description: Positioning, ICP, competitive landscape, acquisition channels, launch plan
 ---
 
-# Go-to-Market Strategy — coderClaw.ai
+# Go-to-Market Strategy — BuilderForce Agents.ai
 
-This document covers the positioning, ICP, channels, competitive differentiation, pricing strategy, launch plan, and growth motions for coderClaw.ai and Builderforce.
+This document covers the positioning, ICP, channels, competitive differentiation, pricing strategy, launch plan, and growth motions for BuilderForce Agents.ai and Builderforce.
 
 ---
 
@@ -20,14 +20,14 @@ This document covers the positioning, ICP, channels, competitive differentiation
 - "Jira for AI teams — minus the tickets."
 
 ### Category
-coderClaw.ai creates and owns the category of **AI Agent Orchestration Portals** — the control plane layer between autonomous AI coding agents and human engineering teams. This is distinct from:
+BuilderForce Agents.ai creates and owns the category of **AI Agent Orchestration Portals** — the control plane layer between autonomous AI coding agents and human engineering teams. This is distinct from:
 - **AI coding assistants** (Cursor, GitHub Copilot) — single-user, no orchestration
 - **Project management tools** (Jira, Linear) — human-only workflows, no agent integration
 - **LLM APIs** (OpenAI, Anthropic) — raw models, no workflow management
 - **Agent frameworks** (LangChain, CrewAI) — developer-only libraries, no hosted control plane
 
 ### Positioning statement
-*For engineering teams of 5–1,000+ who want to leverage AI agents at scale without losing visibility or control, coderClaw.ai is an AI-native orchestration platform that coordinates self-healing agents across unlimited projects — unlike Jira or Linear, which were designed for humans writing tickets, not AI agents executing code.*
+*For engineering teams of 5–1,000+ who want to leverage AI agents at scale without losing visibility or control, BuilderForce Agents.ai is an AI-native orchestration platform that coordinates self-healing agents across unlimited projects — unlike Jira or Linear, which were designed for humans writing tickets, not AI agents executing code.*
 
 ---
 
@@ -93,7 +93,7 @@ coderClaw.ai creates and owns the category of **AI Agent Orchestration Portals**
 - Subscription tiers start free — upgrade only when you need Pro model pool access
 
 **Key proof points:**
-- Free tier: 1 claw, 3 projects, 1,000 LLM requests/month at $0
+- Free tier: 1 agent, 3 projects, 1,000 LLM requests/month at $0
 - 14-day Pro trial, no credit card
 - Deploy in 20 minutes (see [Getting Started](/link/getting-started/))
 
@@ -104,7 +104,7 @@ coderClaw.ai creates and owns the category of **AI Agent Orchestration Portals**
 - $29/seat/month — typically replaces $12k+/year Jira + $8k+/year AI coding tool subscriptions
 
 **Key proof points:**
-- Unlimited claws on Pro
+- Unlimited agents on Pro
 - Full 4-role RBAC for department-level isolation
 - WebSocket execution streaming for zero-latency CI dashboards
 
@@ -163,16 +163,16 @@ Content pages that drive long-tail traffic:
 | `/link/getting-started` | "how to set up AI agent orchestration" | Tutorial |
 | `/link/multi-agent-orchestration` | "multi-agent workflow management" | Guide |
 | `/link/marketplace` | "AI agent skills marketplace" | Guide |
-| `/link/pricing` | "coderClaw pricing", "AI orchestration platform cost" | Pricing page |
+| `/link/pricing` | "BuilderForce Agents pricing", "AI orchestration platform cost" | Pricing page |
 | `/link/architecture` | "AI agent orchestration architecture", "Cloudflare Workers DDD" | Technical |
 
 ---
 
 ## 8. Content Marketing Plan
 
-**Phase 1 — Foundation (Month 1–2):** "How we replaced Jira with an AI-native workflow mesh" (Dev.to + HN), "Building a multi-agent coding pipeline with coderClaw", Product Hunt launch.
+**Phase 1 — Foundation (Month 1–2):** "How we replaced Jira with an AI-native workflow mesh" (Dev.to + HN), "Building a multi-agent coding pipeline with BuilderForce Agents", Product Hunt launch.
 
-**Phase 2 — Authority (Month 3–6):** "AI agent audit trail: SOC 2 considerations", "coderClaw vs Devin: control plane vs autonomous agent", video: "Register your first claw in 5 minutes", weekly changelog posts.
+**Phase 2 — Authority (Month 3–6):** "AI agent audit trail: SOC 2 considerations", "BuilderForce Agents vs Devin: control plane vs autonomous agent", video: "Register your first agent in 5 minutes", weekly changelog posts.
 
 **Phase 3 — Scale (Month 7+):** Guest podcast appearances, conference talks (KubeCon, AI Engineer World's Fair, Cloudflare Connect).
 
@@ -195,9 +195,9 @@ Channels: `#announcements`, `#help`, `#showcase`, `#feedback`, `#contribute`.
 
 **Technology integrations:** Cloudflare (Workers showcase), Neon ("Preferred database" co-marketing), Anthropic/Claude (official integration listing), GitHub (GitHub App for PR events), Linear (import projects).
 
-**Agency and consulting partnerships:** Partner Programme for agencies that deploy coderClaw.ai for clients — revenue share on Enterprise contracts, co-branded case studies, priority support.
+**Agency and consulting partnerships:** Partner Programme for agencies that deploy BuilderForce Agents.ai for clients — revenue share on Enterprise contracts, co-branded case studies, priority support.
 
-**AI infrastructure providers:** Partner with GPU cloud and inference providers (Together.ai, Fireworks, Groq) for preferred pricing on the coderClawLLM Pro model pool.
+**AI infrastructure providers:** Partner with GPU cloud and inference providers (Together.ai, Fireworks, Groq) for preferred pricing on the BuilderForce AgentsLLM Pro model pool.
 
 ---
 
@@ -205,7 +205,7 @@ Channels: `#announcements`, `#help`, `#showcase`, `#feedback`, `#contribute`.
 
 | Milestone | Target | Success criteria |
 |-----------|--------|-------------------|
-| **Beta launch** | Now | 100 registered users, 50 active claws, Discord >200 members |
+| **Beta launch** | Now | 100 registered users, 50 active agents, Discord >200 members |
 | **Public launch (Product Hunt)** | Month 2 | #1–3 of the day, 500+ upvotes, 1,000 signups |
 | **v1.0 GA** | Month 3 | Stable API, 3 featured marketplace skills, 10 paying Pro customers |
 | **Pro traction** | Month 6 | 100 Pro seats, $2,900 MRR |
@@ -218,7 +218,7 @@ Channels: `#announcements`, `#help`, `#showcase`, `#feedback`, `#contribute`.
 
 **Acquisition:** GitHub stars, signups per week, organic search traffic, Discord members.
 
-**Activation:** Time to first claw connected (< 20 minutes target), projects created in first session (> 1 = activated), % of signups who connect a claw within 7 days.
+**Activation:** Time to first agent connected (< 20 minutes target), projects created in first session (> 1 = activated), % of signups who connect a agent within 7 days.
 
 **Retention:** 7-day active rate (> 40% target), 30-day active rate (> 20% target), executions per active tenant per week.
 

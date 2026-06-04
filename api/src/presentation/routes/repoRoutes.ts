@@ -8,12 +8,12 @@
  * PATCH  /api/repos/repositories/:id                   Update a repo (incl. set isDefault)
  * DELETE /api/repos/repositories/:id                   Remove a repo association
  * POST   /api/repos/repositories/:id/default           Mark a repo as the project default
- * POST   /api/repos/tasks/:taskId/pull-request         Dispatch PR creation to the task's claw
- * POST   /api/repos/pull-requests/:id/result           Claw callback: record PR number/url/status
+ * POST   /api/repos/tasks/:taskId/pull-request         Dispatch PR creation to the task's agentHost
+ * POST   /api/repos/pull-requests/:id/result           AgentHost callback: record PR number/url/status
  * GET    /api/repos/projects/:projectId/pull-requests  List a project's pull requests
  *
- * Every query is tenant-scoped. The CLAW_RELAY dispatch mirrors runtimeRoutes.ts:
- *   env.CLAW_RELAY.get(env.CLAW_RELAY.idFromName(String(clawId))).fetch(...)
+ * Every query is tenant-scoped. The AGENT_HOST_RELAY dispatch mirrors runtimeRoutes.ts:
+ *   env.AGENT_HOST_RELAY.get(env.AGENT_HOST_RELAY.idFromName(String(agentHostId))).fetch(...)
  */
 import { Hono } from 'hono';
 import { and, eq, desc } from 'drizzle-orm';
@@ -25,21 +25,21 @@ import {
 } from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import type { ClawRelayDO } from '../../infrastructure/relay/ClawRelayDO';
-import { RepoService, type ClawDispatcher } from '../../application/repos/RepoService';
+import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
+import { RepoService, type AgentHostDispatcher } from '../../application/repos/RepoService';
 import type { CreatePrMessage } from '../../application/repos/prDispatch';
 
 type RepoHonoEnv = HonoEnv & {
   Bindings: HonoEnv['Bindings'] & {
-    CLAW_RELAY?: DurableObjectNamespace<ClawRelayDO>;
+    AGENT_HOST_RELAY?: DurableObjectNamespace<AgentHostRelayDO>;
   };
 };
 
-/** Build a dispatcher that pushes a create_pr message to a specific claw's relay DO. */
-function makeClawDispatcher(env: RepoHonoEnv['Bindings']): ClawDispatcher {
-  return async (clawId: number, message: CreatePrMessage): Promise<boolean> => {
-    if (!env.CLAW_RELAY) return false;
-    const stub = env.CLAW_RELAY.get(env.CLAW_RELAY.idFromName(String(clawId)));
+/** Build a dispatcher that pushes a create_pr message to a specific agentHost's relay DO. */
+function makeAgentHostDispatcher(env: RepoHonoEnv['Bindings']): AgentHostDispatcher {
+  return async (agentHostId: number, message: CreatePrMessage): Promise<boolean> => {
+    if (!env.AGENT_HOST_RELAY) return false;
+    const stub = env.AGENT_HOST_RELAY.get(env.AGENT_HOST_RELAY.idFromName(String(agentHostId)));
     const response = await stub.fetch('https://relay.internal/dispatch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -84,7 +84,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       return c.json({ error: 'provider, owner and repo are required' }, 400);
     }
 
-    const service = new RepoService(db, makeClawDispatcher(c.env));
+    const service = new RepoService(db, makeAgentHostDispatcher(c.env));
     const row = await service.addRepo(
       {
         projectId,
@@ -111,7 +111,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const projectId = Number(c.req.param('projectId'));
     if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid projectId' }, 400);
 
-    const service = new RepoService(db, makeClawDispatcher(c.env));
+    const service = new RepoService(db, makeAgentHostDispatcher(c.env));
     const repos = await service.listRepos(projectId, tenantId);
     return c.json({ repositories: repos });
   });
@@ -211,16 +211,16 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const taskId = Number(c.req.param('taskId'));
     if (!Number.isFinite(taskId)) return c.json({ error: 'Invalid taskId' }, 400);
 
-    const service = new RepoService(db, makeClawDispatcher(c.env));
+    const service = new RepoService(db, makeAgentHostDispatcher(c.env));
     const result = await service.dispatchPrCreation(taskId, tenantId);
 
     if (!result.ok) {
       switch (result.code) {
         case 'task_not_found':
           return c.json({ error: result.reason }, 404);
-        case 'no_claw':
+        case 'no_agent_host':
         case 'no_repo':
-          // No assigned claw / no resolvable repo: do not broadcast — fail closed.
+          // No assigned agentHost / no resolvable repo: do not broadcast — fail closed.
           return c.json({ error: result.reason }, 409);
         case 'dispatch_failed':
           return c.json({ error: result.reason }, 502);
@@ -231,7 +231,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       {
         ok: true,
         pullRequestId: result.prId,
-        clawId: result.clawId,
+        agentHostId: result.agentHostId,
         branchName: result.message.branchName,
         base: result.message.base,
       },
@@ -239,7 +239,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     );
   });
 
-  // POST /api/repos/pull-requests/:id/result — claw callback to record PR result.
+  // POST /api/repos/pull-requests/:id/result — agentHost callback to record PR result.
   router.post('/pull-requests/:id/result', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
@@ -250,7 +250,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       status?: string | null;
     }>();
 
-    const service = new RepoService(db, makeClawDispatcher(c.env));
+    const service = new RepoService(db, makeAgentHostDispatcher(c.env));
     const row = await service.recordPrResult(id, tenantId, body);
     if (!row) return c.json({ error: 'Pull request not found' }, 404);
     return c.json(row);

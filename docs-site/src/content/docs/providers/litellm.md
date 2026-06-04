@@ -1,21 +1,21 @@
 ---
 title: "LiteLLM"
 
-summary: "Run CoderClaw through LiteLLM Proxy for unified model access and cost tracking"
+summary: "Run BuilderForce Agents through LiteLLM Proxy for unified model access and cost tracking"
 read_when:
-  - You want to route CoderClaw through a LiteLLM proxy
+  - You want to route BuilderForce Agents through a LiteLLM proxy
   - You need cost tracking, logging, or model routing through LiteLLM
 ---
 
 # LiteLLM
 
-[LiteLLM](https://litellm.ai) is an open-source LLM gateway that provides a unified API to 100+ model providers. Route CoderClaw through LiteLLM to get centralized cost tracking, logging, and the flexibility to switch backends without changing your CoderClaw config.
+[LiteLLM](https://litellm.ai) is an open-source LLM gateway that provides a unified API to 100+ model providers. Route BuilderForce Agents through LiteLLM to get centralized cost tracking, logging, and the flexibility to switch backends without changing your BuilderForce Agents config.
 
-## Why use LiteLLM with CoderClaw?
+## Why use LiteLLM with BuilderForce Agents?
 
-- **Cost tracking** — See exactly what CoderClaw spends across all models
+- **Cost tracking** — See exactly what BuilderForce Agents spends across all models
 - **Model routing** — Switch between Claude, GPT-4, Gemini, Bedrock without config changes
-- **Virtual keys** — Create keys with spend limits for CoderClaw
+- **Virtual keys** — Create keys with spend limits for BuilderForce Agents
 - **Logging** — Full request/response logs for debugging
 - **Fallbacks** — Automatic failover if your primary provider is down
 
@@ -24,7 +24,7 @@ read_when:
 ### Via onboarding
 
 ```bash
-coderclaw onboard --auth-choice litellm-api-key
+builderforce onboard --auth-choice litellm-api-key
 ```
 
 ### Manual setup
@@ -36,15 +36,15 @@ pip install 'litellm[proxy]'
 litellm --model claude-opus-4-6
 ```
 
-2. Point CoderClaw to LiteLLM:
+2. Point BuilderForce Agents to LiteLLM:
 
 ```bash
 export LITELLM_API_KEY="your-litellm-key"
 
-coderclaw
+builderforce
 ```
 
-That's it. CoderClaw now routes through LiteLLM.
+That's it. BuilderForce Agents now routes through LiteLLM.
 
 ## Configuration
 
@@ -95,14 +95,14 @@ export LITELLM_API_KEY="sk-litellm-key"
 
 ## Virtual keys
 
-Create a dedicated key for CoderClaw with spend limits:
+Create a dedicated key for BuilderForce Agents with spend limits:
 
 ```bash
 curl -X POST "http://localhost:4000/key/generate" \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "key_alias": "coderclaw",
+    "key_alias": "builderforce",
     "max_budget": 50.00,
     "budget_duration": "monthly"
   }'
@@ -127,7 +127,7 @@ model_list:
       api_key: os.environ/OPENAI_API_KEY
 ```
 
-CoderClaw keeps requesting `claude-opus-4-6` — LiteLLM handles the routing.
+BuilderForce Agents keeps requesting `claude-opus-4-6` — LiteLLM handles the routing.
 
 ## Viewing usage
 
@@ -146,8 +146,8 @@ curl "http://localhost:4000/spend/logs" \
 ## Notes
 
 - LiteLLM runs on `http://localhost:4000` by default
-- CoderClaw connects via the OpenAI-compatible `/v1/chat/completions` endpoint
-- All CoderClaw features work through LiteLLM — no limitations
+- BuilderForce Agents connects via the OpenAI-compatible `/v1/chat/completions` endpoint
+- All BuilderForce Agents features work through LiteLLM — no limitations
 
 ## See also
 
