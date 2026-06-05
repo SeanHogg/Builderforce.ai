@@ -1,5 +1,5 @@
 /**
- * SsmMemoryService – loads/manages the SSMjs runtime and SSMAgent
+ * SsmMemoryService – loads/manages the @builderforce/memory runtime and SSMAgent
  * for BuilderForceAgents's local hippocampus memory layer.
  *
  * GPU initialisation is optional: if @webgpu/node is unavailable or the GPU
@@ -103,7 +103,7 @@ async function fetchCheckpointToDisk(url: string, destPath: string): Promise<Buf
 }
 
 // ── Lazy module imports ───────────────────────────────────────────────────────
-// We import SSMjs types dynamically so that a missing package does not prevent
+// We import @builderforce/memory types dynamically so that a missing package does not prevent
 // the rest of the gateway from starting.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -148,7 +148,7 @@ export class SsmMemoryService {
    *
    * GPU init is attempted first; if it fails (no @webgpu/node or no GPU),
    * the service falls back to memory-only operation (gpuAvailable = false).
-   * Never throws — returns null if the SSMjs package itself is missing.
+   * Never throws — returns null if the @builderforce/memory package itself is missing.
    */
   static async create(opts: SsmMemoryServiceOptions = {}): Promise<SsmMemoryService | null> {
     const checkpointPath = resolveCheckpointPath(opts.checkpointPath);
@@ -165,17 +165,17 @@ export class SsmMemoryService {
       new Function("m", "return import(m)")(m) as Promise<unknown>;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let ssmjsMod: any;
+    let memoryMod: any;
     try {
       // Dynamic import so a missing package is a runtime no-op
-      ssmjsMod = await _import("@seanhogg/ssmjs");
+      memoryMod = await _import("@builderforce/memory");
     } catch {
-      logDebug("[ssm-memory] @seanhogg/ssmjs not available — skipping SSM memory layer");
+      logDebug("[ssm-memory] @builderforce/memory not available — skipping SSM memory layer");
       return null;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
-    const { SSMRuntime, MemoryStore, SSMAgent } = ssmjsMod as Record<string, any>;
+    const { SSMRuntime, MemoryStore, SSMAgent } = memoryMod as Record<string, any>;
 
     // IDBFactory — always available via fake-indexeddb
     let idbFactory: unknown;
