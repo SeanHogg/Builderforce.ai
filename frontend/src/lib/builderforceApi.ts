@@ -360,7 +360,7 @@ export const workflows = {
 // ---------------------------------------------------------------------------
 
 export type WorkflowNodeKind =
-  | 'trigger' | 'agent' | 'memory' | 'knowledge' | 'train'
+  | 'trigger' | 'agent' | 'llm' | 'mcp' | 'memory' | 'knowledge' | 'train'
   | 'transform' | 'filter' | 'branch' | 'output';
 
 export interface WorkflowDefNode {

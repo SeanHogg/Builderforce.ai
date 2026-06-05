@@ -56,6 +56,37 @@ export interface IAgentMemoryService {
   train?(opts: { model: string; dataset: string; epochs: number }): Promise<string>;
 }
 
+// ── LLM platform calls (builder `llm` nodes) ──────────────────────────────────
+
+export interface LlmCompletionRequest {
+  /** Provider id (openai, anthropic, gemini…); the gateway routes/maps it. */
+  provider?: string;
+  model?: string;
+  system?: string;
+  prompt: string;
+  temperature?: number;
+}
+
+/** Calls an LLM platform — implemented over the Builderforce OpenAI-compatible
+ *  gateway. Builder `llm` nodes use this; absent → the node records intent. */
+export interface ILlmService {
+  complete(req: LlmCompletionRequest): Promise<string>;
+}
+
+// ── MCP / SaaS integration invocation (builder `mcp` nodes) ───────────────────
+
+export interface McpInvocation {
+  integration: string;
+  operation: string;
+  params: Record<string, unknown>;
+}
+
+/** Invokes an MCP-server / SaaS integration tool. Builder `mcp` nodes use this;
+ *  absent → the node records intent. */
+export interface IMcpService {
+  invoke(call: McpInvocation): Promise<string>;
+}
+
 // ── Agent transport (unified local + remote dispatch) ─────────────────────────
 
 export type AgentTransportKind = "local" | "remote";
