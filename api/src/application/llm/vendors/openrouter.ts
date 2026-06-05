@@ -105,8 +105,13 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'z-ai/glm-4-32b',                            tier: 'STANDARD', label: 'GLM 4 32B',                brand: 'Z.AI'      },
   { id: 'openai/gpt-5-nano',                         tier: 'STANDARD', label: 'GPT-5 Nano',               brand: 'OpenAI'    },
 
+  // ── STANDARD tier (cont.) — cheap current-gen frontier for routing/short tasks
+  { id: 'anthropic/claude-haiku-4.5',                tier: 'STANDARD', label: 'Claude Haiku 4.5',     brand: 'Anthropic' },
+
   // ── PREMIUM tier — paid coding-grade models
-  { id: 'anthropic/claude-3.7-sonnet',               tier: 'PREMIUM', label: 'Claude 3.7 Sonnet',     brand: 'Anthropic' },
+  // Claude Sonnet 4.6 replaces the retired Claude 3.7 Sonnet (`claude-3-7-sonnet`
+  // was retired on the first-party API 2026-02-19; current-gen Sonnet is 4.6).
+  { id: 'anthropic/claude-sonnet-4.6',               tier: 'PREMIUM', label: 'Claude Sonnet 4.6',     brand: 'Anthropic' },
   { id: 'openai/gpt-4.1',                            tier: 'PREMIUM', label: 'GPT-4.1',               brand: 'OpenAI'    },
   { id: 'openai/o4-mini',                            tier: 'PREMIUM', label: 'o4-mini (reasoning)',   brand: 'OpenAI'    },
   { id: 'google/gemini-2.5-pro',                     tier: 'PREMIUM', label: 'Gemini 2.5 Pro',        brand: 'Google'    },
