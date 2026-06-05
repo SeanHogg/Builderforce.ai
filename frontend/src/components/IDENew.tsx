@@ -134,8 +134,13 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
       setFileContents(prev => ({ ...prev, [path]: content }));
       setOpenFiles(prev => (prev.includes(path) ? prev : [...prev, path]));
       setActiveFile(path);
-    } catch {
-      setFileContents(prev => ({ ...prev, [path]: '' }));
+    } catch (e) {
+      // Do NOT cache '' on failure: that poisons fileContents so the cached
+      // branch above short-circuits every future open and the file shows blank
+      // forever. Leave the path uncached so the next click re-fetches; still
+      // open the tab so the user sees something happened.
+      console.error(`Failed to load ${path}:`, e);
+      terminalWriteRef.current?.(`\r\n\x1b[31m✗ Failed to load ${path} — click again to retry.\x1b[0m\r\n`);
       setOpenFiles(prev => (prev.includes(path) ? prev : [...prev, path]));
       setActiveFile(path);
     }
@@ -333,7 +338,7 @@ export default defineConfig({
       console.error('Run failed:', e);
 
       // Always surface the error in the terminal so the user sees it
-      if (errorMsg.includes('EJSONPARSE')) {
+      if (errorMsg.includes('EJSONPARSE') || errorMsg.includes('Invalid package.json')) {
         terminalWriter?.('\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
         terminalWriter?.('\x1b[31m✗ PACKAGE.JSON ERROR\x1b[0m\r\n');
         terminalWriter?.('\r\n\x1b[33mYour package.json file is invalid or empty.\x1b[0m\r\n');
