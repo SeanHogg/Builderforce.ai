@@ -11,6 +11,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { adminApi } from '@/lib/adminApi';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 
 interface Attempt {
   model: string;
@@ -114,6 +115,8 @@ export function LlmTracesPanel() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<TraceDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  // Card/list view toggle for the trace summary list — default 'table'.
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
 
   const load = useCallback(async (q: string) => {
     setLoading(true);
@@ -155,7 +158,7 @@ export function LlmTracesPanel() {
 
       <form
         onSubmit={(e) => { e.preventDefault(); void load(query); }}
-        style={{ display: 'flex', gap: 8, marginBottom: 16 }}
+        style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}
       >
         <input
           value={query}
@@ -175,6 +178,7 @@ export function LlmTracesPanel() {
         >
           Search
         </button>
+        <ViewToggle value={viewMode} onChange={setViewMode} />
       </form>
 
       {error && (
@@ -183,6 +187,7 @@ export function LlmTracesPanel() {
 
       <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 1fr' : '1fr', gap: 16 }}>
         {/* List */}
+        {viewMode === 'table' ? (
         <div style={{ border: '1px solid #1b2436', borderRadius: 10, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
             <thead>
@@ -226,6 +231,45 @@ export function LlmTracesPanel() {
             </tbody>
           </table>
         </div>
+        ) : loading ? (
+          <div style={{ padding: 16, color: muted, fontSize: 13 }}>Loading…</div>
+        ) : traces.length === 0 ? (
+          <div style={{ padding: 16, color: muted, fontSize: 13 }}>No traces found.</div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+            {traces.map((t) => (
+              <div
+                key={t.traceId}
+                role="button"
+                tabIndex={0}
+                onClick={() => void openTrace(t.traceId)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void openTrace(t.traceId); } }}
+                style={{
+                  cursor: 'pointer',
+                  background: 'var(--bg-elevated, #0a0f1a)',
+                  border: `1px solid ${selected?.traceId === t.traceId ? '#2a3a55' : 'var(--border-subtle, #1b2436)'}`,
+                  borderRadius: 12,
+                  padding: 16,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                  <code style={{ fontFamily: 'monospace', fontSize: 11, color: '#9fb0cc' }}>
+                    {t.traceId.replace(/^llm-/, '').slice(0, 8)}…
+                  </code>
+                  {pill(`${t.status ?? '—'}`, t.success ? ok : bad)}
+                </div>
+                <div style={{ fontSize: 13, color: '#e6ebf5', wordBreak: 'break-word' }}>{t.resolvedModel ?? '—'}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: muted }}>
+                  <span>{t.createdAt ? new Date(t.createdAt).toLocaleString() : '—'}</span>
+                  <span>{t.durationMs} ms</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Detail */}
         {selected && (

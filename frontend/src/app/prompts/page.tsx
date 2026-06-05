@@ -9,6 +9,8 @@ import {
   type CreatePromptBody,
 } from '@/lib/builderforceApi';
 import { getStoredUser } from '@/lib/auth';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -35,6 +37,7 @@ export default function PromptsPage() {
   const [selected, setSelected] = useState<PromptPublicView | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
 
   const loadPublic = (search?: string) => {
     setLoading(true);
@@ -125,12 +128,14 @@ export default function PromptsPage() {
             </select>
           </>
         )}
+        {tab !== 'public' && <span style={{ flex: 1 }} />}
+        <ViewToggle value={viewMode} onChange={setViewMode} />
       </div>
 
       {loading && <div style={card}>Loading prompts…</div>}
       {error && <div style={{ ...card, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>}
 
-      {!loading && !error && (
+      {!loading && !error && viewMode === 'card' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
           {prompts.map((p) => (
             <button key={p.id} onClick={() => openDetail(p)} style={{ ...card, textAlign: 'left', cursor: 'pointer' }}>
@@ -156,6 +161,48 @@ export default function PromptsPage() {
             </div>
           )}
         </div>
+      )}
+
+      {!loading && !error && viewMode === 'table' && (
+        prompts.length === 0 ? (
+          <div style={{ ...card, color: 'var(--text-muted)' }}>
+            {tab === 'mine' ? 'You have no prompts yet. Click “+ New prompt” to create one.' : 'No public prompts found.'}
+          </div>
+        ) : (
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
+                <tr style={theadRowStyle}>
+                  <th style={thStyle}>Title</th>
+                  <th style={thStyle}>Category</th>
+                  <th style={thStyle}>Uses</th>
+                  <th style={thStyle}>Stars</th>
+                  <th style={thStyle}>Author</th>
+                  <th style={thStyle}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {prompts.map((p) => (
+                  <tr key={p.id} style={trStyle}>
+                    <td style={{ ...tdStyle, fontWeight: 600 }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {p.title}
+                        {p.isFeatured && <span title="Featured">⭐</span>}
+                      </span>
+                    </td>
+                    <td style={tdMutedStyle}>{p.category ?? '—'}</td>
+                    <td style={tdMutedStyle}>{p.usageCount.toLocaleString()}</td>
+                    <td style={tdMutedStyle}>{p.starCount}</td>
+                    <td style={tdMutedStyle}>{p.authorName ?? '—'}</td>
+                    <td style={tdStyle}>
+                      <button onClick={() => openDetail(p)} style={ghostBtn}>View</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
       )}
 
       {selected && (

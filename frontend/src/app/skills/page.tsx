@@ -13,6 +13,8 @@ import {
 import { BUILTIN_SKILLS, userSkillsKey, type BuiltinSkill, type UserSkill } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
 import { SkillAssignmentsContent } from '@/components/SkillAssignmentsContent';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
 function loadUserSkills(tenantId: string): UserSkill[] {
   if (typeof window === 'undefined') return [];
@@ -35,6 +37,7 @@ export default function SkillsPage() {
   const tenantNum = Number(tenantId);
 
   const [tab, setTab] = useState<'assigned' | 'marketplace' | 'my-skills'>('assigned');
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -193,10 +196,15 @@ export default function SkillsPage() {
 
       {error && <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 8 }}>{error}</div>}
 
-      <div style={{ display: 'flex', gap: 4, marginBottom: 20 }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, alignItems: 'center' }}>
         <button type="button" className={`btn ${tab === 'assigned' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('assigned')}>Assigned ({assigned.length})</button>
         <button type="button" className={`btn ${tab === 'marketplace' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('marketplace')}>Marketplace ({marketplaceItems.length})</button>
         <button type="button" className={`btn ${tab === 'my-skills' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('my-skills')}>My Skills ({userSkills.length})</button>
+        {tab !== 'assigned' && (
+          <div style={{ marginLeft: 'auto' }}>
+            <ViewToggle value={viewMode} onChange={setViewMode} />
+          </div>
+        )}
       </div>
 
       {loading && tab !== 'assigned' ? (
@@ -218,7 +226,7 @@ export default function SkillsPage() {
             <div className="empty-state-sub">Create your own skill and share it in the marketplace</div>
             <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setCreateOpen(true)}>Create Skill</button>
           </div>
-        ) : (
+        ) : viewMode === 'card' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
             {userSkills.map((s) => (
               <div key={s.id} className="card" style={{ overflow: 'hidden' }}>
@@ -242,6 +250,43 @@ export default function SkillsPage() {
               </div>
             ))}
           </div>
+        ) : (
+          <div style={{ ...tableWrapStyle, overflowX: 'auto' }}>
+            <table style={tableStyle}>
+              <thead>
+                <tr style={theadRowStyle}>
+                  <th style={thStyle}>Name</th>
+                  <th style={thStyle}>Description</th>
+                  <th style={thStyle}>Category</th>
+                  <th style={thStyle}>Tags</th>
+                  <th style={thStyle}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {userSkills.map((s) => (
+                  <tr key={s.id} style={trStyle}>
+                    <td style={{ ...tdStyle, fontWeight: 600 }}>
+                      {s.name}{' '}
+                      {s.shared && <span className="badge badge-green">Shared</span>}
+                    </td>
+                    <td style={tdMutedStyle}>{s.description || '—'}</td>
+                    <td style={tdMutedStyle}>{s.category} · v{s.version}</td>
+                    <td style={tdMutedStyle}>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {s.tags?.length ? s.tags.map((t) => <span key={t} className="badge badge-gray">{t}</span>) : '—'}
+                      </div>
+                    </td>
+                    <td style={tdStyle}>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button type="button" className={`btn btn-sm ${s.shared ? 'btn-secondary' : 'btn-primary'}`} onClick={() => toggleShare(s.id)}>{s.shared ? 'Unshare' : 'Share'}</button>
+                        <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserSkill(s.id)}>Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )
       ) : (
         <>
@@ -250,7 +295,7 @@ export default function SkillsPage() {
           </div>
           {marketplaceItems.length === 0 ? (
             <div className="empty-state"><div className="empty-state-title">No skills found</div></div>
-          ) : (
+          ) : viewMode === 'card' ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
               {marketplaceItems.map((s) => {
                 const stat = stats[s.slug] ?? { likes: 0, installs: 0, liked: false };
@@ -285,6 +330,49 @@ export default function SkillsPage() {
                   </div>
                 );
               })}
+            </div>
+          ) : (
+            <div style={{ ...tableWrapStyle, overflowX: 'auto' }}>
+              <table style={tableStyle}>
+                <thead>
+                  <tr style={theadRowStyle}>
+                    <th style={thStyle}>Name</th>
+                    <th style={thStyle}>Description</th>
+                    <th style={thStyle}>Category</th>
+                    <th style={thStyle}>Stats</th>
+                    <th style={thStyle}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {marketplaceItems.map((s) => {
+                    const stat = stats[s.slug] ?? { likes: 0, installs: 0, liked: false };
+                    const installed = installedSlugs.has(s.slug);
+                    return (
+                      <tr key={s.slug} style={trStyle}>
+                        <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          <span style={{ marginRight: 6 }}>{(s as { emoji?: string }).emoji ?? '✨'}</span>{s.name}
+                        </td>
+                        <td style={tdMutedStyle}>{s.description || '—'}</td>
+                        <td style={tdMutedStyle}>
+                          {s.category ? <span className="badge badge-gray" style={{ fontSize: 10 }}>{s.category}</span> : '—'}
+                          {s.author && <div style={{ fontSize: 11, marginTop: 2 }}>by {s.author}</div>}
+                        </td>
+                        <td style={{ ...tdMutedStyle, whiteSpace: 'nowrap' }}>
+                          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? '#ef4444' : 'var(--muted)' }} title={stat.liked ? 'Unlike' : 'Like'} onClick={() => toggleLike(s.slug)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
+                          <span style={{ marginLeft: 10, fontSize: 11 }}>⬇️ {stat.installs}</span>
+                        </td>
+                        <td style={tdStyle}>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                            {installed ? <button type="button" className="btn btn-danger btn-sm" onClick={() => unassign(s.slug)}>Uninstall</button> : <button type="button" className="btn btn-primary btn-sm" onClick={() => assign(s.slug)}>Install</button>}
+                            <ArtifactAssigner artifactType="skill" artifactSlug={s.slug} artifactName={s.name} />
+                            <Link href={`/skills/${encodeURIComponent(s.slug)}`} className="btn btn-secondary btn-sm">View</Link>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </>

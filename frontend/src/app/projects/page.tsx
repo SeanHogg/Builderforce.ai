@@ -13,6 +13,7 @@ import { ProjectCard } from '@/components/ProjectCard';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { UpgradeModal } from '@/components/UpgradeModal';
+import { ViewToggle } from '@/components/ViewToggle';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 
 /**
@@ -191,40 +192,7 @@ export default function ProjectsPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>Projects</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ display: 'flex', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 2 }}>
-              <button
-                type="button"
-                onClick={() => setViewMode('card')}
-                style={{
-                  padding: '6px 12px',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  border: 'none',
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                  background: viewMode === 'card' ? 'var(--coral-bright)' : 'transparent',
-                  color: viewMode === 'card' ? '#fff' : 'var(--text-secondary)',
-                }}
-              >
-                Card
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('table')}
-                style={{
-                  padding: '6px 12px',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  border: 'none',
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                  background: viewMode === 'table' ? 'var(--coral-bright)' : 'transparent',
-                  color: viewMode === 'table' ? '#fff' : 'var(--text-secondary)',
-                }}
-              >
-                List
-              </button>
-            </div>
+            <ViewToggle value={viewMode} onChange={setViewMode} />
             <button
               type="button"
               onClick={() => setShowForm(true)}

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { specsApi, type Spec } from '@/lib/builderforceApi';
 import { ChatMessageContent } from './ChatMessageContent';
 import { ConfirmDialog } from './ConfirmDialog';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 
 export interface PRDsContentProps {
   projectId: number;
@@ -23,7 +24,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
   const [specs, setSpecs] = useState<Spec[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [showAddModal, setShowAddModal] = useState(false);
   const [addGoal, setAddGoal] = useState('');
   const [addPrd, setAddPrd] = useState('');
@@ -120,40 +121,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ display: 'flex', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 2 }}>
-            <button
-              type="button"
-              onClick={() => setViewMode('card')}
-              style={{
-                padding: '6px 12px',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                border: 'none',
-                borderRadius: 6,
-                cursor: 'pointer',
-                background: viewMode === 'card' ? 'var(--coral-bright)' : 'transparent',
-                color: viewMode === 'card' ? '#fff' : 'var(--text-secondary)',
-              }}
-            >
-              Card
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('list')}
-              style={{
-                padding: '6px 12px',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                border: 'none',
-                borderRadius: 6,
-                cursor: 'pointer',
-                background: viewMode === 'list' ? 'var(--coral-bright)' : 'transparent',
-                color: viewMode === 'list' ? '#fff' : 'var(--text-secondary)',
-              }}
-            >
-              List
-            </button>
-          </div>
+          <ViewToggle value={viewMode} onChange={setViewMode} />
           <Link
             href={brainstormUrl}
             style={{

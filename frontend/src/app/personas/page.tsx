@@ -13,6 +13,8 @@ import {
 import { BUILTIN_PERSONAS, userPersonasKey, type Persona, type UserPersona } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
 import { PersonaAssignmentsContent } from '@/components/PersonaAssignmentsContent';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
 function loadUserPersonas(tenantId: string): UserPersona[] {
   if (typeof window === 'undefined') return [];
@@ -33,6 +35,7 @@ export default function PersonasPage() {
   const tenantNum = Number(tenantId);
 
   const [tab, setTab] = useState<'assigned' | 'marketplace' | 'my-personas'>('assigned');
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -203,7 +206,7 @@ export default function PersonasPage() {
         <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 8 }}>{error}</div>
       )}
 
-      <div style={{ display: 'flex', gap: 4, marginBottom: 20 }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, alignItems: 'center' }}>
         <button type="button" className={`btn ${tab === 'assigned' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('assigned')}>
           Assigned ({assigned.length})
         </button>
@@ -213,6 +216,11 @@ export default function PersonasPage() {
         <button type="button" className={`btn ${tab === 'my-personas' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('my-personas')}>
           My Personas ({userPersonas.length})
         </button>
+        {tab !== 'assigned' && (
+          <div style={{ marginLeft: 'auto' }}>
+            <ViewToggle value={viewMode} onChange={setViewMode} />
+          </div>
+        )}
       </div>
 
       {loading && tab !== 'assigned' ? (
@@ -234,7 +242,7 @@ export default function PersonasPage() {
             <div className="empty-state-sub">Create your own persona to shape how your agents think and communicate</div>
             <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setCreateOpen(true)}>Create Persona</button>
           </div>
-        ) : (
+        ) : viewMode === 'card' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
             {userPersonas.map((p) => (
               <div key={p.id} className="card" style={{ overflow: 'hidden' }}>
@@ -266,6 +274,42 @@ export default function PersonasPage() {
               </div>
             ))}
           </div>
+        ) : (
+          <div style={{ ...tableWrapStyle, overflowX: 'auto' }}>
+            <table style={tableStyle}>
+              <thead>
+                <tr style={theadRowStyle}>
+                  <th style={thStyle}>Name</th>
+                  <th style={thStyle}>Description</th>
+                  <th style={thStyle}>Tags</th>
+                  <th style={thStyle}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {userPersonas.map((p) => (
+                  <tr key={p.id} style={trStyle}>
+                    <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      <span style={{ marginRight: 6 }}>🎭</span>{p.name}
+                      {p.shared && <span className="badge badge-green" style={{ marginLeft: 6 }}>Shared</span>}
+                    </td>
+                    <td style={tdMutedStyle}>{p.description || '—'}</td>
+                    <td style={tdMutedStyle}>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {p.tags.length ? p.tags.map((t) => <span key={t} className="badge badge-gray">{t}</span>) : '—'}
+                      </div>
+                    </td>
+                    <td style={tdStyle}>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button type="button" className={`btn btn-sm ${p.shared ? 'btn-secondary' : 'btn-primary'}`} onClick={() => toggleShare(p.id)}>{p.shared ? 'Unshare' : 'Share'}</button>
+                        <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserPersona(p.id)}>Delete</button>
+                        <ArtifactAssigner artifactType="persona" artifactSlug={p.slug} artifactName={p.name} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )
       ) : (
         <>
@@ -281,7 +325,7 @@ export default function PersonasPage() {
           </div>
           {filteredMarketplace.length === 0 ? (
             <div className="empty-state"><div className="empty-state-title">No personas found</div></div>
-          ) : (
+          ) : viewMode === 'card' ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
               {filteredMarketplace.map((p) => {
                 const stat = stats[p.name] ?? { likes: 0, installs: 0, liked: false };
@@ -350,6 +394,60 @@ export default function PersonasPage() {
                   </div>
                 );
               })}
+            </div>
+          ) : (
+            <div style={{ ...tableWrapStyle, overflowX: 'auto' }}>
+              <table style={tableStyle}>
+                <thead>
+                  <tr style={theadRowStyle}>
+                    <th style={thStyle}>Name</th>
+                    <th style={thStyle}>Description</th>
+                    <th style={thStyle}>Source / Tags</th>
+                    <th style={thStyle}>Stats</th>
+                    <th style={thStyle}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredMarketplace.map((p) => {
+                    const stat = stats[p.name] ?? { likes: 0, installs: 0, liked: false };
+                    const installed = installedSlugs.has(p.name);
+                    return (
+                      <tr key={p.name} style={trStyle}>
+                        <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          <span style={{ marginRight: 6 }}>🎭</span>{p.name}
+                        </td>
+                        <td style={tdMutedStyle}>{p.description || '—'}</td>
+                        <td style={tdMutedStyle}>
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                            {sourceBadge(p.source)}
+                            {(p.tags ?? []).slice(0, 2).map((t) => <span key={t} className="badge badge-gray">{t}</span>)}
+                          </div>
+                        </td>
+                        <td style={{ ...tdMutedStyle, whiteSpace: 'nowrap' }}>
+                          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? 'Unlike' : 'Like'} onClick={() => toggleLike(p.name)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
+                          <span style={{ marginLeft: 10, fontSize: 11 }}>⬇️ {stat.installs}</span>
+                        </td>
+                        <td style={tdStyle}>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                            {installed ? (
+                              <>
+                                <button type="button" className="btn btn-danger btn-sm" onClick={() => unassignPersona(p.name)}>Uninstall</button>
+                                <ArtifactAssigner artifactType="persona" artifactSlug={p.name} artifactName={p.name} />
+                              </>
+                            ) : (
+                              <>
+                                <button type="button" className="btn btn-primary btn-sm" onClick={() => assignPersona(p.name)}>Install</button>
+                                <ArtifactAssigner artifactType="persona" artifactSlug={p.name} artifactName={p.name} />
+                                <Link href={`/personas/${encodeURIComponent(p.name)}`} className="btn btn-secondary btn-sm">View</Link>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </>

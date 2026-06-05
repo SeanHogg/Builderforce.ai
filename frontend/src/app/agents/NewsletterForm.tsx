@@ -30,7 +30,7 @@ export default function NewsletterForm({ source = 'agents' }: { source?: string 
   return (
     <section className="cc-newsletter">
       <h2 className="cc-h2"><span className="cc-agentHost-accent">⟩</span> Stay in the Loop</h2>
-      <p className="cc-prose">Get updates on new features, integrations, and lobster wisdom. No spam, unsubscribe anytime.</p>
+      <p className="cc-prose">Get updates on new features, integrations, and agent wisdom. No spam, unsubscribe anytime.</p>
       <form className="cc-nl-form" onSubmit={handleSubmit}>
         <input
           type="email"

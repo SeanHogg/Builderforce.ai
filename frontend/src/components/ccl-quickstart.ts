@@ -40,16 +40,16 @@ export class CclQuickstart extends LitElement {
     quickOnboard: CommentSet;
   } = {
     oneliner: {
-      stable: "# Works everywhere. Installs everything. You're welcome. 🦞",
-      beta: "# Living on the edge. Bugs are features you found first. 🦞",
+      stable: "# Works everywhere. Installs everything. You're welcome.",
+      beta: "# Living on the edge. Bugs are features you found first.",
     },
     quickInstall: {
       stable: "# Install BuilderForce Agents",
       beta: "# Install BuilderForce Agents (beta) — Fresh from the lab 🧪",
     },
     quickOnboard: {
-      stable: "# Meet your lobster",
-      beta: "# Meet your experimental lobster",
+      stable: "# Meet your agent",
+      beta: "# Meet your experimental agent",
     },
   };
 
@@ -260,7 +260,7 @@ export class CclQuickstart extends LitElement {
             <div class="macos-app-content">
               <div class="macos-description">
                 <span class="macos-tagline">Companion App (Beta)</span>
-                <span class="macos-subtitle">Menubar access to your lobster. Works great alongside the CLI.</span>
+                <span class="macos-subtitle">Menubar access to your agent. Works great alongside the CLI.</span>
               </div>
               <a href="https://github.com/SeanHogg/BuilderForce Agents/releases/latest" class="macos-download-btn" target="_blank" rel="noopener">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

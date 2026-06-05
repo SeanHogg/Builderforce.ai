@@ -7,6 +7,8 @@ import {
   type CalendarCell,
   type ContributorCalendar,
 } from '@/lib/builderforceApi';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -120,6 +122,7 @@ export default function ContributorsPage() {
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [selected, setSelected] = useState<number | null>(null); // null = whole team
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
 
   const load = () => {
     setLoading(true);
@@ -206,33 +209,70 @@ export default function ContributorsPage() {
 
           {/* Per-contributor rows */}
           <div style={cardStyle}>
-            <h2 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 12px' }}>Leaderboard</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {data.contributors.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setSelected(c.id)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '8px 10px', borderRadius: 8,
-                    background: selected === c.id ? 'var(--bg-hover, rgba(255,255,255,0.04))' : 'transparent',
-                    border: '1px solid transparent', cursor: 'pointer', textAlign: 'left', width: '100%',
-                  }}
-                >
-                  <span style={{ flex: '0 0 180px', display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                    <span style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.displayName}</span>
-                  </span>
-                  <KindBadge kind={c.kind} />
-                  <span style={{ flex: 1 }} />
-                  {c.jobTitle && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{c.jobTitle}</span>}
-                  <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{c.total.toLocaleString()}</span>
-                </button>
-              ))}
-              {data.contributors.length === 0 && (
-                <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: 8 }}>
-                  No contributors yet. Connect a repo integration to ingest human activity, or click <b>Sync AI agents</b> to add your agentHosts.
-                </div>
-              )}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Leaderboard</h2>
+              <ViewToggle value={viewMode} onChange={setViewMode} />
             </div>
+            {data.contributors.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: 8 }}>
+                No contributors yet. Connect a repo integration to ingest human activity, or click <b>Sync AI agents</b> to add your agentHosts.
+              </div>
+            ) : viewMode === 'card' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {data.contributors.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setSelected(c.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '8px 10px', borderRadius: 8,
+                      background: selected === c.id ? 'var(--bg-hover, rgba(255,255,255,0.04))' : 'transparent',
+                      border: '1px solid transparent', cursor: 'pointer', textAlign: 'left', width: '100%',
+                    }}
+                  >
+                    <span style={{ flex: '0 0 180px', display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                      <span style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.displayName}</span>
+                    </span>
+                    <KindBadge kind={c.kind} />
+                    <span style={{ flex: 1 }} />
+                    {c.jobTitle && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{c.jobTitle}</span>}
+                    <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{c.total.toLocaleString()}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div style={{ ...tableWrapStyle, overflowX: 'auto' }}>
+                <table style={tableStyle}>
+                  <thead>
+                    <tr style={theadRowStyle}>
+                      <th style={thStyle}>#</th>
+                      <th style={thStyle}>Contributor</th>
+                      <th style={thStyle}>Type</th>
+                      <th style={thStyle}>Role</th>
+                      <th style={{ ...thStyle, textAlign: 'right' }}>Contributions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...data.contributors].sort((a, b) => b.total - a.total).map((c, i) => (
+                      <tr
+                        key={c.id}
+                        style={{
+                          ...trStyle,
+                          cursor: 'pointer',
+                          background: selected === c.id ? 'var(--bg-hover, rgba(255,255,255,0.04))' : 'transparent',
+                        }}
+                        onClick={() => setSelected(c.id)}
+                      >
+                        <td style={{ ...tdMutedStyle, fontVariantNumeric: 'tabular-nums' }}>{i + 1}</td>
+                        <td style={{ ...tdStyle, fontWeight: 600 }}>{c.displayName}</td>
+                        <td style={tdStyle}><KindBadge kind={c.kind} /></td>
+                        <td style={tdMutedStyle}>{c.jobTitle ?? '—'}</td>
+                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{c.total.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </>
       )}

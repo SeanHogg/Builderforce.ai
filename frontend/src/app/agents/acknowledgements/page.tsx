@@ -49,7 +49,7 @@ export default function AcknowledgementsPage() {
       </p>
 
       <section>
-        <h2>Built on OpenAgentHost 🦞</h2>
+        <h2>Built on OpenAgentHost</h2>
         <p>
           BuilderForce Agents started as a fork of <a href="https://openclaw.ai" target="_blank" rel="noopener">OpenAgentHost</a> —
           the open-source personal AI assistant built by the OpenAgentHost team. OpenAgentHost gave us a battle-tested gateway

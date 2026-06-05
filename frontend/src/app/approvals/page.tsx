@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { approvalsApi, agentHosts, type Approval, type ApprovalStatus, type AgentHost } from '@/lib/builderforceApi';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 
 const STATUS_OPTIONS: Array<{ value: '' | ApprovalStatus; label: string }> = [
   { value: '', label: 'All statuses' },
@@ -39,6 +40,7 @@ export default function ApprovalsPage() {
   const [status, setStatus] = useState<'' | ApprovalStatus>('pending');
   const [agentHostId, setAgentHostId] = useState<string>('');
   const [query, setQuery] = useState<string>('');
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -108,11 +110,14 @@ export default function ApprovalsPage() {
   return (
     <div style={{ flex: 1, color: 'var(--text-primary)' }}>
       <main className="max-w-6xl mx-auto px-4 py-5">
-        <div style={{ marginBottom: 20 }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 4 }}>Approvals</h1>
-          <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
-            Review pending high-risk actions requested by agentHosts and approve or reject them.
-          </p>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: 20 }}>
+          <div>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 4 }}>Approvals</h1>
+            <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
+              Review pending high-risk actions requested by agentHosts and approve or reject them.
+            </p>
+          </div>
+          <ViewToggle value={viewMode} onChange={setViewMode} />
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
@@ -171,6 +176,7 @@ export default function ApprovalsPage() {
           </div>
         )}
 
+        {viewMode === 'table' ? (
         <div className="table-wrap">
           <table className="data-table" style={{ fontSize: 13 }}>
             <thead>
@@ -246,6 +252,83 @@ export default function ApprovalsPage() {
             </tbody>
           </table>
         </div>
+        ) : (
+          loading ? (
+            <div className="text-muted" style={{ fontSize: 13, padding: '16px 0' }}>Loading approvals...</div>
+          ) : filtered.length === 0 ? (
+            <div className="text-muted" style={{ fontSize: 13, padding: '16px 0' }}>No approvals found</div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+              {filtered.map((row) => {
+                const isPending = row.status === 'pending';
+                const busy = busyId === row.id;
+                return (
+                  <div
+                    key={row.id}
+                    style={{
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 12,
+                      padding: 18,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14, wordBreak: 'break-word' }}>
+                        {row.actionType}
+                      </span>
+                      <span className={statusClass(row.status)} style={{ flexShrink: 0 }}>{row.status}</span>
+                    </div>
+
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>
+                      {row.description}
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      {[
+                        { label: 'AgentHost', value: row.agentHostId != null ? agentHostNameById.get(row.agentHostId) ?? `#${row.agentHostId}` : '-' },
+                        { label: 'Requested By', value: row.requestedBy ?? '-' },
+                        { label: 'Requested', value: fmtDate(row.createdAt) },
+                        { label: 'Expires', value: fmtDate(row.expiresAt) },
+                        { label: 'Decision', value: row.reviewedBy ? `${row.reviewedBy}${row.reviewNote ? `: ${row.reviewNote}` : ''}` : '-' },
+                      ].map(({ label, value }) => (
+                        <div key={label}>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{value}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {isPending ? (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          disabled={busy}
+                          onClick={() => void decide(row, 'approved')}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          disabled={busy}
+                          onClick={() => void decide(row, 'rejected')}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-muted" style={{ fontSize: 12 }}>No actions available</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )
+        )}
       </main>
     </div>
   );

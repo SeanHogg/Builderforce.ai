@@ -11,8 +11,10 @@ import { ChatInput } from '@/components/ChatInput';
 import { ProjectCard } from '@/components/ProjectCard';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import MascotIcon from '@/components/MascotIcon';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { OnboardingStepper } from '@/components/OnboardingStepper';
+import { ViewToggle } from '@/components/ViewToggle';
 import { agentHosts, tasksApi, runtimeApi, approvalsApi, isAwaitingApprovalExecution, type AgentHost, type Task } from '@/lib/builderforceApi';
 
 const ONBOARDING_DISMISSED_KEY = 'bf_onboarding_dismissed';
@@ -382,40 +384,7 @@ export default function DashboardPage() {
           >
             <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Projects</h2>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ display: 'flex', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 2 }}>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('card')}
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    border: 'none',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    background: viewMode === 'card' ? 'var(--coral-bright)' : 'transparent',
-                    color: viewMode === 'card' ? '#fff' : 'var(--text-secondary)',
-                  }}
-                >
-                  Card
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('table')}
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    border: 'none',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    background: viewMode === 'table' ? 'var(--coral-bright)' : 'transparent',
-                    color: viewMode === 'table' ? '#fff' : 'var(--text-secondary)',
-                  }}
-                >
-                  List
-                </button>
-              </div>
+              <ViewToggle value={viewMode} onChange={setViewMode} />
               <Link
                 href="/projects"
                 style={{
@@ -724,7 +693,7 @@ export default function DashboardPage() {
                 border: '1px solid var(--border-subtle)',
               }}
             >
-              <div style={{ fontSize: 48, marginBottom: 12 }}>🦀</div>
+              <div style={{ marginBottom: 12 }}><MascotIcon size={48} /></div>
               <div style={{ fontWeight: 600, marginBottom: 4 }}>No agents registered</div>
               <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
                 Register an agent in Workforce to start delegating work
