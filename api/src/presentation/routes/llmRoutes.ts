@@ -20,7 +20,7 @@ import {
   type LlmUsage,
 } from '../../application/llm/LlmProxyService';
 import { logTrace } from '../../application/llm/traceLogger';
-import { callOpenRouterEmbeddings } from '../../application/llm/vendors';
+import { callOpenRouterEmbeddings, pickUsage } from '../../application/llm/vendors';
 import {
   imageProxyForPlan,
   imageProductNameForPlan,
@@ -101,9 +101,11 @@ function logUsage(
         userId,
         llmProduct,
         model,
-        promptTokens:     usage.promptTokens,
-        completionTokens: usage.completionTokens,
-        totalTokens:      usage.totalTokens,
+        promptTokens:        usage.promptTokens,
+        completionTokens:    usage.completionTokens,
+        totalTokens:         usage.totalTokens,
+        cacheReadTokens:     usage.cacheReadTokens     ?? 0,
+        cacheCreationTokens: usage.cacheCreationTokens ?? 0,
         retries,
         streamed,
         metadata: metadata ? JSON.stringify(metadata) : null,
@@ -413,12 +415,17 @@ function wrapStreamForUsage(
         } else if (trimmed === 'data: [DONE]' && lastDataJson) {
           try {
             const parsed = JSON.parse(lastDataJson) as Record<string, unknown>;
-            const raw = parsed['usage'] as { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
-            if (raw) {
+            const rawUsage = parsed['usage'];
+            if (rawUsage) {
+              // Reuse the vendor usage normalizer so the streaming path captures
+              // the same prompt-cache breakdown (cache_read/creation) as JSON.
+              const u = pickUsage(rawUsage);
               onUsage({
-                promptTokens:     raw.prompt_tokens     ?? 0,
-                completionTokens: raw.completion_tokens ?? 0,
-                totalTokens:      raw.total_tokens      ?? 0,
+                promptTokens:     u.prompt_tokens     ?? 0,
+                completionTokens: u.completion_tokens ?? 0,
+                totalTokens:      u.total_tokens      ?? 0,
+                ...(u.cache_read_tokens     != null ? { cacheReadTokens:     u.cache_read_tokens     } : {}),
+                ...(u.cache_creation_tokens != null ? { cacheCreationTokens: u.cache_creation_tokens } : {}),
               });
             }
           } catch { /* ignore parse errors */ }
