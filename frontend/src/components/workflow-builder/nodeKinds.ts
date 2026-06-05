@@ -19,7 +19,7 @@ export interface ConfigField {
   placeholder?: string;
 }
 
-export type NodeGroup = 'Trigger' | 'LLM Logic' | 'ETL' | 'Agent' | 'Output';
+export type NodeGroup = 'Trigger' | 'LLM Logic' | 'Integrations' | 'ETL' | 'Agent' | 'Output';
 
 export interface NodeKindMeta {
   kind: WorkflowNodeKind;
@@ -43,7 +43,17 @@ export const NODE_KINDS: NodeKindMeta[] = [
     blurb: 'Entry point that starts the workflow.',
     defaultConfig: { triggerType: 'manual' },
     fields: [
-      { key: 'triggerType', label: 'Trigger type', type: 'select', options: ['manual', 'webhook', 'schedule', 'board-event'] },
+      {
+        key: 'triggerType', label: 'Trigger type', type: 'select',
+        // Includes marketing / data-collection events so a workflow can start
+        // from a captured signal (form, signup, purchase, email engagement…).
+        options: [
+          'manual', 'webhook', 'schedule', 'board-event',
+          'form-submit', 'page-view', 'signup', 'purchase',
+          'email-open', 'email-click', 'rss', 'inbound-email', 'integration',
+        ],
+      },
+      { key: 'source', label: 'Source / label', type: 'text', placeholder: 'e.g. pricing-page form, newsletter' },
     ],
   },
   {
@@ -91,6 +101,36 @@ export const NODE_KINDS: NodeKindMeta[] = [
       { key: 'source', label: 'Source text', type: 'textarea', placeholder: 'Text/URL to ingest (ingest op)' },
       { key: 'namespace', label: 'Namespace', type: 'text', placeholder: 'KB namespace (optional)' },
       { key: 'limit', label: 'Top-K', type: 'number' },
+    ],
+  },
+  {
+    kind: 'llm',
+    label: 'Call LLM',
+    icon: '✨',
+    group: 'LLM Logic',
+    accent: '#a855f7',
+    blurb: 'Call a model provider (OpenAI, Anthropic, Gemini…) via the gateway.',
+    defaultConfig: { provider: 'openai', model: '', system: '', prompt: '', temperature: 0.7 },
+    fields: [
+      { key: 'provider', label: 'Provider', type: 'text', placeholder: 'openai, anthropic, gemini, mistral…' },
+      { key: 'model', label: 'Model (blank = provider default)', type: 'text', placeholder: 'e.g. gpt-4o, claude-opus-4-8' },
+      { key: 'system', label: 'System prompt', type: 'textarea', placeholder: 'Optional system instructions' },
+      { key: 'prompt', label: 'Prompt', type: 'textarea', placeholder: 'User prompt — supports {{input}}' },
+      { key: 'temperature', label: 'Temperature', type: 'number' },
+    ],
+  },
+  {
+    kind: 'mcp',
+    label: 'MCP Tool',
+    icon: '🧩',
+    group: 'Integrations',
+    accent: '#38bdf8',
+    blurb: 'Invoke an MCP server / SaaS integration tool.',
+    defaultConfig: { integration: '', operation: '', params: '{}' },
+    fields: [
+      { key: 'integration', label: 'Integration', type: 'text', placeholder: 'e.g. github, postgres, slack' },
+      { key: 'operation', label: 'Operation', type: 'text', placeholder: 'e.g. create-issue, query' },
+      { key: 'params', label: 'Params (JSON)', type: 'textarea', placeholder: '{ "title": "..." }' },
     ],
   },
   {
@@ -160,4 +200,4 @@ export const NODE_KIND_MAP: Record<WorkflowNodeKind, NodeKindMeta> = NODE_KINDS.
   {} as Record<WorkflowNodeKind, NodeKindMeta>,
 );
 
-export const NODE_GROUPS: NodeGroup[] = ['Trigger', 'LLM Logic', 'Agent', 'ETL', 'Output'];
+export const NODE_GROUPS: NodeGroup[] = ['Trigger', 'LLM Logic', 'Integrations', 'Agent', 'ETL', 'Output'];

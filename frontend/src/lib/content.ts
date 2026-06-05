@@ -225,6 +225,200 @@ export const COMPARISON: ComparisonRow[] = [
   { feature: 'Zero GPU bills', builderforce: '✅', genericNotebooks: '❌', cloudTraining: '⚠️' },
 ];
 
+/* ════════════════════ COMPETITIVE COMPARISON (vs other AI coding tools) ════════════════════ */
+
+export interface CompetitorCol {
+  /** Stable column key — must match the keys used in CompetitiveRow.values. */
+  key: string;
+  label: string;
+}
+
+/** Rival tools in display order. Builderforce.ai is always the first, highlighted column. */
+export const COMPETITORS: CompetitorCol[] = [
+  { key: 'copilot', label: 'GitHub Copilot' },
+  { key: 'cursor', label: 'Cursor / Windsurf' },
+  { key: 'claudeCode', label: 'Claude Code' },
+  { key: 'devin', label: 'Devin' },
+  { key: 'openhands', label: 'OpenHands' },
+  { key: 'aider', label: 'Aider' },
+  { key: 'continueDev', label: 'Continue.dev' },
+];
+
+export interface CompetitiveRow {
+  feature: string;
+  /** Optional Builderforce-only qualifier shown under the feature name. */
+  note?: string;
+  /** Cell value per column key — `builderforce` plus every COMPETITORS key (✅ / ⚠️ / ❌ or short text). */
+  values: Record<string, string>;
+}
+
+export interface CompetitiveCategory {
+  id: string;
+  title: string;
+  blurb: string;
+  rows: CompetitiveRow[];
+}
+
+/**
+ * The full "Builderforce.ai vs the field" matrix, grouped into decision-driving
+ * themes. Single source of truth for the /compare page and homepage teaser.
+ */
+export const COMPETITIVE_COMPARISON: CompetitiveCategory[] = [
+  {
+    id: 'ownership',
+    title: 'Ownership & Deployment',
+    blurb: 'Where the platform runs and who controls it determines cost, data residency, and lock-in.',
+    rows: [
+      { feature: 'Price', values: { builderforce: 'Free (MIT)', copilot: '$19/user/mo', cursor: '$20/user/mo', claudeCode: 'Usage-based', devin: '$500/mo', openhands: 'Free (MIT)', aider: 'Free (MIT)', continueDev: 'Free (MIT)' } },
+      { feature: 'Self-hosted / open source', note: 'MIT, fully self-hosted', values: { builderforce: '✅', copilot: '❌ MS cloud', cursor: '❌ Vendor cloud', claudeCode: '❌ Anthropic cloud', devin: '❌ Cloud only', openhands: '✅', aider: '✅', continueDev: '✅' } },
+      { feature: 'Air-gapped / private deployment', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '✅', aider: '✅', continueDev: '✅' } },
+      { feature: 'RBAC + audit trails', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '⚠️ Basic', openhands: '❌', aider: '❌', continueDev: '❌' } },
+    ],
+  },
+  {
+    id: 'model-flexibility',
+    title: 'Model & Tooling Flexibility',
+    blurb: 'Freedom to choose any model, run offline, and integrate with the open MCP ecosystem.',
+    rows: [
+      { feature: 'Any model provider', note: '30+ providers', values: { builderforce: '✅', copilot: '❌ GPT/Claude', cursor: '⚠️ Limited', claudeCode: '❌ Anthropic only', devin: '❌ Proprietary', openhands: '✅', aider: '✅', continueDev: '✅' } },
+      { feature: 'Local / offline models (Ollama)', values: { builderforce: '✅', copilot: '❌', cursor: '⚠️', claudeCode: '❌', devin: '❌', openhands: '✅', aider: '✅', continueDev: '✅' } },
+      { feature: 'IDE-independent', note: 'Any channel / CLI', values: { builderforce: '✅', copilot: '❌ VS Code', cursor: '❌ VS Code fork', claudeCode: '⚠️ Terminal', devin: '✅ Web UI', openhands: '✅ Web/CLI', aider: '✅ CLI', continueDev: '❌ Extension' } },
+      { feature: 'MCP — consume', values: { builderforce: '✅', copilot: '❌', cursor: '✅ Native', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '✅ Native' } },
+      { feature: 'MCP — expose as server', note: '/mcp endpoint', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+    ],
+  },
+  {
+    id: 'orchestration',
+    title: 'Multi-Agent Orchestration',
+    blurb: 'Coordinating specialized agents across structured workflows, not single-pass prompts.',
+    rows: [
+      { feature: 'Multi-agent orchestration', note: '7 roles + dependency DAG', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+      { feature: 'Planning workflow', note: 'PRD → Arch → Tasks via /spec', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '⚠️ Basic plan', openhands: '❌', aider: '❌', continueDev: '❌' } },
+      { feature: 'Bug-fix workflow', note: 'Analyzer → Creator → Reviewer', values: { builderforce: '✅', copilot: '⚠️ Inline', cursor: '⚠️ Inline', claudeCode: '⚠️ Inline', devin: '✅', openhands: '⚠️ Single-pass', aider: '⚠️ Single-pass', continueDev: '⚠️ Inline' } },
+      { feature: 'Refactor workflow', note: 'Reviewer → Refactor → Tests', values: { builderforce: '✅', copilot: '❌', cursor: '⚠️ Single-pass', claudeCode: '⚠️ Single-pass', devin: '⚠️ Single-pass', openhands: '⚠️ Single-pass', aider: '⚠️ Single-pass', continueDev: '❌' } },
+      { feature: 'Adversarial review pass', note: 'Built-in workflow', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+      { feature: 'Custom agent personas / roles', note: 'YAML in .builderforce/personas/', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+    ],
+  },
+  {
+    id: 'governance',
+    title: 'Governance & Reliability',
+    blurb: 'Approval gates, recovery, and automation that make agents safe to run in production.',
+    rows: [
+      { feature: 'Human-in-the-loop approval gates', note: 'Suspend + approve via portal', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '⚠️ Basic', openhands: '❌', aider: '❌', continueDev: '❌' } },
+      { feature: 'Self-healing / error recovery', note: 'Auto-detect + rerun', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '⚠️ Retry only', openhands: '⚠️ Retry only', aider: '❌', continueDev: '❌' } },
+      { feature: 'Scheduled automation (cron)', note: 'Builderforce-synced', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+      { feature: 'CI/CD pipeline integration', note: 'CLI + webhook triggers', values: { builderforce: '✅', copilot: '⚠️ PR suggest', cursor: '❌', claudeCode: '⚠️ CLI only', devin: '⚠️ API', openhands: '⚠️ API', aider: '⚠️ CLI', continueDev: '❌' } },
+    ],
+  },
+  {
+    id: 'codebase-context',
+    title: 'Codebase Understanding & Editing',
+    blurb: 'How deeply the tool reads your repo and how cleanly it stages changes for review.',
+    rows: [
+      { feature: 'Codebase semantic search', values: { builderforce: '✅', copilot: '⚠️', cursor: '✅', claudeCode: '⚠️ Basic RAG', devin: '✅', openhands: '⚠️ Basic', aider: '⚠️ Git-aware', continueDev: '✅' } },
+      { feature: 'Deep AST + git-history analysis', values: { builderforce: '✅', copilot: '❌', cursor: '⚠️ Basic RAG', claudeCode: '⚠️ Basic RAG', devin: '⚠️ Basic RAG', openhands: '⚠️ Basic RAG', aider: '⚠️ Git-aware', continueDev: '⚠️ Basic RAG' } },
+      { feature: 'Staged diff / accept-reject', note: '/diff, /accept, /reject', values: { builderforce: '✅', copilot: '❌', cursor: '✅ Composer', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '✅ Git diff', continueDev: '✅ ⌘K diff' } },
+      { feature: 'Bundled skills', note: '53 built-in + marketplace', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+    ],
+  },
+  {
+    id: 'memory-fleet',
+    title: 'Memory & Fleet',
+    blurb: 'Persistent knowledge across sessions and coordination across machines.',
+    rows: [
+      { feature: 'Persistent project knowledge', note: '.builderforce/', values: { builderforce: '✅', copilot: '❌', cursor: '⚠️ In-session', claudeCode: '⚠️ In-session', devin: '⚠️ In-session', openhands: '❌', aider: '❌', continueDev: '❌' } },
+      { feature: 'Session handoffs', note: '/handoff + auto-load', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+      { feature: 'Workflow persistence across restarts', note: 'YAML checkpoint + resume', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '⚠️ Session-based', openhands: '❌', aider: '❌', continueDev: '❌' } },
+      { feature: 'Post-task knowledge loop', note: '.builderforce/memory/ auto-updated', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+      { feature: 'Agent-to-agent distributed delegation', note: 'remote:<id> dispatch', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+      { feature: 'Fleet / multi-machine coordination', note: 'Builderforce fleet registry', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+    ],
+  },
+  {
+    id: 'reach',
+    title: 'Channels & Reach',
+    blurb: 'Meeting your team where they already work, on any device.',
+    rows: [
+      { feature: 'Works in WhatsApp / Telegram / Slack', note: '15+ channels', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+      { feature: 'Voice + Talk mode', note: 'macOS / iOS / Android', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+      { feature: 'Mobile companion apps', note: 'iOS + Android', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+    ],
+  },
+];
+
+/* ════════════════════ COMPARE PAGE COPY ════════════════════ */
+
+export interface ComparePillar {
+  /** Emoji icon. */
+  icon: string;
+  title: string;
+  desc: string;
+}
+
+export interface CompareTeaser {
+  title: string;
+  blurb: string;
+  ctaLabel: string;
+  /** Differentiating capability names for the condensed homepage teaser. */
+  highlightFeatures: string[];
+}
+
+/** Narrative copy for the /compare page (and the homepage teaser). */
+export const COMPARE = {
+  seo: {
+    title: 'Builderforce.ai vs the Field: Multi-Agent Delivery Compared | Builderforce.ai',
+    description:
+      'See how Builderforce.ai compares to GitHub Copilot, Cursor, Windsurf, Claude Code, Devin, OpenHands, Aider and Continue.dev. Self-hosted, MIT-licensed, model-agnostic multi-agent orchestration with governance, audit and persistent memory.',
+    ogTitle: 'Builderforce.ai vs GitHub Copilot, Cursor, Claude Code, Devin & more',
+  },
+  hero: {
+    eyebrow: 'Builderforce.ai vs the field',
+    title: 'Purpose-built for multi-agent delivery, not file-level autocomplete',
+    subtitle:
+      'GitHub Copilot finishes your line. Cursor rewrites your function. Builderforce.ai plans the feature, coordinates a team of specialist agents to build, review and test it, governs every action with approvals and an audit trail, and remembers what your project decided last sprint. Self-hosted, MIT-licensed, and model-agnostic.',
+  },
+  intro:
+    'Most AI coding tools are powerful autocomplete engines that stop at the file boundary. Builderforce.ai operates one level up: it builds, trains and deploys an AI agent workforce, connects to your systems, and governs every action like an AI CTO, CIO and Security Officer. The tables below compare Builderforce.ai against the tools teams evaluate most often, focused on the capabilities that separate shipping a feature from finishing a line.',
+  pillars: [
+    {
+      icon: '🛡️',
+      title: 'Self-hosted, MIT-licensed, air-gapped',
+      desc: 'Your code and your agents run on your own machines. MIT-licensed with no subscription ceiling and a full air-gapped deployment path, so security and compliance teams keep control. Most rivals are closed SaaS that send your code to their cloud.',
+    },
+    {
+      icon: '🔀',
+      title: 'True multi-agent orchestration',
+      desc: 'Seven specialist roles coordinated through a dependency DAG run planning, bug-fix, refactor and adversarial-review workflows end to end. Copilot, Cursor, Claude Code, Devin and the rest drive a single agent making one suggestion at a time.',
+    },
+    {
+      icon: '🎛️',
+      title: 'Model freedom, no vendor lock-in',
+      desc: 'Route any task to any of 30+ providers, including fully local models via Ollama and self-managed Bedrock. Copilot is tied to GPT and Claude; Devin is proprietary. Builderforce.ai is IDE-independent and never tethered to one vendor.',
+    },
+    {
+      icon: '✅',
+      title: 'Governance, memory and fleet reach',
+      desc: 'Human-in-the-loop approval gates and a full audit trail wrap every action, persistent project memory lives in .builderforce/, and agent-to-agent distributed delegation spans machines and 15+ chat channels with voice and mobile companion apps.',
+    },
+  ] as ComparePillar[],
+  quotable:
+    'Builderforce.ai is the only one of these tools purpose-built for multi-agent delivery: self-hosted, MIT-licensed, model-agnostic across 30+ providers, and governed by approvals and an audit trail, where the others optimize a single agent inside a single editor.',
+  teaser: {
+    title: 'Built for delivery, not just completion',
+    blurb:
+      'GitHub Copilot, Cursor, Claude Code and Devin drive a single agent. Builderforce.ai orchestrates a self-hosted, model-agnostic agent workforce with governance, audit and persistent memory. See the full comparison.',
+    ctaLabel: 'Compare Builderforce.ai vs the field',
+    highlightFeatures: [
+      'Multi-agent orchestration (7 roles + DAG)',
+      'Self-hosted + MIT + air-gapped',
+      '30+ model providers incl. local Ollama',
+      'Approval gates + audit trail',
+      'Persistent project memory in .builderforce/',
+    ],
+  } as CompareTeaser,
+} as const;
+
 /* ════════════════════ GETTING STARTED ════════════════════ */
 
 export const GETTING_STARTED_STEPS = [
@@ -308,6 +502,40 @@ export const PRICING_FAQ: FaqItem[] = [
   },
 ];
 
+/** Compare page FAQ — competitor-intent Q&As for "vs" search capture */
+export const COMPARE_FAQ: FaqItem[] = [
+  {
+    question: 'Is Builderforce.ai an alternative to GitHub Copilot?',
+    answer:
+      'Yes, but they solve different scopes. GitHub Copilot is single-agent autocomplete inside VS Code, tied to GPT and Claude models. Builderforce.ai is a self-hosted, MIT-licensed multi-agent platform that orchestrates seven specialist roles through full planning, bug-fix, refactor and adversarial-review workflows, runs on 30+ model providers including local Ollama, and adds approvals, audit and persistent memory. Teams that have outgrown line completion adopt Builderforce.ai for end-to-end delivery.',
+  },
+  {
+    question: 'How does Builderforce.ai compare to Cursor and Windsurf?',
+    answer:
+      'Cursor and Windsurf are excellent AI-native editors, but they are still single-agent and IDE-bound. Builderforce.ai is IDE-independent and works from any channel or CLI, coordinates multiple agents on one task through a dependency DAG, and is fully self-hosted with model freedom across 30+ providers. You can even connect Cursor or Windsurf to Builderforce.ai over MCP and use it as your orchestration and memory layer.',
+  },
+  {
+    question: 'Builderforce.ai vs Claude Code and Aider, what is the difference?',
+    answer:
+      'Claude Code is locked to Anthropic models and Aider runs a single CLI agent. Builderforce.ai runs a team of specialist agents with a built-in adversarial review pass, human approval gates, an audit trail, and persistent project memory in .builderforce/. It is model-agnostic across 30+ providers and adds fleet mesh, remote:<id> dispatch and 15+ chat channels, so it scales from one developer to an orchestrated fleet.',
+  },
+  {
+    question: 'Builderforce.ai vs Devin and OpenHands, which should I pick for autonomous engineering?',
+    answer:
+      'Devin is a proprietary hosted autonomous agent and OpenHands is an open single-agent runtime. Builderforce.ai differs by being self-hosted and MIT-licensed with true multi-agent orchestration and governance built in: approval gates, audit trails and self-healing recovery that auto-detects failures and reruns affected steps. You keep your code on your own infrastructure and choose any model, including local ones.',
+  },
+  {
+    question: 'Can Builderforce.ai run fully offline or air-gapped?',
+    answer:
+      'Yes. Builderforce.ai is self-hosted and supports air-gapped deployment. With local models via Ollama you can run the entire agent workforce without any code or prompt leaving your network, which most closed competitors cannot offer. Project memory persists locally in .builderforce/ so context survives across sessions without a cloud dependency.',
+  },
+  {
+    question: 'Does Builderforce.ai lock me into one model or IDE?',
+    answer:
+      'No. Builderforce.ai is model-agnostic across 30+ providers, including Anthropic, OpenAI, Bedrock and local Ollama, and it is IDE-independent, reachable from any CLI or chat channel. There is no editor fork to adopt and no single-vendor model requirement, which is a core difference from Copilot, Cursor, Windsurf and Claude Code.',
+  },
+];
+
 /** Login page FAQ */
 export const LOGIN_FAQ: FaqItem[] = [
   {
@@ -383,6 +611,14 @@ export const DEFINED_TERMS: DefinedTermEntry[] = [
   {
     name: 'Agent Orchestration',
     description: 'The coordination of multiple AI agents working together on complex tasks. Includes workflow sequencing, approval gates, fleet mesh networking, and remote dispatch across BuilderForce Agents instances.',
+  },
+  {
+    name: 'Multi-agent orchestration',
+    description: 'Coordinating several specialist AI agents, each with a defined role, across a single body of work through a dependency DAG, rather than driving one agent that produces a single suggestion at a time. Builderforce.ai uses seven roles to run planning, bug-fix, refactor and adversarial-review workflows end to end.',
+  },
+  {
+    name: 'Human-in-the-loop governance',
+    description: 'An operating model in which AI agents pause at approval gates for a person to approve or reject high-impact actions, with every action recorded in an audit trail. Builderforce.ai applies this across its agent workforce so teams keep control and meet compliance requirements.',
   },
 ];
 
@@ -474,6 +710,7 @@ export interface NavLink {
 export const FOOTER_LINKS: NavLink[] = [
   { href: '/', label: 'Home' },
   { href: '/product', label: 'Product' },
+  { href: '/compare', label: 'Compare' },
   { href: '/marketplace', label: 'Workforce Registry' },
   { href: '/agents', label: 'BuilderForce Agents' },
   { href: '/blog', label: 'Blog' },

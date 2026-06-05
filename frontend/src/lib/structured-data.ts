@@ -12,6 +12,9 @@ import {
   LOGIN_FAQ,
   REGISTER_FAQ,
   BLOG_FAQ,
+  COMPARE_FAQ,
+  COMPARE,
+  COMPETITIVE_COMPARISON,
   DEFINED_TERMS,
   PRICING_PLANS,
   PRODUCT_SECTIONS,
@@ -246,6 +249,44 @@ export function productSchema() {
       breadcrumbs(
         { name: 'Home', url: BRAND.url },
         { name: 'Product', url: `${BRAND.url}/product` },
+      ),
+    ],
+  };
+}
+
+/** Compare page: SoftwareApplication + ItemList of compared capabilities + FAQ + BreadcrumbList */
+export function compareSchema() {
+  const features = COMPETITIVE_COMPARISON.flatMap((c) => c.rows.map((r) => r.feature));
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      organization,
+      {
+        '@type': 'SoftwareApplication',
+        '@id': `${BRAND.url}/#app`,
+        name: BRAND.name,
+        description: COMPARE.seo.description,
+        url: `${BRAND.url}/compare`,
+        applicationCategory: 'DeveloperApplication',
+        operatingSystem: 'Web',
+        author: { '@id': `${BRAND.url}/#organization` },
+        dateModified: BRAND.dateModified,
+        featureList: features,
+      },
+      {
+        '@type': 'ItemList',
+        name: 'Builderforce.ai capabilities compared to other AI coding tools',
+        itemListElement: COMPETITIVE_COMPARISON.map((cat, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          name: cat.title,
+          description: cat.blurb,
+        })),
+      },
+      faqSchema(COMPARE_FAQ),
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Compare', url: `${BRAND.url}/compare` },
       ),
     ],
   };

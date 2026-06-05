@@ -4,6 +4,7 @@ import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { WorkflowNodeKind } from '@/lib/builderforceApi';
 import { NODE_KIND_MAP } from './nodeKinds';
+import { integrationAccent, integrationForConfig, integrationIcon } from './integrations';
 
 export interface BuilderNodeData extends Record<string, unknown> {
   kind: WorkflowNodeKind;
@@ -16,6 +17,10 @@ function configSummary(kind: WorkflowNodeKind, config: Record<string, unknown>):
   switch (kind) {
     case 'agent':
       return [config.role, config.runtime].filter(Boolean).join(' · ') || 'agent';
+    case 'llm':
+      return [config.provider, config.model].filter(Boolean).join(' · ') || 'llm';
+    case 'mcp':
+      return [config.integration, config.operation].filter(Boolean).join(' · ') || 'tool';
     case 'memory':
       return `${String(config.op ?? 'recall')}${config.query ? ` · ${String(config.query).slice(0, 24)}` : ''}`;
     case 'knowledge':
