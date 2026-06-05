@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import FeatureCard from '../FeatureCard';
 import { NODE_KINDS, NODE_GROUPS } from '@/components/workflow-builder/nodeKinds';
+import { INTEGRATIONS, INTEGRATION_CATEGORIES, integrationIcon } from '@/components/workflow-builder/integrations';
 
 export const metadata: Metadata = {
   title: 'Agentic Workflow Builder — Builderforce.ai',
@@ -124,6 +125,31 @@ export default function WorkflowBuilderMarketingPage() {
               </div>
             </div>
           ))}
+        </section>
+
+        {/* Integration catalog — counts come straight from the builder registry. */}
+        <section className="cc-section">
+          <h2 className="cc-h2"><span className="cc-agentHost-accent">⟩</span> {INTEGRATIONS.length}+ integrations, ready to drop in</h2>
+          <p className="cc-prose">
+            MCP servers, LLM platforms, databases, CRMs and data-collection sources — drag any of them onto the canvas.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14, marginTop: 8 }}>
+            {INTEGRATION_CATEGORIES.slice().sort((a, b) => a.order - b.order).map((cat) => {
+              const items = INTEGRATIONS.filter((i) => i.category === cat.id);
+              return (
+                <div key={cat.id} style={{ padding: '14px 16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderLeft: `3px solid ${cat.accent}`, borderRadius: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary, #e2e5ec)' }}>{cat.icon} {cat.label}</span>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: cat.accent }}>{items.length}</span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted, #8a8f9c)', marginTop: 6, lineHeight: 1.5 }}>
+                    {items.slice(0, 8).map((i) => `${integrationIcon(i)} ${i.label}`).join(' · ')}
+                    {items.length > 8 ? ` +${items.length - 8} more` : ''}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </section>
 
         <section className="cc-section">

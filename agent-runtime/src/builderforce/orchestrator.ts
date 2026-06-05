@@ -13,6 +13,8 @@ import type {
   AgentTransportDispatchResult,
   IAgentTransport,
   IAgentMemoryService,
+  ILlmService,
+  IMcpService,
   ITelemetryService,
 } from "./ports.js";
 import {
@@ -94,6 +96,8 @@ export type OrchestratorConfig = {
   memoryService?: IAgentMemoryService | null;
   agentTransport?: IAgentTransport | null;
   relayService?: IRelayService;
+  llmService?: ILlmService | null;
+  mcpService?: IMcpService | null;
 };
 
 /**
@@ -111,6 +115,10 @@ export class AgentOrchestrator {
   private telemetry: ITelemetryService | null = null;
   /** Domain port: memory recall — injected after SSM initialisation. */
   private memoryService: IAgentMemoryService | null = null;
+  /** Domain port: LLM platform calls (builder `llm` nodes) via the gateway. */
+  private llmService: ILlmService | null = null;
+  /** Domain port: MCP / SaaS integration invocation (builder `mcp` nodes). */
+  private mcpService: IMcpService | null = null;
   /** Unified local/remote transport for task dispatch and agentNode discovery.
    *  Always wired by the gateway (local-only when no API key, composite when
    *  BUILDERFORCE_API_KEY is present). */
@@ -168,6 +176,12 @@ export class AgentOrchestrator {
     }
     if (config.relayService !== undefined) {
       this.relayService = config.relayService;
+    }
+    if (config.llmService !== undefined) {
+      this.llmService = config.llmService;
+    }
+    if (config.mcpService !== undefined) {
+      this.mcpService = config.mcpService;
     }
   }
 
@@ -665,6 +679,10 @@ export class AgentOrchestrator {
   ): Promise<string> {
     const upstream = this.buildStructuredContext(task, workflow);
     switch (kind) {
+      case "llm":
+        return this.runLlmNode(config, upstream);
+      case "mcp":
+        return this.runMcpNode(config, upstream);
       case "memory":
         return this.runMemoryNode(config, upstream);
       case "knowledge":
@@ -693,6 +711,46 @@ export class AgentOrchestrator {
       default:
         return `[node:${kind}] no handler — passing through`;
     }
+  }
+
+  /** LLM node — call a model platform via the gateway. `{{input}}` in the prompt
+   *  is substituted with the upstream payload. No-ops (records intent) when no
+   *  LLM service is wired. */
+  private async runLlmNode(config: Record<string, unknown>, upstream: string): Promise<string> {
+    const provider = config.provider ? String(config.provider) : undefined;
+    if (!this.llmService) {
+      return `[llm] no LLM service wired — recorded intent for ${provider ?? "default provider"}`;
+    }
+    const prompt = String(config.prompt ?? upstream).replace(/\{\{\s*input\s*\}\}/g, upstream);
+    const temperature = config.temperature != null ? Number(config.temperature) : undefined;
+    return this.llmService.complete({
+      provider,
+      model: config.model ? String(config.model) : undefined,
+      system: config.system ? String(config.system) : undefined,
+      prompt,
+      temperature: Number.isFinite(temperature) ? temperature : undefined,
+    });
+  }
+
+  /** MCP node — invoke an MCP-server / SaaS integration tool. `params` is parsed
+   *  from the node's JSON config. No-ops (records intent) when no MCP service is
+   *  wired. */
+  private async runMcpNode(config: Record<string, unknown>, _upstream: string): Promise<string> {
+    const integration = String(config.integration ?? config.source ?? "");
+    const operation = String(config.operation ?? "");
+    if (!this.mcpService) {
+      return `[mcp:${integration || "tool"}] no MCP transport wired — recorded intent for "${operation}"`;
+    }
+    let params: Record<string, unknown> = {};
+    if (config.params) {
+      try {
+        const parsed = JSON.parse(String(config.params)) as unknown;
+        if (parsed && typeof parsed === "object") params = parsed as Record<string, unknown>;
+      } catch {
+        /* leave params empty on malformed JSON */
+      }
+    }
+    return this.mcpService.invoke({ integration, operation, params });
   }
 
   /** Memory node — recall from, or write to, the SSM hippocampus memory layer. */

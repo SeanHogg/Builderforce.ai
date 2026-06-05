@@ -27,6 +27,7 @@ import { BuilderforceRelayService } from "../infra/builderforce-relay.js";
 import { CompositeAgentTransport } from "../infra/composite-agent-transport.js";
 import { CronPollerService } from "../infra/cron-poller.js";
 import { WorkflowPollerService } from "../infra/workflow-poller.js";
+import { GatewayLlmService } from "../infra/gateway-llm-service.js";
 import { readSharedEnvVar } from "../infra/env-file.js";
 import { isTruthyEnvValue } from "../infra/env.js";
 import { KnowledgeLoopService, setKnowledgeLoopService } from "../infra/knowledge-loop.js";
@@ -358,6 +359,9 @@ async function startBuilderforceServices(
       });
       workflowPoller.start();
       params.log.warn("[workflow-poller] started");
+
+      // Builder `llm` nodes call model platforms through the metered gateway.
+      globalOrchestrator.configure({ llmService: new GatewayLlmService({ baseUrl, apiKey }) });
     }
 
     knowledgeLoop = new KnowledgeLoopService({
