@@ -630,6 +630,7 @@ export default function DashboardPage() {
             agentHost={selectedAgentHost}
             open={!!selectedAgentHost}
             onClose={() => setSelectedAgentHost(null)}
+            onDeleted={(id) => setAgentHostList((prev) => prev.filter((h) => h.id !== id))}
           />
         )}
         <ConfirmDialog

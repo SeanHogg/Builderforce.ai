@@ -23,6 +23,23 @@ import type { HonoEnv } from '../../env';
 const RUNTIME_SUPPORT = ['cloud', 'host', 'both'] as const;
 const PRICING_MODELS = ['flat_fee', 'consumption'] as const;
 
+/**
+ * `ide_agents.skills` is a `text` column holding a JSON string. The
+ * `PublishedAgent` contract (and the /workforce edit form) expects a real
+ * `string[]`, so normalize every row on the way out. Mirrors the parse in
+ * ideRoutes — kept here so all workforce responses honor the contract.
+ */
+function mapAgentRow<T extends Record<string, unknown>>(row: T | null | undefined): T | null | undefined {
+  if (row == null) return row;
+  const skills = row.skills;
+  const parsed = Array.isArray(skills)
+    ? skills
+    : typeof skills === 'string'
+      ? (() => { try { const v = JSON.parse(skills); return Array.isArray(v) ? v : []; } catch { return []; } })()
+      : [];
+  return { ...row, skills: parsed };
+}
+
 export function createWorkforceRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
@@ -38,7 +55,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       ORDER BY created_at DESC
       LIMIT 200
     `;
-    return c.json(rows);
+    return c.json(rows.map(mapAgentRow));
   });
 
   router.post('/agents', authMiddleware, async (c) => {
@@ -80,7 +97,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
          ${body.published ?? false})
       RETURNING *
     `;
-    return c.json(row, 201);
+    return c.json(mapAgentRow(row), 201);
   });
 
   router.patch('/agents/:id', authMiddleware, async (c) => {
@@ -132,7 +149,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       WHERE id = ${id} AND tenant_id = ${tenantId}
       RETURNING *
     `;
-    return c.json(row);
+    return c.json(mapAgentRow(row));
   });
 
   router.delete('/agents/:id', authMiddleware, async (c) => {
@@ -155,7 +172,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       ORDER BY hire_count DESC, created_at DESC
       LIMIT 200
     `;
-    return c.json(rows);
+    return c.json(rows.map(mapAgentRow));
   });
 
   // GET /api/workforce/agents/:id — public agent detail
@@ -166,7 +183,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       WHERE id = ${c.req.param('id')} AND status = 'active'
     `;
     if (!row) return c.json({ error: 'Agent not found' }, 404);
-    return c.json(row);
+    return c.json(mapAgentRow(row));
   });
 
   return router;

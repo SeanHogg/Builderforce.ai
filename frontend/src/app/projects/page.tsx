@@ -416,6 +416,7 @@ export default function ProjectsPage() {
             agentHost={selectedAgentHost}
             open={!!selectedAgentHost}
             onClose={() => setSelectedAgentHost(null)}
+            onDeleted={(id) => setAgentHostList((prev) => prev.filter((h) => h.id !== id))}
           />
         )}
         <UpgradeModal error={planError} onClose={() => setPlanError(null)} />

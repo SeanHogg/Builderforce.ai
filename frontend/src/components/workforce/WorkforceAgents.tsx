@@ -373,6 +373,10 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
           tenantId={tenantId ?? undefined}
           defaultAgentHostId={defaultAgentHostId}
           onSetDefaultAgentHost={tenantId != null ? handleSetDefaultAgentHost : undefined}
+          onDeleted={(id) => {
+            setHosts((prev) => prev.filter((h) => h.id !== id));
+            setDefaultAgentHostId((d) => (d === id ? null : d));
+          }}
         />
       )}
 

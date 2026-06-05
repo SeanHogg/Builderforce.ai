@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import type { AgentHost } from '@/lib/builderforceApi';
+import { agentHosts, type AgentHost } from '@/lib/builderforceApi';
 import { ObservabilityContent } from './ObservabilityContent';
 import { AgentHostDebugContent } from './AgentHostDebugContent';
 import { CronJobsContent } from './CronJobsContent';
@@ -43,6 +43,8 @@ export interface AgentHostSlideOutPanelProps {
   /** Current default agentHost id; if matches agentHost.id, show "Default" and "Clear default". */
   defaultAgentHostId?: number | null;
   onSetDefaultAgentHost?: (agentHostId: number | null) => Promise<void>;
+  /** Called after the agentHost is deregistered (deleted) so the parent can drop it from its list. */
+  onDeleted?: (agentHostId: number) => void;
   initialTab?: AgentHostPanelTab;
 }
 
@@ -98,10 +100,12 @@ export function AgentHostSlideOutPanel({
   tenantId,
   defaultAgentHostId,
   onSetDefaultAgentHost,
+  onDeleted,
   initialTab = 'details',
 }: AgentHostSlideOutPanelProps) {
   const [activeTab, setActiveTab] = useState<AgentHostPanelTab>(initialTab);
   const [savingDefault, setSavingDefault] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (open) setActiveTab(initialTab);
@@ -133,6 +137,23 @@ export function AgentHostSlideOutPanel({
       await onSetDefaultAgentHost(null);
     } finally {
       setSavingDefault(false);
+    }
+  };
+
+  const handleDeregister = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (deleting) return;
+    if (!confirm(`Deregister "${agentHost.name}"? Its API key will be revoked and it will no longer connect.`)) return;
+    setDeleting(true);
+    try {
+      await agentHosts.deregister(agentHost.id);
+      onDeleted?.(agentHost.id);
+      onClose();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to deregister');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -273,6 +294,24 @@ export function AgentHostSlideOutPanel({
                 {savingDefault ? 'Setting…' : 'Set as default'}
               </button>
             ))}
+          <button
+            type="button"
+            onClick={handleDeregister}
+            disabled={deleting}
+            title="Deregister this remote agent"
+            style={{
+              padding: '6px 12px',
+              fontSize: 12,
+              fontWeight: 600,
+              background: 'var(--surface-danger-soft, rgba(239,68,68,0.12))',
+              color: 'var(--danger, #ef4444)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 8,
+              cursor: deleting ? 'wait' : 'pointer',
+            }}
+          >
+            {deleting ? 'Deregistering…' : 'Deregister'}
+          </button>
         </div>
 
         {/* Tabs */}
