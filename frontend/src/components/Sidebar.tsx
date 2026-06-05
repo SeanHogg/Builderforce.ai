@@ -160,6 +160,31 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
         aria-hidden="true"
       />
       <nav className={`nav ${collapsed ? 'collapsed' : ''}${mobileOpen ? ' mobile-open' : ''}`}>
+        {/* Collapse handle — pinned top, bridging the right divider (desktop only) */}
+        <button
+          type="button"
+          className="nav-collapse-toggle"
+          onClick={onToggleCollapsed}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-expanded={!collapsed}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}
+          >
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+
         {/* Mobile drawer header (hidden on desktop via CSS) */}
         <div className="nav-mobile-head">
           <span className="nav-mobile-title">Menu</span>
@@ -194,9 +219,9 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
           )}
         </div>
 
-        <div className="nav-footer">
-          {!isAuthenticated && (
-            <div className="nav-section" style={{ marginBottom: 8 }}>
+        {!isAuthenticated && (
+          <div className="nav-footer">
+            <div className="nav-section" style={{ marginBottom: 0 }}>
               <Link href="/login" className="nav-item" onClick={onMobileClose}>
                 <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>🔑</span>
                 {!collapsed && <span className="nav-item-label">Sign In</span>}
@@ -215,31 +240,8 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
                 {!collapsed && <span className="nav-item-label">Get Started</span>}
               </Link>
             </div>
-          )}
-          <button
-            type="button"
-            className="nav-collapse-toggle"
-            onClick={onToggleCollapsed}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            aria-expanded={!collapsed}
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-              style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}
-            >
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-          </button>
-        </div>
+          </div>
+        )}
       </nav>
     </>
   );

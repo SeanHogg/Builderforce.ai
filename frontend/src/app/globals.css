@@ -863,7 +863,10 @@ html[data-theme='light'] .nebula {
 /* Nav (slide-out sidebar) */
 .nav {
   grid-area: nav;
-  overflow: hidden;
+  position: relative;
+  z-index: 2;
+  /* visible so the collapse handle can straddle the right divider */
+  overflow: visible;
   padding: 16px 12px;
   background: color-mix(in srgb, var(--bg) 86%, transparent);
   backdrop-filter: blur(10px);
@@ -890,21 +893,25 @@ html[data-theme='light'] .nebula {
   flex-direction: column;
 }
 
-/* Small chevron that collapses/expands the sidebar. Sits at the trailing edge
-   when expanded; centers itself when the rail is collapsed. */
+/* Round chevron handle that collapses/expands the sidebar. Pinned to the top
+   and straddling the right divider so it bridges the sidebar/content border. */
 .nav-collapse-toggle {
-  align-self: flex-end;
+  position: absolute;
+  top: 14px;
+  right: -13px;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: transparent;
+  border-radius: 50%;
+  background: var(--bg-elevated, var(--bg));
   color: var(--muted);
   cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
   transition: color var(--duration-fast) ease, background var(--duration-fast) ease, border-color var(--duration-fast) ease;
 }
 
@@ -912,10 +919,6 @@ html[data-theme='light'] .nebula {
   color: var(--text);
   background: var(--bg-hover);
   border-color: var(--accent-subtle, var(--border));
-}
-
-.nav.collapsed .nav-collapse-toggle {
-  align-self: center;
 }
 
 .nav-section {
