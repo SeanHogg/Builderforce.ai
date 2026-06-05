@@ -1044,8 +1044,10 @@ html[data-theme='light'] .nebula {
   background: transparent;
 }
 
-/* IDE project page: no padding, full-bleed so no whitespace */
-.content:has(.ide-full-height) {
+/* Full-bleed content pages (IDE project page, workflow builder): no padding,
+   no scroll — the child fills the area between the top bar and footer itself. */
+.content:has(.ide-full-height),
+.content:has(.app-full-height) {
   padding: 0;
   overflow: hidden;
   display: flex;
