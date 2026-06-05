@@ -155,11 +155,64 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   router.delete('/agents/:id', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
+    // Drop the agent and its canonical identity bridge + per-agent assignments.
     const rows = await sql(c.env)`
       DELETE FROM ide_agents WHERE id = ${id} AND tenant_id = ${tenantId} RETURNING id
     `;
     if (rows.length === 0) return c.json({ error: 'Agent not found' }, 404);
+
+    const bridges = await sql(c.env)`
+      DELETE FROM project_agents
+      WHERE tenant_id = ${tenantId} AND agent_kind = 'workforce' AND agent_ref = ${id} AND project_id IS NULL
+      RETURNING id
+    `;
+    const bridgeId = bridges[0]?.id;
+    if (bridgeId != null) {
+      await sql(c.env)`
+        DELETE FROM artifact_assignments
+        WHERE tenant_id = ${tenantId} AND scope = 'agent' AND scope_id = ${bridgeId}
+      `;
+    }
     return c.json({ deleted: true });
+  });
+
+  // ----- Canonical agent identity (for per-agent capability assignment) ----
+  // Ensures the tenant-wide, project-less project_agents row for a cloud agent
+  // and returns its numeric id. Per-agent skills/personas are assigned against
+  // it via artifact_assignments scope='agent' + scope_id = projectAgentId, so
+  // they follow the agent everywhere (IDE / Workflow / on-prem / cloud) rather
+  // than being tied to any one project (swimlane).
+  router.post('/agents/:id/bridge', authMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    const id = c.req.param('id');
+
+    const [agent] = await sql(c.env)`
+      SELECT id, name FROM ide_agents WHERE id = ${id} AND tenant_id = ${tenantId}
+    `;
+    if (!agent) return c.json({ error: 'Agent not found' }, 404);
+
+    const [existing] = await sql(c.env)`
+      SELECT id FROM project_agents
+      WHERE tenant_id = ${tenantId} AND agent_kind = 'workforce' AND agent_ref = ${id} AND project_id IS NULL
+    `;
+    if (existing) return c.json({ projectAgentId: existing.id });
+
+    const [created] = await sql(c.env)`
+      INSERT INTO project_agents (tenant_id, project_id, agent_kind, agent_ref, name, added_by)
+      VALUES (${tenantId}, NULL, 'workforce', ${id}, ${agent.name}, ${userId})
+      ON CONFLICT (tenant_id, agent_kind, agent_ref) WHERE project_id IS NULL DO NOTHING
+      RETURNING id
+    `;
+    if (created) return c.json({ projectAgentId: created.id }, 201);
+
+    // Lost an insert race — read the row the other request created.
+    const [row] = await sql(c.env)`
+      SELECT id FROM project_agents
+      WHERE tenant_id = ${tenantId} AND agent_kind = 'workforce' AND agent_ref = ${id} AND project_id IS NULL
+    `;
+    if (!row) return c.json({ error: 'Failed to create agent identity' }, 500);
+    return c.json({ projectAgentId: row.id });
   });
 
   // ----- Public: browse published agents ---------------------------------

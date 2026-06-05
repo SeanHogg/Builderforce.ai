@@ -474,6 +474,20 @@ export async function deleteAgent(agentId: string): Promise<void> {
   await apiRequest<{ deleted: boolean }>(`/api/workforce/agents/${agentId}`, { method: 'DELETE' });
 }
 
+/**
+ * Ensure the agent's canonical (project-less) identity row and return its
+ * numeric id. Per-agent skills/personas are assigned against this id with
+ * artifact_assignments scope='agent', so they follow the agent everywhere.
+ */
+export async function ensureWorkforceAgentBridge(agentId: string): Promise<number> {
+  const r = await apiRequest<{ projectAgentId: number }>(`/api/workforce/agents/${agentId}/bridge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  return r.projectAgentId;
+}
+
 // ---------------------------------------------------------------------------
 // Repo analysis — the Architect / Digital-Transformation tool (/api/repo-analysis)
 // ---------------------------------------------------------------------------
