@@ -30,7 +30,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { open: navOpen, openNav, closeNav } = useMobileNav();
 
   return (
-    <>
+    <div className="app-frame">
       <EmulationBar />
       <PermissionDebuggerPanel />
       <QaTelemetry />
@@ -44,6 +44,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </div>
       <MobileBottomNav />
       <AppFooter />
-    </>
+    </div>
   );
 }

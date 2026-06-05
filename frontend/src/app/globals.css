@@ -621,8 +621,21 @@ html[data-theme='light'] .nebula {
    BuilderForceAgentsLink-style App Shell (header, footer, slide-out nav)
    ============================================================ */
 
+/* App frame: full-viewport flex column that stacks the shell (topbar + nav +
+   scrollable content) above the footer. The footer lives in normal flow so it
+   can NEVER overlap page content — pages don't need to reserve space for it. */
+.app-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
 .shell {
-  height: calc(100vh - var(--footer-height));
+  /* Fill the frame between the (in-flow) footer and the top; min-height:0 lets
+     the inner .content actually scroll instead of expanding the column. */
+  flex: 1 1 auto;
+  min-height: 0;
   display: grid;
   grid-template-columns: var(--shell-nav-width) minmax(0, 1fr);
   grid-template-rows: var(--shell-topbar-height) 1fr;
@@ -806,22 +819,16 @@ html[data-theme='light'] .nebula {
   background: var(--bg-hover);
 }
 
-/* Global footer (fixed bottom), except when in footer-only layout (e.g. IDE) */
+/* Global footer — sits in normal flow as the last row of the .app-frame /
+   footer-only flex columns, so it always sits below content and never covers
+   it. flex-shrink:0 keeps it at its natural height while content scrolls. */
 .global-footer {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  flex-shrink: 0;
   z-index: 70;
   border-top: 1px solid var(--border);
   background: var(--chrome-strong);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-}
-
-/* IDE / login / register: footer in flow so it doesn't cover content */
-.layout-footer-only .global-footer {
-  position: static;
 }
 
 .global-footer-inner {

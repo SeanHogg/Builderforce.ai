@@ -22,7 +22,7 @@ export default function PublicShell({ children }: { children: React.ReactNode })
   const { open: navOpen, openNav, closeNav } = useMobileNav();
 
   return (
-    <>
+    <div className="app-frame">
       <div className={`shell ${collapsed ? 'nav-collapsed' : ''}`} style={{ position: 'relative' }}>
         <TopBar onMenuClick={openNav} />
         <Sidebar collapsed={collapsed} onToggleCollapsed={toggle} mobileOpen={navOpen} onMobileClose={closeNav} />
@@ -30,6 +30,6 @@ export default function PublicShell({ children }: { children: React.ReactNode })
       </div>
       <MobileBottomNav />
       <AppFooter />
-    </>
+    </div>
   );
 }

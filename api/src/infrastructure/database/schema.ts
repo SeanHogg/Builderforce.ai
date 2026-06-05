@@ -12,7 +12,9 @@ import {
   varchar,
   real,
   unique,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 /**
  * Data model aligns with product flow (see README "Data model & API"):
@@ -841,9 +843,15 @@ export const artifactAssignments = pgTable('artifact_assignments', {
 ]);
 
 /**
- * Agents attached to a project. Gives each agent (workforce or registered) a
- * numeric id so per-agent artifact assignments can reuse artifact_assignments
- * with scope='agent' and scope_id = project_agents.id.
+ * Agent identity + project attachments. Gives each agent (workforce or
+ * registered) a numeric id so per-agent artifact assignments can reuse
+ * artifact_assignments with scope='agent' and scope_id = project_agents.id.
+ *
+ * An agent is NOT tied to a project — it's used anywhere (IDE, Workflow,
+ * on-prem, cloud) and associated with 0..N projects as swimlanes:
+ *   projectId NULL     → the canonical, tenant-wide agent identity row.
+ *                        Per-agent capabilities assigned here apply everywhere.
+ *   projectId NOT NULL → a project (swimlane) attachment, layered on top.
  *
  *   agentKind 'workforce'  → agentRef holds PublishedAgent.id (string)
  *   agentKind 'registered' → agentRef holds agents.id (numeric, as string)
@@ -851,7 +859,7 @@ export const artifactAssignments = pgTable('artifact_assignments', {
 export const projectAgents = pgTable('project_agents', {
   id:         serial('id').primaryKey(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:  integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   agentKind:  varchar('agent_kind', { length: 16 }).notNull(),
   agentRef:   varchar('agent_ref', { length: 64 }).notNull(),
   name:       varchar('name', { length: 255 }).notNull(),
@@ -861,7 +869,13 @@ export const projectAgents = pgTable('project_agents', {
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
-  unique().on(t.tenantId, t.projectId, t.agentKind, t.agentRef),
+  // One canonical identity row per (tenant, kind, ref); many project attachments.
+  uniqueIndex('uq_project_agents_identity')
+    .on(t.tenantId, t.agentKind, t.agentRef)
+    .where(sql`${t.projectId} IS NULL`),
+  uniqueIndex('uq_project_agents_attachment')
+    .on(t.tenantId, t.projectId, t.agentKind, t.agentRef)
+    .where(sql`${t.projectId} IS NOT NULL`),
 ]);
 
 /**

@@ -7,10 +7,10 @@
  * assignments. This gives users a union of everything assigned across the
  * hierarchy, with de-duplication by slug.
  */
-import { eq, and, or, inArray } from 'drizzle-orm';
+import { eq, and, or, isNull } from 'drizzle-orm';
 import {
   artifactAssignments,
-  projects,
+  projectAgents,
   tasks,
 } from '../../infrastructure/database/schema';
 import {
@@ -27,6 +27,12 @@ export type ResolutionContext = {
   projectId?: number;
   /** project_agents.id — when executing as a specific agent, fold in its per-agent assignments. */
   agentAssignmentId?: number;
+  /**
+   * A workforce cloud agent's ide_agents.id. Resolved to the agent's canonical
+   * (project-less) project_agents identity row so its per-agent assignments
+   * follow it into any execution context, regardless of project.
+   */
+  cloudAgentRef?: string;
 };
 
 /**
@@ -89,12 +95,28 @@ export async function resolveArtifacts(
     );
   }
 
-  // Agent-level — per-agent assignments keyed on project_agents.id
-  if (ctx.agentAssignmentId != null) {
+  // Agent-level — per-agent assignments keyed on project_agents.id. A workforce
+  // cloud agent is addressed by its ide_agents.id, resolved here to its
+  // canonical (project-less) identity row so capabilities follow the agent.
+  let agentAssignmentId = ctx.agentAssignmentId;
+  if (agentAssignmentId == null && ctx.cloudAgentRef != null) {
+    const [identity] = await db
+      .select({ id: projectAgents.id })
+      .from(projectAgents)
+      .where(and(
+        eq(projectAgents.tenantId, ctx.tenantId),
+        eq(projectAgents.agentKind, 'workforce'),
+        eq(projectAgents.agentRef, ctx.cloudAgentRef),
+        isNull(projectAgents.projectId),
+      ))
+      .limit(1);
+    agentAssignmentId = identity?.id;
+  }
+  if (agentAssignmentId != null) {
     scopeConditions.push(
       and(
         eq(artifactAssignments.scope, AssignmentScope.AGENT),
-        eq(artifactAssignments.scopeId, ctx.agentAssignmentId),
+        eq(artifactAssignments.scopeId, agentAssignmentId),
       ),
     );
   }

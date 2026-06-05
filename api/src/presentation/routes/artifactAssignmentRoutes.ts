@@ -165,9 +165,10 @@ export function createArtifactAssignmentRoutes(db: Db): Hono<HonoEnv> {
     const agentHostIdP    = c.req.query('agentHostId');
     const projectIdP = c.req.query('projectId');
     const agentIdP   = c.req.query('agentId');
+    const cloudAgentRef = c.req.query('cloudAgentRef');
 
-    if (!taskIdP && !agentHostIdP && !projectIdP && !agentIdP) {
-      return c.json({ error: 'At least one of taskId, agentHostId, projectId, or agentId is required' }, 400);
+    if (!taskIdP && !agentHostIdP && !projectIdP && !agentIdP && !cloudAgentRef) {
+      return c.json({ error: 'At least one of taskId, agentHostId, projectId, agentId, or cloudAgentRef is required' }, 400);
     }
 
     const resolved = await resolveArtifacts(db, {
@@ -176,6 +177,7 @@ export function createArtifactAssignmentRoutes(db: Db): Hono<HonoEnv> {
       agentHostId:    agentHostIdP ? Number(agentHostIdP) : undefined,
       projectId: projectIdP ? Number(projectIdP) : undefined,
       agentAssignmentId: agentIdP ? Number(agentIdP) : undefined,
+      cloudAgentRef: cloudAgentRef || undefined,
     });
 
     return c.json(resolved);
