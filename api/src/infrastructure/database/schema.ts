@@ -302,6 +302,11 @@ export const llmUsageLog = pgTable('llm_usage_log', {
   promptTokens:     integer('prompt_tokens').notNull().default(0),
   completionTokens: integer('completion_tokens').notNull().default(0),
   totalTokens:      integer('total_tokens').notNull().default(0),
+  /** Prompt-cache breakdown (subset of prompt_tokens). cache_read is billed at
+   *  ~0.1x input rate, cache_creation at ~1.25x — persisted so cost accounting
+   *  reflects the discount instead of charging cached input at full rate. */
+  cacheReadTokens:     integer('cache_read_tokens').notNull().default(0),
+  cacheCreationTokens: integer('cache_creation_tokens').notNull().default(0),
   retries:          integer('retries').notNull().default(0),
   streamed:         boolean('streamed').notNull().default(false),
   /** Caller-supplied metadata for billing trace-back ({ toolRunId, sessionId, userId, … }). */
