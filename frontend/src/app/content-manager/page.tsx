@@ -482,6 +482,46 @@ export default function ContentManagerPage() {
                 );
               })}
             </div>
+          ) : (
+            <div style={{ ...tableWrapStyle, overflowX: 'auto' }}>
+              <table style={tableStyle}>
+                <thead>
+                  <tr style={theadRowStyle}>
+                    <th style={thStyle}>Title</th>
+                    <th style={thStyle}>Type</th>
+                    <th style={thStyle}>Tags</th>
+                    <th style={thStyle}>Stats</th>
+                    <th style={thStyle}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {marketplaceContent.map((b) => {
+                    const stat = contentStats[b.id] ?? { likes: 0, installs: 0, liked: false };
+                    return (
+                      <tr key={b.id} style={trStyle}>
+                        <td style={{ ...tdStyle, fontWeight: 500 }}>{b.title}</td>
+                        <td style={tdMutedStyle}><span className="badge badge-gray">{b.type}</span></td>
+                        <td style={tdMutedStyle}>
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            {b.tags.slice(0, 3).map((t) => <span key={t} className="badge badge-gray">{t}</span>)}
+                          </div>
+                        </td>
+                        <td style={tdMutedStyle}>
+                          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} onClick={() => toggleContentLike(b.id)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
+                          <span style={{ marginLeft: 10 }}>⬇️ {stat.installs}</span>
+                        </td>
+                        <td style={tdStyle}>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <Link href={`/content-manager/${encodeURIComponent(b.id)}`} className="btn btn-secondary btn-sm">View</Link>
+                            <ArtifactAssigner artifactType="content" artifactSlug={b.id} artifactName={b.title} />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </>
       )}
