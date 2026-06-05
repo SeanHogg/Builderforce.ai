@@ -249,6 +249,10 @@ export const agentHosts = {
       body: JSON.stringify({ name: name.trim() }),
     }).then((r) => ({ ...r.agentHost, apiKey: r.apiKey } as AgentHostRegistration)),
 
+  /** Deregister (delete) a remote agentHost. Revokes its API key server-side. */
+  deregister: (agentHostId: number) =>
+    request<void>(`/api/agent-hosts/${agentHostId}`, { method: 'DELETE' }),
+
   /** WebSocket URL for agentHost relay (gateway). Pass tenant token via ?token=. */
   wsUrl: (agentHostId: number): string => {
     const base = (AUTH_API_URL || '').replace(/^http/, 'ws');
