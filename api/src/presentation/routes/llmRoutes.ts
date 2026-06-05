@@ -678,6 +678,18 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // Premium override forces the Pro OpenRouter key path; otherwise plan-driven.
     const isPro = access.premiumOverride || access.effectivePlan !== 'free';
 
+    // ── Output cap ───────────────────────────────────────────────────────────
+    // Clamp max_tokens to the plan ceiling so a misconfigured client can't ask
+    // for a giant generation and bill a full 128K-token output in one shot.
+    // Clamp down rather than reject (the request still succeeds, just bounded).
+    // Superadmins and unlimited daily-limit overrides (-1) bypass.
+    const maxTokensCeiling = getLimits(toTenantPlan(access.effectivePlan)).maxTokensPerRequest;
+    const maxTokensExempt = access.isSuperadmin || access.tokenDailyLimitOverride === -1;
+    if (!maxTokensExempt && maxTokensCeiling > 0
+        && typeof body.max_tokens === 'number' && body.max_tokens > maxTokensCeiling) {
+      body.max_tokens = maxTokensCeiling;
+    }
+
     // Validate required key for the active plan up-front so callers get a clear 503.
     const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
     if (!requiredKey) {

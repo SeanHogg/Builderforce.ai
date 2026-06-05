@@ -69,6 +69,15 @@ export interface VendorUsage {
   prompt_tokens?: number;
   completion_tokens?: number;
   total_tokens?: number;
+  /**
+   * Prompt-cache breakdown (when the upstream is a caching provider, e.g.
+   * Anthropic via OpenRouter). `cache_read_tokens` are billed at ~10% of the
+   * input rate, `cache_creation_tokens` at ~125%; persisting them separately
+   * lets cost accounting reflect the discount instead of charging cached input
+   * at full rate. Subset of `prompt_tokens` (OpenAI shape) — not additive to it.
+   */
+  cache_read_tokens?: number;
+  cache_creation_tokens?: number;
 }
 
 export interface VendorCallResult {
@@ -151,6 +160,18 @@ export function pickUsage(u: unknown): VendorUsage {
   if (prompt     !== undefined) out.prompt_tokens     = prompt;
   if (completion !== undefined) out.completion_tokens = completion;
   if (total      !== undefined) out.total_tokens      = total;
+
+  // Prompt-cache breakdown. Two shapes reach us:
+  //  - Anthropic-native: top-level `cache_read_input_tokens` / `cache_creation_input_tokens`
+  //  - OpenAI / OpenRouter-normalized: `prompt_tokens_details.cached_tokens` (reads only)
+  const details = usage['prompt_tokens_details'];
+  const cachedFromDetails = details && typeof details === 'object'
+    ? numOrUndef((details as Record<string, unknown>)['cached_tokens'])
+    : undefined;
+  const cacheRead = numOrUndef(usage['cache_read_input_tokens']) ?? cachedFromDetails;
+  const cacheCreation = numOrUndef(usage['cache_creation_input_tokens']);
+  if (cacheRead     !== undefined) out.cache_read_tokens     = cacheRead;
+  if (cacheCreation !== undefined) out.cache_creation_tokens = cacheCreation;
   return out;
 }
 

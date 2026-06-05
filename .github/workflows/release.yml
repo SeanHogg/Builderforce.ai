@@ -47,10 +47,10 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      # Version is read from the `packageManager` field in package.json.
+      # Do not also set `version:` here — action-setup@v4 errors if both exist.
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10.23.0
 
       - name: Use Node.js 20
         uses: actions/setup-node@v4

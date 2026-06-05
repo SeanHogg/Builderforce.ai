@@ -55,9 +55,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Version is read from the `packageManager` field in package.json.
+      # Do not also set `version:` here — action-setup@v4 errors if both exist.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10.23.0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
