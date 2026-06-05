@@ -177,6 +177,10 @@ export interface LlmUsage {
   promptTokens:     number;
   completionTokens: number;
   totalTokens:      number;
+  /** Prompt-cache breakdown (subset of promptTokens). Present only for caching
+   *  upstreams. Persisted so cost accounting can discount cache reads (~0.1x). */
+  cacheReadTokens?:     number;
+  cacheCreationTokens?: number;
 }
 
 /** One model attempt that failed before the resolved model succeeded. */
@@ -644,6 +648,8 @@ export class LlmProxyService {
           promptTokens:     result.usage.prompt_tokens     ?? 0,
           completionTokens: result.usage.completion_tokens ?? 0,
           totalTokens:      result.usage.total_tokens      ?? 0,
+          ...(result.usage.cache_read_tokens     != null ? { cacheReadTokens:     result.usage.cache_read_tokens     } : {}),
+          ...(result.usage.cache_creation_tokens != null ? { cacheCreationTokens: result.usage.cache_creation_tokens } : {}),
         },
       } : {}),
       ...(schemaRetries > 0 ? { schemaRetries } : {}),

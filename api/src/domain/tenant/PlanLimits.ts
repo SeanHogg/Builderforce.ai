@@ -16,6 +16,13 @@ export interface PlanLimits {
   maxSeats: number;
   /** Token budget per calendar day (input + output combined) */
   tokenDailyLimit: number;
+  /**
+   * Upper bound on a single request's `max_tokens` (output cap). Guards against
+   * a misconfigured client requesting a huge generation that bills a full
+   * 128K-token output in one shot. Requests above this are clamped down, not
+   * rejected. -1 = no cap.
+   */
+  maxTokensPerRequest: number;
   /** Whether approval workflow gates are available */
   approvalWorkflows: boolean;
   /** Whether fleet mesh (agentHost-to-agentHost routing) is available */
@@ -36,6 +43,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     maxProjects: 5,
     maxSeats: 1,
     tokenDailyLimit: 10_000,
+    maxTokensPerRequest: 4_096,
     approvalWorkflows: false,
     fleetMesh: false,
     fullTelemetry: false,
@@ -48,6 +56,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     maxProjects: -1,
     maxSeats: 1,
     tokenDailyLimit: 1_000_000,
+    maxTokensPerRequest: 16_384,
     approvalWorkflows: true,
     fleetMesh: true,
     fullTelemetry: true,
@@ -60,6 +69,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     maxProjects: -1,
     maxSeats: -1,
     tokenDailyLimit: 5_000_000,
+    maxTokensPerRequest: 64_000,
     approvalWorkflows: true,
     fleetMesh: true,
     fullTelemetry: true,
