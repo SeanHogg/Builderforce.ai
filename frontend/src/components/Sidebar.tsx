@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { getStoredTenant } from '@/lib/auth';
 import { isNavItemActive, type NavMatch } from '@/lib/nav';
 import { PRODUCT_SECTIONS } from '@/lib/content';
+import MascotIcon from './MascotIcon';
 
 interface NavItem extends NavMatch {
   label: string;
@@ -37,7 +38,7 @@ const mainNav: NavItem[] = [
 ];
 
 const meshNav: NavItem[] = [
-  { href: '/workforce', label: 'Workforce', icon: '🦀' },
+  { href: '/workforce', label: 'Workforce', icon: <MascotIcon size={20} /> },
   { href: '/chats', label: 'Chats', icon: '💬' },
 ];
 
@@ -66,7 +67,7 @@ const apiKeysNavItem: NavItem = { href: '/settings/api-keys', label: 'API Keys',
 const publicNav: NavItem[] = [
   { href: '/', label: 'Home', icon: '🏠', exactMatch: true },
   { href: '/product', label: 'Product', icon: '✨' },
-  { href: '/marketplace', label: 'Workforce', icon: '🦀' },
+  { href: '/marketplace', label: 'Workforce', icon: <MascotIcon size={20} /> },
   { href: '/agents', label: 'BuilderForce Agents', icon: '🤖' },
   { href: '/blog', label: 'Blog', icon: '📝' },
   { href: '/pricing', label: 'Pricing', icon: '💳' },

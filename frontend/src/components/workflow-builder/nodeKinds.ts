@@ -49,7 +49,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
   {
     kind: 'agent',
     label: 'Agent Run',
-    icon: '🦀',
+    icon: '🤖',
     group: 'Agent',
     accent: '#f4726e',
     blurb: 'Run one of your agents (role + runtime + model).',

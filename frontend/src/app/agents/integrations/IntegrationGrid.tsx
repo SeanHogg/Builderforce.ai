@@ -1,4 +1,6 @@
 import BrandIcon, { type IconSpec } from '../BrandIcon';
+import type { ViewMode } from '@/components/ViewToggle';
+import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
 export interface IntegrationItem {
   name: string;
@@ -13,34 +15,68 @@ export default function IntegrationGrid({
   description,
   items,
   columns = 4,
+  viewMode = 'card',
 }: {
   title: string;
   description: string;
   items: IntegrationItem[];
   columns?: 2 | 3 | 4;
+  viewMode?: ViewMode;
 }) {
   return (
     <section className="cc-int-section">
       <h2 className="cc-int-h2"><span className="cc-agentHost-accent">⟩</span> {title}</h2>
       <p className="cc-int-desc">{description}</p>
-      <div className={`cc-int-grid cc-int-grid-${columns}`}>
-        {items.map((item) => (
-          <a
-            key={`${item.name}-${item.docs}`}
-            href={item.docs}
-            target="_blank"
-            rel="noopener"
-            className="cc-int-card"
-            style={{ ['--accent' as string]: item.color }}
-          >
-            <span className="cc-int-icon">
-              <BrandIcon icon={item.icon} color={item.color} size={32} label={item.name} />
-            </span>
-            <h3 className="cc-int-name">{item.name}</h3>
-            <p className="cc-int-card-desc">{item.desc}</p>
-          </a>
-        ))}
-      </div>
+      {viewMode === 'table' ? (
+        <div style={tableWrapStyle}>
+          <table style={tableStyle}>
+            <thead>
+              <tr style={theadRowStyle}>
+                <th style={thStyle}>Integration</th>
+                <th style={thStyle}>Description</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={`${item.name}-${item.docs}`} style={trStyle}>
+                  <td style={tdStyle}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <BrandIcon icon={item.icon} color={item.color} size={20} label={item.name} />
+                      <strong>{item.name}</strong>
+                    </span>
+                  </td>
+                  <td style={tdMutedStyle}>{item.desc}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right' }}>
+                    <a href={item.docs} target="_blank" rel="noopener" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
+                      Connect →
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className={`cc-int-grid cc-int-grid-${columns}`}>
+          {items.map((item) => (
+            <a
+              key={`${item.name}-${item.docs}`}
+              href={item.docs}
+              target="_blank"
+              rel="noopener"
+              className="cc-int-card"
+              style={{ ['--accent' as string]: item.color }}
+            >
+              <span className="cc-int-icon">
+                <BrandIcon icon={item.icon} color={item.color} size={32} label={item.name} />
+              </span>
+              <h3 className="cc-int-name">{item.name}</h3>
+              <p className="cc-int-card-desc">{item.desc}</p>
+            </a>
+          ))}
+        </div>
+      )}
       <style>{`
         .cc-int-section { margin-top: 56px; }
         .cc-int-h2 {

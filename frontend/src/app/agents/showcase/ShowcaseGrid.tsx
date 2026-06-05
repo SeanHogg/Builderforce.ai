@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
 interface Tweet {
   id: string;
@@ -28,6 +30,7 @@ export default function ShowcaseGrid({
   totalCount: number;
 }) {
   const [filter, setFilter] = useState<Filter>('agents');
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
 
   const visible = useMemo(
     () => (filter === 'agents' ? tweets.filter(isBuilderForceAgents) : tweets),
@@ -51,38 +54,75 @@ export default function ShowcaseGrid({
         >
           All Projects ({totalCount})
         </button>
+        <div style={{ marginLeft: 'auto' }}>
+          <ViewToggle value={viewMode} onChange={setViewMode} />
+        </div>
       </div>
 
-      <div className="cc-showcase-grid">
-        {visible.map((t) => (
-          <a
-            key={t.id}
-            href={`https://x.com/${t.author}/status/${t.id}`}
-            target="_blank"
-            rel="noopener"
-            className="cc-tweet-card"
-          >
-            <div className="cc-tweet-header">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`https://unavatar.io/x/${t.author}`} alt={t.author} className="cc-avatar" loading="lazy" />
-              <div className="cc-author-info">
-                <span className="cc-author-name">@{t.author}</span>
-                <span className="cc-likes">♥ {t.likes}</span>
+      {viewMode === 'table' ? (
+        <div style={tableWrapStyle}>
+          <table style={tableStyle}>
+            <thead>
+              <tr style={theadRowStyle}>
+                <th style={thStyle}>Author</th>
+                <th style={thStyle}>Summary</th>
+                <th style={thStyle}>Likes</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Link</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((t) => (
+                <tr key={t.id} style={trStyle}>
+                  <td style={tdStyle}><strong>@{t.author}</strong></td>
+                  <td style={tdMutedStyle}>{t.quote}</td>
+                  <td style={tdMutedStyle}>♥ {t.likes}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right' }}>
+                    <a
+                      href={`https://x.com/${t.author}/status/${t.id}`}
+                      target="_blank"
+                      rel="noopener"
+                      className="cc-tweet-link"
+                    >
+                      View on X →
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="cc-showcase-grid">
+          {visible.map((t) => (
+            <a
+              key={t.id}
+              href={`https://x.com/${t.author}/status/${t.id}`}
+              target="_blank"
+              rel="noopener"
+              className="cc-tweet-card"
+            >
+              <div className="cc-tweet-header">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`https://unavatar.io/x/${t.author}`} alt={t.author} className="cc-avatar" loading="lazy" />
+                <div className="cc-author-info">
+                  <span className="cc-author-name">@{t.author}</span>
+                  <span className="cc-likes">♥ {t.likes}</span>
+                </div>
               </div>
-            </div>
-            <p className="cc-tweet-quote">{t.quote}</p>
-            {t.images && t.images.length > 0 && (
-              <div className="cc-tweet-images">
-                {t.images.map((img, i) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={i} src={img} alt="Screenshot" className="cc-tweet-image" loading="lazy" />
-                ))}
-              </div>
-            )}
-            <span className="cc-tweet-link">View on X →</span>
-          </a>
-        ))}
-      </div>
+              <p className="cc-tweet-quote">{t.quote}</p>
+              {t.images && t.images.length > 0 && (
+                <div className="cc-tweet-images">
+                  {t.images.map((img, i) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={i} src={img} alt="Screenshot" className="cc-tweet-image" loading="lazy" />
+                  ))}
+                </div>
+              )}
+              <span className="cc-tweet-link">View on X →</span>
+            </a>
+          ))}
+        </div>
+      )}
 
       <style>{`
         .cc-filter-bar {

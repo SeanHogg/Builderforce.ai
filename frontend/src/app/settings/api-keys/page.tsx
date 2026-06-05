@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { tenantApiKeysApi, type TenantApiKey } from '@/lib/builderforceApi';
 import { getStoredTenant } from '@/lib/auth';
 import { MintedTenantApiKeyDisplay } from '@/components/MintedTenantApiKeyDisplay';
@@ -8,6 +8,8 @@ import { AllowedOriginsField } from '@/components/AllowedOriginsField';
 import { AllowedOriginsBadge } from '@/components/AllowedOriginsBadge';
 import { TenantApiKeyEditor } from '@/components/TenantApiKeyEditor';
 import { TenantApiKeyUsageDrawer } from '@/components/TenantApiKeyUsageDrawer';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -68,6 +70,7 @@ export default function ApiKeysPage() {
   const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [expandedKeyId, setExpandedKeyId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
 
   useEffect(() => {
     if (!isOwner || !Number.isFinite(tenantId)) { setLoading(false); return; }
@@ -204,7 +207,11 @@ export default function ApiKeysPage() {
       </div>
 
       <div style={cardStyle}>
-        <div style={sectionTitle}>Active and revoked keys</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ ...sectionTitle, marginBottom: 0 }}>Active and revoked keys</div>
+          <ViewToggle value={viewMode} onChange={setViewMode} />
+        </div>
+        <div style={{ marginBottom: 14 }} />
         {error && (
           <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>Error: {error}</div>
         )}
@@ -212,7 +219,7 @@ export default function ApiKeysPage() {
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>
         ) : keys.length === 0 ? (
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No keys yet. Create one above.</div>
-        ) : (
+        ) : viewMode === 'card' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {keys.map((k) => {
               const revoked = !!k.revokedAt;
@@ -296,6 +303,101 @@ export default function ApiKeysPage() {
                 </div>
               );
             })}
+          </div>
+        ) : (
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
+                <tr style={theadRowStyle}>
+                  <th style={thStyle}>Name</th>
+                  <th style={thStyle}>Status</th>
+                  <th style={thStyle}>Created</th>
+                  <th style={thStyle}>Last used</th>
+                  <th style={thStyle}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {keys.map((k) => {
+                  const revoked = !!k.revokedAt;
+                  const isEditing = editingKeyId === k.id;
+                  return (
+                    <Fragment key={k.id}>
+                      <tr style={{ ...trStyle, opacity: revoked ? 0.5 : 1 }}>
+                        <td style={tdStyle}>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontWeight: 600 }}>
+                            <span
+                              style={{
+                                width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                                display: 'inline-block',
+                                background: revoked ? 'var(--text-muted)' : 'rgba(34,197,94,0.9)',
+                              }}
+                            />
+                            <span>{k.name}</span>
+                            <AllowedOriginsBadge allowedOrigins={k.allowedOrigins} />
+                          </div>
+                        </td>
+                        <td style={tdMutedStyle}>
+                          {revoked ? `Revoked ${fmtDate(k.revokedAt)}` : 'Active'}
+                        </td>
+                        <td style={tdMutedStyle}>{fmtDate(k.createdAt)}</td>
+                        <td style={tdMutedStyle}>{fmtDate(k.lastUsedAt)}</td>
+                        <td style={tdStyle}>
+                          {!isEditing && (
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                onClick={() => setExpandedKeyId(expandedKeyId === k.id ? null : k.id)}
+                                style={{ ...buttonPrimary, padding: '4px 10px', fontSize: 11, background: 'none' }}
+                              >
+                                {expandedKeyId === k.id ? 'Hide activity' : 'View activity'}
+                              </button>
+                              {!revoked && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingKeyId(k.id)}
+                                    style={{ ...buttonPrimary, padding: '4px 10px', fontSize: 11 }}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleRevoke(k.id)}
+                                    disabled={revoking === k.id}
+                                    style={buttonDanger}
+                                  >
+                                    {revoking === k.id ? '…' : 'Revoke'}
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                      {(isEditing || expandedKeyId === k.id) && (
+                        <tr style={trStyle}>
+                          <td style={tdStyle} colSpan={5}>
+                            {isEditing && (
+                              <TenantApiKeyEditor
+                                initialName={k.name}
+                                initialAllowedOrigins={k.allowedOrigins}
+                                onSave={(patch) => handleEdit(k.id, patch)}
+                                onCancel={() => setEditingKeyId(null)}
+                                saving={savingEdit}
+                              />
+                            )}
+                            <TenantApiKeyUsageDrawer
+                              expanded={expandedKeyId === k.id}
+                              load={(params) => tenantApiKeysApi.usage(tenantId, k.id, params)}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

@@ -23,6 +23,8 @@ import {
 import { listAgents, hireAgent } from '@/lib/api';
 import type { PublishedAgent } from '@/lib/types';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
 type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'content' | 'workforce' | 'publish';
 
@@ -159,6 +161,7 @@ export default function MarketplacePage() {
 
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<MarketplaceCategory>('all');
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [listings, setListings] = useState<MarketplaceListing[]>([]);
   const [stats, setStats] = useState<Record<string, ArtifactStats>>({});
   const [installed, setInstalled] = useState<Set<string>>(new Set());
@@ -451,6 +454,11 @@ export default function MarketplacePage() {
             ))}
           </div>
         </div>
+        {category !== 'publish' && (
+          <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
+            <ViewToggle value={viewMode} onChange={setViewMode} />
+          </div>
+        )}
       </div>
 
       {category === 'publish' ? (
@@ -565,6 +573,47 @@ export default function MarketplacePage() {
               ? 'No published workforce agents yet. Publish an agent from a project to list it here.'
               : 'No workforce agents match your search.'}
           </div>
+        ) : viewMode === 'table' ? (
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
+                <tr style={theadRowStyle}>
+                  <th style={thStyle}>Name</th>
+                  <th style={thStyle}>Title</th>
+                  <th style={thStyle}>Skills</th>
+                  <th style={thStyle}>Hires</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAgents.map((agent) => (
+                  <tr key={agent.id} style={trStyle}>
+                    <td style={tdStyle}>
+                      <span style={{ marginRight: 6 }}>👤</span>
+                      <strong style={{ color: 'var(--text-strong)' }}>{agent.name}</strong>
+                    </td>
+                    <td style={tdMutedStyle}>{agent.title || 'Workforce agent'}</td>
+                    <td style={tdMutedStyle}>
+                      {agent.skills && agent.skills.length > 0
+                        ? agent.skills.slice(0, 4).join(', ') + (agent.skills.length > 4 ? '…' : '')
+                        : '—'}
+                    </td>
+                    <td style={tdMutedStyle}>{agent.hire_count != null ? `${agent.hire_count}×` : '—'}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        disabled={hiringId === agent.id}
+                        onClick={() => handleHire(agent.id)}
+                      >
+                        {hiringId === agent.id ? 'Hiring…' : 'Hire'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
             {filteredAgents.map((agent) => (
@@ -641,6 +690,100 @@ export default function MarketplacePage() {
       ) : filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--muted)' }}>
           No items match your search.
+        </div>
+      ) : viewMode === 'table' ? (
+        <div style={tableWrapStyle}>
+          <table style={tableStyle}>
+            <thead>
+              <tr style={theadRowStyle}>
+                <th style={thStyle}>Name</th>
+                <th style={thStyle}>Type</th>
+                <th style={thStyle}>Author</th>
+                <th style={thStyle}>Price</th>
+                <th style={thStyle}>Stats</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((item) => {
+                const typeIcon = item.emoji ?? (item.type === 'persona' ? '🎭' : item.type === 'content' ? '📝' : '⚡');
+                const k = key(item.type, item.artifactSlug);
+                const stat = stats[k] ?? { likes: item.likes, installs: item.downloads, liked: false };
+                const isInstalled = installed.has(k);
+                return (
+                  <tr key={item.id} style={trStyle}>
+                    <td style={tdStyle}>
+                      <span style={{ marginRight: 6 }}>{typeIcon}</span>
+                      <strong style={{ color: 'var(--text-strong)' }}>{item.name}</strong>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>v{item.version}</div>
+                    </td>
+                    <td style={{ ...tdStyle, textTransform: 'capitalize' }}>{item.type}</td>
+                    <td style={tdMutedStyle}>{item.author}</td>
+                    <td style={tdStyle}>
+                      {(item.price ?? 0) === 0
+                        ? 'Free'
+                        : `$${(item.price ?? 0).toFixed(2)}${item.pricingModel === 'consumption' ? ` / ${item.priceUnit ?? 'use'}` : ''}`}
+                    </td>
+                    <td style={tdMutedStyle}>
+                      <button
+                        type="button"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: 0,
+                          fontSize: 12,
+                          color: stat.liked ? 'var(--error)' : 'var(--muted)',
+                        }}
+                        title={stat.liked ? 'Unlike' : 'Like'}
+                        onClick={() => toggleLike(item)}
+                      >
+                        {stat.liked ? '❤️' : '🤍'} {stat.likes}
+                      </button>
+                      <span style={{ marginLeft: 10 }} title="Installs">⬇️ {stat.installs}</span>
+                      {isInstalled && <span style={{ marginLeft: 10 }}>✓</span>}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-secondary"
+                          title={hasItem(item.id) ? 'In cart' : 'Add to cart'}
+                          onClick={() => addItem({
+                            id: item.id,
+                            type: item.type as ArtifactType,
+                            slug: item.artifactSlug,
+                            name: item.name,
+                            price: item.price ?? 0,
+                            pricingModel: item.pricingModel ?? 'flat_fee',
+                            priceUnit: item.priceUnit,
+                            emoji: item.emoji,
+                            image: item.image,
+                          })}
+                          style={{ color: hasItem(item.id) ? '#22c55e' : undefined }}
+                        >
+                          {hasItem(item.id) ? '✓ In Cart' : '+ Cart'}
+                        </button>
+                        <ArtifactAssigner
+                          artifactType={item.type}
+                          artifactSlug={item.artifactSlug}
+                          artifactName={item.name}
+                        />
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${isInstalled ? 'btn-secondary' : 'btn-primary'}`}
+                          disabled={!hasAgentHosts}
+                          onClick={() => toggleInstall(item)}
+                        >
+                          {!hasAgentHosts ? 'Register agentHost' : isInstalled ? 'Uninstall' : 'Install'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>

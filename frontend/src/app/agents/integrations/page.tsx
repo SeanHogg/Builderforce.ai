@@ -9,7 +9,8 @@ import {
   siX, siVercel,
   siLinux, siAndroid, siMacos, siIos,
 } from 'simple-icons';
-import IntegrationGrid, { type IntegrationItem } from './IntegrationGrid';
+import { type IntegrationItem } from './IntegrationGrid';
+import IntegrationsView, { type IntegrationSection } from './IntegrationsView';
 import type { CustomSvg, IconSpec } from '../BrandIcon';
 import { LUCIDE } from '../lucideIcons';
 
@@ -143,16 +144,20 @@ export default function IntegrationsPage() {
         </p>
       </header>
 
-      <IntegrationGrid title="Chat Providers" description="Message BuilderForce Agents from any chat app — it responds right where you are." items={chatProviders} />
-      <IntegrationGrid title="AI Models" description="Use any model you want — cloud or local. Your keys, your choice." items={modelProviders} />
-      <IntegrationGrid title="Productivity" description="Notes, tasks, wikis, and code — BuilderForce Agents works with your favorite tools." items={productivityApps} />
-      <IntegrationGrid title="Music & Audio" description="Control playback, identify songs, and manage multi-room audio." items={musicAudio} columns={3} />
-      <IntegrationGrid title="Smart Home" description="Lights, thermostats, and IoT devices — all voice-controllable." items={smartHome} columns={3} />
-      <IntegrationGrid title="Tools & Automation" description="Browser control, scheduled tasks, email triggers, and more." items={tools} />
-      <IntegrationGrid title="Media & Creative" description="Generate images, capture screens, and find the perfect GIF." items={mediaCreative} />
-      <IntegrationGrid title="Social" description="Post tweets, manage email, and stay connected." items={socialComms} columns={2} />
-      <IntegrationGrid title="Companion Apps" description="Native apps and platform support across your devices." items={companionApps} />
-      <IntegrationGrid title="Real-World Examples" description="What people are actually building with BuilderForce Agents integrations." items={showcaseItems} />
+      <IntegrationsView
+        sections={[
+          { title: 'Chat Providers', description: 'Message BuilderForce Agents from any chat app — it responds right where you are.', items: chatProviders },
+          { title: 'AI Models', description: 'Use any model you want — cloud or local. Your keys, your choice.', items: modelProviders },
+          { title: 'Productivity', description: 'Notes, tasks, wikis, and code — BuilderForce Agents works with your favorite tools.', items: productivityApps },
+          { title: 'Music & Audio', description: 'Control playback, identify songs, and manage multi-room audio.', items: musicAudio, columns: 3 },
+          { title: 'Smart Home', description: 'Lights, thermostats, and IoT devices — all voice-controllable.', items: smartHome, columns: 3 },
+          { title: 'Tools & Automation', description: 'Browser control, scheduled tasks, email triggers, and more.', items: tools },
+          { title: 'Media & Creative', description: 'Generate images, capture screens, and find the perfect GIF.', items: mediaCreative },
+          { title: 'Social', description: 'Post tweets, manage email, and stay connected.', items: socialComms, columns: 2 },
+          { title: 'Companion Apps', description: 'Native apps and platform support across your devices.', items: companionApps },
+          { title: 'Real-World Examples', description: 'What people are actually building with BuilderForce Agents integrations.', items: showcaseItems },
+        ] satisfies IntegrationSection[]}
+      />
 
       <style>{`
         .cc-int-page {

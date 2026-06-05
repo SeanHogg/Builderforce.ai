@@ -6,11 +6,11 @@ type Mode = 'oneliner' | 'npm' | 'git';
 
 const COMMANDS: Record<Mode, { comment: string; cmd: string }[]> = {
   oneliner: [
-    { comment: '# Works everywhere. Installs everything. You\'re welcome. 🦞', cmd: 'curl -fsSL https://builderforce.ai/install.sh | bash' },
+    { comment: '# Works everywhere. Installs everything. You\'re welcome.', cmd: 'curl -fsSL https://builderforce.ai/install.sh | bash' },
   ],
   npm: [
     { comment: '# Install BuilderForce Agents', cmd: 'npm i -g @seanhogg/builderforce-agents' },
-    { comment: '# Meet your lobster', cmd: 'builderforce onboard' },
+    { comment: '# Meet your agent', cmd: 'builderforce onboard' },
   ],
   git: [
     { comment: '# Hackable build from source', cmd: 'git clone https://github.com/seanhogg/agents.git' },

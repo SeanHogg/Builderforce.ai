@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
 export interface Skill {
   id: string;
@@ -28,6 +30,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
   const [category, setCategory] = useState<string>('');
   const [search, setSearch] = useState<string>('');
   const [sort, setSort] = useState<SortKey>('trending');
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
 
   const categories = useMemo(
     () => Array.from(new Set(skills.map((s) => s.category).filter((c): c is string => Boolean(c)))).sort(),
@@ -91,33 +94,67 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
             <option value="downloads">Most Downloaded</option>
           </select>
         </div>
+        <div className="cc-skills-filter" style={{ flex: '0 0 auto', justifyContent: 'flex-end' }}>
+          <label>View</label>
+          <ViewToggle value={viewMode} onChange={setViewMode} />
+        </div>
       </section>
 
       <p className="cc-skills-count">
         Showing {visible.length} of {skills.length} skills
       </p>
 
-      <div className="cc-skills-grid">
-        {visible.map((s) => (
-          <article key={s.id} className="cc-skill-card">
-            <div className="cc-skill-head">
-              <h3 className="cc-skill-name">{s.name}</h3>
-              {s.category && <span className="cc-skill-cat">{s.category}</span>}
-            </div>
-            <p className="cc-skill-author">by {s.author}</p>
-            <p className="cc-skill-desc">{s.description}</p>
-            {s.tags && s.tags.length > 0 && (
-              <div className="cc-skill-tags">
-                {s.tags.map((t) => <span key={t} className="cc-skill-tag">#{t}</span>)}
+      {viewMode === 'table' ? (
+        <div style={tableWrapStyle}>
+          <table style={tableStyle}>
+            <thead>
+              <tr style={theadRowStyle}>
+                <th style={thStyle}>Skill</th>
+                <th style={thStyle}>Description</th>
+                <th style={thStyle}>Category</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((s) => (
+                <tr key={s.id} style={trStyle}>
+                  <td style={tdStyle}>
+                    <strong>{s.name}</strong>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>by {s.author}</div>
+                  </td>
+                  <td style={tdMutedStyle}>{s.description}</td>
+                  <td style={tdMutedStyle}>{s.category ?? '—'}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right' }}>
+                    <Link href="/marketplace" className="cc-btn">Get</Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="cc-skills-grid">
+          {visible.map((s) => (
+            <article key={s.id} className="cc-skill-card">
+              <div className="cc-skill-head">
+                <h3 className="cc-skill-name">{s.name}</h3>
+                {s.category && <span className="cc-skill-cat">{s.category}</span>}
               </div>
-            )}
-            <div className="cc-skill-stats">
-              {typeof s.likes === 'number' && <span>♥ {s.likes}</span>}
-              {typeof s.downloads === 'number' && <span>↓ {s.downloads}</span>}
-            </div>
-          </article>
-        ))}
-      </div>
+              <p className="cc-skill-author">by {s.author}</p>
+              <p className="cc-skill-desc">{s.description}</p>
+              {s.tags && s.tags.length > 0 && (
+                <div className="cc-skill-tags">
+                  {s.tags.map((t) => <span key={t} className="cc-skill-tag">#{t}</span>)}
+                </div>
+              )}
+              <div className="cc-skill-stats">
+                {typeof s.likes === 'number' && <span>♥ {s.likes}</span>}
+                {typeof s.downloads === 'number' && <span>↓ {s.downloads}</span>}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
 
       <style>{`
         .cc-skills-page {

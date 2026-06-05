@@ -11,6 +11,8 @@ import {
 import { InviteTeamMembers } from '@/components/InviteTeamMembers';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 
 /**
@@ -28,6 +30,7 @@ export default function MembersPage() {
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<TenantMember | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -142,6 +145,7 @@ export default function MembersPage() {
                 </span>
               )}
             </h2>
+            <ViewToggle value={viewMode} onChange={setViewMode} />
           </div>
 
           {error && (
@@ -168,7 +172,7 @@ export default function MembersPage() {
             <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '12px 0' }}>
               No members yet. Invite your first teammate above.
             </div>
-          ) : (
+          ) : viewMode === 'card' ? (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {members.map((m, idx) => (
                 <div
@@ -265,6 +269,73 @@ export default function MembersPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          ) : (
+            <div style={tableWrapStyle}>
+              <table style={tableStyle}>
+                <thead>
+                  <tr style={theadRowStyle}>
+                    <th style={thStyle}>Member</th>
+                    <th style={thStyle}>Email</th>
+                    <th style={thStyle}>MFA</th>
+                    <th style={thStyle}>Sessions</th>
+                    <th style={thStyle}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {members.map((m) => (
+                    <tr key={m.id} style={trStyle}>
+                      <td style={{ ...tdStyle, fontWeight: 600 }}>
+                        {m.displayName ?? m.username ?? m.email}
+                      </td>
+                      <td style={tdMutedStyle}>{m.email}</td>
+                      <td style={tdStyle}>
+                        {m.mfaEnabled ? (
+                          <span
+                            title="MFA enabled"
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              padding: '3px 8px',
+                              borderRadius: 6,
+                              background: 'rgba(34,197,94,0.15)',
+                              color: '#22c55e',
+                              letterSpacing: 0.3,
+                            }}
+                          >
+                            MFA
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)' }}>—</span>
+                        )}
+                      </td>
+                      <td style={tdMutedStyle}>
+                        {m.activeSessions} session{m.activeSessions === 1 ? '' : 's'}
+                      </td>
+                      <td style={tdStyle}>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmRemove(m)}
+                          disabled={removing === m.id}
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: 'var(--coral-bright)',
+                            background: 'transparent',
+                            border: '1px solid var(--coral-bright)',
+                            borderRadius: 8,
+                            cursor: removing === m.id ? 'not-allowed' : 'pointer',
+                            opacity: removing === m.id ? 0.6 : 1,
+                          }}
+                        >
+                          {removing === m.id ? 'Removing…' : 'Remove'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </section>

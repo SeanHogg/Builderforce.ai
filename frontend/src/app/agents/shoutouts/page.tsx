@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import testimonials from '@/data/agents/testimonials.json';
 import extraTestimonials from '@/data/agents/testimonials-extra.json';
+import ShoutoutsView, { type Testimonial } from './ShoutoutsView';
 
 export const metadata: Metadata = {
   title: 'Shoutouts — BuilderForce Agents',
@@ -8,39 +9,11 @@ export const metadata: Metadata = {
   alternates: { canonical: '/agents/shoutouts' },
 };
 
-interface Testimonial {
-  quote: string;
-  author: string;
-  url: string;
-  avatar?: string;
-}
-
 export default function ShoutoutsPage() {
   const all = [...testimonials, ...extraTestimonials] as Testimonial[];
   return (
     <div className="cc-page">
-      <header className="cc-page-header">
-        <h1 className="cc-page-title"><span className="cc-agentHost-accent">⟩</span> Shoutouts</h1>
-        <p className="cc-page-subtitle">What the community is saying about BuilderForce Agents.</p>
-      </header>
-
-      <div className="cc-shoutouts-grid">
-        {all.map((t, i) => (
-          <a key={i} href={t.url} target="_blank" rel="noopener" className="cc-shoutout-card">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={t.avatar || `https://unavatar.io/x/${t.author}`}
-              alt={t.author}
-              loading="lazy"
-              className="cc-shoutout-avatar"
-            />
-            <div className="cc-shoutout-content">
-              <p className="cc-shoutout-quote">&ldquo;{t.quote}&rdquo;</p>
-              <span className="cc-shoutout-author">@{t.author}</span>
-            </div>
-          </a>
-        ))}
-      </div>
+      <ShoutoutsView all={all} />
 
       <style>{`
         .cc-page {
@@ -113,6 +86,30 @@ export default function ShoutoutsPage() {
           color: var(--coral-bright);
           font-size: 0.82rem;
         }
+        .cc-shoutouts-toolbar {
+          display: flex;
+          justify-content: flex-end;
+          margin-bottom: 16px;
+        }
+        .cc-shoutout-tauthor {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-weight: 600;
+          white-space: nowrap;
+        }
+        .cc-shoutout-tavatar {
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          flex-shrink: 0;
+        }
+        .cc-shoutout-thandle {
+          color: var(--coral-bright);
+          text-decoration: none;
+          white-space: nowrap;
+        }
+        .cc-shoutout-thandle:hover { text-decoration: underline; }
       `}</style>
     </div>
   );

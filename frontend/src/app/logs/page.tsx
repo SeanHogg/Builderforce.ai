@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { auditApi, type AuditEvent } from '@/lib/builderforceApi';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
   user_registered: 'var(--cyan-bright, #00e5cc)',
@@ -56,6 +57,7 @@ export default function LogsPage() {
   const [eventTypeFilter, setEventTypeFilter] = useState('');
   const [resourceTypeFilter, setResourceTypeFilter] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -85,22 +87,25 @@ export default function LogsPage() {
             Immutable event log for all state changes in your workspace.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={load}
-          style={{
-            padding: '7px 14px',
-            fontSize: 12,
-            fontWeight: 600,
-            background: 'var(--bg-base)',
-            color: 'var(--text-secondary)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
-            cursor: 'pointer',
-          }}
-        >
-          ⟳ Refresh
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <ViewToggle value={viewMode} onChange={setViewMode} />
+          <button
+            type="button"
+            onClick={load}
+            style={{
+              padding: '7px 14px',
+              fontSize: 12,
+              fontWeight: 600,
+              background: 'var(--bg-base)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 8,
+              cursor: 'pointer',
+            }}
+          >
+            ⟳ Refresh
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -175,6 +180,7 @@ export default function LogsPage() {
         </div>
       )}
 
+      {viewMode === 'table' ? (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {events.map((ev) => {
           const isExpanded = expandedId === ev.id;
@@ -271,6 +277,103 @@ export default function LogsPage() {
           );
         })}
       </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+          {events.map((ev) => {
+            const isExpanded = expandedId === ev.id;
+            let meta: Record<string, unknown> | null = null;
+            try { meta = ev.metadata ? JSON.parse(ev.metadata) : null; } catch { /* ignore */ }
+
+            return (
+              <div
+                key={ev.id}
+                style={{
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 12,
+                  padding: 18,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <EventTypeBadge type={ev.eventType} />
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
+                    {new Date(ev.createdAt).toLocaleString()}
+                  </span>
+                </div>
+
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', minWidth: 0 }}>
+                  {ev.resourceType && (
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      {ev.resourceType}
+                      {ev.resourceId ? ` #${ev.resourceId}` : ''} ·{' '}
+                    </span>
+                  )}
+                  {ev.userId ? `user ${ev.userId.slice(0, 8)}…` : 'system'}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(isExpanded ? null : ev.id)}
+                  style={{
+                    alignSelf: 'flex-start',
+                    padding: 0,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--coral-bright, #f4726e)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {isExpanded ? '▲ Hide details' : '▼ Show details'}
+                </button>
+
+                {isExpanded && (
+                  <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 10 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      {[
+                        { label: 'Event ID', value: String(ev.id) },
+                        { label: 'Tenant', value: String(ev.tenantId) },
+                        { label: 'Resource type', value: ev.resourceType ?? '—' },
+                        { label: 'Resource ID', value: ev.resourceId ?? '—' },
+                        { label: 'User ID', value: ev.userId ?? 'system' },
+                        { label: 'Timestamp', value: new Date(ev.createdAt).toISOString() },
+                      ].map(({ label, value }) => (
+                        <div key={label}>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>
+                          <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{value}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {meta && (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>Metadata</div>
+                        <pre
+                          style={{
+                            fontSize: 11,
+                            fontFamily: 'var(--font-mono)',
+                            color: 'var(--text-secondary)',
+                            background: 'var(--bg-base)',
+                            padding: '8px 10px',
+                            borderRadius: 6,
+                            overflowX: 'auto',
+                            margin: 0,
+                          }}
+                        >
+                          {JSON.stringify(meta, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

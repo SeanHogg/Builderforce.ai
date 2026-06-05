@@ -105,7 +105,7 @@ export default function AgentsHome() {
       <div className="cc-nebula" aria-hidden />
       <div className="cc-page">
         <header className="cc-hero">
-          <div className="cc-lobster">
+          <div className="cc-logo">
             <Image src="/agents.png" alt="BuilderForce Agents logo" width={140} height={140} priority />
           </div>
           <h1 className="cc-title">BuilderForce Agents</h1>
@@ -245,12 +245,12 @@ export default function AgentsHome() {
           text-align: center;
           padding: 24px 0 32px;
         }
-        .cc-lobster {
+        .cc-logo {
           display: inline-block;
           margin-bottom: 16px;
           filter: drop-shadow(0 0 30px var(--logo-glow));
         }
-        .cc-lobster img {
+        .cc-logo img {
           width: clamp(96px, 18vw, 160px);
           height: auto;
         }

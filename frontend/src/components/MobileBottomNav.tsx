@@ -1,13 +1,15 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { isNavItemActive, type NavMatch } from '@/lib/nav';
+import MascotIcon from './MascotIcon';
 
 interface BottomItem extends NavMatch {
   label: string;
-  icon: string;
+  icon: ReactNode;
   /** Priority CTA treatment (e.g. Sign In when logged out). */
   accent?: boolean;
 }
@@ -20,7 +22,7 @@ function itemsFor(isAuthenticated: boolean, isSuperadmin: boolean): BottomItem[]
     return [
       { href: '/', label: 'Home', icon: '🏠', exactMatch: true },
       { href: '/product', label: 'Product', icon: '✨' },
-      { href: '/marketplace', label: 'Workforce', icon: '🦀' },
+      { href: '/marketplace', label: 'Workforce', icon: <MascotIcon size={22} /> },
       { href: '/pricing', label: 'Pricing', icon: '💳' },
       { href: '/login', label: 'Sign In', icon: '🔑', accent: true },
     ];
@@ -30,7 +32,7 @@ function itemsFor(isAuthenticated: boolean, isSuperadmin: boolean): BottomItem[]
     : { href: '/settings', label: 'Settings', icon: '⚙', exactMatch: true };
   return [
     { href: '/dashboard', label: 'Home', icon: '🏠' },
-    { href: '/workforce', label: 'Workforce', icon: '🦀' },
+    { href: '/workforce', label: 'Workforce', icon: <MascotIcon size={22} /> },
     { href: '/workflows/builder', label: 'Workflows', icon: '🔀', activePaths: ['/workflows'] },
     { href: '/chats', label: 'Chats', icon: '💬' },
     last,

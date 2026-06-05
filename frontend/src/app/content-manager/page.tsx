@@ -8,6 +8,8 @@ import { useAuth } from '@/lib/AuthContext';
 import { marketplaceStats, llmChat, type ArtifactStats } from '@/lib/builderforceApi';
 import { contentStorageKey } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
 export type ContentType = 'page' | 'template' | 'snippet';
 export type ContentStatus = 'draft' | 'published';
@@ -62,6 +64,7 @@ export default function ContentManagerPage() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ContentBlock | null>(null);
   const [previewMode, setPreviewMode] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [activeVariant, setActiveVariant] = useState<'main' | 'ab'>('main');
   const [form, setForm] = useState({
     title: '',
@@ -243,7 +246,7 @@ export default function ContentManagerPage() {
       </div>
 
       {/* Primary tabs: My Content (N) | Marketplace (N) */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 24 }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 24, alignItems: 'center' }}>
         <button
           type="button"
           className={`btn btn-sm ${contentTab === 'my-content' ? 'btn-primary' : 'btn-secondary'}`}
@@ -258,6 +261,9 @@ export default function ContentManagerPage() {
         >
           Marketplace ({marketplaceCount})
         </button>
+        <div style={{ marginLeft: 'auto' }}>
+          <ViewToggle value={viewMode} onChange={setViewMode} />
+        </div>
       </div>
 
       {contentTab === 'my-content' ? (
@@ -335,7 +341,7 @@ export default function ContentManagerPage() {
                 Create content
               </button>
             </div>
-          ) : (
+          ) : viewMode === 'card' ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
               {filtered.map((b) => {
                 const stat = contentStats[b.id] ?? { likes: b.likes ?? 0, installs: b.downloads ?? 0, liked: false };
@@ -372,6 +378,56 @@ export default function ContentManagerPage() {
                 );
               })}
             </div>
+          ) : (
+            <div style={{ ...tableWrapStyle, overflowX: 'auto' }}>
+              <table style={tableStyle}>
+                <thead>
+                  <tr style={theadRowStyle}>
+                    <th style={thStyle}>Title</th>
+                    <th style={thStyle}>Type</th>
+                    <th style={thStyle}>Status</th>
+                    <th style={thStyle}>Stats</th>
+                    <th style={thStyle}>Updated</th>
+                    <th style={thStyle}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((b) => {
+                    const stat = contentStats[b.id] ?? { likes: b.likes ?? 0, installs: b.downloads ?? 0, liked: false };
+                    return (
+                      <tr key={b.id} style={trStyle}>
+                        <td style={{ ...tdStyle, fontWeight: 500 }} title={b.title}>
+                          {b.title}
+                          {b.variant && <span className="badge badge-blue" style={{ marginLeft: 6 }} title="A/B variant">A/B</span>}
+                        </td>
+                        <td style={tdMutedStyle}>
+                          <span className="badge badge-gray">{b.type}</span>
+                        </td>
+                        <td style={tdMutedStyle}>
+                          <span className={`badge ${b.status === 'published' ? 'badge-green' : 'badge-yellow'}`}>{b.status}</span>
+                        </td>
+                        <td style={tdMutedStyle}>
+                          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} onClick={() => toggleContentLike(b.id)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
+                          <span style={{ marginLeft: 10 }}>⬇️ {stat.installs}</span>
+                        </td>
+                        <td style={tdMutedStyle}>{new Date(b.updatedAt).toLocaleDateString()}</td>
+                        <td style={tdStyle}>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => openEdit(b)}>Edit</button>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => togglePublish(b.id)}>{b.status === 'published' ? 'Unpublish' : 'Publish'}</button>
+                            {b.status === 'published' && (
+                              <button type="button" className={`btn btn-sm ${b.sharedToMarketplace ? 'btn-secondary' : 'btn-primary'}`} onClick={() => toggleMarketplace(b.id)}>{b.sharedToMarketplace ? 'Unshare' : 'Share'}</button>
+                            )}
+                            <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteBlock(b.id)}>Delete</button>
+                            <ArtifactAssigner artifactType="content" artifactSlug={b.id} artifactName={b.title} />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </>
       ) : (
@@ -398,7 +454,7 @@ export default function ContentManagerPage() {
                 Go to My Content
               </button>
             </div>
-          ) : (
+          ) : viewMode === 'card' ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
               {marketplaceContent.map((b) => {
                 const stat = contentStats[b.id] ?? { likes: 0, installs: 0, liked: false };

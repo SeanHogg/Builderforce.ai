@@ -34,6 +34,7 @@ import {
   type VendorHealthSnapshot,
 } from '@/lib/adminApi';
 import { llmChat } from '@/lib/builderforceApi';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { BUILTIN_PERSONAS, type Persona } from '@/lib/marketplaceData';
 import UserDetailDrawer from '@/components/UserDetailDrawer';
 import { TenantApiKeysAdminTab } from '@/components/admin/TenantApiKeysAdminTab';
@@ -322,6 +323,11 @@ export default function AdminPage() {
 
   // User detail drawer
   const [drawerUser, setDrawerUser] = useState<AdminUser | null>(null);
+
+  // Card/list view toggles — default 'table' to preserve existing behavior.
+  // Each tab keeps its own mode so switching one doesn't affect the other.
+  const [usersViewMode, setUsersViewMode] = useState<ViewMode>('table');
+  const [tenantsViewMode, setTenantsViewMode] = useState<ViewMode>('table');
 
   // Tenants tab: expanded tenant members
   const [expandedTenantId, setExpandedTenantId] = useState<number | null>(null);
@@ -1053,64 +1059,120 @@ export default function AdminPage() {
 
             {tab === 'users' && (
               <div>
-                <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                   <span className="text-muted" style={{ fontSize: 14 }}>{users.length} users</span>
-                  <button type="button" className="btn-ghost" onClick={() => loadTab('users')}>
-                    ↻ Refresh
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ViewToggle value={usersViewMode} onChange={setUsersViewMode} />
+                    <button type="button" className="btn-ghost" onClick={() => loadTab('users')}>
+                      ↻ Refresh
+                    </button>
+                  </div>
                 </div>
-                <div className="table-wrap">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Email</th>
-                        <th>Username</th>
-                        <th>Workspaces</th>
-                        <th>Joined</th>
-                        <th>Role</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {users.map((u) => (
-                        <tr key={u.id}>
-                          <td>{u.email}</td>
-                          <td className="text-muted">{u.username ?? '—'}</td>
-                          <td>{u.tenantCount}</td>
-                          <td className="text-muted">{fmtDate(u.createdAt)}</td>
-                          <td>
-                            {u.isSuperadmin ? (
-                              <span className="badge badge-danger">superadmin</span>
-                            ) : (
-                              <span className="badge badge-neutral">user</span>
-                            )}
-                          </td>
-                          <td style={{ display: 'flex', gap: 6 }}>
-                            <button type="button" className="btn-ghost" onClick={() => setDrawerUser(u)}>
-                              Details
-                            </button>
-                            {!u.isSuperadmin && (
-                              <button type="button" className="btn-ghost" onClick={() => startImpersonate(u)}>
-                                Emulate
-                              </button>
-                            )}
-                          </td>
+                {users.length === 0 ? (
+                  <p className="text-muted" style={{ padding: 24 }}>No users found.</p>
+                ) : usersViewMode === 'table' ? (
+                  <div className="table-wrap">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Email</th>
+                          <th>Username</th>
+                          <th>Workspaces</th>
+                          <th>Joined</th>
+                          <th>Role</th>
+                          <th></th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {users.map((u) => (
+                          <tr key={u.id}>
+                            <td>{u.email}</td>
+                            <td className="text-muted">{u.username ?? '—'}</td>
+                            <td>{u.tenantCount}</td>
+                            <td className="text-muted">{fmtDate(u.createdAt)}</td>
+                            <td>
+                              {u.isSuperadmin ? (
+                                <span className="badge badge-danger">superadmin</span>
+                              ) : (
+                                <span className="badge badge-neutral">user</span>
+                              )}
+                            </td>
+                            <td style={{ display: 'flex', gap: 6 }}>
+                              <button type="button" className="btn-ghost" onClick={() => setDrawerUser(u)}>
+                                Details
+                              </button>
+                              {!u.isSuperadmin && (
+                                <button type="button" className="btn-ghost" onClick={() => startImpersonate(u)}>
+                                  Emulate
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                    {users.map((u) => (
+                      <div
+                        key={u.id}
+                        style={{
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: 12,
+                          padding: 18,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 10,
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                          <span style={{ fontWeight: 600, wordBreak: 'break-all' }}>{u.email}</span>
+                          {u.isSuperadmin ? (
+                            <span className="badge badge-danger">superadmin</span>
+                          ) : (
+                            <span className="badge badge-neutral">user</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                          {u.username ?? '—'}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-muted)' }}>
+                          <span>{u.tenantCount} workspaces</span>
+                          <span>{fmtDate(u.createdAt)}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                          <button type="button" className="btn-ghost" onClick={() => setDrawerUser(u)}>
+                            Details
+                          </button>
+                          {!u.isSuperadmin && (
+                            <button type="button" className="btn-ghost" onClick={() => startImpersonate(u)}>
+                              Emulate
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
             {tab === 'tenants' && (
               <div>
-                <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                   <span className="text-muted" style={{ fontSize: 14 }}>{tenants.length} workspaces</span>
-                  <button type="button" className="btn-ghost" onClick={() => loadTab('tenants')}>
-                    ↻ Refresh
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ViewToggle value={tenantsViewMode} onChange={setTenantsViewMode} />
+                    <button type="button" className="btn-ghost" onClick={() => loadTab('tenants')}>
+                      ↻ Refresh
+                    </button>
+                  </div>
                 </div>
+                {tenants.length === 0 ? (
+                  <p className="text-muted" style={{ padding: 24 }}>No workspaces found.</p>
+                ) : tenantsViewMode === 'table' ? (
                 <div className="table-wrap">
                   <table className="data-table">
                     <thead>
@@ -1243,6 +1305,133 @@ export default function AdminPage() {
                     </tbody>
                   </table>
                 </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                    {tenants.map((t) => {
+                      const expanded = expandedTenantId === t.id;
+                      const toggleExpand = async () => {
+                        if (expanded) {
+                          setExpandedTenantId(null);
+                          return;
+                        }
+                        setExpandedTenantId(t.id);
+                        if (!tenantMembersMap[t.id]) {
+                          try {
+                            const members = await adminApi.tenantMembers(t.id);
+                            setTenantMembersMap((prev) => ({ ...prev, [t.id]: members }));
+                          } catch (e) {
+                            setErrorMsg(e instanceof Error ? e.message : String(e));
+                          }
+                        }
+                      };
+                      return (
+                        <div
+                          key={t.id}
+                          style={{
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border-subtle)',
+                            borderRadius: 12,
+                            padding: 18,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 10,
+                          }}
+                        >
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10 }}
+                            onClick={() => { void toggleExpand(); }}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void toggleExpand(); } }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                              <span style={{ fontWeight: 600 }}>
+                                <span style={{ display: 'inline-block', marginRight: 6, transition: 'transform 0.2s', transform: expanded ? 'rotate(90deg)' : 'none' }}>▶</span>
+                                {t.name}
+                              </span>
+                              <span className={`badge ${t.effectivePlan === 'pro' ? 'badge-danger' : 'badge-neutral'}`}>
+                                {t.effectivePlan}
+                              </span>
+                            </div>
+                            <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--text-muted)' }}>{t.slug}</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 13 }}>
+                              <span className={`badge ${t.status === 'active' ? 'badge-success' : 'badge-neutral'}`}>{t.status}</span>
+                              <span className="text-muted">{t.billingStatus}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-muted)' }}>
+                              <span>{t.memberCount} members</span>
+                              <span>{t.agentHostCount} agenthosts</span>
+                            </div>
+                            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Created {fmtDate(t.createdAt)}</div>
+                          </div>
+                          {expanded && (
+                            <div onClick={(e) => e.stopPropagation()} style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 10 }}>
+                              <TenantTokenLimitOverrideEditor
+                                tenantId={t.id}
+                                value={t.tokenDailyLimitOverride ?? null}
+                                onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, tokenDailyLimitOverride: next } : x))}
+                              />
+                              <TenantPremiumOverrideEditor
+                                tenantId={t.id}
+                                value={t.premiumOverride === true}
+                                onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, premiumOverride: next } : x))}
+                              />
+                              {!tenantMembersMap[t.id] ? (
+                                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading members…</span>
+                              ) : tenantMembersMap[t.id].length === 0 ? (
+                                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No members.</span>
+                              ) : (
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                  <thead>
+                                    <tr>
+                                      <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Email</th>
+                                      <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Role</th>
+                                      <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Joined</th>
+                                      <th style={{ padding: '4px 8px' }}></th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {tenantMembersMap[t.id].map((m) => (
+                                      <tr key={m.id}>
+                                        <td style={{ padding: '4px 8px' }}>{m.email}</td>
+                                        <td style={{ padding: '4px 8px' }}>
+                                          <span className="badge badge-neutral" style={{ fontSize: 10 }}>{m.role}</span>
+                                        </td>
+                                        <td style={{ padding: '4px 8px', color: 'var(--text-muted)' }}>{fmtDate(m.joinedAt)}</td>
+                                        <td style={{ padding: '4px 8px' }}>
+                                          <button
+                                            type="button"
+                                            className="btn-ghost"
+                                            style={{ fontSize: 11, padding: '2px 8px' }}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              const adminUser: AdminUser = {
+                                                id: m.id,
+                                                email: m.email,
+                                                username: m.username,
+                                                displayName: m.displayName,
+                                                isSuperadmin: false,
+                                                createdAt: m.joinedAt,
+                                                tenantCount: 1,
+                                              };
+                                              startImpersonate(adminUser);
+                                            }}
+                                          >
+                                            Emulate
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 

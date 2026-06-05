@@ -434,7 +434,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
     surfaces: [
       { icon: '🔀', title: 'Workflow Builder', desc: 'Compose agents and tools into repeatable, approval-gated workflows.', href: '/workflows/builder' },
       { icon: '☑', title: 'Task Management', desc: 'Track, assign, and watch tasks flow through your agent workforce.', href: '/tasks' },
-      { icon: '🦀', title: 'Workforce Mesh', desc: 'Discover and dispatch work across local and remote AgentHosts — capacity sharing across machines and tenants.', href: '/workforce' },
+      { icon: '🕸️', title: 'Workforce Mesh', desc: 'Discover and dispatch work across local and remote AgentHosts — capacity sharing across machines and tenants.', href: '/workforce' },
       { icon: '💬', title: 'Chats', desc: 'Talk to your agents directly, or watch them collaborate in shared conversations.', href: '/chats' },
     ],
   },
