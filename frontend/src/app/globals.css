@@ -886,6 +886,36 @@ html[data-theme='light'] .nebula {
   padding-top: 8px;
   margin-top: 8px;
   border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Small chevron that collapses/expands the sidebar. Sits at the trailing edge
+   when expanded; centers itself when the rail is collapsed. */
+.nav-collapse-toggle {
+  align-self: flex-end;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color var(--duration-fast) ease, background var(--duration-fast) ease, border-color var(--duration-fast) ease;
+}
+
+.nav-collapse-toggle:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+  border-color: var(--accent-subtle, var(--border));
+}
+
+.nav.collapsed .nav-collapse-toggle {
+  align-self: center;
 }
 
 .nav-section {
@@ -1515,77 +1545,158 @@ html[data-theme='light'] .nebula {
 }
 
 /* ── Mobile / responsive ── */
+/* ── Mobile nav chrome: hidden on desktop (the rail is docked) ── */
+.nav-backdrop,
+.nav-mobile-head,
+.topbar-hamburger,
+.mobile-bottom-nav {
+  display: none;
+}
+/* Auth chips are direct topbar flex items on desktop; hidden on mobile. */
+.topbar-auth-cta {
+  display: contents;
+}
+
+/* Mobile bottom-bar item styling (only visible when the bar is shown <768px) */
+.mbn-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 44px;
+  text-decoration: none;
+  color: var(--muted);
+  font-weight: 500;
+  transition: color var(--duration-fast) ease;
+}
+.mbn-item:hover { color: var(--text); }
+.mbn-item.active { color: var(--accent, #4d9eff); }
+.mbn-accent { color: var(--coral-bright); font-weight: 700; }
+.mbn-icon { font-size: 1.25rem; line-height: 1; }
+.mbn-label { font-size: 10px; line-height: 1; }
+
 @media (max-width: 767px) {
-  /* Hide Marketplace chip from topbar — it lives in the sidebar on mobile */
-  .topbar-center {
-    display: none;
-  }
+  /* Marketplace chip lives in the bottom bar / drawer on mobile */
+  .topbar-center { display: none; }
 
-  /* Show sidebar Marketplace item only on mobile */
-  .nav-item-mobile-only {
-    display: flex;
+  /* Hamburger opens the drawer; desktop auth chips give way to drawer + bottom bar */
+  .topbar-hamburger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin-right: 2px;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
   }
+  .topbar-hamburger:hover { background: var(--bg-hover); }
+  .topbar-auth-cta { display: none; }
 
-  /* Force icon-only sidebar on mobile to maximise content area */
-  :root {
-    --shell-nav-width: var(--shell-nav-width-collapsed);
-  }
+  /* The docked rail column collapses to zero — the sidebar becomes a drawer. */
+  :root { --shell-nav-width: 0px; }
 
   .nav {
-    padding: 16px 8px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(86vw, 320px);
+    padding: 0;
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1002;
+    background: var(--bg);
   }
+  .nav.mobile-open { transform: translateX(0); }
 
+  /* Drawer header with the X close button */
+  .nav-mobile-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: var(--shell-topbar-height);
+    padding: 0 8px 0 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .nav-mobile-title { font-weight: 700; font-size: 15px; color: var(--text-strong); }
+  .nav-mobile-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .nav-mobile-close:hover { background: var(--bg-hover); color: var(--text); }
+
+  /* Drawer shows full labels regardless of the desktop collapse preference */
+  .nav-main { padding: 12px; }
+  .nav-footer { padding: 8px 12px; }
   .nav-section-label {
+    opacity: 1;
+    pointer-events: auto;
+    height: auto;
+    margin-bottom: 6px;
+    padding: 0 10px;
+  }
+  .nav-item { padding: 10px 12px; justify-content: flex-start; gap: 10px; }
+  .nav-item-label { display: inline; }
+
+  /* Hide the desktop collapse chevron in the drawer — the X closes it */
+  .nav-collapse-toggle { display: none; }
+
+  /* Backdrop behind the open drawer */
+  .nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
     opacity: 0;
     pointer-events: none;
-    height: 0;
-    margin: 0;
-    padding: 0;
+    transition: opacity 0.25s ease;
+    z-index: 1001;
+  }
+  .nav-backdrop.open { opacity: 1; pointer-events: auto; }
+
+  /* Persistent bottom bar */
+  .mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 900;
+    height: calc(56px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
   }
 
-  .nav-section {
-    margin-bottom: 8px;
-  }
-
-  .nav-item {
-    padding: 8px;
-    justify-content: center;
-    gap: 0;
-  }
-
-  .nav-item-label {
-    display: none;
-  }
-
-  /* Tighter content padding on small screens */
+  /* Tighter content padding + clearance for the bottom bar */
   .content {
-    padding: 8px 6px;
+    padding: 8px 6px calc(64px + env(safe-area-inset-bottom, 0px));
   }
 
-  /* Page inner wrapper: remove max-width constraint, use smaller padding */
-  .page-inner {
-    padding: 12px 8px;
-    max-width: 100%;
-    margin: 0;
-  }
+  .page-inner { padding: 12px 8px; max-width: 100%; margin: 0; }
 
-  /* BrainStorm: stack sidebar and main vertically on mobile */
-  .bs-shell {
-    grid-template-columns: 1fr;
-    height: auto;
-    min-height: 0;
-  }
+  .bs-shell { grid-template-columns: 1fr; height: auto; min-height: 0; }
+  .bs-sidebar { max-height: 200px; border-right: none; border-bottom: 1px solid var(--border); }
 
-  .bs-sidebar {
-    max-height: 200px;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-
-  /* Topbar: tighten brand on very small screens */
-  .brand-name {
-    font-size: 14px;
-  }
+  .brand-name { font-size: 14px; }
 }
 
 /* On desktop: hide the mobile-only sidebar items (Marketplace is in topbar) */

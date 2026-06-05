@@ -4,11 +4,13 @@ import { usePathname } from 'next/navigation';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import AppFooter from './AppFooter';
+import MobileBottomNav from './MobileBottomNav';
 import EmulationBar from './EmulationBar';
 import PermissionDebuggerPanel from './PermissionDebuggerPanel';
 import QaTelemetry from './QaTelemetry';
 import { useEmulation } from '@/lib/EmulationContext';
 import { useSidebarCollapse } from '@/lib/useSidebarCollapse';
+import { useMobileNav } from '@/lib/useMobileNav';
 
 function isProjectIdPage(pathname: string | null): boolean {
   return pathname != null && /^\/projects\/[^/]+$/.test(pathname);
@@ -25,6 +27,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // IDE/project pages force icon-only mode; otherwise the user's stored choice.
   const routeCollapsed = isProjectIdPage(pathname) || isIdePage(pathname);
   const { collapsed: navCollapsed, toggle: toggleNav } = useSidebarCollapse(routeCollapsed);
+  const { open: navOpen, openNav, closeNav } = useMobileNav();
 
   return (
     <>
@@ -35,10 +38,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         className={`shell ${navCollapsed ? 'nav-collapsed' : ''}${emulation ? ' emulation-active' : ''}`}
         style={{ position: 'relative' }}
       >
-        <TopBar />
-        <Sidebar collapsed={navCollapsed} onToggleCollapsed={toggleNav} />
+        <TopBar onMenuClick={openNav} />
+        <Sidebar collapsed={navCollapsed} onToggleCollapsed={toggleNav} mobileOpen={navOpen} onMobileClose={closeNav} />
         <main className="content">{children}</main>
       </div>
+      <MobileBottomNav />
       <AppFooter />
     </>
   );

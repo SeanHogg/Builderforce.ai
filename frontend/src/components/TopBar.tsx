@@ -65,7 +65,7 @@ function CartButton() {
   );
 }
 
-export default function TopBar() {
+export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { tenant, logout, user, isAuthenticated } = useAuth();
   const { previewRole, startPreview, exitPreview } = useRolePreview();
   const { emulation } = useEmulation();
@@ -79,6 +79,18 @@ export default function TopBar() {
   return (
     <header className={`topbar${previewRole ? ' topbar--role-preview' : ''}`}>
       <div className="topbar-left">
+        <button
+          type="button"
+          className="topbar-hamburger"
+          onClick={onMenuClick}
+          aria-label="Open menu"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
         <Link href={isAuthenticated ? '/dashboard' : '/'} className="brand" style={{ textDecoration: 'none' }}>
           <Image
             src="/agentHost.png"
@@ -110,7 +122,8 @@ export default function TopBar() {
       </div>
       <div className="topbar-right">
         {!isAuthenticated && (
-          <>
+          // Hidden on mobile (the drawer + bottom bar carry these); shown ≥768px.
+          <span className="topbar-auth-cta">
             <Link href="/login" className="tenant-chip" style={{ textDecoration: 'none' }}>
               Sign In
             </Link>
@@ -126,7 +139,7 @@ export default function TopBar() {
             >
               Get Started →
             </Link>
-          </>
+          </span>
         )}
 
         {isAuthenticated && tenant && (

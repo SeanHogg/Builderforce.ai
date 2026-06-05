@@ -3,7 +3,9 @@
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import AppFooter from './AppFooter';
+import MobileBottomNav from './MobileBottomNav';
 import { useSidebarCollapse } from '@/lib/useSidebarCollapse';
+import { useMobileNav } from '@/lib/useMobileNav';
 
 /**
  * Shell for public marketing + browse pages. Reuses the same `.shell` grid +
@@ -11,17 +13,22 @@ import { useSidebarCollapse } from '@/lib/useSidebarCollapse';
  * chrome — so it renders for logged-out visitors (the gate returns null
  * pre-auth). The Sidebar and TopBar are auth-aware, so this one shell serves
  * both: marketing nav when logged out, app nav when signed in.
+ *
+ * Mobile: the Sidebar is an off-canvas drawer (hamburger in TopBar) and a
+ * persistent bottom bar carries the high-traffic destinations.
  */
 export default function PublicShell({ children }: { children: React.ReactNode }) {
   const { collapsed, toggle } = useSidebarCollapse();
+  const { open: navOpen, openNav, closeNav } = useMobileNav();
 
   return (
     <>
       <div className={`shell ${collapsed ? 'nav-collapsed' : ''}`} style={{ position: 'relative' }}>
-        <TopBar />
-        <Sidebar collapsed={collapsed} onToggleCollapsed={toggle} />
+        <TopBar onMenuClick={openNav} />
+        <Sidebar collapsed={collapsed} onToggleCollapsed={toggle} mobileOpen={navOpen} onMobileClose={closeNav} />
         <main className="content">{children}</main>
       </div>
+      <MobileBottomNav />
       <AppFooter />
     </>
   );
