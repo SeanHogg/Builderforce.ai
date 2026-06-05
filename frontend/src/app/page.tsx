@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
-import { HOMEPAGE_FAQ, FOOTER_LINKS } from '@/lib/content';
+import { HOMEPAGE_FAQ, FOOTER_LINKS, COMPARE } from '@/lib/content';
 import { savePendingPrompt } from '@/lib/brain';
 
 // register BuilderForce Agents quickstart web component
@@ -634,6 +634,29 @@ export default function LandingPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Competitive teaser → /compare ── */}
+        <section className="lp-section">
+          <div className="lp-features" style={{maxWidth:'940px',margin:'0 auto',textAlign:'center'}}>
+            <h2 className="section-title">
+              <span className="agentHost-accent">⟩</span> {COMPARE.teaser.title}
+            </h2>
+            <p style={{maxWidth:'720px',margin:'0 auto 28px',color:'var(--text-secondary)'}}>
+              {COMPARE.teaser.blurb}
+            </p>
+            <div className="lp-grid" style={{gap:'14px',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))'}}>
+              {COMPARE.teaser.highlightFeatures.map((f)=>(
+                <div key={f} className="lp-card" style={{display:'flex',gap:'10px',alignItems:'flex-start',textAlign:'left'}}>
+                  <span aria-hidden style={{color:'var(--accent)',fontWeight:700,lineHeight:1.4}}>✅</span>
+                  <span style={{fontSize:'0.88rem',color:'var(--text-primary)',lineHeight:1.45}}>{f}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{marginTop:'28px'}}>
+              <Link href="/compare" className="lp-btn-primary">{COMPARE.teaser.ctaLabel} →</Link>
             </div>
           </div>
         </section>

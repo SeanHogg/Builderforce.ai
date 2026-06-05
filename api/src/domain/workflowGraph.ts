@@ -17,8 +17,10 @@ import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 
 /** Every node kind the builder palette can place on the canvas. */
 export type WorkflowNodeKind =
-  | 'trigger'    // entry point: manual / webhook / schedule / board-event
+  | 'trigger'    // entry point: manual / webhook / schedule / board-event / data-collection
   | 'agent'      // run a configured agent (role + runtime + model)
+  | 'llm'        // call an LLM platform (OpenAI/Anthropic/Gemini/…) via the gateway
+  | 'mcp'        // invoke an MCP-server / SaaS integration tool
   | 'memory'     // read/write the SSM hippocampus memory
   | 'knowledge'  // ingest into / query a knowledge base
   | 'train'      // kick a MambaKit/SSMjs training run → hippocampus model
@@ -32,6 +34,8 @@ export type WorkflowNodeKind =
  *  compiler, and the orchestrator's executeTask switch agree on one vocabulary. */
 export const NODE_HANDLER_ROLES: Record<Exclude<WorkflowNodeKind, 'agent'>, string> = {
   trigger:   'node:trigger',
+  llm:       'node:llm',
+  mcp:       'node:mcp',
   memory:    'node:memory',
   knowledge: 'node:knowledge',
   train:     'node:train',
@@ -156,6 +160,10 @@ export function taskTextForNode(node: WorkflowDefNode): string {
   switch (node.kind) {
     case 'agent':
       return String(c.task ?? c.prompt ?? node.label ?? 'Run agent');
+    case 'llm':
+      return `LLM ${String(c.provider ?? 'openai')}${c.model ? `/${String(c.model)}` : ''}: ${String(c.prompt ?? node.label)}`;
+    case 'mcp':
+      return `${String(c.integration ?? node.label)} → ${String(c.operation ?? 'call')}`;
     case 'memory':
       return `Memory ${String(c.op ?? 'recall')}: ${String(c.query ?? c.key ?? node.label)}`;
     case 'knowledge':

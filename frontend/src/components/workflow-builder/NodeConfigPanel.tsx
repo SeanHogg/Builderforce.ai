@@ -3,6 +3,7 @@
 import type { Node } from '@xyflow/react';
 import { NODE_KIND_MAP, type ConfigField } from './nodeKinds';
 import type { BuilderNodeData } from './BuilderNode';
+import { integrationForConfig, integrationIcon } from './integrations';
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -27,6 +28,9 @@ interface Props {
 export function NodeConfigPanel({ node, onChange, onDelete }: Props) {
   const meta = NODE_KIND_MAP[node.data.kind];
   const config = node.data.config ?? {};
+  // When this node is backed by a catalog integration, surface its operation
+  // picker and identity instead of the generic kind chrome.
+  const integ = integrationForConfig(config);
 
   const setConfig = (key: string, value: unknown) =>
     onChange(node.id, { config: { ...config, [key]: value } });
@@ -77,10 +81,10 @@ export function NodeConfigPanel({ node, onChange, onDelete }: Props) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', overflowY: 'auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 18 }}>{meta?.icon}</span>
+        <span style={{ fontSize: 18 }}>{integ ? integrationIcon(integ) : meta?.icon}</span>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{meta?.label}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{meta?.blurb}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{integ?.label ?? meta?.label}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{integ?.description ?? meta?.blurb}</div>
         </div>
       </div>
 
@@ -93,7 +97,21 @@ export function NodeConfigPanel({ node, onChange, onDelete }: Props) {
         />
       </label>
 
-      {meta?.fields.map((f) => (
+      {/* Integration operation picker, driven by the registry. */}
+      {integ && integ.operations.length > 0 && (
+        <label style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
+          Operation
+          <select style={inputStyle} value={String(config.operation ?? integ.operations[0]?.id ?? '')} onChange={(e) => setConfig('operation', e.target.value)}>
+            {integ.operations.map((op) => (
+              <option key={op.id} value={op.id}>{op.label}</option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {/* Catalog fields for this kind — hide the raw `operation` field when an
+          integration is selected (the picker above replaces it). */}
+      {meta?.fields.filter((f) => !(integ && f.key === 'operation')).map((f) => (
         <label key={f.key} style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
           {f.label}
           {renderField(f)}

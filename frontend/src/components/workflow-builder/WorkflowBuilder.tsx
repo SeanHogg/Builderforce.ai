@@ -14,6 +14,7 @@ import {
   type Edge,
   type Connection,
   type NodeTypes,
+  type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
@@ -26,6 +27,14 @@ import {
 import { BuilderNode, type BuilderNodeData } from './BuilderNode';
 import { NodeConfigPanel } from './NodeConfigPanel';
 import { NODE_GROUPS, NODE_KINDS, NODE_KIND_MAP } from './nodeKinds';
+import {
+  INTEGRATIONS, INTEGRATION_CATEGORIES, integrationAccent, integrationIcon, presetConfig,
+  type Integration,
+} from './integrations';
+
+/** dataTransfer MIME for palette → canvas drag-and-drop. */
+const DND_MIME = 'application/x-wf-node';
+type DndPayload = { kind?: WorkflowNodeKind; integrationId?: string };
 
 const nodeTypes: NodeTypes = { builder: BuilderNode };
 
@@ -41,15 +50,44 @@ const fieldStyle: React.CSSProperties = {
   padding: '7px 10px', fontSize: 12.5, border: '1px solid var(--border-subtle)', borderRadius: 8,
   background: 'var(--bg-deep)', color: 'var(--text-primary)',
 };
+const groupLabelStyle: React.CSSProperties = {
+  fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase',
+  letterSpacing: '0.04em', marginBottom: 5,
+};
+function paletteItemStyle(accent: string): React.CSSProperties {
+  return {
+    display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+    padding: '6px 8px', marginBottom: 4, fontSize: 12, fontWeight: 600,
+    background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+    border: '1px solid var(--border-subtle)', borderLeft: `3px solid ${accent}`,
+    borderRadius: 7, cursor: 'grab',
+  };
+}
 
-function makeNode(kind: WorkflowNodeKind, index: number): Node<BuilderNodeData> {
+type XY = { x: number; y: number };
+
+/** Staggered fallback position when a node is added by click (no drop point). */
+function staggerPos(index: number): XY {
+  return { x: 120 + (index % 4) * 60, y: 80 + (index % 6) * 70 };
+}
+
+function makeNode(kind: WorkflowNodeKind, position: XY): Node<BuilderNodeData> {
   const meta = NODE_KIND_MAP[kind];
   return {
     id: crypto.randomUUID(),
     type: 'builder',
-    // Stagger new nodes so they don't stack exactly on top of each other.
-    position: { x: 120 + (index % 4) * 60, y: 80 + (index % 6) * 70 },
+    position,
     data: { kind, label: meta.label, config: { ...meta.defaultConfig } },
+  };
+}
+
+/** Build a node from an integration preset (LLM provider, MCP tool, or trigger). */
+function makeIntegrationNode(integ: Integration, position: XY): Node<BuilderNodeData> {
+  return {
+    id: crypto.randomUUID(),
+    type: 'builder',
+    position,
+    data: { kind: integ.kind, label: integ.label, config: presetConfig(integ) },
   };
 }
 
@@ -96,13 +134,49 @@ export function WorkflowBuilder({ definitionId }: Props) {
       .finally(() => setLoading(false));
   }, [definitionId, setNodes, setEdges]);
 
+  const rfRef = useRef<ReactFlowInstance<Node<BuilderNodeData>, Edge> | null>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [paletteSearch, setPaletteSearch] = useState('');
+
   const onConnect = useCallback(
     (c: Connection) => setEdges((eds) => addEdge({ ...c, id: crypto.randomUUID() }, eds)),
     [setEdges],
   );
 
   const addNode = useCallback(
-    (kind: WorkflowNodeKind) => setNodes((nds) => [...nds, makeNode(kind, nds.length)]),
+    (kind: WorkflowNodeKind) => setNodes((nds) => [...nds, makeNode(kind, staggerPos(nds.length))]),
+    [setNodes],
+  );
+
+  const addIntegration = useCallback(
+    (integ: Integration) => setNodes((nds) => [...nds, makeIntegrationNode(integ, staggerPos(nds.length))]),
+    [setNodes],
+  );
+
+  // Drag-and-drop: palette items carry a JSON payload; the canvas drops them at
+  // the cursor's flow coordinates.
+  const onPaletteDragStart = useCallback((e: React.DragEvent, payload: DndPayload) => {
+    e.dataTransfer.setData(DND_MIME, JSON.stringify(payload));
+    e.dataTransfer.effectAllowed = 'move';
+  }, []);
+
+  const onCanvasDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const onCanvasDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      const raw = e.dataTransfer.getData(DND_MIME);
+      if (!raw) return;
+      let payload: DndPayload;
+      try { payload = JSON.parse(raw) as DndPayload; } catch { return; }
+      const position = rfRef.current?.screenToFlowPosition({ x: e.clientX, y: e.clientY }) ?? { x: 0, y: 0 };
+      const integ = payload.integrationId ? INTEGRATIONS.find((i) => i.id === payload.integrationId) : undefined;
+      const node = integ ? makeIntegrationNode(integ, position) : payload.kind ? makeNode(payload.kind, position) : null;
+      if (node) setNodes((nds) => [...nds, node]);
+    },
     [setNodes],
   );
 
@@ -225,6 +299,14 @@ export function WorkflowBuilder({ definitionId }: Props) {
     return <div style={{ padding: 24, fontSize: 13, color: 'var(--text-muted)' }}>Loading workflow…</div>;
   }
 
+  const q = paletteSearch.trim().toLowerCase();
+  const filteredIntegrations = q
+    ? INTEGRATIONS.filter(
+        (i) => i.label.toLowerCase().includes(q) || i.description.toLowerCase().includes(q) || i.category.includes(q),
+      )
+    : INTEGRATIONS;
+  const sortedCategories = INTEGRATION_CATEGORIES.slice().sort((a, b) => a.order - b.order);
+
   return (
     <div className="app-full-height" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       {/* Toolbar */}
@@ -255,40 +337,81 @@ export function WorkflowBuilder({ definitionId }: Props) {
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* Palette */}
-        <div style={{ width: 184, borderRight: '1px solid var(--border-subtle)', overflowY: 'auto', padding: 12 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>Nodes</div>
-          {NODE_GROUPS.map((group) => (
-            <div key={group} style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 5 }}>{group}</div>
-              {NODE_KINDS.filter((m) => m.group === group).map((m) => (
-                <button
-                  key={m.kind}
-                  type="button"
-                  onClick={() => addNode(m.kind)}
-                  title={m.blurb}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
-                    padding: '6px 8px', marginBottom: 4, fontSize: 12, fontWeight: 600,
-                    background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-                    border: '1px solid var(--border-subtle)', borderLeft: `3px solid ${m.accent}`,
-                    borderRadius: 7, cursor: 'pointer',
-                  }}
-                >
-                  <span>{m.icon}</span> {m.label}
-                </button>
-              ))}
-            </div>
-          ))}
+        <div style={{ width: 210, borderRight: '1px solid var(--border-subtle)', overflowY: 'auto', padding: 12 }}>
+          <input
+            value={paletteSearch}
+            onChange={(e) => setPaletteSearch(e.target.value)}
+            placeholder="Search integrations…"
+            style={{ ...fieldStyle, width: '100%', boxSizing: 'border-box', marginBottom: 8, fontSize: 12 }}
+          />
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 10 }}>Drag onto the canvas, or click to add.</div>
+
+          {/* Core node kinds */}
+          {NODE_GROUPS.map((group) => {
+            const items = NODE_KINDS.filter((m) => m.group === group);
+            if (!items.length) return null;
+            return (
+              <div key={group} style={{ marginBottom: 12 }}>
+                <div style={groupLabelStyle}>{group}</div>
+                {items.map((m) => (
+                  <button
+                    key={m.kind}
+                    type="button"
+                    draggable
+                    onDragStart={(e) => onPaletteDragStart(e, { kind: m.kind })}
+                    onClick={() => addNode(m.kind)}
+                    title={m.blurb}
+                    style={paletteItemStyle(m.accent)}
+                  >
+                    <span>{m.icon}</span> {m.label}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+
+          {/* Integrations — MCP servers, LLM platforms, data-collection sources */}
+          {sortedCategories.map((cat) => {
+            const items = filteredIntegrations.filter((i) => i.category === cat.id);
+            if (!items.length) return null;
+            return (
+              <div key={cat.id} style={{ marginBottom: 12 }}>
+                <div style={groupLabelStyle}>{cat.icon} {cat.label}</div>
+                {items.map((i) => (
+                  <button
+                    key={i.id}
+                    type="button"
+                    draggable
+                    onDragStart={(e) => onPaletteDragStart(e, { integrationId: i.id })}
+                    onClick={() => addIntegration(i)}
+                    title={i.description}
+                    style={paletteItemStyle(integrationAccent(i.category))}
+                  >
+                    <span>{integrationIcon(i)}</span> {i.label}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+          {filteredIntegrations.length === 0 && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>No integrations match “{paletteSearch}”.</div>
+          )}
         </div>
 
         {/* Canvas */}
-        <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+        <div
+          ref={canvasRef}
+          style={{ flex: 1, minWidth: 0, position: 'relative' }}
+          onDragOver={onCanvasDragOver}
+          onDrop={onCanvasDrop}
+        >
           <ReactFlow
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onInit={(inst) => { rfRef.current = inst; }}
             nodeTypes={nodeTypes}
             onNodeClick={(_, n) => setSelectedId(n.id)}
             onPaneClick={() => setSelectedId(null)}
@@ -302,7 +425,7 @@ export function WorkflowBuilder({ definitionId }: Props) {
           {nodes.length === 0 && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
               <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
-                Click nodes in the palette to start building.<br />Wire them together, then Save &amp; Run.
+                Drag nodes from the palette onto the canvas.<br />Wire them together, then Save &amp; Run.
               </div>
             </div>
           )}
