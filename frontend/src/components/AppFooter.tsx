@@ -1,56 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
+import { useState } from 'react';
+import { useLegalDocs } from './legal/useLegalDocs';
+import LegalDocModal, { type LegalModalType } from './legal/LegalDocModal';
 
-const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || '—';
-const AUTH_API_URL = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
-
-interface LegalDocument {
-  version: string;
-  title: string;
-  content: string;
-  publishedAt: string;
-}
-
-interface LegalCurrent {
-  terms: LegalDocument;
-  privacy: LegalDocument;
-}
-
+/**
+ * Page footer with version + Terms/Privacy. Used only by the sidebar-less auth
+ * screens (login/register); the rest of the app surfaces the same info via the
+ * sidebar's SidebarLegalMenu so it never overlaps content.
+ */
 export default function AppFooter() {
-  const [legal, setLegal] = useState<LegalCurrent | null>(null);
-  const [modalType, setModalType] = useState<'terms' | 'privacy' | null>(null);
-  const [apiVersion, setApiVersion] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`${AUTH_API_URL}/api/auth/legal/current`, { credentials: 'omit' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: LegalCurrent | null) => {
-        if (!cancelled && data?.terms && data?.privacy) setLegal(data);
-      })
-      .catch(() => {});
-    fetch(`${AUTH_API_URL}/health`, { credentials: 'omit' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: { version?: string } | null) => {
-        if (!cancelled && data?.version) setApiVersion(data.version);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
-
-  const termsVersion = legal?.terms?.version;
-  const privacyVersion = legal?.privacy?.version;
-  const doc = modalType === 'terms' ? legal?.terms : legal?.privacy;
-  const modalTitle = modalType === 'terms' ? 'Terms of Use' : 'Privacy Policy';
+  const { appVersion, apiVersion, legal, termsVersion, privacyVersion } = useLegalDocs();
+  const [modalType, setModalType] = useState<LegalModalType | null>(null);
 
   return (
     <>
       <footer className="global-footer">
         <div className="global-footer-inner">
           <span>
-            UI {APP_VERSION} · API {apiVersion ?? '…'}
+            UI {appVersion} · API {apiVersion ?? '…'}
           </span>
           <div className="global-footer-links">
             <button
@@ -71,105 +39,7 @@ export default function AppFooter() {
         </div>
       </footer>
 
-      {/* Legal document modal (BuilderForceAgentsLink-style: show content from API, no external URL) */}
-      {modalType !== null && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={modalTitle}
-          className="modal-overlay"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setModalType(null);
-          }}
-        >
-          <div
-            style={{
-              maxWidth: 920,
-              width: '100%',
-              maxHeight: '90vh',
-              display: 'flex',
-              flexDirection: 'column',
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 16,
-              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                padding: '20px 24px',
-                borderBottom: '1px solid var(--border-subtle)',
-                flexShrink: 0,
-              }}
-            >
-              <h2
-                style={{
-                  margin: 0,
-                  fontSize: '1.25rem',
-                  fontWeight: 700,
-                  color: 'var(--text-primary)',
-                  fontFamily: 'var(--font-display)',
-                }}
-              >
-                {doc?.title ?? modalTitle}
-                {doc?.version ? ` · v${doc.version}` : ''}
-              </h2>
-              {doc?.publishedAt && (
-                <p
-                  style={{
-                    margin: '6px 0 0',
-                    fontSize: '0.8rem',
-                    color: 'var(--text-muted)',
-                  }}
-                >
-                  Published {new Date(doc.publishedAt).toLocaleString()}
-                </p>
-              )}
-            </div>
-            <div
-              style={{
-                flex: 1,
-                overflow: 'auto',
-                padding: 24,
-              }}
-            >
-              {doc?.content ? (
-                <LegalDocPreview content={doc.content} />
-              ) : (
-                <p style={{ margin: 0, color: 'var(--text-muted)' }}>Loading…</p>
-              )}
-            </div>
-            <div
-              style={{
-                padding: '16px 24px',
-                borderTop: '1px solid var(--border-subtle)',
-                flexShrink: 0,
-                display: 'flex',
-                justifyContent: 'flex-end',
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setModalType(null)}
-                style={{
-                  padding: '10px 20px',
-                  fontSize: '0.9rem',
-                  fontWeight: 600,
-                  color: '#fff',
-                  background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                  border: 'none',
-                  borderRadius: 10,
-                  cursor: 'pointer',
-                  fontFamily: 'var(--font-display)',
-                }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <LegalDocModal type={modalType} legal={legal} onClose={() => setModalType(null)} />
     </>
   );
 }

@@ -94,6 +94,33 @@ export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
     });
   });
 
+  // Read a dispatch's current state + output (status, the agent's summary incl.
+  // changed-files + PR link, and any error). Drives the kanban card's "see what
+  // the agent did" affordance. NOT cached: this is a live status that flips
+  // pending→running→completed mid-execution and is written by a different route
+  // (host dispatch-result) / the relay DO, so a read-through cache would serve
+  // stale status during the very window the UI polls it; volume is one row/poll.
+  router.get('/:dispatchId', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const dispatchId = c.req.param('dispatchId');
+    const [row] = await db
+      .select({
+        dispatchId: agentDispatches.id,
+        role: agentDispatches.role,
+        status: agentDispatches.status,
+        output: agentDispatches.output,
+        error: agentDispatches.error,
+        taskId: agentDispatches.taskId,
+        runtime: agentDispatches.runtime,
+        updatedAt: agentDispatches.updatedAt,
+      })
+      .from(agentDispatches)
+      .where(and(eq(agentDispatches.id, dispatchId), eq(agentDispatches.tenantId, tenantId)))
+      .limit(1);
+    if (!row) return c.json({ error: 'Dispatch not found' }, 404);
+    return c.json({ dispatch: row });
+  });
+
   // Optional: mark a claimed dispatch as actively running.
   router.post('/:dispatchId/running', async (c) => {
     const tenantId = c.get('tenantId') as number;

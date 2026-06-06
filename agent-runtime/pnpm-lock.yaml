@@ -72,9 +72,6 @@ importers:
       '@napi-rs/canvas':
         specifier: ^0.1.89
         version: 0.1.94
-      '@seanhogg/ssmjs':
-        specifier: '*'
-        version: 2026.3.21(@seanhogg/mambakit@2026.3.21(@seanhogg/mambacode.js@2026.3.21))
       '@sinclair/typebox':
         specifier: 0.34.48
         version: 0.34.48
@@ -2541,22 +2538,6 @@ packages:
   '@scure/bip39@2.0.1':
     resolution: {integrity: sha512-PsxdFj/d2AcJcZDX1FXN3dDgitDDTmwf78rKZq1a6c1P1Nan1X/Sxc7667zU3U+AN60g7SxxP0YCVw2H/hBycg==}
 
-  '@seanhogg/mambacode.js@2026.3.21':
-    resolution: {integrity: sha512-+T60jeT8zK8ga7f+5anfrQPX4LSv32iu3WclbY1hhiZjcVKS+k95X0RpM1xTr8Nw+1nMse60y1/231htWctg1g==}
-    engines: {node: '>=18.0.0'}
-
-  '@seanhogg/mambakit@2026.3.21':
-    resolution: {integrity: sha512-EY9G1rnYZEgPH+vHGz0a/qFPn8kSzWO9QyHxyJZ1/LZQQdP4P/w0ks9QR8PAJMpZVMHbS+p1N+HhHizo2dmgwQ==}
-    engines: {node: '>=18.0.0'}
-    peerDependencies:
-      '@seanhogg/mambacode.js': ^2026.3.21
-
-  '@seanhogg/ssmjs@2026.3.21':
-    resolution: {integrity: sha512-jdWpbzqIx/LqCNnFFK2Q5+YaH3YBSQICPgJU8IWIORQWzwpOen7veLWykshRL/SrIEJz8A6S3QJPNMMAIGSzkw==}
-    engines: {node: '>=18.0.0'}
-    peerDependencies:
-      '@seanhogg/mambakit': ^2026.3.21
-
   '@selderee/plugin-htmlparser2@0.11.0':
     resolution: {integrity: sha512-P33hHGdldxGabLFjPPpaTxVolMrzrcegejx+0GxjrIb9Zv48D8yAIA/QTDR2dFl7Uz7urX8aX6+5bCZslr+gWQ==}
 
@@ -3216,6 +3197,7 @@ packages:
   basic-ftp@5.1.0:
     resolution: {integrity: sha512-RkaJzeJKDbaDWTIPiJwubyljaEPwpVWkm9Rt5h9Nd6h7tEXTJ3VB4qxdZBioV7JO5yLUaOKwz7vDOzlncUsegw==}
     engines: {node: '>=10.0.0'}
+    deprecated: Security vulnerability fixed in 5.2.1, please upgrade
 
   bcrypt-pbkdf@1.0.2:
     resolution: {integrity: sha512-qeFIXtP4MSoi6NLqO12WfqARWWuCKi2Rn/9hJLEmtB5yTNr9DqFWkJRCf2qShWzPeAMRnOgCrq0sg/KLv5ES9w==}
@@ -5426,6 +5408,7 @@ packages:
 
   uuid@8.3.2:
     resolution: {integrity: sha512-+NYs2QeMWy+GWFOEm9xnn6HCDp0l7QBD7ml8zLUmJ+93Q5NF0NocErnwkTkXVFNiX3/fpC6afS8Dhb/gz7R7eg==}
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
   validate-npm-package-name@6.0.2:
@@ -6504,7 +6487,7 @@ snapshots:
     dependencies:
       lodash.camelcase: 4.3.0
       long: 5.3.2
-      protobufjs: 7.5.4
+      protobufjs: 7.6.1
       yargs: 17.7.2
 
   '@hapi/boom@9.1.4':
@@ -7785,16 +7768,6 @@ snapshots:
     dependencies:
       '@noble/hashes': 2.0.1
       '@scure/base': 2.0.0
-
-  '@seanhogg/mambacode.js@2026.3.21': {}
-
-  '@seanhogg/mambakit@2026.3.21(@seanhogg/mambacode.js@2026.3.21)':
-    dependencies:
-      '@seanhogg/mambacode.js': 2026.3.21
-
-  '@seanhogg/ssmjs@2026.3.21(@seanhogg/mambakit@2026.3.21(@seanhogg/mambacode.js@2026.3.21))':
-    dependencies:
-      '@seanhogg/mambakit': 2026.3.21(@seanhogg/mambacode.js@2026.3.21)
 
   '@selderee/plugin-htmlparser2@0.11.0':
     dependencies:

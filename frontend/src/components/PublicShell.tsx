@@ -2,7 +2,6 @@
 
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
-import AppFooter from './AppFooter';
 import MobileBottomNav from './MobileBottomNav';
 import { useSidebarCollapse } from '@/lib/useSidebarCollapse';
 import { useMobileNav } from '@/lib/useMobileNav';
@@ -29,7 +28,6 @@ export default function PublicShell({ children }: { children: React.ReactNode })
         <main className="content">{children}</main>
       </div>
       <MobileBottomNav />
-      <AppFooter />
     </div>
   );
 }
