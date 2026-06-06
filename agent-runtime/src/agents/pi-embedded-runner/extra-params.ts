@@ -230,6 +230,92 @@ function createAnthropicBetaHeadersWrapper(
     });
 }
 
+const ANTHROPIC_EPHEMERAL_CACHE = { type: "ephemeral" } as const;
+
+/**
+ * Add an Anthropic prompt-cache breakpoint to the system prompt of an
+ * OpenAI-format request payload, in place.
+ *
+ * pi-ai's openai-completions provider (`maybeAddOpenRouterAnthropicCacheControl`)
+ * marks only the last user/assistant message for `openrouter` + `anthropic/*`
+ * models — it leaves the `system` message uncached. The system prompt is the
+ * largest stable prefix (tooling / skills / identity sections), so caching it is
+ * the single biggest win. String content is promoted to a cache-marked text
+ * block; array content gets the marker on its last text part. Idempotent: a
+ * system block that already carries a breakpoint is left untouched, keeping the
+ * total at two breakpoints (system here + history from the SDK), within
+ * Anthropic's cap of four.
+ *
+ * @internal Exported for testing
+ */
+export function addAnthropicSystemCacheControl(payload: unknown): void {
+  if (!payload || typeof payload !== "object") {
+    return;
+  }
+  const messages = (payload as { messages?: unknown }).messages;
+  if (!Array.isArray(messages)) {
+    return;
+  }
+  const system = messages.find(
+    (m) => m && typeof m === "object" && (m as { role?: unknown }).role === "system",
+  ) as { content?: unknown } | undefined;
+  if (!system) {
+    return;
+  }
+
+  const content = system.content;
+  if (typeof content === "string") {
+    if (content.length === 0) {
+      return;
+    }
+    system.content = [{ type: "text", text: content, cache_control: ANTHROPIC_EPHEMERAL_CACHE }];
+    return;
+  }
+  if (!Array.isArray(content)) {
+    return;
+  }
+  // Already marked anywhere in the system block — leave it (no duplicate breakpoint).
+  if (content.some((p) => p && typeof p === "object" && "cache_control" in (p as object))) {
+    return;
+  }
+  for (let i = content.length - 1; i >= 0; i--) {
+    const part = content[i];
+    if (part && typeof part === "object" && (part as { type?: unknown }).type === "text") {
+      (part as Record<string, unknown>).cache_control = ANTHROPIC_EPHEMERAL_CACHE;
+      return;
+    }
+  }
+}
+
+/**
+ * Create a streamFn wrapper that caches the system prompt for OpenRouter-routed
+ * Anthropic models. Scoped to `anthropic/*` ids because direct-Anthropic already
+ * caches the system block via the SDK's cacheRetention default, and other
+ * OpenRouter providers either auto-cache (OpenAI/Grok) or would reject the
+ * marker. Injects via the `onPayload` seam — the same mechanism the store /
+ * tool_stream wrappers use to mutate the exact body sent upstream.
+ */
+function createOpenRouterAnthropicSystemCacheWrapper(
+  baseStreamFn: StreamFn | undefined,
+  modelId: string,
+): StreamFn {
+  const underlying = baseStreamFn ?? streamSimple;
+  const isAnthropic = modelId.trim().toLowerCase().startsWith("anthropic/");
+  return (model, context, options) => {
+    if (!isAnthropic) {
+      return underlying(model, context, options);
+    }
+    const originalOnPayload = options?.onPayload;
+    return underlying(model, context, {
+      ...options,
+      onPayload: (payload) => {
+        addAnthropicSystemCacheControl(payload);
+        originalOnPayload?.(payload);
+      },
+    });
+  };
+}
+
 /**
  * Create a streamFn wrapper that adds OpenRouter app attribution headers.
  * These headers allow BuilderForceAgents to appear on OpenRouter's leaderboard.
@@ -322,6 +408,9 @@ export function applyExtraParamsToAgent(
   if (provider === "openrouter") {
     log.debug(`applying OpenRouter app attribution headers for ${provider}/${modelId}`);
     agent.streamFn = createOpenRouterHeadersWrapper(agent.streamFn);
+    // pi-ai caches only the last message for openrouter/anthropic; also cache
+    // the system prompt — the biggest stable prefix — via the onPayload seam.
+    agent.streamFn = createOpenRouterAnthropicSystemCacheWrapper(agent.streamFn, modelId);
   }
 
   // Enable Z.AI tool_stream for real-time tool call streaming.

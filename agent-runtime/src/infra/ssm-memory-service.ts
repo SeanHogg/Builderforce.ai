@@ -52,6 +52,17 @@ export interface SsmMemoryServiceOptions {
    * this option → env `BUILDERFORCE_AGENTS_SSM_CHECKPOINT_URL` → none.
    */
   checkpointUrl?: string;
+  /**
+   * BuilderForce.ai gateway base URL for the shared (L2) semantic response
+   * cache. Resolution: this option → env `BUILDERFORCE_GATEWAY_URL`. When set
+   * (with `apiKey`), a paraphrased answer cached by the web app or another agent
+   * can be reused here. Absent → the semantic cache runs L1-only (on-device).
+   */
+  gatewayUrl?: string;
+  /** Tenant API key for the gateway L2 cache. Resolution: this option → env `BUILDERFORCE_API_KEY`. */
+  apiKey?: string;
+  /** Optional partition for the shared cache (e.g. per model). Resolution: this option → env `BUILDERFORCE_SEMCACHE_NAMESPACE`. */
+  semanticCacheNamespace?: string;
 }
 
 /** Default on-disk checkpoint path, relative to cwd. */
@@ -112,6 +123,8 @@ type SSMRuntime = any;
 type SSMAgent = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MemoryStore = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SemanticCache = any;
 
 // ── SsmMemoryService ──────────────────────────────────────────────────────────
 
@@ -119,6 +132,14 @@ export class SsmMemoryService {
   readonly runtime: SSMRuntime;
   readonly agent: SSMAgent;
   readonly memory: MemoryStore;
+  /**
+   * Embedding-keyed read-through cache for cortex completions: L1 = on-device
+   * SSM embeddings (free), L2 = the BuilderForce.ai gateway (shared with the web
+   * app). `null` when the GPU/embedder is unavailable. Consumed by the cortex
+   * path to reuse paraphrased answers instead of re-billing the frontier model
+   * (see `getCachedOrGenerate`).
+   */
+  readonly semanticCache: SemanticCache | null;
   readonly gpuAvailable: boolean;
   /** Absolute-or-cwd-relative path the checkpoint is loaded from and saved to. */
   readonly checkpointPath: string;
@@ -131,6 +152,7 @@ export class SsmMemoryService {
     runtime: SSMRuntime,
     agent: SSMAgent,
     memory: MemoryStore,
+    semanticCache: SemanticCache | null,
     gpuAvailable: boolean,
     checkpointPath: string,
     saveEveryLearns: number,
@@ -138,6 +160,7 @@ export class SsmMemoryService {
     this.runtime = runtime;
     this.agent = agent;
     this.memory = memory;
+    this.semanticCache = semanticCache;
     this.gpuAvailable = gpuAvailable;
     this.checkpointPath = checkpointPath;
     this.saveEveryLearns = saveEveryLearns;
@@ -175,7 +198,8 @@ export class SsmMemoryService {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
-    const { SSMRuntime, MemoryStore, SSMAgent } = memoryMod as Record<string, any>;
+    const { SSMRuntime, MemoryStore, SSMAgent, SemanticCache, FetchSemanticCacheBackend } =
+      memoryMod as Record<string, any>;
 
     // IDBFactory — always available via fake-indexeddb
     let idbFactory: unknown;
@@ -285,10 +309,34 @@ export class SsmMemoryService {
       // init() failure is non-fatal (no persisted history yet)
     }
 
+    // Semantic response cache: L1 = on-device SSM embeddings (only meaningful
+    // when the GPU/embedder is live), L2 = the gateway when a URL + key are set.
+    let semanticCache: unknown = null;
+    if (gpuAvailable && typeof SemanticCache === "function") {
+      try {
+        const gatewayUrl = opts.gatewayUrl ?? process.env["BUILDERFORCE_GATEWAY_URL"];
+        const apiKey = opts.apiKey ?? process.env["BUILDERFORCE_API_KEY"];
+        const namespace = opts.semanticCacheNamespace ?? process.env["BUILDERFORCE_SEMCACHE_NAMESPACE"];
+        const l2 =
+          gatewayUrl && apiKey && typeof FetchSemanticCacheBackend === "function"
+            ? new FetchSemanticCacheBackend({ baseUrl: gatewayUrl, apiKey, namespace })
+            : undefined;
+        semanticCache = new SemanticCache({
+          embed: (text: string) => runtime.embed(text),
+          ...(l2 ? { l2 } : {}),
+        });
+        logDebug(`[ssm-memory] semantic cache enabled (L2 ${l2 ? "gateway" : "off"})`);
+      } catch (err) {
+        logDebug(`[ssm-memory] semantic cache init failed: ${String(err)}`);
+        semanticCache = null;
+      }
+    }
+
     const svc = new SsmMemoryService(
       runtime,
       agent,
       memory,
+      semanticCache,
       gpuAvailable,
       checkpointPath,
       saveEveryLearns,
@@ -316,6 +364,33 @@ export class SsmMemoryService {
     opts?: { ttlMs?: number; tags?: string[]; importance?: number },
   ): Promise<void> {
     await this.memory.remember(key, content, opts);
+  }
+
+  /**
+   * Read-through semantic cache for an expensive (cortex) completion. Embeds
+   * `query`, returns a paraphrase-matched cached answer when one exists (L1
+   * on-device, then L2 gateway), otherwise runs `generate()`, caches it in both
+   * tiers, and returns it. When the cache is unavailable it simply calls
+   * `generate()`. Errors degrade to a direct `generate()` so caching can never
+   * break a cortex call.
+   *
+   * Intended consumer: the cortex path (`callExecutionLlm` in
+   * builderforcellm-local-stream) — wrap the provider call with this to avoid
+   * re-billing the frontier model for semantically-repeated prompts.
+   */
+  async getCachedOrGenerate(
+    query: string,
+    generate: () => Promise<string>,
+    meta?: Record<string, unknown>,
+  ): Promise<{ response: string; cached: boolean }> {
+    if (!this.semanticCache) {
+      return { response: await generate(), cached: false };
+    }
+    try {
+      return await this.semanticCache.getOrGenerate(query, generate, meta);
+    } catch {
+      return { response: await generate(), cached: false };
+    }
   }
 
   /**

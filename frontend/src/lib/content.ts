@@ -101,6 +101,12 @@ export const FEATURES: Feature[] = [
     longDesc: 'LoRA adapter weights are serialised from WebGPU buffers and automatically persisted to Cloudflare R2 with signed URLs.',
   },
   {
+    icon: '♻️',
+    title: 'Semantic Response Cache',
+    shortDesc: 'Reuse answers across paraphrases — slash token spend.',
+    longDesc: 'An embedding-keyed cache reuses a prior answer when a new prompt means the same thing as one already answered, so the frontier model is never billed twice for the same work. Two tiers: a free on-device layer (SSM embeddings, in your browser and in each agent) plus a shared gateway layer — so a cache hit in the web app saves tokens for your agents too.',
+  },
+  {
     icon: '⚡',
     title: 'Full IDE Workspace',
     shortDesc: 'Monaco editor, terminal, AI chat — all-in-one.',
