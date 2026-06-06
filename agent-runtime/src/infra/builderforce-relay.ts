@@ -33,6 +33,13 @@ import {
   RelayPresencePoller,
 } from "./builderforce-relay-helpers.js";
 import { resolveRemoteResult } from "./remote-result-broker.js";
+import { resolveCodingSession } from "./coding-session-broker.js";
+import { runCodingDispatch } from "./builderforce-coding-dispatch.js";
+import {
+  makeCodingAgent,
+  makeCodingGit,
+  makeCodingHttp,
+} from "./builderforce-coding-dispatch-adapters.js";
 import { dispatchResultToRemoteAgentNode, type RemoteDispatchOptions } from "./remote-subagent.js";
 import { setRelayHook } from "./workflow-telemetry.js";
 
@@ -157,6 +164,35 @@ export class BuilderforceRelayService implements IRelayService {
       .catch((err: unknown) => {
         logWarn(`[builderforce] ${payload.sourceType} dispatch failed: ${String(err)}`);
       });
+  }
+
+  /**
+   * Handle a swimlane `agent_dispatch` frame end-to-end: clone the bound repo
+   * through the host git-proxy, run the embedded agent against it, push, open a
+   * PR, and report the terminal result. Never throws — runCodingDispatch always
+   * reports a terminal result so the stage can't hang.
+   */
+  private async handleAgentDispatch(dispatchId: string): Promise<void> {
+    const workspaceDir = this.opts.workspaceDir ?? process.cwd();
+    try {
+      await runCodingDispatch(
+        {
+          http: makeCodingHttp({
+            baseUrl: this.opts.baseUrl,
+            agentNodeId: this.opts.agentNodeId,
+            apiKey: this.opts.apiKey,
+          }),
+          git: makeCodingGit({ apiKey: this.opts.apiKey }),
+          agent: makeCodingAgent(() => this.gatewayClient),
+          baseUrl: normalizeBaseUrl(this.opts.baseUrl),
+          workspaceDir,
+          joinPath: (...parts: string[]) => path.join(...parts),
+        },
+        dispatchId,
+      );
+    } catch (err) {
+      logWarn(`[builderforce] agent_dispatch ${dispatchId} failed: ${String(err)}`);
+    }
   }
 
   /**
@@ -609,6 +645,20 @@ export class BuilderforceRelayService implements IRelayService {
         break;
       }
 
+      case "agent_dispatch": {
+        // Swimlane coding dispatch: clone the bound repo through the host
+        // git-proxy, run the embedded agent against it, push, open a PR, and
+        // report the terminal result so the SwimlaneCoordinator advances.
+        const dispatchId = typeof msg.dispatchId === "string" ? msg.dispatchId : "";
+        if (!dispatchId) {
+          logWarn("[builderforce] agent_dispatch without dispatchId");
+          break;
+        }
+        logWarn(`[builderforce] received agent_dispatch dispatch=${dispatchId}`);
+        void this.handleAgentDispatch(dispatchId);
+        break;
+      }
+
       case "approval.decision": {
         // Manager approved or rejected a pending approval request in the portal.
         const approvalId = typeof msg.approvalId === "string" ? msg.approvalId : "";
@@ -713,6 +763,11 @@ export class BuilderforceRelayService implements IRelayService {
             session,
           });
         }
+        // A coding dispatch waiting on this session handles its own terminal
+        // reporting (commit/push/PR/dispatch-result) — don't double-report.
+        if (resolveCodingSession(session, { ok: true, text })) {
+          return;
+        }
         // Report execution completed to Builderforce if one is pending.
         if (this.pendingExecutionId != null) {
           const eid = this.pendingExecutionId;
@@ -730,6 +785,10 @@ export class BuilderforceRelayService implements IRelayService {
             text: `[error] ${text}`,
             session,
           });
+        }
+        // A coding dispatch waiting on this session reports its own failure.
+        if (resolveCodingSession(session, { ok: false, text: text ?? "agent error" })) {
+          return;
         }
         // Report execution failed to Builderforce if one is pending.
         if (this.pendingExecutionId != null) {

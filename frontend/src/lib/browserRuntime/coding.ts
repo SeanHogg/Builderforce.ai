@@ -133,6 +133,8 @@ export async function runCodingDispatch(
   }
 
   const pushedSummary = changes.summary ?? `Pushed ${changes.files.length} file(s) to ${changes.branch}.`;
+  const fileList = `Changed files:\n${changes.files.map((f) => `  - ${f.path}`).join('\n')}`;
+  const base = `${pushedSummary}\n\n${fileList}`;
   return {
     pushed: true,
     branch: changes.branch,
@@ -140,6 +142,6 @@ export async function runCodingDispatch(
     buildOk,
     prUrl: pr?.url,
     prNumber: pr?.number,
-    summary: pr ? `${pushedSummary}\nOpened PR #${pr.number}: ${pr.url}` : pushedSummary,
+    summary: pr ? `${base}\n\nOpened PR #${pr.number}: ${pr.url}` : base,
   };
 }
