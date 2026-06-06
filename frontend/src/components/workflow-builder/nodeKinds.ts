@@ -17,6 +17,20 @@ export interface ConfigField {
   type: ConfigFieldType;
   options?: string[];
   placeholder?: string;
+  /**
+   * Only render this field when another config field holds one of these values.
+   * Lets a kind reveal type-specific options (e.g. a cron field for a `schedule`
+   * trigger) instead of showing every field at once. Omitted = always visible.
+   */
+  visibleWhen?: { field: string; equals: string | string[] };
+}
+
+/** Whether a field should render given the node's current config. */
+export function isFieldVisible(field: ConfigField, config: Record<string, unknown>): boolean {
+  if (!field.visibleWhen) return true;
+  const current = String(config[field.visibleWhen.field] ?? '');
+  const { equals } = field.visibleWhen;
+  return Array.isArray(equals) ? equals.includes(current) : current === equals;
 }
 
 export type NodeGroup = 'Trigger' | 'LLM Logic' | 'Integrations' | 'ETL' | 'Agent' | 'Output';
@@ -54,6 +68,21 @@ export const NODE_KINDS: NodeKindMeta[] = [
         ],
       },
       { key: 'source', label: 'Source / label', type: 'text', placeholder: 'e.g. pricing-page form, newsletter' },
+
+      // Type-specific options, revealed by the selected trigger type above.
+      { key: 'cron', label: 'Cron schedule', type: 'text', placeholder: 'e.g. 0 9 * * 1-5', visibleWhen: { field: 'triggerType', equals: 'schedule' } },
+      { key: 'timezone', label: 'Timezone', type: 'text', placeholder: 'e.g. UTC, America/New_York', visibleWhen: { field: 'triggerType', equals: 'schedule' } },
+      { key: 'webhookPath', label: 'Webhook path', type: 'text', placeholder: 'e.g. /hooks/lead', visibleWhen: { field: 'triggerType', equals: 'webhook' } },
+      { key: 'secret', label: 'Signing secret', type: 'text', placeholder: 'Shared secret to verify payloads', visibleWhen: { field: 'triggerType', equals: 'webhook' } },
+      { key: 'boardEvent', label: 'Board event', type: 'select', options: ['task-created', 'task-moved', 'task-completed', 'comment-added'], visibleWhen: { field: 'triggerType', equals: 'board-event' } },
+      { key: 'formId', label: 'Form id', type: 'text', placeholder: 'Form identifier', visibleWhen: { field: 'triggerType', equals: 'form-submit' } },
+      { key: 'pagePath', label: 'Page path', type: 'text', placeholder: 'e.g. /pricing', visibleWhen: { field: 'triggerType', equals: 'page-view' } },
+      { key: 'sku', label: 'Product / SKU', type: 'text', placeholder: 'Match a product (blank = any)', visibleWhen: { field: 'triggerType', equals: 'purchase' } },
+      { key: 'campaign', label: 'Campaign id', type: 'text', placeholder: 'Email campaign id', visibleWhen: { field: 'triggerType', equals: ['email-open', 'email-click'] } },
+      { key: 'feedUrl', label: 'Feed URL', type: 'text', placeholder: 'https://example.com/feed.xml', visibleWhen: { field: 'triggerType', equals: 'rss' } },
+      { key: 'pollMinutes', label: 'Poll interval (min)', type: 'number', visibleWhen: { field: 'triggerType', equals: 'rss' } },
+      { key: 'inbox', label: 'Inbox address', type: 'text', placeholder: 'e.g. leads@inbound.builderforce.ai', visibleWhen: { field: 'triggerType', equals: 'inbound-email' } },
+      { key: 'integrationEvent', label: 'Integration event', type: 'text', placeholder: 'e.g. invoice.paid', visibleWhen: { field: 'triggerType', equals: 'integration' } },
     ],
   },
   {
