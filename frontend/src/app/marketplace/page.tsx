@@ -580,7 +580,7 @@ export default function MarketplacePage() {
                 <tr style={theadRowStyle}>
                   <th style={thStyle}>Name</th>
                   <th style={thStyle}>Title</th>
-                  <th style={thStyle}>Skills</th>
+                  <th style={thStyle}>Tags</th>
                   <th style={thStyle}>Hires</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
                 </tr>

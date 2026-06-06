@@ -13,6 +13,13 @@ export interface CloudAgentFormState {
   name: string;
   title: string;
   bio: string;
+  /**
+   * Free-text discovery tags/labels (comma-separated in the form, an array on
+   * the wire). Surfaced to the user as "Tags / Labels" — distinct from the
+   * agent's real Skills, which are first-class capabilities assigned on the
+   * Capabilities tab. These power marketplace search and SEO keywords, so they
+   * persist to the established `skills` column on the agent record.
+   */
   skills: string;
   baseModel: string;
   runtimeSupport: AgentRuntimeSupport;
@@ -61,8 +68,11 @@ export function CloudAgentFormFields({
         <textarea style={{ ...inputStyle, minHeight: 70, resize: 'vertical' }} value={form.bio} onChange={(e) => onChange({ bio: e.target.value })} placeholder="What does this agent do?" />
       </div>
       <div>
-        <label style={labelStyle}>Skills (comma-separated)</label>
-        <input style={inputStyle} value={form.skills} onChange={(e) => onChange({ skills: e.target.value })} placeholder="code-review, summarization" />
+        <label style={labelStyle}>Tags / Labels (comma-separated)</label>
+        <input style={inputStyle} value={form.skills} onChange={(e) => onChange({ skills: e.target.value })} placeholder="code-review, release-notes, summarization" />
+        <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>
+          Keywords used for marketplace search and SEO discovery. These are tags, not the agent’s Skills — assign Skills on the Capabilities tab.
+        </p>
       </div>
       <div>
         <label style={labelStyle}>Runtime support</label>
