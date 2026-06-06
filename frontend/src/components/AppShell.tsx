@@ -3,7 +3,6 @@
 import { usePathname } from 'next/navigation';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
-import AppFooter from './AppFooter';
 import MobileBottomNav from './MobileBottomNav';
 import EmulationBar from './EmulationBar';
 import PermissionDebuggerPanel from './PermissionDebuggerPanel';
@@ -43,7 +42,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <main className="content">{children}</main>
       </div>
       <MobileBottomNav />
-      <AppFooter />
     </div>
   );
 }

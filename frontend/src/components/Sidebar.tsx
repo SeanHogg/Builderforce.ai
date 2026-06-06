@@ -8,6 +8,7 @@ import { getStoredTenant } from '@/lib/auth';
 import { isNavItemActive, type NavMatch } from '@/lib/nav';
 import { PRODUCT_SECTIONS } from '@/lib/content';
 import MascotIcon from './MascotIcon';
+import SidebarLegalMenu from './legal/SidebarLegalMenu';
 
 interface NavItem extends NavMatch {
   label: string;
@@ -220,27 +221,35 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
           )}
         </div>
 
-        {!isAuthenticated && (
+        {/* Footer renders when it has content: the Sign in / Get started CTAs
+            (logged out) and/or the legal menu (hidden on the collapsed rail).
+            Skipping the empty case avoids a stray divider on the icon rail. */}
+        {(!isAuthenticated || !collapsed) && (
           <div className="nav-footer">
-            <div className="nav-section" style={{ marginBottom: 0 }}>
-              <Link href="/login" className="nav-item" onClick={onMobileClose}>
-                <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>🔑</span>
-                {!collapsed && <span className="nav-item-label">Sign In</span>}
-              </Link>
-              <Link
-                href="/register"
-                className="nav-item"
-                onClick={onMobileClose}
-                style={{
-                  color: '#fff',
-                  background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                  marginTop: 4,
-                }}
-              >
-                <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>🚀</span>
-                {!collapsed && <span className="nav-item-label">Get Started</span>}
-              </Link>
-            </div>
+            {!isAuthenticated && (
+              <div className="nav-section" style={{ marginBottom: 0 }}>
+                <Link href="/login" className="nav-item" onClick={onMobileClose}>
+                  <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>🔑</span>
+                  {!collapsed && <span className="nav-item-label">Sign In</span>}
+                </Link>
+                <Link
+                  href="/register"
+                  className="nav-item"
+                  onClick={onMobileClose}
+                  style={{
+                    color: '#fff',
+                    background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
+                    marginTop: 4,
+                  }}
+                >
+                  <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>🚀</span>
+                  {!collapsed && <span className="nav-item-label">Get Started</span>}
+                </Link>
+              </div>
+            )}
+            {/* Version + Terms/Privacy — relocated here from the old global footer
+                (which overlapped page content); sits under the Get Started CTA. */}
+            <SidebarLegalMenu collapsed={collapsed} />
           </div>
         )}
       </nav>
