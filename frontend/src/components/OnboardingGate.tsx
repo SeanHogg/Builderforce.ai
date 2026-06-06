@@ -18,6 +18,7 @@
 
 import { useState } from 'react';
 import { useOnboardingState, type ActiveTermsDoc } from '@/lib/onboarding';
+import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 
 interface OnboardingGateProps {
   children: React.ReactNode;
@@ -133,19 +134,7 @@ function TermsAcceptanceScreen({ terms, onAccept }: TermsAcceptanceScreenProps) 
         </div>
 
         <div style={{ flex: 1, overflow: 'auto', padding: 24 }}>
-          <pre
-            style={{
-              margin: 0,
-              fontFamily: 'var(--font-body)',
-              fontSize: '0.875rem',
-              lineHeight: 1.6,
-              color: 'var(--text-secondary)',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-            }}
-          >
-            {terms.content}
-          </pre>
+          <LegalDocPreview content={terms.content} />
         </div>
 
         <div

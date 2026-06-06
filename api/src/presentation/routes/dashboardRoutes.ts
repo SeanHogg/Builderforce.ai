@@ -18,6 +18,7 @@ import {
   tenants,
   workflows,
 } from '../../infrastructure/database/schema';
+import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { getLimits } from '../../domain/tenant/PlanLimits';
 import { TenantPlan, TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
@@ -55,7 +56,7 @@ export function createDashboardRoutes(db: Db): Hono<HonoEnv> {
       db
         .select({
           total: count(),
-          online: sql<number>`count(*) filter (where ${agentHosts.connectedAt} is not null)`,
+          online: sql<number>`count(*) filter (where ${agentHostOnlineCondition()})`,
         })
         .from(agentHosts)
         .where(and(eq(agentHosts.tenantId, tenantId), eq(agentHosts.status, 'active'))),

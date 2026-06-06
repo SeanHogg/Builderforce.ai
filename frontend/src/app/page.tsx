@@ -8,9 +8,9 @@ import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
 import { HOMEPAGE_FAQ, FOOTER_LINKS, COMPARE } from '@/lib/content';
 import { savePendingPrompt } from '@/lib/brain';
-
-// register BuilderForce Agents quickstart web component
-import '../components/ccl-quickstart';
+import { BLOG_POSTS } from '@/lib/blogData';
+import { ArticleCardGrid } from '@/components/blog/ArticleCard';
+import QuickStart from '@/components/QuickStart';
 
 const HERO_PROMPT_EXAMPLES = [
   'Audit my repo for security issues',
@@ -579,8 +579,7 @@ export default function LandingPage() {
         </section>
 
         {/* ── Quickstart install block ── */}
-        {/* @ts-ignore */}
-        <ccl-quickstart></ccl-quickstart>
+        <QuickStart />
 
         {/* ── Stats ── */}
         <div className="lp-stats">
@@ -730,6 +729,23 @@ export default function LandingPage() {
                   </ul>
                 </div>
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Latest from the blog (SEO content) ── */}
+        <section className="lp-section" id="blog">
+          <div className="lp-features">
+            <h2 className="section-title">
+              <span className="agentHost-accent">⟩</span> Latest from the blog
+            </h2>
+            <p style={{maxWidth:'720px',margin:'0 auto 32px',color:'var(--text-secondary)',textAlign:'center'}}>
+              Deep dives, tutorials, and best practices for building and deploying
+              AI agents — from WebGPU LoRA training to multi-agent orchestration.
+            </p>
+            <ArticleCardGrid posts={BLOG_POSTS} limit={3} />
+            <div style={{marginTop:'32px',textAlign:'center'}}>
+              <Link href="/blog" className="lp-btn-secondary">📝 Read all articles →</Link>
             </div>
           </div>
         </section>

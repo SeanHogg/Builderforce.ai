@@ -32,6 +32,19 @@ const nextConfig = {
       { source: '/coderclaw/:path*', destination: '/agents/:path*', permanent: true },
     ]
   },
+  async rewrites() {
+    // /docs/* is the Astro Starlight site, deployed as a SEPARATE Cloudflare
+    // Pages project (`builderforce-docs`, built with Astro `base: '/docs'` so it
+    // serves under /docs/*). The apex builderforce.ai is a Pages custom domain
+    // bound to THIS Next worker, which otherwise answers /docs/* with its own
+    // 404. Reverse-proxy those requests (same-origin, no redirect) to the docs
+    // deployment so links like /docs/agents-vs-alternatives resolve. The
+    // /docs/:path* match also covers Starlight's emitted assets (/docs/_astro/*).
+    return [
+      { source: '/docs', destination: 'https://builderforce-docs.pages.dev/docs' },
+      { source: '/docs/:path*', destination: 'https://builderforce-docs.pages.dev/docs/:path*' },
+    ]
+  },
   async headers() {
     return [
       // WebContainer connect route: must NOT be cross-origin isolated so the

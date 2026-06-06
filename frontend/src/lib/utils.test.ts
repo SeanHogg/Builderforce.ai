@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getLanguage, getFileName, buildTree } from './utils';
+import { getLanguage, getFileName, buildTree, unwrapLegalMarkdown } from './utils';
 import type { FileEntry } from './utils';
 
 // ---------------------------------------------------------------------------
@@ -196,5 +196,49 @@ describe('buildTree', () => {
 
   it('drops a fully-empty path instead of creating a blank node', () => {
     expect(buildTree([file('')])).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// unwrapLegalMarkdown
+// ---------------------------------------------------------------------------
+
+describe('unwrapLegalMarkdown', () => {
+  it('returns clean Markdown unchanged', () => {
+    const doc = '# Privacy Policy\n\nWe respect your data.';
+    expect(unwrapLegalMarkdown(doc)).toBe(doc);
+  });
+
+  it('unwraps a *.md fenced block and discards surrounding chatter', () => {
+    const raw = [
+      'Okay, I can help you draft a Privacy Policy.',
+      '',
+      '```PRIVACY_POLICY.md',
+      '# Privacy Policy',
+      '',
+      '**Effective Date:** 2026-01-01',
+      '```',
+    ].join('\n');
+    expect(unwrapLegalMarkdown(raw)).toBe('# Privacy Policy\n\n**Effective Date:** 2026-01-01');
+  });
+
+  it('recognizes a bare `md` info string', () => {
+    const raw = 'Here you go:\n\n```md\n# Terms\n```';
+    expect(unwrapLegalMarkdown(raw)).toBe('# Terms');
+  });
+
+  it('recognizes a `markdown` info string', () => {
+    const raw = '```markdown\n# Terms of Use\n```';
+    expect(unwrapLegalMarkdown(raw)).toBe('# Terms of Use');
+  });
+
+  it('is case-insensitive about the info string', () => {
+    const raw = 'Draft:\n\n```TERMS.MD\n# Terms\n```';
+    expect(unwrapLegalMarkdown(raw)).toBe('# Terms');
+  });
+
+  it('leaves a non-Markdown fenced block (e.g. a code sample) in place', () => {
+    const doc = 'Our policy includes this snippet:\n\n```js\nconst x = 1;\n```';
+    expect(unwrapLegalMarkdown(doc)).toBe(doc);
   });
 });

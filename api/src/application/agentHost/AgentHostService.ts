@@ -1,5 +1,6 @@
 import { IAgentHostRepository } from '../../domain/agentHost/IAgentHostRepository';
 import type { AgentHost, AgentHostStatus } from '../../domain/agentHost/AgentHost';
+import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { asAgentHostId, asTenantId } from '../../domain/shared/types';
 
 export type AgentHostFilterStatus = 'online' | 'offline' | null;
@@ -14,10 +15,10 @@ export class AgentHostService {
   async listAgentHostsForTenant(tenantId: number, status: AgentHostFilterStatus = null): Promise<AgentHost[]> {
     const agentHosts = await this.agentHostRepo.findByTenant(asTenantId(tenantId));
     if (status === 'online') {
-      return agentHosts.filter((c) => c.connectedAt !== null);
+      return agentHosts.filter((c) => isAgentHostOnline(c));
     }
     if (status === 'offline') {
-      return agentHosts.filter((c) => c.connectedAt === null);
+      return agentHosts.filter((c) => !isAgentHostOnline(c));
     }
     return agentHosts;
   }

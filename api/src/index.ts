@@ -240,6 +240,12 @@ function buildApp(env: Env): Hono<HonoEnv> {
   // built before the BuilderForce Agents rebrand still call /api/claws. Remove once the
   // deployed agent fleet has upgraded to the /api/agent-hosts paths (see Gap Register).
   app.route('/api/claws',                  createAgentHostRoutes(db, agentHostService));
+  // @deprecated back-compat alias for the agent-runtime's relay client, which still
+  // targets /api/agentNodes/:id/{upstream,heartbeat,assignment-context}. Without this
+  // the periodic heartbeat 404s and lastSeenAt never refreshes — which the online-status
+  // rule (domain/agentHost/onlineStatus.ts) reads as "offline after 15 min". Remove once
+  // the runtime is repointed to /api/agent-hosts (see Gap Register).
+  app.route('/api/agentNodes',             createAgentHostRoutes(db, agentHostService));
   app.route('/api/skill-assignments', createSkillAssignmentRoutes(db));
   app.route('/api/artifact-assignments', createArtifactAssignmentRoutes(db));
   app.route('/api/project-agents', createProjectAgentRoutes(db));

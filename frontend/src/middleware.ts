@@ -4,19 +4,16 @@ import type { NextRequest } from 'next/server';
 /**
  * Route protection rules:
  *
- * PUBLIC  (no auth required):
- *   /              Landing page
- *   /workforce     Agent registry
- *   /login         Sign-in
- *   /register      Sign-up
+ * PUBLIC (no auth): /, /product, /pricing, /blog, /agents, /marketplace,
+ *   /prompts, /login, /register.
  *
- * WEB-TOKEN required (signed in, no tenant selected yet):
- *   /tenants       Tenant selector
+ * WEB-TOKEN required: /tenants (tenant selector → login when logged out).
  *
- * WEB-TOKEN + TENANT-TOKEN required (fully authenticated):
- *   /dashboard, /ide, /projects, /training, /tasks, /workforce, /chats,
- *   /brainstorm, /content-manager, /skills, /personas, /approvals,
- *   /pricing, /security, /settings, /observability, /debug
+ * Feature routes (/dashboard, /ide, /projects, /training, /tasks, /workforce,
+ *   /chats, /brainstorm, /content-manager, /skills, /personas, /approvals,
+ *   /security, /settings, /observability, /debug, …): when logged OUT we let the
+ *   request through so the client renders a marketing teaser + login/CTA
+ *   (RouteMarketing) rather than redirecting; signed-in-but-no-tenant → /tenants.
  */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -85,7 +82,6 @@ export function middleware(request: NextRequest) {
     '/skills',
     '/personas',
     '/approvals',
-    '/pricing',
     '/security',
     '/settings',
     '/observability',
@@ -94,7 +90,11 @@ export function middleware(request: NextRequest) {
   const isProtected = protectedPaths.some((p) => pathname === p || pathname.startsWith(p + '/'));
 
   if (isProtected) {
-    if (!webToken) return toLogin();
+    // Logged out → DON'T redirect to login. Let the request through so the app
+    // renders a per-route marketing teaser + login/CTA (ConditionalAppShell +
+    // RouteMarketing), instead of bouncing the visitor or showing a blank gate.
+    if (!webToken) return NextResponse.next();
+    // Signed in but no workspace selected → tenant picker.
     if (!tenantToken) return toTenants();
     return NextResponse.next();
   }
@@ -122,7 +122,6 @@ export const config = {
     '/skills/:path*',
     '/personas/:path*',
     '/approvals/:path*',
-    '/pricing/:path*',
     '/security/:path*',
     '/settings/:path*',
     '/observability/:path*',

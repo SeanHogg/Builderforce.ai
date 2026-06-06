@@ -4,6 +4,7 @@ import { TenantService } from '../../application/tenant/TenantService';
 import { TenantRole, TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
@@ -312,7 +313,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       .where(eq(agentHosts.tenantId, tenantId));
 
     const filtered = status === 'online'
-      ? rows.filter((row) => row.connectedAt !== null)
+      ? rows.filter((row) => isAgentHostOnline(row))
       : rows;
 
     const hostRows = await Promise.all(
@@ -329,12 +330,14 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         const capabilities: string[] = row.capabilities
           ? (JSON.parse(row.capabilities) as string[])
           : [];
+        const online = isAgentHostOnline(row);
         return {
           ...row,
+          online,
           capabilities,
           capabilitySummary: {
-            distributed: row.connectedAt !== null && associatedProjects.length > 1,
-            remoteDispatch: row.connectedAt !== null && capabilities.includes('remote-dispatch'),
+            distributed: online && associatedProjects.length > 1,
+            remoteDispatch: online && capabilities.includes('remote-dispatch'),
             projectCount: associatedProjects.length,
           },
           projectIds: associatedProjects.map((p) => p.projectId),
