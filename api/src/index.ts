@@ -60,6 +60,7 @@ import { createProjectAgentRoutes } from './presentation/routes/projectAgentRout
 import { createMarketplaceStatsRoutes } from './presentation/routes/marketplaceStatsRoutes';
 import { createWorkforceRoutes }        from './presentation/routes/workforceRoutes';
 import { createLlmRoutes }          from './presentation/routes/llmRoutes';
+import { createSemanticCacheRoutes } from './presentation/routes/semanticCacheRoutes';
 import { createAdminRoutes }        from './presentation/routes/adminRoutes';
 import { createChatRoutes }         from './presentation/routes/chatRoutes';
 import { createSpecRoutes }         from './presentation/routes/specRoutes';
@@ -209,6 +210,10 @@ function buildApp(env: Env): Hono<HonoEnv> {
 
   // builderforceLLM — OpenAI-compatible multi-vendor LLM proxy (tenant or agentHost API key auth)
   app.route('/llm', createLlmRoutes());
+
+  // Shared (L2) semantic response cache — the web app and the agent runtime both
+  // query it so a paraphrased answer from one surface is reusable by the other.
+  app.route('/v1/semantic-cache', createSemanticCacheRoutes());
 
   // Marketplace (no JWT required for read, required for write)
   app.route('/marketplace', createMarketplaceRoutes(db));

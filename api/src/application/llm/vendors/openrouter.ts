@@ -17,6 +17,7 @@ import {
   type VendorStreamResult,
 } from './types';
 import { sanitizeExtraBodyForVendor } from '../jsonSchemaSanitize';
+import { applyPromptCaching } from '../promptCaching';
 
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 const EMBEDDINGS_ENDPOINT = 'https://openrouter.ai/api/v1/embeddings';
@@ -149,9 +150,13 @@ function buildBody(params: VendorCallParams): Record<string, unknown> {
   // strip them here so the call doesn't bounce with `[cerebras] 400` embedded
   // in the OpenRouter response. See jsonSchemaSanitize.ts for the keyword set.
   const safeExtra = sanitizeExtraBodyForVendor('openrouter', extraBody);
+  // Inject Anthropic prompt-cache breakpoints on the stable prefix for
+  // caching-capable models. No-op for non-Anthropic ids and caller-managed
+  // caching; non-destructive so the shared `messages` array stays clean for the
+  // next cascade candidate. See ../promptCaching.ts.
   return {
     model,
-    messages,
+    messages: applyPromptCaching(messages, model),
     ...(tools ? { tools } : {}),
     ...(toolChoice ? { tool_choice: toolChoice } : {}),
     ...(maxTokens != null ? { max_tokens: maxTokens } : {}),

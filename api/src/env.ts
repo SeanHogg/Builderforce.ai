@@ -87,6 +87,19 @@ export interface Env {
    */
   AUTH_CACHE_KV?: KVNamespace;
 
+  /**
+   * Optional KV namespace backing the shared (L2) semantic response cache
+   * (`/v1/semantic-cache`). Holds, per tenant+namespace partition, a bounded
+   * list of {embedding, response} so a paraphrased prompt answered on one
+   * surface (web or agent) can be reused by the other. Unbound → the endpoint
+   * degrades to "always miss / no-op store" and clients fall back to local-only.
+   *
+   * Provision once:  `npx wrangler kv:namespace create SEMANTIC_CACHE_KV`
+   * Then bind in wrangler.toml:
+   *   [[kv_namespaces]]  binding = "SEMANTIC_CACHE_KV"  id = "<id from create output>"
+   */
+  SEMANTIC_CACHE_KV?: KVNamespace;
+
   // ---------------------------------------------------------------------------
   // Payment provider (optional — defaults to "manual" if unset)
   // ---------------------------------------------------------------------------
