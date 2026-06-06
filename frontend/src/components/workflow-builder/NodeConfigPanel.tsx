@@ -1,7 +1,7 @@
 'use client';
 
 import type { Node } from '@xyflow/react';
-import { NODE_KIND_MAP, type ConfigField } from './nodeKinds';
+import { NODE_KIND_MAP, isFieldVisible, type ConfigField } from './nodeKinds';
 import type { BuilderNodeData } from './BuilderNode';
 import { integrationForConfig, integrationIcon } from './integrations';
 
@@ -110,8 +110,12 @@ export function NodeConfigPanel({ node, onChange, onDelete }: Props) {
       )}
 
       {/* Catalog fields for this kind — hide the raw `operation` field when an
-          integration is selected (the picker above replaces it). */}
-      {meta?.fields.filter((f) => !(integ && f.key === 'operation')).map((f) => (
+          integration is selected (the picker above replaces it), and hide fields
+          whose `visibleWhen` predicate doesn't match the current config. */}
+      {meta?.fields
+        .filter((f) => !(integ && f.key === 'operation'))
+        .filter((f) => isFieldVisible(f, config))
+        .map((f) => (
         <label key={f.key} style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
           {f.label}
           {renderField(f)}
