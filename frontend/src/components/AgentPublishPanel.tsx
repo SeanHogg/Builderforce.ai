@@ -222,7 +222,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
             </div>
 
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Skills</label>
+              <label className="block text-xs text-gray-400 mb-1">Tags / Labels</label>
               <div className="flex gap-1 mb-1.5 flex-wrap">
                 {profile.skills.map(s => (
                   <span
@@ -246,7 +246,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                   value={skillInput}
                   onChange={e => setSkillInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddSkill(); } }}
-                  placeholder="Add skill…"
+                  placeholder="Add tag…"
                   className="flex-1 bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
                 />
                 <button
