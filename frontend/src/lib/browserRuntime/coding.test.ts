@@ -99,4 +99,25 @@ describe('runCodingDispatch', () => {
     await runCodingDispatch(dispatch, { repoId: 'r1', defaultBranch: null }, { git, propose: async () => changes() });
     expect(git.clone).toHaveBeenCalledWith(undefined);
   });
+
+  it('opens a PR after pushing and surfaces it in the result', async () => {
+    const git = fakeGit();
+    const openPr = vi.fn(async () => ({ url: 'https://github.com/o/r/pull/9', number: 9 }));
+    const res = await runCodingDispatch(dispatch, repo, { git, propose: async () => changes(), openPr });
+
+    expect(openPr).toHaveBeenCalledWith(
+      expect.objectContaining({ branch: 'agentHost/task-1', base: 'main' }),
+    );
+    expect(res).toMatchObject({ pushed: true, prNumber: 9, prUrl: 'https://github.com/o/r/pull/9' });
+    expect(res.summary).toContain('Opened PR #9');
+  });
+
+  it('still succeeds when the PR step is unsupported (branch is pushed)', async () => {
+    const git = fakeGit();
+    const openPr = vi.fn(async () => null);
+    const res = await runCodingDispatch(dispatch, repo, { git, propose: async () => changes(), openPr });
+    expect(git.push).toHaveBeenCalled();
+    expect(res.pushed).toBe(true);
+    expect(res.prUrl).toBeUndefined();
+  });
 });

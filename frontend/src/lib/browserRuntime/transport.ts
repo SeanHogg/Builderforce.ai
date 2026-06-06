@@ -73,5 +73,22 @@ export function createBrowserAgentTransport(deps: { request?: RequestFn } = {}):
         body: JSON.stringify(result),
       });
     },
+
+    async openPullRequest(dispatchId, pr): Promise<{ url: string; number: number } | null> {
+      try {
+        const res = await request<{ url?: string; number?: number }>(
+          `/api/agent-runtime/${encodeURIComponent(dispatchId)}/pull-request`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pr) },
+        );
+        if (typeof res.url === 'string' && typeof res.number === 'number') {
+          return { url: res.url, number: res.number };
+        }
+        return null;
+      } catch {
+        // Provider unsupported / PR step failed — the branch is pushed regardless,
+        // so don't fail the whole dispatch; the summary notes the branch.
+        return null;
+      }
+    },
   };
 }

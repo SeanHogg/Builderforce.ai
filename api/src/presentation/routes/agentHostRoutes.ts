@@ -34,6 +34,14 @@ import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashServic
 import { invalidateKeyCache } from '../../infrastructure/auth/keyResolutionCache';
 import { verifyJwt } from '../../infrastructure/auth/JwtService';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
+import { SwimlaneCoordinator } from '../../application/swimlane/SwimlaneCoordinator';
+import { DrizzleCoordinatorStore } from '../../application/swimlane/DrizzleCoordinatorStore';
+import { AgentHostStageDispatcher } from '../../application/swimlane/agentHostStageDispatcher';
+import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
+import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
+import { openDispatchPullRequest } from '../../application/repos/openDispatchPullRequest';
+import { executeGitProxy } from '../../application/repos/gitProxy';
+import { agentDispatches } from '../../infrastructure/database/schema';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -1401,6 +1409,155 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     }));
 
     return result;
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/agent-hosts/:id/dispatch-result   (agentHost API key auth)
+  // The headless-cloud result writeback: a deployed agentHost reports a swimlane
+  // dispatch's terminal status here, and the SwimlaneCoordinator advances the
+  // ticket (or routes it to needs_attention) — the agentHost analogue of the
+  // browser's tenant-JWT /api/agent-runtime/:dispatchId/result. dispatchId is the
+  // correlation id; tenant scope comes from the authenticated host (a host can
+  // only report results for its own tenant's dispatches).
+  // -------------------------------------------------------------------------
+  router.post('/:id/dispatch-result', async (c) => {
+    const agentHostId = Number(c.req.param('id'));
+    const key = extractAgentHostKey(c);
+    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
+    if (!agentHost) return c.text('Unauthorized', 401);
+
+    const body = await c.req.json<{
+      dispatchId: string;
+      status: 'completed' | 'failed' | 'cancelled';
+      output?: string;
+      error?: string;
+    }>();
+    if (!body.dispatchId) return c.json({ error: 'dispatchId is required' }, 400);
+    if (!['completed', 'failed', 'cancelled'].includes(body.status)) {
+      return c.json({ error: 'status must be completed | failed | cancelled' }, 400);
+    }
+
+    const coordinator = new SwimlaneCoordinator(
+      new DrizzleCoordinatorStore(db),
+      new AgentHostStageDispatcher(c.env.AGENT_HOST_RELAY),
+    );
+    try {
+      await coordinator.reportDispatchResult(body.dispatchId, agentHost.tenantId, {
+        status: body.status,
+        output: body.output ?? null,
+        error: body.error ?? null,
+      });
+    } catch {
+      return c.json({ error: 'Dispatch not found' }, 404);
+    }
+    return c.json({ ok: true });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/agent-hosts/:id/dispatch/:dispatchId   (agentHost API key auth)
+  // A deployed agentHost fetches the full detail for a dispatch it received over
+  // the relay (the relay frame carries only the dispatchId — secrets never ride
+  // the relay). Returns the task input + the repo coordinates and the host-authed
+  // git-proxy path the runtime clones/pushes through (so the git token stays
+  // server-side, mirroring the browser security boundary).
+  // -------------------------------------------------------------------------
+  router.get('/:id/dispatch/:dispatchId', async (c) => {
+    const agentHostId = Number(c.req.param('id'));
+    const key = extractAgentHostKey(c);
+    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
+    if (!agentHost) return c.text('Unauthorized', 401);
+
+    const dispatchId = c.req.param('dispatchId');
+    const [d] = await db
+      .select({
+        id: agentDispatches.id,
+        role: agentDispatches.role,
+        model: agentDispatches.model,
+        input: agentDispatches.input,
+        taskId: agentDispatches.taskId,
+        ticketRunId: agentDispatches.ticketRunId,
+      })
+      .from(agentDispatches)
+      .where(and(eq(agentDispatches.id, dispatchId), eq(agentDispatches.tenantId, agentHost.tenantId)))
+      .limit(1);
+    if (!d) return c.json({ error: 'Dispatch not found' }, 404);
+
+    const repo = await resolveDefaultRepoForTask(db, agentHost.tenantId, d.taskId);
+    return c.json({
+      dispatch: {
+        dispatchId: d.id,
+        role: d.role,
+        model: d.model,
+        input: d.input,
+        taskId: d.taskId,
+        ticketRunId: d.ticketRunId,
+        repo: repo
+          ? { ...repo, gitProxyPath: `/api/agent-hosts/${agentHostId}/git-proxy/${repo.repoId}` }
+          : null,
+      },
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // /api/agent-hosts/:id/git-proxy/:repoId/...   (agentHost API key auth)
+  // The headless analogue of /api/git-proxy: a deployed agentHost runs git
+  // smart-HTTP against these, and the credential is injected SERVER-SIDE. The
+  // token never reaches the agentHost — identical boundary to the browser proxy,
+  // reusing the same upstream-streaming executor (executeGitProxy).
+  // -------------------------------------------------------------------------
+  const hostGitProxy = async (
+    c: Context<AgentHostHonoEnv>,
+    repoId: string,
+    subPath: string,
+    method: 'GET' | 'POST',
+  ): Promise<Response> => {
+    const agentHostId = Number(c.req.param('id'));
+    const key = extractAgentHostKey(c);
+    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
+    if (!agentHost) return c.text('Unauthorized', 401);
+
+    const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
+    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+    const resolved = await resolveRepoCredential(db, secret, agentHost.tenantId, repoId);
+    if (isResolveError(resolved)) return c.json({ error: resolved.error }, resolved.status);
+
+    const result = await executeGitProxy({
+      repo: resolved.repo,
+      token: resolved.token,
+      subPath,
+      method,
+      query: method === 'GET' ? new URL(c.req.url).searchParams.toString() : undefined,
+      contentType: c.req.header('Content-Type'),
+      body: method === 'POST' ? await c.req.arrayBuffer() : undefined,
+    });
+    if (!result.ok) return c.json({ error: result.error }, 400);
+    return result.response;
+  };
+
+  router.get('/:id/git-proxy/:repoId/info/refs', (c) => hostGitProxy(c, c.req.param('repoId'), 'info/refs', 'GET'));
+  router.post('/:id/git-proxy/:repoId/git-upload-pack', (c) => hostGitProxy(c, c.req.param('repoId'), 'git-upload-pack', 'POST'));
+  router.post('/:id/git-proxy/:repoId/git-receive-pack', (c) => hostGitProxy(c, c.req.param('repoId'), 'git-receive-pack', 'POST'));
+
+  // -------------------------------------------------------------------------
+  // POST /api/agent-hosts/:id/dispatch/:dispatchId/pull-request   (host key auth)
+  // Headless analogue of the browser's PR-open: after a deployed agentHost pushes
+  // its branch through the host git-proxy, it opens the PR here. Shared logic with
+  // the tenant-JWT route via openDispatchPullRequest (token stays server-side).
+  // -------------------------------------------------------------------------
+  router.post('/:id/dispatch/:dispatchId/pull-request', async (c) => {
+    const agentHostId = Number(c.req.param('id'));
+    const key = extractAgentHostKey(c);
+    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
+    if (!agentHost) return c.text('Unauthorized', 401);
+
+    const dispatchId = c.req.param('dispatchId');
+    const body = await c.req.json<{ branch: string; base?: string; title?: string; body?: string }>();
+    const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
+    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+
+    const result = await openDispatchPullRequest(db, secret, agentHost.tenantId, dispatchId, body);
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json({ ok: true, url: result.url, number: result.number });
   });
 
   // -------------------------------------------------------------------------

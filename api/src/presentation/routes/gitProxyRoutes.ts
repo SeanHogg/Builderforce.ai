@@ -14,11 +14,9 @@
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { and, eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { projectRepositories, integrationCredentials } from '../../infrastructure/database/schema';
-import { decryptCredentials } from '../../application/boardsync/drizzleStore';
-import { buildUpstreamGitUrl, buildGitAuthHeader } from '../../application/repos/gitProxy';
+import { executeGitProxy } from '../../application/repos/gitProxy';
+import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -28,69 +26,29 @@ export function createGitProxyRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
-  async function resolveRepoAndToken(
-    c: Context<HonoEnv>,
-    repoId: string,
-  ): Promise<{ repo: { provider: string; host: string | null; owner: string; repo: string }; token: string } | { error: string; status: 400 | 404 }> {
-    const tenantId = c.get('tenantId') as number;
-    const [repo] = await db
-      .select()
-      .from(projectRepositories)
-      .where(and(eq(projectRepositories.id, repoId), eq(projectRepositories.tenantId, tenantId)));
-    if (!repo) return { error: 'Repository not found', status: 404 };
-    if (!repo.credentialId) return { error: 'Repository has no linked credential', status: 400 };
-
-    const [cred] = await db
-      .select()
-      .from(integrationCredentials)
-      .where(and(eq(integrationCredentials.id, repo.credentialId), eq(integrationCredentials.tenantId, tenantId)));
-    if (!cred) return { error: 'Credential not found', status: 404 };
-
-    const env = c.env as ProxyEnv;
-    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
-    const creds = await decryptCredentials(cred.credentialsEnc, cred.iv, secret);
-    const token =
-      (creds?.accessToken as string | undefined) ??
-      (creds?.apiToken as string | undefined) ??
-      (creds?.token as string | undefined);
-    if (!token) return { error: 'Credential has no usable token', status: 400 };
-
-    return { repo: { provider: repo.provider, host: repo.host, owner: repo.owner, repo: repo.repo }, token };
-  }
-
   async function proxy(
     c: Context<HonoEnv>,
     repoId: string,
     subPath: string,
     method: 'GET' | 'POST',
   ): Promise<Response> {
-    const resolved = await resolveRepoAndToken(c, repoId);
-    if ('error' in resolved) return c.json({ error: resolved.error }, resolved.status);
+    const tenantId = c.get('tenantId') as number;
+    const env = c.env as ProxyEnv;
+    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+    const resolved = await resolveRepoCredential(db, secret, tenantId, repoId);
+    if (isResolveError(resolved)) return c.json({ error: resolved.error }, resolved.status);
 
-    let upstreamUrl: string;
-    try {
-      const query = method === 'GET' ? new URL(c.req.url).searchParams.toString() : undefined;
-      upstreamUrl = buildUpstreamGitUrl(resolved.repo, subPath, query || undefined);
-    } catch {
-      return c.json({ error: 'Disallowed git path' }, 400);
-    }
-
-    const headers: Record<string, string> = {
-      Authorization: buildGitAuthHeader(resolved.repo.provider, resolved.token),
-      'User-Agent': 'BuilderForce-Git-Proxy/1.0',
-    };
-    const contentType = c.req.header('Content-Type');
-    if (contentType) headers['Content-Type'] = contentType;
-
-    const init: RequestInit = { method, headers };
-    if (method === 'POST') init.body = await c.req.arrayBuffer();
-
-    const upstream = await fetch(upstreamUrl, init);
-    const respHeaders = new Headers();
-    const ct = upstream.headers.get('Content-Type');
-    if (ct) respHeaders.set('Content-Type', ct);
-    respHeaders.set('Cache-Control', 'no-cache');
-    return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
+    const result = await executeGitProxy({
+      repo: resolved.repo,
+      token: resolved.token,
+      subPath,
+      method,
+      query: method === 'GET' ? new URL(c.req.url).searchParams.toString() : undefined,
+      contentType: c.req.header('Content-Type'),
+      body: method === 'POST' ? await c.req.arrayBuffer() : undefined,
+    });
+    if (!result.ok) return c.json({ error: result.error }, 400);
+    return result.response;
   }
 
   router.get('/:repoId/info/refs', (c) => proxy(c, c.req.param('repoId'), 'info/refs', 'GET'));

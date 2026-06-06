@@ -49,6 +49,13 @@ export interface BrowserRuntimeTransport {
     dispatchId: string,
     result: { status: 'completed' | 'failed'; output?: string; error?: string },
   ): Promise<void>;
+  /** Open a PR server-side after the worker pushed its branch (token stays
+   *  server-side). Returns the PR url+number, or null when the provider does not
+   *  support automated PRs (the branch is still pushed). */
+  openPullRequest(
+    dispatchId: string,
+    pr: { branch: string; base?: string; title?: string; body?: string },
+  ): Promise<{ url: string; number: number } | null>;
 }
 
 export type RunOutcome = 'idle' | 'completed' | 'failed';

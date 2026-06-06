@@ -31,6 +31,14 @@ export interface CodingDeps {
   propose: (args: { role: string; input: string }) => Promise<ProposedChanges>;
   /** Optional WebContainer build/test gate; if it fails, we do NOT push. */
   build?: () => Promise<{ ok: boolean; output: string }>;
+  /** Optional: open a PR server-side after a successful push. Returns null when
+   *  the provider does not support automated PRs (branch is still pushed). */
+  openPr?: (args: {
+    branch: string;
+    base?: string;
+    title?: string;
+    body?: string;
+  }) => Promise<{ url: string; number: number } | null>;
 }
 
 export interface CodingResult {
@@ -38,6 +46,9 @@ export interface CodingResult {
   branch: string;
   commitSha?: string;
   buildOk?: boolean;
+  /** Set when a PR was opened for the pushed branch. */
+  prUrl?: string;
+  prNumber?: number;
   summary: string;
 }
 
@@ -110,11 +121,25 @@ export async function runCodingDispatch(
   const commitSha = await deps.git.commitAll(changes.commitMessage);
   await deps.git.push(changes.branch);
 
+  // Open a PR for the pushed branch (server-side; token never reaches here).
+  let pr: { url: string; number: number } | null = null;
+  if (deps.openPr) {
+    pr = await deps.openPr({
+      branch: changes.branch,
+      base: repo.defaultBranch ?? undefined,
+      title: changes.commitMessage,
+      body: changes.summary,
+    });
+  }
+
+  const pushedSummary = changes.summary ?? `Pushed ${changes.files.length} file(s) to ${changes.branch}.`;
   return {
     pushed: true,
     branch: changes.branch,
     commitSha,
     buildOk,
-    summary: changes.summary ?? `Pushed ${changes.files.length} file(s) to ${changes.branch}.`,
+    prUrl: pr?.url,
+    prNumber: pr?.number,
+    summary: pr ? `${pushedSummary}\nOpened PR #${pr.number}: ${pr.url}` : pushedSummary,
   };
 }
