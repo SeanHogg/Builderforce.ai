@@ -37,6 +37,34 @@ function detectOs(): Os {
   return isWindows ? 'windows' : 'unix';
 }
 
+/**
+ * Copy-to-clipboard button. Declared at module scope (not inside QuickStart) so
+ * it is a stable component identity across renders — `copied`/`onCopy` are threaded
+ * in as props rather than closed over.
+ */
+function CopyBtn({
+  text,
+  copyKey,
+  copied,
+  onCopy,
+}: {
+  text: string;
+  copyKey: string;
+  copied: string | null;
+  onCopy: (text: string, key: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="cc-copy-btn"
+      onClick={() => onCopy(text, copyKey)}
+      aria-label="Copy command"
+    >
+      {copied === copyKey ? '✓' : '⧉'}
+    </button>
+  );
+}
+
 export default function QuickStart() {
   const [mode, setMode] = useState<Mode>('oneliner');
   const [pm, setPm] = useState<Pm>('npm');
@@ -81,17 +109,6 @@ export default function QuickStart() {
       // ignore
     }
   };
-
-  const CopyBtn = ({ text, copyKey }: { text: string; copyKey: string }) => (
-    <button
-      type="button"
-      className="cc-copy-btn"
-      onClick={() => copy(text, copyKey)}
-      aria-label="Copy command"
-    >
-      {copied === copyKey ? '✓' : '⧉'}
-    </button>
-  );
 
   const showOsControls = mode === 'oneliner';
   const showPmControls = mode === 'npm';
@@ -228,7 +245,7 @@ export default function QuickStart() {
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
                 <span className="cc-cmd-text">{onelinerCommand}</span>
-                <CopyBtn text={onelinerCommand} copyKey="oneliner" />
+                <CopyBtn text={onelinerCommand} copyKey="oneliner" copied={copied} onCopy={copy} />
               </div>
             </>
           )}
@@ -239,13 +256,13 @@ export default function QuickStart() {
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
                 <span className="cc-cmd-text">{quickInstallCommand}</span>
-                <CopyBtn text={quickInstallCommand} copyKey="install" />
+                <CopyBtn text={quickInstallCommand} copyKey="install" copied={copied} onCopy={copy} />
               </div>
               <div className="cc-code-line cc-comment">{COMMENTS.quickOnboard[betaMode]}</div>
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
                 <span className="cc-cmd-text">builderforce onboard</span>
-                <CopyBtn text="builderforce onboard" copyKey="onboard" />
+                <CopyBtn text="builderforce onboard" copyKey="onboard" copied={copied} onCopy={copy} />
               </div>
             </>
           )}
@@ -259,6 +276,8 @@ export default function QuickStart() {
                 <CopyBtn
                   text="curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git"
                   copyKey="hackable-installer"
+                  copied={copied}
+                  onCopy={copy}
                 />
               </div>
             </>
@@ -270,18 +289,18 @@ export default function QuickStart() {
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
                 <span className="cc-cmd-text">git clone https://github.com/seanhogg/agents.git</span>
-                <CopyBtn text="git clone https://github.com/seanhogg/agents.git" copyKey="clone" />
+                <CopyBtn text="git clone https://github.com/seanhogg/agents.git" copyKey="clone" copied={copied} onCopy={copy} />
               </div>
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
                 <span className="cc-cmd-text">cd builderforce-agents &amp;&amp; pnpm install &amp;&amp; pnpm run build</span>
-                <CopyBtn text="cd builderforce-agents && pnpm install && pnpm run build" copyKey="build" />
+                <CopyBtn text="cd builderforce-agents && pnpm install && pnpm run build" copyKey="build" copied={copied} onCopy={copy} />
               </div>
               <div className="cc-code-line cc-comment"># You built it, now meet it</div>
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
                 <span className="cc-cmd-text">pnpm run builderforce onboard</span>
-                <CopyBtn text="pnpm run builderforce onboard" copyKey="hackable-onboard" />
+                <CopyBtn text="pnpm run builderforce onboard" copyKey="hackable-onboard" copied={copied} onCopy={copy} />
               </div>
             </>
           )}

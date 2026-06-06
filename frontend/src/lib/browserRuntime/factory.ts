@@ -116,6 +116,9 @@ export function createCodingDeps(opts: {
   authHeaders: Record<string, string>;
   callModel: (c: ModelCall) => Promise<string>;
   buildCommand?: string[];
+  /** Opens a PR server-side for the pushed branch (the transport binds the
+   *  dispatchId). Omitted → branch is pushed without a PR. */
+  openPr?: CodingDeps['openPr'];
 }): CodingDeps {
   const { git, fs, dir } = createBrowserGitClient({
     repoId: opts.repo.repoId,
@@ -136,5 +139,5 @@ export function createCodingDeps(opts: {
       }
     : undefined;
 
-  return { git, propose, build };
+  return { git, propose, build, openPr: opts.openPr };
 }

@@ -13,45 +13,19 @@
  * POST   /api/workflows/:id/tasks        Add a task to a workflow
  * PATCH  /api/workflows/:id/tasks/:tid   Update individual task state
  */
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import { eq, and, asc } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { workflows, workflowTasks, agentHosts, telemetrySpans } from '../../infrastructure/database/schema';
-import { verifySecret } from '../../infrastructure/auth/HashService';
+import { workflows, workflowTasks, telemetrySpans } from '../../infrastructure/database/schema';
+import {
+  resolveHostAuth,
+  verifyAgentHostApiKey,
+  verifyBearerAgentHost,
+} from '../../infrastructure/auth/agentHostAuth';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 type WorkflowHonoEnv = HonoEnv;
-
-async function verifyAgentHostApiKey(db: Db, id: number, key?: string | null): Promise<{ id: number; tenantId: number } | null> {
-  if (!key) return null;
-  const [agentHost] = await db
-    .select({ id: agentHosts.id, tenantId: agentHosts.tenantId, apiKeyHash: agentHosts.apiKeyHash })
-    .from(agentHosts)
-    .where(eq(agentHosts.id, id));
-  if (!agentHost) return null;
-  const valid = await verifySecret(key, agentHost.apiKeyHash);
-  return valid ? agentHost : null;
-}
-
-/** Resolve a agentHost from Bearer token + X-AgentHost-Id header (used by workflow-telemetry forwarding). */
-async function verifyBearerAgentHost(db: Db, authHeader: string | undefined, agentHostIdHeader: string | undefined): Promise<{ id: number; tenantId: number } | null> {
-  if (!authHeader?.startsWith('Bearer ') || !agentHostIdHeader) return null;
-  const key = authHeader.slice(7);
-  const id = Number(agentHostIdHeader);
-  if (!Number.isFinite(id) || id <= 0) return null;
-  return verifyAgentHostApiKey(db, id, key);
-}
-
-/** Resolve an authenticated agentHost from either Bearer+header or ?agentHostId=&key=. */
-async function resolveHostAuth(db: Db, c: Context): Promise<{ id: number; tenantId: number } | null> {
-  const bearer = await verifyBearerAgentHost(db, c.req.header('Authorization'), c.req.header('X-AgentHost-Id'));
-  if (bearer) return bearer;
-  const idParam = Number(c.req.query('agentHostId') ?? '');
-  const key = c.req.query('key');
-  if (!Number.isNaN(idParam) && idParam > 0 && key) return verifyAgentHostApiKey(db, idParam, key);
-  return null;
-}
 
 export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
   const router = new Hono<WorkflowHonoEnv>();

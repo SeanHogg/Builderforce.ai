@@ -22,6 +22,7 @@ function fakeTransport(over: Partial<BrowserRuntimeTransport> = {}): BrowserRunt
     claim: vi.fn(async () => dispatch()),
     callModel: vi.fn(async () => 'model output'),
     report: vi.fn(async () => {}),
+    openPullRequest: vi.fn(async () => null),
     ...over,
   };
 }

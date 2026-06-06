@@ -29,6 +29,7 @@ describe('AgentWorker tab', () => {
       }),
       callModel: vi.fn(async () => 'agent produced this output'),
       report,
+      openPullRequest: vi.fn(async () => null),
     };
 
     const { getByLabelText, getByTestId } = render(<AgentWorker transport={transport} />);
@@ -58,6 +59,7 @@ describe('AgentWorker tab', () => {
       }),
       callModel: vi.fn(async () => 'should not be used in coding mode'),
       report: vi.fn(async () => {}),
+      openPullRequest: vi.fn(async () => null),
     };
 
     const { getByLabelText, getByTestId } = render(<AgentWorker transport={transport} handlers={{ code }} />);
@@ -80,6 +82,7 @@ describe('AgentWorker tab', () => {
         throw new Error('gateway down');
       }),
       report: vi.fn(async () => {}),
+      openPullRequest: vi.fn(async () => null),
     };
 
     const { getByLabelText, getByTestId } = render(<AgentWorker transport={transport} />);

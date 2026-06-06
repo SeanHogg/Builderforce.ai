@@ -40,6 +40,7 @@ function defaultCodeHandler(transport: BrowserRuntimeTransport) {
       apiBase: getApiBaseUrl(),
       authHeaders: getAuthHeaders(),
       callModel: transport.callModel,
+      openPr: (pr) => transport.openPullRequest(dispatch.dispatchId, pr),
     });
     const result = await runCodingDispatch(
       { role: dispatch.role, input: dispatch.input },

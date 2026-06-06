@@ -16,19 +16,25 @@
  * and drives these endpoints. AgentHosts use the same /result callback.
  */
 import { Hono } from 'hono';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { agentDispatches, tasks, projectRepositories } from '../../infrastructure/database/schema';
+import { agentDispatches } from '../../infrastructure/database/schema';
 import { SwimlaneCoordinator } from '../../application/swimlane/SwimlaneCoordinator';
 import { DrizzleCoordinatorStore } from '../../application/swimlane/DrizzleCoordinatorStore';
 import {
   AgentHostStageDispatcher,
   type AgentHostRelayNamespace,
 } from '../../application/swimlane/agentHostStageDispatcher';
+import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
+import { openDispatchPullRequest } from '../../application/repos/openDispatchPullRequest';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
-type RuntimeEnv = { AGENT_HOST_RELAY?: AgentHostRelayNamespace };
+type RuntimeEnv = {
+  AGENT_HOST_RELAY?: AgentHostRelayNamespace;
+  INTEGRATION_ENCRYPTION_SECRET?: string;
+  JWT_SECRET?: string;
+};
 
 export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -71,7 +77,8 @@ export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
 
     // Resolve the repo the agent should code against (default repo of the
     // task's project), so the browser worker can clone/edit/push via the proxy.
-    const repo = await resolveRepoForTask(db, tenantId, claimed.taskId);
+    const repoRef = await resolveDefaultRepoForTask(db, tenantId, claimed.taskId);
+    const repo = repoRef ? { repoId: repoRef.repoId, defaultBranch: repoRef.defaultBranch } : null;
 
     return c.json({
       dispatch: {
@@ -123,34 +130,21 @@ export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ ok: true });
   });
 
+  // Open a pull request for a dispatch after the worker pushed its branch. The
+  // token never reaches the browser: the worker pushes via the git-proxy, then
+  // calls this so the PR is opened server-side with the decrypted credential.
+  // Shared with the headless host-authed path via openDispatchPullRequest.
+  router.post('/:dispatchId/pull-request', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const dispatchId = c.req.param('dispatchId');
+    const body = await c.req.json<{ branch: string; base?: string; title?: string; body?: string }>();
+
+    const env = c.env as RuntimeEnv;
+    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+    const result = await openDispatchPullRequest(db, secret, tenantId, dispatchId, body);
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json({ ok: true, url: result.url, number: result.number });
+  });
+
   return router;
-}
-
-/**
- * Resolve the repo a task's agent should code against: the project's default
- * repo (or the most recently added one). Returns null when the task has no
- * project repo bound — the worker then runs in reasoning-only mode.
- */
-async function resolveRepoForTask(
-  db: Db,
-  tenantId: number,
-  taskId: number | null,
-): Promise<{ repoId: string; defaultBranch: string | null } | null> {
-  if (taskId == null) return null;
-  const [task] = await db
-    .select({ projectId: tasks.projectId })
-    .from(tasks)
-    .where(eq(tasks.id, taskId))
-    .limit(1);
-  if (!task) return null;
-
-  const repos = await db
-    .select({ id: projectRepositories.id, isDefault: projectRepositories.isDefault, defaultBranch: projectRepositories.defaultBranch })
-    .from(projectRepositories)
-    .where(and(eq(projectRepositories.projectId, task.projectId), eq(projectRepositories.tenantId, tenantId)))
-    .orderBy(desc(projectRepositories.createdAt));
-  if (repos.length === 0) return null;
-
-  const chosen = repos.find((r) => r.isDefault) ?? repos[0]!;
-  return { repoId: chosen.id, defaultBranch: chosen.defaultBranch };
 }

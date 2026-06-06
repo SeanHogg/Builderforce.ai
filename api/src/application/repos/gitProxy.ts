@@ -65,6 +65,61 @@ export function buildGitAuthHeader(provider: string, token: string): string {
   return `Basic ${basic}`;
 }
 
+/**
+ * Build the provider REST API base URL for a repo's host. github.com uses the
+ * dedicated api.github.com origin; a GitHub Enterprise host uses `/api/v3` on
+ * the same host. Only GitHub is mapped today (callers gate on provider first).
+ */
+export function buildGitApiBaseUrl(provider: string, host: string | null): string {
+  const h = (host ?? '').trim();
+  if (provider === 'github') {
+    if (!h || h === 'github.com') return 'https://api.github.com';
+    return `https://${h}/api/v3`;
+  }
+  // Non-GitHub providers are not yet supported for REST operations.
+  throw new Error(`No REST API base for provider '${provider}'`);
+}
+
+/**
+ * Stream a smart-HTTP git request to the upstream provider with the token
+ * injected server-side. Shared by the tenant-JWT git-proxy (browser) and the
+ * host-authed git-proxy (headless agentHost) so the upstream fetch + header
+ * injection + response streaming live in ONE place. Returns a tagged shape the
+ * caller maps to an HTTP response (so this stays free of any web framework).
+ */
+export async function executeGitProxy(opts: {
+  repo: ProxyRepo;
+  token: string;
+  subPath: string;
+  method: 'GET' | 'POST';
+  query?: string;
+  contentType?: string;
+  body?: ArrayBuffer;
+}): Promise<{ ok: true; response: Response } | { ok: false; error: string }> {
+  let upstreamUrl: string;
+  try {
+    upstreamUrl = buildUpstreamGitUrl(opts.repo, opts.subPath, opts.query || undefined);
+  } catch {
+    return { ok: false, error: 'Disallowed git path' };
+  }
+
+  const headers: Record<string, string> = {
+    Authorization: buildGitAuthHeader(opts.repo.provider, opts.token),
+    'User-Agent': 'BuilderForce-Git-Proxy/1.0',
+  };
+  if (opts.contentType) headers['Content-Type'] = opts.contentType;
+
+  const init: RequestInit = { method: opts.method, headers };
+  if (opts.method === 'POST') init.body = opts.body;
+
+  const upstream = await fetch(upstreamUrl, init);
+  const respHeaders = new Headers();
+  const ct = upstream.headers.get('Content-Type');
+  if (ct) respHeaders.set('Content-Type', ct);
+  respHeaders.set('Cache-Control', 'no-cache');
+  return { ok: true, response: new Response(upstream.body, { status: upstream.status, headers: respHeaders }) };
+}
+
 /** The service name for an info/refs advertisement, validated. */
 export function parseGitService(query: string | null): 'git-upload-pack' | 'git-receive-pack' | null {
   if (!query) return null;
