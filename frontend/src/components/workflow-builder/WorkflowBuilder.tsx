@@ -18,11 +18,12 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
-  agentHosts,
   workflowDefinitions,
-  type AgentHost,
   type WorkflowDefinitionGraph,
   type WorkflowNodeKind,
+  type WorkflowRunTarget,
+  type WorkflowRunTargets,
+  type WorkflowTriggerInfo,
 } from '@/lib/builderforceApi';
 import { BuilderNode, type BuilderNodeData } from './BuilderNode';
 import { NodeConfigPanel } from './NodeConfigPanel';
@@ -91,6 +92,20 @@ function makeIntegrationNode(integ: Integration, position: XY): Node<BuilderNode
   };
 }
 
+/** Encode a run target as the `<select>` option value (`host:<id>` / `cloud:<ref>`). */
+function runTargetToValue(t: WorkflowRunTarget | null): string {
+  if (!t) return '';
+  if (t.runtime === 'cloud') return t.cloudAgentRef ? `cloud:${t.cloudAgentRef}` : '';
+  return t.agentHostId ? `host:${t.agentHostId}` : '';
+}
+
+/** Decode a `<select>` option value back into a run target. */
+function valueToRunTarget(v: string): WorkflowRunTarget | null {
+  if (v.startsWith('host:')) return { runtime: 'host', agentHostId: Number(v.slice(5)) };
+  if (v.startsWith('cloud:')) return { runtime: 'cloud', cloudAgentRef: v.slice(6) };
+  return null;
+}
+
 interface Props {
   /** Existing definition id to load + edit; omitted for a new workflow. */
   definitionId?: string | null;
@@ -103,13 +118,14 @@ export function WorkflowBuilder({ definitionId }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState('Untitled workflow');
   const [defId, setDefId] = useState<string | null>(definitionId ?? null);
-  const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
-  const [agentHostId, setAgentHostId] = useState<number | ''>('');
+  const [runTargets, setRunTargets] = useState<WorkflowRunTargets>({ hosts: [], cloudAgents: [] });
+  const [runTarget, setRunTarget] = useState<WorkflowRunTarget | null>(null);
+  const [triggerInfo, setTriggerInfo] = useState<Record<string, WorkflowTriggerInfo>>({});
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(!!definitionId);
 
-  useEffect(() => { agentHosts.list().then(setAgentHostList).catch(() => {}); }, []);
+  useEffect(() => { workflowDefinitions.runTargets().then(setRunTargets).catch(() => {}); }, []);
 
   // Load an existing definition into the canvas.
   useEffect(() => {
@@ -120,6 +136,11 @@ export function WorkflowBuilder({ definitionId }: Props) {
       .then((d) => {
         setName(d.name);
         setDefId(d.id);
+        if (d.runTargetRuntime === 'cloud') {
+          setRunTarget({ runtime: 'cloud', cloudAgentRef: d.runTargetCloudAgentRef ?? null });
+        } else if (d.runTargetAgentHostId) {
+          setRunTarget({ runtime: 'host', agentHostId: d.runTargetAgentHostId });
+        }
         setNodes(
           d.definition.nodes.map((n) => ({
             id: n.id,
@@ -129,6 +150,10 @@ export function WorkflowBuilder({ definitionId }: Props) {
           })),
         );
         setEdges(d.definition.edges.map((e) => ({ id: e.id, source: e.source, target: e.target })));
+        workflowDefinitions
+          .triggers(d.id)
+          .then((list) => setTriggerInfo(Object.fromEntries(list.map((t) => [t.nodeId, t]))))
+          .catch(() => {});
       })
       .catch((e: Error) => setStatus(e.message))
       .finally(() => setLoading(false));
@@ -211,20 +236,43 @@ export function WorkflowBuilder({ definitionId }: Props) {
     [nodes, edges],
   );
 
+  // Persisted run-target fields derived from the current selection — saved so
+  // scheduled / webhook / rss / inbound-email runs know where to execute.
+  const runTargetFields = useMemo(
+    () => ({
+      runTargetRuntime: runTarget?.runtime ?? ('host' as const),
+      runTargetAgentHostId: runTarget?.runtime === 'host' ? runTarget.agentHostId ?? null : null,
+      runTargetCloudAgentRef: runTarget?.runtime === 'cloud' ? runTarget.cloudAgentRef ?? null : null,
+    }),
+    [runTarget],
+  );
+
+  // Load the materialized triggers' activation state (webhook URLs, next runs)
+  // so the inspector can show each trigger node how it fires.
+  const refreshTriggers = useCallback((id: string) => {
+    workflowDefinitions
+      .triggers(id)
+      .then((list) => setTriggerInfo(Object.fromEntries(list.map((t) => [t.nodeId, t]))))
+      .catch(() => {});
+  }, []);
+
   const save = useCallback(async (): Promise<string | null> => {
     setBusy(true);
     setStatus(null);
     try {
       const graph = toGraph();
+      const nameVal = name.trim() || 'Untitled workflow';
       if (defId) {
-        await workflowDefinitions.update(defId, { name: name.trim() || 'Untitled workflow', definition: graph });
+        await workflowDefinitions.update(defId, { name: nameVal, definition: graph, ...runTargetFields });
         setStatus('Saved.');
+        refreshTriggers(defId);
         return defId;
       }
-      const created = await workflowDefinitions.create({ name: name.trim() || 'Untitled workflow', definition: graph });
+      const created = await workflowDefinitions.create({ name: nameVal, definition: graph, ...runTargetFields });
       setDefId(created.id);
       router.replace(`/workflows/builder?id=${created.id}`);
       setStatus('Saved.');
+      refreshTriggers(created.id);
       return created.id;
     } catch (e) {
       setStatus(e instanceof Error ? e.message : 'Save failed');
@@ -232,24 +280,24 @@ export function WorkflowBuilder({ definitionId }: Props) {
     } finally {
       setBusy(false);
     }
-  }, [defId, name, toGraph, router]);
+  }, [defId, name, toGraph, router, runTargetFields, refreshTriggers]);
 
   const run = useCallback(async () => {
-    if (!agentHostId) { setStatus('Select a agentHost to run on.'); return; }
+    if (!runTarget) { setStatus('Select a run target (agentHost or cloud agent).'); return; }
     if (nodes.length === 0) { setStatus('Add at least one node first.'); return; }
     setBusy(true);
     setStatus(null);
     try {
-      const id = await save();             // ensure the latest graph is persisted
+      const id = await save();             // ensure the latest graph + target is persisted
       if (!id) return;
-      const { workflowId } = await workflowDefinitions.run(id, Number(agentHostId));
+      const { workflowId } = await workflowDefinitions.run(id, runTarget);
       router.push(`/workflows?run=${workflowId}`);
     } catch (e) {
       setStatus(e instanceof Error ? e.message : 'Run failed');
     } finally {
       setBusy(false);
     }
-  }, [agentHostId, nodes.length, save, router]);
+  }, [runTarget, nodes.length, save, router]);
 
   // Save (if needed), then download the definition as YAML.
   const exportYaml = useCallback(async () => {
@@ -317,9 +365,23 @@ export function WorkflowBuilder({ definitionId }: Props) {
           style={{ ...fieldStyle, fontWeight: 700, fontSize: 14, minWidth: 220, flex: 1 }}
           placeholder="Workflow name"
         />
-        <select value={agentHostId} onChange={(e) => setAgentHostId(e.target.value ? Number(e.target.value) : '')} style={fieldStyle} title="Run on agentHost">
-          <option value="">Select agentHost…</option>
-          {agentHostList.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        <select
+          value={runTargetToValue(runTarget)}
+          onChange={(e) => setRunTarget(valueToRunTarget(e.target.value))}
+          style={fieldStyle}
+          title="Run on a self-hosted agentHost or a cloud agent"
+        >
+          <option value="">Select run target…</option>
+          {runTargets.hosts.length > 0 && (
+            <optgroup label="Self-hosted agentHosts">
+              {runTargets.hosts.map((h) => <option key={`host:${h.id}`} value={`host:${h.id}`}>{h.name}</option>)}
+            </optgroup>
+          )}
+          {runTargets.cloudAgents.length > 0 && (
+            <optgroup label="Cloud agents">
+              {runTargets.cloudAgents.map((a) => <option key={`cloud:${a.ref}`} value={`cloud:${a.ref}`}>{a.name}</option>)}
+            </optgroup>
+          )}
         </select>
         <button type="button" style={btnSubtle} disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button>
         <button type="button" style={btnSubtle} disabled={busy} onClick={() => void exportYaml()} title="Download as YAML">Export</button>
@@ -434,7 +496,12 @@ export function WorkflowBuilder({ definitionId }: Props) {
         {/* Inspector */}
         {selectedNode && (
           <div style={{ width: 268, borderLeft: '1px solid var(--border-subtle)', padding: 14 }}>
-            <NodeConfigPanel node={selectedNode} onChange={updateNodeData} onDelete={deleteNode} />
+            <NodeConfigPanel
+              node={selectedNode}
+              onChange={updateNodeData}
+              onDelete={deleteNode}
+              triggerInfo={triggerInfo[selectedNode.id]}
+            />
           </div>
         )}
       </div>

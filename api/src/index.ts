@@ -66,6 +66,7 @@ import { createChatRoutes }         from './presentation/routes/chatRoutes';
 import { createSpecRoutes }         from './presentation/routes/specRoutes';
 import { createWorkflowRoutes }     from './presentation/routes/workflowRoutes';
 import { createWorkflowDefinitionRoutes } from './presentation/routes/workflowDefinitionRoutes';
+import { createWorkflowTriggerRoutes } from './presentation/routes/workflowTriggerRoutes';
 import { createApprovalRoutes }     from './presentation/routes/approvalRoutes';
 import { createApprovalRuleRoutes } from './presentation/routes/approvalRuleRoutes';
 import { createTelemetryRoutes }    from './presentation/routes/telemetryRoutes';
@@ -106,6 +107,9 @@ import {
   OPENAPI_DESCRIPTION,
 } from './openapi/schema';
 import { runVendorHealthCron } from './application/llm/vendorHealthCron';
+import { runDueTriggers } from './application/workflow/runDueTriggers';
+import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
+import { handleInboundEmail } from './application/workflow/inboundEmail';
 
 // Middleware
 import { addCorsToResponse, corsMiddleware } from './presentation/middleware/cors';
@@ -230,6 +234,10 @@ function buildApp(env: Env): Hono<HonoEnv> {
   // GitHub webhook — raw body required for HMAC verification, no JWT
   app.route('/api/webhooks', createGitHubWebhookRoutes(db));
 
+  // Public workflow trigger entrypoints (webhook) — addressed by per-trigger
+  // token, optional HMAC; no JWT. Mounted with the other public webhook routes.
+  app.route('/api/workflow-triggers', createWorkflowTriggerRoutes(db));
+
   // Public endpoints (no JWT required)
   app.route('/api/auth',    createAuthRoutes(authService, db));
   app.route('/api/auth',    createOAuthRoutes(db));
@@ -320,6 +328,15 @@ function buildApp(env: Env): Hono<HonoEnv> {
 
 const DEV_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5173', 'http://127.0.0.1:5173'];
 
+/** Minimal shape of a Cloudflare Email Routing message — typed locally so the
+ *  build doesn't require the email-message types to be installed. */
+interface ForwardableEmailLike {
+  readonly from: string;
+  readonly to: string;
+  readonly headers?: { get?: (name: string) => string | null };
+  readonly raw?: unknown;
+}
+
 function optionCorsAllowOrigin(origin: string | null, corsOrigins: string | undefined): string {
   if (!origin) return '*';
   if (corsOrigins === '*') return '*';
@@ -331,18 +348,56 @@ function optionCorsAllowOrigin(origin: string | null, corsOrigins: string | unde
 export default {
   /**
    * Cloudflare scheduled() handler — fires on cron triggers declared in
-   * api/wrangler.toml `[triggers] crons`. Currently:
-   *   - daily LLM vendor health probe (every cron tick runs the same sweep;
-   *     change-detection inside the runner suppresses email noise).
+   * api/wrangler.toml `[triggers] crons`:
+   *   - `0 9 * * *`  daily LLM vendor health probe (change-detected, email-quiet).
+   *   - every-5-min tick: workflow-trigger sweep — fire due schedule + rss
+   *     triggers, then advance any pending cloud-runtime workflows.
    *
-   * Errors are caught and logged so a probe failure can't poison the rest of
-   * the cron schedule.
+   * Each branch is isolated so a failure in one can't poison the others. We key
+   * off `event.cron` so the expensive vendor probe only runs on the daily tick.
    */
-  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (event.cron === '0 9 * * *') {
+      ctx.waitUntil(
+        runVendorHealthCron(env).catch((err) => {
+          console.error('[cron:llm-health] failed', err);
+        }),
+      );
+    }
+    // Trigger sweep + cloud executor run on the frequent tick. (Also run when no
+    // cron string is supplied, e.g. a manual `wrangler` invocation.)
+    if (event.cron !== '0 9 * * *') {
+      ctx.waitUntil(
+        runDueTriggers(env)
+          .then(() => processPendingCloudWorkflows(env))
+          .catch((err) => {
+            console.error('[cron:wf-triggers] failed', err);
+          }),
+      );
+    }
+  },
+
+  /**
+   * Cloudflare Email Routing handler — receives inbound mail for addressed
+   * `inbound-email` workflow triggers (local-part = trigger token). Requires the
+   * Email Routing binding to be provisioned (see Gap Register). Typed loosely so
+   * the build doesn't depend on the email-types being present.
+   */
+  async email(message: ForwardableEmailLike, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(
-      runVendorHealthCron(env).catch((err) => {
-        console.error('[cron:llm-health] failed', err);
-      }),
+      (async () => {
+        let text = '';
+        try {
+          if (message.raw) text = await new Response(message.raw as ReadableStream).text();
+        } catch { /* best-effort body read */ }
+        const result = await handleInboundEmail(env, {
+          to: message.to,
+          from: message.from,
+          subject: message.headers?.get?.('subject') ?? undefined,
+          text,
+        });
+        if (!result.ok) console.warn('[email:wf-trigger] not dispatched:', result.error);
+      })().catch((err) => console.error('[email:wf-trigger] failed', err)),
     );
   },
   fetch(request: Request, env: Env, ctx: ExecutionContext): Response | Promise<Response> {

@@ -392,6 +392,41 @@ export interface WorkflowDefinitionGraph {
   edges: WorkflowDefEdge[];
 }
 
+export type WorkflowRuntime = 'host' | 'cloud';
+
+/** Where a workflow runs: a self-hosted agentHost OR a builderforce cloud agent. */
+export interface WorkflowRunTarget {
+  runtime: WorkflowRuntime;
+  agentHostId?: number | null;
+  cloudAgentRef?: string | null;
+}
+
+/** The run targets a workflow can execute on (for the builder's selector). */
+export interface WorkflowRunTargets {
+  hosts: Array<{ id: number; name: string; status: string }>;
+  cloudAgents: Array<{ ref: string; name: string }>;
+}
+
+/** Persisted run-target columns, surfaced on definition records. */
+export interface WorkflowRunTargetFields {
+  runTargetRuntime: WorkflowRuntime;
+  runTargetAgentHostId: number | null;
+  runTargetCloudAgentRef: string | null;
+}
+
+/** Activation state of one materialized trigger (for the builder's inspector). */
+export interface WorkflowTriggerInfo {
+  nodeId: string;
+  triggerType: 'schedule' | 'webhook' | 'rss' | 'inbound-email';
+  enabled: boolean;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastStatus: string | null;
+  webhookUrl: string | null;
+  emailAddress: string | null;
+  hasSecret: boolean;
+}
+
 /** List-row shape (graph omitted for the index). */
 export interface WorkflowDefinitionSummary {
   id: string;
@@ -401,8 +436,8 @@ export interface WorkflowDefinitionSummary {
   updatedAt: string;
 }
 
-/** Full record incl. the parsed graph. */
-export interface WorkflowDefinitionDetail extends WorkflowDefinitionSummary {
+/** Full record incl. the parsed graph + persisted run target. */
+export interface WorkflowDefinitionDetail extends WorkflowDefinitionSummary, Partial<WorkflowRunTargetFields> {
   definition: WorkflowDefinitionGraph;
 }
 
@@ -410,22 +445,27 @@ export const workflowDefinitions = {
   list: () =>
     request<{ definitions: WorkflowDefinitionSummary[] }>('/api/workflow-definitions').then((r) => r.definitions),
   get: (id: string) => request<WorkflowDefinitionDetail>(`/api/workflow-definitions/${id}`),
-  create: (body: { name: string; description?: string; definition?: WorkflowDefinitionGraph }) =>
+  /** The targets a workflow can run on: self-hosted agentHosts + cloud agents. */
+  runTargets: () => request<WorkflowRunTargets>('/api/workflow-definitions/run-targets'),
+  /** Activatable triggers + their activation state (webhook URL, next run, …). */
+  triggers: (id: string) =>
+    request<{ triggers: WorkflowTriggerInfo[] }>(`/api/workflow-definitions/${id}/triggers`).then((r) => r.triggers),
+  create: (body: { name: string; description?: string; definition?: WorkflowDefinitionGraph } & Partial<WorkflowRunTargetFields>) =>
     request<WorkflowDefinitionSummary>('/api/workflow-definitions', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  update: (id: string, body: { name?: string; description?: string; definition?: WorkflowDefinitionGraph }) =>
+  update: (id: string, body: { name?: string; description?: string; definition?: WorkflowDefinitionGraph } & Partial<WorkflowRunTargetFields>) =>
     request<WorkflowDefinitionDetail>(`/api/workflow-definitions/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
   remove: (id: string) =>
     request<{ ok: boolean }>(`/api/workflow-definitions/${id}`, { method: 'DELETE' }),
-  run: (id: string, agentHostId: number) =>
+  run: (id: string, target: WorkflowRunTarget) =>
     request<{ workflowId: string; taskCount: number }>(`/api/workflow-definitions/${id}/run`, {
       method: 'POST',
-      body: JSON.stringify({ agentHostId }),
+      body: JSON.stringify(target),
     }),
   /** Export a definition as YAML text (for download / hand-editing). */
   exportYaml: async (id: string): Promise<string> => {

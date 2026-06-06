@@ -14,11 +14,10 @@
  *   POST   /api/workflow-definitions/:id/run   Compile + instantiate an execution run
  */
 import { Hono } from 'hono';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { workflowDefinitions, workflows, workflowTasks } from '../../infrastructure/database/schema';
+import { workflowDefinitions, workflowTriggers, agentHosts } from '../../infrastructure/database/schema';
 import {
-  compileDefinition,
   definitionToYaml,
   parseDefinition,
   validateDefinition,
@@ -26,6 +25,8 @@ import {
   type WorkflowDefinition,
 } from '../../domain/workflowGraph';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { instantiateWorkflowRun, type RunTarget, type WorkflowRuntime } from '../../application/workflow/instantiateRun';
+import { syncDefinitionTriggers } from '../../application/workflow/triggerSync';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -42,6 +43,37 @@ function coerceDefinition(input: unknown): WorkflowDefinition {
     };
   }
   return { nodes: [], edges: [] };
+}
+
+interface RunTargetInput {
+  runTargetRuntime?: string;
+  runTargetAgentHostId?: number | null;
+  runTargetCloudAgentRef?: string | null;
+}
+
+/** Normalize a persisted/incoming run target into the columns + RunTarget shape. */
+function coerceRunTarget(input: RunTargetInput): {
+  runTargetRuntime: WorkflowRuntime;
+  runTargetAgentHostId: number | null;
+  runTargetCloudAgentRef: string | null;
+} {
+  const runtime: WorkflowRuntime = input.runTargetRuntime === 'cloud' ? 'cloud' : 'host';
+  return {
+    runTargetRuntime: runtime,
+    runTargetAgentHostId: runtime === 'host' ? input.runTargetAgentHostId ?? null : null,
+    runTargetCloudAgentRef: runtime === 'cloud' ? input.runTargetCloudAgentRef ?? null : null,
+  };
+}
+
+/** RunTarget from a definition row's persisted run-target columns. */
+function runTargetFromRow(row: {
+  runTargetRuntime: string;
+  runTargetAgentHostId: number | null;
+  runTargetCloudAgentRef: string | null;
+}): RunTarget {
+  return row.runTargetRuntime === 'cloud'
+    ? { runtime: 'cloud', cloudAgentRef: row.runTargetCloudAgentRef }
+    : { runtime: 'host', agentHostId: row.runTargetAgentHostId };
 }
 
 export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
@@ -68,23 +100,60 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ definitions });
   });
 
+  // GET /run-targets — the targets a workflow can run on: self-hosted agentHosts
+  // AND builderforce-hosted cloud agents (ide_agents supporting the cloud
+  // runtime). Read-through cached; the keyspace is per-tenant and small.
+  router.get('/run-targets', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const targets = await getOrSetCached(c.env as Env, `wfdef:run-targets:${tenantId}`, async () => {
+      const hosts = await db
+        .select({ id: agentHosts.id, name: agentHosts.name, status: agentHosts.status })
+        .from(agentHosts)
+        .where(eq(agentHosts.tenantId, tenantId))
+        .orderBy(desc(agentHosts.lastSeenAt));
+      // ide_agents is accessed via raw SQL (no Drizzle model); only agents that
+      // can serve the cloud runtime are eligible run targets.
+      const cloudRows = (await db.execute(sql`
+        SELECT id, name, runtime_support
+        FROM ide_agents
+        WHERE tenant_id = ${tenantId}
+          AND status = 'active'
+          AND runtime_support IN ('cloud', 'both')
+        ORDER BY created_at DESC
+        LIMIT 200
+      `)).rows as Array<{ id: string; name: string }>;
+      return {
+        hosts: hosts.map((h) => ({ id: h.id, name: h.name, status: h.status })),
+        cloudAgents: cloudRows.map((r) => ({ ref: r.id, name: r.name })),
+      };
+    });
+    return c.json(targets);
+  });
+
   // POST / — create
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ name?: string; description?: string; definition?: unknown }>();
+    const segmentId = c.get('segmentId') ?? null;
+    const body = await c.req.json<{ name?: string; description?: string; definition?: unknown } & RunTargetInput>();
     if (!body.name || !body.name.trim()) return c.json({ error: 'name is required' }, 400);
 
     const id = crypto.randomUUID();
     const now = new Date();
+    const def = coerceDefinition(body.definition);
+    const target = coerceRunTarget(body);
     await db.insert(workflowDefinitions).values({
       id,
       tenantId,
-      segmentId: c.get('segmentId') ?? null,
+      segmentId,
       name: body.name.trim(),
       description: body.description ?? null,
-      definition: JSON.stringify(coerceDefinition(body.definition)),
+      definition: JSON.stringify(def),
+      ...target,
       createdAt: now,
       updatedAt: now,
+    });
+    await syncDefinitionTriggers(db, {
+      definitionId: id, tenantId, segmentId, definition: def, target: runTargetFromRow(target),
     });
 
     await invalidateCached(c.env as Env, listCacheKey(tenantId));
@@ -110,15 +179,19 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
 
     const id = crypto.randomUUID();
     const now = new Date();
+    const segmentId = c.get('segmentId') ?? null;
     await db.insert(workflowDefinitions).values({
       id,
       tenantId,
-      segmentId: c.get('segmentId') ?? null,
+      segmentId,
       name: body.name?.trim() || 'Imported workflow',
       description: null,
       definition: JSON.stringify(def),
       createdAt: now,
       updatedAt: now,
+    });
+    await syncDefinitionTriggers(db, {
+      definitionId: id, tenantId, segmentId, definition: def, target: { runtime: 'host', agentHostId: null },
     });
     await invalidateCached(c.env as Env, listCacheKey(tenantId));
     const [row] = await db.select().from(workflowDefinitions).where(eq(workflowDefinitions.id, id));
@@ -154,17 +227,62 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
     });
   });
 
-  // PATCH /:id — update name/description/graph
-  router.patch('/:id', async (c) => {
+  // GET /:id/triggers — the materialized, activatable triggers for a definition,
+  // so the builder can show each one's activation: webhook URL, inbound-email
+  // address, next scheduled run, and last firing status. Single-PK-scoped read of
+  // a tiny per-definition set — intentionally uncached (state changes per tick).
+  router.get('/:id/triggers', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const body = await c.req.json<{ name?: string; description?: string; definition?: unknown }>();
-
-    const [existing] = await db
+    const [defRow] = await db
       .select({ id: workflowDefinitions.id })
       .from(workflowDefinitions)
       .where(and(eq(workflowDefinitions.id, id), eq(workflowDefinitions.tenantId, tenantId)));
+    if (!defRow) return c.json({ error: 'Workflow definition not found' }, 404);
+
+    const rows = await db
+      .select()
+      .from(workflowTriggers)
+      .where(and(eq(workflowTriggers.definitionId, id), eq(workflowTriggers.tenantId, tenantId)));
+
+    const origin = new URL(c.req.url).origin;
+    const emailDomain = (c.env as Env).INBOUND_EMAIL_DOMAIN ?? 'inbound.builderforce.ai';
+    return c.json({
+      triggers: rows.map((r) => ({
+        nodeId: r.nodeId,
+        triggerType: r.triggerType,
+        enabled: r.enabled,
+        nextRunAt: r.nextRunAt,
+        lastRunAt: r.lastRunAt,
+        lastStatus: r.lastStatus,
+        webhookUrl: r.triggerType === 'webhook' && r.token ? `${origin}/api/workflow-triggers/hook/${r.token}` : null,
+        emailAddress: r.triggerType === 'inbound-email' && r.token ? `wf+${r.token}@${emailDomain}` : null,
+        hasSecret: !!r.secret,
+      })),
+    });
+  });
+
+  // PATCH /:id — update name/description/graph/run-target
+  router.patch('/:id', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const body = await c.req.json<{ name?: string; description?: string; definition?: unknown } & RunTargetInput>();
+
+    const [existing] = await db
+      .select()
+      .from(workflowDefinitions)
+      .where(and(eq(workflowDefinitions.id, id), eq(workflowDefinitions.tenantId, tenantId)));
     if (!existing) return c.json({ error: 'Workflow definition not found' }, 404);
+
+    const runTargetTouched =
+      body.runTargetRuntime !== undefined ||
+      body.runTargetAgentHostId !== undefined ||
+      body.runTargetCloudAgentRef !== undefined;
+    const target = coerceRunTarget({
+      runTargetRuntime: body.runTargetRuntime ?? existing.runTargetRuntime,
+      runTargetAgentHostId: body.runTargetAgentHostId ?? existing.runTargetAgentHostId,
+      runTargetCloudAgentRef: body.runTargetCloudAgentRef ?? existing.runTargetCloudAgentRef,
+    });
 
     await db
       .update(workflowDefinitions)
@@ -172,9 +290,25 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
         ...(body.name !== undefined ? { name: body.name.trim() } : {}),
         ...(body.description !== undefined ? { description: body.description } : {}),
         ...(body.definition !== undefined ? { definition: JSON.stringify(coerceDefinition(body.definition)) } : {}),
+        ...(runTargetTouched ? target : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(workflowDefinitions.id, id), eq(workflowDefinitions.tenantId, tenantId)));
+
+    // Re-sync the trigger registry whenever the graph or run target changed —
+    // both feed the materialized workflow_triggers rows.
+    if (body.definition !== undefined || runTargetTouched) {
+      const [updated] = await db.select().from(workflowDefinitions).where(eq(workflowDefinitions.id, id));
+      if (updated) {
+        await syncDefinitionTriggers(db, {
+          definitionId: id,
+          tenantId,
+          segmentId: updated.segmentId ?? null,
+          definition: parseDefinition(updated.definition),
+          target: runTargetFromRow(updated),
+        });
+      }
+    }
 
     await invalidateCached(c.env as Env, listCacheKey(tenantId));
     const [row] = await db.select().from(workflowDefinitions).where(eq(workflowDefinitions.id, id));
@@ -193,14 +327,18 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ ok: true });
   });
 
-  // POST /:id/run — compile + instantiate an execution record for a agentHost.
-  // The definition is lowered to orchestrator steps; each compiled step becomes
-  // a workflow_task whose dependsOn holds the *task UUIDs* of upstream nodes.
+  // POST /:id/run — compile + instantiate an execution record. The run target is
+  // taken from the request when supplied (manual run from the builder), else the
+  // definition's persisted run target. Supports a self-hosted agentHost
+  // (runtime=host) or the builderforce-hosted cloud runtime (runtime=cloud).
   router.post('/:id/run', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const body = await c.req.json<{ agentHostId?: number }>();
-    if (!body.agentHostId) return c.json({ error: 'agentHostId is required to run a workflow' }, 400);
+    const body = await c.req.json<{
+      agentHostId?: number;
+      runtime?: string;
+      cloudAgentRef?: string;
+    }>();
 
     const [defRow] = await db
       .select()
@@ -208,46 +346,27 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(workflowDefinitions.id, id), eq(workflowDefinitions.tenantId, tenantId)));
     if (!defRow) return c.json({ error: 'Workflow definition not found' }, 404);
 
-    const def = parseDefinition(defRow.definition);
-    const invalid = validateDefinition(def);
-    if (invalid) return c.json({ error: invalid }, 400);
-
-    const steps = compileDefinition(def);
-    const nodeToTaskId = new Map(steps.map((s) => [s.nodeId, crypto.randomUUID()]));
-
-    const workflowId = crypto.randomUUID();
-    const now = new Date();
-    await db.insert(workflows).values({
-      id: workflowId,
-      tenantId,
-      segmentId: c.get('segmentId') ?? null,
-      agentHostId: body.agentHostId,
-      workflowType: 'custom',
-      status: 'pending',
-      description: defRow.name,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    if (steps.length > 0) {
-      await db.insert(workflowTasks).values(
-        steps.map((s) => ({
-          id: nodeToTaskId.get(s.nodeId)!,
-          workflowId,
-          agentRole: s.role,
-          description: s.description,
-          // input carries the node kind + config so the agentHost's orchestrator can
-          // run LLM-logic nodes (memory/knowledge/train) natively, not as agents.
-          input: JSON.stringify({ kind: s.kind, config: s.config }),
-          dependsOn: JSON.stringify(s.dependsOnNodeIds.map((nid) => nodeToTaskId.get(nid)).filter(Boolean)),
-          status: 'pending' as const,
-          createdAt: now,
-          updatedAt: now,
-        })),
-      );
+    // Request target wins; otherwise fall back to the definition's saved target.
+    let target: RunTarget;
+    if (body.runtime === 'cloud') {
+      target = { runtime: 'cloud', cloudAgentRef: body.cloudAgentRef ?? defRow.runTargetCloudAgentRef };
+    } else if (body.runtime === 'host' || body.agentHostId) {
+      target = { runtime: 'host', agentHostId: body.agentHostId ?? defRow.runTargetAgentHostId };
+    } else {
+      target = runTargetFromRow(defRow);
     }
 
-    return c.json({ workflowId, taskCount: steps.length }, 201);
+    const result = await instantiateWorkflowRun(db, {
+      tenantId,
+      segmentId: c.get('segmentId') ?? null,
+      definition: parseDefinition(defRow.definition),
+      name: defRow.name,
+      target,
+      triggerSource: 'manual',
+    });
+    if (!result.ok) return c.json({ error: result.error }, 400);
+
+    return c.json({ workflowId: result.workflowId, taskCount: result.taskCount }, 201);
   });
 
   return router;
