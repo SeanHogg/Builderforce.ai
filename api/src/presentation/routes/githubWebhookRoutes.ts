@@ -27,35 +27,10 @@ import { and, eq } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { projects, tasks, agentHosts } from '../../infrastructure/database/schema';
+import { verifyHmacSignature } from '../../application/workflow/verifySignature';
 
 /** Labels that trigger auto-dispatch. Lower-cased for comparison. */
 const DISPATCH_LABELS = new Set(['coderclaw', 'ai-task', 'host', 'ai']);
-
-/** Verify GitHub webhook HMAC-SHA256 signature (Web Crypto API — Worker-compatible). */
-async function verifyGitHubSignature(
-  rawBody: string,
-  signatureHeader: string,
-  secret: string,
-): Promise<boolean> {
-  try {
-    if (!signatureHeader.startsWith('sha256=')) return false;
-    const expected = signatureHeader.slice('sha256='.length);
-    const key = await crypto.subtle.importKey(
-      'raw',
-      new TextEncoder().encode(secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign'],
-    );
-    const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody));
-    const hex = Array.from(new Uint8Array(mac))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-    return hex === expected;
-  } catch {
-    return false;
-  }
-}
 
 interface GitHubIssuePayload {
   action: string;
@@ -94,7 +69,7 @@ export function createGitHubWebhookRoutes(db: Db): Hono<HonoEnv> {
     const rawBody = await c.req.text();
     const sigHeader = c.req.header('X-Hub-Signature-256') ?? '';
 
-    const valid = await verifyGitHubSignature(rawBody, sigHeader, secret);
+    const valid = await verifyHmacSignature(rawBody, sigHeader, secret);
     if (!valid) {
       return c.json({ error: 'Invalid signature' }, 401);
     }

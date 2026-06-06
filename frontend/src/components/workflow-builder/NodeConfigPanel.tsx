@@ -4,6 +4,7 @@ import type { Node } from '@xyflow/react';
 import { NODE_KIND_MAP, isFieldVisible, type ConfigField } from './nodeKinds';
 import type { BuilderNodeData } from './BuilderNode';
 import { integrationForConfig, integrationIcon } from './integrations';
+import type { WorkflowTriggerInfo } from '@/lib/builderforceApi';
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -21,11 +22,13 @@ interface Props {
   node: Node<BuilderNodeData>;
   onChange: (nodeId: string, patch: Partial<BuilderNodeData>) => void;
   onDelete: (nodeId: string) => void;
+  /** Activation state for a trigger node (webhook URL, next run, …), if any. */
+  triggerInfo?: WorkflowTriggerInfo;
 }
 
 /** Right-hand inspector for the selected node — edits its label and the typed
  *  config fields declared in the node-kind catalog. */
-export function NodeConfigPanel({ node, onChange, onDelete }: Props) {
+export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props) {
   const meta = NODE_KIND_MAP[node.data.kind];
   const config = node.data.config ?? {};
   // When this node is backed by a catalog integration, surface its operation
@@ -121,6 +124,43 @@ export function NodeConfigPanel({ node, onChange, onDelete }: Props) {
           {renderField(f)}
         </label>
       ))}
+
+      {/* Trigger activation — how this trigger actually fires once saved. */}
+      {node.data.kind === 'trigger' && triggerInfo && (
+        <div
+          style={{
+            display: 'flex', flexDirection: 'column', gap: 6, padding: '9px 10px',
+            border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-deep)',
+          }}
+        >
+          <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>
+            Activation
+          </div>
+          {triggerInfo.webhookUrl && (
+            <label style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+              Webhook URL{triggerInfo.hasSecret ? ' (sign with X-Signature)' : ''}
+              <input readOnly style={inputStyle} value={triggerInfo.webhookUrl} onFocus={(e) => e.currentTarget.select()} />
+            </label>
+          )}
+          {triggerInfo.emailAddress && (
+            <label style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+              Inbound email address
+              <input readOnly style={inputStyle} value={triggerInfo.emailAddress} onFocus={(e) => e.currentTarget.select()} />
+            </label>
+          )}
+          {triggerInfo.nextRunAt && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              Next run: {new Date(triggerInfo.nextRunAt).toLocaleString()}
+            </div>
+          )}
+          {triggerInfo.lastStatus && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              Last: {triggerInfo.lastStatus}
+              {triggerInfo.lastRunAt ? ` · ${new Date(triggerInfo.lastRunAt).toLocaleString()}` : ''}
+            </div>
+          )}
+        </div>
+      )}
 
       <button
         type="button"

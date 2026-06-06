@@ -1031,7 +1031,13 @@ export const workflows = pgTable('workflows', {
   id:           uuid('id').primaryKey(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  agentHostId:       integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
+  // Nullable since 0080: a workflow can target the cloud runtime instead of a
+  // self-hosted agentHost (then runtime='cloud' + cloudAgentRef identifies it).
+  agentHostId:       integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'cascade' }),
+  /** Where this run executes: 'host' (self-hosted agentHost) | 'cloud' (builderforce-hosted). */
+  runtime:      varchar('runtime', { length: 16 }).notNull().default('host'),
+  /** ide_agents.id of the cloud agent serving the run when runtime='cloud'. */
+  cloudAgentRef: varchar('cloud_agent_ref', { length: 64 }),
   specId:       uuid('spec_id').references(() => specs.id, { onDelete: 'set null' }),
   workflowType: workflowTypeEnum('workflow_type').notNull().default('custom'),
   status:       workflowStatusEnum('status').notNull().default('pending'),
@@ -1071,8 +1077,48 @@ export const workflowDefinitions = pgTable('workflow_definitions', {
   name:        varchar('name', { length: 255 }).notNull(),
   description: text('description'),
   definition:  text('definition').notNull().default('{"nodes":[],"edges":[]}'),  // serialized WorkflowDefinition JSON
+  // Run target (0080): where runs of this definition execute — manual runs, and
+  // every trigger-fired run, inherit this. 'host' uses runTargetAgentHostId,
+  // 'cloud' uses runTargetCloudAgentRef (an ide_agents.id).
+  runTargetRuntime:     varchar('run_target_runtime', { length: 16 }).notNull().default('host'),
+  runTargetAgentHostId: integer('run_target_agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
+  runTargetCloudAgentRef: varchar('run_target_cloud_agent_ref', { length: 64 }),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Workflow triggers — the materialized, activatable triggers (schedule /
+// webhook / rss / inbound-email) extracted from a definition's trigger nodes on
+// every save. The scheduler cron reads schedule+rss rows by `nextRunAt`; the
+// public webhook + inbound-email entrypoints address rows by `token`. Re-synced
+// (delete + recreate) whenever the owning definition is created/updated/imported
+// so the registry never drifts from the graph. See application/workflow/triggerSync.
+// ---------------------------------------------------------------------------
+
+export const workflowTriggers = pgTable('workflow_triggers', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  definitionId:  uuid('definition_id').notNull().references(() => workflowDefinitions.id, { onDelete: 'cascade' }),
+  nodeId:        varchar('node_id', { length: 128 }).notNull(),
+  triggerType:   varchar('trigger_type', { length: 32 }).notNull(),  // schedule|webhook|rss|inbound-email
+  enabled:       boolean('enabled').notNull().default(true),
+  config:        text('config').notNull().default('{}'),             // JSON of the trigger node config
+  // Run target snapshot, inherited from the definition at sync time.
+  runtime:       varchar('runtime', { length: 16 }).notNull().default('host'),
+  agentHostId:   integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
+  cloudAgentRef: varchar('cloud_agent_ref', { length: 64 }),
+  // Addressing (webhook / inbound-email): random URL/address-safe token + optional HMAC secret.
+  token:         varchar('token', { length: 64 }).unique(),
+  secret:        varchar('secret', { length: 128 }),
+  // Polling state (schedule / rss): next due time + dedup cursor for rss.
+  nextRunAt:     timestamp('next_run_at'),
+  cursor:        text('cursor'),
+  lastRunAt:     timestamp('last_run_at'),
+  lastStatus:    varchar('last_status', { length: 32 }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------

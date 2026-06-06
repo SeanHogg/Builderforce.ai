@@ -175,6 +175,10 @@ export interface Env {
   /** From address for notification emails, e.g. "Builderforce <notifications@builderforce.ai>" */
   NOTIFICATION_EMAIL_FROM?: string;
 
+  /** Domain for inbound-email workflow triggers (the addressed inbox lives here),
+   *  e.g. "inbound.builderforce.ai". Falls back to that default when unset. */
+  INBOUND_EMAIL_DOMAIN?: string;
+
   /** Optional comma-separated override of LLM vendor-health alert recipients.
    *  When unset, the scheduled() runner emails every user with isSuperadmin=true.
    *  Set via: wrangler secret put LLM_HEALTH_ALERT_RECIPIENTS */

@@ -68,9 +68,17 @@ tag = "v4"
 renamed_classes = [{ from = "ClawRelayDO", to = "AgentHostRelayDO" }]
 
 # Cron triggers — see scheduled() in src/index.ts
-# 09:00 UTC daily: probe every registered LLM vendor and email superadmins on status change.
+#   "0 9 * * *"   09:00 UTC daily: probe every LLM vendor; email superadmins on status change.
+#   "*/5 * * * *" every 5 min: fire due schedule + rss workflow triggers, then advance
+#                 pending cloud-runtime workflows. Schedules finer than 5 min coalesce to it.
 [triggers]
-crons = ["0 9 * * *"]
+crons = ["0 9 * * *", "*/5 * * * *"]
+
+# Inbound-email workflow trigger (the `inbound-email` trigger type) is delivered to
+# the email() handler in src/index.ts. It requires Cloudflare Email Routing to be
+# enabled for the zone and a catch-all/custom-address rule forwarding to this Worker.
+# Provision in the dashboard (Email → Email Routing → Email Workers) — there is no
+# wrangler binding for inbound email beyond the email() handler. See Gap Register.
 
 [observability]
 enabled = false
