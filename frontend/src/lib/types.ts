@@ -50,6 +50,10 @@ export interface Project {
   taskCount?: number;
   /** From list endpoint: primary assigned Workforce agent (agentHost) for this project */
   assignedAgentHost?: { id: number; name: string } | null;
+  /** From list endpoint: earliest task start date (falls back to earliest due date). ISO string. Drives the calendar/Gantt timeline. */
+  startDate?: string | null;
+  /** From list endpoint: latest task due date — the project deadline. ISO string. */
+  dueDate?: string | null;
 }
 
 export interface FileEntry {

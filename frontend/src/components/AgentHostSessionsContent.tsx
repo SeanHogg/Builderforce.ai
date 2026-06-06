@@ -176,7 +176,7 @@ export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsConte
                 <option value="">Select target agentHost…</option>
                 {agentHostList.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name}{c.connectedAt ? ' ●' : ' ○'}
+                    {c.name}{c.online ? ' ●' : ' ○'}
                   </option>
                 ))}
               </select>

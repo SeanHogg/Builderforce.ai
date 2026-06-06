@@ -48,7 +48,7 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
 
   const nodes = useMemo(() => layoutNodes(agentHosts, cx, cy, radius), [agentHosts, cx, cy, radius]);
 
-  const onlineAgentHosts = agentHosts.filter((c) => !!c.connectedAt);
+  const onlineAgentHosts = agentHosts.filter((c) => !!c.online);
 
   const handleDispatch = async () => {
     if (!selectedAgentHost) return;
@@ -96,16 +96,16 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
               y1={cy}
               x2={x}
               y2={y}
-              stroke={agentHost.connectedAt ? 'var(--cyan-bright, #00e5cc)' : 'var(--border-subtle)'}
+              stroke={agentHost.online ? 'var(--cyan-bright, #00e5cc)' : 'var(--border-subtle)'}
               strokeWidth={hoveredId === agentHost.id ? 2 : 1}
-              strokeDasharray={agentHost.connectedAt ? undefined : '4 3'}
+              strokeDasharray={agentHost.online ? undefined : '4 3'}
               opacity={0.5}
             />
           ))}
 
           {/* Cross-agentHost lines (mesh edges between online agentHosts) */}
           {nodes
-            .filter(({ agentHost }) => agentHost.connectedAt)
+            .filter(({ agentHost }) => agentHost.online)
             .map(({ agentHost: a, x: ax, y: ay }, i, arr) =>
               arr.slice(i + 1).map(({ agentHost: b, x: bx, y: by }) => (
                 <line
@@ -129,7 +129,7 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
 
           {/* AgentHost nodes */}
           {nodes.map(({ agentHost, x, y }) => {
-            const online = !!agentHost.connectedAt;
+            const online = !!agentHost.online;
             const isSelected = selectedAgentHost?.id === agentHost.id;
             const isHovered = hoveredId === agentHost.id;
             const nodeColor = online ? 'var(--cyan-bright, #00e5cc)' : 'var(--border-subtle)';
@@ -203,7 +203,7 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
             <option value="">Select agentHost…</option>
             {agentHosts.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}{c.connectedAt ? ' ●' : ' ○'}
+                {c.name}{c.online ? ' ●' : ' ○'}
               </option>
             ))}
           </select>

@@ -20,7 +20,7 @@ export default function DebugPage() {
     agentHosts.list()
       .then((list) => {
         setAgentHostList(list);
-        const first = list.find((c) => c.connectedAt) ?? list[0] ?? null;
+        const first = list.find((c) => c.online) ?? list[0] ?? null;
         setSelectedAgentHost(first);
       })
       .finally(() => setLoading(false));
@@ -64,7 +64,7 @@ export default function DebugPage() {
             >
               {agentHostList.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name}{c.connectedAt ? ' (connected)' : ' (offline)'}
+                  {c.name}{c.online ? ' (connected)' : ' (offline)'}
                 </option>
               ))}
             </select>

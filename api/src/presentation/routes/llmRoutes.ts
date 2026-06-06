@@ -21,6 +21,7 @@ import {
 } from '../../application/llm/LlmProxyService';
 import { logTrace } from '../../application/llm/traceLogger';
 import { callOpenRouterEmbeddings, pickUsage } from '../../application/llm/vendors';
+import { getCatalogCached } from '../../application/llm/modelCatalog';
 import {
   imageProxyForPlan,
   imageProductNameForPlan,
@@ -848,6 +849,20 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       },
       result.response.status as 200,
     );
+  });
+
+  // -----------------------------------------------------------------------
+  // GET /v1/catalog — PUBLIC model catalog for the marketing /models page.
+  // No auth: this is the same OpenRouter catalog we proxy, served through the
+  // read-through cache so the browser never calls OpenRouter directly and we
+  // keep one shared, invalidatable copy. Pricing is OpenRouter's verbatim —
+  // our Pro plan proxies these models at the same per-token price.
+  // -----------------------------------------------------------------------
+  router.get('/v1/catalog', async (c) => {
+    const data = await getCatalogCached(c.env);
+    // Cache at the edge too — the payload is identical for every visitor.
+    c.header('Cache-Control', 'public, max-age=300, s-maxage=3600');
+    return c.json({ object: 'list', data });
   });
 
   // -----------------------------------------------------------------------

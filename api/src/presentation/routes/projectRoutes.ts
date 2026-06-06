@@ -1,9 +1,10 @@
 import { Hono, type Context } from 'hono';
-import { and, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, max, min } from 'drizzle-orm';
 import { ProjectService } from '../../application/project/ProjectService';
 import type { HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { ProjectStatus, TenantRole } from '../../domain/shared/types';
+import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHostProjects, agentHosts, ideProjectChatMessages, ideProjectChats, projectInsightEvents, projects, sourceControlIntegrations, tasks, tenants } from '../../infrastructure/database/schema';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
@@ -346,6 +347,34 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       taskCounts.map((row) => [row.projectId, Number(row.taskCount)]),
     );
 
+    // Project timelines are derived from their tasks: a project has no date column
+    // of its own, so its schedule spans the earliest task start (falling back to the
+    // earliest due date) through the latest task due date. Powers the calendar/Gantt views.
+    const dateRanges = await db
+      .select({
+        projectId: tasks.projectId,
+        minStart: min(tasks.startDate),
+        minDue: min(tasks.dueDate),
+        maxDue: max(tasks.dueDate),
+      })
+      .from(tasks)
+      .where(
+        and(
+          inArray(tasks.projectId, projectIds),
+          eq(tasks.archived, false),
+        ),
+      )
+      .groupBy(tasks.projectId);
+
+    const toIso = (value: Date | string | null): string | null =>
+      value ? new Date(value).toISOString() : null;
+    const dateRangeByProject = new Map<number, { startDate: string | null; dueDate: string | null }>(
+      dateRanges.map((row) => [
+        row.projectId,
+        { startDate: toIso(row.minStart ?? row.minDue), dueDate: toIso(row.maxDue) },
+      ]),
+    );
+
     const tenantId = c.get('tenantId');
     const assignedAgentHostRows = await db
       .select({
@@ -368,6 +397,8 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         ...project,
         taskCount: taskCountByProject.get(project.id) ?? 0,
         assignedAgentHost: assignedAgentHostByProject.get(project.id) ?? null,
+        startDate: dateRangeByProject.get(project.id)?.startDate ?? null,
+        dueDate: dateRangeByProject.get(project.id)?.dueDate ?? null,
       })),
     });
   });
@@ -824,6 +855,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         name:        r.name,
         slug:        r.slug,
         status:      r.status,
+        online:      isAgentHostOnline(r),
         connectedAt: r.connectedAt?.toISOString() ?? null,
         lastSeenAt:  r.lastSeenAt?.toISOString() ?? null,
         createdAt:   r.createdAt.toISOString(),

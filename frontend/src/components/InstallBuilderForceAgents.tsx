@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import QuickStart from './QuickStart';
 
 interface InstallBuilderForceAgentsProps {
   /** Workspace token to auto-configure the installed agent. */
@@ -8,17 +8,10 @@ interface InstallBuilderForceAgentsProps {
 }
 
 /**
- * Reusable "Install BuilderForce Agents" step — wraps the <ccl-quickstart> Lit web component.
+ * Reusable "Install BuilderForce Agents" step — wraps the shared <QuickStart /> component.
  * Renders the full quickstart UI with all installation modes (one-liner, npm, hackable, macOS).
  */
 export function InstallBuilderForceAgents({ tenantToken }: InstallBuilderForceAgentsProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // Dynamically import the Lit web component on the client only
-  useEffect(() => {
-    import('./ccl-quickstart').catch(() => null);
-  }, []);
-
   return (
     <div>
       <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20 }}>
@@ -42,10 +35,7 @@ export function InstallBuilderForceAgents({ tenantToken }: InstallBuilderForceAg
         </div>
       )}
 
-      <div ref={containerRef}>
-        {/* @ts-expect-error: custom Lit element */}
-        <ccl-quickstart />
-      </div>
+      <QuickStart />
 
       <p style={{ marginTop: 16, fontSize: 12, color: 'var(--text-muted)' }}>
         You can also do this later from the{' '}

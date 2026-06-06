@@ -40,7 +40,8 @@ export default function AppFooter() {
     return () => { cancelled = true; };
   }, []);
 
-  const termsVersion = legal?.terms?.version ?? '—';
+  const termsVersion = legal?.terms?.version;
+  const privacyVersion = legal?.privacy?.version;
   const doc = modalType === 'terms' ? legal?.terms : legal?.privacy;
   const modalTitle = modalType === 'terms' ? 'Terms of Use' : 'Privacy Policy';
 
@@ -49,7 +50,7 @@ export default function AppFooter() {
       <footer className="global-footer">
         <div className="global-footer-inner">
           <span>
-            UI {APP_VERSION} · API {apiVersion ?? '…'} · Terms v{termsVersion}
+            UI {APP_VERSION} · API {apiVersion ?? '…'}
           </span>
           <div className="global-footer-links">
             <button
@@ -57,14 +58,14 @@ export default function AppFooter() {
               onClick={() => setModalType('terms')}
               className="global-footer-link"
             >
-              Terms of Use
+              Terms of Use{termsVersion ? ` (v${termsVersion})` : ''}
             </button>
             <button
               type="button"
               onClick={() => setModalType('privacy')}
               className="global-footer-link"
             >
-              Privacy Policy
+              Privacy Policy{privacyVersion ? ` (v${privacyVersion})` : ''}
             </button>
           </div>
         </div>

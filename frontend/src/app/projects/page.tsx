@@ -14,7 +14,18 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { ViewToggle } from '@/components/ViewToggle';
+import { ProjectCalendar } from '@/components/ProjectCalendar';
+import { ProjectGantt } from '@/components/ProjectGantt';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
+
+type ProjectsView = 'card' | 'table' | 'calendar' | 'gantt';
+
+const PROJECT_VIEW_OPTIONS: Array<{ value: ProjectsView; label: string }> = [
+  { value: 'card', label: 'Card' },
+  { value: 'table', label: 'List' },
+  { value: 'calendar', label: 'Calendar' },
+  { value: 'gantt', label: 'Gantt' },
+];
 
 /**
  * Projects page — full project list, create project modal, open project → IDE.
@@ -34,7 +45,7 @@ export default function ProjectsPage() {
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailsProject, setDetailsProject] = useState<Project | null>(null);
-  const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
+  const [viewMode, setViewMode] = useState<ProjectsView>('card');
   const [selectedAgentHost, setSelectedAgentHost] = useState<AgentHost | null>(null);
   const [confirmProject, setConfirmProject] = useState<Project | null>(null);
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
@@ -192,7 +203,7 @@ export default function ProjectsPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>Projects</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <ViewToggle value={viewMode} onChange={setViewMode} />
+            <ViewToggle value={viewMode} onChange={setViewMode} options={PROJECT_VIEW_OPTIONS} />
             <button
               type="button"
               onClick={() => setShowForm(true)}
@@ -273,6 +284,10 @@ export default function ProjectsPage() {
               />
             ))}
           </div>
+        ) : viewMode === 'calendar' ? (
+          <ProjectCalendar projects={projects} onSelect={setDetailsProject} />
+        ) : viewMode === 'gantt' ? (
+          <ProjectGantt projects={projects} onSelect={setDetailsProject} />
         ) : (
           <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>

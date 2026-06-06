@@ -230,6 +230,12 @@ export interface AgentHost {
   slug?: string;
   status?: string;
   apiKeyHash?: string;
+  /**
+   * Canonical liveness from the API: holds a relay connection AND heartbeat is
+   * fresh. Prefer this over `connectedAt` for online/offline UI — connectedAt
+   * can stay set forever if a host dies without cleanly closing its socket.
+   */
+  online?: boolean;
   connectedAt: string | null;
   lastSeenAt: string | null;
   createdAt: string;

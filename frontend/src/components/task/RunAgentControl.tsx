@@ -79,7 +79,7 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
         <select value={agentHostId} onChange={(e) => setAgentHostId(e.target.value)} style={{ ...selectStyle, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="Agent">
           <option value="">Auto (any agent)</option>
           {agentHosts.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}{c.connectedAt ? '' : ' (offline)'}</option>
+            <option key={c.id} value={c.id}>{c.name}{c.online ? '' : ' (offline)'}</option>
           ))}
         </select>
         <select value={model} onChange={(e) => setModel(e.target.value)} style={{ ...selectStyle, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="LLM model">

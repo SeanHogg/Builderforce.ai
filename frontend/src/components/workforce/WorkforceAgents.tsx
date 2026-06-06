@@ -18,6 +18,8 @@ import { FleetMeshContent } from '@/components/FleetMeshContent';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import { CloudAgentSlideOutPanel, type CloudAgentPanelTab } from './CloudAgentSlideOutPanel';
+import { ConfiguredQuickstartPopover } from './ConfiguredQuickstartPopover';
+import { useAuth } from '@/lib/AuthContext';
 import {
   CloudAgentFormFields,
   cloudAgentFormToInput,
@@ -41,6 +43,10 @@ type AgentKind = 'cloud' | 'host';
 
 const btnPrimary: React.CSSProperties = { padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' };
 const btnSubtle: React.CSSProperties = { padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-strong)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' };
+
+// "Add agent" split button: primary action + caret that opens the configured quickstart.
+const splitMain: React.CSSProperties = { padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderTopLeftRadius: 8, borderBottomLeftRadius: 8, cursor: 'pointer' };
+const splitCaret: React.CSSProperties = { padding: '8px 10px', fontSize: 11, fontWeight: 700, background: 'var(--accent)', color: '#fff', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.25)', borderTopRightRadius: 8, borderBottomRightRadius: 8, cursor: 'pointer', lineHeight: 1 };
 
 function priceLabel(a: PublishedAgent): string {
   if (!a.price_cents) return 'Free';
@@ -69,6 +75,11 @@ const cardStyle: React.CSSProperties = {
 };
 
 export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
+  const { tenant, tenantToken } = useAuth();
+
+  // --- "Connect a new agent" quickstart popover (caret on the split button) -
+  const [quickstartOpen, setQuickstartOpen] = useState(false);
+
   // --- Remote agentHosts ---------------------------------------------------
   const [hosts, setHosts] = useState<AgentHost[]>([]);
   const [loadingHosts, setLoadingHosts] = useState(true);
@@ -212,7 +223,27 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     <section>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-strong)', margin: 0 }}>Agents</h2>
-        <button type="button" onClick={() => openCreate('cloud')} style={btnPrimary}>+ Add agent</button>
+        <div style={{ position: 'relative', display: 'inline-flex' }}>
+          <button type="button" onClick={() => openCreate('cloud')} style={splitMain}>+ Agent</button>
+          <button
+            type="button"
+            onClick={() => setQuickstartOpen((o) => !o)}
+            style={splitCaret}
+            aria-label="Connect a new agent with the quickstart"
+            aria-haspopup="dialog"
+            aria-expanded={quickstartOpen}
+          >
+            ▾
+          </button>
+          {quickstartOpen && (
+            <ConfiguredQuickstartPopover
+              workgroupName={tenant?.name ?? 'your workgroup'}
+              workgroupSlug={tenant?.slug}
+              tenantToken={tenantToken}
+              onClose={() => setQuickstartOpen(false)}
+            />
+          )}
+        </div>
       </div>
       <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
         Your cloud agents and registered remote agents (self-hosted BuilderForce Agents instances) in one place.
@@ -238,7 +269,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
           {/* Remote agentHosts */}
           {hosts.map((host) => {
-            const connected = !!host.connectedAt;
+            const connected = !!host.online;
             const isDefault = defaultAgentHostId != null && host.id === defaultAgentHostId;
             const lastSeen = host.lastSeenAt ? new Date(host.lastSeenAt).toLocaleString() : '—';
             return (

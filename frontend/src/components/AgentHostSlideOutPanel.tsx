@@ -157,7 +157,7 @@ export function AgentHostSlideOutPanel({
     }
   };
 
-  const statusLabel = agentHost.status ?? (agentHost.connectedAt ? 'active' : 'offline');
+  const statusLabel = agentHost.status ?? (agentHost.online ? 'active' : 'offline');
   const slug = agentHost.slug;
   const statusColor =
     statusLabel === 'active'

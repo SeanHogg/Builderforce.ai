@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { BLOG_POSTS } from '@/lib/blogData';
 import JsonLd from '@/components/JsonLd';
 import { blogIndexSchema } from '@/lib/structured-data';
+import { ArticleCardGrid } from '@/components/blog/ArticleCard';
 
 export default function BlogPageClient() {
   return (
@@ -73,83 +74,7 @@ export default function BlogPageClient() {
           padding: 8px 24px 72px;
           width: 100%;
         }
-        .blog-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-          gap: 24px;
-        }
-
-        /* ── POST CARD ── */
-        .blog-card {
-          background: var(--surface-card);
-          border: 1px solid var(--border-subtle);
-          border-radius: 20px;
-          padding: 28px 24px;
-          backdrop-filter: blur(12px);
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          text-decoration: none;
-          color: inherit;
-          transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-          animation: blog-fadeInUp 0.6s ease-out both;
-        }
-        .blog-card:hover {
-          border-color: var(--border-accent);
-          transform: translateY(-5px);
-          box-shadow:
-            0 20px 52px var(--shadow-coral-soft),
-            inset 0 1px 0 var(--surface-inset-highlight);
-        }
-        .blog-card-meta {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          flex-wrap: wrap;
-        }
-        .blog-card-date {
-          font-size: 0.78rem;
-          color: var(--text-muted);
-          font-family: var(--font-display);
-        }
-        .blog-card-tag {
-          font-size: 0.7rem;
-          font-weight: 600;
-          padding: 2px 8px;
-          border-radius: 999px;
-          background: var(--surface-coral-soft);
-          color: var(--coral-bright);
-          border: 1px solid var(--border-accent);
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-        }
-        .blog-card-title {
-          font-family: var(--font-display);
-          font-size: 1.1rem;
-          font-weight: 700;
-          color: var(--text-primary);
-          line-height: 1.3;
-        }
-        .blog-card-desc {
-          font-size: 0.88rem;
-          color: var(--text-secondary);
-          line-height: 1.65;
-          flex: 1;
-        }
-        .blog-card-author {
-          font-size: 0.78rem;
-          color: var(--text-muted);
-        }
-        .blog-card-cta {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 0.85rem;
-          font-weight: 600;
-          color: var(--coral-bright);
-          font-family: var(--font-display);
-          margin-top: 4px;
-        }
+        /* Card + grid styles live in components/blog/ArticleCard.tsx */
 
         /* ── FOOTER ── */
         .blog-footer {
@@ -193,7 +118,6 @@ export default function BlogPageClient() {
         @media (max-width: 640px) {
           .blog-hero { padding: 40px 20px 24px; }
           .blog-main { padding: 8px 16px 48px; }
-          .blog-grid { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -212,38 +136,7 @@ export default function BlogPageClient() {
 
         {/* ── Post grid ── */}
         <main className="blog-main">
-          <div className="blog-grid">
-            {BLOG_POSTS.map((post, i) => (
-              <Link
-                key={post.slug}
-                href={`/blog/${post.slug}`}
-                className="blog-card"
-                style={{ animationDelay: `${i * 0.07}s` }}
-              >
-                <div className="blog-card-meta">
-                  <span className="blog-card-date">
-                    {new Date(post.date).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
-                  </span>
-                  {post.tags.slice(0, 1).map((tag) => (
-                    <span key={tag} className="blog-card-tag">{tag}</span>
-                  ))}
-                </div>
-
-                <h2 className="blog-card-title">{post.title}</h2>
-                <p className="blog-card-desc">{post.description}</p>
-
-                {post.author && (
-                  <p className="blog-card-author">By {post.author}</p>
-                )}
-
-                <span className="blog-card-cta">Read article →</span>
-              </Link>
-            ))}
-          </div>
+          <ArticleCardGrid posts={BLOG_POSTS} />
         </main>
 
         {/* ── Footer ── */}

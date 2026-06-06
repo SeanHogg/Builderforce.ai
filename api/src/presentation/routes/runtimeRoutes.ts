@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
-import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
+import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
@@ -290,7 +291,7 @@ async function getDispatchTargets(db: Db, tenantId: number, assignedAgentHostId?
     .where(
       and(
         eq(agentHosts.tenantId, tenantId),
-        isNotNull(agentHosts.connectedAt),
+        agentHostOnlineCondition(),
       ),
     );
   return rows.map((row) => row.id);

@@ -34,6 +34,7 @@ import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashServic
 import { invalidateKeyCache } from '../../infrastructure/auth/keyResolutionCache';
 import { verifyJwt } from '../../infrastructure/auth/JwtService';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
+import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
@@ -250,7 +251,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       id:                   agentHost.id,
       name:                 agentHost.name,
       slug:                 agentHost.slug,
-      online:               agentHost.connectedAt !== null,
+      online:               isAgentHostOnline(agentHost),
       connectedAt:          agentHost.connectedAt,
       lastSeenAt:           agentHost.lastSeenAt,
       capabilities:         agentHost.capabilities ?? [],
@@ -275,7 +276,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
         ...(agentHost.capabilities ?? []),
         ...(agentHost.declaredCapabilities ?? []),
       ]);
-      const online = agentHost.connectedAt !== null ? 1 : 0;
+      const online = isAgentHostOnline(agentHost) ? 1 : 0;
       const matched = requires.filter((r) => caps.has(r)).length;
       const total = requires.length || 1;
       return online * 0.5 + (matched / total) * 0.5;
@@ -290,7 +291,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       agentHostId: best.id,
       name:   best.name,
       score:  Math.round(score(best) * 100) / 100,
-      online: best.connectedAt !== null,
+      online: isAgentHostOnline(best),
     });
   });
 
@@ -310,6 +311,8 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       name: agentHost.name,
       slug: agentHost.slug,
       status: agentHost.status,
+      // Canonical liveness — connectedAt alone is unreliable (stuck-online bug).
+      online: isAgentHostOnline(agentHost),
       connectedAt: agentHost.connectedAt,
       lastSeenAt: agentHost.lastSeenAt,
       createdAt: agentHost.createdAt,
@@ -530,7 +533,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
         capabilities: ['chat', 'tasks', 'relay'],
         connectedAt: agentHost.connectedAt,
         lastSeenAt: agentHost.lastSeenAt,
-        status: agentHost.connectedAt ? 'connected' : 'disconnected',
+        status: isAgentHostOnline(agentHost) ? 'connected' : 'disconnected',
       },
     ]);
   });
@@ -1198,11 +1201,11 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.get('/:id/status', async (c) => {
     const id = Number(c.req.param('id'));
     const [row] = await db
-      .select({ connectedAt: agentHosts.connectedAt })
+      .select({ connectedAt: agentHosts.connectedAt, lastSeenAt: agentHosts.lastSeenAt })
       .from(agentHosts)
       .where(eq(agentHosts.id, id));
     if (!row) return c.json({ error: 'not found' }, 404);
-    return c.json({ connected: row.connectedAt !== null, connectedAt: row.connectedAt });
+    return c.json({ connected: isAgentHostOnline(row), connectedAt: row.connectedAt });
   });
 
   // -------------------------------------------------------------------------

@@ -43,6 +43,35 @@ export function getFileName(path: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Legal-document Markdown sanitizer (used by LegalDocPreview)
+// ---------------------------------------------------------------------------
+
+/**
+ * Legal docs are sometimes pasted in straight from an LLM chat, where the real
+ * document arrives wrapped in a fenced code block (```PRIVACY_POLICY.md … ```)
+ * with conversational chatter around it ("Okay, I can help you draft…"). Render
+ * that verbatim and the whole policy shows up as a raw monospace code block
+ * instead of formatted prose, with the chatter on top.
+ *
+ * If the content contains a fenced code block whose info string looks like
+ * Markdown (`md`, `markdown`, or any `*.md` filename), unwrap it: return the
+ * block's inner body and discard the surrounding chatter. Otherwise the content
+ * is already clean Markdown and is returned unchanged.
+ */
+export function unwrapLegalMarkdown(content: string): string {
+  // ```<info>\n<body>\n``` — info string captured to test whether it's Markdown.
+  const fence = /```[ \t]*([^\n`]*)\r?\n([\s\S]*?)\r?\n?```/g;
+  let match: RegExpExecArray | null;
+  while ((match = fence.exec(content)) !== null) {
+    const info = match[1].trim().toLowerCase();
+    if (info === 'md' || info === 'markdown' || info.endsWith('.md')) {
+      return match[2].trim();
+    }
+  }
+  return content;
+}
+
+// ---------------------------------------------------------------------------
 // File-tree builder (used by FileExplorer)
 // ---------------------------------------------------------------------------
 

@@ -161,7 +161,7 @@ export default function DashboardPage() {
     }
   };
 
-  const connectedAgentHosts = agentHostList.filter((c) => c.connectedAt);
+  const connectedAgentHosts = agentHostList.filter((c) => c.online);
 
   if (!isAuthenticated) return null;
 
@@ -741,11 +741,11 @@ export default function DashboardPage() {
                         fontWeight: 600,
                         padding: '2px 8px',
                         borderRadius: 6,
-                        background: c.connectedAt ? 'rgba(34, 197, 94, 0.15)' : 'var(--bg-deep)',
-                        color: c.connectedAt ? '#22c55e' : 'var(--text-muted)',
+                        background: c.online ? 'rgba(34, 197, 94, 0.15)' : 'var(--bg-deep)',
+                        color: c.online ? '#22c55e' : 'var(--text-muted)',
                       }}
                     >
-                      {c.connectedAt ? 'Online' : 'Offline'}
+                      {c.online ? 'Online' : 'Offline'}
                     </span>
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>

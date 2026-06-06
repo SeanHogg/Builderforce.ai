@@ -872,6 +872,12 @@ html[data-theme='light'] .nebula {
   grid-area: nav;
   position: relative;
   z-index: 2;
+  /* min-height:0 stops this tall (flex-column) grid item from forcing the
+     shell's `1fr` row to grow to the full menu height — without it the row
+     blows past the viewport, the shell clips, the menu can't scroll, and page
+     content gets pushed under the footer. The inner .nav-main does the
+     scrolling. */
+  min-height: 0;
   /* visible so the collapse handle can straddle the right divider */
   overflow: visible;
   padding: 16px 12px;
@@ -1045,6 +1051,9 @@ html[data-theme='light'] .nebula {
 /* Content area */
 .content {
   grid-area: content;
+  /* min-height:0 keeps this column item from being grown past the `1fr` row by
+     its own content; the scroll happens here, not on the window. */
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 12px;

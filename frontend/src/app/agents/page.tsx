@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import QuickStart from './QuickStart';
+import QuickStart from '@/components/QuickStart';
 import FeatureCard from './FeatureCard';
 import NewsletterForm from './NewsletterForm';
 

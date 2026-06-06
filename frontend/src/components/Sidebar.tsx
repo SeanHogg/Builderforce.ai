@@ -69,6 +69,7 @@ const publicNav: NavItem[] = [
   { href: '/product', label: 'Product', icon: '✨' },
   { href: '/marketplace', label: 'Workforce', icon: <MascotIcon size={20} /> },
   { href: '/agents', label: 'BuilderForce Agents', icon: '🤖' },
+  { href: '/models', label: 'Models', icon: '🧠' },
   { href: '/blog', label: 'Blog', icon: '📝' },
   { href: '/pricing', label: 'Pricing', icon: '💳' },
 ];

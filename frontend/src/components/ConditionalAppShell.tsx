@@ -5,6 +5,7 @@ import AppShell from './AppShell';
 import AppFooter from './AppFooter';
 import PublicShell from './PublicShell';
 import OnboardingGate from './OnboardingGate';
+import RouteMarketing from './RouteMarketing';
 import { BrainActionsProvider, BrainContextProvider, BrainProvider, brainConfig } from '@/lib/brain';
 import { FloatingBrain } from './brain/FloatingBrain';
 import { McpExtensionsBridge } from './brain/McpExtensionsBridge';
@@ -18,7 +19,7 @@ const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/'];
 // Marketing + public-browse routes. These render in PublicShell (auth-aware
 // sidebar) for EVERYONE: logged-out visitors get the marketing nav + product
 // map, signed-in users get the app nav — but the page stays publicly viewable.
-const PUBLIC_SHELL_PREFIXES = ['/product', '/blog', '/agents', '/pricing', '/marketplace', '/prompts'];
+const PUBLIC_SHELL_PREFIXES = ['/product', '/blog', '/agents', '/pricing', '/marketplace', '/prompts', '/models'];
 
 // Authenticated app routes — gated behind OnboardingGate inside AppShell.
 const APP_SHELL_EXACT = ['/dashboard', '/ide', '/training', '/tenants'];
@@ -66,6 +67,7 @@ function FooterOnlyShell({ children }: { children: React.ReactNode }) {
 /** Pick the shell chrome for the current route (Brain is mounted globally below). */
 function useShellContent(children: React.ReactNode): React.ReactNode {
   const pathname = usePathname() || '';
+  const { isAuthenticated } = useAuth();
 
   if (isNoChrome(pathname)) return <>{children}</>;
   if (FOOTER_ONLY_PATHS.includes(pathname)) return <FooterOnlyShell>{children}</FooterOnlyShell>;
@@ -74,8 +76,19 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
   // visitors; the app's OnboardingGate would otherwise blank the page pre-auth).
   if (isPublicShellPath(pathname)) return <PublicShell>{children}</PublicShell>;
 
-  // Authenticated app routes → AppShell behind the onboarding/terms gate.
+  // Authenticated app routes.
   if (isAppShellPath(pathname)) {
+    // Logged out → render a per-route marketing teaser + login/CTA instead of a
+    // blank gate or redirect, so no authed deep link is ever a dead end. The
+    // real page never mounts (so its own auth-redirect won't fire).
+    if (!isAuthenticated) {
+      return (
+        <PublicShell>
+          <RouteMarketing pathname={pathname} />
+        </PublicShell>
+      );
+    }
+    // Signed in → AppShell behind the onboarding/terms gate.
     return (
       <OnboardingGate renderShell={(gated) => <AppShell>{gated}</AppShell>}>
         {children}
