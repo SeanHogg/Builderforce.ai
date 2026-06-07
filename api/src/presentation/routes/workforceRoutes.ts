@@ -18,7 +18,11 @@
 import { Hono } from 'hono';
 import { neon } from '@neondatabase/serverless';
 import { authMiddleware } from '../middleware/authMiddleware';
-import type { HonoEnv } from '../../env';
+import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import type { Env, HonoEnv } from '../../env';
+
+/** Cache key for a tenant's purchased (marketplace-acquired) agents. */
+const purchasedCacheKey = (tenantId: number): string => `wf:purchased:${tenantId}`;
 
 const RUNTIME_SUPPORT = ['cloud', 'host', 'both'] as const;
 const PRICING_MODELS = ['flat_fee', 'consumption'] as const;
@@ -56,6 +60,46 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       LIMIT 200
     `;
     return c.json(rows.map(mapAgentRow));
+  });
+
+  // GET /agents/purchased — agents this tenant acquired from the marketplace
+  // (distinct from /agents/mine, which is the tenant's OWN created agents).
+  // Read-through cached; invalidated on hire.
+  router.get('/agents/purchased', authMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const rows = await getOrSetCached(c.env as Env, purchasedCacheKey(tenantId), () =>
+      sql(c.env)`
+        SELECT a.* FROM ide_agents a
+        JOIN agent_purchases p ON p.agent_id = a.id
+        WHERE p.tenant_id = ${tenantId} AND a.status = 'active'
+        ORDER BY p.created_at DESC
+        LIMIT 200
+      ` as unknown as Promise<Record<string, unknown>[]>,
+    );
+    return c.json(rows.map(mapAgentRow));
+  });
+
+  // POST /agents/:id/hire — acquire a published marketplace agent into this
+  // tenant's workforce. Records the purchase (idempotent) and bumps the agent's
+  // aggregate hire counter. Authenticated so the buyer (tenant) is known.
+  router.post('/agents/:id/hire', authMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const [agent] = await sql(c.env)`
+      SELECT id, published, status FROM ide_agents WHERE id = ${id} AND status = 'active'
+    `;
+    if (!agent) return c.json({ error: 'Agent not found' }, 404);
+    if (!agent.published) return c.json({ error: 'Agent is not published to the marketplace' }, 409);
+
+    await sql(c.env)`
+      INSERT INTO agent_purchases (tenant_id, agent_id) VALUES (${tenantId}, ${id})
+      ON CONFLICT (tenant_id, agent_id) DO NOTHING
+    `;
+    const [row] = await sql(c.env)`
+      UPDATE ide_agents SET hire_count = hire_count + 1, updated_at = NOW() WHERE id = ${id} RETURNING *
+    `;
+    await invalidateCached(c.env as Env, purchasedCacheKey(tenantId));
+    return c.json(mapAgentRow(row));
   });
 
   router.post('/agents', authMiddleware, async (c) => {
@@ -155,6 +199,23 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   router.delete('/agents/:id', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
+
+    // Only a tenant's OWN agent that is unpublished AND has no purchases may be
+    // deleted — never pull a published/purchased agent out from under buyers.
+    const [existing] = await sql(c.env)`
+      SELECT published, hire_count FROM ide_agents WHERE id = ${id} AND tenant_id = ${tenantId}
+    `;
+    if (!existing) return c.json({ error: 'Agent not found' }, 404);
+    if (existing.published) {
+      return c.json({ error: 'Unpublish this agent before deleting it.' }, 409);
+    }
+    const [purchase] = await sql(c.env)`
+      SELECT 1 FROM agent_purchases WHERE agent_id = ${id} LIMIT 1
+    `;
+    if (purchase || Number(existing.hire_count ?? 0) > 0) {
+      return c.json({ error: 'This agent has been purchased and cannot be deleted.' }, 409);
+    }
+
     // Drop the agent and its canonical identity bridge + per-agent assignments.
     const rows = await sql(c.env)`
       DELETE FROM ide_agents WHERE id = ${id} AND tenant_id = ${tenantId} RETURNING id

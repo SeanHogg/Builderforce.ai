@@ -418,7 +418,9 @@ export async function fetchAgent(agentId: string): Promise<PublishedAgent> {
 }
 
 export async function hireAgent(agentId: string): Promise<PublishedAgent> {
-  return apiRequest<PublishedAgent>(`${IDE}/agents/${agentId}/hire`, {
+  // Authenticated workforce hire: records the purchase for this tenant (so the
+  // agent shows under "purchased" in /workforce) and bumps the hire counter.
+  return apiRequest<PublishedAgent>(`/api/workforce/agents/${agentId}/hire`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({}),
@@ -452,6 +454,11 @@ export interface CloudAgentInput {
 /** The tenant's own agents (any publish state). */
 export async function listMyAgents(): Promise<PublishedAgent[]> {
   return apiRequest<PublishedAgent[]>(`/api/workforce/agents/mine`);
+}
+
+/** Agents this tenant acquired from the marketplace (distinct from owned). */
+export async function listPurchasedAgents(): Promise<PublishedAgent[]> {
+  return apiRequest<PublishedAgent[]>(`/api/workforce/agents/purchased`);
 }
 
 export async function createCloudAgent(data: CloudAgentInput): Promise<PublishedAgent> {

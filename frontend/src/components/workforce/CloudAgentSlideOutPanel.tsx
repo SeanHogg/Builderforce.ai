@@ -8,6 +8,7 @@ import {
   type AgentPricingModel,
 } from '@/lib/api';
 import type { PublishedAgent } from '@/lib/types';
+import { canDeleteAgent } from '@/lib/agentPermissions';
 import { CapabilitiesContent } from '@/components/CapabilitiesContent';
 import {
   CloudAgentFormFields,
@@ -178,7 +179,9 @@ export function CloudAgentSlideOutPanel({
           {agent.published
             ? <span className="badge-green">PUBLISHED</span>
             : <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 9999, background: 'var(--bg-elevated)', color: 'var(--muted)' }}>DRAFT</span>}
-          <button type="button" onClick={remove} disabled={saving} style={{ ...btnSubtle, color: 'var(--error-text)' }}>Delete</button>
+          {canDeleteAgent(agent) && (
+            <button type="button" onClick={remove} disabled={saving} style={{ ...btnSubtle, color: 'var(--error-text)' }}>Delete</button>
+          )}
         </div>
 
         {/* Tabs */}
