@@ -8,7 +8,6 @@ import { checkProjectKeyAvailable } from '@/lib/builderforceApi';
 import { ObservabilityContent } from './ObservabilityContent';
 import { TaskMgmtContent } from './TaskMgmtContent';
 import { PRDsContent } from './PRDsContent';
-import { CronJobsContent } from './CronJobsContent';
 import { AgentCapabilitiesContent } from './AgentCapabilitiesContent';
 import { BrainPanel } from './brain/BrainPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
@@ -21,10 +20,8 @@ export type ProjectPanelTab =
   | 'integrations'
   | 'taskMgmt'
   | 'prds'
-  | 'cron'
   | 'capabilities'
   | 'brainChat'
-  | 'instances'
   | 'workspace'
   | 'observability';
 
@@ -47,10 +44,8 @@ const TABS: { id: ProjectPanelTab; label: string }[] = [
   { id: 'integrations', label: 'Integrations' },
   { id: 'taskMgmt', label: 'Task Mgmt' },
   { id: 'prds', label: 'PRDs' },
-  { id: 'cron', label: 'Cron' },
   { id: 'capabilities', label: 'Agent / Capabilities' },
   { id: 'brainChat', label: 'Brain Chat' },
-  { id: 'instances', label: 'Instances' },
   { id: 'workspace', label: 'Workspace' },
   { id: 'observability', label: 'Observability' },
 ];
@@ -589,18 +584,6 @@ export function ProjectDetailsPanel({
             </div>
           )}
 
-          {activeTab === 'instances' && (
-            <div style={cardStyle}>
-              <div style={{ fontWeight: 600, marginBottom: 10 }}>Instances</div>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Active agent/agentHost instances for this project. Configure from Workforce.
-              </p>
-              <Link href="/workforce" style={{ fontSize: 13, color: 'var(--coral-bright)', marginTop: 8, display: 'inline-block' }}>
-                Workforce →
-              </Link>
-            </div>
-          )}
-
           {activeTab === 'workspace' && (
             <div style={cardStyle}>
               <div style={{ fontWeight: 600, marginBottom: 10 }}>Workspace</div>
@@ -613,13 +596,8 @@ export function ProjectDetailsPanel({
             </div>
           )}
 
-          {activeTab === 'cron' && (
-            project.assignedAgentHost?.id
-              ? <CronJobsContent agentHostId={project.assignedAgentHost.id} projectId={project.id} hideProjectColumn />
-              : <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 24, textAlign: 'center' }}>No agentHost assigned to this project. Assign a agentHost from the Workforce page to manage cron jobs.</div>
-          )}
           {activeTab === 'capabilities' && (
-            <AgentCapabilitiesContent projectId={project.id} />
+            <AgentCapabilitiesContent projectId={project.id} agentHostId={project.assignedAgentHost?.id} />
           )}
           {activeTab === 'observability' && <ObservabilityContent />}
         </div>
