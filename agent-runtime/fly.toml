@@ -1,20 +1,22 @@
-# Fly.io deployment for a HEADLESS cloud agentHost (claw).
+# Fly.io deployment for a CLOUD BuilderForce Agent.
 #
-# This runs the agent-runtime gateway as a long-lived process that dials OUT to
-# the Builderforce relay (wss://api.builderforce.ai/api/agentNodes/:id/upstream)
-# and executes swimlane `agent_dispatch` coding tasks. It needs NO inbound HTTP
-# service — there is no [http_service] block on purpose; the claw is a client of
-# the relay, not a server.
+# A BuilderForce Agent can run On-Premise (on your own machine) or in the Cloud
+# (deployed like this). Either type can be assigned to a swimlane. This config
+# runs the agent-runtime gateway as a long-lived process that dials OUT to the
+# Builderforce relay (wss://api.builderforce.ai/api/agentNodes/:id/upstream) and
+# executes swimlane `agent_dispatch` coding tasks. It needs NO inbound HTTP
+# service — there is no [http_service] block on purpose; the agent is a client
+# of the relay, not a server.
 #
 # Prerequisites (see docs/CLOUD_DEPLOY.md for the full runbook):
 #   1. @builderforce/memory must be published to npm (the Docker `pnpm install
 #      --frozen-lockfile` 404s until then — tracked in the root gap register).
-#   2. Register the agentHost (POST /api/agent-hosts) to get its numeric id +
-#      clk_* key, then write .builderforce/context.yaml with that instanceId
-#      onto the mounted volume, and `fly secrets set BUILDERFORCE_API_KEY=clk_…`.
+#   2. Register the agent (POST /api/agent-hosts) to get its numeric id + API
+#      key, then write .builderforce/context.yaml with that instanceId onto the
+#      mounted volume, and `fly secrets set BUILDERFORCE_API_KEY=<key>`.
 #
 # Replace app name + region before first deploy.
-app = "builderforce-claw"
+app = "builderforce-agent"
 primary_region = "iad"
 
 [build]
@@ -28,15 +30,15 @@ primary_region = "iad"
 
 # A persistent volume holds .builderforce/context.yaml (the instanceId the relay
 # reads at boot) and the workspace clones. Create with:
-#   fly volumes create claw_data --size 10 --region iad
+#   fly volumes create agent_data --size 10 --region iad
 [mounts]
-  source = "claw_data"
+  source = "agent_data"
   destination = "/data"
 
 [[vm]]
   size = "shared-cpu-2x"
   memory = "2gb"
 
-# Keep exactly one instance running (a claw is a singleton per registration).
+# Keep exactly one instance running (one process per agent registration).
 [deploy]
   strategy = "immediate"

@@ -1,13 +1,15 @@
-# Headless cloud agentHost (claw) — deploy runbook
+# Deploy a Cloud BuilderForce Agent — runbook
 
-This deploys the agent-runtime as a **headless cloud worker** that codes against
-your repos with no browser tab open. It dials out to the Builderforce relay,
+A **BuilderForce Agent** can run **On-Premise** (on your own machine) or in the
+**Cloud** (deployed as below). Either agent type can be assigned to a swimlane
+and will auto-execute its tasks. This runbook deploys a Cloud agent: it codes
+against your repos with no browser open — it dials out to the Builderforce relay,
 picks up swimlane `agent_dispatch` tasks, clones the bound repo through the host
-git-proxy, runs the embedded agent, pushes a branch, and opens a PR — then
-reports the result so the ticket advances autonomously.
+git-proxy, runs the embedded agent, pushes a branch, opens a PR, and reports the
+result so the ticket advances autonomously.
 
 The whole loop is implemented and unit-tested:
-- Runtime handler: `src/infra/builderforce-coding-dispatch.ts` (+ adapters, + `agent_dispatch` case in `builderforce-relay.ts`).
+- Runtime handler: `src/infra/builderforce-coding-dispatch.ts` (+ adapters, + the `agent_dispatch` case in `builderforce-relay.ts`).
 - API contracts (in `../api`): `GET /api/agent-hosts/:id/dispatch/:dispatchId`, the host git-proxy, `POST /api/agent-hosts/:id/dispatch/:dispatchId/pull-request`, `POST /api/agent-hosts/:id/dispatch-result`.
 
 ## Prerequisite (one-time, blocks the Docker build)
@@ -18,25 +20,25 @@ it is published the build 404s. (Tracked in the root README gap register.)
 Publish it, regenerate the lockfile (`pnpm install` in `agent-runtime`), commit,
 then proceed.
 
-## 1. Register the agentHost (get id + key)
+## 1. Register the agent (get id + key)
 
 ```bash
 curl -sX POST https://api.builderforce.ai/api/agent-hosts \
   -H "Authorization: Bearer <TENANT_JWT>" \
   -H 'Content-Type: application/json' \
-  -d '{"name":"cloud-claw-1","machineProfile":{"machineName":"fly-iad"}}'
-# → { "agentHost": { "id": <N> }, "apiKey": "clk_..." }   (apiKey shown once)
+  -d '{"name":"cloud-agent-1","machineProfile":{"machineName":"fly-iad"}}'
+# → { "agentHost": { "id": <N> }, "apiKey": "<key>" }   (apiKey shown once)
 ```
 
-Keep `<N>` (the instanceId) and the `clk_...` key.
+Keep `<N>` (the instanceId) and the API key.
 
 ## 2. Provision Fly + the volume
 
 ```bash
 cd agent-runtime
-fly apps create builderforce-claw          # or edit app name in fly.toml
-fly volumes create claw_data --size 10 --region iad
-fly secrets set BUILDERFORCE_API_KEY=clk_...   # the key from step 1
+fly apps create builderforce-agent          # or edit app name in fly.toml
+fly volumes create agent_data --size 10 --region iad
+fly secrets set BUILDERFORCE_API_KEY=<key>  # the key from step 1
 ```
 
 ## 3. Seed the instanceId the relay reads at boot
@@ -51,7 +53,7 @@ fly ssh console -C "sh -c 'cat > /data/.builderforce/context.yaml <<EOF
 builderforce:
   instanceId: \"<N>\"
 EOF'"
-fly apps restart builderforce-claw
+fly apps restart builderforce-agent
 ```
 
 (If the task's project is fixed, also add `projectId: \"<P>\"` under `builderforce:`.)
@@ -60,7 +62,7 @@ fly apps restart builderforce-claw
 
 ```bash
 curl -s https://api.builderforce.ai/api/agent-hosts/fleet \
-  -H "Authorization: Bearer <TENANT_JWT>"   # the claw should appear, online
+  -H "Authorization: Bearer <TENANT_JWT>"   # the agent should appear, online
 fly logs   # expect: "[builderforce] relay started for agentNode <N>"
 ```
 
@@ -68,21 +70,25 @@ fly logs   # expect: "[builderforce] relay started for agentNode <N>"
 
 1. In the portal, create/connect the project + bind the GitHub repo (must have a
    `credentialId`; mark one repo `isDefault`).
-2. Create a task and start its swimlane ticket so a `cloud`/`remote` dispatch is
-   created and pushed to this claw.
-3. Watch `fly logs`:
+2. Assign this agent to a swimlane (Board config → lane → Assign agent → pick this
+   agent as the target; leave target blank to use the tenant's default agent).
+3. Create a task and start its swimlane ticket so an `agent_dispatch` is created
+   and routed to this agent.
+4. Watch `fly logs`:
    - `received agent_dispatch dispatch=<id>`
    - git clone via `/api/agent-hosts/<N>/git-proxy/<repoId>`
    - agent edits → push → PR open
-4. The PR URL lands on `tasks.githubPrUrl` (kanban card) and the ticket advances.
+5. The PR URL lands on `tasks.githubPrUrl` (kanban card) and the ticket advances.
 
 ## Notes
 
-- The provider git token is **never** sent to the claw: git authenticates to the
-  host git-proxy with the claw's own `clk_*` key (HTTP extra-header); the proxy
+- The provider git token is **never** sent to the agent: git authenticates to the
+  host git-proxy with the agent's own API key (HTTP extra-header); the proxy
   injects the real token server-side.
 - PR creation is GitHub-only today; other providers push the branch and report
   "open a PR manually" (tracked in the gap register).
 - Any container with outbound HTTPS works (Railway/Render/a VM with
   `docker run`) — Fly is just the reference. Set the same env + write the same
-  `context.yaml` + secret.
+  `context.yaml` + secret. An On-Premise agent is the same runtime started on
+  your own machine instead of a cloud host.
+```
