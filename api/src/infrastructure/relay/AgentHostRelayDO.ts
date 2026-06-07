@@ -29,7 +29,7 @@
  *   - tool.audit frames are forwarded to the API for persistence
  */
 
-import { buildExecutionMessageFrame } from './executionMessage';
+import { buildExecutionMessageFrame, buildExecutionCancelFrame } from './executionMessage';
 
 interface BufferedMessage {
   role: string;
@@ -103,6 +103,22 @@ export class AgentHostRelayDO implements DurableObject {
         }
         // Echo to browser clients so the chat thread shows the steering message.
         this.broadcast(JSON.stringify({ type: "chat.message", role: "user", text: built.frame.text, ephemeral: true }));
+        return this.json({ ok: true, delivered: true }, 200);
+      }
+
+      // Cancel: forward an `execution.cancel` frame upstream so the host aborts
+      // the in-flight run. Mirrors /execution-message.
+      if (request.method === "POST" && url.pathname.endsWith("/execution-cancel")) {
+        let payload: unknown = null;
+        try {
+          payload = await request.json();
+        } catch {
+          return this.json({ ok: false, error: "invalid_json" }, 400);
+        }
+        const frame = buildExecutionCancelFrame(payload);
+        if (!this.sendUpstream(frame)) {
+          return this.json({ ok: false, delivered: false, error: "agent_host_offline" }, 409);
+        }
         return this.json({ ok: true, delivered: true }, 200);
       }
 

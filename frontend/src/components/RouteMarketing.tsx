@@ -43,6 +43,20 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
         </div>
       </section>
 
+      {m.faq && m.faq.length > 0 && (
+        <section className="rm-faq">
+          <div className="rm-inside-head">Frequently asked questions</div>
+          <div className="rm-faq-list">
+            {m.faq.map((q) => (
+              <details key={q.question} className="rm-faq-item">
+                <summary className="rm-faq-q">{q.question}</summary>
+                <p className="rm-faq-a">{q.answer}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+      )}
+
       <style>{`
         .route-mkt { max-width: 1000px; margin: 0 auto; padding: 24px; }
         .rm-hero {
@@ -105,6 +119,22 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
         .rm-card-icon { font-size: 1.5rem; }
         .rm-card-title { font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: var(--text-primary); }
         .rm-card-blurb { font-size: 0.84rem; color: var(--text-secondary); line-height: 1.5; }
+
+        .rm-faq { margin-top: 40px; max-width: 760px; margin-left: auto; margin-right: auto; }
+        .rm-faq-list { display: flex; flex-direction: column; gap: 10px; }
+        .rm-faq-item {
+          border: 1px solid var(--border-subtle); border-radius: 14px;
+          background: var(--surface-card); padding: 4px 18px;
+        }
+        .rm-faq-q {
+          cursor: pointer; list-style: none; padding: 14px 0;
+          font-family: var(--font-display); font-weight: 600; font-size: 0.98rem;
+          color: var(--text-primary); display: flex; justify-content: space-between; align-items: center; gap: 12px;
+        }
+        .rm-faq-q::-webkit-details-marker { display: none; }
+        .rm-faq-q::after { content: '+'; color: var(--coral-bright); font-size: 1.3rem; line-height: 1; flex-shrink: 0; }
+        .rm-faq-item[open] .rm-faq-q::after { content: '–'; }
+        .rm-faq-a { margin: 0 0 14px; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.6; }
       `}</style>
     </div>
   );

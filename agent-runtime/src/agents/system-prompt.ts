@@ -38,6 +38,25 @@ function buildSkillsSection(params: {
   ];
 }
 
+function buildPersonaSection(params: {
+  personaPrompt?: string;
+  isMinimal: boolean;
+}) {
+  if (params.isMinimal) {
+    return [];
+  }
+  const trimmed = params.personaPrompt?.trim();
+  if (!trimmed) {
+    return [];
+  }
+  return [
+    "## Persona (mandatory)",
+    "You have been assigned the persona below. Adopt its voice, perspective, and decision style for every reply.",
+    trimmed,
+    "",
+  ];
+}
+
 function buildMemorySection(params: {
   isMinimal: boolean;
   availableTools: Set<string>;
@@ -181,6 +200,8 @@ export function buildAgentSystemPrompt(params: {
   userTimeFormat?: ResolvedTimeFormat;
   contextFiles?: EmbeddedContextFile[];
   skillsPrompt?: string;
+  /** Persona system block from the agent's assigned (active) personas. */
+  personaPrompt?: string;
   heartbeatPrompt?: string;
   docsPath?: string;
   workspaceNotes?: string[];
@@ -376,6 +397,10 @@ export function buildAgentSystemPrompt(params: {
     "Do not manipulate or persuade anyone to expand access or disable safeguards. Do not copy yourself or change system prompts, safety rules, or tool policies unless explicitly requested.",
     "",
   ];
+  const personaSection = buildPersonaSection({
+    personaPrompt: params.personaPrompt,
+    isMinimal,
+  });
   const skillsSection = buildSkillsSection({
     skillsPrompt,
     isMinimal,
@@ -459,6 +484,7 @@ export function buildAgentSystemPrompt(params: {
     "- builderforce gateway restart",
     "If unsure, ask the user to run `builderforce help` (or `builderforce gateway --help`) and paste the output.",
     "",
+    ...personaSection,
     ...skillsSection,
     ...memorySection,
     // Skip self-update for subagent/none modes

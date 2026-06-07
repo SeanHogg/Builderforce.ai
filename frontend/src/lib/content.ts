@@ -590,6 +590,30 @@ export const BLOG_FAQ: FaqItem[] = [
   },
 ];
 
+/** Projects / Tasks domain FAQ — rich-snippet + GEO coverage for the work-management surface. */
+export const PROJECTS_TASKS_FAQ: FaqItem[] = [
+  {
+    question: 'What is the Projects / Tasks workspace in Builderforce.ai?',
+    answer: 'Projects / Tasks is the single work-management surface where you organize everything your AI workforce builds. A project is a collaborative workspace with its own IDE, files, assigned agents, and workflows; the Tasks tab is a task board where work is planned, assigned to agents, and tracked through every status. Projects and Tasks live on one page with two tabs so you can move between organizing the work and tracking it without leaving the surface.',
+  },
+  {
+    question: 'How do AI agents pick up and run tasks?',
+    answer: 'Create a task on a project board, set its priority, and assign it to an AgentHost (a connected agent runtime). The agent picks up the task, runs it through your approval gates, and the board updates live as the task flows from backlog to in-progress to done — across local agents and a remote mesh of AgentHosts.',
+  },
+  {
+    question: 'What views does the task board support?',
+    answer: 'Tasks can be viewed as a kanban board (swimlanes per status or per agent), a sortable table, a calendar, or a Gantt timeline. Projects share the same card, table, calendar, and Gantt views, so you can plan delivery dates and dependencies the same way for both.',
+  },
+  {
+    question: 'Can I scope tasks to a single project?',
+    answer: 'Yes. Open a project and use its Task board action to jump straight to the Tasks tab filtered to that project, or browse all tasks across every project and filter by project, status, or priority. The project scope is preserved in the URL so the view is shareable.',
+  },
+  {
+    question: 'How are projects and tasks connected to workflows and agents?',
+    answer: 'Each project can have assigned agents and repeatable, approval-gated workflows. Tasks are the unit of work that flows to those agents; workflows orchestrate multi-step task execution. Together they form the loop from planning work to running it on your agent workforce, with full observability and an audit trail.',
+  },
+];
+
 /* ════════════════════ DEFINED TERMS (GEO) ════════════════════ */
 
 export interface DefinedTermEntry {
@@ -675,7 +699,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
     blurb: 'Coordinate work across agents, workflows, and a mesh of remote AgentHosts.',
     surfaces: [
       { icon: '🔀', title: 'Workflow Builder', desc: 'Compose agents and tools into repeatable, approval-gated workflows.', href: '/workflows/builder' },
-      { icon: '☑', title: 'Task Management', desc: 'Track, assign, and watch tasks flow through your agent workforce.', href: '/tasks' },
+      { icon: '▦', title: 'Projects / Tasks', desc: 'Organize work into project workspaces — each with a full IDE, agents, and a task board — then plan, assign, and watch tasks flow across your agent workforce in board, table, calendar, or Gantt views.', href: '/projects' },
       { icon: '🕸️', title: 'Workforce Mesh', desc: 'Discover and dispatch work across local and remote AgentHosts — capacity sharing across machines and tenants.', href: '/workforce' },
       { icon: '💬', title: 'Chats', desc: 'Talk to your agents directly, or watch them collaborate in shared conversations.', href: '/chats' },
     ],

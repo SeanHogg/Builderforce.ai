@@ -1,4 +1,4 @@
-import { PRODUCT_SECTIONS } from './content';
+import { PRODUCT_SECTIONS, PROJECTS_TASKS_FAQ, type FaqItem } from './content';
 
 /**
  * Marketing copy shown to logged-out visitors who land on an authenticated
@@ -13,6 +13,8 @@ export interface RouteMarketing {
   icon: string;
   title: string;
   description: string;
+  /** Optional FAQ rendered on the teaser (and emitted as FAQPage JSON-LD) for richer SEO/GEO. */
+  faq?: FaqItem[];
 }
 
 const fromSurfaces: Record<string, RouteMarketing> = {};
@@ -23,9 +25,7 @@ for (const section of PRODUCT_SECTIONS) {
 }
 
 const extra: Record<string, RouteMarketing> = {
-  '/projects': { icon: '▦', title: 'Projects', description: 'Organize your work into collaborative AI project workspaces with a full IDE, tasks, and agents.' },
   '/workflows': { icon: '🔀', title: 'Workflow Builder', description: 'Compose agents and tools into repeatable, approval-gated workflows.' },
-  '/contributors': { icon: '📈', title: 'Contributors', description: 'See who — human and agent — is contributing across your workspace, and how.' },
   '/settings': { icon: '⚙', title: 'Settings', description: 'Manage your workspace, members, API keys, and preferences.' },
   '/tenants': { icon: '🏢', title: 'Workspaces', description: 'Create and switch between multi-tenant workspaces with per-seat roles.' },
   '/admin': { icon: '⚙', title: 'Platform Admin', description: 'Platform administration, LLM traces, and operator tooling.' },
@@ -34,19 +34,30 @@ const extra: Record<string, RouteMarketing> = {
 
 const REGISTRY: Record<string, RouteMarketing> = { ...fromSurfaces, ...extra };
 
+/** Per-route FAQ overlay — attached on top of the resolved teaser for SEO-heavy surfaces. */
+const FAQ_BY_PATH: Record<string, FaqItem[]> = {
+  '/projects': PROJECTS_TASKS_FAQ,
+};
+
 const DEFAULT: RouteMarketing = {
   icon: '🔒',
   title: 'This is part of Builderforce.ai',
   description: 'Sign in to access your AI workforce — build, train, orchestrate, and govern custom AI agents.',
 };
 
-export function getRouteMarketing(pathname: string): RouteMarketing {
-  if (REGISTRY[pathname]) return REGISTRY[pathname];
-  let best: { key: string; val: RouteMarketing } | null = null;
-  for (const [key, val] of Object.entries(REGISTRY)) {
+/** Longest-prefix match of `pathname` against a `key → value` map. */
+function longestPrefixMatch<T>(pathname: string, map: Record<string, T>): { key: string; val: T } | null {
+  let best: { key: string; val: T } | null = null;
+  for (const [key, val] of Object.entries(map)) {
     if (pathname === key || pathname.startsWith(`${key}/`)) {
       if (!best || key.length > best.key.length) best = { key, val };
     }
   }
-  return best?.val ?? DEFAULT;
+  return best;
+}
+
+export function getRouteMarketing(pathname: string): RouteMarketing {
+  const base = REGISTRY[pathname] ?? longestPrefixMatch(pathname, REGISTRY)?.val ?? DEFAULT;
+  const faq = FAQ_BY_PATH[pathname] ?? longestPrefixMatch(pathname, FAQ_BY_PATH)?.val;
+  return faq ? { ...base, faq } : base;
 }

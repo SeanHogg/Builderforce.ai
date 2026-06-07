@@ -318,6 +318,14 @@ export const llmUsageLog = pgTable('llm_usage_log', {
   useCase:          varchar('use_case', { length: 128 }),
   /** Which `bfk_*` key authenticated this request. Null for `clk_*` / web JWT auth. */
   tenantApiKeyId:   uuid('tenant_api_key_id'),
+  // Agent attribution (0096) — lets usage/cost be split CLOUD vs ON-PREM vs WEB.
+  // A row with all three null is a web/SDK call.
+  /** Self-hosted (on-prem) agent host that made the call. */
+  agentHostId:      integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
+  /** Cloud agent run (ide_agents.id, or null for the gateway-default bucket). */
+  cloudAgentRef:    varchar('cloud_agent_ref', { length: 64 }),
+  /** Execution a cloud-run usage row belongs to (trace key). */
+  executionId:      integer('execution_id'),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
 

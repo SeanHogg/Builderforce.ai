@@ -24,7 +24,7 @@ interface NavItem extends NavMatch {
 const mainNav: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
   { href: '/brainstorm', label: 'Brain Storm', icon: '💡' },
-  { href: '/projects', label: 'Projects', icon: '▦', exactMatch: true },
+  { href: '/projects', label: 'Projects / Tasks', icon: '▦', activePaths: ['/tasks'] },
   {
     href: '/ide/dashboard',
     label: 'IDE',
@@ -33,9 +33,6 @@ const mainNav: NavItem[] = [
   },
   { href: '/architect', label: 'Architect', icon: '🏛' },
   { href: '/workflows', label: 'Workflows', icon: '🔀', activePaths: ['/workflows'] },
-  { href: '/tasks', label: 'Task Mgmt', icon: '☑' },
-  { href: '/contributors', label: 'Contributors', icon: '📈' },
-  { href: '/training', label: 'Training', icon: '🎓' },
 ];
 
 const meshNav: NavItem[] = [

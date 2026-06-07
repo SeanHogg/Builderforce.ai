@@ -27,3 +27,21 @@ export function buildExecutionMessageFrame(payload: unknown): BuildExecutionMess
     typeof p.executionId === 'number' && Number.isFinite(p.executionId) ? p.executionId : undefined;
   return { ok: true, frame: { type: 'execution.message', executionId, text } };
 }
+
+/**
+ * Pure builder for the `execution.cancel` frame the relay DO forwards to a
+ * connected agent host when a user cancels a running execution. The host aborts
+ * the live agent session (and, for V2, the in-flight SDK run) so cancel actually
+ * halts work + token spend instead of only flipping the DB status.
+ */
+export interface ExecutionCancelFrame {
+  type: 'execution.cancel';
+  executionId?: number;
+}
+
+export function buildExecutionCancelFrame(payload: unknown): ExecutionCancelFrame {
+  const p = (payload && typeof payload === 'object' ? payload : {}) as { executionId?: unknown };
+  const executionId =
+    typeof p.executionId === 'number' && Number.isFinite(p.executionId) ? p.executionId : undefined;
+  return { type: 'execution.cancel', executionId };
+}

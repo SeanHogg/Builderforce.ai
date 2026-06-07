@@ -22,6 +22,7 @@ import { buildTtsSystemPromptHint } from "../../tts/tts.js";
 import { resolveUserPath } from "../../utils.js";
 import { normalizeMessageChannel } from "../../utils/message-channel.js";
 import { isReasoningTagProvider } from "../../utils/provider-utils.js";
+import { buildAssignedPersonaPrompt } from "../assigned-capabilities.js";
 import { resolveBuilderForceAgentsAgentDir } from "../agent-paths.js";
 import { resolveSessionAgentIds } from "../agent-scope.js";
 import type { ExecElevatedDefaults } from "../bash-tools.js";
@@ -352,6 +353,8 @@ export async function compactEmbeddedPiSessionDirect(
       config: params.config,
       workspaceDir: effectiveWorkspace,
     });
+    // Keep the assigned persona in the rebuilt prompt after compaction.
+    const personaPrompt = buildAssignedPersonaPrompt();
 
     const sessionLabel = params.sessionKey ?? params.sessionId;
     const { contextFiles } = await resolveBootstrapContextForRun({
@@ -491,6 +494,7 @@ export async function compactEmbeddedPiSessionDirect(
         ? resolveHeartbeatPrompt(params.config?.agents?.defaults?.heartbeat?.prompt)
         : undefined,
       skillsPrompt,
+      personaPrompt,
       docsPath: docsPath ?? undefined,
       ttsHint,
       promptMode,

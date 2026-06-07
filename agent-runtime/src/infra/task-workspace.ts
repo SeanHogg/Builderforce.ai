@@ -1,4 +1,5 @@
 import path from "node:path";
+import fs from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -78,6 +79,54 @@ export async function detectTaskChanges(dir: string, agent: string): Promise<Att
   } catch {
     return [];
   }
+}
+
+/** Default age past which an idle ticket workspace is considered orphaned. */
+export const STALE_WORKSPACE_MS = 24 * 3_600_000; // 24 hours
+
+/**
+ * Remove ticket workspaces left behind by a crash or dropped connection.
+ *
+ * A workspace (`<baseDir>/.builderforce/tasks/<taskId>`) is normally torn down
+ * on `task.finalize`. If the runtime dies before that arrives, the dir — and its
+ * git clone — leaks forever. This sweep (run on startup) reclaims any task dir
+ * whose most-recent modification is older than `maxAgeMs`, recovering disk after
+ * any crash without touching workspaces of in-flight runs. Best-effort.
+ *
+ * `activeTaskIds` are skipped (a run currently using them), so it is safe to call
+ * periodically as well as at boot.
+ */
+export async function sweepStaleTaskWorkspaces(
+  baseDir: string,
+  opts?: { maxAgeMs?: number; nowMs?: number; activeTaskIds?: Iterable<number | string> },
+): Promise<{ removed: string[] }> {
+  const maxAgeMs = opts?.maxAgeMs ?? STALE_WORKSPACE_MS;
+  const nowMs = opts?.nowMs ?? Date.now();
+  const active = new Set([...(opts?.activeTaskIds ?? [])].map(String));
+  const tasksRoot = path.join(baseDir, ".builderforce", "tasks");
+  const removed: string[] = [];
+
+  let entries: string[];
+  try {
+    entries = await fs.readdir(tasksRoot);
+  } catch {
+    return { removed }; // no tasks dir yet — nothing to sweep
+  }
+
+  for (const entry of entries) {
+    if (active.has(entry)) { continue; }
+    const dir = path.join(tasksRoot, entry);
+    try {
+      const stat = await fs.stat(dir);
+      if (!stat.isDirectory()) { continue; }
+      if (nowMs - stat.mtimeMs < maxAgeMs) { continue; }
+      await fs.rm(dir, { recursive: true, force: true });
+      removed.push(dir);
+    } catch {
+      /* best-effort — skip anything we can't stat/remove */
+    }
+  }
+  return { removed };
 }
 
 /** True when `dir` already contains a git clone. */

@@ -20,6 +20,7 @@ import {
   type LlmUsage,
 } from '../../application/llm/LlmProxyService';
 import { logTrace } from '../../application/llm/traceLogger';
+import { recordUsageRow, type UsageAttribution } from '../../application/llm/usageLedger';
 import { callOpenRouterEmbeddings, pickUsage } from '../../application/llm/vendors';
 import { getCatalogCached } from '../../application/llm/modelCatalog';
 import {
@@ -108,28 +109,23 @@ function logUsage(
   idempotencyKey: string | null,
   useCase: string | null,
   tenantApiKeyId: string | null,
+  attribution: UsageAttribution | null = null,
 ): void {
   ctx.waitUntil(
-    buildDatabase(env)
-      .insert(llmUsageLog)
-      .values({
-        tenantId,
-        userId,
-        llmProduct,
-        model,
-        promptTokens:        usage.promptTokens,
-        completionTokens:    usage.completionTokens,
-        totalTokens:         usage.totalTokens,
-        cacheReadTokens:     usage.cacheReadTokens     ?? 0,
-        cacheCreationTokens: usage.cacheCreationTokens ?? 0,
-        retries,
-        streamed,
-        metadata: metadata ? JSON.stringify(metadata) : null,
-        idempotencyKey,
-        useCase,
-        tenantApiKeyId,
-      })
-      .catch(() => { /* never let logging fail the request */ }),
+    recordUsageRow(buildDatabase(env), {
+      tenantId,
+      userId,
+      llmProduct,
+      model,
+      retries,
+      streamed,
+      usage,
+      metadata,
+      idempotencyKey,
+      useCase,
+      tenantApiKeyId,
+      attribution,
+    }),
   );
 }
 
@@ -547,7 +543,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             totalTokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
             cacheReadTokens: u.cache_read_input_tokens ?? 0,
             cacheCreationTokens: u.cache_creation_input_tokens ?? 0,
-          }, { engine: 'builderforce-v2' }, idempotencyKey, 'v2_agent', access.tenantApiKeyId);
+          }, { engine: 'builderforce-v2' }, idempotencyKey, 'v2_agent', access.tenantApiKeyId, { agentHostId: access.agentHostId });
         }
         return new Response(JSON.stringify(json ?? { error: 'upstream_error' }), {
           status: upstream.status,
@@ -563,6 +559,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           logUsage(
             c.env, c.executionCtx, access.tenantId, access.userId, product, model, 0, true,
             parseAnthropicSseUsage(text), { engine: 'builderforce-v2' }, idempotencyKey, 'v2_agent', access.tenantApiKeyId,
+            { agentHostId: access.agentHostId },
           );
         } catch { /* metering is best-effort */ }
       })());
@@ -590,6 +587,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         logUsage(
           c.env, c.executionCtx, access.tenantId, access.userId, product, result.resolvedModel, result.retries, true,
           usage, { engine: 'builderforce-v2', resolvedModel: result.resolvedModel }, idempotencyKey, 'v2_agent', access.tenantApiKeyId,
+          { agentHostId: access.agentHostId },
         );
       });
       return new Response(stream, {
@@ -603,6 +601,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       c.env, c.executionCtx, access.tenantId, access.userId, product, result.resolvedModel, result.retries, false,
       result.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       { engine: 'builderforce-v2', resolvedModel: result.resolvedModel }, idempotencyKey, 'v2_agent', access.tenantApiKeyId,
+      { agentHostId: access.agentHostId },
     );
     return new Response(JSON.stringify(openAiToAnthropicMessage(openaiJson, result.resolvedModel, messageId)), {
       status: result.response.status,
@@ -927,6 +926,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           c.env, c.executionCtx, access.tenantId, access.userId, llmProduct,
           result.resolvedModel, result.retries, true, usage,
           callerMetadata, idempotencyKey, callerUseCase, access.tenantApiKeyId,
+          { agentHostId: access.agentHostId },
         ),
       );
 
@@ -955,6 +955,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       idempotencyKey,
       callerUseCase,
       access.tenantApiKeyId,
+      { agentHostId: access.agentHostId },
     );
 
     // Surface the trace id inside the error envelope too, so a consumer hitting

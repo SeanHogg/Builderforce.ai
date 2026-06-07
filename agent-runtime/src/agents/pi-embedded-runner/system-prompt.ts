@@ -17,6 +17,8 @@ export function buildEmbeddedSystemPrompt(params: {
   reasoningTagHint: boolean;
   heartbeatPrompt?: string;
   skillsPrompt?: string;
+  /** Persona system block from the agent's assigned (active) personas. */
+  personaPrompt?: string;
   docsPath?: string;
   ttsHint?: string;
   reactionGuidance?: {
@@ -58,6 +60,7 @@ export function buildEmbeddedSystemPrompt(params: {
     reasoningTagHint: params.reasoningTagHint,
     heartbeatPrompt: params.heartbeatPrompt,
     skillsPrompt: params.skillsPrompt,
+    personaPrompt: params.personaPrompt,
     docsPath: params.docsPath,
     ttsHint: params.ttsHint,
     workspaceNotes: params.workspaceNotes,

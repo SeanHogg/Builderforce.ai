@@ -44,12 +44,14 @@ import { dispatchResultToRemoteAgentNode, type RemoteDispatchOptions } from "./r
 import { setRelayHook } from "./workflow-telemetry.js";
 import { buildSteeringInjection } from "./relay-steering.js";
 import { runClaudeAgentSdkV2, type V2RunnerSinks } from "../agents/claude-agent-sdk-runner.js";
+import { buildAssignedCapabilityAppend } from "../agents/assigned-capabilities.js";
 import {
   taskWorkspaceDir,
   buildTaskCloneUrl,
   taskBranchName,
   isCloned,
   detectTaskChanges,
+  sweepStaleTaskWorkspaces,
 } from "./task-workspace.js";
 
 function extractChatText(message: unknown): string {
@@ -110,6 +112,9 @@ export class BuilderforceRelayService implements IRelayService {
   private gatewayClient: GatewayClient | null = null;
   /** executionId from the last task.assign / task.broadcast dispatch, if any. */
   private pendingExecutionId: number | null = null;
+  /** Abort handles for in-flight V2 (Claude Agent SDK) runs, keyed by executionId,
+   *  so an `execution.cancel` frame from the portal can actually halt the run. */
+  private readonly v2Aborts = new Map<number, AbortController>();
   /** Context for the in-flight V1 task run, so the session-final handler can
    *  diff the shared workspace and attribute the changes to the executing agent. */
   private pendingTaskRun: {
@@ -163,19 +168,6 @@ export class BuilderforceRelayService implements IRelayService {
       return;
     }
 
-    // Push assigned artifacts to the gateway for the agentNode to use
-    if (payload.artifacts) {
-      this.gatewayClient
-        ?.request("artifacts.sync", {
-          artifacts: payload.artifacts,
-          executionId: payload.executionId,
-          taskId: payload.taskId,
-        })
-        .catch((err: unknown) => {
-          logWarn(`[builderforce] artifacts.sync failed: ${String(err)}`);
-        });
-    }
-
     // Track executionId so we can report running/completed/failed back to Builderforce.
     if (payload.executionId != null) {
       this.pendingExecutionId = payload.executionId;
@@ -185,11 +177,66 @@ export class BuilderforceRelayService implements IRelayService {
     // Both engines run out of the shared per-ticket workspace; V2 runs the Claude
     // Agent SDK loop in-process, V1 runs the pi-coding-agent loop via the local
     // gateway's chat.send.
-    if (payload.engine === "builderforce-v2") {
-      void this.runV2Engine(payload, message);
-      return;
+    const runEngine = () => {
+      if (payload.engine === "builderforce-v2") {
+        void this.runV2Engine(payload, message);
+      } else {
+        void this.runV1Engine(payload, message);
+      }
+    };
+
+    // Apply assigned artifacts FIRST, then run — both engines read the synced
+    // persona registry / sidecar at run start, so the sync must complete before
+    // the run begins (otherwise the agent races past its own capabilities).
+    if (payload.artifacts) {
+      void this.syncAssignedCapabilities(payload.artifacts, payload.executionId, payload.taskId)
+        .finally(runEngine);
+    } else {
+      runEngine();
     }
-    void this.runV1Engine(payload, message);
+  }
+
+  /**
+   * Push assigned artifacts to the gateway (applies persona registry + writes the
+   * sidecar) and record a `capabilities.load` event on the Observability timeline
+   * (live frame + durable persist) so on-prem runs show which Skills/Personas/
+   * Content were loaded — at parity with the cloud `capabilities.load` event.
+   * Awaited before the run starts; never throws.
+   */
+  private async syncAssignedCapabilities(
+    artifacts: { skills?: string[]; personas?: string[]; content?: string[] },
+    executionId?: number,
+    taskId?: number,
+  ): Promise<void> {
+    try {
+      await this.gatewayClient?.request("artifacts.sync", { artifacts, executionId, taskId });
+    } catch (err) {
+      logWarn(`[builderforce] artifacts.sync failed: ${String(err)}`);
+    }
+
+    const skills = artifacts.skills ?? [];
+    const personas = artifacts.personas ?? [];
+    const content = artifacts.content ?? [];
+    if (!(skills.length || personas.length || content.length)) return;
+
+    const summary = { skills, personas, content };
+    this.sendToRelay({
+      type: "tool.audit",
+      sessionKey: "main",
+      toolName: "capabilities.load",
+      category: "context",
+      args: summary,
+      ts: new Date().toISOString(),
+    });
+    void this.persistToolAudit({
+      executionId,
+      toolName: "capabilities.load",
+      category: "context",
+      args: summary,
+    });
+    logWarn(
+      `[builderforce] capabilities.load: ${personas.length} persona(s), ${skills.length} skill(s), ${content.length} content`,
+    );
   }
 
   /**
@@ -380,18 +427,40 @@ export class BuilderforceRelayService implements IRelayService {
     // out of it (the ticket is the shared context). Clone happens once.
     const cwd = await this.ensureTaskWorkspace(payload.taskId, payload.repo);
 
-    const result = await runClaudeAgentSdkV2(
-      {
-        prompt,
-        model: payload.model,
-        cwd,
-        // SDK posts Messages to `${anthropicBaseUrl}/v1/messages`; the gateway's
-        // Anthropic-Messages endpoint lives under /llm.
-        anthropicBaseUrl: `${normalizeBaseUrl(this.opts.baseUrl)}/llm`,
-        gatewayAuthKey: this.opts.apiKey,
-      },
-      sinks,
-    );
+    // Assigned Skills/Personas/Content → appended to the SDK system prompt (the
+    // V2 run path injects nothing otherwise). Mirrors the V1 embedded injection.
+    const appendSystemPrompt = await buildAssignedCapabilityAppend();
+
+    // Register an abort handle so an `execution.cancel` frame can stop this run.
+    const abortController = new AbortController();
+    if (payload.executionId != null) { this.v2Aborts.set(payload.executionId, abortController); }
+
+    let result: { ok: boolean; text: string };
+    try {
+      result = await runClaudeAgentSdkV2(
+        {
+          prompt,
+          model: payload.model,
+          cwd,
+          // SDK posts Messages to `${anthropicBaseUrl}/v1/messages`; the gateway's
+          // Anthropic-Messages endpoint lives under /llm.
+          anthropicBaseUrl: `${normalizeBaseUrl(this.opts.baseUrl)}/llm`,
+          gatewayAuthKey: this.opts.apiKey,
+          appendSystemPrompt,
+          abortController,
+        },
+        sinks,
+      );
+    } finally {
+      if (payload.executionId != null) { this.v2Aborts.delete(payload.executionId); }
+    }
+
+    // If the run was cancelled, the API already flipped the row to CANCELLED (a
+    // terminal state); don't report completed/failed over it.
+    if (abortController.signal.aborted) {
+      await this.emitTaskChanges(cwd, agentLabel, payload.executionId, payload.taskId);
+      return;
+    }
 
     // Attribute the files this agent changed (traceability), then commit + push
     // them to the ticket branch as pending changes.
@@ -651,6 +720,14 @@ export class BuilderforceRelayService implements IRelayService {
     setRelayHook((event, payload) => {
       this.sendToRelay({ type: "event", event, payload });
     });
+    // Reclaim ticket workspaces orphaned by a previous crash/kill (a run that
+    // never received task.finalize leaves its clone on disk). Skips the dir of
+    // any run currently in flight. Best-effort; never blocks startup.
+    void sweepStaleTaskWorkspaces(this.opts.workspaceDir ?? process.cwd(), {
+      activeTaskIds: this.pendingTaskRun?.taskId != null ? [this.pendingTaskRun.taskId] : [],
+    })
+      .then(({ removed }) => { if (removed.length) { logWarn(`[builderforce] swept ${removed.length} stale ticket workspace(s)`); } })
+      .catch(() => { /* best-effort */ });
     this.connectUpstream();
     this.connectLocalGateway();
     this.startRemoteResultTracking();
@@ -994,6 +1071,27 @@ export class BuilderforceRelayService implements IRelayService {
           .catch((err: unknown) => {
             logWarn(`[builderforce] execution.message dispatch failed: ${String(err)}`);
           });
+        break;
+      }
+
+      case "execution.cancel": {
+        // The user cancelled a running execution from the portal. Halt the work:
+        // abort the in-flight V2 SDK run (if any) and abort the live V1 chat
+        // session, so cancel actually stops token spend instead of only flipping
+        // the DB status.
+        const executionId =
+          typeof msg.executionId === "number" && Number.isFinite(msg.executionId)
+            ? msg.executionId
+            : undefined;
+        logWarn(`[builderforce] cancel execution ${executionId ?? "?"}`);
+        if (executionId != null) {
+          const ctrl = this.v2Aborts.get(executionId);
+          if (ctrl) { try { ctrl.abort(); } catch { /* ignore */ } }
+        }
+        // V1 (pi) runs out of the live `main` session — abort the current turn.
+        // The API already set the row to CANCELLED (terminal) before relaying
+        // this frame, so we don't report state back — just stop the work.
+        this.gatewayClient?.request("chat.abort", {}).catch(() => {});
         break;
       }
 

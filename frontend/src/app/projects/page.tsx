@@ -1,54 +1,31 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type { Project } from '@/lib/types';
-import type { AgentHost } from '@/lib/builderforceApi';
-import { fetchProjects, createProject, deleteProject } from '@/lib/api';
-import { agentHosts } from '@/lib/builderforceApi';
 import { useAuth } from '@/lib/AuthContext';
-import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
-import { ProjectCard } from '@/components/ProjectCard';
-import { DeleteProjectDialog } from '@/components/DeleteProjectDialog';
-import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
-import { UpgradeModal } from '@/components/UpgradeModal';
-import { ViewToggle } from '@/components/ViewToggle';
-import { ScheduleCalendar } from '@/components/ScheduleCalendar';
-import { ScheduleGantt } from '@/components/ScheduleGantt';
-import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
+import { ProjectsContent } from '@/components/ProjectsContent';
+import { TaskMgmtContent } from '@/components/TaskMgmtContent';
 
-type ProjectsView = 'card' | 'table' | 'calendar' | 'gantt';
+type Tab = 'projects' | 'tasks';
 
-const PROJECT_VIEW_OPTIONS: Array<{ value: ProjectsView; label: string }> = [
-  { value: 'card', label: 'Card' },
-  { value: 'table', label: 'List' },
-  { value: 'calendar', label: 'Calendar' },
-  { value: 'gantt', label: 'Gantt' },
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'projects', label: 'Projects' },
+  { id: 'tasks', label: 'Tasks' },
 ];
 
 /**
- * Projects page — full project list, create project modal, open project → IDE.
- * Separate from Dashboard (home); Dashboard has a preview and "View all" links here.
+ * Projects / Tasks — one domain page with two tabs:
+ *  - Projects: the project list (reusable {@link ProjectsContent}).
+ *  - Tasks: the task board/list (reusable {@link TaskMgmtContent}).
+ *
+ * `?tab=tasks` opens the Tasks tab; `?project=<id>` scopes the Tasks board to one
+ * project (set by the Task board button on a project). The legacy `/tasks` route
+ * redirects here preserving those params.
  */
-export default function ProjectsPage() {
+export default function ProjectsTasksPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, hasTenant } = useAuth();
-
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
-  const [newProjectName, setNewProjectName] = useState('');
-  const [newProjectDesc, setNewProjectDesc] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [detailsProject, setDetailsProject] = useState<Project | null>(null);
-  const [viewMode, setViewMode] = useState<ProjectsView>('card');
-  const [selectedAgentHost, setSelectedAgentHost] = useState<AgentHost | null>(null);
-  const [confirmProject, setConfirmProject] = useState<Project | null>(null);
-  const [planError, setPlanError] = useState<PlanLimitError | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -58,452 +35,62 @@ export default function ProjectsPage() {
     }
   }, [isAuthenticated, hasTenant, router]);
 
-  useEffect(() => {
-    if (!isAuthenticated || !hasTenant) return;
-    Promise.all([
-      fetchProjects().catch(() => {
-        setError('Failed to load projects. Check your connection and try again.');
-        return [] as Project[];
-      }),
-      agentHosts.list().catch(() => [] as AgentHost[]),
-    ]).then(([projs, agentHostsData]) => {
-      setProjects(projs);
-      setAgentHostList(agentHostsData);
-    }).finally(() => setIsLoading(false));
-  }, [isAuthenticated, hasTenant]);
-
-  useEffect(() => {
-    if (searchParams.get('create') === '1') setShowForm(true);
-  }, [searchParams]);
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newProjectName.trim()) return;
-    setIsCreating(true);
-    setError(null);
-    try {
-      const project = await createProject({
-        name: newProjectName.trim(),
-        description: newProjectDesc.trim() || undefined,
-        template: 'vanilla',
-      });
-      setProjects((prev) => [project, ...prev]);
-      setNewProjectName('');
-      setNewProjectDesc('');
-      setShowForm(false);
-      router.replace('/projects', { scroll: false });
-    } catch (err) {
-      if (isPlanLimitError(err)) {
-        setShowForm(false);
-        setPlanError(err);
-      } else {
-        setError('Failed to create project');
-      }
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
   if (!isAuthenticated || !hasTenant) return null;
+
+  // Active tab is derived from the URL (single source of truth) — no mirrored state.
+  const activeTab: Tab = searchParams.get('tab') === 'tasks' ? 'tasks' : 'projects';
+  const projectParam = Number(searchParams.get('project'));
+  const scopedProjectId = Number.isFinite(projectParam) && projectParam > 0 ? projectParam : undefined;
+
+  const selectTab = (tab: Tab) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === 'tasks') params.set('tab', 'tasks');
+    else params.delete('tab');
+    const qs = params.toString();
+    router.replace(`/projects${qs ? `?${qs}` : ''}`, { scroll: false });
+  };
 
   return (
     <div style={{ flex: 1, color: 'var(--text-primary)' }}>
       <main className="max-w-6xl mx-auto px-4 py-5">
-        {/* New Project Modal */}
-        {showForm && (
-          <div className="modal-overlay" style={{ zIndex: 50 }}>
-            <div
-              className="rounded-xl p-6 w-full max-w-md border border-gray-700"
-              style={{ background: 'var(--bg-elevated)' }}
-            >
-              <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
-                New Project
-              </h3>
-              <form onSubmit={handleCreate} className="space-y-4">
-                <div>
-                  <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>
-                    Project Name *
-                  </label>
-                  <input
-                    autoFocus
-                    value={newProjectName}
-                    onChange={(e) => setNewProjectName(e.target.value)}
-                    placeholder="My Awesome App"
-                    required
-                    style={{
-                      width: '100%',
-                      background: 'var(--bg-deep)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 10,
-                      padding: '10px 14px',
-                      outline: 'none',
-                    }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>
-                    Description
-                  </label>
-                  <input
-                    value={newProjectDesc}
-                    onChange={(e) => setNewProjectDesc(e.target.value)}
-                    placeholder="Optional description..."
-                    style={{
-                      width: '100%',
-                      background: 'var(--bg-deep)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 10,
-                      padding: '10px 14px',
-                      outline: 'none',
-                    }}
-                  />
-                </div>
-                <div className="flex gap-3 justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setShowForm(false)}
-                    style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isCreating || !newProjectName.trim()}
-                    style={{
-                      padding: '8px 18px',
-                      fontSize: '0.875rem',
-                      fontWeight: 600,
-                      background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 10,
-                      cursor: isCreating || !newProjectName.trim() ? 'not-allowed' : 'pointer',
-                      opacity: isCreating || !newProjectName.trim() ? 0.7 : 1,
-                    }}
-                  >
-                    {isCreating ? 'Creating…' : 'Create'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 16 }}>Projects / Tasks</h1>
 
-        {error && (
-          <div
-            className="rounded-lg px-4 py-3 mb-6 text-sm"
-            style={{ background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)' }}
-          >
-            {error}
-          </div>
-        )}
-
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>Projects</h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <ViewToggle value={viewMode} onChange={setViewMode} options={PROJECT_VIEW_OPTIONS} />
+        {/* Tabs */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 2,
+            borderBottom: '1px solid var(--border-subtle)',
+            marginBottom: 24,
+          }}
+        >
+          {TABS.map(({ id, label }) => (
             <button
+              key={id}
               type="button"
-              onClick={() => setShowForm(true)}
+              onClick={() => selectTab(id)}
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '10px 18px',
-                fontSize: '0.875rem',
+                padding: '12px 18px',
+                fontSize: 14,
                 fontWeight: 600,
-                background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                color: '#fff',
+                color: activeTab === id ? 'var(--coral-bright)' : 'var(--text-secondary)',
+                background: 'none',
                 border: 'none',
-                borderRadius: 10,
+                borderBottom: activeTab === id ? '2px solid var(--coral-bright)' : '2px solid transparent',
                 cursor: 'pointer',
-                fontFamily: 'var(--font-display)',
-                boxShadow: '0 4px 14px var(--shadow-coral-mid)',
+                marginBottom: -1,
               }}
             >
-              + New project
+              {label}
             </button>
-          </div>
+          ))}
         </div>
 
-        {isLoading ? (
-          <div style={{ color: 'var(--text-muted)', padding: 24 }}>Loading projects…</div>
-        ) : projects.length === 0 ? (
-          <div
-            style={{
-              textAlign: 'center',
-              padding: 48,
-              background: 'var(--bg-elevated)',
-              borderRadius: 12,
-              border: '1px solid var(--border-subtle)',
-            }}
-          >
-            <div style={{ fontSize: 56, marginBottom: 16 }}>🚀</div>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>No projects yet. Create your first one!</p>
-            <button
-              type="button"
-              onClick={() => setShowForm(true)}
-              style={{
-                padding: '12px 24px',
-                background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-                fontFamily: 'var(--font-display)',
-              }}
-            >
-              Create project
-            </button>
-          </div>
-        ) : viewMode === 'card' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {projects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                onCardClick={setDetailsProject}
-                onDetailsClick={setDetailsProject}
-                onOpenIde={(p) => router.push(`/ide/dashboard?project=${p.id}`)}
-                showDetailsButton
-                onAssignedAgentClick={(ac) => {
-                  const agentHost = agentHostList.find((c) => c.id === ac.id);
-                  if (agentHost) setSelectedAgentHost(agentHost);
-                }}
-                onDelete={async (p) => {
-                  try {
-                    await deleteProject(p.id);
-                    setProjects((prev) => prev.filter((x) => x.id !== p.id));
-                  } catch (err) {
-                    console.error(err);
-                    alert('Failed to delete project');
-                  }
-                }}
-              />
-            ))}
-          </div>
-        ) : viewMode === 'calendar' ? (
-          <ScheduleCalendar items={projects} getLabel={(p) => p.name} onSelect={setDetailsProject} />
-        ) : viewMode === 'gantt' ? (
-          <ScheduleGantt items={projects} getLabel={(p) => p.name} onSelect={setDetailsProject} noun="project" />
+        {activeTab === 'projects' ? (
+          <ProjectsContent />
         ) : (
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
-                  <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Name</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Description</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Agent</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {projects.map((project) => (
-                  <tr key={project.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                    <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--text-primary)' }}>{project.name}</td>
-                    <td style={{ padding: '12px 16px', color: 'var(--text-secondary)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {project.description ?? '—'}
-                    </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      {project.assignedAgentHost ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const agentHost = agentHostList.find((c) => c.id === project.assignedAgentHost!.id);
-                            if (agentHost) setSelectedAgentHost(agentHost);
-                          }}
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color: 'var(--coral-bright)',
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            padding: 0,
-                            textDecoration: 'underline',
-                          }}
-                        >
-                          {project.assignedAgentHost.name}
-                        </button>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <button
-                          type="button"
-                          onClick={() => setDetailsProject(project)}
-                          aria-label="Details"
-                          style={{
-                            padding: 6,
-                            fontSize: 0,
-                            background: 'var(--bg-base)',
-                            color: 'var(--coral-bright)',
-                            border: '1px solid var(--coral-bright)',
-                            borderRadius: 8,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: 32,
-                            height: 32,
-                          }}
-                        >
-                          <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-                            <path d="M9 2h6l6 6v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h4z" />
-                            <circle cx="15" cy="15" r="3" />
-                            <line x1="17.5" y1="17.5" x2="21" y2="21" />
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/tasks?project=${project.id}`)}
-                          aria-label="Task board"
-                          title="Task board"
-                          style={{
-                            padding: 6,
-                            fontSize: 0,
-                            background: 'var(--bg-base)',
-                            color: 'var(--coral-bright)',
-                            border: '1px solid var(--coral-bright)',
-                            borderRadius: 8,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: 32,
-                            height: 32,
-                          }}
-                        >
-                          <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-                            <rect x="3" y="4" width="4" height="16" rx="1" />
-                            <rect x="10" y="4" width="4" height="11" rx="1" />
-                            <rect x="17" y="4" width="4" height="14" rx="1" />
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/workflows?projectId=${project.id}`)}
-                          aria-label="View workflows"
-                          title={`Workflows${project.workflowCount != null ? ` (${project.workflowCount})` : ''}`}
-                          style={{
-                            padding: 6,
-                            fontSize: 0,
-                            background: 'var(--bg-base)',
-                            color: 'var(--coral-bright)',
-                            border: '1px solid var(--coral-bright)',
-                            borderRadius: 8,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: 32,
-                            height: 32,
-                          }}
-                        >
-                          <span style={{ fontSize: 16 }} aria-hidden>🔀</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/ide/dashboard?project=${project.id}`)}
-                          aria-label="Open in IDE"
-                          style={{
-                            padding: 6,
-                            fontSize: 0,
-                            background: 'var(--bg-base)',
-                            color: 'var(--coral-bright)',
-                            border: '1px solid var(--coral-bright)',
-                            borderRadius: 8,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: 32,
-                            height: 32,
-                          }}
-                        >
-                          <span style={{ fontSize: 18 }} aria-hidden>💻</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmProject(project)}
-                          style={{
-                            padding: '6px 10px',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color: 'var(--coral-bright)',
-                            background: 'transparent',
-                            border: '1px solid var(--coral-bright)',
-                            borderRadius: 8,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <TaskMgmtContent projectId={scopedProjectId} />
         )}
-
-        {detailsProject && (
-          <ProjectDetailsPanel
-            project={detailsProject}
-            open={!!detailsProject}
-            onClose={() => setDetailsProject(null)}
-            onProjectUpdate={(updated) => {
-              setProjects((prev) => prev.map((p) => (p.id === updated.id ? { ...updated, assignedAgentHost: p.assignedAgentHost } : p)));
-              setDetailsProject((p) => (p && p.id === updated.id ? updated : p));
-            }}
-            onDelete={async (p) => {
-              try {
-                await deleteProject(p.id);
-                setProjects((prev) => prev.filter((x) => x.id !== p.id));
-                setDetailsProject(null);
-              } catch (err) {
-                console.error(err);
-                alert('Failed to delete project');
-              }
-            }}
-          />
-        )}
-
-        {selectedAgentHost && (
-          <AgentHostSlideOutPanel
-            agentHost={selectedAgentHost}
-            open={!!selectedAgentHost}
-            onClose={() => setSelectedAgentHost(null)}
-            onDeleted={(id) => setAgentHostList((prev) => prev.filter((h) => h.id !== id))}
-          />
-        )}
-        <UpgradeModal error={planError} onClose={() => setPlanError(null)} />
-
-        {/* delete dialog used by the table view (prompts to move open tasks first) */}
-        <DeleteProjectDialog
-          project={confirmProject}
-          onCancel={() => setConfirmProject(null)}
-          onConfirm={async (project) => {
-            try {
-              await deleteProject(project.id);
-              setProjects((prev) => prev.filter((x) => x.id !== project.id));
-              if (detailsProject && detailsProject.id === project.id) {
-                setDetailsProject(null);
-              }
-            } catch (err) {
-              console.error(err);
-              alert('Failed to delete project');
-            } finally {
-              setConfirmProject(null);
-            }
-          }}
-        />
       </main>
     </div>
   );

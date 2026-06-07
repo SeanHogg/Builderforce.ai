@@ -138,7 +138,7 @@ export function ProjectCard({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              window.location.href = `/tasks?project=${project.id}`;
+              window.location.href = `/projects?tab=tasks&project=${project.id}`;
             }}
             aria-label="Task board"
             title="Task board"

@@ -98,6 +98,7 @@ import {
   buildEmbeddedSystemPrompt,
   createSystemPromptOverride,
 } from "../system-prompt.js";
+import { buildAssignedPersonaPrompt } from "../../assigned-capabilities.js";
 import { installToolResultContextGuard } from "../tool-result-context-guard.js";
 import { splitSdkTools } from "../tool-split.js";
 import { describeUnknownError, mapThinkingLevel } from "../utils.js";
@@ -269,6 +270,11 @@ export async function runEmbeddedAttempt(
       config: params.config,
       workspaceDir: effectiveWorkspace,
     });
+
+    // Inject the agent's assigned (active) personas into the main system prompt —
+    // at parity with skills/content. Process-wide registry state, populated by the
+    // gateway `artifacts.sync` handler when Builderforce pushes assignments.
+    const personaPrompt = buildAssignedPersonaPrompt();
 
     const sessionLabel = params.sessionKey ?? params.sessionId;
     const { bootstrapFiles: hookAdjustedBootstrapFiles, contextFiles } =
@@ -446,6 +452,7 @@ export async function runEmbeddedAttempt(
         ? resolveHeartbeatPrompt(params.config?.agents?.defaults?.heartbeat?.prompt)
         : undefined,
       skillsPrompt,
+      personaPrompt,
       docsPath: docsPath ?? undefined,
       ttsHint,
       workspaceNotes,

@@ -9,6 +9,7 @@ import RouteMarketing from './RouteMarketing';
 import { BrainActionsProvider, BrainContextProvider, BrainProvider, brainConfig } from '@/lib/brain';
 import { FloatingBrain } from './brain/FloatingBrain';
 import { McpExtensionsBridge } from './brain/McpExtensionsBridge';
+import { PlatformActionsBridge } from './brain/PlatformActionsBridge';
 import { useAuth } from '@/lib/AuthContext';
 
 const FOOTER_ONLY_PATHS = ['/login', '/register'];
@@ -115,7 +116,10 @@ export default function ConditionalAppShell({ children }: { children: React.Reac
         <BrainContextProvider>
           {content}
           <FloatingBrain />
-          {/* Register the tenant's server-side MCP extension tools (auth only). */}
+          {/* Make the Brain the epicenter for every action: register the platform
+              capability tools + the tenant's server-side MCP extension tools.
+              Both are auth-gated — they call the gateway with the tenant token. */}
+          {hasTenant && <PlatformActionsBridge />}
           {hasTenant && <McpExtensionsBridge />}
         </BrainContextProvider>
       </BrainActionsProvider>
