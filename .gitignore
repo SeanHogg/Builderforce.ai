@@ -44,3 +44,7 @@ worker/test-output/
 
 # Ignore local secrets
 worker/secrets.json
+
+# Runtime workspace/session data (transient)
+.builderforce/sessions/
+agent-runtime/.builderforce/sessions/

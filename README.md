@@ -1514,13 +1514,30 @@ full `api/src` rename (`Claw*`→`AgentHost*`, table `coderclaw_instances`→`ag
   in docs. Worse, it called `exit` on failure — and the Workforce "Connect a new agent" one-liner
   runs it via `iwr | iex` (in-process), where `exit` **terminates the user's PowerShell session**
   (the reported "crash"). Fixed: URLs → `api.builderforce.ai`/`builderforce.ai`, and every `exit N`
-  → `return` so a failure ends the script without killing the host shell. **STILL BROKEN (logged,
-  needs design):** `install.ps1` is a *marketplace-agent registry browser* — it ignores
-  `$env:BUILDERFORCE_TOKEN` / `$env:BUILDERFORCE_WORKSPACE` that the "Connect a new agent" popover
-  injects, so it never registers the machine as an AgentHost into the workgroup. The popover promises
-  "the agent installs and registers straight into this workgroup"; install.ps1 doesn't. Fixing it
-  (download+install the agent-runtime, then register via the token/workspace) unblocks real self-host
-  onboarding.
+  → `return` so a failure ends the script without killing the host shell.
+- **Connect-a-new-agent flow REWRITTEN end-to-end (was: install.ps1 ignored the token).** `install.ps1`
+  was a *marketplace-agent registry browser* — it ignored `$env:BUILDERFORCE_TOKEN` /
+  `$env:BUILDERFORCE_WORKSPACE` and never registered the machine. Rewrote it to: preflight Node/npm →
+  `npm i -g @seanhogg/builderforce-agents` → `builderforce connect` → `builderforce gateway`. Added a
+  **new headless `builderforce connect`** command ([builderforce-connect.ts](agent-runtime/src/commands/builderforce-connect.ts),
+  [register.connect.ts](agent-runtime/src/cli/program/register.connect.ts)) that reads the token from
+  env, `POST`s `/api/agent-hosts`, writes the link key to `~/.builderforce/.env`
+  (`BUILDERFORCE_API_KEY`/`URL`) and the host id into project context (which the gateway reads to
+  connect). tsgo clean. **Prerequisite to actually run:** `@seanhogg/builderforce-agents` must be
+  **published to npm** (still blocked — `npm whoami` 401); until then step 2 of install.ps1 404s
+  (handled gracefully).
+- **Runtime↔server WIRE CONTRACT was split by the rebrand and is now realigned (the real flow break).**
+  The product rename used `claw`→`agentNode` but the API uses `claw`→`agent_host`, so the two halves
+  of the SAME wire contract diverged. Fixed in `agent-runtime/src`: **API paths** `/api/agentNodes…`
+  → `/api/agent-hosts…` (35 occurrences, 20 files — registration/heartbeat/forward/sync/relay/cron/
+  skills/personas all were 404ing); **headers** `X-AgentNode-*` → `X-AgentHost-*` (9, matches the
+  server's `X-AgentHost-From/Id/Signature`); **registration response** `res.agentNode` →
+  `res.agentHost` (server returns `{agentHost, apiKey}`). tsgo clean. **REMAINING audit (logged):**
+  other JSON body fields still carry runtime-side names — `fromAgentNodeId`/`callbackAgentNodeId`
+  (forward), assignment-context, etc. in [api-contract.ts](agent-runtime/src/infra/api-contract.ts) —
+  each must be verified against its server endpoint's field names; not swept blindly to avoid new
+  mismatches. Also `workforce-agent.ts` reads `BUILDERFORCE_AGENTS_LINK_API_KEY` while the rest of the
+  runtime uses `BUILDERFORCE_API_KEY` — align to one.
 - **The "coderclaw" still visible on `/workforce` was DATA, not code** — the tenant/workgroup row
   (`tenants.id=1`) was literally named/slugged `coderclaw`. `frontend/src` has **0** `coderclaw`
   refs; the page interpolates the workgroup name. Renamed the tenant → `name='BuilderForce'`,
