@@ -133,7 +133,7 @@ export function ObservabilityContent({
 
   // Directory: self-hosted hosts + cloud agents, merged into one list.
   const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
-  const [cloudAgentList, setCloudAgentList] = useState<PoolAgent[]>([]);
+  const [cloudAgentList, setCloudAgentList] = useState<{ ref: string; name: string }[]>([]);
   const [dirLoading, setDirLoading] = useState(true);
   const [dirError, setDirError] = useState<string | null>(null);
 
@@ -188,11 +188,19 @@ export function ObservabilityContent({
         setDirError(e instanceof Error ? e.message : 'Failed to load agents');
         return [] as AgentHost[];
       }),
+      // Registered workforce cloud agents (may not have run yet)…
       loadAgentPool().then((p) => p.filter((a) => a.kind === 'workforce')).catch(() => [] as PoolAgent[]),
+      // …plus cloud agents that have ACTUALLY run (incl. the gateway-default
+      // bucket) — so every cloud run is attributable to a chip, named or not.
+      cloudAgentsApi.list().catch(() => [] as { ref: string; name: string }[]),
     ])
-      .then(([hosts, cloud]) => {
+      .then(([hosts, pool, ran]) => {
         setAgentHostList(hosts);
-        setCloudAgentList(cloud);
+        // Merge by ref; a "ran" entry wins (its name reflects the actual run).
+        const byRef = new Map<string, { ref: string; name: string }>();
+        for (const a of pool) byRef.set(a.ref, { ref: a.ref, name: a.name });
+        for (const a of ran) byRef.set(a.ref, { ref: a.ref, name: a.name });
+        setCloudAgentList([...byRef.values()]);
       })
       .finally(() => setDirLoading(false));
   }, [scoped]);

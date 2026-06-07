@@ -16,7 +16,7 @@
 import { Hono } from 'hono';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { workflowDefinitions, workflowTriggers, agentHosts, projects } from '../../infrastructure/database/schema';
+import { workflowDefinitions, workflowTriggers, agentHosts, projects, workflows } from '../../infrastructure/database/schema';
 import {
   definitionToYaml,
   parseDefinition,
@@ -142,7 +142,64 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
         return { ...rest, runTargetAgentHostId, agentName };
       });
     });
-    return c.json({ definitions });
+
+    // Run stats (count + most-recent status/time per definition) are computed
+    // fresh, NOT cached: they change on every workflow run, and a run is created
+    // deep in the application layer (manual/trigger/swimlane) without access to
+    // this cache key. One indexed, grouped query (workflows_definition_id_idx) —
+    // not an N+1 — so merging live stats onto the cached list stays cheap.
+    const statRows = (await db.execute(sql`
+      SELECT workflow_definition_id AS def_id,
+             COUNT(*)::int AS run_count,
+             (ARRAY_AGG(status ORDER BY created_at DESC))[1] AS last_run_status,
+             MAX(created_at) AS last_run_at
+      FROM workflows
+      WHERE tenant_id = ${tenantId} AND workflow_definition_id IS NOT NULL
+      GROUP BY workflow_definition_id
+    `)).rows as Array<{ def_id: string; run_count: number; last_run_status: string | null; last_run_at: string | null }>;
+    const statsById = new Map(statRows.map((s) => [s.def_id, s]));
+
+    const enriched = definitions.map((d) => {
+      const s = statsById.get(d.id);
+      return {
+        ...d,
+        runCount: s?.run_count ?? 0,
+        lastRunStatus: s?.last_run_status ?? null,
+        lastRunAt: s?.last_run_at ?? null,
+      };
+    });
+    return c.json({ definitions: enriched });
+  });
+
+  // GET /:id/runs — execution history for one workflow definition (newest first,
+  // bounded). Uncached: run state changes continuously; the list is bounded and
+  // served by workflows_definition_id_idx.
+  router.get('/:id/runs', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const [defRow] = await db
+      .select({ id: workflowDefinitions.id })
+      .from(workflowDefinitions)
+      .where(and(eq(workflowDefinitions.id, id), eq(workflowDefinitions.tenantId, tenantId)));
+    if (!defRow) return c.json({ error: 'Workflow definition not found' }, 404);
+
+    const runs = await db
+      .select({
+        id: workflows.id,
+        agentHostId: workflows.agentHostId,
+        projectId: workflows.projectId,
+        workflowType: workflows.workflowType,
+        status: workflows.status,
+        description: workflows.description,
+        createdAt: workflows.createdAt,
+        completedAt: workflows.completedAt,
+        updatedAt: workflows.updatedAt,
+      })
+      .from(workflows)
+      .where(and(eq(workflows.workflowDefinitionId, id), eq(workflows.tenantId, tenantId)))
+      .orderBy(desc(workflows.createdAt))
+      .limit(100);
+    return c.json({ runs });
   });
 
   // GET /run-targets — the targets a workflow can run on: self-hosted agentHosts
@@ -415,6 +472,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       definition: parseDefinition(defRow.definition),
       name: defRow.name,
       projectId: defRow.projectId,
+      definitionId: defRow.id,
       target,
       triggerSource: 'manual',
     });

@@ -81,11 +81,6 @@ export function getStoredTenant(): Tenant | null {
   }
 }
 
-export function getStoredLastProjectId(): string | null {
-  if (!isBrowser()) return null;
-  return localStorage.getItem(LAST_PROJECT_KEY);
-}
-
 export function persistLastProjectId(projectId: string): void {
   if (!isBrowser()) return;
   localStorage.setItem(LAST_PROJECT_KEY, projectId);

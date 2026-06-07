@@ -18,6 +18,10 @@ export interface ProjectCardProps {
   onDelete?: (project: Project) => void;
   /** Show the delete icon. Defaults to true when onDelete is provided. */
   showDeleteButton?: boolean;
+  /** Override the 💻 IDE button action. Defaults to opening the project in the
+   *  editor (`/ide/<id>`); the Projects page overrides this to route through the
+   *  IDE dashboard scoped to the project. */
+  onOpenIde?: (project: Project) => void;
 }
 
 const createdDate = (project: Project): string => {
@@ -34,7 +38,9 @@ export function ProjectCard({
   onAssignedAgentClick,
   onDelete,
   showDeleteButton = !!onDelete,
+  onOpenIde,
 }: ProjectCardProps) {
+  const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (onCardClick && e.key === 'Enter') {
       e.preventDefault();
@@ -149,7 +155,7 @@ export function ProjectCard({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              window.location.href = `/ide/${project.publicId ?? project.id}`;
+              openIde(project);
             }}
             aria-label="Open in IDE"
             style={iconButtonStyle}

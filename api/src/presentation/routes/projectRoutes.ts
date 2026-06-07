@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { and, count, desc, eq, inArray, max, min } from 'drizzle-orm';
 import { ProjectService } from '../../application/project/ProjectService';
-import type { Project } from '../../domain/project/Project';
+import { ensureProjectTemplate } from '../../application/project/projectTemplate';
 import type { HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { ProjectStatus, TenantRole } from '../../domain/shared/types';
@@ -9,98 +9,6 @@ import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHostProjects, agentHosts, ideProjectChatMessages, ideProjectChats, projectInsightEvents, projects, sourceControlIntegrations, tasks, tenants, workflows } from '../../infrastructure/database/schema';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
-
-const IDE_PREFIX = 'ide/';
-
-/** Default files for new (vanilla) projects. Must match the Run flow defaults so new projects run without overwriting. */
-const VANILLA_TEMPLATE: Record<string, string> = {
-  'package.json': JSON.stringify({
-    name: 'my-app',
-    version: '1.0.0',
-    type: 'module',
-    scripts: {
-      dev: 'vite',
-      build: 'vite build',
-      preview: 'vite preview'
-    },
-    dependencies: {
-      react: '^18.2.0',
-      'react-dom': '^18.2.0'
-    },
-    devDependencies: {
-      '@vitejs/plugin-react': '^4.0.0',
-      vite: '^4.3.9'
-    }
-  }, null, 2),
-  'index.html': `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My App</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>`,
-  'src/main.jsx': `import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';
-
-function App() {
-  return (
-    <div style={{ padding: '2rem', fontFamily: 'system-ui' }}>
-      <h1>Hello World! 🚀</h1>
-      <p>Edit src/main.jsx to get started.</p>
-    </div>
-  );
-}
-
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);`,
-  'src/index.css': `body {
-  margin: 0;
-  padding: 0;
-  font-family: system-ui, -apple-system, sans-serif;
-}`,
-  'vite.config.js': `import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-
-export default defineConfig({
-  plugins: [react()],
-});`,
-};
-
-/**
- * Seed R2 with the IDE starter template for a freshly-created project, so the
- * in-browser IDE opens with a runnable scaffold instead of empty files (which
- * forced the Run pipeline onto run-only defaults that were never persisted).
- *
- * Call this from EVERY project-creation path — not just the "New project" modal.
- * The decision to seed lives here (single source of truth) rather than at each
- * call site:
- *   - seed when template === 'vanilla' (explicit), OR when no template was given
- *     for a default 'designer' project that has no connected source-control repo;
- *   - skip repo-connected projects — their files live in the git repo, not R2,
- *     and a scaffold would shadow them;
- *   - skip non-'designer' modalities (video/llm) — they don't run the Vite app.
- *
- * Only call on creation (R2 prefix is empty then) — it does not overwrite.
- * No-op if storage is unavailable.
- */
-async function seedProjectTemplate(storage: R2Bucket | undefined, project: Project): Promise<void> {
-  if (!storage) return;
-  const hasRepo = !!(project.sourceControlRepoFullName || project.githubRepoUrl);
-  const isDesigner = (project.modality ?? 'designer') === 'designer';
-  const wantsVanilla = project.template === 'vanilla' || (!project.template && isDesigner && !hasRepo);
-  if (!wantsVanilla) return;
-  const prefix = `${IDE_PREFIX}projects/${project.id}/`;
-  await Promise.all(
-    Object.entries(VANILLA_TEMPLATE).map(([path, content]) =>
-      storage.put(prefix + path, content),
-    ),
-  );
-}
 
 type SourceControlProvider = 'github' | 'bitbucket';
 
@@ -604,6 +512,8 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       sourceControlRepoUrl?: string | null;
       githubRepoUrl?: string | null;
       governance?: string | null;
+      /** IDE project type: 'designer' | 'video' | 'llm'. Defaults to 'designer'. */
+      modality?: string | null;
     }>();
     const tenantId = c.get('tenantId');
     const name = body.name?.trim();
@@ -633,9 +543,10 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       sourceControlRepoUrl: assignment.value.sourceControlRepoUrl,
       githubRepoUrl: assignment.value.githubRepoUrl,
       governance: body.governance ?? null,
+      modality: body.modality ?? null,
       tenantId,
     });
-    await seedProjectTemplate(c.env.UPLOADS, project);
+    await ensureProjectTemplate(c.env.UPLOADS, project);
     return c.json(project.toPlain(), 201);
   });
 
@@ -708,7 +619,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       githubRepoUrl: assignment.value.githubRepoUrl,
     });
 
-    await seedProjectTemplate(c.env.UPLOADS, created);
+    await ensureProjectTemplate(c.env.UPLOADS, created);
     return c.json({ action: 'created', project: created.toPlain() }, 201);
   });
 
@@ -803,7 +714,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     // Newly scaffolded (non-repo, default designer) projects get the starter
     // template so the IDE opens runnable — updates of an existing project keep
     // whatever files it already has.
-    if (!existing) await seedProjectTemplate(c.env.UPLOADS, project);
+    if (!existing) await ensureProjectTemplate(c.env.UPLOADS, project);
 
     let selectedAgentHostId: number | null = null;
 

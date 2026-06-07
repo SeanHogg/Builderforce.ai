@@ -51,6 +51,17 @@ const primaryBtn: React.CSSProperties = {
   boxShadow: '0 4px 14px var(--shadow-coral-mid)',
 };
 
+const subtleBtn: React.CSSProperties = {
+  padding: '6px 12px',
+  fontSize: 12,
+  fontWeight: 600,
+  color: 'var(--coral-bright)',
+  background: 'var(--bg-base)',
+  border: '1px solid var(--coral-bright)',
+  borderRadius: 8,
+  cursor: 'pointer',
+};
+
 /** Derive the saved run target from a definition summary, so the list can fire a
  *  run with the workflow's own assigned agent (no extra round-trip). */
 function savedRunTarget(def: WorkflowDefinitionSummary): WorkflowRunTarget {
@@ -62,6 +73,28 @@ function savedRunTarget(def: WorkflowDefinitionSummary): WorkflowRunTarget {
 /** Has the workflow got an agent assigned? Every workflow needs one to run. */
 function hasAgent(def: WorkflowDefinitionSummary): boolean {
   return def.runTargetRuntime === 'cloud' ? !!def.runTargetCloudAgentRef : !!def.runTargetAgentHostId;
+}
+
+/** Status pill — one source of truth for run/task status colouring. */
+function StatusPill({ status }: { status: string }) {
+  const color = STATUS_COLORS[status] ?? 'var(--text-muted)';
+  return (
+    <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 5, background: `${color}22`, color, whiteSpace: 'nowrap' }}>
+      {status}
+    </span>
+  );
+}
+
+/** Run-history rollup line ("12 runs · last completed") — shared by card + row. */
+function RunStats({ def }: { def: WorkflowDefinitionSummary }) {
+  const count = def.runCount ?? 0;
+  if (count === 0) return <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>No runs yet</span>;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+      {count} run{count === 1 ? '' : 's'}
+      {def.lastRunStatus && <>· last <StatusPill status={def.lastRunStatus} /></>}
+    </span>
+  );
 }
 
 function WorkflowTaskRow({ task }: { task: WorkflowTask }) {
@@ -81,9 +114,7 @@ function WorkflowTaskRow({ task }: { task: WorkflowTask }) {
         )}
         {task.error && <div style={{ fontSize: 11, color: 'var(--coral-bright, #f4726e)', marginTop: 4 }}>{task.error}</div>}
       </div>
-      <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 5, background: `${color}22`, color, flexShrink: 0, whiteSpace: 'nowrap' }}>
-        {task.status}
-      </span>
+      <StatusPill status={task.status} />
     </div>
   );
 }
@@ -119,37 +150,20 @@ function AgentLabel({ def }: { def: WorkflowDefinitionSummary }) {
 
 /** A workflow (definition) as a card — mirrors the project card layout. */
 function WorkflowDefCard({
-  def,
-  onOpen,
-  onRun,
-  onDelete,
-  running,
+  def, onOpen, onRun, onViewRuns, onDelete, running,
 }: {
   def: WorkflowDefinitionSummary;
   onOpen: (d: WorkflowDefinitionSummary) => void;
   onRun: (d: WorkflowDefinitionSummary) => void;
+  onViewRuns: (d: WorkflowDefinitionSummary) => void;
   onDelete: (d: WorkflowDefinitionSummary) => void;
   running: boolean;
 }) {
   return (
-    <div
-      style={{
-        padding: 20,
-        background: 'var(--bg-elevated)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: 12,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
-      }}
-    >
+    <div style={{ padding: 20, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <span style={{ fontSize: 18 }} aria-hidden>🔀</span>
-        <button
-          type="button"
-          onClick={() => onOpen(def)}
-          style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-        >
+        <button type="button" onClick={() => onOpen(def)} style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
           <h3 style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', margin: 0 }}>{def.name}</h3>
           {def.description && (
             <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '4px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
@@ -168,8 +182,9 @@ function WorkflowDefCard({
         <AgentLabel def={def} />
       </div>
 
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 'auto' }}>
-        Updated {new Date(def.updatedAt).toLocaleDateString()}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 'auto' }}>
+        <RunStats def={def} />
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Updated {new Date(def.updatedAt).toLocaleDateString()}</span>
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -177,27 +192,18 @@ function WorkflowDefCard({
         <button type="button" onClick={() => onRun(def)} disabled={running} style={{ ...subtleBtn, opacity: running ? 0.6 : 1 }}>
           {running ? 'Running…' : '▶ Run'}
         </button>
+        {(def.runCount ?? 0) > 0 && (
+          <button type="button" onClick={() => onViewRuns(def)} style={subtleBtn}>Runs ({def.runCount})</button>
+        )}
         <button type="button" onClick={() => onDelete(def)} style={{ ...subtleBtn, marginLeft: 'auto' }}>Delete</button>
       </div>
     </div>
   );
 }
 
-const subtleBtn: React.CSSProperties = {
-  padding: '6px 12px',
-  fontSize: 12,
-  fontWeight: 600,
-  color: 'var(--coral-bright)',
-  background: 'var(--bg-base)',
-  border: '1px solid var(--coral-bright)',
-  borderRadius: 8,
-  cursor: 'pointer',
-};
-
 export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
   const router = useRouter();
   const [defs, setDefs] = useState<WorkflowDefinitionSummary[]>([]);
-  const [runs, setRuns] = useState<Workflow[]>([]);
   const [projectList, setProjectList] = useState<Project[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [loading, setLoading] = useState(true);
@@ -205,7 +211,12 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
   const [runningId, setRunningId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Run detail (execution history) — tasks + dependency graph for one run.
+  // Per-workflow run history drill-down.
+  const [runsForDef, setRunsForDef] = useState<WorkflowDefinitionSummary | null>(null);
+  const [defRuns, setDefRuns] = useState<Workflow[]>([]);
+  const [loadingRuns, setLoadingRuns] = useState(false);
+
+  // Run detail (one execution) — tasks + dependency graph.
   const [selectedDetail, setSelectedDetail] = useState<Workflow | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailTab, setDetailTab] = useState<'tasks' | 'graph'>('tasks');
@@ -215,18 +226,16 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    Promise.all([
-      workflowDefinitions.list().catch((e: Error) => { setError(e.message); return [] as WorkflowDefinitionSummary[]; }),
-      workflows.list({ projectId: projectId ?? undefined }).catch(() => [] as Workflow[]),
-    ])
-      .then(([d, r]) => { setDefs(d); setRuns(r); })
+    workflowDefinitions
+      .list()
+      .then(setDefs)
+      .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [projectId]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { fetchProjects().then(setProjectList).catch(() => {}); }, []);
 
-  // Filter definitions to the active project (when the page is project-scoped).
   const visibleDefs = projectId != null ? defs.filter((d) => d.projectId === projectId) : defs;
 
   const filteredProjectName = projectId != null
@@ -238,6 +247,18 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
   const openDef = (d: WorkflowDefinitionSummary) => router.push(`/workflows/builder?id=${d.id}`);
   const newWorkflow = () => router.push(projectId != null ? `/workflows/builder?projectId=${projectId}` : '/workflows/builder');
 
+  const viewRuns = useCallback(async (d: WorkflowDefinitionSummary) => {
+    setRunsForDef(d);
+    setLoadingRuns(true);
+    try {
+      setDefRuns(await workflowDefinitions.runs(d.id));
+    } catch {
+      setDefRuns([]);
+    } finally {
+      setLoadingRuns(false);
+    }
+  }, []);
+
   const runDef = async (d: WorkflowDefinitionSummary) => {
     if (!hasAgent(d)) {
       setNotice(`"${d.name}" has no agent assigned — open it and pick a run target first.`);
@@ -248,8 +269,8 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
     try {
       const { workflowId } = await workflowDefinitions.run(d.id, savedRunTarget(d));
       setNotice(`Started a run of "${d.name}".`);
+      load(); // refresh run counts
       const detail = await workflows.get(workflowId).catch(() => null);
-      load();
       if (detail) openDetail(detail);
     } catch (e) {
       setNotice(e instanceof Error ? e.message : 'Failed to start run');
@@ -275,8 +296,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
     if (wf.tasks) return;
     setLoadingDetail(true);
     try {
-      const detail = await workflows.get(wf.id);
-      setSelectedDetail(detail);
+      setSelectedDetail(await workflows.get(wf.id));
     } catch {
       setSelectedDetail(wf);
     } finally {
@@ -365,6 +385,53 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
     );
   }
 
+  // ---- Per-workflow run history view --------------------------------------
+  if (runsForDef) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            type="button"
+            onClick={() => { setRunsForDef(null); setDefRuns([]); }}
+            style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}
+          >
+            ← Back
+          </button>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{runsForDef.name} · Runs</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>Execution history (newest first)</div>
+          </div>
+          <button type="button" onClick={() => runDef(runsForDef)} disabled={runningId === runsForDef.id} style={{ ...subtleBtn, opacity: runningId === runsForDef.id ? 0.6 : 1 }}>
+            {runningId === runsForDef.id ? 'Running…' : '▶ Run now'}
+          </button>
+        </div>
+
+        {loadingRuns ? (
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading runs…</div>
+        ) : defRuns.length === 0 ? (
+          <div style={{ ...cardStyle, fontSize: 12, color: 'var(--text-muted)' }}>No runs yet.</div>
+        ) : (
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+            {defRuns.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => openDetail(r)}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)', background: 'none', cursor: 'pointer' }}
+              >
+                <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {r.description ?? `Run ${r.id.slice(0, 8)}`}
+                </span>
+                <StatusPill status={r.status} />
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(r.createdAt).toLocaleString()}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // ---- List view ----------------------------------------------------------
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -419,7 +486,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
       ) : viewMode === 'card' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {visibleDefs.map((d) => (
-            <WorkflowDefCard key={d.id} def={d} onOpen={openDef} onRun={runDef} onDelete={deleteDef} running={runningId === d.id} />
+            <WorkflowDefCard key={d.id} def={d} onOpen={openDef} onRun={runDef} onViewRuns={viewRuns} onDelete={deleteDef} running={runningId === d.id} />
           ))}
         </div>
       ) : (
@@ -427,7 +494,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
-                {['Name', 'Project', 'Agent', 'Updated', 'Actions'].map((h) => (
+                {['Name', 'Project', 'Agent', 'Runs', 'Updated', 'Actions'].map((h) => (
                   <th key={h} style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>{h}</th>
                 ))}
               </tr>
@@ -442,6 +509,15 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
                   </td>
                   <td style={{ padding: '12px 16px' }}><ScopeChip def={d} /></td>
                   <td style={{ padding: '12px 16px' }}><AgentLabel def={d} /></td>
+                  <td style={{ padding: '12px 16px' }}>
+                    {(d.runCount ?? 0) > 0 ? (
+                      <button type="button" onClick={() => viewRuns(d)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                        <RunStats def={d} />
+                      </button>
+                    ) : (
+                      <RunStats def={d} />
+                    )}
+                  </td>
                   <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{new Date(d.updatedAt).toLocaleDateString()}</td>
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -456,39 +532,6 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
               ))}
             </tbody>
           </table>
-        </div>
-      )}
-
-      {/* Execution history — runs are executions OF the workflows above, kept
-          clearly subordinate so the two concepts don't read as peer lists. */}
-      {runs.length > 0 && (
-        <div style={{ marginTop: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10 }}>
-            Recent runs ({runs.length})
-          </div>
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
-            {runs.map((r) => {
-              const color = STATUS_COLORS[r.status] ?? 'var(--text-muted)';
-              return (
-                <button
-                  key={r.id}
-                  type="button"
-                  onClick={() => openDetail(r)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)', background: 'none', border: 'none', borderBottomStyle: 'solid', cursor: 'pointer' }}
-                >
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                  <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {r.description ?? `Run ${r.id.slice(0, 8)}`}
-                  </span>
-                  {r.projectName && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.projectName}</span>}
-                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 5, background: `${color}22`, color, whiteSpace: 'nowrap' }}>
-                    {r.status}
-                  </span>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(r.createdAt).toLocaleDateString()}</span>
-                </button>
-              );
-            })}
-          </div>
         </div>
       )}
     </div>

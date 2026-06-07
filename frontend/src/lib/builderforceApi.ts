@@ -302,7 +302,18 @@ export interface ToolAuditEvent {
  * hosts they have no relay log stream, but they DO push tool-audit telemetry
  * (migration 0092), so the Observability timeline treats them as first-class.
  */
+export interface CloudAgentRef {
+  /** ide_agents.id, or the '__default__' sentinel for gateway-default runs. */
+  ref: string;
+  name: string;
+}
+
 export const cloudAgents = {
+  /** Cloud agents that have actually run (distinct telemetry refs) — drives the
+   *  Observability directory so every cloud run is attributable, incl. default. */
+  list: () =>
+    request<{ agents: CloudAgentRef[] }>(`/api/runtime/cloud-agents`).then((r) => r.agents),
+
   /** Tool-audit events for one cloud agent (by ide_agents.id), newest first. */
   toolAuditEvents: (ref: string, params?: { limit?: number }) => {
     const q = new URLSearchParams();
@@ -470,6 +481,10 @@ export interface WorkflowDefinitionSummary {
   runTargetAgentHostId?: number | null;
   runTargetCloudAgentRef?: string | null;
   agentName?: string | null;
+  /** Execution history rollup (live, not cached): total runs + most recent. */
+  runCount?: number;
+  lastRunStatus?: string | null;
+  lastRunAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -486,6 +501,9 @@ export const workflowDefinitions = {
   list: () =>
     request<{ definitions: WorkflowDefinitionSummary[] }>('/api/workflow-definitions').then((r) => r.definitions),
   get: (id: string) => request<WorkflowDefinitionDetail>(`/api/workflow-definitions/${id}`),
+  /** Execution history (runs) for one definition, newest first. */
+  runs: (id: string) =>
+    request<{ runs: Workflow[] }>(`/api/workflow-definitions/${id}/runs`).then((r) => r.runs),
   /** The targets a workflow can run on: self-hosted agentHosts + cloud agents. */
   runTargets: () => request<WorkflowRunTargets>('/api/workflow-definitions/run-targets'),
   /** Activatable triggers + their activation state (webhook URL, next run, …). */
