@@ -444,6 +444,13 @@ async function ensureTaskPrd(
 
   // Land PRD.md as a real pending change on the ticket's git branch (branch + PR).
   const committed = await commitPrdAsPendingChange(db, gitSecret(env), tenantId, taskId, taskRow.title, prd, agentLabel);
+  if (committed.ok) {
+    // Surface the branch + PR on the ticket (Details shows the branch as a link).
+    await db.update(tasks)
+      .set({ gitBranch: committed.branch, ...(committed.prUrl ? { githubPrUrl: committed.prUrl, githubPrNumber: committed.prNumber ?? undefined } : {}), updatedAt: new Date() })
+      .where(eq(tasks.id, taskId))
+      .catch(() => { /* best-effort */ });
+  }
 
   notifyExecutionSubscribers(executionId, {
     type: 'file_change', executionId, path: 'PRD.md', change: existingSpecId ? 'modified' : 'created', ts: new Date().toISOString(),

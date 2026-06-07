@@ -1675,18 +1675,29 @@ full `api/src` rename (`Claw*`→`AgentHost*`, table `coderclaw_instances`→`ag
   commit/branch (intentional — pending review). Fixing (explicit `producesPrd` flag on the planning step + a
   `prd_edit`/section-merge tool agents can call) unblocks: collaborative PRD authoring across the swimlane.
 
-- **"Agents are Users" is only partial — self-assign data is persisted but not surfaced or actionable.** When a
-  cloud agent runs a ticket it now self-assigns: `dispatchAndQueue` ([runtimeRoutes.ts](api/src/presentation/routes/runtimeRoutes.ts))
-  writes `tasks.assigned_agent_ref` (= the `ide_agents.id`, migration 0090). The PRD it drafts is now linked to
-  the task (`tasks.spec_id` via `linkSpecToTask` → shows on the task's PRD tab) and recorded as an
-  agent-attributed `PRD.md` change in `task_file_changes` (shows in the Changes tab). **Still missing:**
-  (1) `assigned_agent_ref` does NOT flow through `Task` ([api/src/domain/task/Task.ts](api/src/domain/task/Task.ts)
-  `toPlain`) / the repository / the frontend `Task` type, so the kanban card + drawer don't *show* the agent
-  assignee; (2) Auto/default runs have no `cloudAgentRef`, so there's no agent identity to assign; (3) agents
-  can't yet update the ticket's description/status themselves (no agent-facing task-mutation tool); (4) agents
-  aren't modeled as first-class users (avatar/identity/permissions). Fixing (thread `assignedAgentRef` through
-  the domain entity → frontend → an AgentChip on the card; add a `task_update` agent tool; an agent-user
-  identity) unblocks: agents visibly owning and updating their tickets.
+- **PRD multi-agent UPDATE flow + agent task-mutation tools are not built.** The PRD is now task-scoped
+  (`tasks.spec_id`), carries an attribution header naming the drafting agent, is recorded as an attributed
+  `PRD.md` change, and is **committed to the ticket git branch as a pending change** (branch + PR) via the
+  provider API ([commitFileToRepo.ts](api/src/application/repos/commitFileToRepo.ts) +
+  [commitPrdToRepo.ts](api/src/application/repos/commitPrdToRepo.ts), works on the no-runtime cloud path). The
+  runtime path commits **all** workspace files to the branch per run (`commitAndPushTicketBranch`). The branch
+  is surfaced on the ticket Details as a hyperlink to the PR (`tasks.git_branch`, migration 0091); the agent
+  self-assigns (`tasks.assigned_agent_ref`, migration 0090) and both now flow through `Task` →
+  frontend. **Still missing:** (1) downstream agents can't *append* attributed updates to an existing PRD — only
+  the first draft is written (the header invites updates but there's no `prd_update` flow appending a signed
+  section + re-commit); (2) agents can't update the ticket description/status via a tool (no agent-facing
+  task-mutation tool / agent-user identity); (3) the assigned agent isn't rendered as a name/AgentChip on the
+  card (the `assigned_agent_ref` id reaches the frontend but isn't resolved to the agent's name/avatar);
+  (4) Auto/default runs have no `cloudAgentRef`, so no agent identity to assign. Fixing unblocks: collaborative,
+  attributed PRD authoring + agents visibly owning and editing their tickets.
+- **`commitFileToRepo`/`commitPrdToRepo`/`createPullRequest` are GitHub-only.** Bitbucket/GitLab return a typed
+  `unsupported` result, so the PRD-as-pending-change + PR flow only lands on GitHub repos; other providers keep
+  the PRD in the DB (PRD tab) with no branch. Fixing (implement the branch+commit+PR REST calls per provider)
+  unblocks: the git pending-change flow on non-GitHub repos.
+- **`/llm/v1/messages` does not enforce the plan daily-token cap.** The endpoint now defaults to OUR model pool
+  (Messages⇄OpenAI translation via [anthropicMessagesBridge.ts](api/src/application/llm/anthropicMessagesBridge.ts),
+  reusing `llmProxyForPlan`) when no tenant Anthropic key is set, and passes through to api.anthropic.com when a
+  BYO key exists. Unlike [`/v1/chat/completions`](api/src/presentation/routes/llmRoutes.ts) it skips the
 - **`/llm/v1/messages` does not enforce the plan daily-token cap.** The endpoint now defaults to OUR model pool
   (Messages⇄OpenAI translation via [anthropicMessagesBridge.ts](api/src/application/llm/anthropicMessagesBridge.ts),
   reusing `llmProxyForPlan`) when no tenant Anthropic key is set, and passes through to api.anthropic.com when a

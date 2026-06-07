@@ -276,12 +276,18 @@ export class BuilderforceRelayService implements IRelayService {
     }
   }
 
-  /** Attribute + clear the in-flight V1 task run's changes when its session ends. */
+  /** When a V1 session ends: attribute its changes, then commit + push them to the
+   *  ticket branch as pending changes. */
   private flushPendingTaskChanges(): void {
     const run = this.pendingTaskRun;
     if (!run) return;
     this.pendingTaskRun = null;
-    void this.emitTaskChanges(run.cwd, run.agentLabel, run.executionId, run.taskId);
+    void (async () => {
+      await this.emitTaskChanges(run.cwd, run.agentLabel, run.executionId, run.taskId);
+      if (run.taskId != null && run.repo?.repoId) {
+        await this.commitAndPushTicketBranch(run.taskId, run.repo, run.title, run.agentLabel);
+      }
+    })();
   }
 
   /**
@@ -294,6 +300,7 @@ export class BuilderforceRelayService implements IRelayService {
     payload: {
       executionId?: number;
       taskId?: number;
+      title?: string;
       sourceType: string;
       repo?: { repoId: string; defaultBranch: string | null };
       agentLabel?: string;
@@ -302,13 +309,17 @@ export class BuilderforceRelayService implements IRelayService {
   ): Promise<void> {
     const agentLabel = payload.agentLabel?.trim() || "BuilderForce-V1";
     const cwd = await this.ensureTaskWorkspace(payload.taskId, payload.repo);
-    // Record context so the session-final handler can diff + attribute changes.
-    this.pendingTaskRun = { executionId: payload.executionId, taskId: payload.taskId, agentLabel, cwd };
+    // Record context so the session-final handler can diff + attribute + commit changes.
+    this.pendingTaskRun = {
+      executionId: payload.executionId, taskId: payload.taskId, agentLabel, cwd,
+      title: payload.title ?? `Task ${payload.taskId ?? ""}`.trim(), repo: payload.repo,
+    };
 
-    // The agent's cwd is enforced to `cwd` via the chat.send workspaceDir param —
-    // its file tools default there. Only add the no-commit guidance for repo tasks.
+    // The agent's cwd is enforced via the chat.send workspaceDir param. Changes are
+    // committed to the ticket branch automatically after the run — the agent must
+    // not manage git itself.
     const effectivePrompt = payload.repo?.repoId
-      ? `${prompt}\n\n[Workspace] You are working in the ticket's cloned repository. Do NOT \`git commit\`/\`git push\` — changes are committed and a PR is opened automatically when the ticket is marked Done.`
+      ? `${prompt}\n\n[Workspace] You are working in the ticket's cloned git repository (already on its branch). Edit/create files freely. Do NOT run \`git\` — BuilderForce commits your changes to the ticket branch as pending changes after this run.`
       : prompt;
 
     this.gatewayClient
@@ -334,6 +345,7 @@ export class BuilderforceRelayService implements IRelayService {
     payload: {
       executionId?: number;
       taskId?: number;
+      title?: string;
       model?: string;
       sourceType: string;
       repo?: { repoId: string; defaultBranch: string | null };
@@ -377,8 +389,14 @@ export class BuilderforceRelayService implements IRelayService {
       sinks,
     );
 
-    // Attribute the files this agent changed to it (traceability).
+    // Attribute the files this agent changed (traceability), then commit + push
+    // them to the ticket branch as pending changes.
     await this.emitTaskChanges(cwd, agentLabel, payload.executionId, payload.taskId);
+    if (payload.taskId != null && payload.repo?.repoId) {
+      await this.commitAndPushTicketBranch(
+        payload.taskId, payload.repo, payload.title ?? `Task ${payload.taskId}`, agentLabel,
+      );
+    }
 
     if (payload.executionId != null) {
       await this.reportExecutionState(
@@ -390,9 +408,9 @@ export class BuilderforceRelayService implements IRelayService {
   }
 
   /**
-   * Finalize a ticket on Done: commit the shared task workspace to a branch,
-   * push it through the host git-proxy, and ask the API to open a PR. The API
-   * sends this frame when the task transitions to done. Never throws.
+   * Finalize a ticket on Done: a final commit + push of any remaining changes to
+   * the ticket branch (the per-run commits already pushed earlier ones), then tear
+   * the workspace down. Never throws.
    */
   private async finalizeTask(payload: {
     taskId: number;
@@ -400,39 +418,17 @@ export class BuilderforceRelayService implements IRelayService {
     repoId?: string;
     defaultBranch?: string | null;
   }): Promise<void> {
-    const baseDir = this.opts.workspaceDir ?? process.cwd();
-    const dir = taskWorkspaceDir(baseDir, payload.taskId);
-    if (!payload.repoId || !(await isCloned(dir))) {
-      logDebug(`[builderforce] finalize task ${payload.taskId}: no repo workspace to commit`);
-      return;
+    const dir = taskWorkspaceDir(this.opts.workspaceDir ?? process.cwd(), payload.taskId);
+    if (payload.repoId && (await isCloned(dir))) {
+      await this.commitAndPushTicketBranch(
+        payload.taskId,
+        { repoId: payload.repoId, defaultBranch: payload.defaultBranch ?? null },
+        payload.title ?? `Task ${payload.taskId}`,
+        "BuilderForce",
+      );
     }
-    const git = makeCodingGit({ apiKey: this.opts.apiKey });
-    const branch = taskBranchName(payload.taskId);
-    try {
-      await git.checkoutNewBranch(dir, branch).catch(() => { /* branch may already exist */ });
-      const { changed } = await git.commitAll(dir, `BuilderForce: task ${payload.taskId} — ${payload.title ?? ""}`.trim());
-      if (!changed) {
-        logDebug(`[builderforce] finalize task ${payload.taskId}: no changes to commit`);
-        return;
-      }
-      const base = normalizeBaseUrl(this.opts.baseUrl);
-      const cloneUrl = buildTaskCloneUrl(base, this.opts.agentNodeId, payload.repoId);
-      await git.push(dir, cloneUrl, branch);
-      // The API holds the repo credential and opens the PR server-side.
-      await fetch(`${base}/api/agent-hosts/${this.opts.agentNodeId}/tasks/${payload.taskId}/pull-request`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.opts.apiKey}` },
-        body: JSON.stringify({ branch, base: payload.defaultBranch ?? undefined, title: payload.title }),
-        signal: AbortSignal.timeout(30_000),
-      }).catch(() => { /* branch is pushed; PR can be opened manually */ });
-      logWarn(`[builderforce] finalized task ${payload.taskId}: pushed ${branch}`);
-    } catch (err) {
-      logWarn(`[builderforce] finalize task ${payload.taskId} failed: ${String(err)}`);
-    } finally {
-      // Tear the ticket workspace down — the work is committed/pushed, the ticket
-      // is Done, so the ephemeral clone is no longer needed.
-      await fs.rm(dir, { recursive: true, force: true }).catch(() => { /* best-effort */ });
-    }
+    // Tear the ticket workspace down — the work is committed/pushed, ticket is Done.
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => { /* best-effort */ });
   }
 
   /**

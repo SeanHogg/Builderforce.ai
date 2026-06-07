@@ -1536,6 +1536,26 @@ export function TaskMgmtContent({
                   </span>
                 )}
               </div>
+              {drawerTask.gitBranch && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>Branch</div>
+                  {drawerTask.githubPrUrl ? (
+                    <a
+                      href={drawerTask.githubPrUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="View the code changes"
+                      style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--coral-bright)', wordBreak: 'break-all' }}
+                    >
+                      {drawerTask.gitBranch} →
+                    </a>
+                  ) : (
+                    <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
+                      {drawerTask.gitBranch}
+                    </span>
+                  )}
+                </div>
+              )}
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Description</div>
                 {editingField === 'description' ? (

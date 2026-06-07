@@ -708,6 +708,10 @@ export interface Task {
   priority: TaskPriority;
   assignedAgentType: string | null;
   assignedAgentHostId: number | null;
+  /** ide_agents.id of the cloud agent working this ticket (agents are assignees). */
+  assignedAgentRef: string | null;
+  /** Git branch the agent executes this ticket under (links to the code changes). */
+  gitBranch: string | null;
   githubPrUrl: string | null;
   githubPrNumber: number | null;
   startDate: string | null;
