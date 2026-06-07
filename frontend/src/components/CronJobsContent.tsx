@@ -14,6 +14,9 @@ export interface CronJobsContentProps {
   agentHostId: number;
   /** When set, only show cron jobs for this project. */
   projectId?: number;
+  /** Scope to one attached agent (project_agents.id), or 'none' for project-wide
+   *  schedules only. Omitted → all schedules for the project. */
+  projectAgentId?: number | 'none';
   /** Hide the project column (e.g. when embedded inside a project panel). */
   hideProjectColumn?: boolean;
   className?: string;
@@ -23,6 +26,7 @@ export interface CronJobsContentProps {
 export function CronJobsContent({
   agentHostId,
   projectId,
+  projectAgentId,
   hideProjectColumn,
   className,
   style,
@@ -41,14 +45,14 @@ export function CronJobsContent({
     setLoading(true);
     setError(null);
     try {
-      const list = await cronApi.list(agentHostId, projectId);
+      const list = await cronApi.list(agentHostId, projectId, projectAgentId);
       setJobs(list);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load cron jobs');
     } finally {
       setLoading(false);
     }
-  }, [agentHostId, projectId]);
+  }, [agentHostId, projectId, projectAgentId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -62,6 +66,7 @@ export function CronJobsContent({
         name: formName.trim(),
         schedule: formSchedule.trim(),
         projectId: formProjectId ? Number(formProjectId) : (projectId ?? null),
+        projectAgentId: typeof projectAgentId === 'number' ? projectAgentId : null,
       });
       setJobs((prev) => [created, ...prev]);
       setFormName('');

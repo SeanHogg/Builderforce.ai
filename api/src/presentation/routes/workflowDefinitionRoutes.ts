@@ -49,6 +49,13 @@ interface RunTargetInput {
   runTargetRuntime?: string;
   runTargetAgentHostId?: number | null;
   runTargetCloudAgentRef?: string | null;
+  /** 'project' = runs under the bound project; 'global' = tenant-wide. */
+  executionScope?: string;
+}
+
+/** Normalize execution scope to the two allowed values. */
+function coerceExecutionScope(v: string | undefined): 'project' | 'global' {
+  return v === 'global' ? 'global' : 'project';
 }
 
 /** Normalize a persisted/incoming run target into the columns + RunTarget shape. */
@@ -149,6 +156,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       description: body.description ?? null,
       definition: JSON.stringify(def),
       ...target,
+      executionScope: coerceExecutionScope(body.executionScope),
       createdAt: now,
       updatedAt: now,
     });
@@ -291,6 +299,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
         ...(body.description !== undefined ? { description: body.description } : {}),
         ...(body.definition !== undefined ? { definition: JSON.stringify(coerceDefinition(body.definition)) } : {}),
         ...(runTargetTouched ? target : {}),
+        ...(body.executionScope !== undefined ? { executionScope: coerceExecutionScope(body.executionScope) } : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(workflowDefinitions.id, id), eq(workflowDefinitions.tenantId, tenantId)));

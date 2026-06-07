@@ -99,6 +99,7 @@ import { createPrdRoutes }             from './presentation/routes/prdRoutes';
 import { createRepoRoutes }            from './presentation/routes/repoRoutes';
 import { createAgentRuntimeRoutes }    from './presentation/routes/agentRuntimeRoutes';
 import { createGitProxyRoutes }        from './presentation/routes/gitProxyRoutes';
+import { createAgentAssignmentRoutes } from './presentation/routes/agentAssignmentRoutes';
 
 import { API_VERSION } from './version';
 import {
@@ -315,6 +316,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/repos',             createRepoRoutes(db));
   app.route('/api/agent-runtime',     createAgentRuntimeRoutes(db));
   app.route('/api/git-proxy',         createGitProxyRoutes(db));
+  app.route('/api/agent-assignments', createAgentAssignmentRoutes(db));
 
   app.onError(errorHandler);
   app.notFound((c) => addCorsToResponse(c, c.json({ error: 'Not found' }, 404)));

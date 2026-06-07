@@ -13,6 +13,7 @@ import {
   real,
   unique,
   uniqueIndex,
+  index,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -884,6 +885,35 @@ export const projectAgents = pgTable('project_agents', {
 ]);
 
 /**
+ * Canonical agent-assignment model (migration 0082). An agent is registered once
+ * (tenant-scoped, identified by agentKind+agentRef — the same coordinates
+ * project_agents uses) and ASSIGNED to many platform aspects from one place:
+ *   scope          — project | workflow | architecture | security | swimlane | brain | global
+ *   scopeId        — target id within that scope (project/workflow/swimlane id…); NULL for brain/global
+ *   executionScope — project | global (e.g. a workflow runs under a project, or tenant-wide)
+ * This is the single source the surfaces read, superseding the fragmented
+ * project_agents / swimlane target / assignedAgentHost notions over time.
+ */
+export const agentAssignments = pgTable('agent_assignments', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  agentKind:      varchar('agent_kind', { length: 16 }).notNull(),  // workforce | registered
+  agentRef:       varchar('agent_ref', { length: 64 }).notNull(),
+  scope:          varchar('scope', { length: 24 }).notNull(),       // project|workflow|architecture|security|swimlane|brain|global
+  scopeId:        varchar('scope_id', { length: 64 }),              // target id; NULL for brain/global
+  executionScope: varchar('execution_scope', { length: 16 }).notNull().default('project'),  // project|global
+  role:           varchar('role', { length: 64 }).notNull().default('default'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  // One assignment per (tenant, agent, scope, target). COALESCE collapses NULL
+  // scopeId so brain/global is unique per agent+scope. Mirrors migration 0082.
+  uniqueIndex('uq_agent_assignments').on(t.tenantId, t.agentKind, t.agentRef, t.scope, sql`COALESCE(${t.scopeId}, '')`),
+  index('idx_agent_assignments_scope').on(t.tenantId, t.scope, t.scopeId),
+]);
+
+/**
  * Platform personas — admin-managed personas (CRUD in Platform Admin).
  * Merged with built-in personas for marketplace display.
  */
@@ -1083,6 +1113,8 @@ export const workflowDefinitions = pgTable('workflow_definitions', {
   runTargetRuntime:     varchar('run_target_runtime', { length: 16 }).notNull().default('host'),
   runTargetAgentHostId: integer('run_target_agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
   runTargetCloudAgentRef: varchar('run_target_cloud_agent_ref', { length: 64 }),
+  // Execution scope (0083): 'project' = runs under the bound project; 'global' = tenant-wide.
+  executionScope:       varchar('execution_scope', { length: 16 }).notNull().default('project'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
@@ -1313,6 +1345,8 @@ export const cronJobs = pgTable('cron_jobs', {
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   agentHostId:      integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
   projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  /** Scopes the schedule to one attached agent (project_agents.id); NULL = project-wide. */
+  projectAgentId: integer('project_agent_id').references(() => projectAgents.id, { onDelete: 'cascade' }),
   name:        varchar('name', { length: 255 }).notNull(),
   schedule:    varchar('schedule', { length: 255 }).notNull(),
   taskId:      integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
