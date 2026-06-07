@@ -12,6 +12,7 @@ import {
   ticketRuns,
   swimlaneTransitions,
   agentDispatches,
+  tenants,
 } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type {
@@ -41,6 +42,16 @@ export class DrizzleCoordinatorStore implements CoordinatorStore {
       maxConcurrentTickets: b.maxConcurrentTickets,
       needsAttentionLane: b.needsAttentionLane,
     };
+  }
+
+  // Low-frequency: read once per ticket stage transition (not a per-request hot
+  // path), a single PK lookup — so it is not run through the read-through cache.
+  async getDefaultAgentHostId(tenantId: number): Promise<string | null> {
+    const [t] = await this.db
+      .select({ defaultAgentHostId: tenants.defaultAgentHostId })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId));
+    return t?.defaultAgentHostId != null ? String(t.defaultAgentHostId) : null;
   }
 
   async countActiveTickets(boardId: string, tenantId: number, activeLifecycles: string[]): Promise<number> {

@@ -10,7 +10,7 @@ import { agentHosts } from '@/lib/builderforceApi';
 import { useAuth } from '@/lib/AuthContext';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
 import { ProjectCard } from '@/components/ProjectCard';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { DeleteProjectDialog } from '@/components/DeleteProjectDialog';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { ViewToggle } from '@/components/ViewToggle';
@@ -436,19 +436,15 @@ export default function ProjectsPage() {
         )}
         <UpgradeModal error={planError} onClose={() => setPlanError(null)} />
 
-        {/* confirmation dialog used by table delete */}
-        <ConfirmDialog
-          open={!!confirmProject}
-          message={
-            confirmProject ? `Delete project "${confirmProject.name}"? This cannot be undone.` : ''
-          }
+        {/* delete dialog used by the table view (prompts to move open tasks first) */}
+        <DeleteProjectDialog
+          project={confirmProject}
           onCancel={() => setConfirmProject(null)}
-          onConfirm={async () => {
-            if (!confirmProject) return;
+          onConfirm={async (project) => {
             try {
-              await deleteProject(confirmProject.id);
-              setProjects((prev) => prev.filter((x) => x.id !== confirmProject.id));
-              if (detailsProject && detailsProject.id === confirmProject.id) {
+              await deleteProject(project.id);
+              setProjects((prev) => prev.filter((x) => x.id !== project.id));
+              if (detailsProject && detailsProject.id === project.id) {
                 setDetailsProject(null);
               }
             } catch (err) {

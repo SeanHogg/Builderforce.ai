@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import type { Project } from '@/lib/types';
-import { ConfirmDialog } from './ConfirmDialog';
+import { DeleteProjectDialog } from './DeleteProjectDialog';
 
 export interface ProjectCardProps {
   project: Project;
@@ -182,9 +182,8 @@ export function ProjectCard({
                   <path d="M9 6V4h6v2" />
                 </svg>
               </button>
-              <ConfirmDialog
-                open={showConfirm}
-                message={`Delete project "${project.name}"? This cannot be undone.`}
+              <DeleteProjectDialog
+                project={showConfirm ? project : null}
                 onCancel={() => setShowConfirm(false)}
                 onConfirm={() => {
                   setShowConfirm(false);

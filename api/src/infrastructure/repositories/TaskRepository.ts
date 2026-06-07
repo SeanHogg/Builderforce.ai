@@ -77,6 +77,8 @@ export class TaskRepository implements ITaskRepository {
     const [updated] = await this.db
       .update(tasksTable)
       .set({
+        projectId:         plain.projectId,
+        key:               plain.key,
         title:             plain.title,
         description:       plain.description ?? undefined,
         status:            plain.status,

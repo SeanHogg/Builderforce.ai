@@ -11,7 +11,7 @@ import { PRDsContent } from './PRDsContent';
 import { CronJobsContent } from './CronJobsContent';
 import { AgentCapabilitiesContent } from './AgentCapabilitiesContent';
 import { BrainPanel } from './brain/BrainPanel';
-import { ConfirmDialog } from './ConfirmDialog';
+import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { SourceControlContent } from './sourcecontrol/SourceControlContent';
 import { IntegrationCredentialsManager } from './integrations/IntegrationCredentialsManager';
 import { BoardConnectionsManager } from './integrations/BoardConnectionsManager';
@@ -233,9 +233,8 @@ export function ProjectDetailsPanel({
                     <path d="M9 6V4h6v2" />
                   </svg>
                 </button>
-                <ConfirmDialog
-                  open={showConfirm}
-                  message={`Delete project "${project.name}"? This cannot be undone.`}
+                <DeleteProjectDialog
+                  project={showConfirm ? project : null}
                   onCancel={() => setShowConfirm(false)}
                   onConfirm={() => {
                     setShowConfirm(false);
