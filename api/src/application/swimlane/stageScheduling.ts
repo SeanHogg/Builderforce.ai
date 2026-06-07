@@ -57,30 +57,66 @@ export function computeReadyDispatches(
 
 export type StageOutcome = 'running' | 'completed' | 'failed';
 
+/** How many of a stage's agents must succeed for the lane action to fire. */
+export type SuccessPolicy = 'all' | 'any' | 'n_of_m';
+
 /**
- * Aggregate a stage's dispatch statuses into a single outcome.
+ * The number of `completed` dispatches a stage needs to count as a success,
+ * given its policy. 'all' → every dispatch; 'any' → one; 'n_of_m' → the
+ * threshold, clamped to [1, total].
+ */
+export function stageSuccessNeed(
+  policy: SuccessPolicy,
+  threshold: number | null | undefined,
+  total: number,
+): number {
+  if (total === 0) return 0;
+  if (policy === 'any') return 1;
+  if (policy === 'n_of_m') return Math.max(1, Math.min(threshold ?? total, total));
+  return total; // 'all'
+}
+
+/**
+ * Aggregate a stage's dispatch statuses into a single outcome, honouring the
+ * lane's success policy. We only emit a TERMINAL outcome once nothing is still
+ * active (running/claimed/pending) or `blocked` — so the coordinator fires the
+ * advance/needs_attention transition exactly once. The caller is responsible
+ * for cancelling dead-blocked dispatches (see {@link computeDeadBlocked}) so a
+ * sequential stage that fails early still settles instead of waiting forever.
  *
- * - any `failed`/`cancelled` AND no remaining non-terminal work → 'failed'
- *   (we let in-flight siblings finish before declaring failure so we don't
- *    leave orphaned running work, but a failure is sticky — see note below)
- * - all `completed` → 'completed'
- * - otherwise → 'running'
- *
- * NOTE: as soon as one dispatch fails the stage is doomed; callers may choose to
- * stop scheduling new `blocked` work (computeReadyDispatches won't advance past a
- * failed dep anyway). We only emit the terminal 'failed' once nothing is still
- * actively running, so the coordinator's needs_attention transition is final.
+ * - still active/blocked      → 'running'
+ * - settled, done >= need     → 'completed' (quorum met)
+ * - settled, done <  need     → 'failed'
  */
 export function aggregateStageOutcome(
   statuses: readonly DispatchStatus[],
+  policy: SuccessPolicy = 'all',
+  threshold?: number | null,
 ): StageOutcome {
   if (statuses.length === 0) return 'completed'; // empty stage = pass-through
-  const anyFailed = statuses.some((s) => s === 'failed' || s === 'cancelled');
-  const anyActive = statuses.some((s) => ACTIVE_NONTERMINAL.has(s) || s === 'blocked');
-  if (anyFailed && !anyActive) return 'failed';
-  if (anyActive) return 'running';
-  // No active work and no failures → everything is completed.
-  return 'completed';
+  const active = statuses.some((s) => ACTIVE_NONTERMINAL.has(s) || s === 'blocked');
+  if (active) return 'running';
+  const done = statuses.filter((s) => s === 'completed').length;
+  return done >= stageSuccessNeed(policy, threshold, statuses.length) ? 'completed' : 'failed';
+}
+
+/**
+ * Blocked dispatches that can NEVER run because a dependency has already
+ * `failed`/`cancelled`. The coordinator cancels these so the stage settles
+ * (otherwise a sequential stage whose first agent fails would leave the rest
+ * blocked forever and the ticket stuck in `stage_running`).
+ */
+export function computeDeadBlocked(
+  dispatches: readonly SchedulableDispatch[],
+): SchedulableDispatch[] {
+  const byId = new Map(dispatches.map((d) => [d.id, d]));
+  return dispatches.filter((d) => {
+    if (d.status !== 'blocked') return false;
+    return d.dependsOn.some((depId) => {
+      const s = byId.get(depId)?.status;
+      return s === 'failed' || s === 'cancelled';
+    });
+  });
 }
 
 /** True when every dispatch is in a terminal state (nothing left to run). */

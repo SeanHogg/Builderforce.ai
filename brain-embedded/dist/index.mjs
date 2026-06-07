@@ -430,6 +430,7 @@ function useBrainConversation(options) {
     modality = "designer",
     extraSystem,
     systemPrompt,
+    model,
     toolSpecs,
     runTool,
     ensureChatId,
@@ -494,7 +495,7 @@ ${extraSystem}` : base;
       for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
         setStreamingText("");
         const result = await stream(
-          { messages: working, tools, tool_choice: tools ? "auto" : void 0 },
+          { messages: working, tools, tool_choice: tools ? "auto" : void 0, model },
           { onTextDelta: (d) => setStreamingText((s) => s + d) }
         );
         if (result.toolCalls.length > 0 && runTool) {

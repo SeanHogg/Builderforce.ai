@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   computeReadyDispatches,
   aggregateStageOutcome,
+  computeDeadBlocked,
+  stageSuccessNeed,
   isStageSettled,
   isTerminalDispatch,
   type SchedulableDispatch,
@@ -72,6 +74,40 @@ describe('aggregateStageOutcome', () => {
 
   it('a failure WHILE siblings still run stays running until settled', () => {
     expect(aggregateStageOutcome(['failed', 'running'])).toBe('running');
+  });
+
+  it("policy 'any': one completion is enough once settled, even with failures", () => {
+    expect(aggregateStageOutcome(['completed', 'failed'], 'any')).toBe('completed');
+    expect(aggregateStageOutcome(['failed', 'cancelled'], 'any')).toBe('failed');
+    // still running while anything is active, regardless of policy
+    expect(aggregateStageOutcome(['completed', 'running'], 'any')).toBe('running');
+  });
+
+  it("policy 'n_of_m': needs `threshold` completions", () => {
+    expect(aggregateStageOutcome(['completed', 'completed', 'failed'], 'n_of_m', 2)).toBe('completed');
+    expect(aggregateStageOutcome(['completed', 'failed', 'failed'], 'n_of_m', 2)).toBe('failed');
+  });
+});
+
+describe('stageSuccessNeed', () => {
+  it('maps policy to the completion count needed', () => {
+    expect(stageSuccessNeed('all', null, 3)).toBe(3);
+    expect(stageSuccessNeed('any', null, 3)).toBe(1);
+    expect(stageSuccessNeed('n_of_m', 2, 3)).toBe(2);
+    expect(stageSuccessNeed('n_of_m', 9, 3)).toBe(3); // clamped to total
+    expect(stageSuccessNeed('n_of_m', 0, 3)).toBe(1); // clamped to >= 1
+    expect(stageSuccessNeed('all', null, 0)).toBe(0); // empty stage
+  });
+});
+
+describe('computeDeadBlocked', () => {
+  it('flags blocked dispatches whose dependency already failed/cancelled', () => {
+    const list = [d('a', 'failed'), d('b', 'blocked', ['a']), d('c', 'blocked', ['x'])];
+    expect(computeDeadBlocked(list).map((x) => x.id)).toEqual(['b']);
+  });
+
+  it('does not flag a blocked dispatch whose deps are still in flight', () => {
+    expect(computeDeadBlocked([d('a', 'running'), d('b', 'blocked', ['a'])])).toEqual([]);
   });
 });
 

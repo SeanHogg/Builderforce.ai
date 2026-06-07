@@ -17,16 +17,18 @@
 import {
   canTransitionTicket,
   mapWorkflowStatusToTicketEvent,
-  resolveSuccessfulStageTarget,
+  resolveStageAction,
   type TicketLifecycle,
   type WorkflowStatus,
 } from './transitions';
 import { compileStage, type StageAssignment, type ExecutionMode } from './compileStage';
 import {
   aggregateStageOutcome,
+  computeDeadBlocked,
   computeReadyDispatches,
   type DispatchStatus,
   type SchedulableDispatch,
+  type SuccessPolicy,
 } from './stageScheduling';
 import type {
   AssignmentLite,
@@ -50,6 +52,20 @@ export interface StageHistoryEntry {
  */
 export interface StageDispatcher {
   dispatch(d: DispatchLite): Promise<{ accepted: boolean; externalRef?: string; error?: string }>;
+}
+
+/**
+ * Runs a workflow definition as the side-effect of a lane's `run_workflow`
+ * action. Injected so the coordinator stays IO-free and unit-testable with a
+ * fake; the Drizzle-backed implementation loads the definition and calls
+ * instantiateWorkflowRun. Optional — when absent, a run_workflow action simply
+ * advances the ticket without firing the workflow.
+ */
+export interface StageWorkflowRunner {
+  run(
+    workflowDefId: string,
+    ctx: { tenantId: number; ticketRunId: string; taskId: number },
+  ): Promise<void>;
 }
 
 export class TicketCapacityError extends Error {
@@ -109,6 +125,8 @@ export class SwimlaneCoordinator {
     /** AgentHost-reachable executor for local/cloud/remote dispatches. Optional:
      *  when absent, only browser (pull) dispatches can run. */
     private readonly dispatcher?: StageDispatcher,
+    /** Runs a lane's `run_workflow` action. Optional (see {@link StageWorkflowRunner}). */
+    private readonly workflowRunner?: StageWorkflowRunner,
   ) {}
 
   /**
@@ -172,7 +190,6 @@ export class SwimlaneCoordinator {
    */
   async onStageComplete(ticketRunId: string, workflowStatus: WorkflowStatus): Promise<TicketRunLite> {
     const run = await this.loadRun(ticketRunId);
-    const board = await this.loadBoard(run.boardId, run.tenantId);
     const event = mapWorkflowStatusToTicketEvent(workflowStatus);
 
     if (!event.canAutoAdvance) {
@@ -188,29 +205,44 @@ export class SwimlaneCoordinator {
     }
 
     const currentLane = await this.loadLane(run.currentSwimlaneId, run.tenantId);
-    const target = resolveSuccessfulStageTarget({
+    const plan = resolveStageAction({
       isTerminalLane: currentLane?.isTerminal ?? false,
       gate: currentLane?.gate ?? 'auto',
-      boardAutonomous: board.autonomous,
+      actionType: currentLane?.actionType ?? null,
+      actionTarget: currentLane?.actionTarget ?? null,
     });
 
-    if (target === 'advancing') {
-      const nextLane = await this.nextLane(run.boardId, run.tenantId, currentLane?.position ?? 0);
+    // run_workflow action: fire the workflow as a side-effect wherever the
+    // ticket lands (advancing or done — never on a human gate, which pauses).
+    if (plan.runWorkflowId && this.workflowRunner) {
+      await this.workflowRunner.run(plan.runWorkflowId, {
+        tenantId: run.tenantId,
+        ticketRunId: run.id,
+        taskId: run.taskId,
+      });
+    }
+
+    if (plan.lifecycle === 'advancing') {
+      // move_ticket action routes to a named lane; otherwise the next lane.
+      const destLane = plan.moveToLaneKey
+        ? await this.laneByKey(run.boardId, run.tenantId, plan.moveToLaneKey)
+        : await this.nextLane(run.boardId, run.tenantId, currentLane?.position ?? 0);
+
       return this.applyLifecycle(run, {
-        next: nextLane ? 'stage_running' : 'done',
-        currentSwimlaneId: nextLane?.id ?? run.currentSwimlaneId,
+        next: destLane ? 'stage_running' : 'done',
+        currentSwimlaneId: destLane?.id ?? run.currentSwimlaneId,
         reason: 'autonomous',
         workflowStatus,
         historyStatus: 'completed',
-        toSwimlaneId: nextLane?.id ?? run.currentSwimlaneId,
-        intermediate: nextLane ? ['stage_completed', 'advancing'] : 'stage_completed',
+        toSwimlaneId: destLane?.id ?? run.currentSwimlaneId,
+        intermediate: destLane ? ['stage_completed', 'advancing'] : 'stage_completed',
       });
     }
 
     return this.applyLifecycle(run, {
-      next: target,
+      next: plan.lifecycle,
       currentSwimlaneId: run.currentSwimlaneId,
-      reason: target === 'done' ? 'autonomous' : 'gate_approved',
+      reason: plan.lifecycle === 'done' ? 'autonomous' : 'gate_approved',
       workflowStatus,
       historyStatus: 'completed',
       toSwimlaneId: run.currentSwimlaneId,
@@ -366,7 +398,29 @@ export class SwimlaneCoordinator {
       siblings = await this.store.listStageDispatches(ticketRunId, stageSeq, tenantId);
     }
 
-    const outcome = aggregateStageOutcome(siblings.map((s) => s.status as DispatchStatus));
+    // Cancel blocked dispatches that can never run (a dependency already failed),
+    // so a sequential stage whose first agent fails settles instead of hanging.
+    const dead = computeDeadBlocked(this.toSchedulable(siblings));
+    if (dead.length > 0) {
+      for (const d of dead) {
+        await this.store.updateDispatch(d.id, {
+          status: 'cancelled',
+          error: 'dependency failed; dispatch cannot run',
+          completedAt: true,
+        });
+      }
+      siblings = await this.store.listStageDispatches(ticketRunId, stageSeq, tenantId);
+    }
+
+    // The stage's success quorum comes from the lane (all | any | n_of_m).
+    const lane = siblings[0]?.swimlaneId
+      ? await this.loadLane(siblings[0].swimlaneId, tenantId)
+      : undefined;
+    const outcome = aggregateStageOutcome(
+      siblings.map((s) => s.status as DispatchStatus),
+      (lane?.successPolicy as SuccessPolicy) ?? 'all',
+      lane?.successThreshold ?? null,
+    );
     if (outcome === 'completed') {
       await this.onStageComplete(ticketRunId, 'completed');
     } else if (outcome === 'failed') {
@@ -421,6 +475,12 @@ export class SwimlaneCoordinator {
     return lanes.find((l) => l.position > afterPosition);
   }
 
+  /** Resolve a lane by its key within a board (for the move_ticket action). */
+  private async laneByKey(boardId: string, tenantId: number, key: string): Promise<LaneLite | undefined> {
+    const lanes = await this.store.listLanes(boardId, tenantId);
+    return lanes.find((l) => l.key === key);
+  }
+
   private async loadLane(swimlaneId: string | null, tenantId: number): Promise<LaneLite | undefined> {
     if (!swimlaneId) return undefined;
     return (await this.store.getLane(swimlaneId, tenantId)) ?? undefined;
@@ -430,12 +490,6 @@ export class SwimlaneCoordinator {
     const run = await this.store.getTicketRun(ticketRunId);
     if (!run) throw new TicketRunNotFoundError();
     return run;
-  }
-
-  private async loadBoard(boardId: string, tenantId: number): Promise<BoardLikeForResolve> {
-    const board = await this.store.getBoard(boardId, tenantId);
-    if (!board) throw new TicketRunNotFoundError();
-    return board;
   }
 
   /**
@@ -504,6 +558,3 @@ export class SwimlaneCoordinator {
     return updated;
   }
 }
-
-/** Minimal board shape resolveSuccessfulStageTarget needs. */
-type BoardLikeForResolve = { autonomous: boolean };

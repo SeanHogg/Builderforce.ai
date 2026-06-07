@@ -24,6 +24,11 @@ export interface LaneLite {
   isTerminal: boolean;
   gate: string;          // 'auto' | 'human'
   executionMode: string; // 'parallel' | 'sequential'
+  /** Lane action fired once the stage settles (migration 0084). */
+  actionType: string | null;       // null|'advance' | 'move_ticket' | 'run_workflow'
+  actionTarget: string | null;     // target lane key (move_ticket) | workflow id (run_workflow)
+  successPolicy: string;           // 'all' | 'any' | 'n_of_m'
+  successThreshold: number | null; // required when successPolicy='n_of_m'
 }
 
 export interface AssignmentLite {

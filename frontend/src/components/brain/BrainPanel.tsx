@@ -109,6 +109,16 @@ export function BrainPanel({
     }
     return isPage ? BRAINSTORM_SYSTEM_PROMPT : undefined;
   }, [personaSel, brainAgents, agentName, isPage]);
+  // Route the Brain to the assigned agent's real model. The Brain streams to the
+  // gateway (/llm/v1/chat/completions), which resolves real model ids — so use the
+  // agent's base_model from the pool; registered/default agents → undefined (default).
+  const personaModel = useMemo(() => {
+    if (!personaSel.startsWith('agent:')) return undefined;
+    const a = brainAgents.find((x) => `agent:${x.agentKind}:${x.agentRef}` === personaSel);
+    if (!a) return undefined;
+    const pooled = agentPool.find((p) => p.kind === a.agentKind && p.ref === a.agentRef);
+    return pooled?.baseModel ?? undefined;
+  }, [personaSel, brainAgents, agentPool]);
 
   const chats = useBrainChats(
     pinnedProjectId != null ? { pinnedProjectId } : { filterProjectId },
@@ -124,6 +134,7 @@ export function BrainPanel({
     modality,
     extraSystem,
     systemPrompt: personaSystemPrompt,
+    model: personaModel,
     toolSpecs,
     runTool,
     ensureChatId,

@@ -120,11 +120,11 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     }
   }, []);
 
-  const loadCloud = useCallback(() => {
+  const loadCloud = useCallback((): Promise<PublishedAgent[]> => {
     setLoadingCloud(true);
     return listMyAgents()
-      .then(setCloudAgents)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load cloud agents'))
+      .then((list) => { setCloudAgents(list); return list; })
+      .catch((e) => { setError(e instanceof Error ? e.message : 'Failed to load cloud agents'); return [] as PublishedAgent[]; })
       .finally(() => setLoadingCloud(false));
   }, []);
 
@@ -362,7 +362,13 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
           initialTab={agentPanelTab}
           tenantId={tenantId}
           onClose={() => setSelectedAgent(null)}
-          onSaved={() => { loadCloud(); }}
+          onSaved={async () => {
+            // Refetch AND re-sync the open panel's agent so its header (name,
+            // DRAFT/PUBLISHED) reflects the just-saved/published values — without
+            // this the panel keeps the stale prop and looks like nothing changed.
+            const list = await loadCloud();
+            setSelectedAgent((cur) => (cur ? list.find((x) => x.id === cur.id) ?? cur : cur));
+          }}
           onDeleted={() => { setSelectedAgent(null); loadCloud(); }}
         />
       )}

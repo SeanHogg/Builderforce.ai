@@ -3,7 +3,7 @@ import {
   VALID_TICKET_TRANSITIONS,
   canTransitionTicket,
   mapWorkflowStatusToTicketEvent,
-  resolveSuccessfulStageTarget,
+  resolveStageAction,
   type TicketLifecycle,
   type WorkflowStatus,
 } from './transitions';
@@ -123,33 +123,47 @@ describe('mapWorkflowStatusToTicketEvent', () => {
   });
 });
 
-describe('resolveSuccessfulStageTarget', () => {
-  it('returns done when the lane is terminal regardless of gate/autonomy', () => {
-    expect(resolveSuccessfulStageTarget({ isTerminalLane: true, gate: 'auto', boardAutonomous: true })).toBe('done');
-    expect(resolveSuccessfulStageTarget({ isTerminalLane: true, gate: 'human', boardAutonomous: false })).toBe('done');
+describe('resolveStageAction', () => {
+  const base = { isTerminalLane: false, gate: 'auto', actionType: null, actionTarget: null };
+
+  it('human gate wins: awaiting_gate even on a terminal lane or with an action', () => {
+    expect(resolveStageAction({ ...base, gate: 'human' }).lifecycle).toBe('awaiting_gate');
+    expect(resolveStageAction({ ...base, gate: 'human', isTerminalLane: true }).lifecycle).toBe('awaiting_gate');
+    expect(resolveStageAction({ ...base, gate: 'human', actionType: 'move_ticket', actionTarget: 'x' }).lifecycle).toBe('awaiting_gate');
   });
 
-  it('returns awaiting_gate when the lane has a human gate', () => {
-    expect(resolveSuccessfulStageTarget({ isTerminalLane: false, gate: 'human', boardAutonomous: true })).toBe('awaiting_gate');
+  it('terminal lane (auto gate) → done', () => {
+    expect(resolveStageAction({ ...base, isTerminalLane: true }).lifecycle).toBe('done');
   });
 
-  it('returns awaiting_gate on a non-autonomous board even with an auto gate', () => {
-    expect(resolveSuccessfulStageTarget({ isTerminalLane: false, gate: 'auto', boardAutonomous: false })).toBe('awaiting_gate');
+  it('default / advance action → advancing with no move/workflow target', () => {
+    const plan = resolveStageAction(base);
+    expect(plan.lifecycle).toBe('advancing');
+    expect(plan.moveToLaneKey).toBeUndefined();
+    expect(plan.runWorkflowId).toBeFalsy();
   });
 
-  it('returns advancing only when autonomous AND auto gate AND non-terminal', () => {
-    expect(resolveSuccessfulStageTarget({ isTerminalLane: false, gate: 'auto', boardAutonomous: true })).toBe('advancing');
+  it('move_ticket → advancing toward the named lane key', () => {
+    const plan = resolveStageAction({ ...base, actionType: 'move_ticket', actionTarget: 'done-lane' });
+    expect(plan.lifecycle).toBe('advancing');
+    expect(plan.moveToLaneKey).toBe('done-lane');
   });
 
-  it('every resolved target is a transition the lifecycle allows from stage_completed', () => {
-    const targets = [
-      resolveSuccessfulStageTarget({ isTerminalLane: true, gate: 'auto', boardAutonomous: true }),
-      resolveSuccessfulStageTarget({ isTerminalLane: false, gate: 'human', boardAutonomous: true }),
-      resolveSuccessfulStageTarget({ isTerminalLane: false, gate: 'auto', boardAutonomous: false }),
-      resolveSuccessfulStageTarget({ isTerminalLane: false, gate: 'auto', boardAutonomous: true }),
+  it('run_workflow → advancing plus the workflow id side-effect', () => {
+    const plan = resolveStageAction({ ...base, actionType: 'run_workflow', actionTarget: 'wf-1' });
+    expect(plan.lifecycle).toBe('advancing');
+    expect(plan.runWorkflowId).toBe('wf-1');
+  });
+
+  it('every resolved lifecycle is a transition the lifecycle allows from stage_completed', () => {
+    const plans = [
+      resolveStageAction({ ...base, isTerminalLane: true }),
+      resolveStageAction({ ...base, gate: 'human' }),
+      resolveStageAction(base),
+      resolveStageAction({ ...base, actionType: 'move_ticket', actionTarget: 'x' }),
     ];
-    for (const t of targets) {
-      expect(canTransitionTicket('stage_completed', t)).toBe(true);
+    for (const p of plans) {
+      expect(canTransitionTicket('stage_completed', p.lifecycle)).toBe(true);
     }
   });
 });

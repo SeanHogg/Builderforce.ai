@@ -30,6 +30,8 @@ export interface UseBrainConversationOptions {
   extraSystem?: string;
   /** Override the system prompt entirely (e.g. a fixed Brain Storm persona). */
   systemPrompt?: string;
+  /** Override the model (e.g. run the Brain as a specific assigned agent). */
+  model?: string;
   /** Tool specs from the page-action registry. */
   toolSpecs?: BrainToolSpec[];
   /** Dispatch a tool call to the registry. */
@@ -74,6 +76,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     modality = 'designer',
     extraSystem,
     systemPrompt,
+    model,
     toolSpecs,
     runTool,
     ensureChatId,
@@ -151,7 +154,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
         setStreamingText('');
         const result = await stream(
-          { messages: working, tools, tool_choice: tools ? 'auto' : undefined },
+          { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model },
           { onTextDelta: (d) => setStreamingText((s) => s + d) },
         );
 
