@@ -28,6 +28,9 @@ export default function TenantsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameName, setRenameName] = useState('');
+  const [isRenaming, setIsRenaming] = useState(false);
   const autoSelectAttempted = useRef(false);
 
   // Redirect if not authenticated
@@ -136,13 +139,47 @@ export default function TenantsPage() {
     }
   };
 
+  const startRename = (e: React.MouseEvent, tenant: Tenant) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setRenamingId(tenant.id);
+    setRenameName(tenant.name || '');
+    setError(null);
+  };
+  const cancelRename = () => {
+    setRenamingId(null);
+    setRenameName('');
+  };
+  const handleRename = async (e: React.FormEvent, tenant: Tenant) => {
+    e.preventDefault();
+    const trimmed = renameName.trim();
+    if (!webToken || !trimmed || trimmed === tenant.name) {
+      cancelRename();
+      return;
+    }
+    setError(null);
+    setIsRenaming(true);
+    try {
+      const updated = await apiRenameTenant(webToken, tenant.id, trimmed);
+      setTenants((prev) => prev.map((t) => (t.id === tenant.id ? { ...t, name: updated.name, slug: updated.slug ?? t.slug } : t)));
+      cancelRename();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to rename workspace');
+    } finally {
+      setIsRenaming(false);
+    }
+  };
+  // A workspace can be renamed by its owners and managers. When role is unknown
+  // (older token shapes), allow the attempt — the API enforces authorization.
+  const canRename = (t: Tenant) => !t.role || t.role === 'owner' || t.role === 'manager';
+
   if (!isAuthenticated) return null;
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-deep)', color: 'var(--text-primary)', display: 'flex', flexDirection: 'column' }}>
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
-          <h1 className="text-2xl font-bold text-white mb-2">Select workspace</h1>
+          <h1 className="text-2xl font-bold text-gray-100 mb-2">Select workspace</h1>
           <p className="text-gray-400 text-sm mb-8">
             Choose the organization you want to work in.
           </p>
@@ -177,13 +214,13 @@ export default function TenantsPage() {
           ) : showCreate ? (
             <div className="space-y-4">
               <form onSubmit={handleCreateTenant} className="bg-gray-900 border border-gray-700 rounded-xl p-4 space-y-4">
-                <h2 className="text-lg font-semibold text-white">Create new Tenant</h2>
+                <h2 className="text-lg font-semibold text-gray-100">Create new Tenant</h2>
                 <input
                   type="text"
                   value={createName}
                   onChange={(e) => setCreateName(e.target.value)}
                   placeholder="Workspace name"
-                  className="w-full px-4 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-2 rounded-lg bg-gray-800 border border-gray-600 text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
                   autoFocus
                   disabled={isCreating}
                 />
@@ -231,66 +268,109 @@ export default function TenantsPage() {
               )}
               {tenants.map((t) => {
                 const isDefault = String(t.id) === defaultTenantId;
+                const isEditing = renamingId === t.id;
                 return (
                   <div
                     key={t.id}
                     className="w-full flex items-center gap-4 bg-gray-900 hover:bg-gray-800 border border-gray-700 hover:border-gray-600 rounded-xl p-4 transition-all text-left group"
                   >
-                    <button
-                      type="button"
-                      onClick={() => handleSelect(t)}
-                      disabled={!!isSelecting}
-                      className="flex-1 flex items-center gap-4 min-w-0 disabled:opacity-50"
-                    >
-                      <div className="w-10 h-10 rounded-lg bg-blue-600/20 border border-blue-600/40 flex items-center justify-center text-blue-400 font-bold text-lg flex-shrink-0">
-                        {(t.name || t.id).charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-white truncate flex items-center gap-2">
-                          {t.name || t.id}
-                          {isDefault && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600/30 text-blue-300 border border-blue-500/40">
-                              Default
-                            </span>
+                    {isEditing ? (
+                      <form onSubmit={(e) => handleRename(e, t)} className="flex-1 flex items-center gap-2 min-w-0">
+                        <input
+                          type="text"
+                          value={renameName}
+                          onChange={(e) => setRenameName(e.target.value)}
+                          placeholder="Workspace name"
+                          className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                          autoFocus
+                          disabled={isRenaming}
+                          onKeyDown={(e) => { if (e.key === 'Escape') cancelRename(); }}
+                        />
+                        <button
+                          type="submit"
+                          disabled={isRenaming || !renameName.trim()}
+                          className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium text-sm flex-shrink-0"
+                        >
+                          {isRenaming ? 'Saving…' : 'Save'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelRename}
+                          disabled={isRenaming}
+                          className="px-3 py-2 rounded-lg border border-gray-600 hover:border-gray-500 text-gray-300 text-sm flex-shrink-0"
+                        >
+                          Cancel
+                        </button>
+                      </form>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleSelect(t)}
+                          disabled={!!isSelecting}
+                          className="flex-1 flex items-center gap-4 min-w-0 disabled:opacity-50"
+                        >
+                          <div className="w-10 h-10 rounded-lg bg-blue-600/20 border border-blue-600/40 flex items-center justify-center text-blue-400 font-bold text-lg flex-shrink-0">
+                            {(t.name || t.id).charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-gray-100 truncate flex items-center gap-2">
+                              {t.name || t.id}
+                              {isDefault && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600/30 text-blue-300 border border-blue-500/40">
+                                  Default
+                                </span>
+                              )}
+                            </div>
+                            {t.slug && (
+                              <div className="text-xs text-gray-500 truncate">{t.slug}</div>
+                            )}
+                          </div>
+                          {isSelecting === t.id ? (
+                            <div className="text-gray-400 text-sm">Loading…</div>
+                          ) : (
+                            <svg className="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          )}
+                        </button>
+                        <div
+                          className="flex-shrink-0 flex items-center gap-2"
+                          onClick={preventSelectBubble}
+                          onMouseDown={preventSelectBubble}
+                        >
+                          {canRename(t) && (
+                            <button
+                              type="button"
+                              onClick={(e) => startRename(e, t)}
+                              className="px-2 py-1 text-xs text-gray-500 hover:text-gray-300 border border-gray-600 hover:border-gray-500 rounded transition-opacity"
+                              title="Rename workspace"
+                            >
+                              Rename
+                            </button>
+                          )}
+                          {isDefault ? (
+                            <button
+                              type="button"
+                              onClick={handleClearDefault}
+                              className="px-2 py-1 text-xs text-gray-500 hover:text-gray-300 border border-gray-600 hover:border-gray-500 rounded transition-opacity"
+                              title="Clear default tenant"
+                            >
+                              Clear default
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => handleSetDefault(e, t)}
+                              className="px-2 py-1 text-xs text-gray-500 hover:text-gray-300 border border-gray-600 hover:border-gray-500 rounded transition-opacity"
+                              title="Set as default tenant"
+                            >
+                              Set default
+                            </button>
                           )}
                         </div>
-                        {t.slug && (
-                          <div className="text-xs text-gray-500 truncate">{t.slug}</div>
-                        )}
-                      </div>
-                      {isSelecting === t.id ? (
-                        <div className="text-gray-400 text-sm">Loading…</div>
-                      ) : (
-                        <svg className="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      )}
-                    </button>
-                    <div
-                      className="flex-shrink-0"
-                      onClick={preventSelectBubble}
-                      onMouseDown={preventSelectBubble}
-                    >
-                      {isDefault ? (
-                        <button
-                          type="button"
-                          onClick={handleClearDefault}
-                          className="px-2 py-1 text-xs text-gray-500 hover:text-gray-300 border border-gray-600 hover:border-gray-500 rounded transition-opacity"
-                          title="Clear default tenant"
-                        >
-                          Clear default
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={(e) => handleSetDefault(e, t)}
-                          className="px-2 py-1 text-xs text-gray-500 hover:text-gray-300 border border-gray-600 hover:border-gray-500 rounded transition-opacity"
-                          title="Set as default tenant"
-                        >
-                          Set default
-                        </button>
-                      )}
-                    </div>
+                      </>
+                    )}
                   </div>
                 );
               })}
