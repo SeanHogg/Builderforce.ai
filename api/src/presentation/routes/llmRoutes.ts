@@ -225,9 +225,10 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
 
   const token = authHeader.slice(7);
 
-  // AgentHost API key path: local BuilderForce Agents instances send their raw clk_xxx key
-  // directly as the Bearer token rather than exchanging it for a JWT first.
-  if (token.startsWith('clk_')) {
+  // BuilderForce Agent API key path: agent instances send their raw key directly
+  // as the Bearer token rather than exchanging it for a JWT first. New keys are
+  // `bfa_*`; legacy `clk_*` keys (retired "claw" brand) are still accepted.
+  if (token.startsWith('bfa_') || token.startsWith('clk_')) {
     const keyHash = await hashSecret(token);
 
     const resolved = await resolveKeyCached(c.env, 'clk', keyHash, async () => {

@@ -345,7 +345,9 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     if (limitErr) return c.json(limitErr, 402);
 
     const slug    = body.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    const rawKey  = generateApiKey('clk');
+    // BuilderForce Agent key. Legacy already-issued `clk_*` keys still authenticate
+    // (see llmRoutes + HashService), but new agents are minted as `bfa_*`.
+    const rawKey  = generateApiKey('bfa');
     const keyHash = await hashSecret(rawKey);
     const machineProfile = normalizeMachineProfile(body.machineProfile);
 
