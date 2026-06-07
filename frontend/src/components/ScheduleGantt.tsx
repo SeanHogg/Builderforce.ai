@@ -1,24 +1,29 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { Project } from '@/lib/types';
 import {
   DEADLINE_COLORS,
   formatShort,
   parseDate,
-  scheduledProjects,
+  scheduledItems,
   startOfDay,
-} from '@/lib/projectSchedule';
+  type Schedulable,
+} from '@/lib/schedule';
 import { ScheduleLegend } from './ScheduleLegend';
 
 /**
- * Horizontal Gantt of project timelines (earliest task start → deadline). Bars
- * are colored by deadline status; a "today" marker and month axis give context.
- * Projects with no dates are listed below so they are not silently dropped.
+ * Horizontal Gantt of item timelines (start → deadline), generic over any
+ * {@link Schedulable} item (a project, a task, …). Bars are colored by deadline
+ * status; a "today" marker and month axis give context. Items with no dates are
+ * listed below so they are not silently dropped. Reused by Projects and Tasks.
  */
-interface ProjectGanttProps {
-  projects: Project[];
-  onSelect: (project: Project) => void;
+interface ScheduleGanttProps<T extends Schedulable & { id: string | number }> {
+  items: T[];
+  /** Human label for an item (e.g. project name, task title). */
+  getLabel: (item: T) => string;
+  onSelect: (item: T) => void;
+  /** Lowercase noun for the row-column header and empty state (e.g. "project", "task"). */
+  noun?: string;
 }
 
 const PX_PER_DAY = 26;
@@ -46,9 +51,14 @@ function monthSegments(start: Date, end: Date): Array<{ label: string; days: num
   return segments;
 }
 
-export function ProjectGantt({ projects, onSelect }: ProjectGanttProps) {
-  const scheduled = useMemo(() => scheduledProjects(projects), [projects]);
-  const undated = projects.filter((p) => !parseDate(p.dueDate) && !parseDate(p.startDate));
+export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
+  items,
+  getLabel,
+  onSelect,
+  noun = 'item',
+}: ScheduleGanttProps<T>) {
+  const scheduled = useMemo(() => scheduledItems(items), [items]);
+  const undated = items.filter((p) => !parseDate(p.dueDate) && !parseDate(p.startDate));
 
   const range = useMemo(() => {
     if (scheduled.length === 0) return null;
@@ -64,10 +74,12 @@ export function ProjectGantt({ projects, onSelect }: ProjectGanttProps) {
     return { start, end };
   }, [scheduled]);
 
+  const colHeader = noun.charAt(0).toUpperCase() + noun.slice(1);
+
   if (!range) {
     return (
       <div style={{ padding: 32, textAlign: 'center', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, color: 'var(--text-secondary)' }}>
-        No scheduled projects yet. Add start or due dates to a project&apos;s tasks to see them on the timeline.
+        No scheduled {noun}s yet. Add start or due dates to see them on the timeline.
       </div>
     );
   }
@@ -91,7 +103,7 @@ export function ProjectGantt({ projects, onSelect }: ProjectGanttProps) {
             {/* Axis header */}
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)' }}>
               <div style={{ width: NAME_COL, flexShrink: 0, padding: '8px 12px', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)' }}>
-                Project
+                {colHeader}
               </div>
               <div style={{ position: 'relative', width: timelineWidth, display: 'flex' }}>
                 {segments.map((seg, i) => (
@@ -132,16 +144,17 @@ export function ProjectGantt({ projects, onSelect }: ProjectGanttProps) {
                   }}
                 />
               )}
-              {scheduled.map(({ project, schedule }) => {
+              {scheduled.map(({ item, schedule }) => {
                 const offset = daysBetween(range.start, schedule.start!);
                 const duration = Math.max(1, daysBetween(schedule.start!, schedule.end!) + 1);
                 const color = DEADLINE_COLORS[schedule.status];
+                const label = getLabel(item);
                 return (
-                  <div key={project.id} style={{ display: 'flex', height: ROW_H, borderBottom: '1px solid var(--border-subtle)' }}>
+                  <div key={item.id} style={{ display: 'flex', height: ROW_H, borderBottom: '1px solid var(--border-subtle)' }}>
                     <button
                       type="button"
-                      onClick={() => onSelect(project)}
-                      title={project.name}
+                      onClick={() => onSelect(item)}
+                      title={label}
                       style={{
                         width: NAME_COL,
                         flexShrink: 0,
@@ -158,12 +171,12 @@ export function ProjectGantt({ projects, onSelect }: ProjectGanttProps) {
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {project.name}
+                      {label}
                     </button>
                     <div style={{ position: 'relative', width: timelineWidth }}>
                       <button
                         type="button"
-                        onClick={() => onSelect(project)}
+                        onClick={() => onSelect(item)}
                         title={`${formatShort(schedule.start!)} → ${formatShort(schedule.end!)}`}
                         style={{
                           position: 'absolute',
@@ -201,11 +214,11 @@ export function ProjectGantt({ projects, onSelect }: ProjectGanttProps) {
       {undated.length > 0 && (
         <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Unscheduled:</span>
-          {undated.map((project) => (
+          {undated.map((item) => (
             <button
-              key={project.id}
+              key={item.id}
               type="button"
-              onClick={() => onSelect(project)}
+              onClick={() => onSelect(item)}
               style={{
                 padding: '3px 10px',
                 fontSize: '0.75rem',
@@ -217,7 +230,7 @@ export function ProjectGantt({ projects, onSelect }: ProjectGanttProps) {
                 cursor: 'pointer',
               }}
             >
-              {project.name}
+              {getLabel(item)}
             </button>
           ))}
         </div>

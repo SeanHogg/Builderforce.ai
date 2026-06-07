@@ -1,17 +1,23 @@
-import type { Project } from './types';
-
 /**
- * Shared timeline helpers for the project Calendar and Gantt views.
+ * Shared timeline helpers for the Calendar and Gantt views.
  *
- * A project has no date column of its own — its schedule is derived server-side
- * from its tasks (see GET /api/projects): `startDate` is the earliest task start
- * (falling back to the earliest due date) and `dueDate` is the latest task due
- * date, i.e. the project deadline. Both arrive as ISO strings or null.
+ * Generic over any {@link Schedulable} — anything with `startDate`/`dueDate` ISO
+ * string fields (or null). Both `Project` (dates derived server-side from its
+ * tasks) and `Task` (its own dates) satisfy this shape, so the Calendar/Gantt
+ * components and these helpers are reused unchanged across both pages.
  */
+
+/** Anything that can be placed on a timeline: a start and a deadline (either may be absent). */
+export interface Schedulable {
+  /** Earliest start, ISO string or null/absent. */
+  startDate?: string | null;
+  /** Deadline, ISO string or null/absent. */
+  dueDate?: string | null;
+}
 
 export type DeadlineStatus = 'overdue' | 'soon' | 'upcoming' | 'none';
 
-export interface ProjectSchedule {
+export interface ItemSchedule {
   start: Date | null;
   end: Date | null;
   status: DeadlineStatus;
@@ -64,23 +70,23 @@ export function deadlineStatus(end: Date | null, now: Date = new Date()): Deadli
   return 'upcoming';
 }
 
-/** Derive a project's timeline range + deadline status from its ISO date fields. */
-export function getProjectSchedule(project: Project, now: Date = new Date()): ProjectSchedule {
-  const end = parseDate(project.dueDate);
+/** Derive an item's timeline range + deadline status from its ISO date fields. */
+export function getSchedule(item: Schedulable, now: Date = new Date()): ItemSchedule {
+  const end = parseDate(item.dueDate);
   // If only a start exists, treat it as a single-day marker so it still renders.
-  const start = parseDate(project.startDate) ?? end;
+  const start = parseDate(item.startDate) ?? end;
   return { start, end: end ?? start, status: deadlineStatus(end, now) };
 }
 
-/** Projects that have at least one usable date, in deadline order (soonest first). */
-export function scheduledProjects(
-  projects: Project[],
+/** Items that have at least one usable date, in deadline order (soonest first). */
+export function scheduledItems<T extends Schedulable>(
+  items: T[],
   now: Date = new Date(),
-): Array<{ project: Project; schedule: ProjectSchedule }> {
-  return projects
-    .map((project) => ({ project, schedule: getProjectSchedule(project, now) }))
-    .filter((p) => p.schedule.start && p.schedule.end)
-    .sort((a, b) => (a.schedule.end!.getTime() - b.schedule.end!.getTime()));
+): Array<{ item: T; schedule: ItemSchedule }> {
+  return items
+    .map((item) => ({ item, schedule: getSchedule(item, now) }))
+    .filter((s) => s.schedule.start && s.schedule.end)
+    .sort((a, b) => a.schedule.end!.getTime() - b.schedule.end!.getTime());
 }
 
 const FMT_SHORT = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });

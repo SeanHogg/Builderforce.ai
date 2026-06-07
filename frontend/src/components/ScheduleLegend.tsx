@@ -1,6 +1,6 @@
 'use client';
 
-import { DEADLINE_COLORS, DEADLINE_LABELS, type DeadlineStatus } from '@/lib/projectSchedule';
+import { DEADLINE_COLORS, DEADLINE_LABELS, type DeadlineStatus } from '@/lib/schedule';
 
 /**
  * Shared deadline-status legend for the Calendar and Gantt views, so both read
