@@ -143,8 +143,9 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
         )}
 
         {isAuthenticated && tenant && (
-          <Link href="/tenants" className="tenant-chip" style={{ textDecoration: 'none' }} title={tenant.name}>
+          <Link href="/tenants" className="tenant-chip" style={{ textDecoration: 'none' }} title={`${tenant.name || tenant.id} (workspace)`}>
             {tenant.name || tenant.id}
+            <span style={{ opacity: 0.6, fontWeight: 400, marginLeft: 4 }}>(workspace)</span>
             <svg viewBox="0 0 24 24" style={{ width: 12, height: 12, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
               <polyline points="6 9 12 15 18 9" />
             </svg>
