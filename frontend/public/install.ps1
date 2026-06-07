@@ -1,189 +1,112 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Builderforce.ai Agent Installer
-  Fetch agents from the Builderforce Workforce Registry and install them locally.
+  BuilderForce Agents — installer & agent-host connector (Windows).
 
 .DESCRIPTION
-  Run interactively to choose from all available agents, or pass -AgentId to
-  install a specific agent directly.
+  Installs the BuilderForce Agents runtime (the `builderforce` CLI). When a
+  workspace token is present in the session — which the "Connect a new agent"
+  one-liner on https://builderforce.ai/workforce sets via
+  $env:BUILDERFORCE_TOKEN / $env:BUILDERFORCE_WORKSPACE — it also registers THIS
+  machine as an agent host in your workgroup and starts the gateway so it shows
+  up online.
 
-.EXAMPLE
-  # Interactive — shows all available agents:
-  iwr -useb https://builderforce.ai/install.ps1 | iex
+  Designed to be run via `iwr -useb https://builderforce.ai/install.ps1 | iex`.
+  It NEVER calls `exit` (that would terminate the calling PowerShell session
+  under `iex`); it uses `return` so a failure ends the script cleanly.
 
-  # Non-interactive — install a specific agent by ID:
-  & ([scriptblock]::Create((iwr -useb https://builderforce.ai/install.ps1 -UseBasicParsing).Content)) -AgentId "agent-abc123"
-
-.PARAMETER AgentId
-  Optional. Install a specific agent by its registry ID without showing the menu.
+.PARAMETER Tag
+  npm dist-tag or version of @seanhogg/builderforce-agents to install.
+  Default: latest.
 
 .PARAMETER ApiUrl
-  Optional. Override the Builderforce API base URL.
-  Default: https://api.builderforce.ai
+  Builderforce API base URL. Default: $env:BUILDERFORCE_URL or
+  https://api.builderforce.ai
 
-.PARAMETER InstallDir
-  Optional. Directory where agent packages are saved.
-  Default: $env:USERPROFILE\.builderforce\agents
+.PARAMETER NoStart
+  Install + register only; do not start the gateway.
 #>
 param(
-    [string]$AgentId   = "",
-    [string]$ApiUrl    = "https://api.builderforce.ai",
-    [string]$InstallDir = "$env:USERPROFILE\.builderforce\agents"
+    [string]$Tag    = "latest",
+    [string]$ApiUrl = "",
+    [switch]$NoStart
 )
 
 $ErrorActionPreference = "Stop"
 
-# ---------------------------------------------------------------------------
-# Banner
-# ---------------------------------------------------------------------------
-Write-Host ""
-Write-Host "  ╔═══════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "  ║      Builderforce.ai  Agent  Installer        ║" -ForegroundColor Cyan
-Write-Host "  ╚═══════════════════════════════════════════════╝" -ForegroundColor Cyan
-Write-Host ""
+function Say($msg, $color = "Gray") { Write-Host $msg -ForegroundColor $color }
+
+Say ""
+Say "  ╔═══════════════════════════════════════════════╗" Cyan
+Say "  ║      BuilderForce.ai  Agent  Installer         ║" Cyan
+Say "  ╚═══════════════════════════════════════════════╝" Cyan
+Say ""
 
 # ---------------------------------------------------------------------------
-# Ensure install directory exists
+# 1. Preflight — the runtime is a Node.js CLI, so npm must be available.
 # ---------------------------------------------------------------------------
-if (-not (Test-Path $InstallDir)) {
-    New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-    Write-Host "  Created install directory: $InstallDir" -ForegroundColor Green
+if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+    Say "  X  Node.js / npm was not found on PATH." Red
+    Say "     Install Node.js 20+ from https://nodejs.org and re-run this command." DarkGray
+    Say ""
+    return
 }
 
 # ---------------------------------------------------------------------------
-# Fetch available agents from the registry
+# 2. Install the runtime CLI.
 # ---------------------------------------------------------------------------
-Write-Host "  Fetching agents from the Builderforce registry..." -ForegroundColor DarkGray
-
+Say "  Installing the BuilderForce Agents runtime (@seanhogg/builderforce-agents@$Tag)..." DarkGray
 try {
-    $agents = Invoke-RestMethod -Uri "$ApiUrl/api/agents" -Method GET -UseBasicParsing
+    & npm install -g "@seanhogg/builderforce-agents@$Tag" 2>&1 | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "npm install exited with code $LASTEXITCODE" }
 } catch {
-    Write-Host ""
-    Write-Host "  ✗  Could not reach the Builderforce registry." -ForegroundColor Red
-    Write-Host "     URL tried: $ApiUrl/api/agents" -ForegroundColor DarkGray
-    Write-Host "     Error    : $_" -ForegroundColor DarkGray
-    Write-Host ""
+    Say "  X  Could not install the runtime." Red
+    Say "     $_" DarkGray
+    Say ""
     return
 }
+Say "  OK  Runtime installed — try 'builderforce --help'." Green
 
-if (-not $agents -or $agents.Count -eq 0) {
-    Write-Host ""
-    Write-Host "  No agents are currently published in the registry." -ForegroundColor Yellow
-    Write-Host ""
-    return
+# ---------------------------------------------------------------------------
+# 3. Resolve the API URL (param > env > default).
+# ---------------------------------------------------------------------------
+if (-not $ApiUrl) {
+    $ApiUrl = if ($env:BUILDERFORCE_URL) { $env:BUILDERFORCE_URL } else { "https://api.builderforce.ai" }
 }
 
 # ---------------------------------------------------------------------------
-# If no AgentId was supplied, show an interactive selection menu
+# 4. If a workspace token is present, register this machine + (optionally) start.
+#    The token + workspace are read from the environment by `builderforce
+#    connect`, so they never appear on the command line / in history.
 # ---------------------------------------------------------------------------
-if (-not $AgentId) {
-    Write-Host ""
-    Write-Host "  Available Agents  ($($agents.Count) total)" -ForegroundColor White
-    Write-Host "  $(([string]([char]0x2500)) * 51)" -ForegroundColor DarkGray
-
-    for ($i = 0; $i -lt $agents.Count; $i++) {
-        $a      = $agents[$i]
-        $skills = if ($a.skills -is [array]) { $a.skills -join ", " } else { "" }
-        Write-Host ""
-        Write-Host "  [$($i + 1)]  $($a.name)" -ForegroundColor Cyan -NoNewline
-        Write-Host "  -  $($a.title)" -ForegroundColor White
-        Write-Host "       $($a.bio)" -ForegroundColor DarkGray
-        if ($skills) {
-            Write-Host "       Skills: $skills" -ForegroundColor DarkGray
-        }
-        Write-Host "       Hired $($a.hire_count) time(s)  |  ID: $($a.id)" -ForegroundColor DarkGray
-    }
-
-    Write-Host ""
-    Write-Host "  [A]  Install all agents" -ForegroundColor Yellow
-    Write-Host "  [Q]  Quit" -ForegroundColor DarkGray
-    Write-Host ""
-
-    $choice = Read-Host "  Enter number(s) to install (e.g. 1  or  1,3  or  A)"
-
-    if ($choice -match "^[Qq]") {
-        Write-Host ""
-        Write-Host "  Cancelled." -ForegroundColor DarkGray
-        Write-Host ""
+if ($env:BUILDERFORCE_TOKEN) {
+    $env:BUILDERFORCE_URL = $ApiUrl
+    Say ""
+    Say "  Registering this machine as an agent host..." DarkGray
+    try {
+        & builderforce connect
+        if ($LASTEXITCODE -ne 0) { throw "connect exited with code $LASTEXITCODE" }
+    } catch {
+        Say "  X  Registration failed." Red
+        Say "     $_" DarkGray
+        Say ""
         return
     }
 
-    $selectedAgents = @()
-
-    if ($choice -match "^[Aa]") {
-        $selectedAgents = $agents
+    if ($NoStart) {
+        Say ""
+        Say "  Start the agent any time with:  builderforce gateway" DarkGray
     } else {
-        foreach ($token in ($choice -split ",")) {
-            $n = $token.Trim()
-            if ($n -match "^\d+$") {
-                $idx = [int]$n - 1
-                if ($idx -ge 0 -and $idx -lt $agents.Count) {
-                    $selectedAgents += $agents[$idx]
-                } else {
-                    Write-Host "  ⚠  '$n' is out of range — skipping." -ForegroundColor Yellow
-                }
-            } else {
-                Write-Host "  ⚠  '$n' is not a valid selection — skipping." -ForegroundColor Yellow
-            }
-        }
-    }
-
-    if ($selectedAgents.Count -eq 0) {
-        Write-Host ""
-        Write-Host "  No valid agents selected. Nothing installed." -ForegroundColor Yellow
-        Write-Host ""
-        return
+        Say ""
+        Say "  Starting the gateway (Ctrl+C to stop)..." DarkGray
+        & builderforce gateway
     }
 } else {
-    # Direct install by ID (non-interactive)
-    $selectedAgents = @($agents | Where-Object { $_.id -eq $AgentId })
-    if (-not $selectedAgents -or $selectedAgents.Count -eq 0) {
-        Write-Host ""
-        Write-Host "  ✗  No agent with ID '$AgentId' was found in the registry." -ForegroundColor Red
-        Write-Host ""
-        return
-    }
+    Say ""
+    Say "  No workspace token in this session." Yellow
+    Say "  - To connect interactively:  builderforce onboard" DarkGray
+    Say "  - Or copy the 'Connect a new agent' command from" DarkGray
+    Say "    https://builderforce.ai/workforce (it carries your workspace token)." DarkGray
 }
 
-# ---------------------------------------------------------------------------
-# Download and save each selected agent package
-# ---------------------------------------------------------------------------
-Write-Host ""
-Write-Host "  Installing $($selectedAgents.Count) agent(s)..." -ForegroundColor White
-Write-Host ""
-
-$successCount = 0
-$failCount    = 0
-
-foreach ($agent in $selectedAgents) {
-    $safeName = ($agent.name -replace '[^\w-]', '-') -replace '-+', '-'
-    $fileName = "$safeName.agent.json"
-    $filePath = Join-Path $InstallDir $fileName
-
-    Write-Host "  * $($agent.name)" -ForegroundColor White -NoNewline
-
-    try {
-        $pkg = Invoke-RestMethod -Uri "$ApiUrl/api/agents/$($agent.id)/package" -Method GET -UseBasicParsing
-        $pkg | ConvertTo-Json -Depth 10 | Out-File -FilePath $filePath -Encoding UTF8
-        Write-Host "  OK" -ForegroundColor Green
-        Write-Host "    -> $filePath" -ForegroundColor DarkGray
-        $successCount++
-    } catch {
-        Write-Host "  FAILED" -ForegroundColor Red
-        Write-Host "    Error: $_" -ForegroundColor DarkGray
-        $failCount++
-    }
-}
-
-# ---------------------------------------------------------------------------
-# Summary
-# ---------------------------------------------------------------------------
-Write-Host ""
-if ($successCount -gt 0) {
-    Write-Host "  $successCount agent(s) installed to: $InstallDir" -ForegroundColor Green
-}
-if ($failCount -gt 0) {
-    Write-Host "  $failCount agent(s) failed to install." -ForegroundColor Red
-}
-Write-Host ""
+Say ""

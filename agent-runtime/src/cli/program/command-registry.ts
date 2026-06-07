@@ -66,6 +66,19 @@ const coreEntries: CoreCliEntry[] = [
   {
     commands: [
       {
+        name: "connect",
+        description: "Register this machine as an agent host in a Builderforce workspace",
+        hasSubcommands: false,
+      },
+    ],
+    register: async ({ program }) => {
+      const mod = await import("./register.connect.js");
+      mod.registerConnectCommand(program);
+    },
+  },
+  {
+    commands: [
+      {
         name: "configure",
         description:
           "Interactive setup wizard for credentials, channels, gateway, and agent defaults",

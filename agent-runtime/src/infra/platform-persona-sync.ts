@@ -32,7 +32,7 @@ export type PlatformPersonaSyncOptions = {
 export async function fetchPlatformPersonas(
   opts: PlatformPersonaSyncOptions,
 ): Promise<PlatformPersona[]> {
-  const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agentNodes/${opts.agentNodeId}/platform-personas`;
+  const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agent-hosts/${opts.agentNodeId}/platform-personas`;
   try {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${opts.apiKey}` },

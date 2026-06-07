@@ -125,7 +125,7 @@ export async function syncBuilderForceAgentsDirectory(
   };
 
   const response = await fetch(
-    `${baseUrl}/api/agentNodes/${encodeURIComponent(params.agentNodeId)}/directories/sync?key=${encodeURIComponent(params.apiKey)}`,
+    `${baseUrl}/api/agent-hosts/${encodeURIComponent(params.agentNodeId)}/directories/sync?key=${encodeURIComponent(params.apiKey)}`,
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },

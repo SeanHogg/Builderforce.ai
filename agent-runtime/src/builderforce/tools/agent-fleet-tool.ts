@@ -1,7 +1,7 @@
 /**
  * agent_fleet tool — discover peer BuilderForceAgents instances in the same tenant.
  *
- * Uses the agentNode-authenticated GET /api/agentNodes/fleet endpoint so no user JWT is
+ * Uses the agentNode-authenticated GET /api/agent-hosts/fleet endpoint so no user JWT is
  * needed. Returns each agentNode's ID, name, online status, and capabilities.
  *
  * Use the returned agentNode IDs with the "remote:<agentNodeId>" workflow step role to

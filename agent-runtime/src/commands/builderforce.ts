@@ -810,7 +810,7 @@ async function ensureProjectMapping(params: {
     });
 
     await builderforceApiFetch(
-      `${params.serverUrl}/api/agentNodes/${params.agentNodeId}/projects/${upsert.project.id}`,
+      `${params.serverUrl}/api/agent-hosts/${params.agentNodeId}/projects/${upsert.project.id}`,
       {
         method: "PUT",
         token: params.tenantJwt,
@@ -1103,15 +1103,15 @@ async function promptBuilderforceSetup(
   let projectAction: "created" | "updated" | "unknown" = "unknown";
   try {
     const res = await builderforceApiFetch<{
-      agentNode: { id: number; name: string; slug: string };
+      agentHost: { id: number; name: string; slug: string };
       apiKey: string;
-    }>(`${serverUrl}/api/agentNodes`, {
+    }>(`${serverUrl}/api/agent-hosts`, {
       method: "POST",
       token: tenantJwt,
       body: JSON.stringify({ name: agentNodeName }),
     });
-    agentNodeId = String(res.agentNode.id);
-    agentNodeSlug = res.agentNode.slug;
+    agentNodeId = String(res.agentHost.id);
+    agentNodeSlug = res.agentHost.slug;
     apiKey = res.apiKey;
 
     const mapped = await ensureProjectMapping({
@@ -1127,7 +1127,7 @@ async function promptBuilderforceSetup(
       projectAction = mapped.action;
     }
 
-    agentNodeSpin.stop(`AgentNode "${res.agentNode.name}" registered`);
+    agentNodeSpin.stop(`AgentNode "${res.agentHost.name}" registered`);
   } catch (err) {
     agentNodeSpin.stop("AgentNode registration failed");
     note(String(err instanceof Error ? err.message : err), "Error");

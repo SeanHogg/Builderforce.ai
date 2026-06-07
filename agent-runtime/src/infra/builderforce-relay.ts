@@ -205,7 +205,7 @@ export class BuilderforceRelayService implements IRelayService {
     extra?: { result?: string; errorMessage?: string },
   ): Promise<void> {
     const base = normalizeBaseUrl(this.opts.baseUrl);
-    const url = `${base}/api/agentNodes/${this.opts.agentNodeId}/executions/${executionId}/state`;
+    const url = `${base}/api/agent-hosts/${this.opts.agentNodeId}/executions/${executionId}/state`;
     try {
       await fetch(url, {
         method: "PATCH",
@@ -228,9 +228,9 @@ export class BuilderforceRelayService implements IRelayService {
       .replace(/^http:/, "ws:");
     // API key is passed via Authorization header, not as a query param.
     // Query params appear in server access logs and CDN caches — headers are safer.
-    this.upstreamWsUrl = `${base}/api/agentNodes/${opts.agentNodeId}/upstream`;
-    this.heartbeatHttpUrl = `${normalizeBaseUrl(opts.baseUrl)}/api/agentNodes/${opts.agentNodeId}/heartbeat`;
-    this.assignmentContextUrl = `${normalizeBaseUrl(opts.baseUrl)}/api/agentNodes/${opts.agentNodeId}/assignment-context`;
+    this.upstreamWsUrl = `${base}/api/agent-hosts/${opts.agentNodeId}/upstream`;
+    this.heartbeatHttpUrl = `${normalizeBaseUrl(opts.baseUrl)}/api/agent-hosts/${opts.agentNodeId}/heartbeat`;
+    this.assignmentContextUrl = `${normalizeBaseUrl(opts.baseUrl)}/api/agent-hosts/${opts.agentNodeId}/assignment-context`;
     this.gatewayWsUrl = opts.gatewayUrl ?? "ws://127.0.0.1:18789";
 
     this.heartbeat = new RelayHeartbeat({
@@ -267,7 +267,7 @@ export class BuilderforceRelayService implements IRelayService {
       return;
     }
     const base = normalizeBaseUrl(this.opts.baseUrl);
-    const url = `${base}/api/agentNodes/${encodeURIComponent(remoteAgentNodeId)}/context-bundle`;
+    const url = `${base}/api/agent-hosts/${encodeURIComponent(remoteAgentNodeId)}/context-bundle`;
     let bundle: { files: Array<{ path: string; content: string; sha256: string }> };
     try {
       const res = await fetch(url, {

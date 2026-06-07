@@ -24,7 +24,7 @@ export async function pushProjectContextToBuilderforce(
   if (!context.governance) {
     return true;
   }
-  const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agentNodes/${opts.agentNodeId}/project-context`;
+  const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agent-hosts/${opts.agentNodeId}/project-context`;
   try {
     const res = await fetch(url, {
       method: "PATCH",

@@ -112,7 +112,7 @@ export class CronPollerService {
   }
 
   private async fetchAndSchedule(): Promise<void> {
-    const url = `${normalizeBaseUrl(this.opts.baseUrl)}/api/agentNodes/${this.opts.agentNodeId}/cron`;
+    const url = `${normalizeBaseUrl(this.opts.baseUrl)}/api/agent-hosts/${this.opts.agentNodeId}/cron`;
     try {
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${this.opts.apiKey}` },
@@ -187,7 +187,7 @@ export class CronPollerService {
   }
 
   private async patchJobStatus(jobId: string, status: "success" | "error"): Promise<void> {
-    const url = `${normalizeBaseUrl(this.opts.baseUrl)}/api/agentNodes/${this.opts.agentNodeId}/cron/${jobId}`;
+    const url = `${normalizeBaseUrl(this.opts.baseUrl)}/api/agent-hosts/${this.opts.agentNodeId}/cron/${jobId}`;
     try {
       await fetch(url, {
         method: "PATCH",

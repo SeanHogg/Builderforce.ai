@@ -234,7 +234,7 @@ export class WorkflowTelemetryService {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       Authorization: `Bearer ${this.apiKey}`,
-      "X-AgentNode-Id": this.agentNodeId,
+      "X-AgentHost-Id": this.agentNodeId,
     };
     if (span.traceId) {
       headers["X-Trace-Id"] = span.traceId;

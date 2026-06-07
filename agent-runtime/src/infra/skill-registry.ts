@@ -32,7 +32,7 @@ export async function fetchAndLoadSkills(opts: {
   agentNodeId: string;
   apiKey: string;
 }): Promise<void> {
-  const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agentNodes/${opts.agentNodeId}/skills`;
+  const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agent-hosts/${opts.agentNodeId}/skills`;
   try {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${opts.apiKey}` },
