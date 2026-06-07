@@ -97,9 +97,15 @@ export function useExecutionStream(executionId: number | null): ExecutionStreamS
       pollTimer = setInterval(tick, 3000);
     };
 
+    // Always run a reconciliation poll. The execution-stream WebSocket map is
+    // per-Worker-isolate, so a terminal event written in the POST/run isolate may
+    // never reach a WS connection served by a different isolate — leaving the UI
+    // stuck on "running" even though the row is `completed`. Polling the row picks
+    // up the true status + result regardless; the WS just makes live updates faster.
+    startPolling();
+
     const url = runtimeApi.streamUrl(executionId);
     if (!url || typeof WebSocket === 'undefined') {
-      startPolling();
       return () => { cancelled = true; if (pollTimer) clearInterval(pollTimer); };
     }
 
@@ -107,7 +113,6 @@ export function useExecutionStream(executionId: number | null): ExecutionStreamS
     try {
       ws = new WebSocket(url);
     } catch {
-      startPolling();
       return () => { cancelled = true; if (pollTimer) clearInterval(pollTimer); };
     }
     wsRef.current = ws;
