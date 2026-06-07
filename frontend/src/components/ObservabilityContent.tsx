@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { agentHosts, workflows, type AgentHost, type ToolAuditEvent, type Workflow } from '@/lib/builderforceApi';
 import { AgentHostGateway } from '@/lib/agentHostGateway';
+import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -113,6 +114,10 @@ export function ObservabilityContent({
   const agentHostById = useRef<Map<number, AgentHost>>(new Map());
   agentHostById.current = new Map(agentHostList.map((c) => [c.id, c]));
 
+  // Cloud agents (run server-side via the gateway, no relay log stream) — shown
+  // for completeness so the directory matches the rest of the app.
+  const [cloudAgents, setCloudAgents] = useState<PoolAgent[]>([]);
+
   // Load agentHosts when no propAgentHostId
   useEffect(() => {
     if (propAgentHostId != null) return;
@@ -129,6 +134,11 @@ export function ObservabilityContent({
         setAgentHostListError(e instanceof Error ? e.message : 'Failed to load agents');
       })
       .finally(() => setAgentHostListLoading(false));
+  }, [propAgentHostId]);
+
+  useEffect(() => {
+    if (propAgentHostId != null) return;
+    loadAgentPool().then((p) => setCloudAgents(p.filter((a) => a.kind === 'workforce'))).catch(() => setCloudAgents([]));
   }, [propAgentHostId]);
 
   const toggleAgentHost = useCallback((id: number) => {
@@ -321,7 +331,7 @@ export function ObservabilityContent({
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-            Active Agents
+            Self-hosted agents
           </span>
           {propAgentHostId == null && agentHostList.length > 0 && (
             <>
@@ -428,10 +438,50 @@ export function ObservabilityContent({
                       flexShrink: 0,
                     }}
                   />
-                  {c.name} ({c.id})
+                  {c.name}
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      letterSpacing: 0.3,
+                      padding: '1px 6px',
+                      borderRadius: 9999,
+                      background: c.online ? 'rgba(34,197,94,0.15)' : 'var(--bg-elevated)',
+                      color: c.online ? 'rgba(34,197,94,0.95)' : 'var(--text-muted)',
+                    }}
+                  >
+                    {c.online ? 'ONLINE' : 'OFFLINE'}
+                  </span>
                 </label>
               );
             })}
+          </div>
+        )}
+
+        {/* Cloud agents — visible for completeness, but they run server-side via
+            the gateway and don't stream relay logs; their activity shows in their
+            runs (Architect / Task agent / workflow telemetry), not here. */}
+        {propAgentHostId == null && cloudAgents.length > 0 && (
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Cloud agents</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {cloudAgents.map((a) => (
+                <span
+                  key={`cloud-${a.ref}`}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                    background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8,
+                    fontSize: 13, color: 'var(--text-secondary)',
+                  }}
+                >
+                  {a.name}
+                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.3, padding: '1px 6px', borderRadius: 9999, background: 'var(--surface-coral-soft)', color: 'var(--accent)' }}>CLOUD</span>
+                </span>
+              ))}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+              Cloud agents run server-side via the gateway and don&apos;t stream live relay logs. Their activity appears in their runs — Architect analyses, the Task agent panel, and workflow telemetry.
+            </div>
           </div>
         )}
       </div>
