@@ -11,7 +11,7 @@ import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentHosts, executions, projectInsightEvents, projects, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
+import { agentHosts, executions, projectInsightEvents, projects, specs, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
 import { approvals } from '../../infrastructure/database/schema';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 
@@ -52,6 +52,7 @@ type ExecutionTaskRow = {
   description: string | null;
   assignedAgentHostId: number | null;
   priority: 'low' | 'medium' | 'high' | 'urgent';
+  projectId: number;
 };
 
 type ExecutionApprovalGateResult =
@@ -307,12 +308,42 @@ function extractCompletion(raw: unknown): string {
  * `pending` forever. Coding tasks that need a real repo/runtime still belong on
  * an agentHost — this is the fallback so non-host runs complete. Never throws.
  */
+/**
+ * Load the project's PRD + architecture spec + governance rules so the cloud
+ * fallback honors them (the degraded path has no workspace/`PRD.md`, so it must
+ * pull the same context the orchestrator would inject from the DB). Best-effort:
+ * returns '' on any miss. One read per cloud run (not a hot path).
+ */
+async function loadProjectContext(db: Db, tenantId: number, projectId: number): Promise<string> {
+  const parts: string[] = [];
+  try {
+    const [spec] = await db
+      .select({ prd: specs.prd, archSpec: specs.archSpec })
+      .from(specs)
+      .where(and(eq(specs.tenantId, tenantId), eq(specs.projectId, projectId)))
+      .orderBy(desc(specs.updatedAt))
+      .limit(1);
+    if (spec?.prd?.trim()) parts.push(`## Product Requirements Document (PRD)\n\n${spec.prd.trim()}`);
+    if (spec?.archSpec?.trim()) parts.push(`## Architecture Spec\n\n${spec.archSpec.trim()}`);
+  } catch { /* no spec / transient — skip */ }
+  try {
+    const [proj] = await db
+      .select({ governance: projects.governance })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
+      .limit(1);
+    if (proj?.governance?.trim()) parts.push(`## Project Rules / Governance (must be followed)\n\n${proj.governance.trim()}`);
+  } catch { /* no governance — skip */ }
+  return parts.join('\n\n');
+}
+
 async function runCloudExecution(
   env: Env,
   runtimeService: RuntimeService,
   executionId: number,
   taskRow: { title: string; description: string | null },
   payload?: string,
+  projectContext?: string,
 ): Promise<void> {
   let model: string | undefined;
   try {
@@ -329,10 +360,14 @@ async function runCloudExecution(
       execution: running.toPlain(),
       ts: new Date().toISOString(),
     });
+    const userContent = [
+      projectContext?.trim() ? projectContext.trim() : null,
+      `## Your Task\n\n${taskRow.title}\n\n${taskRow.description ?? ''}`.trim(),
+    ].filter(Boolean).join('\n\n---\n\n');
     const result = await ideProxy(env).complete({
       messages: [
-        { role: 'system', content: 'You are a BuilderForce agent executing a project task. Produce the concrete deliverable for the task as your response.' },
-        { role: 'user', content: `Task: ${taskRow.title}\n\n${taskRow.description ?? ''}`.trim() },
+        { role: 'system', content: 'You are a BuilderForce agent executing a project task. Follow the PRD, architecture spec, and project rules provided below exactly. Produce the concrete, finished deliverable for the task — do NOT return a template with bracketed placeholders to be filled in later; where specifics are unknown, make explicit, reasonable assumptions and state them.' },
+        { role: 'user', content: userContent },
       ],
       ...(model ? { model } : {}),
       useCase: 'task_execution',
@@ -447,7 +482,8 @@ async function dispatchAndQueue(
     // No online self-hosted agent took it → queue a background cloud run. The
     // 'done' notification is emitted by the background task when it settles.
     c.executionCtx.waitUntil((async () => {
-      await runCloudExecution(c.env as Env, runtimeService, execution.id, taskRow, payload);
+      const projectContext = await loadProjectContext(db, tenantId, taskRow.projectId);
+      await runCloudExecution(c.env as Env, runtimeService, execution.id, taskRow, payload, projectContext);
       const updated = await runtimeService.getExecution(execution.id);
       notifyExecutionSubscribers(execution.id, {
         type: 'done',
@@ -529,6 +565,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         description: tasks.description,
         assignedAgentHostId: tasks.assignedAgentHostId,
         priority: tasks.priority,
+        projectId: tasks.projectId,
       })
       .from(tasks)
       .innerJoin(projects, eq(projects.id, tasks.projectId))
@@ -606,6 +643,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         description: tasks.description,
         assignedAgentHostId: tasks.assignedAgentHostId,
         priority: tasks.priority,
+        projectId: tasks.projectId,
       })
       .from(tasks)
       .innerJoin(projects, eq(projects.id, tasks.projectId))

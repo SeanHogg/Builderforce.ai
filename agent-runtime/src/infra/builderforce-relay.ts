@@ -207,11 +207,23 @@ export class BuilderforceRelayService implements IRelayService {
       },
     };
 
+    // Each execution gets an isolated workspace so concurrent / repeated V2 runs
+    // don't clobber each other's files. (Repo cloning into this dir for code
+    // tasks is a separate, cross-engine follow-up — see gap register.)
+    const baseDir = this.opts.workspaceDir ?? process.cwd();
+    const cwd =
+      payload.executionId != null
+        ? path.join(baseDir, ".builderforce", "v2", String(payload.executionId))
+        : baseDir;
+    if (cwd !== baseDir) {
+      await fs.mkdir(cwd, { recursive: true }).catch(() => { /* fall back to baseDir use */ });
+    }
+
     const result = await runClaudeAgentSdkV2(
       {
         prompt,
         model: payload.model,
-        cwd: this.opts.workspaceDir ?? process.cwd(),
+        cwd,
         // SDK posts Messages to `${anthropicBaseUrl}/v1/messages`; the gateway's
         // Anthropic-Messages endpoint lives under /llm.
         anthropicBaseUrl: `${normalizeBaseUrl(this.opts.baseUrl)}/llm`,
