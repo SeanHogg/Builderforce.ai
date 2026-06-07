@@ -110,6 +110,9 @@ export class BuilderforceRelayService implements IRelayService {
   private gatewayClient: GatewayClient | null = null;
   /** executionId from the last task.assign / task.broadcast dispatch, if any. */
   private pendingExecutionId: number | null = null;
+  /** Context for the in-flight V1 task run, so the session-final handler can
+   *  diff the shared workspace and attribute the changes to the executing agent. */
+  private pendingTaskRun: { executionId?: number; taskId?: number; agentLabel: string; cwd: string } | null = null;
   /** Tracks pending remote task correlations so results can be sent back. */
   private pendingRemoteCorrelations = new Map<
     string,
@@ -172,17 +175,95 @@ export class BuilderforceRelayService implements IRelayService {
       void this.reportExecutionState(payload.executionId, "running");
     }
 
-    // BuilderForce-V2 → run the Claude Agent SDK loop; V1 (default) → the
-    // pi-coding-agent loop via the local gateway's chat.send.
+    // Both engines run out of the shared per-ticket workspace; V2 runs the Claude
+    // Agent SDK loop in-process, V1 runs the pi-coding-agent loop via the local
+    // gateway's chat.send.
     if (payload.engine === "builderforce-v2") {
       void this.runV2Engine(payload, message);
       return;
     }
+    void this.runV1Engine(payload, message);
+  }
+
+  /**
+   * Ensure the shared per-ticket workspace exists and (once) holds a clone of the
+   * task's bound repo. Returns the working directory both engines run in.
+   */
+  private async ensureTaskWorkspace(
+    taskId: number | undefined,
+    repo?: { repoId: string; defaultBranch: string | null },
+  ): Promise<string> {
+    const baseDir = this.opts.workspaceDir ?? process.cwd();
+    const cwd = taskId != null ? taskWorkspaceDir(baseDir, taskId) : baseDir;
+    await fs.mkdir(cwd, { recursive: true }).catch(() => { /* fall back to baseDir */ });
+    if (repo?.repoId && !(await isCloned(cwd))) {
+      try {
+        const cloneUrl = buildTaskCloneUrl(normalizeBaseUrl(this.opts.baseUrl), this.opts.agentNodeId, repo.repoId);
+        await makeCodingGit({ apiKey: this.opts.apiKey }).clone(cloneUrl, cwd, repo.defaultBranch ?? null);
+      } catch (err) {
+        logWarn(`[builderforce] task ${taskId} clone failed: ${String(err)}`);
+      }
+    }
+    return cwd;
+  }
+
+  /** Diff the ticket workspace and emit one attributed file.change per change. */
+  private async emitTaskChanges(
+    cwd: string,
+    agentLabel: string,
+    executionId: number | undefined,
+    taskId: number | undefined,
+  ): Promise<void> {
+    for (const ch of await detectTaskChanges(cwd, agentLabel)) {
+      this.sendToRelay({
+        type: "file.change",
+        executionId,
+        taskId,
+        path: ch.path,
+        change: ch.change,
+        agent: ch.agent,
+        ts: new Date().toISOString(),
+      });
+    }
+  }
+
+  /** Attribute + clear the in-flight V1 task run's changes when its session ends. */
+  private flushPendingTaskChanges(): void {
+    const run = this.pendingTaskRun;
+    if (!run) return;
+    this.pendingTaskRun = null;
+    void this.emitTaskChanges(run.cwd, run.agentLabel, run.executionId, run.taskId);
+  }
+
+  /**
+   * BuilderForce-V1 engine path. Runs the pi-coding-agent loop via the gateway's
+   * `chat.send`, steered to work in the shared ticket workspace. The gateway's
+   * session-`final` handler attributes the changes (via `pendingTaskRun`) and
+   * reports the terminal execution state.
+   */
+  private async runV1Engine(
+    payload: {
+      executionId?: number;
+      taskId?: number;
+      sourceType: string;
+      repo?: { repoId: string; defaultBranch: string | null };
+      agentLabel?: string;
+    },
+    prompt: string,
+  ): Promise<void> {
+    const agentLabel = payload.agentLabel?.trim() || "BuilderForce-V1";
+    const cwd = await this.ensureTaskWorkspace(payload.taskId, payload.repo);
+    // Record context so the session-final handler can diff + attribute changes.
+    this.pendingTaskRun = { executionId: payload.executionId, taskId: payload.taskId, agentLabel, cwd };
+
+    const effectivePrompt = payload.repo?.repoId
+      ? `${prompt}\n\n[Workspace] Work in the cloned repository at: ${cwd}\nEdit files there using absolute paths. Do NOT \`git commit\`/\`git push\` — changes are committed and a PR is opened automatically when the ticket is marked Done.`
+      : prompt;
 
     this.gatewayClient
       ?.request("chat.send", {
         sessionKey: "main",
-        message,
+        message: effectivePrompt,
         idempotencyKey: `task-${payload.sourceType}-${payload.taskId ?? "na"}-${payload.executionId ?? Date.now()}`,
       })
       .catch((err: unknown) => {
@@ -227,20 +308,8 @@ export class BuilderforceRelayService implements IRelayService {
     };
 
     // One shared ephemeral workspace per ticket — every agent on the task works
-    // out of it (the ticket is the shared context). Clone the bound repo into it
-    // once; WIP accumulates across runs until the task is marked Done.
-    const baseDir = this.opts.workspaceDir ?? process.cwd();
-    const cwd = payload.taskId != null ? taskWorkspaceDir(baseDir, payload.taskId) : baseDir;
-    await fs.mkdir(cwd, { recursive: true }).catch(() => { /* fall back to baseDir */ });
-
-    if (payload.repo?.repoId && !(await isCloned(cwd))) {
-      try {
-        const cloneUrl = buildTaskCloneUrl(normalizeBaseUrl(this.opts.baseUrl), this.opts.agentNodeId, payload.repo.repoId);
-        await makeCodingGit({ apiKey: this.opts.apiKey }).clone(cloneUrl, cwd, payload.repo.defaultBranch ?? null);
-      } catch (err) {
-        logWarn(`[builderforce] task ${payload.taskId} clone failed: ${String(err)}`);
-      }
-    }
+    // out of it (the ticket is the shared context). Clone happens once.
+    const cwd = await this.ensureTaskWorkspace(payload.taskId, payload.repo);
 
     const result = await runClaudeAgentSdkV2(
       {
@@ -255,19 +324,8 @@ export class BuilderforceRelayService implements IRelayService {
       sinks,
     );
 
-    // Attribute the files this agent changed to it (traceability) and surface
-    // each as a file.change frame the portal/Changes tab can render.
-    for (const ch of await detectTaskChanges(cwd, agentLabel)) {
-      this.sendToRelay({
-        type: "file.change",
-        executionId: payload.executionId,
-        taskId: payload.taskId,
-        path: ch.path,
-        change: ch.change,
-        agent: ch.agent,
-        ts: new Date().toISOString(),
-      });
-    }
+    // Attribute the files this agent changed to it (traceability).
+    await this.emitTaskChanges(cwd, agentLabel, payload.executionId, payload.taskId);
 
     if (payload.executionId != null) {
       await this.reportExecutionState(
@@ -984,6 +1042,8 @@ export class BuilderforceRelayService implements IRelayService {
         if (resolveCodingSession(session, { ok: true, text })) {
           return;
         }
+        // Attribute the V1 run's file changes to its agent before completing.
+        this.flushPendingTaskChanges();
         // Report execution completed to Builderforce if one is pending.
         if (this.pendingExecutionId != null) {
           const eid = this.pendingExecutionId;
@@ -1006,6 +1066,8 @@ export class BuilderforceRelayService implements IRelayService {
         if (resolveCodingSession(session, { ok: false, text: text ?? "agent error" })) {
           return;
         }
+        // Attribute any partial changes the V1 run made before it errored.
+        this.flushPendingTaskChanges();
         // Report execution failed to Builderforce if one is pending.
         if (this.pendingExecutionId != null) {
           const eid = this.pendingExecutionId;
