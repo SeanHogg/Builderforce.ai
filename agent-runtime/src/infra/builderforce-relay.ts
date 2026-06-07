@@ -44,6 +44,13 @@ import { dispatchResultToRemoteAgentNode, type RemoteDispatchOptions } from "./r
 import { setRelayHook } from "./workflow-telemetry.js";
 import { buildSteeringInjection } from "./relay-steering.js";
 import { runClaudeAgentSdkV2, type V2RunnerSinks } from "../agents/claude-agent-sdk-runner.js";
+import {
+  taskWorkspaceDir,
+  buildTaskCloneUrl,
+  taskBranchName,
+  isCloned,
+  detectTaskChanges,
+} from "./task-workspace.js";
 
 function extractChatText(message: unknown): string {
   if (!message || typeof message !== "object") {
@@ -127,6 +134,10 @@ export class BuilderforceRelayService implements IRelayService {
     engine?: string;
     /** Model id from the run payload (forwarded to the engine). */
     model?: string;
+    /** Repo bound to the task's project (for cloning into the ticket workspace). */
+    repo?: { repoId: string; defaultBranch: string | null };
+    /** Human label of the executing agent (for change traceability). */
+    agentLabel?: string;
   }): void {
     const lines = [
       `[Builderforce ${payload.sourceType}] ${payload.title}`,
@@ -186,9 +197,17 @@ export class BuilderforceRelayService implements IRelayService {
    * renders both engines identically, then reports the terminal execution state.
    */
   private async runV2Engine(
-    payload: { executionId?: number; model?: string; sourceType: string },
+    payload: {
+      executionId?: number;
+      taskId?: number;
+      model?: string;
+      sourceType: string;
+      repo?: { repoId: string; defaultBranch: string | null };
+      agentLabel?: string;
+    },
     prompt: string,
   ): Promise<void> {
+    const agentLabel = payload.agentLabel?.trim() || "BuilderForce-V2";
     const sinks: V2RunnerSinks = {
       onAssistantText: (text) =>
         this.sendToRelay({ type: "chat.message", role: "assistant", text, session: "main" }),
@@ -207,16 +226,20 @@ export class BuilderforceRelayService implements IRelayService {
       },
     };
 
-    // Each execution gets an isolated workspace so concurrent / repeated V2 runs
-    // don't clobber each other's files. (Repo cloning into this dir for code
-    // tasks is a separate, cross-engine follow-up — see gap register.)
+    // One shared ephemeral workspace per ticket — every agent on the task works
+    // out of it (the ticket is the shared context). Clone the bound repo into it
+    // once; WIP accumulates across runs until the task is marked Done.
     const baseDir = this.opts.workspaceDir ?? process.cwd();
-    const cwd =
-      payload.executionId != null
-        ? path.join(baseDir, ".builderforce", "v2", String(payload.executionId))
-        : baseDir;
-    if (cwd !== baseDir) {
-      await fs.mkdir(cwd, { recursive: true }).catch(() => { /* fall back to baseDir use */ });
+    const cwd = payload.taskId != null ? taskWorkspaceDir(baseDir, payload.taskId) : baseDir;
+    await fs.mkdir(cwd, { recursive: true }).catch(() => { /* fall back to baseDir */ });
+
+    if (payload.repo?.repoId && !(await isCloned(cwd))) {
+      try {
+        const cloneUrl = buildTaskCloneUrl(normalizeBaseUrl(this.opts.baseUrl), this.opts.agentNodeId, payload.repo.repoId);
+        await makeCodingGit({ apiKey: this.opts.apiKey }).clone(cloneUrl, cwd, payload.repo.defaultBranch ?? null);
+      } catch (err) {
+        logWarn(`[builderforce] task ${payload.taskId} clone failed: ${String(err)}`);
+      }
     }
 
     const result = await runClaudeAgentSdkV2(
@@ -232,12 +255,68 @@ export class BuilderforceRelayService implements IRelayService {
       sinks,
     );
 
+    // Attribute the files this agent changed to it (traceability) and surface
+    // each as a file.change frame the portal/Changes tab can render.
+    for (const ch of await detectTaskChanges(cwd, agentLabel)) {
+      this.sendToRelay({
+        type: "file.change",
+        executionId: payload.executionId,
+        taskId: payload.taskId,
+        path: ch.path,
+        change: ch.change,
+        agent: ch.agent,
+        ts: new Date().toISOString(),
+      });
+    }
+
     if (payload.executionId != null) {
       await this.reportExecutionState(
         payload.executionId,
         result.ok ? "completed" : "failed",
         result.ok ? { result: result.text } : { errorMessage: result.text },
       );
+    }
+  }
+
+  /**
+   * Finalize a ticket on Done: commit the shared task workspace to a branch,
+   * push it through the host git-proxy, and ask the API to open a PR. The API
+   * sends this frame when the task transitions to done. Never throws.
+   */
+  private async finalizeTask(payload: {
+    taskId: number;
+    title?: string;
+    repoId?: string;
+    defaultBranch?: string | null;
+  }): Promise<void> {
+    const baseDir = this.opts.workspaceDir ?? process.cwd();
+    const dir = taskWorkspaceDir(baseDir, payload.taskId);
+    if (!payload.repoId || !(await isCloned(dir))) {
+      logDebug(`[builderforce] finalize task ${payload.taskId}: no repo workspace to commit`);
+      return;
+    }
+    const git = makeCodingGit({ apiKey: this.opts.apiKey });
+    const branch = taskBranchName(payload.taskId);
+    try {
+      await git.checkoutNewBranch(dir, branch).catch(() => { /* branch may already exist */ });
+      const { changed } = await git.commitAll(dir, `BuilderForce: task ${payload.taskId} — ${payload.title ?? ""}`.trim());
+      if (!changed) {
+        logDebug(`[builderforce] finalize task ${payload.taskId}: no changes to commit`);
+        return;
+      }
+      const base = normalizeBaseUrl(this.opts.baseUrl);
+      const cloneUrl = buildTaskCloneUrl(base, this.opts.agentNodeId, payload.repoId);
+      await git.push(dir, cloneUrl, branch);
+      // The API holds the repo credential and opens the PR server-side.
+      await fetch(`${base}/api/agent-hosts/${this.opts.agentNodeId}/tasks/${payload.taskId}/pull-request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.opts.apiKey}` },
+        body: JSON.stringify({ branch, base: payload.defaultBranch ?? undefined, title: payload.title }),
+        signal: AbortSignal.timeout(30_000),
+      }).catch(() => { /* branch is pushed; PR can be opened manually */ });
+      logWarn(`[builderforce] finalized task ${payload.taskId}: pushed ${branch}`);
+    } catch (err) {
+      logWarn(`[builderforce] finalize task ${payload.taskId} failed: ${String(err)}`);
     }
   }
 
@@ -715,6 +794,14 @@ export class BuilderforceRelayService implements IRelayService {
           /* payload not JSON — use the engine default model */
         }
 
+        // Repo coords (for cloning into the ticket workspace) + executing agent
+        // label (for change traceability) are resolved by the API.
+        const repoRaw = msg.repo && typeof msg.repo === "object" ? (msg.repo as Record<string, unknown>) : null;
+        const repo = repoRaw && typeof repoRaw.repoId === "string"
+          ? { repoId: repoRaw.repoId, defaultBranch: typeof repoRaw.defaultBranch === "string" ? repoRaw.defaultBranch : null }
+          : undefined;
+        const agentLabel = typeof msg.agentLabel === "string" ? msg.agentLabel : undefined;
+
         logWarn(
           `[builderforce] received ${type}${taskId != null ? ` task=${taskId}` : ""}${executionId != null ? ` execution=${executionId}` : ""} engine=${engine}`,
         );
@@ -728,6 +815,8 @@ export class BuilderforceRelayService implements IRelayService {
           artifacts,
           engine,
           model,
+          repo,
+          agentLabel,
         });
         void this.syncAssignmentContext(type);
         break;
@@ -749,6 +838,22 @@ export class BuilderforceRelayService implements IRelayService {
           .catch((err: unknown) => {
             logWarn(`[builderforce] execution.message dispatch failed: ${String(err)}`);
           });
+        break;
+      }
+
+      case "task.finalize": {
+        // Task marked Done → commit the shared ticket workspace to a branch,
+        // push it, and open a PR.
+        const finalizeTaskId =
+          typeof msg.taskId === "number" && Number.isFinite(msg.taskId) ? msg.taskId : undefined;
+        if (finalizeTaskId == null) break;
+        const repoRaw = msg.repo && typeof msg.repo === "object" ? (msg.repo as Record<string, unknown>) : null;
+        void this.finalizeTask({
+          taskId: finalizeTaskId,
+          title: typeof msg.title === "string" ? msg.title : undefined,
+          repoId: repoRaw && typeof repoRaw.repoId === "string" ? repoRaw.repoId : undefined,
+          defaultBranch: repoRaw && typeof repoRaw.defaultBranch === "string" ? repoRaw.defaultBranch : null,
+        });
         break;
       }
 
