@@ -19,6 +19,7 @@ import { BoardConfigPanel } from './board/BoardConfigPanel';
 import { AgentChip } from './board/AgentChip';
 import { useBoardConfig } from './board/useBoardConfig';
 import { SlideOutPanel } from './SlideOutPanel';
+import { MoveToBoardControl } from './MoveToBoardControl';
 import { TaskAgentTab } from './task/TaskAgentTab';
 import { TaskPrdTab } from './task/TaskPrdTab';
 import { RunAgentControl } from './task/RunAgentControl';
@@ -112,11 +113,14 @@ export function TaskMgmtContent({
       setTasks(tasksData);
       setAgentHostsList(agentHostsData);
       setExecutions(execData);
-      if (projectsProp === undefined && !projectId) {
+      // Always resolve the full project list (unless the parent supplied one):
+      // it backs both the project filter and the "Move to board" destinations,
+      // which are needed even in the scoped (single-project) view.
+      if (projectsProp) {
+        setProjects(projectsProp);
+      } else {
         const projs = await fetchProjects().catch(() => []);
         setProjects(projs);
-      } else if (projectsProp) {
-        setProjects(projectsProp);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
@@ -344,6 +348,26 @@ export function TaskMgmtContent({
     setBulkStatus('');
     for (const id of toUpdate) {
       await patchStatus(id, status);
+    }
+  };
+
+  // Move a task to another project ("board"). The server re-keys it; we swap the
+  // returned task into state so it leaves any board-scoped/filtered view on its own.
+  const moveTask = async (id: number, targetProjectId: number) => {
+    try {
+      const moved = await tasksApi.move(id, targetProjectId);
+      setTasks((prev) => prev.map((t) => (t.id === moved.id ? moved : t)));
+      if (drawerTask?.id === id) setDrawerTask(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Move failed');
+    }
+  };
+
+  const applyBulkMove = async (targetProjectId: number) => {
+    const toMove = selectedIds.slice();
+    setSelectedIds([]);
+    for (const id of toMove) {
+      await moveTask(id, targetProjectId);
     }
   };
   const onDrop = (e: React.DragEvent, status: string) => {
@@ -827,6 +851,11 @@ export function TaskMgmtContent({
                       </option>
                     ))}
                   </select>
+                  <MoveToBoardControl
+                    projects={projects}
+                    currentProjectId={effectiveProjectId}
+                    onMove={applyBulkMove}
+                  />
                 </div>
               )}
               <div style={{ overflowX: 'auto' }}>
@@ -958,7 +987,7 @@ export function TaskMgmtContent({
                         {formatDate(task.dueDate)}
                       </td>
                       <td style={{ padding: '10px 12px' }} onClick={(e) => e.stopPropagation()}>
-                        <div style={{ display: 'flex', gap: 4 }}>
+                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                           <button
                             type="button"
                             style={{ ...buttonTertiary, padding: '4px 8px', fontSize: 12 }}
@@ -973,6 +1002,13 @@ export function TaskMgmtContent({
                           >
                             Edit
                           </button>
+                          <MoveToBoardControl
+                            projects={projects}
+                            currentProjectId={task.projectId}
+                            onMove={(projectId) => moveTask(task.id, projectId)}
+                            label="Move…"
+                            style={{ padding: '4px 6px', fontSize: 12 }}
+                          />
                           <button
                             type="button"
                             style={{
@@ -1411,6 +1447,14 @@ export function TaskMgmtContent({
                       </button>
                     ))}
                 </div>
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Move to board</div>
+                <MoveToBoardControl
+                  projects={projects}
+                  currentProjectId={drawerTask.projectId}
+                  onMove={(projectId) => moveTask(drawerTask.id, projectId)}
+                />
               </div>
               <div style={{ marginBottom: 12 }}>
                 <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Run</div>

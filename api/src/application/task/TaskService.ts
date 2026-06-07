@@ -104,6 +104,33 @@ export class TaskService {
     return this.tasks.update(updated);
   }
 
+  /**
+   * Move a task to a different project ("board"). Validates that both the source
+   * and destination projects belong to the caller's tenant, then re-keys the task
+   * from the destination project's prefix (e.g. CODERCLAW-041 → ACME-014).
+   */
+  async moveTask(id: number, targetProjectId: number, callerTenantId: number): Promise<Task> {
+    const task = await this.getTask(id);
+
+    const source = await this.projects.findById(task.projectId);
+    if (!source || source.tenantId !== callerTenantId) {
+      throw new ForbiddenError('Task belongs to a different workspace');
+    }
+
+    if (task.projectId === asProjectId(targetProjectId)) return task; // no-op: already on this board
+
+    const target = await this.projects.findById(asProjectId(targetProjectId));
+    if (!target) throw new NotFoundError('Project', targetProjectId);
+    if (target.tenantId !== callerTenantId) {
+      throw new ForbiddenError('Project belongs to a different workspace');
+    }
+
+    const taskCount = await this.tasks.countByProject(asProjectId(targetProjectId));
+    const key = `${target.key}-${String(taskCount + 1).padStart(3, '0')}`;
+    const moved = task.moveToProject(asProjectId(targetProjectId), key);
+    return this.tasks.update(moved);
+  }
+
   async deleteTask(id: number): Promise<void> {
     await this.getTask(id);
     await this.tasks.delete(asTaskId(id));

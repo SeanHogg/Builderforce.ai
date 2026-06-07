@@ -309,6 +309,14 @@ export class SwimlaneCoordinator {
       lane.key,
     );
 
+    // Non-browser dispatches route to a agentHost via the relay, keyed by the
+    // dispatch `target` (= the agentHost id). When an assignment did not pin one,
+    // fall back to the tenant's default agentHost so a single registered claw
+    // "just works" without the user wiring a target per lane.
+    const defaultTarget = this.store.getDefaultAgentHostId
+      ? await this.store.getDefaultAgentHostId(run.tenantId)
+      : null;
+
     const assignmentById = new Map<string, AssignmentLite>(assignments.map((a) => [a.id, a]));
     const dispatchIdByAssignment = new Map<string, string>();
     for (const spec of specs) {
@@ -323,7 +331,7 @@ export class SwimlaneCoordinator {
         stageSeq,
         role: spec.agentRole,
         runtime: a?.runtime ?? 'cloud',
-        target: a?.target ?? null,
+        target: a?.target ?? defaultTarget,
         model: a?.model ?? null,
         input: spec.description,
         status: 'blocked',

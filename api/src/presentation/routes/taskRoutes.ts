@@ -79,6 +79,28 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
     return c.json(task.toPlain());
   });
 
+  // POST /api/tasks/:id/move — reassign a task to another project ("board").
+  router.post('/:id/move', async (c) => {
+    const id = Number(c.req.param('id'));
+    const body = await c.req.json<{ projectId: number }>();
+    const task = await taskService.moveTask(id, body.projectId, c.get('tenantId'));
+
+    try {
+      await db.insert(auditEvents).values({
+        tenantId: c.get('tenantId'),
+        userId:   (c as any).get('userId') ?? null,
+        eventType: AuditEventType.TASK_UPDATED,
+        resourceType: 'task',
+        resourceId: String(id),
+        metadata: JSON.stringify({ movedToProjectId: body.projectId, key: task.key }),
+      });
+    } catch {
+      // ignore failures to avoid blocking the main flow
+    }
+
+    return c.json(task.toPlain());
+  });
+
   // DELETE /api/tasks/:id
   router.delete('/:id', async (c) => {
     const id = Number(c.req.param('id'));

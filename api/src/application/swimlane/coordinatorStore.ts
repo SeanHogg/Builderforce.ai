@@ -138,4 +138,10 @@ export interface CoordinatorStore {
   getDispatch(id: string, tenantId: number): Promise<DispatchLite | null>;
   listStageDispatches(ticketRunId: string, stageSeq: number, tenantId: number): Promise<DispatchLite[]>;
   maxStageSeq(ticketRunId: string): Promise<number>;
+  /**
+   * The tenant's default agentHost id (as a string), used to route non-browser
+   * dispatches whose assignment did not pin an explicit `target`. Optional —
+   * in-memory test stores omit it (the coordinator falls back to no default).
+   */
+  getDefaultAgentHostId?(tenantId: number): Promise<string | null>;
 }

@@ -759,6 +759,13 @@ export const tasksApi = {
 
   delete: (id: number): Promise<void> =>
     request<void>(`/api/tasks/${id}`, { method: 'DELETE' }),
+
+  /** Move a task to another project ("board"). Re-keys it to the destination's prefix. */
+  move: (id: number, projectId: number): Promise<Task> =>
+    request<Task>(`/api/tasks/${id}/move`, {
+      method: 'POST',
+      body: JSON.stringify({ projectId }),
+    }),
 };
 
 /** Runtime executions – submit tasks to agentHosts for agent execution. */

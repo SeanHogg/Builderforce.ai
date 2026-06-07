@@ -124,6 +124,17 @@ export class Task {
     return new Task({ ...this.props, ...updates, updatedAt: new Date() });
   }
 
+  /**
+   * Move this task to a different project (board). The key is regenerated from the
+   * destination project so it matches that board's prefix (e.g. ACME-014), mirroring
+   * how issue trackers re-key an issue moved between projects. projectId/key live
+   * outside {@link update}'s allowed fields because reassignment is a distinct
+   * lifecycle event, not a field edit.
+   */
+  moveToProject(projectId: ProjectId, key: string): Task {
+    return new Task({ ...this.props, projectId, key, updatedAt: new Date() });
+  }
+
   start(): Task {
     return this.update({ status: TaskStatus.IN_PROGRESS });
   }

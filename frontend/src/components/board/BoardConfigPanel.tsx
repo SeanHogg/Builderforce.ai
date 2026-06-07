@@ -6,9 +6,11 @@ import { BoardConnectionsManager } from '../integrations/BoardConnectionsManager
 import { useBoardConfig } from './useBoardConfig';
 import {
   boardsApi,
+  agentHosts,
   type Board,
   type Swimlane,
   type SwimlaneAgent,
+  type AgentHost,
 } from '@/lib/builderforceApi';
 
 /**
@@ -200,7 +202,21 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
   const [role, setRole] = useState('');
   const [runtime, setRuntime] = useState('cloud');
   const [model, setModel] = useState('');
+  const [target, setTarget] = useState(''); // '' = tenant default agentHost
+  const [hosts, setHosts] = useState<AgentHost[]>([]);
   const [adding, setAdding] = useState(false);
+
+  // A non-browser runtime routes to a deployed agentHost (claw); load the fleet
+  // so the user can pick which one. Blank target falls back to the tenant default.
+  useEffect(() => {
+    if (!adding) return;
+    let live = true;
+    agentHosts.list().then((h) => { if (live) setHosts(h); }).catch(() => {});
+    return () => { live = false; };
+  }, [adding]);
+
+  const needsTarget = runtime !== 'browser';
+  const hostName = (id: string | null) => hosts.find((h) => String(h.id) === id)?.name ?? `#${id}`;
 
   const add = async () => {
     if (!role.trim()) return;
@@ -208,9 +224,10 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
       role: role.trim(),
       runtime,
       model: model.trim() || null,
+      target: needsTarget ? (target || null) : null,
       position: agents.length,
     });
-    setRole(''); setRuntime('cloud'); setModel(''); setAdding(false); reload();
+    setRole(''); setRuntime('cloud'); setModel(''); setTarget(''); setAdding(false); reload();
   };
   const remove = async (id: string) => { await boardsApi.agents.remove(board.id, lane.id, id); reload(); };
 
@@ -221,7 +238,11 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
       {agents.map((a) => (
         <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '4px 0' }}>
           <span style={{ fontWeight: 600 }}>{a.role}</span>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{a.runtime}{a.model ? ` · ${a.model}` : ' · default LLM'}</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            {a.runtime}
+            {a.runtime !== 'browser' && ` · ${a.target ? hostName(a.target) : 'default agentHost'}`}
+            {a.model ? ` · ${a.model}` : ' · default LLM'}
+          </span>
           <span style={{ flex: 1 }} />
           <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(a.id)}>Remove</button>
         </div>
@@ -235,6 +256,16 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
             <option value="local">local</option>
             <option value="remote">remote</option>
           </select>
+          {needsTarget && (
+            <select value={target} onChange={(e) => setTarget(e.target.value)} style={inputStyle} aria-label="Target agentHost">
+              <option value="">default agentHost</option>
+              {hosts.map((h) => (
+                <option key={h.id} value={String(h.id)}>
+                  {h.name}{h.online ? ' (online)' : ' (offline)'}
+                </option>
+              ))}
+            </select>
+          )}
           <input style={{ ...inputStyle, width: 160 }} placeholder="model (blank = default)" value={model} onChange={(e) => setModel(e.target.value)} />
           <button type="button" style={btnPrimary} onClick={add}>Add</button>
           <button type="button" style={btnSubtle} onClick={() => setAdding(false)}>Cancel</button>
