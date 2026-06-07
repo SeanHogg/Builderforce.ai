@@ -32,7 +32,9 @@ const agent: ProjectAgent = {
 describe('AgentCapabilitiesContent', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.spyOn(api, 'listAgents').mockResolvedValue([]);
+    // The shared agent pool now draws from the tenant's own + purchased agents.
+    vi.spyOn(api, 'listMyAgents').mockResolvedValue([]);
+    vi.spyOn(api, 'listPurchasedAgents').mockResolvedValue([]);
     vi.spyOn(builderforceApi.registeredAgents, 'list').mockResolvedValue([]);
     vi.spyOn(builderforceApi.projectAgents, 'list').mockResolvedValue([agent]);
   });

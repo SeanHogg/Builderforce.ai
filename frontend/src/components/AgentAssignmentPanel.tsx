@@ -14,8 +14,6 @@ export interface AgentAssignmentPanelProps {
   scope: AgentAssignmentScope;
   /** Target id within the scope (project/workflow/swimlane id). Omit for brain/global/tenant-wide. */
   scopeId?: string | number;
-  /** Restrict the workforce pool to a project (project-scoped surfaces). */
-  poolProjectId?: number;
   /** Show a per-assignment project|global execution-scope toggle (e.g. workflows). */
   showExecutionScope?: boolean;
   title?: string;
@@ -33,7 +31,6 @@ export interface AgentAssignmentPanelProps {
 export function AgentAssignmentPanel({
   scope,
   scopeId,
-  poolProjectId,
   showExecutionScope = false,
   title = 'Assigned agents',
   emptyHint = 'No agents assigned. Pick one below.',
@@ -53,7 +50,7 @@ export function AgentAssignmentPanel({
     try {
       const [list, poolAgents] = await Promise.all([
         agentAssignmentsApi.list(scope, scopeId),
-        loadAgentPool(poolProjectId != null ? { projectId: poolProjectId } : undefined),
+        loadAgentPool(),
       ]);
       setAssignments(list);
       setPool(poolAgents);
@@ -62,7 +59,7 @@ export function AgentAssignmentPanel({
     } finally {
       setLoading(false);
     }
-  }, [scope, scopeId, poolProjectId]);
+  }, [scope, scopeId]);
 
   useEffect(() => { load(); }, [load]);
 

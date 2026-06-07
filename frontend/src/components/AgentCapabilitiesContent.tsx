@@ -36,7 +36,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
     setLoading(true);
     setError(null);
     try {
-      const [list, poolAgents] = await Promise.all([projectAgents.list(projectId), loadAgentPool({ projectId })]);
+      const [list, poolAgents] = await Promise.all([projectAgents.list(projectId), loadAgentPool()]);
       setAttached(list);
       setPool(poolAgents);
     } catch (e) {
