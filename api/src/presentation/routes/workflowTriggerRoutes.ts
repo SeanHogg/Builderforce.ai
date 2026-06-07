@@ -40,7 +40,7 @@ export async function fireAddressedTrigger(
   source: string,
 ): Promise<{ ok: true; workflowId: string } | { ok: false; error: string }> {
   const [defRow] = await db
-    .select({ name: workflowDefinitions.name, definition: workflowDefinitions.definition })
+    .select({ name: workflowDefinitions.name, projectId: workflowDefinitions.projectId, definition: workflowDefinitions.definition })
     .from(workflowDefinitions)
     .where(and(eq(workflowDefinitions.id, row.definitionId), eq(workflowDefinitions.tenantId, row.tenantId)));
   if (!defRow) return { ok: false, error: 'workflow definition not found' };
@@ -50,6 +50,7 @@ export async function fireAddressedTrigger(
     segmentId: row.segmentId,
     definition: parseDefinition(defRow.definition),
     name: defRow.name,
+    projectId: defRow.projectId,
     target: targetFromTrigger(row),
     triggerPayload: payload,
     triggerSource: source,

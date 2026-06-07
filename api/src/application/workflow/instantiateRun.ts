@@ -32,6 +32,8 @@ export interface InstantiateRunParams {
   definition: WorkflowDefinition;
   /** Workflow run description (usually the definition name). */
   name: string;
+  /** Project the run belongs to (inherited from the definition); null = tenant-wide. */
+  projectId?: number | null;
   target: RunTarget;
   /**
    * Payload from the trigger that started the run (webhook body, rss item,
@@ -92,6 +94,7 @@ export async function instantiateWorkflowRun(
     id: workflowId,
     tenantId: params.tenantId,
     segmentId: params.segmentId ?? null,
+    projectId: params.projectId ?? null,
     agentHostId: params.target.runtime === 'host' ? params.target.agentHostId! : null,
     runtime: params.target.runtime,
     cloudAgentRef: params.target.runtime === 'cloud' ? params.target.cloudAgentRef ?? null : null,

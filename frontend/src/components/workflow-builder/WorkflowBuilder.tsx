@@ -25,6 +25,8 @@ import {
   type WorkflowRunTargets,
   type WorkflowTriggerInfo,
 } from '@/lib/builderforceApi';
+import { fetchProjects } from '@/lib/api';
+import type { Project } from '@/lib/types';
 import { BuilderNode, type BuilderNodeData } from './BuilderNode';
 import { NodeConfigPanel } from './NodeConfigPanel';
 import { NODE_GROUPS, NODE_KINDS, NODE_KIND_MAP } from './nodeKinds';
@@ -109,9 +111,11 @@ function valueToRunTarget(v: string): WorkflowRunTarget | null {
 interface Props {
   /** Existing definition id to load + edit; omitted for a new workflow. */
   definitionId?: string | null;
+  /** Pre-bind a new workflow to this project (from /workflows?projectId=…). */
+  initialProjectId?: number | null;
 }
 
-export function WorkflowBuilder({ definitionId }: Props) {
+export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props) {
   const router = useRouter();
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<BuilderNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -120,13 +124,17 @@ export function WorkflowBuilder({ definitionId }: Props) {
   const [defId, setDefId] = useState<string | null>(definitionId ?? null);
   const [runTargets, setRunTargets] = useState<WorkflowRunTargets>({ hosts: [], cloudAgents: [] });
   const [runTarget, setRunTarget] = useState<WorkflowRunTarget | null>(null);
-  const [executionScope, setExecutionScope] = useState<'project' | 'global'>('project');
+  const [projectId, setProjectId] = useState<number | null>(initialProjectId);
+  const [projectList, setProjectList] = useState<Project[]>([]);
   const [triggerInfo, setTriggerInfo] = useState<Record<string, WorkflowTriggerInfo>>({});
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(!!definitionId);
 
   useEffect(() => { workflowDefinitions.runTargets().then(setRunTargets).catch(() => {}); }, []);
+  // Projects power the binding selector — a workflow runs under a project, or is
+  // tenant-wide (no project). The binding is the source of truth for scope.
+  useEffect(() => { fetchProjects().then(setProjectList).catch(() => {}); }, []);
 
   // Load an existing definition into the canvas.
   useEffect(() => {
@@ -142,7 +150,7 @@ export function WorkflowBuilder({ definitionId }: Props) {
         } else if (d.runTargetAgentHostId) {
           setRunTarget({ runtime: 'host', agentHostId: d.runTargetAgentHostId });
         }
-        setExecutionScope(d.executionScope === 'global' ? 'global' : 'project');
+        setProjectId(d.projectId ?? null);
         setNodes(
           d.definition.nodes.map((n) => ({
             id: n.id,
@@ -245,9 +253,12 @@ export function WorkflowBuilder({ definitionId }: Props) {
       runTargetRuntime: runTarget?.runtime ?? ('host' as const),
       runTargetAgentHostId: runTarget?.runtime === 'host' ? runTarget.agentHostId ?? null : null,
       runTargetCloudAgentRef: runTarget?.runtime === 'cloud' ? runTarget.cloudAgentRef ?? null : null,
-      executionScope,
+      // The project binding is the source of truth for scope: bound ⇒ project,
+      // unbound ⇒ tenant-wide. The server derives execution_scope identically.
+      projectId,
+      executionScope: (projectId != null ? 'project' : 'global') as 'project' | 'global',
     }),
-    [runTarget, executionScope],
+    [runTarget, projectId],
   );
 
   // Load the materialized triggers' activation state (webhook URLs, next runs)
@@ -387,13 +398,15 @@ export function WorkflowBuilder({ definitionId }: Props) {
           )}
         </select>
         <select
-          value={executionScope}
-          onChange={(e) => setExecutionScope(e.target.value === 'global' ? 'global' : 'project')}
+          value={projectId ?? ''}
+          onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : null)}
           style={fieldStyle}
-          title="Run this workflow under its project, or globally (tenant-wide)"
+          title="Bind this workflow to a project, or leave it tenant-wide (independent)"
         >
-          <option value="project">Runs under project</option>
-          <option value="global">Runs globally</option>
+          <option value="">No project (tenant-wide)</option>
+          {projectList.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
         </select>
         <button type="button" style={btnSubtle} disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button>
         <button type="button" style={btnSubtle} disabled={busy} onClick={() => void exportYaml()} title="Download as YAML">Export</button>

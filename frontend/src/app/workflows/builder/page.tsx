@@ -5,8 +5,11 @@ import { useSearchParams } from 'next/navigation';
 import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
 
 function BuilderPageInner() {
-  const id = useSearchParams().get('id');
-  return <WorkflowBuilder definitionId={id} />;
+  const params = useSearchParams();
+  const id = params.get('id');
+  const projectIdParam = params.get('projectId');
+  const initialProjectId = projectIdParam ? Number(projectIdParam) : null;
+  return <WorkflowBuilder definitionId={id} initialProjectId={initialProjectId} />;
 }
 
 export default function WorkflowBuilderPage() {

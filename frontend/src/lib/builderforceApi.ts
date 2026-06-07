@@ -454,11 +454,22 @@ export interface WorkflowTriggerInfo {
   hasSecret: boolean;
 }
 
-/** List-row shape (graph omitted for the index). */
+/** List-row shape (graph omitted for the index). Enriched by the list endpoint
+ *  with the bound project + run-target agent so each row reads like a project. */
 export interface WorkflowDefinitionSummary {
   id: string;
   name: string;
   description?: string | null;
+  /** Bound project (null = tenant-wide / independent). */
+  projectId?: number | null;
+  projectName?: string | null;
+  /** 'project' = scoped to projectId; 'global' = tenant-wide. */
+  executionScope?: 'project' | 'global';
+  /** Run-target runtime + resolved display name of the assigned agent. */
+  runTargetRuntime?: WorkflowRuntime;
+  runTargetAgentHostId?: number | null;
+  runTargetCloudAgentRef?: string | null;
+  agentName?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -467,6 +478,9 @@ export interface WorkflowDefinitionSummary {
 export interface WorkflowDefinitionDetail extends WorkflowDefinitionSummary, Partial<WorkflowRunTargetFields> {
   definition: WorkflowDefinitionGraph;
 }
+
+/** Project binding accepted on create/update (null = tenant-wide). */
+type WorkflowProjectBinding = { projectId?: number | null };
 
 export const workflowDefinitions = {
   list: () =>
@@ -477,12 +491,12 @@ export const workflowDefinitions = {
   /** Activatable triggers + their activation state (webhook URL, next run, …). */
   triggers: (id: string) =>
     request<{ triggers: WorkflowTriggerInfo[] }>(`/api/workflow-definitions/${id}/triggers`).then((r) => r.triggers),
-  create: (body: { name: string; description?: string; definition?: WorkflowDefinitionGraph } & Partial<WorkflowRunTargetFields>) =>
+  create: (body: { name: string; description?: string; definition?: WorkflowDefinitionGraph } & WorkflowProjectBinding & Partial<WorkflowRunTargetFields>) =>
     request<WorkflowDefinitionSummary>('/api/workflow-definitions', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  update: (id: string, body: { name?: string; description?: string; definition?: WorkflowDefinitionGraph } & Partial<WorkflowRunTargetFields>) =>
+  update: (id: string, body: { name?: string; description?: string; definition?: WorkflowDefinitionGraph } & WorkflowProjectBinding & Partial<WorkflowRunTargetFields>) =>
     request<WorkflowDefinitionDetail>(`/api/workflow-definitions/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
