@@ -59,6 +59,7 @@ import {
 import { getAllVendorIds, vendorForModel, type VendorId } from '../../application/llm/vendors';
 import { llmFailoverLog, llmHealthProbes, llmTraces } from '../../infrastructure/database/schema';
 import { probeVendor, type VendorProbeResult } from '../../application/llm/vendorHealthProbe';
+import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
 import {
   mintTenantApiKey,
   listTenantApiKeys,
@@ -1833,6 +1834,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (body.active !== undefined) updates.active = body.active;
     const [updated] = await db.update(platformPersonas).set(updates as Record<string, unknown>).where(eq(platformPersonas.id, id)).returning();
     if (!updated) return c.json({ error: 'Update failed' }, 500);
+    // Invalidate the cloud capability cache for both old + new slug so the next
+    // cloud run re-reads the edited persona body.
+    await invalidateCapabilityCache(c.env, 'persona', existing.slug);
+    if (updated.slug !== existing.slug) await invalidateCapabilityCache(c.env, 'persona', updated.slug);
     return c.json({
       persona: {
         id:         updated.id,
@@ -1861,8 +1866,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const db = buildDatabase(c.env);
     const id = Number(c.req.param('id'));
     if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
-    const result = await db.delete(platformPersonas).where(eq(platformPersonas.id, id)).returning({ id: platformPersonas.id });
-    if (result.length === 0) return c.json({ error: 'Persona not found' }, 404);
+    const result = await db.delete(platformPersonas).where(eq(platformPersonas.id, id)).returning({ id: platformPersonas.id, slug: platformPersonas.slug });
+    const deleted = result[0];
+    if (!deleted) return c.json({ error: 'Persona not found' }, 404);
+    await invalidateCapabilityCache(c.env, 'persona', deleted.slug);
     return c.json({ ok: true });
   });
 

@@ -15,7 +15,7 @@ import MascotIcon from '@/components/MascotIcon';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { OnboardingStepper } from '@/components/OnboardingStepper';
 import { ViewToggle } from '@/components/ViewToggle';
-import { agentHosts, tasksApi, runtimeApi, approvalsApi, isAwaitingApprovalExecution, type AgentHost, type Task } from '@/lib/builderforceApi';
+import { agentHosts, tasksApi, approvalsApi, type AgentHost, type Task } from '@/lib/builderforceApi';
 
 const ONBOARDING_DISMISSED_KEY = 'bf_onboarding_dismissed';
 
@@ -36,8 +36,6 @@ export default function DashboardPage() {
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const [activeTab, setActiveTab] = useState<'projects' | 'workforce'>('projects');
   const [confirmProject, setConfirmProject] = useState<Project | null>(null);
-  const [sendingToAgentHost, setSendingToAgentHost] = useState(false);
-  const [promptError, setPromptError] = useState<string | null>(null);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [taskStats, setTaskStats] = useState<{ total: number; inProgress: number; done: number } | null>(null);
 
@@ -123,42 +121,14 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, [isAuthenticated, hasTenant]);
 
-  const handlePromptSubmit = async () => {
+  // The dashboard prompt opens Brain Storm and auto-executes there: Brain creates
+  // a chat on demand and streams a reply, then the user can promote it to a
+  // project / IDE. (Direct dispatch to an agent host stays on /tasks + /workforce.)
+  const handlePromptSubmit = () => {
     const p = prompt.trim();
     if (!p) return;
-    // Need a project to create a task
-    const project = projects[0];
-    if (!project) {
-      setPromptError('Create a project first');
-      return;
-    }
-    setPromptError(null);
-    setSendingToAgentHost(true);
-    try {
-      const task = await tasksApi.create({
-        projectId: project.id,
-        title: p.slice(0, 200) || p,
-        description: p.length > 200 ? p : undefined,
-        assignedAgentHostId: connectedAgentHosts[0]?.id ?? undefined,
-      });
-      const execution = await runtimeApi.submitExecution({
-        taskId: task.id,
-        agentHostId: task.assignedAgentHostId ?? undefined,
-      });
-
-      if (isAwaitingApprovalExecution(execution)) {
-        setPrompt('');
-        router.push('/approvals');
-        return;
-      }
-
-      setPrompt('');
-      router.push('/tasks');
-    } catch (e) {
-      setPromptError(e instanceof Error ? e.message : 'Failed to send to agentHost');
-    } finally {
-      setSendingToAgentHost(false);
-    }
+    setPrompt('');
+    router.push(`/brainstorm?prompt=${encodeURIComponent(p)}`);
   };
 
   const connectedAgentHosts = agentHostList.filter((c) => c.online);
@@ -208,7 +178,7 @@ export default function DashboardPage() {
             What should we build?
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: '0 0 20px' }}>
-            Start in <Link href="/brainstorm" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>Brain Storm</Link> to ideate, then execute as a project and build in the IDE—or assign work via <Link href="/tasks" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>Tasks</Link> and <Link href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>Workforce</Link> agents.
+            Start in <Link href="/brainstorm" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>Brain Storm</Link> to ideate, then execute as a project and build in the IDE—or assign work via <Link href="/projects?tab=tasks" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>Tasks</Link> and <Link href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>Workforce</Link> agents.
           </p>
           <div style={{ maxWidth: 760, margin: '0 auto' }}>
             <ChatInput
@@ -216,27 +186,26 @@ export default function DashboardPage() {
               onChange={setPrompt}
               onSubmit={handlePromptSubmit}
               placeholder="Build a budget tracker with Material UI components…"
-              submitLabel={sendingToAgentHost ? 'Sending…' : 'Send to AgentHost'}
-              disabled={sendingToAgentHost}
+              submitLabel="Brain Storm"
               rows={1}
               submitOnEnter={false}
               showBrainIcon={true}
               showVoice={true}
-              secondaryLink={{ label: 'Manage workforce', href: '/workforce' }}
+              secondaryContent={
+                connectedAgentHosts.length > 0 ? (
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    {connectedAgentHosts.length} agent{connectedAgentHosts.length !== 1 ? 's' : ''} connected · {connectedAgentHosts.map((c) => c.name).join(', ')}
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    No agents connected —{' '}
+                    <Link href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
+                      set up in Workforce
+                    </Link>
+                  </span>
+                )
+              }
             />
-            {promptError && (
-              <div style={{ marginTop: 8, fontSize: 13, color: 'var(--error-text)' }}>{promptError}</div>
-            )}
-          </div>
-          <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
-            {connectedAgentHosts.length > 0
-              ? `${connectedAgentHosts.length} agent${connectedAgentHosts.length !== 1 ? 's' : ''} connected · ${connectedAgentHosts.map((c) => c.name).join(', ')}`
-              : 'No agents connected — '}
-            {connectedAgentHosts.length === 0 && (
-              <Link href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
-                set up in Workforce
-              </Link>
-            )}
           </div>
           {pendingApprovalsCount > 0 && (
             <div style={{ marginTop: 8, fontSize: 12, color: 'var(--warning-text)' }}>
@@ -270,7 +239,7 @@ export default function DashboardPage() {
                 label: 'Tasks',
                 value: taskStats?.total ?? '—',
                 sub: taskStats ? `${taskStats.inProgress} in progress` : '',
-                href: '/tasks',
+                href: '/projects?tab=tasks',
                 color: 'var(--cyan-bright, #00e5cc)',
               },
               {

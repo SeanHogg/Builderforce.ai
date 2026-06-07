@@ -20,15 +20,13 @@ import {
   useBrainChats,
   useBrainConversation,
   useBrainActions,
+  PLATFORM_BRAIN_SYSTEM_PROMPT,
   type BrainModality,
 } from '@/lib/brain';
 import type { BrainChat, BrainMessage } from '@/lib/builderforceApi';
 import { agentAssignmentsApi, type AgentAssignment } from '@/lib/builderforceApi';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 import { MODALITIES, getModality } from '@/lib/modality';
-
-const BRAINSTORM_SYSTEM_PROMPT =
-  'You are Brain, the AI assistant inside Builderforce. Help the user brainstorm and plan. Be concise and use markdown when helpful.';
 
 function formatTime(ts: string) {
   const d = new Date(ts);
@@ -107,8 +105,11 @@ export function BrainPanel({
       const a = brainAgents.find((x) => `agent:${x.agentKind}:${x.agentRef}` === personaSel);
       return a ? `You are acting as the "${agentName(a)}" agent for this workspace. Adopt its role, voice and duties when responding.` : undefined;
     }
-    return isPage ? BRAINSTORM_SYSTEM_PROMPT : undefined;
-  }, [personaSel, brainAgents, agentName, isPage]);
+    // Default persona: the platform co-pilot prompt on the full Brain Storm page
+    // AND on the floating drawer everywhere EXCEPT when it's pinned to an IDE
+    // project (there the modality coding prompt — via resolveSystemPrompt — wins).
+    return isPage || pinnedProjectId == null ? PLATFORM_BRAIN_SYSTEM_PROMPT : undefined;
+  }, [personaSel, brainAgents, agentName, isPage, pinnedProjectId]);
   // Route the Brain to the assigned agent's real model. The Brain streams to the
   // gateway (/llm/v1/chat/completions), which resolves real model ids — so use the
   // agent's base_model from the pool; registered/default agents → undefined (default).

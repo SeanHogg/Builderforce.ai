@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { llmApi, type LlmUsageStats, type LlmModelStatus, type LlmHealthResponse } from '@/lib/builderforceApi';
+import { llmApi, dashboardApi, type LlmUsageStats, type LlmModelStatus, type LlmHealthResponse, type DashboardUsage, type UsageByKind } from '@/lib/builderforceApi';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -16,6 +16,18 @@ function fmtNum(n: number) {
   return String(n);
 }
 
+function fmtUsd(n: number) {
+  if (n === 0) return '$0';
+  if (n < 0.01) return `<$0.01`;
+  return `$${n.toFixed(2)}`;
+}
+
+const KIND_META: Record<UsageByKind['kind'], { label: string; color: string }> = {
+  cloud: { label: 'Cloud', color: 'var(--indigo-bright, #7c83fd)' },
+  'on-prem': { label: 'On-prem', color: 'var(--cyan-bright, #00e5cc)' },
+  web: { label: 'Web / SDK', color: 'var(--text-secondary)' },
+};
+
 export function LlmUsageContent() {
   const [usage, setUsage] = useState<LlmUsageStats | null>(null);
   const [health, setHealth] = useState<LlmHealthResponse | null>(null);
@@ -25,6 +37,7 @@ export function LlmUsageContent() {
   const [errorUsage, setErrorUsage] = useState<string | null>(null);
   const [errorHealth, setErrorHealth] = useState<string | null>(null);
   const [poolTab, setPoolTab] = useState<'free' | 'pro'>('free');
+  const [bySource, setBySource] = useState<DashboardUsage | null>(null);
 
   useEffect(() => {
     llmApi
@@ -32,6 +45,9 @@ export function LlmUsageContent() {
       .then(setUsage)
       .catch((e: Error) => setErrorUsage(e.message))
       .finally(() => setLoadingUsage(false));
+
+    // Cloud-vs-on-prem-vs-web breakdown with estimated cost (manager surface).
+    dashboardApi.usage('week').then(setBySource).catch(() => { /* optional card */ });
 
     llmApi
       .health()
@@ -188,6 +204,43 @@ export function LlmUsageContent() {
               ))}
             </div>
           </div>
+
+          {/* By source — CLOUD vs ON-PREM vs WEB, with estimated cost (7-day) */}
+          {bySource && bySource.byKind.length > 0 && (
+            <div style={cardStyle}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>By Source · last 7 days</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  est. {fmtUsd(bySource.totals.estimatedCostUsd)} total
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {bySource.byKind.map((k) => {
+                  const meta = KIND_META[k.kind];
+                  return (
+                    <div
+                      key={k.kind}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        padding: '8px 10px', borderRadius: 8, background: 'var(--bg-elevated)',
+                      }}
+                    >
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: meta.color, flexShrink: 0 }} />
+                      <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{meta.label}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{fmtNum(k.requests)} req</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--cyan-bright, #00e5cc)', flexShrink: 0 }}>{fmtNum(k.totalTokens)} tok</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: meta.color, flexShrink: 0, minWidth: 56, textAlign: 'right' }}>
+                        est. {fmtUsd(k.estimatedCostUsd)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
+                Cost is estimated from catalog per-token prices, not an authoritative billed amount.
+              </div>
+            </div>
+          )}
 
           {/* By model */}
           {usage.byModel && usage.byModel.length > 0 && (

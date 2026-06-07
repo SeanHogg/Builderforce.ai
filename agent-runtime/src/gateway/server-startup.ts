@@ -295,6 +295,14 @@ async function startBuilderforceServices(
       params.log.warn(`[builderforce] relay started for agentNode ${agentNodeId}`);
       relay.setRemoteDispatchOptions({ baseUrl, myAgentNodeId: String(agentNodeId), apiKey });
 
+      // Graceful shutdown: close the relay's sockets/timers on process exit so a
+      // SIGTERM/SIGINT doesn't leave a dangling upstream connection. Orphaned
+      // ticket workspaces are reclaimed by the startup sweep on the next boot.
+      const relayRef = relay;
+      const stopRelay = () => { try { relayRef.stop(); } catch { /* ignore */ } };
+      process.once("SIGTERM", stopRelay);
+      process.once("SIGINT", stopRelay);
+
       void fetchPlatformPersonas({ baseUrl, agentNodeId: String(agentNodeId), apiKey }).then((personas) => {
         if (personas.length > 0) {
           params.log.warn(`[platform-personas] loaded ${personas.length} platform persona(s)`);

@@ -1,45 +1,23 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useAuth } from '@/lib/AuthContext';
-import { TaskMgmtContent } from '@/components/TaskMgmtContent';
 
 /**
- * Task Mgmt page: full task list/board with project filter (like BuilderForceAgentsLink).
- * Uses the same reusable TaskMgmtContent as the project details panel.
- *
- * A `?project=<id>` query param (set by the Task board button on Projects) scopes
- * the board to a single project.
+ * Legacy `/tasks` route. Tasks now live on the consolidated Projects / Tasks page
+ * (`/projects`) under the Tasks tab. Redirect here, preserving the `?project=<id>`
+ * scope so existing deep links and bookmarks keep working.
  */
-export default function TaskMgmtPage() {
+export default function TasksRedirectPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, hasTenant } = useAuth();
 
-  if (!isAuthenticated) {
-    router.replace('/login?next=/tasks');
-    return null;
-  }
-  if (!hasTenant) {
-    router.replace('/tenants?next=/tasks');
-    return null;
-  }
+  useEffect(() => {
+    const project = searchParams.get('project');
+    const params = new URLSearchParams({ tab: 'tasks' });
+    if (project) params.set('project', project);
+    router.replace(`/projects?${params.toString()}`);
+  }, [router, searchParams]);
 
-  const projectParam = Number(searchParams.get('project'));
-  const scopedProjectId = Number.isFinite(projectParam) && projectParam > 0 ? projectParam : undefined;
-
-  return (
-    <div style={{ flex: 1, color: 'var(--text-primary)' }}>
-      <main className="max-w-6xl mx-auto px-4 py-5">
-        <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 4 }}>Task Mgmt</h1>
-          <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
-            View and manage tasks across projects. Filter by project, status, or priority. Open a project from Projects to
-            scope tasks to that project.
-          </p>
-        </div>
-        <TaskMgmtContent projectId={scopedProjectId} />
-      </main>
-    </div>
-  );
+  return null;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildExecutionMessageFrame } from './executionMessage';
+import { buildExecutionMessageFrame, buildExecutionCancelFrame } from './executionMessage';
 
 describe('buildExecutionMessageFrame', () => {
   it('builds an execution.message frame from a valid payload', () => {
@@ -32,5 +32,21 @@ describe('buildExecutionMessageFrame', () => {
     expect(buildExecutionMessageFrame(null)).toEqual({ ok: false, error: 'text_required' });
     expect(buildExecutionMessageFrame('nope')).toEqual({ ok: false, error: 'text_required' });
     expect(buildExecutionMessageFrame(undefined)).toEqual({ ok: false, error: 'text_required' });
+  });
+});
+
+describe('buildExecutionCancelFrame', () => {
+  it('builds an execution.cancel frame with the executionId', () => {
+    expect(buildExecutionCancelFrame({ executionId: 7 })).toEqual({ type: 'execution.cancel', executionId: 7 });
+  });
+
+  it('omits executionId when missing or non-finite', () => {
+    expect(buildExecutionCancelFrame({})).toEqual({ type: 'execution.cancel', executionId: undefined });
+    expect(buildExecutionCancelFrame({ executionId: Number.NaN })).toEqual({ type: 'execution.cancel', executionId: undefined });
+  });
+
+  it('does not throw on null / non-object payloads', () => {
+    expect(buildExecutionCancelFrame(null)).toEqual({ type: 'execution.cancel', executionId: undefined });
+    expect(buildExecutionCancelFrame('nope')).toEqual({ type: 'execution.cancel', executionId: undefined });
   });
 });

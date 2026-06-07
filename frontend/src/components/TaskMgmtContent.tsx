@@ -35,14 +35,7 @@ import {
   taskStatusBadgeClass,
 } from '@/lib/taskStatus';
 
-type TaskView = 'board' | 'list' | 'calendar' | 'gantt';
-
-const TASK_VIEW_OPTIONS: Array<{ value: TaskView; label: string }> = [
-  { value: 'board', label: 'Board' },
-  { value: 'list', label: 'List' },
-  { value: 'calendar', label: 'Calendar' },
-  { value: 'gantt', label: 'Gantt' },
-];
+type TaskView = 'board' | 'table' | 'calendar' | 'gantt';
 
 /** A rendered kanban column = a swimlane (board column). `status` is the lane key tasks sit in. */
 interface BoardColumn {
@@ -534,7 +527,7 @@ export function TaskMgmtContent({
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <ViewToggle value={view} onChange={setView} options={TASK_VIEW_OPTIONS} />
+            <ViewToggle value={view} onChange={setView} board table calendar gantt />
             <button type="button" onClick={openCreate} style={buttonPrimary}>
               New task
             </button>

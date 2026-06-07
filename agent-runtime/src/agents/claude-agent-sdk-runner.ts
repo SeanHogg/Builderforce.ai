@@ -30,6 +30,12 @@ export interface V2RunParams {
   anthropicBaseUrl: string;
   /** Auth key the gateway resolves the tenant from (sent as x-api-key by the SDK). */
   gatewayAuthKey: string;
+  /**
+   * Assigned-capability block (persona + skill/content references) appended to
+   * the SDK's system prompt so the V2 agent adopts what was assigned. Omitted/''
+   * when nothing is assigned.
+   */
+  appendSystemPrompt?: string;
   abortController?: AbortController;
 }
 
@@ -43,7 +49,13 @@ export async function runClaudeAgentSdkV2(
 
   try {
     const stream = query({
-      prompt: params.prompt,
+      // Prepend the assigned Skills/Personas/Content as a guidance preamble. The
+      // SDK's default system prompt is empty, so injecting via the prompt (rather
+      // than switching to the claude_code preset) adds the capabilities without
+      // changing the V2 agent's base behavior.
+      prompt: params.appendSystemPrompt?.trim()
+        ? `${params.appendSystemPrompt.trim()}\n\n---\n\n${params.prompt}`
+        : params.prompt,
       options: {
         ...(params.model ? { model: params.model } : {}),
         cwd: params.cwd,

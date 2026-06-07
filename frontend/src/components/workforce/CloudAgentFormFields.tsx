@@ -44,6 +44,9 @@ export const ENGINE_LABELS: Record<AgentEngine, string> = {
   'builderforce-v2': 'BuilderForce-V2 (Anthropic — Claude Agent SDK)',
 };
 
+export const btnPrimary: React.CSSProperties = { padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' };
+export const btnSubtle: React.CSSProperties = { padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-strong)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' };
+
 export const inputStyle: React.CSSProperties = {
   width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)',
   background: 'var(--bg-elevated)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box',

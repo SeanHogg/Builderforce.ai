@@ -889,6 +889,27 @@ export interface ExecutionTrace {
   };
 }
 
+/** One currently-running (non-terminal) execution in the fleet. */
+export interface ActiveRun {
+  id: number;
+  status: 'pending' | 'submitted' | 'running';
+  taskId: number;
+  taskTitle: string;
+  agentHostId: number | null;
+  cloudAgentRef: string | null;
+  submittedBy: string;
+  startedAt: string | null;
+  createdAt: string;
+  kind: 'cloud' | 'on-prem';
+  elapsedMs: number | null;
+}
+
+export interface ActiveRunsResponse {
+  active: ActiveRun[];
+  /** Cloud agent refs with at least one in-flight run (for the "running" pill). */
+  runningCloudRefs: string[];
+}
+
 export const runtimeApi = {
   /** Submit a task for execution. Dispatches to assigned agentHost or all connected agentHosts. */
   submitExecution: (body: {
@@ -910,6 +931,12 @@ export const runtimeApi = {
    *  agent is actively running each task on the board. */
   listRecent: (limit = 200): Promise<Execution[]> =>
     request<Execution[]>(`/api/runtime/executions?limit=${limit}`),
+
+  /** Fleet "what's running right now": every non-terminal execution, tagged with
+   *  task title, the executing agent, and elapsed time. `runningCloudRefs` lets
+   *  the UI mark a cloud agent as actively running. */
+  listActive: (): Promise<ActiveRunsResponse> =>
+    request<ActiveRunsResponse>(`/api/runtime/active`),
 
   get: (id: number): Promise<Execution> =>
     request<Execution>(`/api/runtime/executions/${id}`),
@@ -949,6 +976,32 @@ export const runtimeApi = {
     const base = AUTH_API_URL.replace(/^http/, 'ws');
     return `${base}/api/runtime/executions/${id}/stream?token=${encodeURIComponent(token)}`;
   },
+};
+
+/** One source bucket in the usage breakdown — CLOUD vs ON-PREM vs WEB. */
+export interface UsageByKind {
+  kind: 'cloud' | 'on-prem' | 'web';
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  requests: number;
+  /** Estimated USD (catalog per-token prices — not an authoritative billed amount). */
+  estimatedCostUsd: number;
+}
+
+export interface DashboardUsage {
+  window: string;
+  windowStart: string;
+  totals: { tokens: number; requests: number; estimatedCostUsd: number };
+  byKind: UsageByKind[];
+  perModel: Array<{ model: string; totalTokens: number; requests: number; estimatedCostUsd: number }>;
+  perAgentHost: Array<{ agentHostId: number | null; totalTokens: number; requests: number }>;
+}
+
+export const dashboardApi = {
+  /** Token + estimated-cost usage split by source (cloud / on-prem / web). */
+  usage: (window: 'today' | 'week' | 'month' = 'week'): Promise<DashboardUsage> =>
+    request<DashboardUsage>(`/api/dashboard/usage?window=${window}`),
 };
 
 /**

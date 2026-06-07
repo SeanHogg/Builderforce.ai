@@ -18,6 +18,7 @@ import {
   DEFINED_TERMS,
   PRICING_PLANS,
   PRODUCT_SECTIONS,
+  PROJECTS_TASKS_FAQ,
   type FaqItem,
 } from './content';
 
@@ -249,6 +250,57 @@ export function productSchema() {
       breadcrumbs(
         { name: 'Home', url: BRAND.url },
         { name: 'Product', url: `${BRAND.url}/product` },
+      ),
+    ],
+  };
+}
+
+/** Projects / Tasks page: SoftwareApplication feature + ItemList of the two capabilities + FAQ + BreadcrumbList */
+export function projectsTasksSchema() {
+  const capabilities = [
+    {
+      name: 'Projects',
+      description:
+        'Collaborative AI project workspaces — each with a full in-browser IDE, files, assigned agents, and workflows. View projects as cards, a table, a calendar, or a Gantt timeline.',
+    },
+    {
+      name: 'Tasks',
+      description:
+        'A task board for your agent workforce — plan, prioritize, and assign tasks to AgentHosts, then watch them flow through every status across a board, table, calendar, or Gantt view.',
+    },
+  ];
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      organization,
+      {
+        '@type': 'SoftwareApplication',
+        '@id': `${BRAND.url}/#projects-tasks`,
+        name: `${BRAND.name} — Projects / Tasks`,
+        description:
+          'Projects / Tasks is the work-management surface of Builderforce.ai: organize work into AI project workspaces, then plan, assign, and track tasks across your agent workforce with board, table, calendar, and Gantt views, approval gates, and full observability.',
+        url: `${BRAND.url}/projects`,
+        applicationCategory: 'BusinessApplication',
+        operatingSystem: 'Web',
+        author: { '@id': `${BRAND.url}/#organization` },
+        dateModified: BRAND.dateModified,
+        featureList: capabilities.map((c) => c.name),
+      },
+      {
+        '@type': 'ItemList',
+        name: 'Builderforce.ai Projects / Tasks capabilities',
+        itemListElement: capabilities.map((c, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          name: c.name,
+          description: c.description,
+          url: `${BRAND.url}/projects`,
+        })),
+      },
+      faqSchema(PROJECTS_TASKS_FAQ),
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Projects / Tasks', url: `${BRAND.url}/projects` },
       ),
     ],
   };

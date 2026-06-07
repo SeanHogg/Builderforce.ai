@@ -1565,6 +1565,16 @@ html[data-theme='light'] .nebula {
   font-size: 11px;
   font-weight: 600;
 }
+/* Muted/"off" counterpart to .badge-green (DRAFT, OFFLINE, inactive states).
+   Previously re-inlined as a style object everywhere a non-green badge was needed. */
+.badge-muted {
+  background: var(--bg-elevated);
+  color: var(--muted);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+}
 
 /* Slide-out panels: standard overlay (blur) + drawer (background)
    Use theme variables so dark/light both get opaque, correct backgrounds. */

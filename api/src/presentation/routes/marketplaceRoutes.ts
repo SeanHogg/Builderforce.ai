@@ -14,6 +14,7 @@ import { eq, and, sql, desc } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import * as schema from '../../infrastructure/database/schema';
 import { signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
+import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
 import type { HonoEnv } from '../../env';
 
 // ---------------------------------------------------------------------------
@@ -510,6 +511,9 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
       })
       .where(eq(schema.marketplaceSkills.slug, slug))
       .returning();
+    // Invalidate the cloud capability cache so the next cloud run re-reads the
+    // edited skill body (name/description/readme).
+    await invalidateCapabilityCache(c.env, 'skill', slug);
     return c.json({ skill: updated });
   });
 

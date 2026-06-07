@@ -19,6 +19,8 @@ import { canDeleteAgent } from '@/lib/agentPermissions';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { FleetMeshContent } from '@/components/FleetMeshContent';
 import { UpgradeModal } from '@/components/UpgradeModal';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import { CloudAgentSlideOutPanel, type CloudAgentPanelTab } from './CloudAgentSlideOutPanel';
 import { ConfiguredQuickstartPopover } from './ConfiguredQuickstartPopover';
@@ -82,6 +84,10 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
 
   // --- "Connect a new agent" quickstart popover (caret on the split button) -
   const [quickstartOpen, setQuickstartOpen] = useState(false);
+
+  // Card | List view mode (session-only) — same shared toggle as every other
+  // collection page. Defaults to the card grid.
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
 
   // --- Remote agentHosts ---------------------------------------------------
   const [hosts, setHosts] = useState<AgentHost[]>([]);
@@ -241,6 +247,8 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     <section>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-strong)', margin: 0 }}>Agents</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {!loading && !isEmpty && <ViewToggle value={viewMode} onChange={setViewMode} />}
         <div style={{ position: 'relative', display: 'inline-flex' }}>
           <button type="button" onClick={() => openCreate('cloud')} style={splitMain}>+ Agent</button>
           <button
@@ -261,6 +269,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
               onClose={() => setQuickstartOpen(false)}
             />
           )}
+        </div>
         </div>
       </div>
       <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
@@ -283,7 +292,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
             Add agent
           </button>
         </div>
-      ) : (
+      ) : viewMode === 'card' ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
           {/* Remote agentHosts */}
           {hosts.map((host) => {
@@ -376,6 +385,96 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
               </div>
             </div>
           ))}
+        </div>
+      ) : (
+        /* List (table) view — the same three collections as the card grid,
+           flattened into one shared-chrome table. */
+        <div style={tableWrapStyle}>
+          <table style={tableStyle}>
+            <thead>
+              <tr style={theadRowStyle}>
+                <th style={thStyle}>Name</th>
+                <th style={thStyle}>Type</th>
+                <th style={thStyle}>Status</th>
+                <th style={thStyle}>Runtime</th>
+                <th style={thStyle}>Price</th>
+                <th style={thStyle} aria-label="Actions" />
+              </tr>
+            </thead>
+            <tbody>
+              {/* Remote agentHosts */}
+              {hosts.map((host) => {
+                const connected = !!host.online;
+                const isDefault = defaultAgentHostId != null && host.id === defaultAgentHostId;
+                return (
+                  <tr
+                    key={`host-${host.id}`}
+                    style={{ ...trStyle, cursor: 'pointer' }}
+                    onClick={() => setSelectedHost(host)}
+                  >
+                    <td style={tdStyle}>
+                      {host.name}
+                      {isDefault && (
+                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>Default</span>
+                      )}
+                    </td>
+                    <td style={tdStyle}><TypePill kind="host" /></td>
+                    <td style={tdMutedStyle}>{connected ? 'Online' : 'Offline'}</td>
+                    <td style={tdMutedStyle}>Remote</td>
+                    <td style={tdMutedStyle}>—</td>
+                    <td style={tdStyle} onClick={(e) => e.stopPropagation()}>
+                      <button type="button" onClick={() => setSelectedHost(host)} style={btnSubtle}>Open</button>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {/* Cloud agents */}
+              {cloudAgents.map((a) => (
+                <tr key={`cloud-${a.id}`} style={trStyle}>
+                  <td style={tdStyle}>{a.name}</td>
+                  <td style={tdStyle}><TypePill kind="cloud" /></td>
+                  <td style={tdMutedStyle}>{a.published ? 'Published' : 'Draft'}</td>
+                  <td style={tdMutedStyle}>{RUNTIME_LABELS[a.runtime_support ?? 'cloud']}</td>
+                  <td style={tdMutedStyle}>{priceLabel(a)}</td>
+                  <td style={tdStyle}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {a.published
+                        ? <button type="button" style={btnSubtle} onClick={() => unpublish(a)}>Unpublish</button>
+                        : <button type="button" style={btnPrimary} onClick={() => openAgentPanel(a, 'pricing')}>Publish</button>}
+                      <button type="button" style={btnSubtle} onClick={() => openAgentPanel(a, 'details')}>Edit</button>
+                      {canDeleteAgent(a) && (
+                        <button
+                          type="button"
+                          style={{ ...btnSubtle, color: 'var(--danger, #dc2626)', borderColor: 'rgba(239,68,68,0.3)' }}
+                          onClick={() => deleteOwned(a)}
+                          title="Delete this draft agent (only available while unpublished and unpurchased)"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+
+              {/* Purchased (marketplace) agents — no owner actions. */}
+              {purchasedAgents.map((a) => (
+                <tr key={`purchased-${a.id}`} style={trStyle}>
+                  <td style={tdStyle}>{a.name}</td>
+                  <td style={tdStyle}>
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--accent)', border: '1px solid var(--border)' }}>
+                      Marketplace
+                    </span>
+                  </td>
+                  <td style={tdMutedStyle}>—</td>
+                  <td style={tdMutedStyle}>{RUNTIME_LABELS[a.runtime_support ?? 'cloud']}</td>
+                  <td style={tdMutedStyle}>{priceLabel(a)}</td>
+                  <td style={tdStyle} />
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

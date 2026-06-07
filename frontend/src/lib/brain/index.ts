@@ -60,3 +60,13 @@ export {
   saveTasks,
   type GeneratedTasks,
 } from './projectArtifacts';
+
+// Platform-action layer: the Brain's "MCP for every capability" registry +
+// the platform co-pilot persona that drives it.
+export {
+  buildPlatformActions,
+  buildPlatformCapabilities,
+  type PlatformCapability,
+  type PlatformActionContext,
+} from './platformActions';
+export { PLATFORM_BRAIN_SYSTEM_PROMPT } from './platformPrompt';

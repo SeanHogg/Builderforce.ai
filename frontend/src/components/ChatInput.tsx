@@ -41,8 +41,8 @@ export interface ChatInputProps {
   /** Pending attachments to display (e.g. before send). */
   pendingAttachments?: ChatInputAttachment[];
   onRemoveAttachment?: (key: string) => void;
-  /** Optional link below the row (e.g. "Manage workforce / agentHosts"). */
-  secondaryLink?: { label: string; href: string };
+  /** Optional content rendered right-aligned below the input row (e.g. agent-connection status). */
+  secondaryContent?: React.ReactNode;
   className?: string;
 }
 
@@ -148,7 +148,7 @@ export function ChatInput({
   showVoice = false,
   pendingAttachments = [],
   onRemoveAttachment,
-  secondaryLink,
+  secondaryContent,
   className,
 }: ChatInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -331,11 +331,9 @@ export function ChatInput({
           <SendArrowIcon />
         </button>
       </div>
-      {secondaryLink && (
+      {secondaryContent && (
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <Link href={secondaryLink.href} style={{ fontSize: 12, color: 'var(--coral-bright)', textDecoration: 'none' }}>
-            {secondaryLink.label}
-          </Link>
+          {secondaryContent}
         </div>
       )}
     </form>

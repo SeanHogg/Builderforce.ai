@@ -9,7 +9,9 @@ import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
+import { loadCapabilityContext } from '../../application/artifact/capabilityContext';
 import { ideProxy, type ChatMessage } from '../../application/llm/LlmProxyService';
+import { recordUsageRow } from '../../application/llm/usageLedger';
 import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
@@ -507,10 +509,20 @@ async function recordCloudToolEvent(
   } catch { /* telemetry is best-effort — never break the run */ }
 }
 
-/** Record cloud-agent token usage for the run. Best-effort — never throws. */
+/**
+ * Record cloud-agent token usage for the run. Writes to BOTH ledgers so the two
+ * views reconcile (previously cloud usage only hit usage_snapshots and was
+ * invisible to the billing/cost log):
+ *   • usage_snapshots — the per-execution trace view (context/compaction columns).
+ *   • llm_usage_log   — the canonical usage/billing ledger, tagged with the cloud
+ *     dimensions (cloud_agent_ref + execution_id) so cost can be split by
+ *     cloud-vs-on-prem (migration 0096). Shared insert with the gateway path via
+ *     recordUsageRow.
+ * Best-effort — never throws.
+ */
 async function recordCloudUsage(
   db: Db,
-  args: { tenantId: number; cloudAgentRef?: string; executionId: number; inputTokens: number; outputTokens: number },
+  args: { tenantId: number; cloudAgentRef?: string; executionId: number; model: string; inputTokens: number; outputTokens: number },
 ): Promise<void> {
   try {
     await db.insert(usageSnapshots).values({
@@ -524,6 +536,16 @@ async function recordCloudUsage(
       contextTokens: args.inputTokens + args.outputTokens,
     });
   } catch { /* best-effort */ }
+  await recordUsageRow(db, {
+    tenantId:   args.tenantId,
+    userId:     null,
+    llmProduct: 'builderforceLLM',
+    model:      args.model,
+    usage:      { promptTokens: args.inputTokens, completionTokens: args.outputTokens, totalTokens: args.inputTokens + args.outputTokens },
+    metadata:   { engine: 'cloud', executionId: args.executionId },
+    useCase:    'task_execution',
+    attribution: { cloudAgentRef: args.cloudAgentRef ?? null, executionId: args.executionId },
+  });
 }
 
 /** Synthetic cloud-agent ref for runs dispatched to the gateway default (no named
@@ -592,7 +614,8 @@ async function runCloudToolLoop(
   model: string | undefined,
   systemPrompt: string,
   userContent: string,
-): Promise<{ ok: boolean; output: string }> {
+  isCancelled: () => Promise<boolean>,
+): Promise<{ ok: boolean; output: string; cancelled: boolean }> {
   const repoResolved = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskRow.id);
   const repoCtx: TicketRepoContext | null = repoResolved.ok ? repoResolved.ctx : null;
   const repoMiss = repoResolved.ok ? '' : repoResolved.reason;
@@ -605,8 +628,14 @@ async function runCloudToolLoop(
 
   let finalOutput = '';
   let finished = false;
+  let cancelled = false;
 
   for (let step = 0; step < MAX_CLOUD_TOOL_STEPS && !finished; step++) {
+    // Honor a cancel issued mid-run: the /cancel endpoint flips the DB row to
+    // CANCELLED (cross-isolate), so we re-read status before each (paid) LLM
+    // call and stop the loop instead of burning more tokens. Caps spend to at
+    // most the in-flight step.
+    if (await isCancelled()) { cancelled = true; break; }
     const tGen0 = Date.now();
     const result = await ideProxy(env).complete({
       messages: messages as unknown as ChatMessage[],
@@ -619,7 +648,7 @@ async function runCloudToolLoop(
     const resolvedModel = result.resolvedModel ?? model ?? 'default';
     if (result.usage) {
       await recordCloudUsage(db, {
-        tenantId, cloudAgentRef, executionId,
+        tenantId, cloudAgentRef, executionId, model: resolvedModel,
         inputTokens: result.usage.promptTokens ?? 0,
         outputTokens: result.usage.completionTokens ?? 0,
       });
@@ -632,7 +661,7 @@ async function runCloudToolLoop(
         detail: { model: resolvedModel, traceId: result.traceId ?? null, step },
         result: `gateway ${result.response.status}`, durationMs: genMs,
       });
-      return { ok: false, output: `Gateway ${result.response.status}: ${body.slice(0, 300)}` };
+      return { ok: false, output: `Gateway ${result.response.status}: ${body.slice(0, 300)}`, cancelled };
     }
 
     const json = (await result.response.json().catch(() => null)) as
@@ -723,8 +752,8 @@ async function runCloudToolLoop(
     finalOutput ||
     (writtenPaths.size > 0
       ? `Committed ${writtenPaths.size} file(s) to \`${repoCtx?.branch}\`${prOpened ? ' and opened a pending-change PR' : ''}.`
-      : '(no output produced)');
-  return { ok: true, output };
+      : cancelled ? 'Run cancelled before any output was produced.' : '(no output produced)');
+  return { ok: true, output, cancelled };
 }
 
 /**
@@ -745,6 +774,7 @@ async function runCloudExecution(
   agentLabel: string,
   cloudAgentRef?: string,
   payload?: string,
+  artifacts?: ResolvedArtifacts,
 ): Promise<void> {
   let model: string | undefined;
   try {
@@ -752,7 +782,18 @@ async function runCloudExecution(
     if (p && typeof p.model === 'string' && p.model.trim()) model = p.model.trim();
   } catch { /* payload not JSON — use default model */ }
 
+  // Cross-isolate cancel check: the /cancel endpoint flips the DB row to
+  // CANCELLED from a different request/isolate; the background loop polls this
+  // between paid steps and stops instead of running to completion.
+  const isCancelled = async (): Promise<boolean> => {
+    try {
+      return (await runtimeService.getExecution(executionId)).status === ExecutionStatus.CANCELLED;
+    } catch { return false; }
+  };
+
   try {
+    // Already cancelled before we even started running → don't transition or spend.
+    if (await isCancelled()) return;
     const running = await runtimeService.update(executionId, { status: ExecutionStatus.RUNNING });
     notifyExecutionSubscribers(executionId, {
       type: 'status_change',
@@ -762,11 +803,13 @@ async function runCloudExecution(
       ts: new Date().toISOString(),
     });
 
-    // Step 1 — PRD-first. Step 2 — governance/arch context (parallel reads).
+    // Step 1 — PRD-first. Step 2 — governance/arch context. Step 3 — assigned
+    // capabilities (Skills/Personas/Content). All three are parallel reads.
     const tPrep0 = Date.now();
-    const [prd, governance] = await Promise.all([
+    const [prd, governance, capabilities] = await Promise.all([
       ensureTaskPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model),
       loadGovernanceContext(db, tenantId, projectId),
+      loadCapabilityContext(env, db, artifacts),
     ]);
     await recordCloudToolEvent(db, {
       tenantId, cloudAgentRef, executionId,
@@ -775,6 +818,19 @@ async function runCloudExecution(
       result: `${prd ? 'PRD ready' : 'no PRD'} · ${governance ? 'governance loaded' : 'no governance'}`,
       durationMs: Date.now() - tPrep0,
     });
+
+    // Record capability loading as its own timeline event so the Observability
+    // timeline shows exactly which Skills/Personas/Content the cloud agent loaded.
+    const cap = capabilities.summary;
+    if (cap.skills.length || cap.personas.length || cap.content.length) {
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef, executionId,
+        toolName: 'capabilities.load', category: 'context',
+        detail: cap,
+        result: `${cap.personas.length} persona(s), ${cap.skills.length} skill(s), ${cap.content.length} content`
+          + (cap.missing.length ? ` · ${cap.missing.length} unresolved: ${cap.missing.join(', ')}` : ''),
+      });
+    }
 
     const userContent = [
       prd ? `## Product Requirements Document (PRD)\n\n${prd}` : null,
@@ -786,13 +842,28 @@ async function runCloudExecution(
     // tools here — the Worker has no shell, so tools are provider-API-backed:
     // write files to the ticket branch, then finish). Each step + tool call is
     // recorded to the timeline.
-    const systemPrompt =
+    const systemPrompt = [
       'You are a BuilderForce agent executing a project task. Follow the PRD, architecture spec, and project rules exactly. ' +
       'Use the write_file tool to deliver each concrete file (full content, no bracketed placeholders); call finish with a summary when done. ' +
-      'If no repository is bound, return the complete deliverable in your final summary instead. Make explicit, reasonable assumptions where specifics are unknown.';
-    const { ok, output } = await runCloudToolLoop(
-      env, db, executionId, tenantId, taskRow, cloudAgentRef, agentLabel, model, systemPrompt, userContent,
+      'If no repository is bound, return the complete deliverable in your final summary instead. Make explicit, reasonable assumptions where specifics are unknown.',
+      // Assigned Skills/Personas/Content — identity + capabilities steer best from
+      // the system prompt, at parity with the self-hosted gateway injection.
+      capabilities.promptBlock || null,
+    ].filter(Boolean).join('\n\n');
+    const { ok, output, cancelled } = await runCloudToolLoop(
+      env, db, executionId, tenantId, taskRow, cloudAgentRef, agentLabel, model, systemPrompt, userContent, isCancelled,
     );
+
+    // Run was cancelled mid-loop: the row is already CANCELLED (a terminal
+    // state). Don't attempt a COMPLETED/FAILED transition (it would throw) —
+    // just surface the partial output to subscribers and stop.
+    if (cancelled || (await isCancelled())) {
+      notifyExecutionSubscribers(executionId, {
+        type: 'message', executionId, role: 'assistant',
+        text: output || 'Run cancelled.', ts: new Date().toISOString(),
+      });
+      return;
+    }
 
     notifyExecutionSubscribers(executionId, {
       type: 'message',
@@ -808,6 +879,8 @@ async function runCloudExecution(
         : { status: ExecutionStatus.FAILED, errorMessage: output },
     );
   } catch (e) {
+    // Don't clobber a cancellation (terminal) with a FAILED transition.
+    if (await isCancelled()) return;
     await runtimeService.update(executionId, {
       status: ExecutionStatus.FAILED,
       errorMessage: e instanceof Error ? e.message : String(e),
@@ -877,11 +950,16 @@ async function dispatchAndQueue(
   const targets = await getDispatchTargets(db, tenantId, taskRow.assignedAgentHostId);
   const dispatchType: DispatchMessage['type'] = taskRow.assignedAgentHostId != null ? 'task.assign' : 'task.broadcast';
 
+  // Parsed synchronously so the executing cloud agent's per-agent assignments
+  // (scope='agent', keyed on its ide_agents.id) fold into the resolved set —
+  // not just tenant/host/project/task scopes.
+  const cloudAgentRef = parseCloudAgentRef(payload);
   const [artifacts, agent, repoRef] = await Promise.all([
     resolveArtifacts(db, {
       tenantId,
       taskId: taskRow.id,
       agentHostId: taskRow.assignedAgentHostId ?? undefined,
+      cloudAgentRef,
     }),
     resolveCloudAgent(c.env as Env, tenantId, payload),
     resolveDefaultRepoForTask(db, tenantId, taskRow.id),
@@ -914,7 +992,7 @@ async function dispatchAndQueue(
     // No online self-hosted agent took it → queue a background cloud run. The
     // 'done' notification is emitted by the background task when it settles.
     c.executionCtx.waitUntil((async () => {
-      await runCloudExecution(c.env as Env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, payload);
+      await runCloudExecution(c.env as Env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, payload, artifacts);
       const updated = await runtimeService.getExecution(execution.id);
       notifyExecutionSubscribers(execution.id, {
         type: 'done',
@@ -1252,6 +1330,48 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     });
   });
 
+  // Fleet "what's running right now" — every non-terminal execution for the
+  // tenant (pending / submitted / running), with task title, the executing agent
+  // (host id or cloud agent ref), and how long it's been going. This is the live
+  // fleet view the dashboard's rolled-up counts couldn't give, and the single
+  // source the UI uses to mark a cloud agent as actively running.
+  // Intentionally uncached: a live operational surface that must reflect the
+  // fleet's state this instant (same rationale as /cloud-agents).
+  router.get('/active', async (c) => {
+    const tenantId = c.get('tenantId');
+    const limit = Math.min(Number(c.req.query('limit') ?? '200'), 500);
+    const rows = await db
+      .select({
+        id: executions.id,
+        status: executions.status,
+        taskId: executions.taskId,
+        taskTitle: tasks.title,
+        agentHostId: executions.agentHostId,
+        cloudAgentRef: tasks.assignedAgentRef,
+        submittedBy: executions.submittedBy,
+        startedAt: executions.startedAt,
+        createdAt: executions.createdAt,
+      })
+      .from(executions)
+      .innerJoin(tasks, eq(tasks.id, executions.taskId))
+      .where(and(eq(executions.tenantId, tenantId), inArray(executions.status, ['pending', 'submitted', 'running'])))
+      .orderBy(desc(executions.createdAt))
+      .limit(limit);
+
+    const now = Date.now();
+    const active = rows.map((r) => {
+      const isCloud = r.agentHostId == null;
+      const since = r.startedAt ?? r.createdAt;
+      return {
+        ...r,
+        kind: isCloud ? ('cloud' as const) : ('on-prem' as const),
+        cloudAgentRef: isCloud ? (r.cloudAgentRef ?? DEFAULT_CLOUD_REF) : null,
+        elapsedMs: since ? Math.max(0, now - new Date(since).getTime()) : null,
+      };
+    });
+    return c.json({ active, runningCloudRefs: [...new Set(active.filter((a) => a.kind === 'cloud').map((a) => a.cloudAgentRef))] });
+  });
+
   // Full execution timeline for one session (newest first)
   router.get('/sessions/:sessionId/executions', async (c) => {
     const sessionId = c.req.param('sessionId').trim();
@@ -1507,10 +1627,26 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     return new Response(null, { status: 101, webSocket: client });
   });
 
-  // Cancel an execution
+  // Cancel an execution. Beyond flipping the DB row to CANCELLED, this actually
+  // STOPS the work: self-hosted runs get an `execution.cancel` frame relayed to
+  // the host (which aborts the live session); cloud runs are halted by the
+  // background loop's per-step cancel poll (see runCloudToolLoop). Without this,
+  // cancel was cosmetic and the agent kept burning tokens to completion.
   router.post('/executions/:id/cancel', async (c) => {
     const id = Number(c.req.param('id'));
     const execution = await runtimeService.cancel(id, c.get('userId'));
+    const plain = execution.toPlain() as { agentHostId?: number | null };
+
+    if (plain.agentHostId != null) {
+      const stub = c.env.AGENT_HOST_RELAY?.get(
+        c.env.AGENT_HOST_RELAY.idFromName(String(plain.agentHostId)),
+      );
+      await stub?.fetch('https://relay.internal/execution-cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ executionId: id }),
+      }).catch(() => { /* best effort; status is already CANCELLED */ });
+    }
 
     notifyExecutionSubscribers(execution.id, {
       type: 'done',

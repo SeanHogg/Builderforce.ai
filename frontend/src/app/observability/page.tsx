@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ObservabilityContent } from '@/components/ObservabilityContent';
 import { LlmUsageContent } from '@/components/LlmUsageContent';
 import { QaContent } from '@/components/QaContent';
+import { ActiveRunsPanel } from '@/components/ActiveRunsPanel';
 
 type Tab = 'logs' | 'llm' | 'qa';
 
@@ -26,6 +27,11 @@ export default function ObservabilityPage() {
       <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>
         Agent logs, execution timelines, and LLM usage metrics across your workspace.
       </p>
+
+      {/* Live fleet view — what's running right now (self-hides when idle). */}
+      <div style={{ marginBottom: 24 }}>
+        <ActiveRunsPanel />
+      </div>
 
       {/* Tab bar */}
       <div

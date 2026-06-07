@@ -111,6 +111,7 @@ import {
 import { runVendorHealthCron } from './application/llm/vendorHealthCron';
 import { runDueTriggers } from './application/workflow/runDueTriggers';
 import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
+import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
 import { handleInboundEmail } from './application/workflow/inboundEmail';
 
 // Middleware
@@ -377,6 +378,13 @@ export default {
           .catch((err) => {
             console.error('[cron:wf-triggers] failed', err);
           }),
+      );
+      // Fail executions stranded in running/pending by a crashed host or dropped
+      // dispatch, so stuck rows can't accumulate (no heartbeat timeout exists).
+      ctx.waitUntil(
+        reapStaleExecutions(env).catch((err) => {
+          console.error('[cron:exec-reaper] failed', err);
+        }),
       );
     }
   },
