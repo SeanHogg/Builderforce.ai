@@ -437,14 +437,14 @@ describe('listAgents', () => {
 });
 
 describe('hireAgent', () => {
-  it('POSTs to /api/agents/:id/hire and returns the updated agent', async () => {
+  it('POSTs to /api/workforce/agents/:id/hire and returns the updated agent', async () => {
     const hired = { ...sampleAgent, hire_count: 1 };
     fetchSpy.mockResolvedValueOnce(
       new Response(JSON.stringify(hired), { status: 200 })
     );
     const result = await hireAgent('agent-1');
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(url).toMatch(/\/api\/ide\/agents\/agent-1\/hire$/);
+    expect(url).toMatch(/\/api\/workforce\/agents\/agent-1\/hire$/);
     expect(init.method).toBe('POST');
     expect(result.hire_count).toBe(1);
   });

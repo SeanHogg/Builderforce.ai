@@ -914,6 +914,22 @@ export const agentAssignments = pgTable('agent_assignments', {
 ]);
 
 /**
+ * Per-tenant marketplace agent purchases (migration 0085). One row per agent a
+ * tenant has acquired from the marketplace, so the /workforce directory shows
+ * purchased agents alongside owned ones and an owned agent with purchases can't
+ * be deleted. `agentId` references the raw-SQL `ide_agents.id` (no FK).
+ */
+export const agentPurchases = pgTable('agent_purchases', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  agentId:   varchar('agent_id', { length: 64 }).notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_agent_purchases').on(t.tenantId, t.agentId),
+  index('idx_agent_purchases_agent').on(t.agentId),
+]);
+
+/**
  * Platform personas — admin-managed personas (CRUD in Platform Admin).
  * Merged with built-in personas for marketplace display.
  */

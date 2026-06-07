@@ -429,14 +429,6 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     return c.json(row);
   });
 
-  router.post('/agents/:id/hire', async (c) => {
-    const [row] = await getSql(c)`
-      UPDATE ide_agents SET hire_count = hire_count + 1, updated_at = NOW() WHERE id = ${c.req.param('id')} RETURNING *
-    `;
-    if (!row) return c.json({ error: 'Agent not found' }, 404);
-    return c.json(row);
-  });
-
   router.get('/agents/:id/package', async (c) => {
     const agentId = c.req.param('id');
     const [agent] = await getSql(c)`SELECT * FROM ide_agents WHERE id = ${agentId}`;

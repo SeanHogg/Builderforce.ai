@@ -9,10 +9,13 @@ import {
 } from '@/lib/builderforceApi';
 import {
   listMyAgents,
+  listPurchasedAgents,
   createCloudAgent,
   updateAgent,
+  deleteAgent,
 } from '@/lib/api';
 import type { PublishedAgent } from '@/lib/types';
+import { canDeleteAgent } from '@/lib/agentPermissions';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { FleetMeshContent } from '@/components/FleetMeshContent';
 import { UpgradeModal } from '@/components/UpgradeModal';
@@ -89,6 +92,8 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   // --- Cloud agents --------------------------------------------------------
   const [cloudAgents, setCloudAgents] = useState<PublishedAgent[]>([]);
   const [loadingCloud, setLoadingCloud] = useState(true);
+  // Agents acquired from the marketplace (distinct from the tenant's own).
+  const [purchasedAgents, setPurchasedAgents] = useState<PublishedAgent[]>([]);
 
   const [error, setError] = useState('');
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
@@ -128,7 +133,11 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       .finally(() => setLoadingCloud(false));
   }, []);
 
-  useEffect(() => { loadHosts(); loadCloud(); }, [loadHosts, loadCloud]);
+  const loadPurchased = useCallback(() => {
+    return listPurchasedAgents().then(setPurchasedAgents).catch(() => setPurchasedAgents([]));
+  }, []);
+
+  useEffect(() => { loadHosts(); loadCloud(); loadPurchased(); }, [loadHosts, loadCloud, loadPurchased]);
 
   useEffect(() => {
     if (tenantId == null) return;
@@ -215,9 +224,18 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
 
   // --- Quick card actions --------------------------------------------------
   const unpublish = async (a: PublishedAgent) => { await updateAgent(a.id, { published: false }); loadCloud(); };
+  const deleteOwned = async (a: PublishedAgent) => {
+    if (!confirm(`Delete agent "${a.name}"? This permanently removes it and its per-agent skills/personas. This cannot be undone.`)) return;
+    try {
+      await deleteAgent(a.id);
+      loadCloud();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed');
+    }
+  };
 
   const loading = loadingHosts || loadingCloud;
-  const isEmpty = hosts.length === 0 && cloudAgents.length === 0;
+  const isEmpty = hosts.length === 0 && cloudAgents.length === 0 && purchasedAgents.length === 0;
 
   return (
     <section>
@@ -325,6 +343,36 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                   : <button type="button" style={btnPrimary} onClick={() => openAgentPanel(a, 'pricing')}>Publish</button>}
                 {a.published && <button type="button" style={btnSubtle} onClick={() => openAgentPanel(a, 'pricing')}>Edit price</button>}
                 <button type="button" style={btnSubtle} onClick={() => openAgentPanel(a, 'details')}>Edit</button>
+                {canDeleteAgent(a) && (
+                  <button
+                    type="button"
+                    style={{ ...btnSubtle, color: 'var(--danger, #dc2626)', borderColor: 'rgba(239,68,68,0.3)' }}
+                    onClick={() => deleteOwned(a)}
+                    title="Delete this draft agent (only available while unpublished and unpurchased)"
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {/* Purchased (marketplace) agents — acquired from the marketplace, not
+              owned by this tenant, so no edit/publish/delete. */}
+          {purchasedAgents.map((a) => (
+            <div key={`purchased-${a.id}`} className="card" style={cardStyle}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 600, color: 'var(--text-strong)', flex: 1 }}>{a.name}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--accent)', border: '1px solid var(--border)' }}>
+                  Marketplace
+                </span>
+              </div>
+              {a.title && a.title !== a.name && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{a.title}</div>}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 11 }}>
+                <span style={{ padding: '2px 8px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--accent)' }}>
+                  {RUNTIME_LABELS[a.runtime_support ?? 'cloud']}
+                </span>
+                <span style={{ padding: '2px 8px', borderRadius: 6, background: 'var(--bg-elevated)', color: 'var(--text-strong)' }}>{priceLabel(a)}</span>
               </div>
             </div>
           ))}
