@@ -1650,14 +1650,25 @@ full `api/src` rename (`Claw*`→`AgentHost*`, table `coderclaw_instances`→`ag
   filtered to one project — mildly inconsistent with the filtered execution list below it. Fixing
   (add `project_id` to `workflow_definitions`, a project picker in the builder, and filter
   `SavedDefinitionsSection` by the active `projectId`) unblocks: a fully project-scoped Workflows page.
-- **Cloud execution is still a single gateway completion, not a real agent loop.** This pass made the
-  kickoff non-blocking — [POST /api/runtime/executions](api/src/presentation/routes/runtimeRoutes.ts)
-  now returns `pending` immediately and runs the cloud path in the background via `executionCtx.waitUntil`
-  (`dispatchAndQueue`), streaming status + final output to WS subscribers. But `runCloudExecution` still
-  calls `ideProxy(env).complete()` once — no tools, no repo, no file writes — so cloud runs produce prose,
-  not code changes, and the new Changes tab stays empty for them. A true cloud agent needs a server-side
-  pi-agent runtime (container/queue consumer running the same loop as a self-hosted agentHost). Fixing
-  unblocks: cloud runs that actually edit files + a populated Changes tab without a self-hosted claw.
+- **Cloud execution does not clone/analyze the repo or write `PRD.md` into it — only the DB PRD step runs.**
+  `runCloudExecution` ([runtimeRoutes.ts](api/src/presentation/routes/runtimeRoutes.ts)) is now PRD-first and
+  rules-aware: it `ensureProjectPrd()`s (generates a WIP PRD if the project has none, persists it to `specs`
+  so it shows in the **PRD tab**, emits it as the first `file_change`), then produces the deliverable honoring
+  the PRD + `projects.governance` with a no-placeholder instruction. **Still missing the rest of the standard
+  flow:** it does not pull the repo, analyze the code, run tools, or write `PRD.md`/changes into the actual
+  repository (the Worker has no FS/subprocess). That requires a connected runtime (V2 Claude Agent SDK or a
+  self-hosted agentHost). Fixing (route cloud runs to a builderforce-operated agent-runtime that clones the
+  repo, drafts `PRD.md` from code analysis, and commits it) unblocks: the full repo-aware flow the user expects.
+- **PRD-first is cloud-path-only; runtime "Run task" executes a single agent turn, not the PRD-first flow.**
+  `ensureProjectPrd` runs inside `runCloudExecution`, so a self-hosted / V2 run of a single task does NOT
+  guarantee a PRD is drafted + persisted first (the orchestrator's planning workflow does PRD→arch→tasks, but
+  a one-off "Run" dispatches a single `chat.send`/V2 run). Fixing (hoist the PRD-first step into
+  `dispatchAndQueue` for all runs, or have the runtime write `PRD.md` + POST it back to `specs`) unblocks:
+  a uniform PRD-first flow regardless of which engine executes, with the PRD always landing in the PRD tab.
+- **PRD tab doesn't auto-refresh after a run drafts a PRD.** [TaskPrdTab](frontend/src/components/task/TaskPrdTab.tsx)
+  fetches `specsApi.list(projectId)` on mount/projectId-change only, so a PRD created by a just-finished run
+  appears on next open, not live. Fixing (refetch on execution `done`, or lift a shared PRD store) unblocks:
+  the PRD appearing in the tab the moment the run drafts it.
 - **PRD WIP file is full-replace by the PRD-owner task only; downstream agents can't edit it.** The new
   [prd-wip.ts](agent-runtime/src/builderforce/prd-wip.ts) writes `PRD.md` at the repo root (and `git add`s it
   as a pending commit) when an `architecture-advisor` task whose description names a PRD completes, and the

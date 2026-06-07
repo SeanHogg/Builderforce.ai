@@ -40,6 +40,7 @@ import { AgentHostStageDispatcher } from '../../application/swimlane/agentHostSt
 import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { openDispatchPullRequest } from '../../application/repos/openDispatchPullRequest';
+import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
 import { executeGitProxy } from '../../application/repos/gitProxy';
 import { agentDispatches } from '../../infrastructure/database/schema';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
@@ -1565,6 +1566,27 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
 
     const result = await openDispatchPullRequest(db, secret, agentHost.tenantId, dispatchId, body);
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json({ ok: true, url: result.url, number: result.number });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/agent-hosts/:id/tasks/:taskId/pull-request   (host key auth)
+  // Ticket finalize: after the host pushes the shared task-workspace branch, it
+  // opens the PR here. Same server-side credential flow as the dispatch PR route.
+  // -------------------------------------------------------------------------
+  router.post('/:id/tasks/:taskId/pull-request', async (c) => {
+    const agentHostId = Number(c.req.param('id'));
+    const agentHost = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
+    if (!agentHost) return c.text('Unauthorized', 401);
+
+    const taskId = Number(c.req.param('taskId'));
+    if (!Number.isFinite(taskId)) return c.json({ error: 'invalid taskId' }, 400);
+    const body = await c.req.json<{ branch: string; base?: string; title?: string; body?: string }>();
+    const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
+    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+
+    const result = await openTaskPullRequest(db, secret, agentHost.tenantId, taskId, body);
     if (!result.ok) return c.json({ error: result.error }, result.status);
     return c.json({ ok: true, url: result.url, number: result.number });
   });

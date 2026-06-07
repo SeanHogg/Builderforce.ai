@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { neon } from '@neondatabase/serverless';
+import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
@@ -39,6 +40,10 @@ type DispatchMessage = {
   payload?: string;
   /** Agent runtime engine resolved from the run-target cloud agent (default v1). */
   engine?: string;
+  /** Human label of the executing cloud agent (change traceability). */
+  agentLabel?: string;
+  /** Repo bound to the task's project, for cloning into the ticket workspace. */
+  repo?: { repoId: string; defaultBranch: string | null };
   task: {
     title: string;
     description?: string | null;
@@ -308,24 +313,19 @@ function extractCompletion(raw: unknown): string {
  * `pending` forever. Coding tasks that need a real repo/runtime still belong on
  * an agentHost — this is the fallback so non-host runs complete. Never throws.
  */
-/**
- * Load the project's PRD + architecture spec + governance rules so the cloud
- * fallback honors them (the degraded path has no workspace/`PRD.md`, so it must
- * pull the same context the orchestrator would inject from the DB). Best-effort:
- * returns '' on any miss. One read per cloud run (not a hot path).
- */
-async function loadProjectContext(db: Db, tenantId: number, projectId: number): Promise<string> {
+/** Load the project's governance rules + architecture spec (the non-PRD context
+ *  the deliverable must honor). Best-effort: '' on any miss. */
+async function loadGovernanceContext(db: Db, tenantId: number, projectId: number): Promise<string> {
   const parts: string[] = [];
   try {
     const [spec] = await db
-      .select({ prd: specs.prd, archSpec: specs.archSpec })
+      .select({ archSpec: specs.archSpec })
       .from(specs)
       .where(and(eq(specs.tenantId, tenantId), eq(specs.projectId, projectId)))
       .orderBy(desc(specs.updatedAt))
       .limit(1);
-    if (spec?.prd?.trim()) parts.push(`## Product Requirements Document (PRD)\n\n${spec.prd.trim()}`);
     if (spec?.archSpec?.trim()) parts.push(`## Architecture Spec\n\n${spec.archSpec.trim()}`);
-  } catch { /* no spec / transient — skip */ }
+  } catch { /* skip */ }
   try {
     const [proj] = await db
       .select({ governance: projects.governance })
@@ -333,17 +333,103 @@ async function loadProjectContext(db: Db, tenantId: number, projectId: number): 
       .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
       .limit(1);
     if (proj?.governance?.trim()) parts.push(`## Project Rules / Governance (must be followed)\n\n${proj.governance.trim()}`);
-  } catch { /* no governance — skip */ }
+  } catch { /* skip */ }
   return parts.join('\n\n');
 }
 
+/**
+ * PRD-first step of the standard flow: ensure the project has a PRD for this
+ * work. If one already exists it's reused; otherwise a WIP PRD is generated from
+ * the task, **persisted to `specs`** (so it appears in the PRD tab and is
+ * associated with the project) and surfaced as the first "file change" (PRD.md).
+ * Returns the PRD markdown, or '' if generation failed. Never throws.
+ *
+ * NOTE: cloning the repo + analyzing the code before drafting (and writing
+ * `PRD.md` into the actual repo) requires a connected runtime — see gap register.
+ * Here we persist to the canonical PRD store the PRD tab reads.
+ */
+async function ensureProjectPrd(
+  env: Env,
+  db: Db,
+  executionId: number,
+  taskRow: { title: string; description: string | null },
+  tenantId: number,
+  projectId: number,
+  model: string | undefined,
+): Promise<string> {
+  let existingId: string | undefined;
+  try {
+    const [existing] = await db
+      .select({ id: specs.id, prd: specs.prd })
+      .from(specs)
+      .where(and(eq(specs.tenantId, tenantId), eq(specs.projectId, projectId)))
+      .orderBy(desc(specs.updatedAt))
+      .limit(1);
+    if (existing?.prd?.trim()) return existing.prd.trim(); // PRD already exists — reuse
+    existingId = existing?.id;
+  } catch { /* fall through to generate */ }
+
+  let prd = '';
+  try {
+    const gen = await ideProxy(env).complete({
+      messages: [
+        { role: 'system', content: 'You are a senior product architect drafting the WIP Product Requirements Document (PRD) that every downstream agent on this task will share. Write a concise, well-structured PRD in GitHub-flavored markdown covering: Problem & Goal, Target users / ICP roles (if relevant), Scope, Functional requirements, Acceptance criteria, and Out of scope. Output ONLY the PRD markdown — no preamble and no bracketed placeholders.' },
+        { role: 'user', content: `Task: ${taskRow.title}\n\n${taskRow.description ?? ''}`.trim() },
+      ],
+      ...(model ? { model } : {}),
+      useCase: 'prd_generation',
+    });
+    if (gen.response.status < 400) prd = extractCompletion(await gen.response.json().catch(() => null));
+  } catch { /* generation failed — return '' */ }
+
+  prd = prd.trim();
+  if (!prd) return '';
+
+  try {
+    const now = new Date();
+    const specId = existingId ?? crypto.randomUUID();
+    await db
+      .insert(specs)
+      .values({ id: specId, tenantId, projectId, goal: taskRow.title, status: 'draft', prd, createdAt: now, updatedAt: now })
+      .onConflictDoUpdate({ target: [specs.id], set: { prd, goal: taskRow.title, updatedAt: now } });
+  } catch { /* persistence failed — still use the PRD as context below */ }
+
+  // Surface the PRD as the first change + a note (best-effort; the PRD tab is the
+  // durable surface).
+  notifyExecutionSubscribers(executionId, {
+    type: 'file_change',
+    executionId,
+    path: 'PRD.md',
+    change: existingId ? 'modified' : 'created',
+    ts: new Date().toISOString(),
+  });
+  notifyExecutionSubscribers(executionId, {
+    type: 'message',
+    executionId,
+    role: 'assistant',
+    text: '📝 Drafted the WIP **PRD** for this task and saved it — see the **PRD** tab. Proceeding with the deliverable against it.',
+    ts: new Date().toISOString(),
+  });
+
+  return prd;
+}
+
+/**
+ * Run an execution server-side via the gateway when NO online agentHost took the
+ * dispatch (Auto / cloud agent with no self-hosted runtime). Standard flow:
+ * (1) ensure a PRD exists (generate + persist + emit as first change), then
+ * (2) produce the deliverable honoring the PRD + project rules. Coding tasks that
+ * need a real repo/runtime still belong on an agentHost. Never throws.
+ */
 async function runCloudExecution(
   env: Env,
   runtimeService: RuntimeService,
+  db: Db,
   executionId: number,
   taskRow: { title: string; description: string | null },
+  tenantId: number,
+  projectId: number,
   payload?: string,
-  projectContext?: string,
 ): Promise<void> {
   let model: string | undefined;
   try {
@@ -360,8 +446,16 @@ async function runCloudExecution(
       execution: running.toPlain(),
       ts: new Date().toISOString(),
     });
+
+    // Step 1 — PRD-first. Step 2 — governance/arch context (parallel reads).
+    const [prd, governance] = await Promise.all([
+      ensureProjectPrd(env, db, executionId, taskRow, tenantId, projectId, model),
+      loadGovernanceContext(db, tenantId, projectId),
+    ]);
+
     const userContent = [
-      projectContext?.trim() ? projectContext.trim() : null,
+      prd ? `## Product Requirements Document (PRD)\n\n${prd}` : null,
+      governance || null,
       `## Your Task\n\n${taskRow.title}\n\n${taskRow.description ?? ''}`.trim(),
     ].filter(Boolean).join('\n\n---\n\n');
     const result = await ideProxy(env).complete({
@@ -412,8 +506,12 @@ type SubmittedExecution = { id: number; status: string; toPlain(): unknown };
  * One indexed lookup per execution-submit (not a hot read path), so it is not
  * cached. Never throws — defaults to 'builderforce-v1' on any failure.
  */
-async function resolveAgentEngine(env: Env, tenantId: number, payload: string | undefined): Promise<string> {
-  const DEFAULT = 'builderforce-v1';
+async function resolveCloudAgent(
+  env: Env,
+  tenantId: number,
+  payload: string | undefined,
+): Promise<{ engine: string; label?: string }> {
+  const DEFAULT = { engine: 'builderforce-v1' as const };
   if (!payload) return DEFAULT;
   let ref: string | undefined;
   try {
@@ -425,9 +523,10 @@ async function resolveAgentEngine(env: Env, tenantId: number, payload: string | 
   if (!ref) return DEFAULT;
   try {
     const sql = neon(env.NEON_DATABASE_URL);
-    const rows = (await sql`SELECT engine FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ engine?: string }>;
-    const engine = rows[0]?.engine;
-    return typeof engine === 'string' && engine ? engine : DEFAULT;
+    const rows = (await sql`SELECT engine, name FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ engine?: string; name?: string }>;
+    const engine = typeof rows[0]?.engine === 'string' && rows[0].engine ? rows[0].engine : 'builderforce-v1';
+    const label = typeof rows[0]?.name === 'string' && rows[0].name ? rows[0].name : undefined;
+    return { engine, label };
   } catch {
     return DEFAULT;
   }
@@ -455,13 +554,14 @@ async function dispatchAndQueue(
   const targets = await getDispatchTargets(db, tenantId, taskRow.assignedAgentHostId);
   const dispatchType: DispatchMessage['type'] = taskRow.assignedAgentHostId != null ? 'task.assign' : 'task.broadcast';
 
-  const [artifacts, engine] = await Promise.all([
+  const [artifacts, agent, repoRef] = await Promise.all([
     resolveArtifacts(db, {
       tenantId,
       taskId: taskRow.id,
       agentHostId: taskRow.assignedAgentHostId ?? undefined,
     }),
-    resolveAgentEngine(c.env as Env, tenantId, payload),
+    resolveCloudAgent(c.env as Env, tenantId, payload),
+    resolveDefaultRepoForTask(db, tenantId, taskRow.id),
   ]);
 
   const message: DispatchMessage = {
@@ -469,7 +569,9 @@ async function dispatchAndQueue(
     executionId: execution.id,
     taskId: taskRow.id,
     payload,
-    engine,
+    engine: agent.engine,
+    agentLabel: agent.label,
+    repo: repoRef ? { repoId: repoRef.repoId, defaultBranch: repoRef.defaultBranch } : undefined,
     task: { title: taskRow.title, description: taskRow.description },
     artifacts,
   };
@@ -482,8 +584,7 @@ async function dispatchAndQueue(
     // No online self-hosted agent took it → queue a background cloud run. The
     // 'done' notification is emitted by the background task when it settles.
     c.executionCtx.waitUntil((async () => {
-      const projectContext = await loadProjectContext(db, tenantId, taskRow.projectId);
-      await runCloudExecution(c.env as Env, runtimeService, execution.id, taskRow, payload, projectContext);
+      await runCloudExecution(c.env as Env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, payload);
       const updated = await runtimeService.getExecution(execution.id);
       notifyExecutionSubscribers(execution.id, {
         type: 'done',

@@ -25,6 +25,7 @@ import { MoveToBoardControl } from './MoveToBoardControl';
 import { AgentTab } from './agent/AgentTab';
 import { TaskPrdTab } from './task/TaskPrdTab';
 import { RunAgentControl } from './task/RunAgentControl';
+import { ChatMessageContent } from './ChatMessageContent';
 import {
   TASK_STATUSES as BOARD_STATUSES,
   taskStatusLabel,
@@ -95,6 +96,13 @@ export function TaskMgmtContent({
   const [boardConfigOpen, setBoardConfigOpen] = useState(false);
   const [prdOpen, setPrdOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'details' | 'agent' | 'prd'>('details');
+  // Inline per-field editing in the task drawer. Only one field is editable at a
+  // time; `fieldDraft` holds the in-progress value (string for text/date inputs).
+  const [editingField, setEditingField] = useState<
+    null | 'title' | 'description' | 'dueDate' | 'assignee' | 'priority'
+  >(null);
+  const [fieldDraft, setFieldDraft] = useState('');
+  const [fieldSaving, setFieldSaving] = useState(false);
 
   // Open a task drawer on a specific tab (defaults to Details). Used so clicking
   // a running-agent chip jumps straight to the Agent tab.
@@ -141,6 +149,12 @@ export function TaskMgmtContent({
       setBulkStatus('');
     }
   }, [view]);
+
+  // Close any open inline editor when switching tasks/tabs so a half-edited field
+  // never carries over to a different task.
+  useEffect(() => {
+    setEditingField(null);
+  }, [drawerTask?.id, drawerTab]);
 
   const filtered = tasks.filter((t) => {
     if (filterStatus && t.status !== filterStatus) return false;
@@ -317,6 +331,25 @@ export function TaskMgmtContent({
       if (drawerTask?.id === t.id) setDrawerTask(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed');
+    }
+  };
+
+  // Persist a single edited field from the drawer's inline editors. Patches the
+  // open task, syncs the list + drawer, and closes the active editor on success.
+  const saveTaskField = async (
+    patch: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'assignedAgentHostId' | 'dueDate'>>
+  ) => {
+    if (!drawerTask) return;
+    setFieldSaving(true);
+    try {
+      const updated = await tasksApi.update(drawerTask.id, patch);
+      setTasks((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+      setDrawerTask(updated);
+      setEditingField(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setFieldSaving(false);
     }
   };
 
@@ -1340,12 +1373,74 @@ export function TaskMgmtContent({
                 borderBottom: '1px solid var(--border-subtle)',
               }}
             >
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 16 }}>{drawerTask.title}</div>
-                <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginTop: 2 }}>
+              <div style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
+                {editingField === 'title' ? (
+                  <input
+                    autoFocus
+                    value={fieldDraft}
+                    onChange={(e) => setFieldDraft(e.target.value)}
+                    onBlur={() => {
+                      const next = fieldDraft.trim();
+                      if (next && next !== drawerTask.title) saveTaskField({ title: next });
+                      else setEditingField(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); }
+                      if (e.key === 'Escape') setEditingField(null);
+                    }}
+                    style={{
+                      width: '100%',
+                      fontWeight: 700,
+                      fontSize: 16,
+                      padding: '4px 8px',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 6,
+                      background: 'var(--bg-deep)',
+                      color: 'var(--text-primary)',
+                    }}
+                  />
+                ) : (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => { setFieldDraft(drawerTask.title); setEditingField('title'); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { setFieldDraft(drawerTask.title); setEditingField('title'); } }}
+                    title="Click to edit title"
+                    style={{ fontWeight: 700, fontSize: 16, cursor: 'text', borderRadius: 6, padding: '4px 6px', margin: '-4px -6px' }}
+                  >
+                    {drawerTask.title}
+                  </div>
+                )}
+                <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginTop: 2, paddingLeft: 6 }}>
                   {drawerTask.key}
                 </div>
               </div>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={(e) => removeTask(drawerTask, e)}
+                style={{
+                  width: 36,
+                  height: 36,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1px solid var(--error-border)',
+                  borderRadius: 8,
+                  background: 'var(--bg-base)',
+                  color: 'var(--error-text)',
+                  cursor: 'pointer',
+                }}
+                aria-label="Delete task"
+                title="Delete task"
+              >
+                <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }}>
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  <line x1="10" y1="11" x2="10" y2="17" />
+                  <line x1="14" y1="11" x2="14" y2="17" />
+                </svg>
+              </button>
               <button
                 type="button"
                 onClick={() => setDrawerTask(null)}
@@ -1368,6 +1463,7 @@ export function TaskMgmtContent({
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
               </button>
+              </div>
             </div>
 
             {/* Tabs */}
@@ -1399,49 +1495,195 @@ export function TaskMgmtContent({
               </div>
             ) : (
             <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
                 <span
                   className={taskStatusBadgeClass(drawerTask.status)}
                   style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6 }}
                 >
                   {columnLabel(drawerTask.status)}
                 </span>
-                <span
-                  className={PRIORITY_CLASS[drawerTask.priority]}
-                  style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6 }}
-                >
-                  {drawerTask.priority}
-                </span>
-              </div>
-              {drawerTask.description && (
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Description</div>
-                  <div
+                {editingField === 'priority' ? (
+                  <select
+                    autoFocus
+                    value={drawerTask.priority}
+                    disabled={fieldSaving}
+                    onChange={(e) => saveTaskField({ priority: e.target.value as TaskPriority })}
+                    onBlur={() => setEditingField(null)}
                     style={{
-                      fontSize: 13,
-                      color: 'var(--text-secondary)',
-                      lineHeight: 1.6,
-                      whiteSpace: 'pre-wrap',
+                      fontSize: 12,
+                      padding: '3px 6px',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 6,
+                      background: 'var(--bg-deep)',
+                      color: 'var(--text-primary)',
                     }}
                   >
-                    {drawerTask.description}
+                    {PRIORITIES.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setEditingField('priority')}
+                    onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('priority'); }}
+                    title="Click to change priority"
+                    className={PRIORITY_CLASS[drawerTask.priority]}
+                    style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, cursor: 'pointer' }}
+                  >
+                    {drawerTask.priority}
+                  </span>
+                )}
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Description</div>
+                {editingField === 'description' ? (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    <textarea
+                      autoFocus
+                      value={fieldDraft}
+                      onChange={(e) => setFieldDraft(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Escape') setEditingField(null); }}
+                      rows={6}
+                      placeholder="Markdown supported…"
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        fontSize: 13,
+                        fontFamily: 'var(--font-mono)',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 8,
+                        background: 'var(--bg-deep)',
+                        color: 'var(--text-primary)',
+                        resize: 'vertical',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                      <button type="button" style={buttonTertiary} onClick={() => setEditingField(null)}>
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={fieldSaving}
+                        style={{ ...buttonPrimary, opacity: fieldSaving ? 0.7 : 1 }}
+                        onClick={() => saveTaskField({ description: fieldDraft.trim() || null })}
+                      >
+                        {fieldSaving ? 'Saving…' : 'Save'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => { setFieldDraft(drawerTask.description ?? ''); setEditingField('description'); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { setFieldDraft(drawerTask.description ?? ''); setEditingField('description'); } }}
+                    title="Click to edit description (Markdown)"
+                    style={{
+                      fontSize: 13,
+                      color: drawerTask.description ? 'var(--text-secondary)' : 'var(--text-muted)',
+                      lineHeight: 1.6,
+                      cursor: 'text',
+                      borderRadius: 8,
+                      padding: 8,
+                      margin: -8,
+                      minHeight: 24,
+                    }}
+                  >
+                    {drawerTask.description
+                      ? <ChatMessageContent content={drawerTask.description} />
+                      : 'Add a description…'}
+                  </div>
+                )}
+              </div>
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>Details</div>
                 <div style={{ display: 'grid', gap: 8 }}>
-                  {[
-                    ['Project', projectNameById(drawerTask.projectId)],
-                    ['Assignee', agentHostNameById(drawerTask.assignedAgentHostId)],
-                    ['Due date', formatDate(drawerTask.dueDate) || 'None'],
-                    ['Created', formatDate(drawerTask.createdAt)],
-                  ].filter(([, v]) => !!v).map(([label, val]) => (
-                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                      <span style={{ color: 'var(--text-muted)' }}>{label}</span>
-                      <span style={{ color: 'var(--text-primary)' }}>{val}</span>
-                    </div>
-                  ))}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Project</span>
+                    <span style={{ color: 'var(--text-primary)' }}>{projectNameById(drawerTask.projectId)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Assignee</span>
+                    {editingField === 'assignee' ? (
+                      <select
+                        autoFocus
+                        value={drawerTask.assignedAgentHostId ?? ''}
+                        disabled={fieldSaving}
+                        onChange={(e) =>
+                          saveTaskField({ assignedAgentHostId: e.target.value ? Number(e.target.value) : null })
+                        }
+                        onBlur={() => setEditingField(null)}
+                        style={{
+                          fontSize: 13,
+                          padding: '3px 6px',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: 6,
+                          background: 'var(--bg-deep)',
+                          color: 'var(--text-primary)',
+                        }}
+                      >
+                        <option value="">Unassigned</option>
+                        {agentHostsList.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setEditingField('assignee')}
+                        onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('assignee'); }}
+                        title="Click to change assignee"
+                        style={{ color: 'var(--text-primary)', cursor: 'pointer', borderBottom: '1px dashed var(--border-subtle)' }}
+                      >
+                        {agentHostNameById(drawerTask.assignedAgentHostId)}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Due date</span>
+                    {editingField === 'dueDate' ? (
+                      <input
+                        type="date"
+                        autoFocus
+                        value={drawerTask.dueDate?.split('T')[0] ?? ''}
+                        disabled={fieldSaving}
+                        onChange={(e) => saveTaskField({ dueDate: e.target.value || null })}
+                        onBlur={() => setEditingField(null)}
+                        onKeyDown={(e) => { if (e.key === 'Escape') setEditingField(null); }}
+                        style={{
+                          fontSize: 13,
+                          padding: '3px 6px',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: 6,
+                          background: 'var(--bg-deep)',
+                          color: 'var(--text-primary)',
+                        }}
+                      />
+                    ) : (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setEditingField('dueDate')}
+                        onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('dueDate'); }}
+                        title="Click to set a due date"
+                        style={{
+                          color: drawerTask.dueDate ? 'var(--text-primary)' : 'var(--text-muted)',
+                          cursor: 'pointer',
+                          borderBottom: '1px dashed var(--border-subtle)',
+                        }}
+                      >
+                        {formatDate(drawerTask.dueDate) || 'None'}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Created</span>
+                    <span style={{ color: 'var(--text-primary)' }}>{formatDate(drawerTask.createdAt)}</span>
+                  </div>
                 </div>
               </div>
               {drawerTask.githubPrUrl && (
@@ -1496,22 +1738,6 @@ export function TaskMgmtContent({
                   onRan={() => { patchStatus(drawerTask.id, 'in_progress', { skipAutoSubmit: true }); setDrawerTab('agent'); }}
                   onAwaitingApproval={(g) => setApprovalGate({ approvalId: g.approvalId, taskId: g.taskId, reason: g.reason })}
                 />
-              </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button type="button" style={buttonTertiary} onClick={(e) => openEdit(drawerTask, e)}>
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  style={{
-                    ...buttonTertiary,
-                    color: 'var(--error-text)',
-                    borderColor: 'var(--error-border)',
-                  }}
-                  onClick={(e) => removeTask(drawerTask, e)}
-                >
-                  Delete
-                </button>
               </div>
             </div>
             )}
