@@ -42,6 +42,7 @@ import {
 } from "./builderforce-coding-dispatch-adapters.js";
 import { dispatchResultToRemoteAgentNode, type RemoteDispatchOptions } from "./remote-subagent.js";
 import { setRelayHook } from "./workflow-telemetry.js";
+import { buildSteeringInjection } from "./relay-steering.js";
 
 function extractChatText(message: unknown): string {
   if (!message || typeof message !== "object") {
@@ -642,6 +643,25 @@ export class BuilderforceRelayService implements IRelayService {
           artifacts,
         });
         void this.syncAssignmentContext(type);
+        break;
+      }
+
+      case "execution.message": {
+        // Steering: a user sent a follow-up direction to a running execution
+        // from the portal. Inject it into the live `main` session as the next
+        // turn so the agent picks it up mid-run.
+        const executionId =
+          typeof msg.executionId === "number" && Number.isFinite(msg.executionId)
+            ? msg.executionId
+            : undefined;
+        const injection = buildSteeringInjection(executionId, msg.text, Date.now());
+        if (!injection) break;
+        logWarn(`[builderforce] steering message for execution ${executionId ?? "?"}`);
+        this.gatewayClient
+          ?.request("chat.send", injection)
+          .catch((err: unknown) => {
+            logWarn(`[builderforce] execution.message dispatch failed: ${String(err)}`);
+          });
         break;
       }
 

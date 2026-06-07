@@ -218,6 +218,8 @@ export interface PublishedAgent {
   tenant_id?: number | null;
   runtime_support?: 'cloud' | 'host' | 'both';
   preferred_runtime?: 'cloud' | 'host' | null;
+  /** Agent runtime engine (migration 0087): pi-coding-agent vs Claude Agent SDK. */
+  engine?: 'builderforce-v1' | 'builderforce-v2';
   price_cents?: number;
   pricing_model?: 'flat_fee' | 'consumption';
   price_unit?: string | null;

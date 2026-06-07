@@ -26,6 +26,7 @@ const purchasedCacheKey = (tenantId: number): string => `wf:purchased:${tenantId
 
 const RUNTIME_SUPPORT = ['cloud', 'host', 'both'] as const;
 const PRICING_MODELS = ['flat_fee', 'consumption'] as const;
+const AGENT_ENGINES = ['builderforce-v1', 'builderforce-v2'] as const;
 
 /**
  * `ide_agents.skills` is a `text` column holding a JSON string. The
@@ -112,6 +113,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       baseModel?: string;
       runtimeSupport?: string;
       preferredRuntime?: string | null;
+      engine?: string;
       priceCents?: number;
       pricingModel?: string;
       priceUnit?: string | null;
@@ -124,6 +126,8 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       ? body.runtimeSupport! : 'cloud';
     const pricingModel = (PRICING_MODELS as readonly string[]).includes(body.pricingModel ?? '')
       ? body.pricingModel! : 'flat_fee';
+    const engine = (AGENT_ENGINES as readonly string[]).includes(body.engine ?? '')
+      ? body.engine! : 'builderforce-v1';
     // preferred_runtime only meaningful when both are supported
     const preferredRuntime = runtimeSupport === 'both' ? (body.preferredRuntime ?? null) : null;
 
@@ -131,12 +135,12 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const [row] = await sql(c.env)`
       INSERT INTO ide_agents
         (id, tenant_id, project_id, name, title, bio, skills, base_model,
-         status, hire_count, runtime_support, preferred_runtime,
+         status, hire_count, runtime_support, preferred_runtime, engine,
          price_cents, pricing_model, price_unit, published)
       VALUES
         (${id}, ${tenantId}, NULL, ${body.name.trim()}, ${body.title?.trim() || body.name.trim()},
          ${body.bio ?? ''}, ${JSON.stringify(body.skills ?? [])}, ${body.baseModel || 'builderforce-default'},
-         'active', 0, ${runtimeSupport}, ${preferredRuntime},
+         'active', 0, ${runtimeSupport}, ${preferredRuntime}, ${engine},
          ${Math.max(0, Math.round(body.priceCents ?? 0))}, ${pricingModel}, ${body.priceUnit ?? null},
          ${body.published ?? false})
       RETURNING *
@@ -155,6 +159,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       baseModel?: string;
       runtimeSupport?: string;
       preferredRuntime?: string | null;
+      engine?: string;
       priceCents?: number;
       pricingModel?: string;
       priceUnit?: string | null;
@@ -171,6 +176,8 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       ? body.runtimeSupport : existing.runtime_support;
     const pricingModel = body.pricingModel != null && (PRICING_MODELS as readonly string[]).includes(body.pricingModel)
       ? body.pricingModel : existing.pricing_model;
+    const engine = body.engine != null && (AGENT_ENGINES as readonly string[]).includes(body.engine)
+      ? body.engine : existing.engine;
     const preferredRuntime = runtimeSupport === 'both'
       ? (body.preferredRuntime !== undefined ? body.preferredRuntime : existing.preferred_runtime)
       : null;
@@ -184,6 +191,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
         base_model        = ${body.baseModel ?? existing.base_model},
         runtime_support   = ${runtimeSupport},
         preferred_runtime = ${preferredRuntime},
+        engine            = ${engine},
         price_cents       = ${body.priceCents != null ? Math.max(0, Math.round(body.priceCents)) : existing.price_cents},
         pricing_model     = ${pricingModel},
         price_unit        = ${body.priceUnit !== undefined ? body.priceUnit : existing.price_unit},

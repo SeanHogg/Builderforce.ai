@@ -435,6 +435,11 @@ export async function fetchAgentPackage(agentId: string): Promise<AgentPackage> 
 
 export type AgentRuntimeSupport = 'cloud' | 'host' | 'both';
 export type AgentPricingModel = 'flat_fee' | 'consumption';
+/**
+ * Agent runtime engine. `builderforce-v1` is the pi-coding-agent embedded runner
+ * (default); `builderforce-v2` is the Claude Agent SDK runner.
+ */
+export type AgentEngine = 'builderforce-v1' | 'builderforce-v2';
 
 export interface CloudAgentInput {
   name: string;
@@ -444,6 +449,7 @@ export interface CloudAgentInput {
   baseModel?: string;
   runtimeSupport?: AgentRuntimeSupport;
   preferredRuntime?: 'cloud' | 'host' | null;
+  engine?: AgentEngine;
   /** Price in USD cents (0 = free). */
   priceCents?: number;
   pricingModel?: AgentPricingModel;
