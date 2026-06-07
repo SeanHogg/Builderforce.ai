@@ -10,11 +10,14 @@ import {
 import { listAgents } from '@/lib/api';
 import type { PublishedAgent } from '@/lib/types';
 import { CapabilitiesContent } from './CapabilitiesContent';
+import { CronJobsContent } from './CronJobsContent';
 
 export interface AgentCapabilitiesContentProps {
   projectId: number;
   /** Tenant ID for content block name resolution. */
   tenantId?: string;
+  /** Executor agentHost for this project — required to schedule cron runs. */
+  agentHostId?: number;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -33,7 +36,7 @@ const KIND_LABEL: Record<PoolAgent['kind'], string> = {
  * project-wide or scoped to a single agent. Reuses {@link CapabilitiesContent}
  * for the section UI; the agent target only changes the scope/scopeId passed in.
  */
-export function AgentCapabilitiesContent({ projectId, tenantId, className, style }: AgentCapabilitiesContentProps) {
+export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, className, style }: AgentCapabilitiesContentProps) {
   const [attached, setAttached] = useState<ProjectAgent[]>([]);
   const [pool, setPool] = useState<PoolAgent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -247,6 +250,27 @@ export function AgentCapabilitiesContent({ projectId, tenantId, className, style
           projectId={projectId}
           tenantId={tenantId}
         />
+      )}
+
+      {/* Scheduled runs (cron) — available once an agent is assigned to the project.
+          Crons execute on the project's agentHost and are project-scoped today
+          (not yet per-assigned-agent — see gap register). */}
+      {attached.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+            Scheduled runs (Cron)
+            {selectedAgent && (
+              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}> · {selectedAgent.name}</span>
+            )}
+          </div>
+          {agentHostId ? (
+            <CronJobsContent agentHostId={agentHostId} projectId={projectId} hideProjectColumn />
+          ) : (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 16, textAlign: 'center', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
+              Assign an agent host (Cloud or On-Premise) to this project to schedule cron runs.
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
