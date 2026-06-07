@@ -29,6 +29,8 @@
  *   - tool.audit frames are forwarded to the API for persistence
  */
 
+import { buildExecutionMessageFrame } from './executionMessage';
+
 interface BufferedMessage {
   role: string;
   content: string;
@@ -74,24 +76,34 @@ export class AgentHostRelayDO implements DurableObject {
         try {
           payload = await request.json();
         } catch {
-          return new Response(JSON.stringify({ ok: false, error: "invalid_json" }), {
-            status: 400,
-            headers: { "Content-Type": "application/json" },
-          });
+          return this.json({ ok: false, error: "invalid_json" }, 400);
         }
-
-        if (this.upstreamSocket?.readyState !== WebSocket.OPEN) {
-          return new Response(JSON.stringify({ ok: false, delivered: false, error: "agent_host_offline" }), {
-            status: 409,
-            headers: { "Content-Type": "application/json" },
-          });
+        if (!this.sendUpstream(payload)) {
+          return this.json({ ok: false, delivered: false, error: "agent_host_offline" }, 409);
         }
+        return this.json({ ok: true, delivered: true }, 200);
+      }
 
-        this.upstreamSocket.send(JSON.stringify(payload));
-        return new Response(JSON.stringify({ ok: true, delivered: true }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
+      // Steering: forward a user follow-up to a running execution as the next
+      // turn for the live agent session. Mirrors /dispatch but wraps the body in
+      // an `execution.message` frame and echoes it to browser clients.
+      if (request.method === "POST" && url.pathname.endsWith("/execution-message")) {
+        let payload: unknown = null;
+        try {
+          payload = await request.json();
+        } catch {
+          return this.json({ ok: false, error: "invalid_json" }, 400);
+        }
+        const built = buildExecutionMessageFrame(payload);
+        if (!built.ok) {
+          return this.json({ ok: false, error: built.error }, 400);
+        }
+        if (!this.sendUpstream(built.frame)) {
+          return this.json({ ok: false, delivered: false, error: "agent_host_offline" }, 409);
+        }
+        // Echo to browser clients so the chat thread shows the steering message.
+        this.broadcast(JSON.stringify({ type: "chat.message", role: "user", text: built.frame.text, ephemeral: true }));
+        return this.json({ ok: true, delivered: true }, 200);
       }
 
       return new Response("Expected WebSocket upgrade", { status: 426 });
@@ -533,6 +545,21 @@ export class AgentHostRelayDO implements DurableObject {
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+
+  /** Send a JSON-serializable frame to the connected agent host. Returns false
+   *  (without throwing) when no agent host is online. */
+  private sendUpstream(frame: unknown): boolean {
+    if (this.upstreamSocket?.readyState !== WebSocket.OPEN) return false;
+    this.upstreamSocket.send(JSON.stringify(frame));
+    return true;
+  }
+
+  private json(body: unknown, status: number): Response {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   private broadcast(data: string) {
     const dead: WebSocket[] = [];

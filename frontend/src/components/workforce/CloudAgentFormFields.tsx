@@ -1,6 +1,6 @@
 'use client';
 
-import type { AgentRuntimeSupport } from '@/lib/api';
+import type { AgentRuntimeSupport, AgentEngine } from '@/lib/api';
 
 /**
  * The cloud-agent identity field set, shared by the "Add agent" create modal
@@ -24,16 +24,24 @@ export interface CloudAgentFormState {
   baseModel: string;
   runtimeSupport: AgentRuntimeSupport;
   preferredRuntime: 'cloud' | 'host';
+  /** Agent runtime engine — which agent loop runs this agent's tasks. */
+  engine: AgentEngine;
 }
 
 export const EMPTY_CLOUD_AGENT_FORM: CloudAgentFormState = {
   name: '', title: '', bio: '', skills: '', baseModel: '', runtimeSupport: 'cloud', preferredRuntime: 'cloud',
+  engine: 'builderforce-v1',
 };
 
 export const RUNTIME_LABELS: Record<AgentRuntimeSupport, string> = {
   cloud: 'Cloud only',
   host: 'Remote (self-hosted) only',
   both: 'Cloud + Remote',
+};
+
+export const ENGINE_LABELS: Record<AgentEngine, string> = {
+  'builderforce-v1': 'BuilderForce-V1 (pi-coding-agent)',
+  'builderforce-v2': 'BuilderForce-V2 (Anthropic — Claude Agent SDK)',
 };
 
 export const inputStyle: React.CSSProperties = {
@@ -95,6 +103,17 @@ export function CloudAgentFormFields({
         </div>
       )}
       <div>
+        <label style={labelStyle}>Agent runtime engine</label>
+        <select style={inputStyle} value={form.engine} onChange={(e) => onChange({ engine: e.target.value as AgentEngine })}>
+          {(Object.keys(ENGINE_LABELS) as AgentEngine[]).map((eng) => (
+            <option key={eng} value={eng}>{ENGINE_LABELS[eng]}</option>
+          ))}
+        </select>
+        <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>
+          V1 runs the pi-coding-agent loop. V2 runs the Claude Agent SDK; models route through the gateway with your tenant’s Anthropic key.
+        </p>
+      </div>
+      <div>
         <label style={labelStyle}>Base model (optional)</label>
         <input style={inputStyle} value={form.baseModel} onChange={(e) => onChange({ baseModel: e.target.value })} placeholder="builderforce.ai default" />
       </div>
@@ -114,5 +133,6 @@ export function cloudAgentFormToInput(form: CloudAgentFormState) {
     baseModel: form.baseModel.trim() || undefined,
     runtimeSupport: form.runtimeSupport,
     preferredRuntime: form.runtimeSupport === 'both' ? form.preferredRuntime : null,
+    engine: form.engine,
   };
 }

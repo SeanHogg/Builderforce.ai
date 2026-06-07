@@ -126,6 +126,18 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   const outputRef = useRef<HTMLDivElement>(null);
   useEffect(() => { outputRef.current?.scrollTo({ top: outputRef.current.scrollHeight }); }, [thread]);
 
+  // While a run is in-flight, re-poll the trace so tool calls + file changes
+  // appear live (the relay persists tool-audit events as they happen). The WS
+  // gives instant status; this gives live Changes/Tools without cross-isolate
+  // event plumbing. Bounded: only polls while running, stops on terminal.
+  useEffect(() => {
+    if (selectedId == null || !isRunning) return;
+    const t = setInterval(() => {
+      runtimeApi.trace(selectedId).then((tr) => setTrace(tr)).catch(() => { /* transient */ });
+    }, 4000);
+    return () => clearInterval(t);
+  }, [selectedId, isRunning]);
+
   const send = async () => {
     const text = draft.trim();
     if (!text || selectedId == null || sending) return;

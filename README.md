@@ -1685,6 +1685,39 @@ full `api/src` rename (`Claw*`→`AgentHost*`, table `coderclaw_instances`→`ag
   commit/branch (intentional — pending review). Fixing (explicit `producesPrd` flag on the planning step + a
   `prd_edit`/section-merge tool agents can call) unblocks: collaborative PRD authoring across the swimlane.
 
+- **Cloud-agent `engine` is persisted + selectable but not yet routed to a runtime.** Migration
+  [0087_agent_engine.sql](api/migrations/0087_agent_engine.sql) adds `ide_agents.engine`
+  (`builderforce-v1` | `builderforce-v2`), surfaced in the create/edit form
+  ([CloudAgentFormFields.tsx](frontend/src/components/workforce/CloudAgentFormFields.tsx)) and saved via
+  [workforceRoutes.ts](api/src/presentation/routes/workforceRoutes.ts). **Not yet wired:** the execution
+  dispatch path ([runtimeRoutes.ts](api/src/presentation/routes/runtimeRoutes.ts) `dispatchAndQueue`) does
+  not look up the run-target agent's `engine` and include it in the `task.assign`/`task.broadcast` payload,
+  so the agent-runtime can't branch on it. Selecting `builderforce-v2` today behaves exactly like V1.
+  Fixing (resolve the cloud agent's `engine` at dispatch, add `engine` to `DispatchMessage`, branch in the
+  agent-runtime relay) unblocks: actually running the V2 engine.
+- **The V2 (Claude Agent SDK) runner does not exist yet.** `builderforce-v2` is meant to run
+  `@anthropic-ai/claude-agent-sdk` in the agent-runtime (real loop, bash/file tools, PreToolUse/PostToolUse
+  hooks → file-change events). The dependency isn't added and no runner module exists — the agent-runtime
+  only has the pi-coding-agent (V1) loop. Fixing (add the SDK dep, write a `claude-agent-sdk-runner` that the
+  relay dispatches to when `engine==='builderforce-v2'`, map its events onto the existing tool.audit /
+  chat.message / execution-state frames) unblocks: the V2 engine end to end.
+- **Gateway has no Anthropic-Messages (`/v1/messages`) BYO-key path.** The V2 engine speaks the Anthropic
+  Messages API; per the chosen design it must route through the builderforce gateway using the tenant's own
+  Anthropic key (metered centrally). The gateway today is OpenAI-shaped only
+  ([llmRoutes.ts](api/src/presentation/routes/llmRoutes.ts) `/v1/chat/completions`); there is no
+  `/v1/messages` endpoint, no per-tenant Anthropic-key storage, and no metering hook for it. Fixing (add a
+  `/v1/messages` route that authenticates the tenant, loads their stored Anthropic key, proxies to
+  `api.anthropic.com`, and meters usage; point the V2 runner's `ANTHROPIC_BASE_URL` at it) unblocks:
+  customer-BYO-key Anthropic runs through the gateway.
+- **Live execution stream is per-isolate; assistant-text deltas aren't pushed mid-run.** The
+  `/executions/:id/stream` WS subscriber map ([runtimeRoutes.ts](api/src/presentation/routes/runtimeRoutes.ts))
+  lives in one Worker isolate, and self-hosted mid-run frames arrive at the relay DO (a different object), so
+  assistant token deltas don't reach the execution panel live — the [AgentExecutionPanel](frontend/src/components/agent/AgentExecutionPanel.tsx)
+  now re-polls the `trace` every 4s while running to surface live tool-calls/file-changes (Changes/Tools),
+  but the Output thread only fills from the terminal result or the cloud path's single assistant event.
+  Fixing (host execution streaming in a Durable Object, or have the relay DO forward `chat.message` deltas to
+  an execution-events channel) unblocks: true token-streaming Output for self-hosted runs.
+
 ---
 
 ## License
