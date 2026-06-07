@@ -47,6 +47,17 @@ export type InstantiateRunResult =
   | { ok: true; workflowId: string; taskCount: number }
   | { ok: false; error: string };
 
+/** Build a {@link RunTarget} from a workflow_definitions row's saved target. */
+export function runTargetFromDefinition(row: {
+  runTargetRuntime: string;
+  runTargetAgentHostId: number | null;
+  runTargetCloudAgentRef: string | null;
+}): RunTarget {
+  return row.runTargetRuntime === 'cloud'
+    ? { runtime: 'cloud', cloudAgentRef: row.runTargetCloudAgentRef }
+    : { runtime: 'host', agentHostId: row.runTargetAgentHostId };
+}
+
 /** Validate the run target: host runs need a host; cloud runs need the flag. */
 export function validateRunTarget(target: RunTarget): string | null {
   if (target.runtime === 'host') {

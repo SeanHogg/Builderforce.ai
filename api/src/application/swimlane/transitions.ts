@@ -84,23 +84,45 @@ export function mapWorkflowStatusToTicketEvent(workflowStatus: WorkflowStatus): 
   }
 }
 
+/** The lane action that fires once a stage succeeds (migration 0084). */
+export type StageActionType = 'advance' | 'move_ticket' | 'run_workflow';
+
+/** What a successful stage should do: the lifecycle + any action side-effect. */
+export interface StageActionPlan {
+  /** Where the ticket lands: advancing | awaiting_gate | done. */
+  lifecycle: TicketLifecycle;
+  /** For 'move_ticket': the destination lane key (instead of the next lane). */
+  moveToLaneKey?: string | null;
+  /** For 'run_workflow': the workflow definition id to instantiate as a side-effect. */
+  runWorkflowId?: string | null;
+}
+
 /**
- * Resolve where a SUCCESSFUL stage should land the ticket, given board/lane
- * config. Encapsulates the gate-vs-advance-vs-done branch so both the
- * coordinator and tests share one rule.
+ * Resolve what a SUCCESSFUL stage should do, given the lane config. Autonomy is
+ * now IMPLICIT — there is no board-level toggle: a successful stage advances
+ * unless its lane gate is 'human' (then it waits for approval). The lane's
+ * action decides WHERE it advances.
  *
- * - terminal lane            → 'done'
- * - human gate (non-auto)    → 'awaiting_gate'
- * - autonomous + auto gate   → 'advancing'
- * - non-autonomous board     → 'awaiting_gate' (require explicit approval)
+ * - human gate         → 'awaiting_gate' (gate wins over any action)
+ * - terminal lane      → 'done'
+ * - action move_ticket → 'advancing' to actionTarget (a lane key)
+ * - action run_workflow→ 'advancing' to the next lane, plus run actionTarget
+ * - else / 'advance'   → 'advancing' to the next lane (legacy default)
  */
-export function resolveSuccessfulStageTarget(opts: {
+export function resolveStageAction(opts: {
   isTerminalLane: boolean;
-  gate: string;            // 'auto' | 'human'
-  boardAutonomous: boolean;
-}): TicketLifecycle {
-  if (opts.isTerminalLane) return 'done';
-  if (opts.gate === 'human') return 'awaiting_gate';
-  if (!opts.boardAutonomous) return 'awaiting_gate';
-  return 'advancing';
+  gate: string;                  // 'auto' | 'human'
+  actionType: string | null;     // null|'advance' | 'move_ticket' | 'run_workflow'
+  actionTarget: string | null;
+}): StageActionPlan {
+  // A human gate pauses everything — no action fires until approval.
+  if (opts.gate === 'human') return { lifecycle: 'awaiting_gate' };
+  // move_ticket redirects where the ticket lands (overrides terminal/next-lane).
+  if (opts.actionType === 'move_ticket') {
+    return { lifecycle: 'advancing', moveToLaneKey: opts.actionTarget };
+  }
+  // run_workflow fires as a side-effect wherever the ticket lands (advance or done).
+  const runWorkflowId = opts.actionType === 'run_workflow' ? opts.actionTarget : null;
+  if (opts.isTerminalLane) return { lifecycle: 'done', runWorkflowId };
+  return { lifecycle: 'advancing', runWorkflowId };
 }

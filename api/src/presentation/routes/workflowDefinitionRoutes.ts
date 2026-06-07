@@ -25,7 +25,12 @@ import {
   type WorkflowDefinition,
 } from '../../domain/workflowGraph';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { instantiateWorkflowRun, type RunTarget, type WorkflowRuntime } from '../../application/workflow/instantiateRun';
+import {
+  instantiateWorkflowRun,
+  runTargetFromDefinition,
+  type RunTarget,
+  type WorkflowRuntime,
+} from '../../application/workflow/instantiateRun';
 import { syncDefinitionTriggers } from '../../application/workflow/triggerSync';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -70,17 +75,6 @@ function coerceRunTarget(input: RunTargetInput): {
     runTargetAgentHostId: runtime === 'host' ? input.runTargetAgentHostId ?? null : null,
     runTargetCloudAgentRef: runtime === 'cloud' ? input.runTargetCloudAgentRef ?? null : null,
   };
-}
-
-/** RunTarget from a definition row's persisted run-target columns. */
-function runTargetFromRow(row: {
-  runTargetRuntime: string;
-  runTargetAgentHostId: number | null;
-  runTargetCloudAgentRef: string | null;
-}): RunTarget {
-  return row.runTargetRuntime === 'cloud'
-    ? { runtime: 'cloud', cloudAgentRef: row.runTargetCloudAgentRef }
-    : { runtime: 'host', agentHostId: row.runTargetAgentHostId };
 }
 
 export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
@@ -161,7 +155,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       updatedAt: now,
     });
     await syncDefinitionTriggers(db, {
-      definitionId: id, tenantId, segmentId, definition: def, target: runTargetFromRow(target),
+      definitionId: id, tenantId, segmentId, definition: def, target: runTargetFromDefinition(target),
     });
 
     await invalidateCached(c.env as Env, listCacheKey(tenantId));
@@ -314,7 +308,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
           tenantId,
           segmentId: updated.segmentId ?? null,
           definition: parseDefinition(updated.definition),
-          target: runTargetFromRow(updated),
+          target: runTargetFromDefinition(updated),
         });
       }
     }
@@ -362,7 +356,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
     } else if (body.runtime === 'host' || body.agentHostId) {
       target = { runtime: 'host', agentHostId: body.agentHostId ?? defRow.runTargetAgentHostId };
     } else {
-      target = runTargetFromRow(defRow);
+      target = runTargetFromDefinition(defRow);
     }
 
     const result = await instantiateWorkflowRun(db, {

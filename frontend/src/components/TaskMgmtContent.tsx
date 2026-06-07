@@ -6,12 +6,14 @@ import {
   tasksApi,
   agentHosts,
   runtimeApi,
+  boardsApi,
   isAwaitingApprovalExecution,
   type Task,
   type TaskPriority,
   type AgentHost,
   type Execution,
   type SwimlaneAgent,
+  type BoardDispatch,
 } from '@/lib/builderforceApi';
 import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
@@ -161,10 +163,35 @@ export function TaskMgmtContent({
 
   // Swimlanes + their configured agents for the selected board, shown discretely
   // in each column header. Only fetched for the board view of a single project.
-  const { lanes, agentsByLane } = useBoardConfig(
+  const { board, lanes, agentsByLane } = useBoardConfig(
     effectiveProjectId,
     effectiveProjectId != null && view === 'board' && !compact,
   );
+
+  // Live per-agent dispatch status for the board, so each lane's configured-agent
+  // chips light up with their current execution status (pending→running→done/failed).
+  const [dispatches, setDispatches] = useState<BoardDispatch[]>([]);
+  useEffect(() => {
+    // Only fetch in the board view; stale data from a prior board is harmless as
+    // the status chips render only here (and a board switch refetches).
+    if (!board?.id || view !== 'board' || compact) return;
+    let live = true;
+    boardsApi.dispatches(board.id).then((d) => { if (live) setDispatches(d); }).catch(() => {});
+    return () => { live = false; };
+  }, [board?.id, view, compact]);
+
+  // Latest dispatch per assignment (configured agent), keyed by assignment id.
+  const latestDispatchByAssignment = useMemo(() => {
+    const m = new Map<string, BoardDispatch>();
+    for (const d of dispatches) {
+      if (!d.assignmentId) continue;
+      const prev = m.get(d.assignmentId);
+      const dc = d.updatedAt ? new Date(d.updatedAt).getTime() : 0;
+      const pc = prev?.updatedAt ? new Date(prev.updatedAt).getTime() : -1;
+      if (!prev || dc >= pc) m.set(d.assignmentId, d);
+    }
+    return m;
+  }, [dispatches]);
 
   // The board's columns ARE its swimlanes (fully configurable): each lane is a
   // column whose key is the status a task holds while sitting in it. Renaming /
@@ -676,14 +703,19 @@ export function TaskMgmtContent({
                       style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}
                       title="Agents configured on this swimlane"
                     >
-                      {column.agents.map((a) => (
-                        <AgentChip
-                          key={a.id}
-                          label={a.role}
-                          meta={a.model ?? a.runtime}
-                          title={`${a.role} · ${a.runtime}${a.model ? ` · ${a.model}` : ''}`}
-                        />
-                      ))}
+                      {column.agents.map((a) => {
+                        const disp = latestDispatchByAssignment.get(a.id);
+                        const label = a.name ?? a.role;
+                        return (
+                          <AgentChip
+                            key={a.id}
+                            label={label}
+                            status={disp?.status}
+                            meta={a.model ?? a.runtime}
+                            title={`${label} · ${a.runtime}${a.model ? ` · ${a.model}` : ''}${disp ? ` — ${disp.status}` : ''}`}
+                          />
+                        );
+                      })}
                     </div>
                   )}
                 </div>

@@ -33,6 +33,7 @@ import {
   selectEvidence,
 } from '../../application/repos/sources/RepoSource';
 import { ArchitectAnalysisService, ArtifactGenerationError } from '../../application/repoanalysis/ArchitectAnalysisService';
+import { resolveAssignedAgent, type AgentKind } from '../../application/swimlane/resolveAssignedAgent';
 import {
   ARTIFACT_KINDS,
   FREE_ARTIFACT_KINDS,
@@ -104,11 +105,12 @@ export class AnalysisRunnerDO implements DurableObject {
   }
 
   /**
-   * The model id of the agent assigned to architecture analysis for this project
-   * (canonical agent-assignment model, scope='architecture'), so the run executes
-   * AS that agent. Workforce agents map to the gateway's `workforce-<id>` route;
-   * registered agents aren't gateway-routable by a model id, so they fall through
-   * to the default cascade. Returns undefined when nothing is assigned.
+   * The concrete model of the agent assigned to architecture analysis for this
+   * project (canonical agent-assignment model, scope='architecture'), so the run
+   * executes AS that agent. Resolves the agent's real `base_model` via the shared
+   * resolveAssignedAgent (workforce → its base_model; registered agents are
+   * endpoint-based with no gateway model, so they yield null → default cascade).
+   * Returns undefined when nothing is assigned.
    */
   private async resolveArchitectAgentModel(tenantId: number, projectId: number): Promise<string | undefined> {
     const [a] = await this.db
@@ -122,7 +124,16 @@ export class AnalysisRunnerDO implements DurableObject {
         ),
       )
       .limit(1);
-    return a?.agentKind === 'workforce' ? `workforce-${a.agentRef}` : undefined;
+    if (!a) return undefined;
+    try {
+      const resolved = await resolveAssignedAgent(this.db, tenantId, {
+        agentKind: a.agentKind as AgentKind,
+        agentRef: a.agentRef,
+      });
+      return resolved.model ?? undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   async fetch(request: Request): Promise<Response> {

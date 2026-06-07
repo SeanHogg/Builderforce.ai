@@ -13,7 +13,13 @@ export interface PoolAgent {
   ref: string;
   name: string;
   meta: string;
+  /** Gateway-resolvable model for this agent (workforce base_model), or null when
+   *  it should use the default (the 'builderforce-default' sentinel / registered). */
+  baseModel?: string | null;
 }
+
+/** base_model sentinel meaning "no explicit model — use the default". */
+const DEFAULT_MODEL_SENTINEL = 'builderforce-default';
 
 export const AGENT_KIND_LABEL: Record<PoolAgent['kind'], string> = {
   workforce: 'Workforce',
@@ -32,9 +38,15 @@ export async function loadAgentPool(opts?: { projectId?: number }): Promise<Pool
   ]);
   const wf: PoolAgent[] = workforce
     .filter((a) => opts?.projectId == null || String(a.project_id) === String(opts.projectId))
-    .map((a) => ({ kind: 'workforce', ref: String(a.id), name: a.name, meta: a.title || a.base_model }));
+    .map((a) => ({
+      kind: 'workforce',
+      ref: String(a.id),
+      name: a.name,
+      meta: a.title || a.base_model,
+      baseModel: a.base_model && a.base_model !== DEFAULT_MODEL_SENTINEL ? a.base_model : null,
+    }));
   const reg: PoolAgent[] = registered
     .filter((a) => a.isActive)
-    .map((a) => ({ kind: 'registered', ref: String(a.id), name: a.name, meta: a.type }));
+    .map((a) => ({ kind: 'registered', ref: String(a.id), name: a.name, meta: a.type, baseModel: null }));
   return [...wf, ...reg];
 }

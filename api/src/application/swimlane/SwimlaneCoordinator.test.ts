@@ -144,7 +144,8 @@ class InMemoryStore implements CoordinatorStore {
   }
   seedLane(l: Partial<LaneLite> & { id: string; boardId: string; position: number }): LaneLite {
     const lane: LaneLite = {
-      key: l.id, isTerminal: false, gate: 'auto', executionMode: 'sequential', ...l,
+      key: l.id, isTerminal: false, gate: 'auto', executionMode: 'sequential',
+      actionType: null, actionTarget: null, successPolicy: 'all', successThreshold: null, ...l,
     };
     this.lanes.push(lane);
     return lane;
@@ -262,9 +263,9 @@ describe('SwimlaneCoordinator — execution loop', () => {
     expect((await store.getTicketRun(run.id))!.lifecycle).toBe('done');
   });
 
-  it('non-autonomous board: a successful stage waits at a human gate; approveGate advances it', async () => {
-    store.seedBoard({ id: 'b1', tenantId: TENANT, autonomous: false });
-    store.seedLane({ id: 'l0', boardId: 'b1', position: 0 });
+  it('human gate: a successful stage waits at the gate; approveGate advances it', async () => {
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
+    store.seedLane({ id: 'l0', boardId: 'b1', position: 0, gate: 'human' });
     store.seedLane({ id: 'l1', boardId: 'b1', position: 1, isTerminal: true });
     store.seedAssignment('l0', { id: 'a0', role: 'impl', runtime: 'browser' });
     store.seedAssignment('l1', { id: 'a1', role: 'rev', runtime: 'browser' });
@@ -319,5 +320,83 @@ describe('SwimlaneCoordinator — execution loop', () => {
     const coord = new SwimlaneCoordinator(store);
     await coord.startTicket('b1', 1, TENANT);
     await expect(coord.startTicket('b1', 2, TENANT)).rejects.toBeInstanceOf(TicketCapacityError);
+  });
+
+  it("move_ticket action: a successful stage moves the ticket to the lane named by action_target, not the next lane", async () => {
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
+    store.seedLane({ id: 'l0', boardId: 'b1', position: 0, actionType: 'move_ticket', actionTarget: 'done-lane' });
+    store.seedLane({ id: 'l1', boardId: 'b1', position: 1 }); // the "next" lane — should be SKIPPED
+    store.seedLane({ id: 'l2', boardId: 'b1', key: 'done-lane', position: 2, isTerminal: true });
+    store.seedAssignment('l0', { id: 'a0', role: 'impl', runtime: 'browser' });
+
+    const coord = new SwimlaneCoordinator(store);
+    const run = await coord.startTicket('b1', 1, TENANT);
+    await coord.reportDispatchResult(store.pending(run.id)[0]!.id, TENANT, { status: 'completed' });
+
+    const cur = (await store.getTicketRun(run.id))!;
+    expect(cur.currentSwimlaneId).toBe('l2'); // jumped past l1 to the named lane
+  });
+
+  it('run_workflow action: a successful stage fires the workflow runner, then advances', async () => {
+    const runner = { run: vi.fn(async () => {}) };
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
+    store.seedLane({ id: 'l0', boardId: 'b1', position: 0, isTerminal: true, actionType: 'run_workflow', actionTarget: 'wf-123' });
+    store.seedAssignment('l0', { id: 'a0', role: 'impl', runtime: 'browser' });
+
+    const coord = new SwimlaneCoordinator(store, undefined, runner);
+    const run = await coord.startTicket('b1', 8, TENANT);
+    await coord.reportDispatchResult(store.pending(run.id)[0]!.id, TENANT, { status: 'completed' });
+
+    expect(runner.run).toHaveBeenCalledTimes(1);
+    expect(runner.run).toHaveBeenCalledWith('wf-123', expect.objectContaining({ tenantId: TENANT, taskId: 8 }));
+    expect((await store.getTicketRun(run.id))!.lifecycle).toBe('done');
+  });
+
+  it("success policy 'any': a parallel stage advances when one agent succeeds even though another fails", async () => {
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
+    store.seedLane({ id: 'l0', boardId: 'b1', position: 0, isTerminal: true, executionMode: 'parallel', successPolicy: 'any' });
+    store.seedAssignment('l0', { id: 'a0', role: 'x', runtime: 'browser', position: 0 });
+    store.seedAssignment('l0', { id: 'a1', role: 'y', runtime: 'browser', position: 1 });
+
+    const coord = new SwimlaneCoordinator(store);
+    const run = await coord.startTicket('b1', 9, TENANT);
+    const pend = store.pending(run.id);
+    expect(pend).toHaveLength(2);
+
+    await coord.reportDispatchResult(pend[0]!.id, TENANT, { status: 'completed' });
+    await coord.reportDispatchResult(pend[1]!.id, TENANT, { status: 'failed', error: 'boom' });
+    // one of two succeeded → quorum met for 'any'
+    expect((await store.getTicketRun(run.id))!.lifecycle).toBe('done');
+  });
+
+  it("success policy 'all': one failure in a parallel stage routes to needs_attention", async () => {
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
+    store.seedLane({ id: 'l0', boardId: 'b1', position: 0, isTerminal: true, executionMode: 'parallel', successPolicy: 'all' });
+    store.seedAssignment('l0', { id: 'a0', role: 'x', runtime: 'browser', position: 0 });
+    store.seedAssignment('l0', { id: 'a1', role: 'y', runtime: 'browser', position: 1 });
+
+    const coord = new SwimlaneCoordinator(store);
+    const run = await coord.startTicket('b1', 10, TENANT);
+    const pend = store.pending(run.id);
+
+    await coord.reportDispatchResult(pend[0]!.id, TENANT, { status: 'completed' });
+    await coord.reportDispatchResult(pend[1]!.id, TENANT, { status: 'failed', error: 'boom' });
+    expect((await store.getTicketRun(run.id))!.lifecycle).toBe('needs_attention');
+  });
+
+  it('sequential stage settles (not stuck) when the first agent fails: the blocked second is cancelled', async () => {
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
+    store.seedLane({ id: 'l0', boardId: 'b1', position: 0, isTerminal: true, executionMode: 'sequential' });
+    store.seedAssignment('l0', { id: 'a0', role: 'first', runtime: 'browser', position: 0 });
+    store.seedAssignment('l0', { id: 'a1', role: 'second', runtime: 'browser', position: 1 });
+
+    const coord = new SwimlaneCoordinator(store);
+    const run = await coord.startTicket('b1', 11, TENANT);
+    const first = store.pending(run.id)[0]!;
+
+    await coord.reportDispatchResult(first.id, TENANT, { status: 'failed', error: 'boom' });
+    expect((await store.getTicketRun(run.id))!.lifecycle).toBe('needs_attention');
+    const all = await store.listStageDispatches(run.id, 1, TENANT);
+    expect(all.find((d) => d.id !== first.id)!.status).toBe('cancelled');
   });
 });

@@ -39,6 +39,7 @@ import {
   swimlanes,
   swimlaneAgentAssignments,
   ticketRuns,
+  agentDispatches,
 } from '../../infrastructure/database/schema';
 import {
   SwimlaneCoordinator,
@@ -47,6 +48,12 @@ import {
   InvalidTicketTransitionError,
 } from '../../application/swimlane/SwimlaneCoordinator';
 import { DrizzleCoordinatorStore } from '../../application/swimlane/DrizzleCoordinatorStore';
+import { DrizzleStageWorkflowRunner } from '../../application/swimlane/stageWorkflowRunner';
+import {
+  resolveAssignedAgent,
+  AssignedAgentNotFoundError,
+  type AgentKind,
+} from '../../application/swimlane/resolveAssignedAgent';
 import { DEFAULT_SWIMLANES } from '../../application/swimlane/defaultSwimlanes';
 import {
   AgentHostStageDispatcher,
@@ -61,6 +68,21 @@ const WORKFLOW_STATUSES: WorkflowStatus[] = ['pending', 'running', 'completed', 
 /** Env shape we read for agentHost dispatch — AGENT_HOST_RELAY is optional (browser-only works without it). */
 type BoardEnv = { AGENT_HOST_RELAY?: AgentHostRelayNamespace };
 
+/** Mutable swimlane fields shared by the create + patch routes. */
+interface LaneWriteBody {
+  name?: string;
+  position?: number;
+  isTerminal?: boolean;
+  gate?: string;
+  executionMode?: string;
+  failurePolicy?: string;
+  /** Lane action + success quorum (migration 0084). */
+  actionType?: string;      // ''|'advance' | 'move_ticket' | 'run_workflow'
+  actionTarget?: string;    // lane key (move_ticket) | workflow id (run_workflow)
+  successPolicy?: string;   // 'all' | 'any' | 'n_of_m'
+  successThreshold?: number;
+}
+
 export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
@@ -70,6 +92,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     new SwimlaneCoordinator(
       new DrizzleCoordinatorStore(db),
       new AgentHostStageDispatcher((env as BoardEnv)?.AGENT_HOST_RELAY),
+      new DrizzleStageWorkflowRunner(db),
     );
 
   // ── Boards CRUD ───────────────────────────────────────────────────────────
@@ -79,7 +102,6 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const body = await c.req.json<{
       projectId: number;
       name: string;
-      autonomous?: boolean;
       maxConcurrentTickets?: number;
       needsAttentionLane?: string;
       segmentId?: string;
@@ -99,7 +121,8 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         segmentId,
         projectId: body.projectId,
         name: body.name.trim(),
-        autonomous: body.autonomous ?? false,
+        // Autonomy is implicit (driven by lane agents + gate); no board toggle.
+        autonomous: true,
         maxConcurrentTickets: body.maxConcurrentTickets ?? 5,
         needsAttentionLane: body.needsAttentionLane ?? 'needs-attention',
         createdAt: now,
@@ -159,7 +182,6 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const boardId = c.req.param('boardId');
     const body = await c.req.json<{
       name?: string;
-      autonomous?: boolean;
       maxConcurrentTickets?: number;
       needsAttentionLane?: string;
     }>();
@@ -168,7 +190,6 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .update(boards)
       .set({
         ...(body.name !== undefined ? { name: body.name.trim() } : {}),
-        ...(body.autonomous !== undefined ? { autonomous: body.autonomous } : {}),
         ...(body.maxConcurrentTickets !== undefined ? { maxConcurrentTickets: body.maxConcurrentTickets } : {}),
         ...(body.needsAttentionLane !== undefined ? { needsAttentionLane: body.needsAttentionLane } : {}),
         updatedAt: new Date(),
@@ -214,15 +235,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const boardId = c.req.param('boardId');
     if (!(await assertBoard(tenantId, boardId))) return c.json({ error: 'Board not found' }, 404);
 
-    const body = await c.req.json<{
-      key: string;
-      name: string;
-      position?: number;
-      isTerminal?: boolean;
-      gate?: string;
-      executionMode?: string;
-      failurePolicy?: string;
-    }>();
+    const body = await c.req.json<LaneWriteBody & { key: string; name: string }>();
     if (!body.key?.trim()) return c.json({ error: 'key is required' }, 400);
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
 
@@ -240,6 +253,10 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         gate: body.gate ?? 'auto',
         executionMode: body.executionMode ?? 'sequential',
         failurePolicy: body.failurePolicy ?? 'needs_attention',
+        actionType: body.actionType ?? null,
+        actionTarget: body.actionTarget ?? null,
+        successPolicy: body.successPolicy ?? 'all',
+        successThreshold: body.successThreshold ?? null,
         createdAt: now,
         updatedAt: now,
       })
@@ -252,14 +269,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');
 
-    const body = await c.req.json<{
-      name?: string;
-      position?: number;
-      isTerminal?: boolean;
-      gate?: string;
-      executionMode?: string;
-      failurePolicy?: string;
-    }>();
+    const body = await c.req.json<LaneWriteBody>();
 
     await db
       .update(swimlanes)
@@ -270,6 +280,10 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         ...(body.gate !== undefined ? { gate: body.gate } : {}),
         ...(body.executionMode !== undefined ? { executionMode: body.executionMode } : {}),
         ...(body.failurePolicy !== undefined ? { failurePolicy: body.failurePolicy } : {}),
+        ...(body.actionType !== undefined ? { actionType: body.actionType || null } : {}),
+        ...(body.actionTarget !== undefined ? { actionTarget: body.actionTarget || null } : {}),
+        ...(body.successPolicy !== undefined ? { successPolicy: body.successPolicy } : {}),
+        ...(body.successThreshold !== undefined ? { successThreshold: body.successThreshold } : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(swimlanes.id, laneId), eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)));
@@ -322,7 +336,11 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     if (!(await assertLane(tenantId, boardId, laneId))) return c.json({ error: 'Swimlane not found' }, 404);
 
     const body = await c.req.json<{
-      role: string;
+      // New model: pick a registry agent; runtime/target/model are resolved from it.
+      agentKind?: AgentKind;
+      agentRef?: string;
+      // Legacy model: explicit free-text role + runtime/target (back-compat).
+      role?: string;
       runtime?: string;
       target?: string;
       taskTemplate?: string;
@@ -330,7 +348,52 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       model?: string;
       position?: number;
     }>();
-    if (!body.role?.trim()) return c.json({ error: 'role is required' }, 400);
+
+    // Resolve the chosen registry agent (runtime/host/model defaults) at assign
+    // time so the dispatch pipeline keeps reading plain columns. Falls back to
+    // the legacy free-text role path when no registry agent is supplied.
+    let resolved: {
+      agentKind: AgentKind | null;
+      agentRef: string | null;
+      name: string | null;
+      role: string;
+      runtime: string;
+      target: string | null;
+      model: string | null;
+    };
+    if (body.agentKind && body.agentRef) {
+      try {
+        const r = await resolveAssignedAgent(db, tenantId, {
+          agentKind: body.agentKind,
+          agentRef: body.agentRef,
+          modelOverride: body.model ?? null,
+        });
+        resolved = {
+          agentKind: body.agentKind,
+          agentRef: body.agentRef,
+          name: r.name,
+          role: r.role,
+          runtime: r.runtime,
+          target: r.target,
+          model: r.model,
+        };
+      } catch (err) {
+        if (err instanceof AssignedAgentNotFoundError) return c.json({ error: err.message }, 404);
+        throw err;
+      }
+    } else if (body.role?.trim()) {
+      resolved = {
+        agentKind: null,
+        agentRef: null,
+        name: null,
+        role: body.role.trim(),
+        runtime: body.runtime ?? 'cloud',
+        target: body.target ?? null,
+        model: body.model ?? null,
+      };
+    } else {
+      return c.json({ error: 'agentKind+agentRef (or a legacy role) is required' }, 400);
+    }
 
     const [row] = await db
       .insert(swimlaneAgentAssignments)
@@ -338,13 +401,16 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         tenantId,
         segmentId: c.get('segmentId') ?? null,
         swimlaneId: laneId,
-        role: body.role.trim(),
-        runtime: body.runtime ?? 'cloud',
-        target: body.target ?? null,
+        agentKind: resolved.agentKind,
+        agentRef: resolved.agentRef,
+        name: resolved.name,
+        role: resolved.role,
+        runtime: resolved.runtime,
+        target: resolved.target,
         taskTemplate: body.taskTemplate ?? null,
         requiredCapabilities:
           body.requiredCapabilities != null ? JSON.stringify(body.requiredCapabilities) : null,
-        model: body.model ?? null,
+        model: resolved.model,
         position: body.position ?? 0,
         createdAt: new Date(),
       })
@@ -402,6 +468,36 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(ticketRuns.boardId, boardId), eq(ticketRuns.tenantId, tenantId)))
       .orderBy(asc(ticketRuns.createdAt));
     return c.json({ tickets: rows });
+  });
+
+  // Live per-agent dispatch status across the board's tickets, in ONE query
+  // (joined to the assignment for the display name) so the board can surface a
+  // status pill per task without an N+1. NOT cached: dispatch status is volatile
+  // live-execution state — caching it would show stale pending/running pills.
+  router.get('/:boardId/dispatches', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const boardId = c.req.param('boardId');
+    if (!(await assertBoard(tenantId, boardId))) return c.json({ error: 'Board not found' }, 404);
+    const rows = await db
+      .select({
+        id: agentDispatches.id,
+        ticketRunId: agentDispatches.ticketRunId,
+        taskId: agentDispatches.taskId,
+        swimlaneId: agentDispatches.swimlaneId,
+        assignmentId: agentDispatches.assignmentId,
+        status: agentDispatches.status,
+        role: agentDispatches.role,
+        name: swimlaneAgentAssignments.name,
+        stageSeq: agentDispatches.stageSeq,
+        position: agentDispatches.position,
+        updatedAt: agentDispatches.updatedAt,
+      })
+      .from(agentDispatches)
+      .innerJoin(ticketRuns, eq(agentDispatches.ticketRunId, ticketRuns.id))
+      .leftJoin(swimlaneAgentAssignments, eq(agentDispatches.assignmentId, swimlaneAgentAssignments.id))
+      .where(and(eq(ticketRuns.boardId, boardId), eq(agentDispatches.tenantId, tenantId)))
+      .orderBy(asc(agentDispatches.ticketRunId), asc(agentDispatches.stageSeq), asc(agentDispatches.position));
+    return c.json({ dispatches: rows });
   });
 
   // Verify a ticket run belongs to the tenant before mutating it.

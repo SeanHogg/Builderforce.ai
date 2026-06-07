@@ -2551,8 +2551,10 @@ export const boards = pgTable('boards', {
   segmentId:            uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   projectId:            integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   name:                 varchar('name', { length: 255 }).notNull(),
-  /** Autonomous mode auto-advances a ticket to the next lane on stage success. */
-  autonomous:           boolean('autonomous').notNull().default(false),
+  /** @deprecated Inert since migration 0084 — autonomy is now driven by lane
+   *  agents + action rules (lane.gate 'auto' vs 'human'), not a board toggle.
+   *  Kept (defaulted true) until all readers are gone; see Gap Register. */
+  autonomous:           boolean('autonomous').notNull().default(true),
   maxConcurrentTickets: integer('max_concurrent_tickets').notNull().default(5),
   needsAttentionLane:   varchar('needs_attention_lane', { length: 120 }).notNull().default('needs-attention'),
   createdAt:            timestamp('created_at').notNull().defaultNow(),
@@ -2572,6 +2574,11 @@ export const swimlanes = pgTable('swimlanes', {
   gate:          varchar('gate', { length: 16 }).notNull().default('auto'),              // 'auto' | 'human'
   executionMode: varchar('execution_mode', { length: 16 }).notNull().default('sequential'), // 'parallel' | 'sequential'
   failurePolicy: varchar('failure_policy', { length: 24 }).notNull().default('needs_attention'), // 'needs_attention' | 'retry' | 'skip'
+  // Lane action fired once the stage settles per successPolicy (migration 0084).
+  actionType:       varchar('action_type', { length: 16 }),   // null|'advance' | 'move_ticket' | 'run_workflow'
+  actionTarget:     varchar('action_target', { length: 64 }), // target lane key (move_ticket) | workflow id (run_workflow)
+  successPolicy:    varchar('success_policy', { length: 16 }).notNull().default('all'), // 'all' | 'any' | 'n_of_m'
+  successThreshold: integer('success_threshold'),             // required when successPolicy='n_of_m'
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
   // UNIQUE (board_id, key) enforced in migration 0064 (kept out of the pgTable
@@ -2584,6 +2591,11 @@ export const swimlaneAgentAssignments = pgTable('swimlane_agent_assignments', {
   tenantId:             integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:            uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   swimlaneId:           uuid('swimlane_id').notNull().references(() => swimlanes.id, { onDelete: 'cascade' }),
+  // Which registry agent was chosen (migration 0084). role/runtime/target/model
+  // below hold the values resolved from this agent at assign time.
+  agentKind:            varchar('agent_kind', { length: 16 }),  // 'workforce' | 'registered'
+  agentRef:             varchar('agent_ref', { length: 64 }),   // ide_agents.id | agents.id
+  name:                 varchar('name', { length: 255 }),       // display name of the chosen agent
   role:                 varchar('role', { length: 120 }).notNull(),
   runtime:              varchar('runtime', { length: 16 }).notNull().default('cloud'),   // 'local' | 'cloud' | 'remote'
   target:               varchar('target', { length: 120 }),   // remote agentHost id when runtime='remote'

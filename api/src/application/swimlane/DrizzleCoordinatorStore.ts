@@ -241,6 +241,10 @@ function toLane(l: LaneRow): LaneLite {
     isTerminal: l.isTerminal,
     gate: l.gate,
     executionMode: l.executionMode,
+    actionType: l.actionType,
+    actionTarget: l.actionTarget,
+    successPolicy: l.successPolicy,
+    successThreshold: l.successThreshold,
   };
 }
 

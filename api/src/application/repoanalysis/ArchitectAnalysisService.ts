@@ -39,8 +39,8 @@ export class ArtifactGenerationError extends Error {
 export class ArchitectAnalysisService {
   /**
    * @param preferredModel  When an agent is assigned to architecture analysis
-   *   for this project, its model id (e.g. `workforce-<id>`) so the run executes
-   *   AS that agent; omitted → the gateway's default cascade.
+   *   for this project, its resolved model (the agent's `base_model`) so the run
+   *   executes AS that agent; omitted → the gateway's default cascade.
    */
   constructor(private readonly env: Env, private readonly preferredModel?: string) {}
 

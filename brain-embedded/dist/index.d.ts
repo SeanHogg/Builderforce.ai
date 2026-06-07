@@ -290,6 +290,8 @@ interface UseBrainConversationOptions {
     extraSystem?: string;
     /** Override the system prompt entirely (e.g. a fixed Brain Storm persona). */
     systemPrompt?: string;
+    /** Override the model (e.g. run the Brain as a specific assigned agent). */
+    model?: string;
     /** Tool specs from the page-action registry. */
     toolSpecs?: BrainToolSpec[];
     /** Dispatch a tool call to the registry. */

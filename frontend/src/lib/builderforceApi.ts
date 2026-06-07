@@ -2097,6 +2097,10 @@ export interface Board {
   swimlanes?: Swimlane[];
 }
 
+/** What a lane does once its agents settle per its success policy. */
+export type LaneActionType = 'advance' | 'move_ticket' | 'run_workflow';
+export type LaneSuccessPolicy = 'all' | 'any' | 'n_of_m';
+
 export interface Swimlane {
   id: string;
   boardId: string;
@@ -2107,6 +2111,12 @@ export interface Swimlane {
   gate: 'auto' | 'human';
   executionMode: 'sequential' | 'parallel';
   failurePolicy: 'needs_attention' | 'retry' | 'skip';
+  /** Lane action fired once the stage settles (null ⇒ advance to next lane). */
+  actionType: LaneActionType | null;
+  /** Target lane key (move_ticket) | workflow definition id (run_workflow). */
+  actionTarget: string | null;
+  successPolicy: LaneSuccessPolicy;
+  successThreshold: number | null;
   createdAt: string;
   updatedAt?: string;
 }
@@ -2114,6 +2124,10 @@ export interface Swimlane {
 export interface SwimlaneAgent {
   id: string;
   swimlaneId: string;
+  /** Which registry agent was chosen. */
+  agentKind: 'workforce' | 'registered' | null;
+  agentRef: string | null;
+  name: string | null;
   role: string;
   runtime: 'cloud' | 'local' | 'remote' | 'browser';
   target: string | null;
@@ -2124,6 +2138,21 @@ export interface SwimlaneAgent {
   createdAt: string;
 }
 
+/** A live per-agent dispatch status across a board's tickets. */
+export interface BoardDispatch {
+  id: string;
+  ticketRunId: string;
+  taskId: number | null;
+  swimlaneId: string | null;
+  assignmentId: string | null;
+  status: 'pending' | 'claimed' | 'running' | 'completed' | 'failed' | 'cancelled';
+  role: string;
+  name: string | null;
+  stageSeq: number;
+  position: number;
+  updatedAt: string;
+}
+
 export const boardsApi = {
   list: (): Promise<Board[]> =>
     request<{ boards: Board[] }>('/api/boards').then((r) => r.boards ?? []),
@@ -2131,21 +2160,25 @@ export const boardsApi = {
   get: (boardId: string): Promise<Board> =>
     request(`/api/boards/${boardId}`),
 
-  create: (body: { projectId: number; name: string; autonomous?: boolean; maxConcurrentTickets?: number; needsAttentionLane?: string | null }): Promise<Board> =>
+  create: (body: { projectId: number; name: string; maxConcurrentTickets?: number; needsAttentionLane?: string | null }): Promise<Board> =>
     request('/api/boards', { method: 'POST', body: JSON.stringify(body) }),
 
-  update: (boardId: string, body: Partial<{ name: string; autonomous: boolean; maxConcurrentTickets: number; needsAttentionLane: string | null }>): Promise<Board> =>
+  update: (boardId: string, body: Partial<{ name: string; maxConcurrentTickets: number; needsAttentionLane: string | null }>): Promise<Board> =>
     request(`/api/boards/${boardId}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   remove: (boardId: string): Promise<void> =>
     request<void>(`/api/boards/${boardId}`, { method: 'DELETE' }),
 
+  /** Live per-agent dispatch status across the board's tickets (NOT cached). */
+  dispatches: (boardId: string): Promise<BoardDispatch[]> =>
+    request<{ dispatches: BoardDispatch[] }>(`/api/boards/${boardId}/dispatches`).then((r) => r.dispatches ?? []),
+
   swimlanes: {
     list: (boardId: string): Promise<Swimlane[]> =>
       request<{ swimlanes: Swimlane[] }>(`/api/boards/${boardId}/swimlanes`).then((r) => r.swimlanes ?? []),
-    create: (boardId: string, body: { key: string; name: string; position?: number; isTerminal?: boolean; gate?: string; executionMode?: string; failurePolicy?: string }): Promise<Swimlane> =>
+    create: (boardId: string, body: Partial<LaneWriteBody> & { key: string; name: string }): Promise<Swimlane> =>
       request(`/api/boards/${boardId}/swimlanes`, { method: 'POST', body: JSON.stringify(body) }),
-    patch: (boardId: string, laneId: string, body: Partial<{ name: string; position: number; isTerminal: boolean; gate: string; executionMode: string; failurePolicy: string }>): Promise<Swimlane> =>
+    patch: (boardId: string, laneId: string, body: Partial<LaneWriteBody>): Promise<Swimlane> =>
       request(`/api/boards/${boardId}/swimlanes/${laneId}`, { method: 'PATCH', body: JSON.stringify(body) }),
     remove: (boardId: string, laneId: string): Promise<void> =>
       request<void>(`/api/boards/${boardId}/swimlanes/${laneId}`, { method: 'DELETE' }),
@@ -2154,9 +2187,23 @@ export const boardsApi = {
   agents: {
     list: (boardId: string, laneId: string): Promise<SwimlaneAgent[]> =>
       request<{ assignments: SwimlaneAgent[] }>(`/api/boards/${boardId}/swimlanes/${laneId}/agents`).then((r) => r.assignments ?? []),
-    create: (boardId: string, laneId: string, body: { role: string; runtime?: string; target?: string | null; model?: string | null; position?: number; taskTemplate?: string | null; requiredCapabilities?: unknown }): Promise<SwimlaneAgent> =>
+    create: (boardId: string, laneId: string, body: { agentKind: 'workforce' | 'registered'; agentRef: string; model?: string | null; position?: number }): Promise<SwimlaneAgent> =>
       request(`/api/boards/${boardId}/swimlanes/${laneId}/agents`, { method: 'POST', body: JSON.stringify(body) }),
     remove: (boardId: string, laneId: string, id: string): Promise<void> =>
       request<void>(`/api/boards/${boardId}/swimlanes/${laneId}/agents/${id}`, { method: 'DELETE' }),
   },
 };
+
+/** Mutable swimlane fields shared by the create + patch requests. */
+interface LaneWriteBody {
+  name: string;
+  position: number;
+  isTerminal: boolean;
+  gate: string;
+  executionMode: string;
+  failurePolicy: string;
+  actionType: string;
+  actionTarget: string;
+  successPolicy: string;
+  successThreshold: number;
+}
