@@ -1220,6 +1220,23 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     return c.json(executions.map(e => e.toPlain()));
   });
 
+  // Per-agent file-change traceability for a task's shared ticket workspace.
+  // A live tail (changes as agents run), so it is not cached; the Changes tab
+  // polls it only while a run is in-flight. Tenant-scoped.
+  router.get('/tasks/:taskId/file-changes', async (c) => {
+    const taskId = Number(c.req.param('taskId'));
+    if (!Number.isFinite(taskId)) return c.json({ changes: [] });
+    const sql = neon((c.env as Env).NEON_DATABASE_URL);
+    const rows = (await sql`
+      SELECT path, change, agent, execution_id AS "executionId", created_at AS "createdAt"
+      FROM task_file_changes
+      WHERE task_id = ${taskId} AND tenant_id = ${c.get('tenantId')}
+      ORDER BY created_at DESC
+      LIMIT 500
+    `) as Array<{ path: string; change: string; agent: string; executionId: number | null; createdAt: string }>;
+    return c.json({ changes: rows });
+  });
+
   // Broadcast an existing task to all currently connected agentHosts in the tenant.
   router.post('/tasks/:taskId/broadcast', async (c) => {
     const taskId = Number(c.req.param('taskId'));

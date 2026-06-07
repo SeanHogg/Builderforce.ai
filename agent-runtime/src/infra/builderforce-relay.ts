@@ -317,6 +317,10 @@ export class BuilderforceRelayService implements IRelayService {
       logWarn(`[builderforce] finalized task ${payload.taskId}: pushed ${branch}`);
     } catch (err) {
       logWarn(`[builderforce] finalize task ${payload.taskId} failed: ${String(err)}`);
+    } finally {
+      // Tear the ticket workspace down — the work is committed/pushed, the ticket
+      // is Done, so the ephemeral clone is no longer needed.
+      await fs.rm(dir, { recursive: true, force: true }).catch(() => { /* best-effort */ });
     }
   }
 
