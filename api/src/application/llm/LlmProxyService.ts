@@ -90,6 +90,33 @@ export const PREMIUM_PRIORITY_POOL: readonly string[] =
 export const PREMIUM_VENDOR_CALL_TIMEOUT_MS = 60_000;
 
 /**
+ * Per-vendor-call timeout for the FREE plan. Free-tier upstreams that haven't
+ * started streaming within ~15s are, empirically, going to burn the full 25s
+ * default and time out anyway (see the all-`408` free attempts in trace
+ * `llm-71b468dd-...`, 2026-06-07). Shrinking the per-attempt budget lets a
+ * saturated free pool fail fast so the request reaches the guaranteed paid
+ * backstop within the caller's deadline instead of spending 2×25s up front.
+ * Paid/premium routing keeps the longer budget — those calls are worth waiting
+ * for. The backstop itself overrides this with `PREMIUM_VENDOR_CALL_TIMEOUT_MS`.
+ */
+export const FREE_VENDOR_CALL_TIMEOUT_MS = 15_000;
+
+/**
+ * Guaranteed paid backstop — a single low-cost, low-variance paid model
+ * dispatched on the *credited* (Pro) OpenRouter key after the primary cascade
+ * fails (or every candidate is on cooldown), regardless of the request's plan.
+ *
+ * Why this exists separately from `PREMIUM_FALLBACK_MODELS`: that chain runs on
+ * whatever key the plan resolves to. On the FREE plan that's the free
+ * OpenRouter key, which may lack the credit to actually pay for the paid Gemini
+ * entry — so the only "safety net" 402s and the request hard-fails (the
+ * `AI_UNAVAILABLE` symptom on hired.video's tailor endpoint). The backstop
+ * closes that hole: Builderforce funds this one cheap call (~$0.0001) as the
+ * reliability floor so a saturated free pool never surfaces a hard failure.
+ */
+export const GUARANTEED_BACKSTOP_MODEL = 'google/gemini-2.5-flash-lite';
+
+/**
  * Premium fallback chain — appended to *every* non-strict candidate chain so a
  * fully-saturated free pool never surfaces an `LLM_UNAVAILABLE` / cascade-
  * exhausted 429 to the caller. Direct Google AI (`googleai/*`) is tried first
@@ -383,8 +410,11 @@ export class LlmProxyService {
       : undefined;
     const candidates = this.buildCandidateChain(seed, cooledSet, cooledVendors, pinnedHint);
     if (candidates.length === 0) {
-      // Every model in the seed + premium fallback list is on cooldown. Fail fast
-      // with a clear envelope instead of attempting a vendor with no chain.
+      // Every model in the seed + premium fallback list is on cooldown. The
+      // guaranteed paid backstop (credited key) is the last chance before we
+      // surface a hard failure.
+      const backstop = await this.dispatchBackstop(body, requestHeaders);
+      if (backstop) return this.finalize(backstop, tid, startedAt, [GUARANTEED_BACKSTOP_MODEL], 'success');
       return this.finalize(
         this.exhaustedResponse(
           seed.slice(),
@@ -394,7 +424,25 @@ export class LlmProxyService {
         tid, startedAt, seed.slice(), 'all_cooldown',
       );
     }
-    return this.finalize(await this.dispatch(candidates, body, requestHeaders), tid, startedAt, candidates);
+
+    const primary = await this.dispatch(candidates, body, requestHeaders);
+    if (primary.response.status < 400) {
+      return this.finalize(primary, tid, startedAt, candidates);
+    }
+
+    // Primary cascade failed (saturated free pool, cascade-exhausted 429, etc.).
+    // Fire the guaranteed paid backstop on the credited key before giving up so
+    // the caller gets a real answer instead of `AI_UNAVAILABLE`. On success,
+    // splice the primary cascade's diagnostics in front of the backstop's so the
+    // trace still records everything that was tried.
+    const backstop = await this.dispatchBackstop(body, requestHeaders);
+    if (backstop) {
+      backstop.failovers = [...primary.failovers, ...backstop.failovers];
+      backstop.retries   = primary.retries + backstop.retries;
+      backstop.attempts  = [...(primary.attempts ?? []), ...(backstop.attempts ?? [])];
+      return this.finalize(backstop, tid, startedAt, [...candidates, GUARANTEED_BACKSTOP_MODEL], 'success');
+    }
+    return this.finalize(primary, tid, startedAt, candidates);
   }
 
   /** Stamp request-level diagnostics onto a ProxyResult before it leaves
@@ -526,10 +574,46 @@ export class LlmProxyService {
     };
   }
 
+  /**
+   * Vendor env that forces the *credited* (Pro) OpenRouter key regardless of the
+   * proxy's plan, so the guaranteed backstop can reach paid models even when the
+   * request itself came in on the free key. Falls back to the standard key when
+   * no Pro key is bound (single-key deployments still get a backstop attempt).
+   */
+  private creditedVendorEnv(): VendorEnv {
+    return {
+      ...this.vendorEnv(),
+      OPENROUTER_API_KEY: this.env.OPENROUTER_API_KEY_PRO ?? this.env.OPENROUTER_API_KEY ?? null,
+    };
+  }
+
+  /**
+   * Guaranteed paid backstop — see `GUARANTEED_BACKSTOP_MODEL`. Dispatched only
+   * after the primary cascade has failed (or every candidate was cooled). Forces
+   * the credited key + the extended premium timeout so one low-variance paid
+   * model can answer even on the free plan with a saturated free pool.
+   *
+   * Returns the successful `ProxyResult`, or `null` when no credited key is bound
+   * or the backstop itself fails — the caller then surfaces the original failure.
+   */
+  private async dispatchBackstop(
+    body: ChatCompletionRequest,
+    requestHeaders?: Record<string, string>,
+  ): Promise<ProxyResult | null> {
+    const creditedEnv = this.creditedVendorEnv();
+    if (!creditedEnv.OPENROUTER_API_KEY) return null; // no paid key to fall back to
+    const result = await this.dispatch([GUARANTEED_BACKSTOP_MODEL], body, requestHeaders, {
+      vendorEnv: creditedEnv,
+      timeoutMs: PREMIUM_VENDOR_CALL_TIMEOUT_MS,
+    });
+    return result.response.status < 400 ? result : null;
+  }
+
   private async dispatch(
     candidates: string[],
     body: ChatCompletionRequest,
     requestHeaders?: Record<string, string>,
+    overrides?: { vendorEnv?: VendorEnv; timeoutMs?: number },
   ): Promise<ProxyResult> {
     // Sanitize tool names (`governance.snapshot` → `governance__DOT__snapshot`)
     // before the body reaches a vendor — Anthropic / some Cerebras configs
@@ -538,6 +622,8 @@ export class LlmProxyService {
     const sanitizedBody = sanitizeRequestToolNames(body as unknown as Record<string, unknown>) as unknown as ChatCompletionRequest;
     const messages = sanitizedBody.messages as unknown as Array<Record<string, unknown>>;
     const extraBody = stripStandardFields(sanitizedBody);
+    const effectiveTimeoutMs = overrides?.timeoutMs ?? this.vendorCallTimeoutMs;
+    const vendorEnv = overrides?.vendorEnv ?? this.vendorEnv();
     const callParams = {
       messages,
       ...(sanitizedBody.max_tokens  != null ? { maxTokens:   sanitizedBody.max_tokens  } : {}),
@@ -545,13 +631,13 @@ export class LlmProxyService {
       ...(sanitizedBody.top_p       != null ? { topP:        sanitizedBody.top_p       } : {}),
       ...(Object.keys(extraBody).length > 0 ? { extraBody } : {}),
       title: this.productName,
-      ...(this.vendorCallTimeoutMs ? { timeoutMs: this.vendorCallTimeoutMs } : {}),
+      ...(effectiveTimeoutMs ? { timeoutMs: effectiveTimeoutMs } : {}),
     };
 
     if (sanitizedBody.stream) {
-      return this.dispatchStream(candidates, callParams, requestHeaders);
+      return this.dispatchStream(candidates, callParams, vendorEnv, requestHeaders);
     }
-    return this.dispatchJson(candidates, callParams, sanitizedBody);
+    return this.dispatchJson(candidates, callParams, vendorEnv, sanitizedBody);
   }
 
   /**
@@ -567,6 +653,7 @@ export class LlmProxyService {
   private async dispatchJson(
     candidates: string[],
     callParams: Omit<Parameters<typeof dispatchVendor>[0], 'env' | 'modelChain'>,
+    vendorEnv: VendorEnv,
     body: ChatCompletionRequest,
   ): Promise<ProxyResult> {
     let chain = candidates;
@@ -579,7 +666,7 @@ export class LlmProxyService {
       let result: Awaited<ReturnType<typeof dispatchVendor>>;
       try {
         result = await dispatchVendor({
-          env: this.vendorEnv(),
+          env: vendorEnv,
           modelChain: chain,
           ...callParams,
         });
@@ -764,11 +851,12 @@ export class LlmProxyService {
   private async dispatchStream(
     candidates: string[],
     callParams: Omit<Parameters<typeof dispatchVendorStream>[0], 'env' | 'modelChain'>,
+    vendorEnv: VendorEnv,
     _requestHeaders?: Record<string, string>,
   ): Promise<ProxyResult> {
     try {
       const result = await dispatchVendorStream({
-        env: this.vendorEnv(),
+        env: vendorEnv,
         modelChain: candidates,
         ...callParams,
       });
@@ -876,8 +964,12 @@ export function resolveRouting(
     effectivePlan === 'teams' ? 'builderforceLLMTeams'
     : effectivePlan === 'pro' ? 'builderforceLLMPro'
     :                            'builderforceLLM';
-  const modelPool = effectivePlan === 'free' ? FREE_MODEL_POOL : PRO_MODEL_POOL;
-  return { productName, modelPool };
+  if (effectivePlan === 'free') {
+    // Free pool fails fast (15s/attempt) so it reaches the guaranteed paid
+    // backstop within the caller's deadline. Paid plans keep the default budget.
+    return { productName, modelPool: FREE_MODEL_POOL, vendorCallTimeoutMs: FREE_VENDOR_CALL_TIMEOUT_MS };
+  }
+  return { productName, modelPool: PRO_MODEL_POOL };
 }
 
 /** Map an effective plan to its productName + model pool, then construct the proxy.
@@ -913,6 +1005,7 @@ export function ideProxy(env: ProxyEnv): LlmProxyService {
     modelPool: FREE_MODEL_POOL,
     preferredPoolSize: PREFERRED_POOL_SIZE,
     productName: 'builderforceLLM',
+    vendorCallTimeoutMs: FREE_VENDOR_CALL_TIMEOUT_MS,
   });
 }
 
