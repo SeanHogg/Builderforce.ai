@@ -8,6 +8,7 @@ import {
   type Task,
   type AgentHost,
 } from '@/lib/builderforceApi';
+import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 
 /**
  * Run-with-agent control — replaces the old "Send to AgentHost" button. A button
@@ -37,9 +38,12 @@ export interface RunAgentControlProps {
 }
 
 export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }: RunAgentControlProps) {
-  const [agentHostId, setAgentHostId] = useState<string>(task.assignedAgentHostId != null ? String(task.assignedAgentHostId) : '');
+  // target encodes the run target: '' = auto, 'host:<id>' = a self-hosted
+  // executor, 'cloud:<ref>' = run AS a cloud agent (its model via an executor).
+  const [target, setTarget] = useState<string>(task.assignedAgentHostId != null ? `host:${task.assignedAgentHostId}` : '');
   const [model, setModel] = useState<string>('');
   const [models, setModels] = useState<string[]>([]);
+  const [cloudAgents, setCloudAgents] = useState<PoolAgent[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,16 +54,25 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
         setModels(list ?? []);
       })
       .catch(() => setModels([]));
+    loadAgentPool().then((p) => setCloudAgents(p.filter((a) => a.kind === 'workforce'))).catch(() => setCloudAgents([]));
   }, []);
 
   const run = async () => {
     setRunning(true); setError(null);
     try {
+      // Resolve the run target. A host runs as an executor; a cloud agent runs
+      // AS its model (no host — the gateway/fleet executes it).
+      const isHost = target.startsWith('host:');
+      const cloudAgent = target.startsWith('cloud:')
+        ? cloudAgents.find((a) => `cloud:${a.ref}` === target)
+        : null;
+      const agentHostId = isHost ? Number(target.slice('host:'.length)) : undefined;
+      const effectiveModel = model || cloudAgent?.baseModel || '';
       const result = await runtimeApi.submitExecution({
         taskId: task.id,
-        agentHostId: agentHostId ? Number(agentHostId) : undefined,
-        // Forward the chosen model to the agent; default = gateway default.
-        payload: model ? JSON.stringify({ model }) : undefined,
+        agentHostId,
+        // Forward the chosen model (explicit, or the cloud agent's own); default = gateway default.
+        payload: effectiveModel ? JSON.stringify({ model: effectiveModel }) : undefined,
       });
       if (isAwaitingApprovalExecution(result)) {
         onAwaitingApproval?.({ approvalId: result.approvalId, taskId: result.taskId, reason: result.reason });
@@ -76,11 +89,22 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
   return (
     <div>
       <div style={{ display: 'inline-flex', alignItems: 'stretch', border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden' }}>
-        <select value={agentHostId} onChange={(e) => setAgentHostId(e.target.value)} style={{ ...selectStyle, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="Agent">
+        <select value={target} onChange={(e) => setTarget(e.target.value)} style={{ ...selectStyle, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="Agent">
           <option value="">Auto (any agent)</option>
-          {agentHosts.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}{c.online ? '' : ' (offline)'}</option>
-          ))}
+          {cloudAgents.length > 0 && (
+            <optgroup label="Cloud agents">
+              {cloudAgents.map((a) => (
+                <option key={`cloud:${a.ref}`} value={`cloud:${a.ref}`}>{a.name}</option>
+              ))}
+            </optgroup>
+          )}
+          {agentHosts.length > 0 && (
+            <optgroup label="Self-hosted agents">
+              {agentHosts.map((c) => (
+                <option key={`host:${c.id}`} value={`host:${c.id}`}>{c.name}{c.online ? '' : ' (offline)'}</option>
+              ))}
+            </optgroup>
+          )}
         </select>
         <select value={model} onChange={(e) => setModel(e.target.value)} style={{ ...selectStyle, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="LLM model">
           <option value="">{DEFAULT_MODEL_LABEL}</option>
