@@ -3,11 +3,13 @@ import type { Context } from 'hono';
 import { neon } from '@neondatabase/serverless';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { commitPrdAsPendingChange } from '../../application/repos/commitPrdToRepo';
+import { resolveTicketRepoContext, commitAgentFile, type TicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
+import { createPullRequest } from '../../application/repos/createPullRequest';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
-import { ideProxy } from '../../application/llm/LlmProxyService';
+import { ideProxy, type ChatMessage } from '../../application/llm/LlmProxyService';
 import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
@@ -481,6 +483,7 @@ async function recordCloudToolEvent(
     executionId: number;
     toolName: string;
     category: string;
+    toolCallId?: string;
     detail?: unknown;
     result?: string;
     durationMs?: number;
@@ -493,6 +496,7 @@ async function recordCloudToolEvent(
       cloudAgentRef: args.cloudAgentRef ?? null,
       executionId:  args.executionId,
       sessionKey:   `exec:${args.executionId}`,
+      toolCallId:   args.toolCallId ?? null,
       toolName:     args.toolName,
       category:     args.category,
       args:         args.detail != null ? JSON.stringify(args.detail) : null,
@@ -520,6 +524,202 @@ async function recordCloudUsage(
       contextTokens: args.inputTokens + args.outputTokens,
     });
   } catch { /* best-effort */ }
+}
+
+/** Shape of one tool call in an OpenAI-compatible completion response. */
+interface RawToolCall { id?: string; type?: string; function?: { name?: string; arguments?: string } }
+
+/**
+ * Tools the cloud (Worker) agent loop can actually execute. The Worker has no
+ * filesystem/shell, so the toolset is provider-API-backed: `write_file` lands a
+ * file on the ticket branch as a pending change; `finish` ends the run. Both V1
+ * and V2 cloud runs use this same loop so they genuinely *execute tools* (not a
+ * single completion) and every call is recorded to the Observability timeline.
+ */
+const CLOUD_AGENT_TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'write_file',
+      description: 'Create or update a file on the ticket branch as a reviewable pending change (a PR is opened/updated for the run). Use once per deliverable file. Provide the FULL file content.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Repo-relative path, e.g. "src/feature.ts".' },
+          content: { type: 'string', description: 'Complete file content (no placeholders).' },
+          summary: { type: 'string', description: 'One-line description of the change.' },
+        },
+        required: ['path', 'content'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'finish',
+      description: 'Call when the task is complete. Provide a concise summary of what was delivered.',
+      parameters: {
+        type: 'object',
+        properties: { summary: { type: 'string', description: 'What was delivered.' } },
+        required: ['summary'],
+      },
+    },
+  },
+] as const;
+
+const MAX_CLOUD_TOOL_STEPS = 6;
+
+/**
+ * The cloud agent's tool-executing loop. Drives the gateway with the toolset
+ * above, executes each requested tool, feeds results back, and repeats until the
+ * model calls `finish`, stops requesting tools, or the step cap is hit. Records a
+ * per-iteration `llm.complete` event, a per-call tool event, and a usage snapshot
+ * — so the timeline shows real tool execution. Never throws.
+ */
+async function runCloudToolLoop(
+  env: Env,
+  db: Db,
+  executionId: number,
+  tenantId: number,
+  taskRow: { id: number; title: string; description: string | null },
+  cloudAgentRef: string | undefined,
+  agentLabel: string,
+  model: string | undefined,
+  systemPrompt: string,
+  userContent: string,
+): Promise<{ ok: boolean; output: string }> {
+  const repoResolved = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskRow.id);
+  const repoCtx: TicketRepoContext | null = repoResolved.ok ? repoResolved.ctx : null;
+  const repoMiss = repoResolved.ok ? '' : repoResolved.reason;
+  const writtenPaths = new Set<string>();
+
+  const messages: Array<Record<string, unknown>> = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userContent },
+  ];
+
+  let finalOutput = '';
+  let finished = false;
+
+  for (let step = 0; step < MAX_CLOUD_TOOL_STEPS && !finished; step++) {
+    const tGen0 = Date.now();
+    const result = await ideProxy(env).complete({
+      messages: messages as unknown as ChatMessage[],
+      tools: CLOUD_AGENT_TOOLS,
+      tool_choice: 'auto',
+      ...(model ? { model } : {}),
+      useCase: 'task_execution',
+    });
+    const genMs = Date.now() - tGen0;
+    const resolvedModel = result.resolvedModel ?? model ?? 'default';
+    if (result.usage) {
+      await recordCloudUsage(db, {
+        tenantId, cloudAgentRef, executionId,
+        inputTokens: result.usage.promptTokens ?? 0,
+        outputTokens: result.usage.completionTokens ?? 0,
+      });
+    }
+    if (result.response.status >= 400) {
+      const body = await result.response.text().catch(() => '');
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef, executionId,
+        toolName: 'llm.complete', category: 'llm',
+        detail: { model: resolvedModel, traceId: result.traceId ?? null, step },
+        result: `gateway ${result.response.status}`, durationMs: genMs,
+      });
+      return { ok: false, output: `Gateway ${result.response.status}: ${body.slice(0, 300)}` };
+    }
+
+    const json = (await result.response.json().catch(() => null)) as
+      | { choices?: Array<{ message?: { content?: unknown; tool_calls?: unknown } }> }
+      | null;
+    const choice = json?.choices?.[0]?.message;
+    const content = typeof choice?.content === 'string' ? choice.content : '';
+    const toolCalls = Array.isArray(choice?.tool_calls) ? (choice!.tool_calls as RawToolCall[]) : [];
+    if (content) finalOutput = content;
+
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef, executionId,
+      toolName: 'llm.complete', category: 'llm',
+      detail: { model: resolvedModel, traceId: result.traceId ?? null, step, toolCalls: toolCalls.length },
+      result: `${toolCalls.length} tool call(s)${content ? ` · ${content.length} chars` : ''}`,
+      durationMs: genMs,
+    });
+
+    if (toolCalls.length === 0) { finished = true; break; }
+
+    // Echo the assistant turn (with its tool_calls) so tool results attach to it.
+    messages.push({ role: 'assistant', content, tool_calls: toolCalls });
+
+    for (const tc of toolCalls) {
+      const name = tc.function?.name ?? 'unknown';
+      let parsed: Record<string, unknown> = {};
+      try { parsed = tc.function?.arguments ? (JSON.parse(tc.function.arguments) as Record<string, unknown>) : {}; } catch { /* leave empty */ }
+      const tStart = Date.now();
+      let toolResult: Record<string, unknown>;
+
+      if (name === 'write_file') {
+        const path = typeof parsed.path === 'string' ? parsed.path : '';
+        const fileContent = typeof parsed.content === 'string' ? parsed.content : '';
+        if (!path || !fileContent) {
+          toolResult = { ok: false, error: 'path and content are both required' };
+        } else if (!repoCtx) {
+          toolResult = { ok: false, error: `no repo bound to this task (${repoMiss}); include the file contents in your final summary instead` };
+        } else {
+          const isNew = !writtenPaths.has(path);
+          const commit = await commitAgentFile(repoCtx, path, fileContent, `${isNew ? 'Add' : 'Update'} ${path} — task #${taskRow.id} (${agentLabel})`);
+          if (commit.ok) {
+            writtenPaths.add(path);
+            await recordTaskFileChange(env, tenantId, taskRow.id, executionId, path, isNew ? 'created' : 'modified', agentLabel);
+            notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: isNew ? 'created' : 'modified', ts: new Date().toISOString() });
+            toolResult = { ok: true, branch: repoCtx.branch, commitUrl: commit.commitUrl };
+          } else {
+            toolResult = { ok: false, error: commit.reason };
+          }
+        }
+      } else if (name === 'finish') {
+        const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : '';
+        if (summary) finalOutput = summary;
+        finished = true;
+        toolResult = { ok: true };
+      } else {
+        toolResult = { ok: false, error: `unknown tool '${name}'` };
+      }
+
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef, executionId,
+        toolName: name, category: 'tool', toolCallId: tc.id,
+        detail: name === 'write_file' ? { path: parsed.path, summary: parsed.summary } : parsed,
+        result: JSON.stringify(toolResult).slice(0, 300),
+        durationMs: Date.now() - tStart,
+      });
+
+      messages.push({ role: 'tool', tool_call_id: tc.id ?? '', content: JSON.stringify(toolResult) });
+    }
+  }
+
+  // Land the changes as a reviewable pending change once any file was committed.
+  let prOpened = false;
+  if (repoCtx && writtenPaths.size > 0) {
+    const pr = await createPullRequest({
+      provider: repoCtx.provider, host: repoCtx.host, owner: repoCtx.owner, repo: repoCtx.repo,
+      token: repoCtx.token, head: repoCtx.branch, base: repoCtx.base,
+      title: `Task #${taskRow.id}: ${taskRow.title}`,
+      body: `Changes for task #${taskRow.id}, by ${agentLabel}. Files: ${[...writtenPaths].join(', ')}.`,
+    }).catch(() => ({ ok: false as const, code: 'provider_error' as const, reason: 'pr failed' }));
+    prOpened = pr.ok;
+    await db.update(tasks)
+      .set({ gitBranch: repoCtx.branch, ...(pr.ok ? { githubPrUrl: pr.url, githubPrNumber: pr.number } : {}), updatedAt: new Date() })
+      .where(eq(tasks.id, taskRow.id))
+      .catch(() => { /* best-effort */ });
+  }
+
+  const output =
+    finalOutput ||
+    (writtenPaths.size > 0
+      ? `Committed ${writtenPaths.size} file(s) to \`${repoCtx?.branch}\`${prOpened ? ' and opened a pending-change PR' : ''}.`
+      : '(no output produced)');
+  return { ok: true, output };
 }
 
 /**
@@ -576,52 +776,19 @@ async function runCloudExecution(
       governance || null,
       `## Your Task\n\n${taskRow.title}\n\n${taskRow.description ?? ''}`.trim(),
     ].filter(Boolean).join('\n\n---\n\n');
-    const tGen0 = Date.now();
-    const result = await ideProxy(env).complete({
-      messages: [
-        { role: 'system', content: 'You are a BuilderForce agent executing a project task. Follow the PRD, architecture spec, and project rules provided below exactly. Produce the concrete, finished deliverable for the task — do NOT return a template with bracketed placeholders to be filled in later; where specifics are unknown, make explicit, reasonable assumptions and state them.' },
-        { role: 'user', content: userContent },
-      ],
-      ...(model ? { model } : {}),
-      useCase: 'task_execution',
-    });
-    const genMs = Date.now() - tGen0;
-    const resolvedModel = result.resolvedModel ?? model ?? 'default';
-    // Debug trail for cloud runs: which model ran + the gateway trace id (so the
-    // run is inspectable in the LLM-trace view even though there's no live stream).
-    const debug = `[ran as ${resolvedModel}${result.traceId ? ` · trace ${result.traceId}` : ''}]`;
-    // Token usage → Observability (mirrors self-hosted usage snapshots).
-    if (result.usage) {
-      await recordCloudUsage(db, {
-        tenantId, cloudAgentRef, executionId,
-        inputTokens: result.usage.promptTokens ?? 0,
-        outputTokens: result.usage.completionTokens ?? 0,
-      });
-    }
-    if (result.response.status >= 400) {
-      const body = await result.response.text().catch(() => '');
-      await recordCloudToolEvent(db, {
-        tenantId, cloudAgentRef, executionId,
-        toolName: 'llm.complete', category: 'llm',
-        detail: { model: resolvedModel, traceId: result.traceId ?? null, useCase: 'task_execution' },
-        result: `gateway ${result.response.status}`,
-        durationMs: genMs,
-      });
-      await runtimeService.update(executionId, {
-        status: ExecutionStatus.FAILED,
-        errorMessage: `Gateway ${result.response.status}: ${body.slice(0, 300)} ${debug}`.trim(),
-      });
-      return;
-    }
-    const text = extractCompletion(await result.response.json().catch(() => null));
-    const output = text || `(no output produced) ${debug}`;
-    await recordCloudToolEvent(db, {
-      tenantId, cloudAgentRef, executionId,
-      toolName: 'llm.complete', category: 'llm',
-      detail: { model: resolvedModel, traceId: result.traceId ?? null, useCase: 'task_execution' },
-      result: `${(text ?? '').length} chars${result.traceId ? ` · trace ${result.traceId}` : ''}`,
-      durationMs: genMs,
-    });
+
+    // Run the agent's tool-executing loop (both V1 and V2 cloud runs execute
+    // tools here — the Worker has no shell, so tools are provider-API-backed:
+    // write files to the ticket branch, then finish). Each step + tool call is
+    // recorded to the timeline.
+    const systemPrompt =
+      'You are a BuilderForce agent executing a project task. Follow the PRD, architecture spec, and project rules exactly. ' +
+      'Use the write_file tool to deliver each concrete file (full content, no bracketed placeholders); call finish with a summary when done. ' +
+      'If no repository is bound, return the complete deliverable in your final summary instead. Make explicit, reasonable assumptions where specifics are unknown.';
+    const { ok, output } = await runCloudToolLoop(
+      env, db, executionId, tenantId, taskRow, cloudAgentRef, agentLabel, model, systemPrompt, userContent,
+    );
+
     notifyExecutionSubscribers(executionId, {
       type: 'message',
       executionId,
@@ -629,7 +796,12 @@ async function runCloudExecution(
       text: output,
       ts: new Date().toISOString(),
     });
-    await runtimeService.update(executionId, { status: ExecutionStatus.COMPLETED, result: output });
+    await runtimeService.update(
+      executionId,
+      ok
+        ? { status: ExecutionStatus.COMPLETED, result: output }
+        : { status: ExecutionStatus.FAILED, errorMessage: output },
+    );
   } catch (e) {
     await runtimeService.update(executionId, {
       status: ExecutionStatus.FAILED,
