@@ -29,13 +29,16 @@ export async function verifySecret(value: string, storedHash: string): Promise<b
  * Generates a new random API key in the format `<prefix>_<32 hex chars>`.
  *
  * Prefix conventions (each means one thing — never overload):
- *   - `clk` — BuilderForce Agents instance API key (`agent_hosts.api_key_hash`)
+ *   - `bfa` — BuilderForce Agent instance API key (`agent_hosts.api_key_hash`)
+ *   - `clk` — DEPRECATED alias of `bfa` (retired "claw" brand). Still ACCEPTED at
+ *             auth for already-issued keys; never minted for new agents. Drop once
+ *             all `clk_*` keys have rotated to `bfa_*`.
  *   - `clu` — Legacy user-bootstrap API key (`users.api_key_hash`)
  *   - `bfk` — Tenant API key for the LLM gateway (`tenant_api_keys.key_hash`)
  *   - `bfai` — Developer API key for the public read-only API (`developer_api_keys.key_hash`)
  *   - `whsec` — Outbound-webhook signing secret (`webhook_subscriptions.secret`)
  */
-export function generateApiKey(prefix: 'clk' | 'clu' | 'bfk' | 'bfai' | 'whsec'): string {
+export function generateApiKey(prefix: 'bfa' | 'clk' | 'clu' | 'bfk' | 'bfai' | 'whsec'): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   const hex   = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
   return `${prefix}_${hex}`;
