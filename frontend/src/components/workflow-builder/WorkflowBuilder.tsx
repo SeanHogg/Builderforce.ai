@@ -120,6 +120,7 @@ export function WorkflowBuilder({ definitionId }: Props) {
   const [defId, setDefId] = useState<string | null>(definitionId ?? null);
   const [runTargets, setRunTargets] = useState<WorkflowRunTargets>({ hosts: [], cloudAgents: [] });
   const [runTarget, setRunTarget] = useState<WorkflowRunTarget | null>(null);
+  const [executionScope, setExecutionScope] = useState<'project' | 'global'>('project');
   const [triggerInfo, setTriggerInfo] = useState<Record<string, WorkflowTriggerInfo>>({});
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -141,6 +142,7 @@ export function WorkflowBuilder({ definitionId }: Props) {
         } else if (d.runTargetAgentHostId) {
           setRunTarget({ runtime: 'host', agentHostId: d.runTargetAgentHostId });
         }
+        setExecutionScope(d.executionScope === 'global' ? 'global' : 'project');
         setNodes(
           d.definition.nodes.map((n) => ({
             id: n.id,
@@ -243,8 +245,9 @@ export function WorkflowBuilder({ definitionId }: Props) {
       runTargetRuntime: runTarget?.runtime ?? ('host' as const),
       runTargetAgentHostId: runTarget?.runtime === 'host' ? runTarget.agentHostId ?? null : null,
       runTargetCloudAgentRef: runTarget?.runtime === 'cloud' ? runTarget.cloudAgentRef ?? null : null,
+      executionScope,
     }),
-    [runTarget],
+    [runTarget, executionScope],
   );
 
   // Load the materialized triggers' activation state (webhook URLs, next runs)
@@ -382,6 +385,15 @@ export function WorkflowBuilder({ definitionId }: Props) {
               {runTargets.cloudAgents.map((a) => <option key={`cloud:${a.ref}`} value={`cloud:${a.ref}`}>{a.name}</option>)}
             </optgroup>
           )}
+        </select>
+        <select
+          value={executionScope}
+          onChange={(e) => setExecutionScope(e.target.value === 'global' ? 'global' : 'project')}
+          style={fieldStyle}
+          title="Run this workflow under its project, or globally (tenant-wide)"
+        >
+          <option value="project">Runs under project</option>
+          <option value="global">Runs globally</option>
         </select>
         <button type="button" style={btnSubtle} disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button>
         <button type="button" style={btnSubtle} disabled={busy} onClick={() => void exportYaml()} title="Download as YAML">Export</button>

@@ -1,14 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  projectAgents,
-  registeredAgents,
-  type ProjectAgent,
-  type RegisteredAgent,
-} from '@/lib/builderforceApi';
-import { listAgents } from '@/lib/api';
-import type { PublishedAgent } from '@/lib/types';
+import { projectAgents, type ProjectAgent } from '@/lib/builderforceApi';
+import { loadAgentPool, AGENT_KIND_LABEL, type PoolAgent } from '@/lib/agentPool';
 import { CapabilitiesContent } from './CapabilitiesContent';
 import { CronJobsContent } from './CronJobsContent';
 
@@ -21,14 +15,6 @@ export interface AgentCapabilitiesContentProps {
   className?: string;
   style?: React.CSSProperties;
 }
-
-/** A selectable agent from one of the two source pools, not yet attached. */
-type PoolAgent = { kind: 'workforce' | 'registered'; ref: string; name: string; meta: string };
-
-const KIND_LABEL: Record<PoolAgent['kind'], string> = {
-  workforce: 'Workforce',
-  registered: 'Registered',
-};
 
 /**
  * The "Agent / Capabilities" panel. Lists the agents attached to a project and
@@ -46,25 +32,11 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
   /** null = project-wide; otherwise the selected ProjectAgent.id. */
   const [target, setTarget] = useState<number | null>(null);
 
-  const loadPool = useCallback(async () => {
-    const [workforce, registered] = await Promise.all([
-      listAgents().catch(() => [] as PublishedAgent[]),
-      registeredAgents.list().catch(() => [] as RegisteredAgent[]),
-    ]);
-    const workforceForProject: PoolAgent[] = workforce
-      .filter((a) => String(a.project_id) === String(projectId))
-      .map((a) => ({ kind: 'workforce', ref: String(a.id), name: a.name, meta: a.title || a.base_model }));
-    const registeredAll: PoolAgent[] = registered
-      .filter((a) => a.isActive)
-      .map((a) => ({ kind: 'registered', ref: String(a.id), name: a.name, meta: a.type }));
-    return [...workforceForProject, ...registeredAll];
-  }, [projectId]);
-
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [list, poolAgents] = await Promise.all([projectAgents.list(projectId), loadPool()]);
+      const [list, poolAgents] = await Promise.all([projectAgents.list(projectId), loadAgentPool({ projectId })]);
       setAttached(list);
       setPool(poolAgents);
     } catch (e) {
@@ -72,7 +44,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
     } finally {
       setLoading(false);
     }
-  }, [projectId, loadPool]);
+  }, [projectId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -264,7 +236,12 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
             )}
           </div>
           {agentHostId ? (
-            <CronJobsContent agentHostId={agentHostId} projectId={projectId} hideProjectColumn />
+            <CronJobsContent
+              agentHostId={agentHostId}
+              projectId={projectId}
+              projectAgentId={selectedAgent ? selectedAgent.id : 'none'}
+              hideProjectColumn
+            />
           ) : (
             <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 16, textAlign: 'center', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
               Assign an agent host (Cloud or On-Premise) to this project to schedule cron runs.
@@ -290,7 +267,7 @@ function AgentKindBadge({ kind }: { kind: PoolAgent['kind'] }) {
         color: kind === 'workforce' ? 'var(--coral-bright)' : 'var(--text-muted)',
       }}
     >
-      {KIND_LABEL[kind]}
+      {AGENT_KIND_LABEL[kind]}
     </span>
   );
 }

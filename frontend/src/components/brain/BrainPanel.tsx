@@ -23,6 +23,9 @@ import {
   type BrainModality,
 } from '@/lib/brain';
 import type { BrainChat, BrainMessage } from '@/lib/builderforceApi';
+import { agentAssignmentsApi, type AgentAssignment } from '@/lib/builderforceApi';
+import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
+import { MODALITIES, getModality } from '@/lib/modality';
 
 const BRAINSTORM_SYSTEM_PROMPT =
   'You are Brain, the AI assistant inside Builderforce. Help the user brainstorm and plan. Be concise and use markdown when helpful.';
@@ -82,6 +85,31 @@ export function BrainPanel({
 
   const { toolSpecs, runTool } = useBrainActions();
 
+  // Brain agent/persona switcher: the user can run the Brain as the default
+  // assistant, as a built-in modality persona, or as one of the agents assigned
+  // to the Brain (scope='brain' in the canonical agent-assignment model).
+  const [personaSel, setPersonaSel] = useState<string>('default');
+  const [brainAgents, setBrainAgents] = useState<AgentAssignment[]>([]);
+  const [agentPool, setAgentPool] = useState<PoolAgent[]>([]);
+  useEffect(() => {
+    let live = true;
+    Promise.all([agentAssignmentsApi.list('brain').catch(() => []), loadAgentPool().catch(() => [])])
+      .then(([a, p]) => { if (live) { setBrainAgents(a); setAgentPool(p); } });
+    return () => { live = false; };
+  }, []);
+  const agentName = useCallback(
+    (a: AgentAssignment) => agentPool.find((p) => p.kind === a.agentKind && p.ref === a.agentRef)?.name ?? `${a.agentKind}:${a.agentRef}`,
+    [agentPool],
+  );
+  const personaSystemPrompt = useMemo(() => {
+    if (personaSel.startsWith('modality:')) return getModality(personaSel.slice('modality:'.length)).brainSystemPrompt;
+    if (personaSel.startsWith('agent:')) {
+      const a = brainAgents.find((x) => `agent:${x.agentKind}:${x.agentRef}` === personaSel);
+      return a ? `You are acting as the "${agentName(a)}" agent for this workspace. Adopt its role, voice and duties when responding.` : undefined;
+    }
+    return isPage ? BRAINSTORM_SYSTEM_PROMPT : undefined;
+  }, [personaSel, brainAgents, agentName, isPage]);
+
   const chats = useBrainChats(
     pinnedProjectId != null ? { pinnedProjectId } : { filterProjectId },
   );
@@ -95,7 +123,7 @@ export function BrainPanel({
     chatId: chats.activeChatId,
     modality,
     extraSystem,
-    systemPrompt: isPage ? BRAINSTORM_SYSTEM_PROMPT : undefined,
+    systemPrompt: personaSystemPrompt,
     toolSpecs,
     runTool,
     ensureChatId,
@@ -331,6 +359,29 @@ export function BrainPanel({
             )}
           </div>
           <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : '12px 16px', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Acting as</span>
+              <select
+                value={personaSel}
+                onChange={(e) => setPersonaSel(e.target.value)}
+                aria-label="Brain agent or persona"
+                style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+              >
+                <option value="default">Default Brain</option>
+                <optgroup label="Personas">
+                  {MODALITIES.map((m) => (
+                    <option key={m.id} value={`modality:${m.id}`}>{m.label ?? m.id}</option>
+                  ))}
+                </optgroup>
+                {brainAgents.length > 0 && (
+                  <optgroup label="Assigned agents">
+                    {brainAgents.map((a) => (
+                      <option key={a.id} value={`agent:${a.agentKind}:${a.agentRef}`}>{agentName(a)}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
             <ChatInput
               value={input}
               onChange={setInput}

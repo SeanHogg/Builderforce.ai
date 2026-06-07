@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { securityApi, type SecurityUser, type SecuritySession } from '@/lib/builderforceApi';
 import { getStoredTenant, getStoredUser } from '@/lib/auth';
+import { AgentAssignmentPanel } from '@/components/AgentAssignmentPanel';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -133,6 +134,14 @@ export default function SecurityPage() {
           Error: {error}
         </div>
       )}
+
+      <div style={{ ...cardStyle, marginBottom: 16 }}>
+        <AgentAssignmentPanel
+          scope="security"
+          title="Security agents"
+          emptyHint="No agents assigned to security. Assign an agent to monitor/review security for this workspace."
+        />
+      </div>
 
       {loading ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading members…</div>

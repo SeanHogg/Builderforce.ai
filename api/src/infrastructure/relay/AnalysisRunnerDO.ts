@@ -23,6 +23,7 @@ import {
   repoAnalysisEvidence,
   repoAnalysisRuns,
   llmUsageLog,
+  agentAssignments,
 } from '../database/schema';
 import { decryptCredentials } from '../../application/boardsync/drizzleStore';
 import { WorkerSubrequestExhaustedError } from '../../application/llm/vendors/types';
@@ -100,6 +101,28 @@ export class AnalysisRunnerDO implements DurableObject {
   private readonly db: Db;
   constructor(private readonly state: DurableObjectState, private readonly env: Env) {
     this.db = buildDatabase(env);
+  }
+
+  /**
+   * The model id of the agent assigned to architecture analysis for this project
+   * (canonical agent-assignment model, scope='architecture'), so the run executes
+   * AS that agent. Workforce agents map to the gateway's `workforce-<id>` route;
+   * registered agents aren't gateway-routable by a model id, so they fall through
+   * to the default cascade. Returns undefined when nothing is assigned.
+   */
+  private async resolveArchitectAgentModel(tenantId: number, projectId: number): Promise<string | undefined> {
+    const [a] = await this.db
+      .select({ agentKind: agentAssignments.agentKind, agentRef: agentAssignments.agentRef })
+      .from(agentAssignments)
+      .where(
+        and(
+          eq(agentAssignments.tenantId, tenantId),
+          eq(agentAssignments.scope, 'architecture'),
+          eq(agentAssignments.scopeId, String(projectId)),
+        ),
+      )
+      .limit(1);
+    return a?.agentKind === 'workforce' ? `workforce-${a.agentRef}` : undefined;
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -290,7 +313,8 @@ export class AnalysisRunnerDO implements DurableObject {
     }
     const bundle = await this.loadEvidenceBundle(cursor);
     const priors = await this.loadPriorArtifacts(cursor.runId);
-    const svc = new ArchitectAnalysisService(this.env);
+    const preferredModel = await this.resolveArchitectAgentModel(cursor.tenantId, cursor.projectId);
+    const svc = new ArchitectAnalysisService(this.env, preferredModel);
 
     try {
       const art = await svc.generate(kind, bundle, priors);

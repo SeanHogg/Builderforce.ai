@@ -1035,9 +1035,14 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     }
 
     const projectIdParam = c.req.query('projectId');
+    // projectAgentId: a numeric id → that attached agent's schedules; 'none' →
+    // project-wide schedules only (NULL); absent → no agent filter (all).
+    const projectAgentIdParam = c.req.query('projectAgentId');
 
     const conditions = [eq(cronJobs.tenantId, tenantId), eq(cronJobs.agentHostId, agentHostId)];
     if (projectIdParam) conditions.push(eq(cronJobs.projectId, Number(projectIdParam)));
+    if (projectAgentIdParam === 'none') conditions.push(isNull(cronJobs.projectAgentId));
+    else if (projectAgentIdParam) conditions.push(eq(cronJobs.projectAgentId, Number(projectAgentIdParam)));
 
     const rows = await db
       .select()
@@ -1057,6 +1062,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       schedule: string;
       taskId?: number | null;
       projectId?: number | null;
+      projectAgentId?: number | null;
       enabled?: boolean;
     }>();
     if (!body.name?.trim() || !body.schedule?.trim()) {
@@ -1069,6 +1075,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       schedule: body.schedule.trim(),
       taskId: body.taskId ?? null,
       projectId: body.projectId ?? null,
+      projectAgentId: body.projectAgentId ?? null,
       enabled: body.enabled ?? true,
       ...(body.id ? { id: body.id } : {}),
     };

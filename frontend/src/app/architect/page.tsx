@@ -15,6 +15,7 @@ import {
 } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
+import { AgentAssignmentPanel } from '@/components/AgentAssignmentPanel';
 
 const KIND_LABELS: Record<RepoAnalysisKind, string> = {
   diagnostic: 'Diagnostic',
@@ -175,6 +176,18 @@ export default function ArchitectPage() {
           {running ? 'Analyzing…' : busy ? 'Starting…' : 'Run Architecture Analysis'}
         </button>
       </div>
+
+      {projectId != null && (
+        <div style={{ marginBottom: 16, padding: 14, borderRadius: 12, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)' }}>
+          <AgentAssignmentPanel
+            scope="architecture"
+            scopeId={projectId}
+            poolProjectId={projectId}
+            title="Agents for this analysis"
+            emptyHint="No agents assigned to architecture analysis for this project. Assign one to have it perform the analysis."
+          />
+        </div>
+      )}
 
       {noRepo && (
         <div style={banner('var(--surface-coral-soft)')}>

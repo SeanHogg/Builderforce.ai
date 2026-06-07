@@ -412,6 +412,8 @@ export interface WorkflowRunTargetFields {
   runTargetRuntime: WorkflowRuntime;
   runTargetAgentHostId: number | null;
   runTargetCloudAgentRef: string | null;
+  /** 'project' = runs under the bound project; 'global' = tenant-wide. */
+  executionScope: 'project' | 'global';
 }
 
 /** Activation state of one materialized trigger (for the builder's inspector). */
@@ -937,6 +939,7 @@ export interface CronJob {
   tenantId: number;
   agentHostId: number;
   projectId: number | null;
+  projectAgentId: number | null;
   name: string;
   schedule: string;
   taskId: number | null;
@@ -949,8 +952,12 @@ export interface CronJob {
 }
 
 export const cronApi = {
-  list: (agentHostId: number, projectId?: number): Promise<CronJob[]> => {
-    const q = projectId != null ? `?projectId=${projectId}` : '';
+  // projectAgentId: a numeric id scopes to one attached agent; 'none' = project-wide only.
+  list: (agentHostId: number, projectId?: number, projectAgentId?: number | 'none'): Promise<CronJob[]> => {
+    const params = new URLSearchParams();
+    if (projectId != null) params.set('projectId', String(projectId));
+    if (projectAgentId != null) params.set('projectAgentId', String(projectAgentId));
+    const q = params.toString() ? `?${params.toString()}` : '';
     return request<{ jobs: CronJob[] }>(`/api/agent-hosts/${agentHostId}/cron${q}`).then((r) => r.jobs ?? []);
   },
 
@@ -960,6 +967,7 @@ export const cronApi = {
     schedule: string;
     taskId?: number | null;
     projectId?: number | null;
+    projectAgentId?: number | null;
     enabled?: boolean;
   }): Promise<CronJob> =>
     request<CronJob>(`/api/agent-hosts/${agentHostId}/cron`, {
@@ -981,6 +989,57 @@ export const cronApi = {
 
   delete: (agentHostId: number, jobId: string): Promise<void> =>
     request<void>(`/api/agent-hosts/${agentHostId}/cron/${jobId}`, { method: 'DELETE' }),
+};
+
+// ---------------------------------------------------------------------------
+// Canonical agent assignments — assign a tenant-registered agent to any aspect.
+// ---------------------------------------------------------------------------
+
+export type AgentAssignmentScope =
+  | 'project'
+  | 'workflow'
+  | 'architecture'
+  | 'security'
+  | 'swimlane'
+  | 'brain'
+  | 'global';
+
+export type AgentExecutionScope = 'project' | 'global';
+
+export interface AgentAssignment {
+  id: string;
+  agentKind: string;
+  agentRef: string;
+  scope: AgentAssignmentScope;
+  scopeId: string | null;
+  executionScope: AgentExecutionScope;
+  role: string;
+}
+
+export const agentAssignmentsApi = {
+  list: (scope: AgentAssignmentScope, scopeId?: string | number): Promise<AgentAssignment[]> => {
+    const params = new URLSearchParams({ scope });
+    if (scopeId != null) params.set('scopeId', String(scopeId));
+    return request<{ assignments: AgentAssignment[] }>(`/api/agent-assignments?${params.toString()}`).then(
+      (r) => r.assignments ?? [],
+    );
+  },
+
+  assign: (body: {
+    agentKind: string;
+    agentRef: string;
+    scope: AgentAssignmentScope;
+    scopeId?: string | number | null;
+    executionScope?: AgentExecutionScope;
+    role?: string;
+  }): Promise<AgentAssignment> =>
+    request<{ assignment: AgentAssignment }>(`/api/agent-assignments`, {
+      method: 'POST',
+      body: JSON.stringify({ ...body, scopeId: body.scopeId != null ? String(body.scopeId) : null }),
+    }).then((r) => r.assignment),
+
+  remove: (id: string): Promise<void> =>
+    request<void>(`/api/agent-assignments/${id}`, { method: 'DELETE' }),
 };
 
 /** @deprecated Use tasksApi.list for full Task[]; kept for ArtifactAssigner. */
