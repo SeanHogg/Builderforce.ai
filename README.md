@@ -1665,10 +1665,6 @@ full `api/src` rename (`Claw*`→`AgentHost*`, table `coderclaw_instances`→`ag
   a one-off "Run" dispatches a single `chat.send`/V2 run). Fixing (hoist the PRD-first step into
   `dispatchAndQueue` for all runs, or have the runtime write `PRD.md` + POST it back to `specs`) unblocks:
   a uniform PRD-first flow regardless of which engine executes, with the PRD always landing in the PRD tab.
-- **PRD tab doesn't auto-refresh after a run drafts a PRD.** [TaskPrdTab](frontend/src/components/task/TaskPrdTab.tsx)
-  fetches `specsApi.list(projectId)` on mount/projectId-change only, so a PRD created by a just-finished run
-  appears on next open, not live. Fixing (refetch on execution `done`, or lift a shared PRD store) unblocks:
-  the PRD appearing in the tab the moment the run drafts it.
 - **PRD WIP file is full-replace by the PRD-owner task only; downstream agents can't edit it.** The new
   [prd-wip.ts](agent-runtime/src/builderforce/prd-wip.ts) writes `PRD.md` at the repo root (and `git add`s it
   as a pending commit) when an `architecture-advisor` task whose description names a PRD completes, and the
@@ -1690,16 +1686,11 @@ full `api/src` rename (`Claw*`→`AgentHost*`, table `coderclaw_instances`→`ag
   path runs via the gateway's `chat.send` in the gateway's own session/cwd, so it does NOT use the shared task
   workspace — V1 task runs don't accumulate into the cloned repo or attribute changes. Fixing (route V1 through
   a relay-controlled cwd, or have the gateway accept a per-task workspace) unblocks: identical flow on both engines.
-- **`file.change` attribution is emitted but not persisted — Changes tab can't show per-agent history reliably.**
-  The V2 runner sends `file.change` frames carrying `{ path, change, agent }`; the relay DO broadcasts them to
-  browser clients but does NOT persist them or forward them to the execution-stream subscribers, so "Agent X
-  created 2 files; Agent Y ran tests" isn't durable or visible cross-isolate / after reload. Fixing (a
-  `task_file_changes` table + a DO `file.change` handler that persists + a Changes-tab read keyed by task)
-  unblocks: durable per-agent change traceability.
-- **The ticket workspace is never torn down after Done.** `.builderforce/tasks/<taskId>` persists on the host
-  after `finalizeTask` pushes + opens the PR. Fixing (rm the dir once the PR is recorded) unblocks: bounded
-  disk use on long-lived runtimes. Also: the no-runtime **cloud** path still can't clone/commit (CF Worker has
-  no FS) — V2/self-hosted is required for the repo half of the flow (see the cloud-execution bullet above).
+  Note: per-agent change attribution is now durable — V2 emits `file.change` frames `{ path, change, agent }`,
+  the relay DO persists them via `POST /api/agent-hosts/:id/file-change` into `task_file_changes` (migration
+  0089), and the Changes tab reads `GET /api/runtime/tasks/:taskId/file-changes`; the V1 gap is only that V1
+  doesn't produce those changes (no shared workspace). The no-runtime **cloud** path still can't clone/commit
+  (CF Worker has no FS) — V2/self-hosted is required for the repo half of the flow (see the cloud bullet above).
 - **`/llm/v1/messages` meters usage but does not enforce the plan daily-token cap.** Unlike
   [`/v1/chat/completions`](api/src/presentation/routes/llmRoutes.ts) (which gates on `llmUsageLog` SUM vs the
   plan cap), the new BYO-key `/v1/messages` proxy logs usage but has no pre-flight cap check — reasonable when

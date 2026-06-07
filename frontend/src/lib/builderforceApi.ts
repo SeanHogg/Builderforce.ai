@@ -816,6 +816,15 @@ export interface ExecutionTraceToolEvent {
   toolCallId?: string;
 }
 
+/** One file an agent created/modified/deleted in a task's shared workspace. */
+export interface TaskFileChange {
+  path: string;
+  change: 'created' | 'modified' | 'deleted';
+  agent: string;
+  executionId: number | null;
+  createdAt: string;
+}
+
 export interface ExecutionTrace {
   execution: Execution;
   trace: {
@@ -853,6 +862,10 @@ export const runtimeApi = {
   /** Execution + usage snapshots + tool-call audit events. */
   trace: (id: number): Promise<ExecutionTrace> =>
     request<ExecutionTrace>(`/api/runtime/executions/${id}/trace`),
+
+  /** Per-agent file-change traceability for a task's shared ticket workspace. */
+  taskFileChanges: (taskId: number): Promise<{ changes: TaskFileChange[] }> =>
+    request<{ changes: TaskFileChange[] }>(`/api/runtime/tasks/${taskId}/file-changes`),
 
   /** Cancel a running/queued execution. */
   cancel: (id: number): Promise<Execution> =>

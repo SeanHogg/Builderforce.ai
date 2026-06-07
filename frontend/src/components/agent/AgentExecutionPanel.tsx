@@ -8,6 +8,7 @@ import {
   type Execution,
   type ExecutionTrace,
   type ExecutionTraceToolEvent,
+  type TaskFileChange,
 } from '@/lib/builderforceApi';
 import { RunAgentControl } from '../task/RunAgentControl';
 import { ChatMessageContent } from '../ChatMessageContent';
@@ -71,6 +72,8 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   const [subTab, setSubTab] = useState<SubTab>('output');
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  // Durable per-agent file changes for the ticket's shared workspace (attributed).
+  const [taskChanges, setTaskChanges] = useState<TaskFileChange[]>([]);
 
   const loadExecutions = useCallback(async (selectLatest = false) => {
     setLoading(true);
@@ -84,6 +87,11 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   }, [task.id, selectedId]);
 
   useEffect(() => { loadExecutions(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [task.id]);
+
+  const loadTaskChanges = useCallback(() => {
+    runtimeApi.taskFileChanges(task.id).then((r) => setTaskChanges(r.changes)).catch(() => { /* none yet */ });
+  }, [task.id]);
+  useEffect(() => { loadTaskChanges(); }, [loadTaskChanges]);
 
   useEffect(() => {
     if (selectedId == null) { setTrace(null); return; }
@@ -134,9 +142,10 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
     if (selectedId == null || !isRunning) return;
     const t = setInterval(() => {
       runtimeApi.trace(selectedId).then((tr) => setTrace(tr)).catch(() => { /* transient */ });
+      loadTaskChanges();
     }, 4000);
     return () => clearInterval(t);
-  }, [selectedId, isRunning]);
+  }, [selectedId, isRunning, loadTaskChanges]);
 
   const send = async () => {
     const text = draft.trim();
@@ -230,7 +239,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
 
           {/* Sub-tabs */}
           <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border-subtle)', marginBottom: 10 }}>
-            {([['output', 'Output'], ['changes', `Changes${files.length ? ` (${files.length})` : ''}`], ['tools', `Tools${toolEvents.length ? ` (${toolEvents.length})` : ''}`]] as const).map(([id, label]) => (
+            {(() => { const changeCount = taskChanges.length || files.length; return [['output', 'Output'], ['changes', `Changes${changeCount ? ` (${changeCount})` : ''}`], ['tools', `Tools${toolEvents.length ? ` (${toolEvents.length})` : ''}`]] as const; })().map(([id, label]) => (
               <button
                 key={id}
                 type="button"
@@ -296,7 +305,16 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
 
           {subTab === 'changes' && (
             <div style={{ minHeight: 80 }}>
-              {files.length === 0 ? (
+              {taskChanges.length > 0 ? (
+                /* Durable, per-agent attributed changes from the ticket workspace. */
+                taskChanges.map((f, i) => (
+                  <div key={`${f.path}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderTop: '1px solid var(--border-subtle)' }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: CHANGE_COLOR[f.change], width: 64, flexShrink: 0 }}>{f.change}</span>
+                    <span style={{ flex: 1, fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', wordBreak: 'break-all' }}>{f.path}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }} title="Agent that made this change">{f.agent}</span>
+                  </div>
+                ))
+              ) : files.length === 0 ? (
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 8 }}>
                   {isRunning ? 'No file changes yet.' : 'This run did not record any file changes.'}
                 </div>

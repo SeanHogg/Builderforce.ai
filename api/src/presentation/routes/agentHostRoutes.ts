@@ -41,6 +41,7 @@ import { resolveRepoCredential, isResolveError } from '../../application/repos/r
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { openDispatchPullRequest } from '../../application/repos/openDispatchPullRequest';
 import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
+import { neon } from '@neondatabase/serverless';
 import { executeGitProxy } from '../../application/repos/gitProxy';
 import { agentDispatches } from '../../infrastructure/database/schema';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
@@ -1568,6 +1569,31 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const result = await openDispatchPullRequest(db, secret, agentHost.tenantId, dispatchId, body);
     if (!result.ok) return c.json({ error: result.error }, result.status);
     return c.json({ ok: true, url: result.url, number: result.number });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/agent-hosts/:id/file-change   (host key auth)
+  // Persist one per-agent file change from the ticket workspace for traceability.
+  // -------------------------------------------------------------------------
+  router.post('/:id/file-change', async (c) => {
+    const agentHostId = Number(c.req.param('id'));
+    const agentHost = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
+    if (!agentHost) return c.text('Unauthorized', 401);
+
+    type FileChangeBody = { taskId?: number; executionId?: number; path?: string; change?: string; agent?: string };
+    const body = await c.req.json<FileChangeBody>().catch((): FileChangeBody => ({}));
+    const taskId = Number(body.taskId);
+    const path = typeof body.path === 'string' ? body.path.trim() : '';
+    if (!Number.isFinite(taskId) || !path) return c.json({ error: 'taskId and path are required' }, 400);
+    const change = ['created', 'modified', 'deleted'].includes(body.change ?? '') ? body.change! : 'modified';
+    const agent = typeof body.agent === 'string' && body.agent.trim() ? body.agent.trim() : 'agent';
+
+    const sql = neon(c.env.NEON_DATABASE_URL);
+    await sql`
+      INSERT INTO task_file_changes (tenant_id, task_id, execution_id, path, change, agent)
+      VALUES (${agentHost.tenantId}, ${taskId}, ${Number.isFinite(Number(body.executionId)) ? Number(body.executionId) : null}, ${path}, ${change}, ${agent})
+    `;
+    return c.json({ ok: true });
   });
 
   // -------------------------------------------------------------------------

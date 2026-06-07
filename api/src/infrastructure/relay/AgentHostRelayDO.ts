@@ -324,6 +324,19 @@ export class AgentHostRelayDO implements DurableObject {
         return;
       }
 
+      // --- file.change — persist per-agent file-change traceability ---
+      if (msg.type === "file.change") {
+        void this.persistFileChange(msg as {
+          taskId?: number;
+          executionId?: number;
+          path?: string;
+          change?: string;
+          agent?: string;
+          ts?: string;
+        });
+        return;
+      }
+
       // --- P2-4: tool.audit — persist tool call record ---
       if (msg.type === "tool.audit") {
         void this.persistToolAuditEvent(msg as {
@@ -506,6 +519,35 @@ export class AgentHostRelayDO implements DurableObject {
     try {
       await fetch(
         `${baseUrl}/api/agent-hosts/${this.agentHostId}/tool-audit`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.agentHostApiKey}` },
+          body: JSON.stringify(msg),
+        },
+      );
+    } catch { /* best-effort */ }
+  }
+
+  // ---------------------------------------------------------------------------
+  // file.change persistence — per-agent traceability for the ticket workspace
+  // ---------------------------------------------------------------------------
+
+  private async persistFileChange(msg: {
+    taskId?: number;
+    executionId?: number;
+    path?: string;
+    change?: string;
+    agent?: string;
+    ts?: string;
+  }) {
+    if (!this.agentHostId || !this.agentHostApiKey) return;
+    if (msg.taskId == null || !msg.path) return;
+    const env = this.env as Partial<{ SELF_URL: string }>;
+    const baseUrl = env.SELF_URL ?? "https://api.builderforce.ai";
+
+    try {
+      await fetch(
+        `${baseUrl}/api/agent-hosts/${this.agentHostId}/file-change`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.agentHostApiKey}` },
