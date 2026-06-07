@@ -1,24 +1,27 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { Project } from '@/lib/types';
 import {
   DEADLINE_COLORS,
-  getProjectSchedule,
+  getSchedule,
   parseDate,
   sameDay,
   startOfDay,
-} from '@/lib/projectSchedule';
+  type Schedulable,
+} from '@/lib/schedule';
 import { ScheduleLegend } from './ScheduleLegend';
 
 /**
- * Month calendar of project deadlines. Each project is plotted on its `dueDate`
- * (the latest task due date); projects with no dates are surfaced in a footer so
- * they are not silently dropped. Click a deadline pill to open the project.
+ * Month calendar of deadlines, generic over any {@link Schedulable} item (a
+ * project, a task, …). Each item is plotted on its `dueDate`; items with no
+ * deadline are surfaced in a footer so they are not silently dropped. Click a
+ * pill to open the item. Reused by the Projects and Tasks pages.
  */
-interface ProjectCalendarProps {
-  projects: Project[];
-  onSelect: (project: Project) => void;
+interface ScheduleCalendarProps<T extends Schedulable & { id: string | number }> {
+  items: T[];
+  /** Human label for an item (e.g. project name, task title). */
+  getLabel: (item: T) => string;
+  onSelect: (item: T) => void;
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -36,27 +39,31 @@ function buildMonthGrid(viewMonth: Date): Date[] {
   });
 }
 
-export function ProjectCalendar({ projects, onSelect }: ProjectCalendarProps) {
+export function ScheduleCalendar<T extends Schedulable & { id: string | number }>({
+  items,
+  getLabel,
+  onSelect,
+}: ScheduleCalendarProps<T>) {
   const today = startOfDay(new Date());
   const [viewMonth, setViewMonth] = useState<Date>(new Date(today.getFullYear(), today.getMonth(), 1));
 
   const days = useMemo(() => buildMonthGrid(viewMonth), [viewMonth]);
 
-  // Map day-key -> projects whose deadline lands that day.
+  // Map day-key -> items whose deadline lands that day.
   const byDay = useMemo(() => {
-    const map = new Map<string, Project[]>();
-    for (const project of projects) {
-      const due = parseDate(project.dueDate);
+    const map = new Map<string, T[]>();
+    for (const item of items) {
+      const due = parseDate(item.dueDate);
       if (!due) continue;
       const key = startOfDay(due).toISOString();
       const list = map.get(key);
-      if (list) list.push(project);
-      else map.set(key, [project]);
+      if (list) list.push(item);
+      else map.set(key, [item]);
     }
     return map;
-  }, [projects]);
+  }, [items]);
 
-  const undated = projects.filter((p) => !parseDate(p.dueDate));
+  const undated = items.filter((p) => !parseDate(p.dueDate));
 
   const goMonth = (delta: number) =>
     setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
@@ -98,7 +105,7 @@ export function ProjectCalendar({ projects, onSelect }: ProjectCalendarProps) {
           {days.map((day) => {
             const inMonth = day.getMonth() === viewMonth.getMonth();
             const isToday = sameDay(day, today);
-            const dayProjects = byDay.get(startOfDay(day).toISOString()) ?? [];
+            const dayItems = byDay.get(startOfDay(day).toISOString()) ?? [];
             return (
               <div
                 key={day.toISOString()}
@@ -129,14 +136,15 @@ export function ProjectCalendar({ projects, onSelect }: ProjectCalendarProps) {
                   {day.getDate()}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  {dayProjects.map((project) => {
-                    const status = getProjectSchedule(project).status;
+                  {dayItems.map((item) => {
+                    const status = getSchedule(item).status;
+                    const label = getLabel(item);
                     return (
                       <button
-                        key={project.id}
+                        key={item.id}
                         type="button"
-                        onClick={() => onSelect(project)}
-                        title={`${project.name} — due ${day.toLocaleDateString()}`}
+                        onClick={() => onSelect(item)}
+                        title={`${label} — due ${day.toLocaleDateString()}`}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
@@ -157,7 +165,7 @@ export function ProjectCalendar({ projects, onSelect }: ProjectCalendarProps) {
                           whiteSpace: 'nowrap',
                         }}
                       >
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.name}</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
                       </button>
                     );
                   })}
@@ -171,11 +179,11 @@ export function ProjectCalendar({ projects, onSelect }: ProjectCalendarProps) {
       {undated.length > 0 && (
         <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>No deadline set:</span>
-          {undated.map((project) => (
+          {undated.map((item) => (
             <button
-              key={project.id}
+              key={item.id}
               type="button"
-              onClick={() => onSelect(project)}
+              onClick={() => onSelect(item)}
               style={{
                 padding: '3px 10px',
                 fontSize: '0.75rem',
@@ -187,7 +195,7 @@ export function ProjectCalendar({ projects, onSelect }: ProjectCalendarProps) {
                 cursor: 'pointer',
               }}
             >
-              {project.name}
+              {getLabel(item)}
             </button>
           ))}
         </div>

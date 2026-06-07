@@ -26,11 +26,23 @@ import { AgentTab } from './agent/AgentTab';
 import { TaskPrdTab } from './task/TaskPrdTab';
 import { RunAgentControl } from './task/RunAgentControl';
 import { ChatMessageContent } from './ChatMessageContent';
+import { ViewToggle } from './ViewToggle';
+import { ScheduleCalendar } from './ScheduleCalendar';
+import { ScheduleGantt } from './ScheduleGantt';
 import {
   TASK_STATUSES as BOARD_STATUSES,
   taskStatusLabel,
   taskStatusBadgeClass,
 } from '@/lib/taskStatus';
+
+type TaskView = 'board' | 'list' | 'calendar' | 'gantt';
+
+const TASK_VIEW_OPTIONS: Array<{ value: TaskView; label: string }> = [
+  { value: 'board', label: 'Board' },
+  { value: 'list', label: 'List' },
+  { value: 'calendar', label: 'Calendar' },
+  { value: 'gantt', label: 'Gantt' },
+];
 
 /** A rendered kanban column = a swimlane (board column). `status` is the lane key tasks sit in. */
 interface BoardColumn {
@@ -76,7 +88,7 @@ export function TaskMgmtContent({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [approvalGate, setApprovalGate] = useState<{ approvalId: string; taskId: number; reason: string } | null>(null);
-  const [view, setView] = useState<'board' | 'list'>('board');
+  const [view, setView] = useState<TaskView>('board');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterProject, setFilterProject] = useState<string>(projectId != null ? String(projectId) : '');
   const [filterPriority, setFilterPriority] = useState<string>('');
@@ -522,31 +534,7 @@ export function TaskMgmtContent({
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <div
-              style={{
-                display: 'flex',
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
-                overflow: 'hidden',
-              }}
-            >
-              {(['board', 'list'] as const).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setView(v)}
-                  style={{
-                    ...buttonTertiary,
-                    borderRadius: 0,
-                    background: view === v ? 'var(--surface-coral-soft)' : 'transparent',
-                    color: view === v ? 'var(--coral-bright)' : 'var(--text-secondary)',
-                  }}
-                >
-                  {v === 'board' ? 'Board' : 'List'}
-                </button>
-              ))}
-            </div>
+            <ViewToggle value={view} onChange={setView} options={TASK_VIEW_OPTIONS} />
             <button type="button" onClick={openCreate} style={buttonPrimary}>
               New task
             </button>
@@ -888,6 +876,10 @@ export function TaskMgmtContent({
             );
           })}
         </div>
+      ) : view === 'calendar' ? (
+        <ScheduleCalendar items={filtered} getLabel={(t) => t.title} onSelect={(t) => openTask(t)} />
+      ) : view === 'gantt' ? (
+        <ScheduleGantt items={filtered} getLabel={(t) => t.title} onSelect={(t) => openTask(t)} noun="task" />
       ) : (
         <div style={cardStyle}>
           {filtered.length === 0 ? (

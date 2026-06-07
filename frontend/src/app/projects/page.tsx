@@ -14,8 +14,8 @@ import { DeleteProjectDialog } from '@/components/DeleteProjectDialog';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { ViewToggle } from '@/components/ViewToggle';
-import { ProjectCalendar } from '@/components/ProjectCalendar';
-import { ProjectGantt } from '@/components/ProjectGantt';
+import { ScheduleCalendar } from '@/components/ScheduleCalendar';
+import { ScheduleGantt } from '@/components/ScheduleGantt';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 
 type ProjectsView = 'card' | 'table' | 'calendar' | 'gantt';
@@ -286,9 +286,9 @@ export default function ProjectsPage() {
             ))}
           </div>
         ) : viewMode === 'calendar' ? (
-          <ProjectCalendar projects={projects} onSelect={setDetailsProject} />
+          <ScheduleCalendar items={projects} getLabel={(p) => p.name} onSelect={setDetailsProject} />
         ) : viewMode === 'gantt' ? (
-          <ProjectGantt projects={projects} onSelect={setDetailsProject} />
+          <ScheduleGantt items={projects} getLabel={(p) => p.name} onSelect={setDetailsProject} noun="project" />
         ) : (
           <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
