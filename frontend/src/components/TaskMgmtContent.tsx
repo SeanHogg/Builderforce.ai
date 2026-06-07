@@ -22,7 +22,7 @@ import { AgentChip } from './board/AgentChip';
 import { useBoardConfig } from './board/useBoardConfig';
 import { SlideOutPanel } from './SlideOutPanel';
 import { MoveToBoardControl } from './MoveToBoardControl';
-import { TaskAgentTab } from './task/TaskAgentTab';
+import { AgentTab } from './agent/AgentTab';
 import { TaskPrdTab } from './task/TaskPrdTab';
 import { RunAgentControl } from './task/RunAgentControl';
 import {
@@ -1372,7 +1372,7 @@ export function TaskMgmtContent({
 
             {/* Tabs */}
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, overflowX: 'auto' }}>
-              {([['details', 'Details'], ['agent', 'Agent'], ['prd', 'PRD']] as const).map(([id, label]) => (
+              {([['details', 'Details'], ['agent', 'Agent / Capabilities'], ['prd', 'PRD']] as const).map(([id, label]) => (
                 <button
                   key={id}
                   type="button"
@@ -1391,7 +1391,7 @@ export function TaskMgmtContent({
 
             {drawerTab === 'agent' ? (
               <div style={{ flex: 1, overflow: 'auto' }}>
-                <TaskAgentTab task={drawerTask} agentHosts={agentHostsList} onTaskChanged={load} />
+                <AgentTab task={drawerTask} projectId={drawerTask.projectId} agentHosts={agentHostsList} onTaskChanged={load} />
               </div>
             ) : drawerTab === 'prd' ? (
               <div style={{ flex: 1, overflow: 'auto' }}>

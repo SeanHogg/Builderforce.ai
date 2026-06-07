@@ -7,7 +7,7 @@ import { updateProject } from '@/lib/api';
 import { checkProjectKeyAvailable } from '@/lib/builderforceApi';
 import { TaskMgmtContent } from './TaskMgmtContent';
 import { PRDsContent } from './PRDsContent';
-import { AgentCapabilitiesContent } from './AgentCapabilitiesContent';
+import { AgentTab } from './agent/AgentTab';
 import { BrainPanel } from './brain/BrainPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { SourceControlContent } from './sourcecontrol/SourceControlContent';
@@ -594,7 +594,7 @@ export function ProjectDetailsPanel({
           )}
 
           {activeTab === 'capabilities' && (
-            <AgentCapabilitiesContent projectId={project.id} agentHostId={project.assignedAgentHost?.id} />
+            <AgentTab projectId={project.id} agentHostId={project.assignedAgentHost?.id} />
           )}
         </div>
       </div>

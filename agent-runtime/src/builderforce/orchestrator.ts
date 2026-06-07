@@ -8,6 +8,8 @@ import path from "node:path";
 import type { SpawnSubagentContext } from "../agents/subagent-spawn.js";
 import { logDebug } from "../logger.js";
 import { findAgentRole } from "./agent-roles.js";
+import { PRD_FILE } from "./project-dir.js";
+import { isPrdTask, readPrdWip, writePrdWip } from "./prd-wip.js";
 import { applyTransform, etlContext, evalPredicate } from "./node-eval.js";
 import type {
   AgentTransportDispatchResult,
@@ -509,6 +511,17 @@ export class AgentOrchestrator {
     // Build structured context block for this task
     let taskInput = this.buildStructuredContext(task, workflow);
 
+    // Prepend the shared PRD working document so every downstream agent operates
+    // off the same WIP file rather than a re-derived context blob. PRD-owning
+    // tasks are skipped — they author the file, they don't read it back.
+    if (this.projectRoot && !isPrdTask(task.agentRole, task.description)) {
+      const prd = await readPrdWip(this.projectRoot);
+      if (prd?.trim()) {
+        taskInput =
+          `## Shared PRD (working document — ${PRD_FILE})\n\n${prd}\n\n---\n\n${taskInput}`;
+      }
+    }
+
     // Prepend semantic memory context if the SSM memory layer is available
     taskInput = await this.injectMemoryContext(task.description, taskInput);
 
@@ -608,6 +621,13 @@ export class AgentOrchestrator {
     task.completedAt = new Date();
     task.output = output;
     this.taskResults.set(task.id, output);
+
+    // PRD-owning tasks write the shared WIP file (and stage it as a pending
+    // commit if a repo is configured) so subsequent agents share one document.
+    if (this.projectRoot && output.trim() && isPrdTask(task.agentRole, task.description)) {
+      await writePrdWip(this.projectRoot, output);
+    }
+
     this.telemetry?.emitTaskEnd(workflow.id, task.id, task.agentRole, task.startedAt);
     this.persistWorkflow(workflow);
     return output;

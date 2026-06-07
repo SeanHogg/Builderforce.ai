@@ -853,6 +853,34 @@ export const runtimeApi = {
   /** Execution + usage snapshots + tool-call audit events. */
   trace: (id: number): Promise<ExecutionTrace> =>
     request<ExecutionTrace>(`/api/runtime/executions/${id}/trace`),
+
+  /** Cancel a running/queued execution. */
+  cancel: (id: number): Promise<Execution> =>
+    request<Execution>(`/api/runtime/executions/${id}/cancel`, { method: 'POST' }),
+
+  /**
+   * Send a follow-up direction to a running/queued execution. The executing
+   * agent (self-hosted or cloud) receives it as an additional instruction so the
+   * user can steer the work mid-run. Emits a `message` event on the stream.
+   */
+  postMessage: (id: number, text: string): Promise<{ ok: true }> =>
+    request<{ ok: true }>(`/api/runtime/executions/${id}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    }),
+
+  /**
+   * WebSocket URL for a single execution's live event stream (status changes,
+   * assistant deltas, tool calls, file changes). The tenant JWT is passed as a
+   * query param because browsers can't set WS auth headers. Returns null if there
+   * is no token yet (caller should fall back to polling).
+   */
+  streamUrl: (id: number): string | null => {
+    const token = getStoredTenantToken();
+    if (!token) return null;
+    const base = AUTH_API_URL.replace(/^http/, 'ws');
+    return `${base}/api/runtime/executions/${id}/stream?token=${encodeURIComponent(token)}`;
+  },
 };
 
 // ---------------------------------------------------------------------------
