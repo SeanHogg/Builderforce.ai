@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { neon } from '@neondatabase/serverless';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
+import { commitPrdAsPendingChange } from '../../application/repos/commitPrdToRepo';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
@@ -374,7 +375,21 @@ async function recordTaskFileChange(
   } catch { /* best-effort */ }
 }
 
-async function ensureProjectPrd(
+/** Resolve the credential secret for git operations (mirrors agentHost routes). */
+function gitSecret(env: Env): string {
+  return (env as { INTEGRATION_ENCRYPTION_SECRET?: string }).INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET;
+}
+
+/**
+ * Task-scoped PRD. Each TASK has its own PRD (via `tasks.spec_id`), drafted with
+ * an attribution header naming the authoring agent (downstream agents append
+ * their own attributed updates). The PRD is:
+ *   • persisted to its task-scoped spec (PRD tab),
+ *   • recorded as an agent-attributed `PRD.md` change (Changes tab),
+ *   • committed to the ticket's git branch as a pending change (branch + PR),
+ *     via the provider API so it works even on the cloud (no-runtime) path.
+ */
+async function ensureTaskPrd(
   env: Env,
   db: Db,
   executionId: number,
@@ -385,22 +400,18 @@ async function ensureProjectPrd(
   agentLabel: string,
   model: string | undefined,
 ): Promise<string> {
-  let existingId: string | undefined;
+  // Task-scoped lookup: the task's own spec, not the project's.
+  let existingSpecId: string | undefined;
   try {
-    const [existing] = await db
-      .select({ id: specs.id, prd: specs.prd })
-      .from(specs)
-      .where(and(eq(specs.tenantId, tenantId), eq(specs.projectId, projectId)))
-      .orderBy(desc(specs.updatedAt))
-      .limit(1);
-    if (existing?.prd?.trim()) {
-      if (existing.id) await linkSpecToTask(db, taskId, existing.id); // keep the task linked
-      return existing.prd.trim(); // PRD already exists — reuse
+    const [t] = await db.select({ specId: tasks.specId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    if (t?.specId) {
+      const [spec] = await db.select({ id: specs.id, prd: specs.prd }).from(specs).where(eq(specs.id, t.specId)).limit(1);
+      if (spec?.prd?.trim()) return spec.prd.trim(); // this task already has a PRD — reuse
+      existingSpecId = spec?.id;
     }
-    existingId = existing?.id;
   } catch { /* fall through to generate */ }
 
-  let prd = '';
+  let prdBody = '';
   try {
     const gen = await ideProxy(env).complete({
       messages: [
@@ -410,13 +421,16 @@ async function ensureProjectPrd(
       ...(model ? { model } : {}),
       useCase: 'prd_generation',
     });
-    if (gen.response.status < 400) prd = extractCompletion(await gen.response.json().catch(() => null));
+    if (gen.response.status < 400) prdBody = extractCompletion(await gen.response.json().catch(() => null));
   } catch { /* generation failed — return '' */ }
 
-  prd = prd.trim();
-  if (!prd) return '';
+  prdBody = prdBody.trim();
+  if (!prdBody) return '';
 
-  const specId = existingId ?? crypto.randomUUID();
+  // Attribution header — each agent's update is signed so the PRD is auditable.
+  const prd = `> **PRD** — drafted by ${agentLabel} · task #${taskId}\n> _Each agent that updates this PRD signs its change below._\n\n${prdBody}`;
+
+  const specId = existingSpecId ?? crypto.randomUUID();
   try {
     const now = new Date();
     await db
@@ -425,18 +439,20 @@ async function ensureProjectPrd(
       .onConflictDoUpdate({ target: [specs.id], set: { prd, goal: taskRow.title, updatedAt: now } });
   } catch { /* persistence failed — still use the PRD as context below */ }
 
-  // Associate the PRD with the task (PRD tab) and record it as the first
-  // file change, attributed to the executing agent (durable, shows in Changes).
   await linkSpecToTask(db, taskId, specId);
-  await recordTaskFileChange(env, tenantId, taskId, executionId, 'PRD.md', existingId ? 'modified' : 'created', agentLabel);
+  await recordTaskFileChange(env, tenantId, taskId, executionId, 'PRD.md', existingSpecId ? 'modified' : 'created', agentLabel);
 
-  // Best-effort live notifications (subject to cross-isolate WS delivery).
+  // Land PRD.md as a real pending change on the ticket's git branch (branch + PR).
+  const committed = await commitPrdAsPendingChange(db, gitSecret(env), tenantId, taskId, taskRow.title, prd, agentLabel);
+
   notifyExecutionSubscribers(executionId, {
-    type: 'file_change', executionId, path: 'PRD.md', change: existingId ? 'modified' : 'created', ts: new Date().toISOString(),
+    type: 'file_change', executionId, path: 'PRD.md', change: existingSpecId ? 'modified' : 'created', ts: new Date().toISOString(),
   });
   notifyExecutionSubscribers(executionId, {
     type: 'message', executionId, role: 'assistant',
-    text: `📝 ${agentLabel} drafted the WIP **PRD** for this task and saved it — see the **PRD** tab. Proceeding with the deliverable against it.`,
+    text: committed.ok
+      ? `📝 ${agentLabel} drafted the PRD and committed it to branch \`${committed.branch}\`${committed.prUrl ? ` — pending change: ${committed.prUrl}` : ' (pending change)'}. See the PRD tab + Changes.`
+      : `📝 ${agentLabel} drafted the PRD (saved to the PRD tab). No git branch created: ${committed.reason}.`,
     ts: new Date().toISOString(),
   });
 
@@ -479,7 +495,7 @@ async function runCloudExecution(
 
     // Step 1 — PRD-first. Step 2 — governance/arch context (parallel reads).
     const [prd, governance] = await Promise.all([
-      ensureProjectPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model),
+      ensureTaskPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model),
       loadGovernanceContext(db, tenantId, projectId),
     ]);
 

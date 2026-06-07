@@ -112,7 +112,14 @@ export class BuilderforceRelayService implements IRelayService {
   private pendingExecutionId: number | null = null;
   /** Context for the in-flight V1 task run, so the session-final handler can
    *  diff the shared workspace and attribute the changes to the executing agent. */
-  private pendingTaskRun: { executionId?: number; taskId?: number; agentLabel: string; cwd: string } | null = null;
+  private pendingTaskRun: {
+    executionId?: number;
+    taskId?: number;
+    agentLabel: string;
+    cwd: string;
+    title: string;
+    repo?: { repoId: string; defaultBranch: string | null };
+  } | null = null;
   /** Tracks pending remote task correlations so results can be sent back. */
   private pendingRemoteCorrelations = new Map<
     string,
@@ -196,15 +203,57 @@ export class BuilderforceRelayService implements IRelayService {
     const baseDir = this.opts.workspaceDir ?? process.cwd();
     const cwd = taskId != null ? taskWorkspaceDir(baseDir, taskId) : baseDir;
     await fs.mkdir(cwd, { recursive: true }).catch(() => { /* fall back to baseDir */ });
-    if (repo?.repoId && !(await isCloned(cwd))) {
-      try {
-        const cloneUrl = buildTaskCloneUrl(normalizeBaseUrl(this.opts.baseUrl), this.opts.agentNodeId, repo.repoId);
-        await makeCodingGit({ apiKey: this.opts.apiKey }).clone(cloneUrl, cwd, repo.defaultBranch ?? null);
-      } catch (err) {
-        logWarn(`[builderforce] task ${taskId} clone failed: ${String(err)}`);
+    if (repo?.repoId && taskId != null) {
+      const git = makeCodingGit({ apiKey: this.opts.apiKey });
+      if (!(await isCloned(cwd))) {
+        try {
+          const cloneUrl = buildTaskCloneUrl(normalizeBaseUrl(this.opts.baseUrl), this.opts.agentNodeId, repo.repoId);
+          await git.clone(cloneUrl, cwd, repo.defaultBranch ?? null);
+        } catch (err) {
+          logWarn(`[builderforce] task ${taskId} clone failed: ${String(err)}`);
+        }
+      }
+      // Execute under the ticket branch so every change is pending on it. Idempotent:
+      // creating an existing branch fails harmlessly (the tree is already on it).
+      if (await isCloned(cwd)) {
+        await git.checkoutNewBranch(cwd, taskBranchName(taskId)).catch(() => { /* already on the branch */ });
       }
     }
     return cwd;
+  }
+
+  /**
+   * Commit ALL of the ticket workspace's changes to the ticket branch and push —
+   * so every file the agent touched (PRD, code, tests, …) becomes a pending change
+   * on the branch, with a PR opened/kept open. Runs after each agent run and on
+   * Done. No-ops when nothing changed. Never throws.
+   */
+  private async commitAndPushTicketBranch(
+    taskId: number,
+    repo: { repoId: string; defaultBranch: string | null },
+    title: string,
+    agentLabel: string,
+  ): Promise<void> {
+    const dir = taskWorkspaceDir(this.opts.workspaceDir ?? process.cwd(), taskId);
+    if (!(await isCloned(dir))) return;
+    const git = makeCodingGit({ apiKey: this.opts.apiKey });
+    const branch = taskBranchName(taskId);
+    try {
+      const { changed } = await git.commitAll(dir, `BuilderForce: task ${taskId} — ${title} (by ${agentLabel})`.trim());
+      if (!changed) return; // nothing new to push
+      const base = normalizeBaseUrl(this.opts.baseUrl);
+      await git.push(dir, buildTaskCloneUrl(base, this.opts.agentNodeId, repo.repoId), branch);
+      // Open/keep a PR so the pending changes are reviewable (idempotent server-side).
+      await fetch(`${base}/api/agent-hosts/${this.opts.agentNodeId}/tasks/${taskId}/pull-request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.opts.apiKey}` },
+        body: JSON.stringify({ branch, base: repo.defaultBranch ?? undefined, title }),
+        signal: AbortSignal.timeout(30_000),
+      }).catch(() => { /* branch pushed; PR can be opened manually */ });
+      logWarn(`[builderforce] task ${taskId}: pushed pending changes to ${branch}`);
+    } catch (err) {
+      logWarn(`[builderforce] task ${taskId} commit/push failed: ${String(err)}`);
+    }
   }
 
   /** Diff the ticket workspace and emit one attributed file.change per change. */
