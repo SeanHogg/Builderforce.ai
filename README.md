@@ -1679,13 +1679,27 @@ full `api/src` rename (`Claw*`→`AgentHost*`, table `coderclaw_instances`→`ag
   commit/branch (intentional — pending review). Fixing (explicit `producesPrd` flag on the planning step + a
   `prd_edit`/section-merge tool agents can call) unblocks: collaborative PRD authoring across the swimlane.
 
-- **BuilderForce-V2 needs the Claude Agent SDK's bundled `claude` CLI + a real workspace in the runtime image.**
-  The V2 runner ([claude-agent-sdk-runner.ts](agent-runtime/src/agents/claude-agent-sdk-runner.ts)) calls the
-  SDK's `query()`, which spawns the bundled `claude` CLI subprocess and operates on `cwd` (the cloned repo /
-  workspace). The agent-runtime container images ([Dockerfile](agent-runtime/Dockerfile), [fly.toml](agent-runtime/fly.toml))
-  must ship Node + the SDK's CLI and mount a writable workspace, and the cloud runtime must clone the task's
-  repo before dispatch (today only the swimlane `agent_dispatch` path clones). Fixing (bake the CLI into the
-  image + clone the repo for V2 broadcast runs) unblocks: V2 runs on cloud-deployed runtimes, not just dev.
+- **The ticket-workspace flow (clone → shared workspace → attributed changes → finalize PR) is V2-only.**
+  Built this pass: [task-workspace.ts](agent-runtime/src/infra/task-workspace.ts) gives each ticket one shared
+  ephemeral dir (`.builderforce/tasks/<taskId>`); the V2 path in [builderforce-relay.ts](agent-runtime/src/infra/builderforce-relay.ts)
+  clones the project's bound repo into it once (coords resolved by the API via `resolveDefaultRepoForTask`,
+  passed on the dispatch), runs the agent there, and emits `file.change` frames **attributed to the executing
+  agent**; on task→Done the API ([taskRoutes.ts](api/src/presentation/routes/taskRoutes.ts) `dispatchTaskFinalize`)
+  sends `task.finalize`, the relay commits + pushes the `builderforce/task-<id>` branch and opens a PR via
+  [openTaskPullRequest](api/src/application/repos/openTaskPullRequest.ts). **Gap:** the **V1** (pi-coding-agent)
+  path runs via the gateway's `chat.send` in the gateway's own session/cwd, so it does NOT use the shared task
+  workspace — V1 task runs don't accumulate into the cloned repo or attribute changes. Fixing (route V1 through
+  a relay-controlled cwd, or have the gateway accept a per-task workspace) unblocks: identical flow on both engines.
+- **`file.change` attribution is emitted but not persisted — Changes tab can't show per-agent history reliably.**
+  The V2 runner sends `file.change` frames carrying `{ path, change, agent }`; the relay DO broadcasts them to
+  browser clients but does NOT persist them or forward them to the execution-stream subscribers, so "Agent X
+  created 2 files; Agent Y ran tests" isn't durable or visible cross-isolate / after reload. Fixing (a
+  `task_file_changes` table + a DO `file.change` handler that persists + a Changes-tab read keyed by task)
+  unblocks: durable per-agent change traceability.
+- **The ticket workspace is never torn down after Done.** `.builderforce/tasks/<taskId>` persists on the host
+  after `finalizeTask` pushes + opens the PR. Fixing (rm the dir once the PR is recorded) unblocks: bounded
+  disk use on long-lived runtimes. Also: the no-runtime **cloud** path still can't clone/commit (CF Worker has
+  no FS) — V2/self-hosted is required for the repo half of the flow (see the cloud-execution bullet above).
 - **`/llm/v1/messages` meters usage but does not enforce the plan daily-token cap.** Unlike
   [`/v1/chat/completions`](api/src/presentation/routes/llmRoutes.ts) (which gates on `llmUsageLog` SUM vs the
   plan cap), the new BYO-key `/v1/messages` proxy logs usage but has no pre-flight cap check — reasonable when

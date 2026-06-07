@@ -1,11 +1,51 @@
 import { Hono } from 'hono';
 import { TaskService } from '../../application/task/TaskService';
-import { TaskPriority, AgentType } from '../../domain/shared/types';
+import { TaskPriority, AgentType, TaskStatus } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { auditEvents } from '../../infrastructure/database/schema';
 import { AuditEventType } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
+import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
+
+/** Minimal shape of the agentHost relay Durable Object namespace binding. */
+type RelayNamespace = {
+  idFromName(name: string): unknown;
+  get(id: unknown): { fetch(url: string, init?: RequestInit): Promise<Response> };
+};
+
+/**
+ * On task → Done, tell the agent host that ran it to finalize the shared ticket
+ * workspace: commit the accumulated changes, push the branch, and open a PR.
+ * Best-effort + background — never blocks the PATCH. Only the assigned host holds
+ * the workspace, so a finalize without one is a no-op.
+ */
+async function dispatchTaskFinalize(
+  env: HonoEnv['Bindings'],
+  db: Db,
+  tenantId: number,
+  taskId: number,
+  agentHostId: number | null,
+  title: string,
+): Promise<void> {
+  if (agentHostId == null) return;
+  const relay = (env as unknown as { AGENT_HOST_RELAY?: RelayNamespace }).AGENT_HOST_RELAY;
+  if (!relay) return;
+  const repoRef = await resolveDefaultRepoForTask(db, tenantId, taskId).catch(() => null);
+  try {
+    const stub = relay.get(relay.idFromName(String(agentHostId)));
+    await stub.fetch('https://relay.internal/dispatch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'task.finalize',
+        taskId,
+        title,
+        repo: repoRef ? { repoId: repoRef.repoId, defaultBranch: repoRef.defaultBranch } : null,
+      }),
+    });
+  } catch { /* host offline / relay miss — branch can be finalized manually */ }
+}
 
 export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -61,6 +101,14 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
       archived?: boolean;
     }>();
     const task = await taskService.updateTask(id, body);
+
+    // On transition to Done, finalize the ticket workspace → commit + PR.
+    if (body.status === TaskStatus.DONE) {
+      const plain = task.toPlain() as { assignedAgentHostId?: number | null; title?: string };
+      c.executionCtx.waitUntil(
+        dispatchTaskFinalize(c.env, db, c.get('tenantId'), id, plain.assignedAgentHostId ?? null, plain.title ?? ''),
+      );
+    }
 
     // record audit event for the status of this task change
     try {
