@@ -692,6 +692,8 @@ export const tasks = pgTable('tasks', {
   /** ide_agents.id of the cloud agent working this ticket — the agent self-assigns
    *  when it starts a run (agents are first-class assignees). No FK (raw-SQL table). */
   assignedAgentRef:  text('assigned_agent_ref'),
+  /** Git branch the agent executes this ticket under (surfaced on Details, links to the PR). */
+  gitBranch:         text('git_branch'),
   startDate:         timestamp('start_date'),
   dueDate:           timestamp('due_date'),
   persona:           varchar('persona', { length: 50 }),

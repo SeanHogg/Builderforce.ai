@@ -22,6 +22,8 @@ export interface TaskProps {
   assignedAgentHostId: AgentHostId | null;
   /** ide_agents.id of the cloud agent working this ticket (agents are assignees). */
   assignedAgentRef: string | null;
+  /** Git branch the agent executes this ticket under (links to the PR/code changes). */
+  gitBranch: string | null;
   startDate: Date | null;
   dueDate: Date | null;
   persona: string | null;
@@ -46,7 +48,7 @@ export class Task {
   static create(
     props: Omit<
       TaskProps,
-      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef'
+      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'gitBranch'
     > & {
       projectKey: string;
       projectTaskCount: number;
@@ -73,6 +75,7 @@ export class Task {
       githubPrNumber: null,
       assignedAgentHostId: null,
       assignedAgentRef: null,
+      gitBranch: null,
       startDate: props.startDate ?? null,
       dueDate: props.dueDate ?? null,
       persona: props.persona ?? null,
@@ -104,6 +107,7 @@ export class Task {
   get githubPrNumber(): number | null { return this.props.githubPrNumber; }
   get assignedAgentHostId(): AgentHostId | null { return this.props.assignedAgentHostId; }
   get assignedAgentRef(): string | null { return this.props.assignedAgentRef; }
+  get gitBranch(): string | null { return this.props.gitBranch; }
   get startDate(): Date | null { return this.props.startDate; }
   get dueDate(): Date | null { return this.props.dueDate; }
   get persona(): string | null { return this.props.persona; }
@@ -120,7 +124,7 @@ export class Task {
       Pick<
         TaskProps,
         'title' | 'description' | 'status' | 'priority' | 'assignedAgentType'
-        | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'startDate' | 'dueDate'
+        | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'gitBranch' | 'startDate' | 'dueDate'
         | 'persona' | 'archived'
       >
     >,

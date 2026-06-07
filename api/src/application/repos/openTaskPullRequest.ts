@@ -80,7 +80,7 @@ export async function openTaskPullRequest(
   });
   await db
     .update(tasks)
-    .set({ githubPrUrl: pr.url, githubPrNumber: pr.number, updatedAt: now })
+    .set({ githubPrUrl: pr.url, githubPrNumber: pr.number, gitBranch: input.branch.trim(), updatedAt: now })
     .where(eq(tasks.id, taskId));
 
   return { ok: true, url: pr.url, number: pr.number };
