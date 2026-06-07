@@ -3,6 +3,15 @@ import path from "node:path";
 import { PERSONAS_SUBDIR } from "./personas.js";
 
 export const BUILDERFORCE_AGENTS_DIR = ".builderforce";
+/** Shared PRD "working document" — the WIP file the first agent drafts and
+ *  downstream agents read/extend. Lives at the repo root so it's a visible,
+ *  committable deliverable. */
+export const PRD_FILE = "PRD.md";
+
+/** Absolute path to the shared PRD working document for a project. */
+export function resolvePrdPath(projectRoot: string): string {
+  return path.join(projectRoot, PRD_FILE);
+}
 export const CONTEXT_FILE = "context.yaml";
 export const ARCHITECTURE_FILE = "architecture.md";
 export const RULES_FILE = "rules.yaml";

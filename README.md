@@ -1650,6 +1650,40 @@ full `api/src` rename (`Claw*`→`AgentHost*`, table `coderclaw_instances`→`ag
   filtered to one project — mildly inconsistent with the filtered execution list below it. Fixing
   (add `project_id` to `workflow_definitions`, a project picker in the builder, and filter
   `SavedDefinitionsSection` by the active `projectId`) unblocks: a fully project-scoped Workflows page.
+- **Cloud execution is still a single gateway completion, not a real agent loop.** This pass made the
+  kickoff non-blocking — [POST /api/runtime/executions](api/src/presentation/routes/runtimeRoutes.ts)
+  now returns `pending` immediately and runs the cloud path in the background via `executionCtx.waitUntil`
+  (`dispatchAndQueue`), streaming status + final output to WS subscribers. But `runCloudExecution` still
+  calls `ideProxy(env).complete()` once — no tools, no repo, no file writes — so cloud runs produce prose,
+  not code changes, and the new Changes tab stays empty for them. A true cloud agent needs a server-side
+  pi-agent runtime (container/queue consumer running the same loop as a self-hosted agentHost). Fixing
+  unblocks: cloud runs that actually edit files + a populated Changes tab without a self-hosted claw.
+- **Self-hosted agent-events bus is not bridged to the execution WS stream — Changes/Tools are post-hoc only.**
+  The agent-runtime emits live `tool`/`assistant`/`file` events on its [agent-events bus](agent-runtime/src/infra/agent-events.ts),
+  but the api only learns of self-hosted progress via the terminal `PATCH /executions/:id/state` callback;
+  the new [AgentExecutionPanel](frontend/src/components/agent/AgentExecutionPanel.tsx) therefore derives
+  live file changes from `file_change` WS events that **only the cloud path emits today**, and falls back to
+  the REST `trace` (tool-call audit, post-run) for self-hosted. Fixing (have the agentHost relay agent-events
+  to a new `PATCH /executions/:id/events` or push them through the relay DO → `notifyExecutionSubscribers`
+  as `file_change`/`message` deltas) unblocks: real-time Output/Changes/Tools for self-hosted runs, not just cloud.
+- **Steering a running execution (`POST /executions/:id/messages`) is not yet consumed by the agent.**
+  The endpoint ([runtimeRoutes.ts](api/src/presentation/routes/runtimeRoutes.ts)) broadcasts the user
+  message to WS subscribers and relays it to the assigned agentHost's relay DO at `/execution-message`, but
+  (1) the agent-runtime relay has **no handler** for that path, so the message never reaches the live
+  pi-agent session, and (2) cloud completions are one-shot and can't be interrupted mid-run. Also, when the
+  WS is unavailable the chatbox echo is lost (polling refetches the execution row, not the message thread —
+  there is no `execution_messages` table). Fixing (relay-DO `/execution-message` handler that calls
+  `activeSession.prompt()` on the in-flight session + an `execution_messages` table surfaced via `trace`)
+  unblocks: genuinely chatting with / redirecting a running agent, with durable history.
+- **PRD WIP file is full-replace by the PRD-owner task only; downstream agents can't edit it.** The new
+  [prd-wip.ts](agent-runtime/src/builderforce/prd-wip.ts) writes `PRD.md` at the repo root (and `git add`s it
+  as a pending commit) when an `architecture-advisor` task whose description names a PRD completes, and the
+  [orchestrator](agent-runtime/src/builderforce/orchestrator.ts) injects the file into every downstream
+  task's context. Gaps: detection is heuristic (`isPrdTask` regex, not an explicit `producesPrd` step flag);
+  downstream agents receive the PRD read-only (no append/section-edit tool), so "used across all agents that
+  execute on the task" is read-shared but not write-shared; and staging is best-effort `git add` with no
+  commit/branch (intentional — pending review). Fixing (explicit `producesPrd` flag on the planning step + a
+  `prd_edit`/section-merge tool agents can call) unblocks: collaborative PRD authoring across the swimlane.
 
 ---
 

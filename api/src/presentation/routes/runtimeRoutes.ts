@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
@@ -68,13 +69,30 @@ type ExecutionTelemetryBody = {
   ts?: string;
 };
 
-type ExecutionSubscriberEvent = {
-  type: 'status_change' | 'done';
-  executionId: number;
-  status: string;
-  execution: unknown;
-  ts: string;
-};
+type ExecutionSubscriberEvent =
+  | {
+      type: 'status_change' | 'done';
+      executionId: number;
+      status: string;
+      execution: unknown;
+      ts: string;
+    }
+  | {
+      /** A user direction sent to a running execution, or an assistant text delta. */
+      type: 'message';
+      executionId: number;
+      role: 'user' | 'assistant';
+      text: string;
+      ts: string;
+    }
+  | {
+      /** A file the agent created / modified / deleted during the run. */
+      type: 'file_change';
+      executionId: number;
+      path: string;
+      change: 'created' | 'modified' | 'deleted';
+      ts: string;
+    };
 
 const executionSubscribers = new Map<number, Set<WebSocket>>();
 
@@ -300,7 +318,14 @@ async function runCloudExecution(
   } catch { /* payload not JSON — use default model */ }
 
   try {
-    await runtimeService.update(executionId, { status: ExecutionStatus.RUNNING });
+    const running = await runtimeService.update(executionId, { status: ExecutionStatus.RUNNING });
+    notifyExecutionSubscribers(executionId, {
+      type: 'status_change',
+      executionId,
+      status: running.status,
+      execution: running.toPlain(),
+      ts: new Date().toISOString(),
+    });
     const result = await ideProxy(env).complete({
       messages: [
         { role: 'system', content: 'You are a BuilderForce agent executing a project task. Produce the concrete deliverable for the task as your response.' },
@@ -321,13 +346,93 @@ async function runCloudExecution(
       return;
     }
     const text = extractCompletion(await result.response.json().catch(() => null));
-    await runtimeService.update(executionId, { status: ExecutionStatus.COMPLETED, result: text || `(no output produced) ${debug}` });
+    const output = text || `(no output produced) ${debug}`;
+    notifyExecutionSubscribers(executionId, {
+      type: 'message',
+      executionId,
+      role: 'assistant',
+      text: output,
+      ts: new Date().toISOString(),
+    });
+    await runtimeService.update(executionId, { status: ExecutionStatus.COMPLETED, result: output });
   } catch (e) {
     await runtimeService.update(executionId, {
       status: ExecutionStatus.FAILED,
       errorMessage: e instanceof Error ? e.message : String(e),
     });
   }
+}
+
+/** Minimal structural shape of a domain Execution returned by RuntimeService. */
+type SubmittedExecution = { id: number; status: string; toPlain(): unknown };
+
+/**
+ * Shared post-submit dispatch path for `/executions` and `/tasks/submit`.
+ *
+ * Tries online self-hosted agentHosts first. If none take the work, the cloud
+ * run is QUEUED rather than awaited: the handler returns immediately with the
+ * execution still `pending`, and the LLM completion runs in the background via
+ * `executionCtx.waitUntil` (the Workers-native queue). Status transitions and
+ * output stream to WebSocket subscribers, so the caller never blocks on the
+ * agent and the UI updates live (or via polling fallback).
+ */
+async function dispatchAndQueue(
+  c: Context<RuntimeHonoEnv>,
+  runtimeService: RuntimeService,
+  db: Db,
+  execution: SubmittedExecution,
+  taskRow: ExecutionTaskRow,
+  payload: string | undefined,
+): Promise<unknown> {
+  const tenantId = c.get('tenantId');
+  const targets = await getDispatchTargets(db, tenantId, taskRow.assignedAgentHostId);
+  const dispatchType: DispatchMessage['type'] = taskRow.assignedAgentHostId != null ? 'task.assign' : 'task.broadcast';
+
+  const artifacts = await resolveArtifacts(db, {
+    tenantId,
+    taskId: taskRow.id,
+    agentHostId: taskRow.assignedAgentHostId ?? undefined,
+  });
+
+  const message: DispatchMessage = {
+    type: dispatchType,
+    executionId: execution.id,
+    taskId: taskRow.id,
+    payload,
+    task: { title: taskRow.title, description: taskRow.description },
+    artifacts,
+  };
+
+  const delivered = (
+    await Promise.all(targets.map((targetId) => dispatchToAgentHost(c.env, targetId, message).catch(() => false)))
+  ).some(Boolean);
+
+  if (!delivered) {
+    // No online self-hosted agent took it → queue a background cloud run. The
+    // 'done' notification is emitted by the background task when it settles.
+    c.executionCtx.waitUntil((async () => {
+      await runCloudExecution(c.env as Env, runtimeService, execution.id, taskRow, payload);
+      const updated = await runtimeService.getExecution(execution.id);
+      notifyExecutionSubscribers(execution.id, {
+        type: 'done',
+        executionId: execution.id,
+        status: updated.status,
+        execution: updated.toPlain(),
+        ts: new Date().toISOString(),
+      });
+    })());
+  }
+
+  // Announce the queued/dispatched execution immediately.
+  notifyExecutionSubscribers(execution.id, {
+    type: 'status_change',
+    executionId: execution.id,
+    status: execution.status,
+    execution: execution.toPlain(),
+    ts: new Date().toISOString(),
+  });
+
+  return execution.toPlain();
 }
 
 async function getDispatchTargets(db: Db, tenantId: number, assignedAgentHostId?: number | null): Promise<number[]> {
@@ -431,57 +536,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       payload:     body.payload,
     });
 
-    if (taskRow) {
-      const targets = await getDispatchTargets(db, c.get('tenantId'), taskRow.assignedAgentHostId);
-      const dispatchType: DispatchMessage['type'] = taskRow.assignedAgentHostId != null ? 'task.assign' : 'task.broadcast';
-
-      const artifacts = await resolveArtifacts(db, {
-        tenantId:  c.get('tenantId'),
-        taskId:    taskRow.id,
-        agentHostId:    taskRow.assignedAgentHostId ?? undefined,
-      });
-
-      const message: DispatchMessage = {
-        type: dispatchType,
-        executionId: execution.id,
-        taskId: taskRow.id,
-        payload: body.payload,
-        task: {
-          title: taskRow.title,
-          description: taskRow.description,
-        },
-        artifacts,
-      };
-
-      const delivered = (
-        await Promise.all(targets.map((targetId) => dispatchToAgentHost(c.env, targetId, message).catch(() => false)))
-      ).some(Boolean);
-
-      // No online self-hosted agent took it → run server-side via the gateway so
-      // the execution completes instead of sitting in `pending` forever.
-      if (!delivered) {
-        await runCloudExecution(c.env as Env, runtimeService, execution.id, taskRow, body.payload);
-        const updated = await runtimeService.getExecution(execution.id);
-        notifyExecutionSubscribers(execution.id, {
-          type: 'status_change',
-          executionId: execution.id,
-          status: updated.status,
-          execution: updated.toPlain(),
-          ts: new Date().toISOString(),
-        });
-        return c.json(updated.toPlain(), 201);
-      }
-    }
-
-    notifyExecutionSubscribers(execution.id, {
-      type: 'status_change',
-      executionId: execution.id,
-      status: execution.status,
-      execution: execution.toPlain(),
-      ts: new Date().toISOString(),
-    });
-
-    return c.json(execution.toPlain(), 201);
+    const result = await dispatchAndQueue(c, runtimeService, db, execution, taskRow, body.payload);
+    return c.json(result, 201);
   });
 
   router.get('/tasks/:id/state', async (c) => {
@@ -557,58 +613,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       payload:     body.payload,
     });
 
-    if (taskRow) {
-      const targets = await getDispatchTargets(db, c.get('tenantId'), taskRow.assignedAgentHostId);
-      const dispatchType: DispatchMessage['type'] = taskRow.assignedAgentHostId != null ? 'task.assign' : 'task.broadcast';
-
-      // Resolve assigned artifacts across all scope levels for this execution
-      const artifacts = await resolveArtifacts(db, {
-        tenantId:  c.get('tenantId'),
-        taskId:    taskRow.id,
-        agentHostId:    taskRow.assignedAgentHostId ?? undefined,
-      });
-
-      const message: DispatchMessage = {
-        type: dispatchType,
-        executionId: execution.id,
-        taskId: taskRow.id,
-        payload: body.payload,
-        task: {
-          title: taskRow.title,
-          description: taskRow.description,
-        },
-        artifacts,
-      };
-
-      const delivered = (
-        await Promise.all(targets.map((targetId) => dispatchToAgentHost(c.env, targetId, message).catch(() => false)))
-      ).some(Boolean);
-
-      // No online self-hosted agent took it → run server-side via the gateway so
-      // the execution completes instead of sitting in `pending` forever.
-      if (!delivered) {
-        await runCloudExecution(c.env as Env, runtimeService, execution.id, taskRow, body.payload);
-        const updated = await runtimeService.getExecution(execution.id);
-        notifyExecutionSubscribers(execution.id, {
-          type: 'status_change',
-          executionId: execution.id,
-          status: updated.status,
-          execution: updated.toPlain(),
-          ts: new Date().toISOString(),
-        });
-        return c.json(updated.toPlain(), 201);
-      }
-    }
-
-    notifyExecutionSubscribers(execution.id, {
-      type: 'status_change',
-      executionId: execution.id,
-      status: execution.status,
-      execution: execution.toPlain(),
-      ts: new Date().toISOString(),
-    });
-
-    return c.json(execution.toPlain(), 201);
+    const result = await dispatchAndQueue(c, runtimeService, db, execution, taskRow, body.payload);
+    return c.json(result, 201);
   });
 
   // List executions for the caller's tenant
@@ -933,6 +939,46 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     });
 
     return c.json(execution.toPlain());
+  });
+
+  // Send a follow-up direction to a running/queued execution so the user can
+  // steer it mid-run. The message is broadcast to the execution's stream
+  // subscribers immediately. For self-hosted runs it is also relayed to the
+  // assigned agentHost (which feeds it into the live agent session as the next
+  // turn). Cloud completions are one-shot today — see gap register for resume.
+  router.post('/executions/:id/messages', async (c) => {
+    const id = Number(c.req.param('id'));
+    const body = await c.req.json<{ text?: string }>().catch(() => ({} as { text?: string }));
+    const text = body.text?.trim();
+    if (!text) return c.json({ error: 'text is required' }, 400);
+
+    const execution = await runtimeService.getExecution(id).catch(() => null);
+    if (!execution) return c.json({ error: 'Execution not found' }, 404);
+    const plain = execution.toPlain() as { tenantId?: number; agentHostId?: number | null };
+    if (plain.tenantId != null && plain.tenantId !== c.get('tenantId')) {
+      return c.json({ error: 'Execution not found' }, 404);
+    }
+
+    if (plain.agentHostId != null) {
+      const stub = c.env.AGENT_HOST_RELAY?.get(
+        c.env.AGENT_HOST_RELAY.idFromName(String(plain.agentHostId)),
+      );
+      await stub?.fetch('https://relay.internal/execution-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ executionId: id, text }),
+      }).catch(() => { /* best effort; subscribers still see the message */ });
+    }
+
+    notifyExecutionSubscribers(id, {
+      type: 'message',
+      executionId: id,
+      role: 'user',
+      text,
+      ts: new Date().toISOString(),
+    });
+
+    return c.json({ ok: true });
   });
 
   // Agent callback: update execution state (running / completed / failed)
