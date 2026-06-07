@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   runtimeApi,
@@ -72,6 +73,11 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   const [subTab, setSubTab] = useState<SubTab>('output');
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  // Optimistic echoes of steering directions. The execution stream's subscriber
+  // map is per-Worker-isolate, so the round-trip `message` event is usually
+  // dropped and a sent direction would never render. We show it locally and drop
+  // it once the stream echoes the same text back (see `thread`).
+  const [sentMessages, setSentMessages] = useState<string[]>([]);
   // Durable per-agent file changes for the ticket's shared workspace (attributed).
   const [taskChanges, setTaskChanges] = useState<TaskFileChange[]>([]);
 
@@ -92,6 +98,9 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
     runtimeApi.taskFileChanges(task.id).then((r) => setTaskChanges(r.changes)).catch(() => { /* none yet */ });
   }, [task.id]);
   useEffect(() => { loadTaskChanges(); }, [loadTaskChanges]);
+
+  // Optimistic echoes belong to the selected execution only — clear on switch.
+  useEffect(() => { setSentMessages([]); }, [selectedId]);
 
   useEffect(() => {
     if (selectedId == null) { setTrace(null); return; }
@@ -117,8 +126,13 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   const hasLiveAssistant = stream.messages.some((m) => m.role === 'assistant');
   const thread = useMemo(() => {
     const base = historicalText && !hasLiveAssistant ? [{ role: 'assistant' as const, text: historicalText, ts: '' }] : [];
-    return [...base, ...stream.messages];
-  }, [historicalText, hasLiveAssistant, stream.messages]);
+    // Drop optimistic echoes the stream has since delivered (match by text).
+    const echoed = new Set(stream.messages.filter((m) => m.role === 'user').map((m) => m.text));
+    const optimistic = sentMessages
+      .filter((t) => !echoed.has(t))
+      .map((text) => ({ role: 'user' as const, text, ts: '' }));
+    return [...base, ...stream.messages, ...optimistic];
+  }, [historicalText, hasLiveAssistant, stream.messages, sentMessages]);
 
   // Files: streamed changes win; fall back to result/tool-derived for past runs.
   const files = useMemo(() => {
@@ -155,11 +169,23 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
     const text = draft.trim();
     if (!text || selectedId == null || sending) return;
     setSending(true);
+    // Render the direction immediately — we can't wait on the stream's echo,
+    // which is unreliable cross-isolate. Rolled back below if the post fails.
+    setSentMessages((prev) => [...prev, text]);
+    setDraft('');
     try {
       await runtimeApi.postMessage(selectedId, text);
-      setDraft('');
-    } catch { /* surfaced via disabled state; keep the draft for retry */ }
-    finally { setSending(false); }
+    } catch {
+      // Roll back the optimistic echo and restore the draft for retry.
+      setSentMessages((prev) => {
+        const i = prev.lastIndexOf(text);
+        if (i < 0) return prev;
+        const next = [...prev];
+        next.splice(i, 1);
+        return next;
+      });
+      setDraft(text);
+    } finally { setSending(false); }
   };
 
   const cancel = async () => {
@@ -304,6 +330,17 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   {sending ? 'Sending…' : 'Send'}
                 </button>
               </div>
+
+              {/* This panel is a minimal per-execution view; the agent streams its
+                  full logs / tool calls / timeline to Observability. */}
+              {selected?.agentHostId != null && (
+                <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                  Minimal view — for full agent logs, tool calls, and timeline,{' '}
+                  <Link href="/observability" style={{ color: 'var(--coral-bright)' }}>
+                    open Observability →
+                  </Link>
+                </div>
+              )}
             </>
           )}
 

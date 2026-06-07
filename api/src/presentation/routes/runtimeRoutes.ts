@@ -27,6 +27,7 @@ import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelay
  * POST   /api/runtime/executions/:id/cancel  – cancel an execution
  * PATCH  /api/runtime/executions/:id/state   – agent callback: update state
  * GET    /api/runtime/tasks/:taskId/executions – history for a task
+ * GET    /api/runtime/agents/:ref/tool-audit  – tool-audit timeline for one cloud agent
  */
 type RuntimeHonoEnv = HonoEnv & {
   Bindings: HonoEnv['Bindings'] & {
@@ -467,6 +468,61 @@ async function ensureTaskPrd(
 }
 
 /**
+ * Record one cloud-agent tool-audit event so cloud runs are observable on the
+ * Timeline exactly like self-hosted agents (which push tool-audit via the relay).
+ * Cloud runs have no agent_host_id / live session, so rows are keyed by the cloud
+ * agent ref + execution id (migration 0092). Best-effort — never throws.
+ */
+async function recordCloudToolEvent(
+  db: Db,
+  args: {
+    tenantId: number;
+    cloudAgentRef?: string;
+    executionId: number;
+    toolName: string;
+    category: string;
+    detail?: unknown;
+    result?: string;
+    durationMs?: number;
+  },
+): Promise<void> {
+  try {
+    await db.insert(toolAuditEvents).values({
+      tenantId:     args.tenantId,
+      agentHostId:  null,
+      cloudAgentRef: args.cloudAgentRef ?? null,
+      executionId:  args.executionId,
+      sessionKey:   `exec:${args.executionId}`,
+      toolName:     args.toolName,
+      category:     args.category,
+      args:         args.detail != null ? JSON.stringify(args.detail) : null,
+      result:       args.result ?? null,
+      durationMs:   args.durationMs ?? null,
+      ts:           new Date(),
+    });
+  } catch { /* telemetry is best-effort — never break the run */ }
+}
+
+/** Record cloud-agent token usage for the run. Best-effort — never throws. */
+async function recordCloudUsage(
+  db: Db,
+  args: { tenantId: number; cloudAgentRef?: string; executionId: number; inputTokens: number; outputTokens: number },
+): Promise<void> {
+  try {
+    await db.insert(usageSnapshots).values({
+      tenantId:      args.tenantId,
+      agentHostId:   null,
+      cloudAgentRef: args.cloudAgentRef ?? null,
+      executionId:   args.executionId,
+      sessionKey:    `exec:${args.executionId}`,
+      inputTokens:   args.inputTokens,
+      outputTokens:  args.outputTokens,
+      contextTokens: args.inputTokens + args.outputTokens,
+    });
+  } catch { /* best-effort */ }
+}
+
+/**
  * Run an execution server-side via the gateway when NO online agentHost took the
  * dispatch (Auto / cloud agent with no self-hosted runtime). Standard flow:
  * (1) ensure a PRD exists (generate + persist + emit as first change), then
@@ -482,6 +538,7 @@ async function runCloudExecution(
   tenantId: number,
   projectId: number,
   agentLabel: string,
+  cloudAgentRef?: string,
   payload?: string,
 ): Promise<void> {
   let model: string | undefined;
@@ -501,16 +558,25 @@ async function runCloudExecution(
     });
 
     // Step 1 — PRD-first. Step 2 — governance/arch context (parallel reads).
+    const tPrep0 = Date.now();
     const [prd, governance] = await Promise.all([
       ensureTaskPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model),
       loadGovernanceContext(db, tenantId, projectId),
     ]);
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef, executionId,
+      toolName: 'context.prepare', category: 'planning',
+      detail: { steps: ['prd', 'governance'] },
+      result: `${prd ? 'PRD ready' : 'no PRD'} · ${governance ? 'governance loaded' : 'no governance'}`,
+      durationMs: Date.now() - tPrep0,
+    });
 
     const userContent = [
       prd ? `## Product Requirements Document (PRD)\n\n${prd}` : null,
       governance || null,
       `## Your Task\n\n${taskRow.title}\n\n${taskRow.description ?? ''}`.trim(),
     ].filter(Boolean).join('\n\n---\n\n');
+    const tGen0 = Date.now();
     const result = await ideProxy(env).complete({
       messages: [
         { role: 'system', content: 'You are a BuilderForce agent executing a project task. Follow the PRD, architecture spec, and project rules provided below exactly. Produce the concrete, finished deliverable for the task — do NOT return a template with bracketed placeholders to be filled in later; where specifics are unknown, make explicit, reasonable assumptions and state them.' },
@@ -519,11 +585,28 @@ async function runCloudExecution(
       ...(model ? { model } : {}),
       useCase: 'task_execution',
     });
+    const genMs = Date.now() - tGen0;
+    const resolvedModel = result.resolvedModel ?? model ?? 'default';
     // Debug trail for cloud runs: which model ran + the gateway trace id (so the
     // run is inspectable in the LLM-trace view even though there's no live stream).
-    const debug = `[ran as ${result.resolvedModel ?? model ?? 'default'}${result.traceId ? ` · trace ${result.traceId}` : ''}]`;
+    const debug = `[ran as ${resolvedModel}${result.traceId ? ` · trace ${result.traceId}` : ''}]`;
+    // Token usage → Observability (mirrors self-hosted usage snapshots).
+    if (result.usage) {
+      await recordCloudUsage(db, {
+        tenantId, cloudAgentRef, executionId,
+        inputTokens: result.usage.promptTokens ?? 0,
+        outputTokens: result.usage.completionTokens ?? 0,
+      });
+    }
     if (result.response.status >= 400) {
       const body = await result.response.text().catch(() => '');
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef, executionId,
+        toolName: 'llm.complete', category: 'llm',
+        detail: { model: resolvedModel, traceId: result.traceId ?? null, useCase: 'task_execution' },
+        result: `gateway ${result.response.status}`,
+        durationMs: genMs,
+      });
       await runtimeService.update(executionId, {
         status: ExecutionStatus.FAILED,
         errorMessage: `Gateway ${result.response.status}: ${body.slice(0, 300)} ${debug}`.trim(),
@@ -532,6 +615,13 @@ async function runCloudExecution(
     }
     const text = extractCompletion(await result.response.json().catch(() => null));
     const output = text || `(no output produced) ${debug}`;
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef, executionId,
+      toolName: 'llm.complete', category: 'llm',
+      detail: { model: resolvedModel, traceId: result.traceId ?? null, useCase: 'task_execution' },
+      result: `${(text ?? '').length} chars${result.traceId ? ` · trace ${result.traceId}` : ''}`,
+      durationMs: genMs,
+    });
     notifyExecutionSubscribers(executionId, {
       type: 'message',
       executionId,
@@ -647,7 +737,7 @@ async function dispatchAndQueue(
     // No online self-hosted agent took it → queue a background cloud run. The
     // 'done' notification is emitted by the background task when it settles.
     c.executionCtx.waitUntil((async () => {
-      await runCloudExecution(c.env as Env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', payload);
+      await runCloudExecution(c.env as Env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, payload);
       const updated = await runtimeService.getExecution(execution.id);
       notifyExecutionSubscribers(execution.id, {
         type: 'done',
@@ -1056,16 +1146,24 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       return c.json({ error: 'Execution not found' }, 404);
     }
 
-    if (plain.agentHostId == null || !plain.sessionId) {
-      return c.json({
-        execution: plain,
-        trace: {
-          source: 'runtime-fallback',
-          usageSnapshots: [],
-          toolEvents: [],
-        },
-      });
-    }
+    // Self-hosted runs are keyed by (agent_host_id, session_key); cloud runs have
+    // neither, so their telemetry (0092) is keyed by execution_id. Pick the filter
+    // that matches the run shape rather than bailing out for cloud executions.
+    const isCloudRun = plain.agentHostId == null || !plain.sessionId;
+    const usageFilter = isCloudRun
+      ? and(eq(usageSnapshots.tenantId, plain.tenantId), eq(usageSnapshots.executionId, id))
+      : and(
+          eq(usageSnapshots.tenantId, plain.tenantId),
+          eq(usageSnapshots.agentHostId, plain.agentHostId),
+          eq(usageSnapshots.sessionKey, plain.sessionId),
+        );
+    const toolFilter = isCloudRun
+      ? and(eq(toolAuditEvents.tenantId, plain.tenantId), eq(toolAuditEvents.executionId, id))
+      : and(
+          eq(toolAuditEvents.tenantId, plain.tenantId),
+          eq(toolAuditEvents.agentHostId, plain.agentHostId),
+          eq(toolAuditEvents.sessionKey, plain.sessionId),
+        );
 
     const usage = await db
       .select({
@@ -1078,13 +1176,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         compactionCount: usageSnapshots.compactionCount,
       })
       .from(usageSnapshots)
-      .where(
-        and(
-          eq(usageSnapshots.tenantId, plain.tenantId),
-          eq(usageSnapshots.agentHostId, plain.agentHostId),
-          eq(usageSnapshots.sessionKey, plain.sessionId),
-        ),
-      )
+      .where(usageFilter)
       .orderBy(desc(usageSnapshots.ts))
       .limit(500);
 
@@ -1101,24 +1193,55 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         toolCallId: toolAuditEvents.toolCallId,
       })
       .from(toolAuditEvents)
-      .where(
-        and(
-          eq(toolAuditEvents.tenantId, plain.tenantId),
-          eq(toolAuditEvents.agentHostId, plain.agentHostId),
-          eq(toolAuditEvents.sessionKey, plain.sessionId),
-        ),
-      )
+      .where(toolFilter)
       .orderBy(desc(toolAuditEvents.ts))
       .limit(500);
 
     return c.json({
       execution: plain,
       trace: {
-        source: 'runtime-fallback',
+        source: isCloudRun ? 'cloud-telemetry' : 'runtime-fallback',
         usageSnapshots: usage,
         toolEvents,
       },
     });
+  });
+
+  // GET /api/runtime/agents/:ref/tool-audit?limit=
+  // Tool-audit events for ONE cloud agent (ide_agents.id), tenant-scoped, newest
+  // first — the cloud-side analogue of /agent-hosts/:id/tool-audit. Feeds the
+  // unified Observability timeline so cloud agents are as observable as hosts.
+  router.get('/agents/:ref/tool-audit', async (c) => {
+    const ref = c.req.param('ref');
+    const tenantId = c.get('tenantId');
+    const limitRaw = Number(c.req.query('limit'));
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 500) : 200;
+
+    const events = await db
+      .select({
+        id: toolAuditEvents.id,
+        runId: toolAuditEvents.runId,
+        sessionKey: toolAuditEvents.sessionKey,
+        toolCallId: toolAuditEvents.toolCallId,
+        toolName: toolAuditEvents.toolName,
+        category: toolAuditEvents.category,
+        args: toolAuditEvents.args,
+        result: toolAuditEvents.result,
+        durationMs: toolAuditEvents.durationMs,
+        executionId: toolAuditEvents.executionId,
+        ts: toolAuditEvents.ts,
+      })
+      .from(toolAuditEvents)
+      .where(
+        and(
+          eq(toolAuditEvents.tenantId, tenantId),
+          eq(toolAuditEvents.cloudAgentRef, ref),
+        ),
+      )
+      .orderBy(desc(toolAuditEvents.ts))
+      .limit(limit);
+
+    return c.json({ events });
   });
 
   // P0-2: WebSocket streaming endpoint for a single execution.
