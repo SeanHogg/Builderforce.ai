@@ -286,6 +286,9 @@ export async function runAgentTurnWithFallback(params: {
               return isMarkdownCapableMessageChannel(channel) ? "markdown" : "plain";
             })(),
             suppressToolErrorWarnings: params.opts?.suppressToolErrorWarnings,
+            // Enforce a per-run working directory (e.g. a ticket's shared
+            // workspace) when the caller provides one — overrides config cwd.
+            ...(params.opts?.workspaceDir ? { workspaceDir: params.opts.workspaceDir } : {}),
             images: params.opts?.images,
             abortSignal: params.opts?.abortSignal,
             blockReplyBreak: params.resolvedBlockStreamingBreak,

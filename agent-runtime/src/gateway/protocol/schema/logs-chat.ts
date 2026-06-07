@@ -40,6 +40,9 @@ export const ChatSendParamsSchema = Type.Object(
     attachments: Type.Optional(Type.Array(Type.Unknown())),
     timeoutMs: Type.Optional(Type.Integer({ minimum: 0 })),
     idempotencyKey: NonEmptyString,
+    /** Enforce the agent's working directory for this run (e.g. a ticket's shared
+     *  workspace). When set, the embedded agent's cwd is this dir. */
+    workspaceDir: Type.Optional(Type.String()),
   },
   { additionalProperties: false },
 );

@@ -31,6 +31,9 @@ export type GetReplyOptions = {
   heartbeatModelOverride?: string;
   /** If true, suppress tool error warning payloads for this run. */
   suppressToolErrorWarnings?: boolean;
+  /** Enforce the embedded agent's working directory for this run (e.g. a ticket's
+   *  shared workspace). Overrides the config workspaceDir when set. */
+  workspaceDir?: string;
   onPartialReply?: (payload: ReplyPayload) => Promise<void> | void;
   onReasoningStream?: (payload: ReplyPayload) => Promise<void> | void;
   /** Called when a thinking/reasoning block ends. */
