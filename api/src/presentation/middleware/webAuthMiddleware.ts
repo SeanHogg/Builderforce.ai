@@ -8,6 +8,15 @@ import { and, eq, isNull, gt, sql } from 'drizzle-orm';
 import { checkTermsAcceptance } from './termsEnforcement';
 
 /**
+ * Paths exempt from the terms-acceptance gate. These are the endpoints required
+ * to fetch, display, and accept the current terms — gating them would make a
+ * terms version bump unrecoverable for existing users.
+ */
+export function isTermsExemptPath(path: string): boolean {
+  return path.startsWith('/api/auth/legal') || path === '/api/auth/me';
+}
+
+/**
  * Web/marketplace JWT middleware.
  *
  * Reads `Authorization: Bearer <webToken>`, verifies the HS256 signature,
@@ -84,7 +93,16 @@ export const webAuthMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => 
     c.set('tokenJti', payload.jti);
   }
 
-  if (!c.req.path.startsWith('/api/auth/legal')) {
+  // The terms gate blocks every authed endpoint EXCEPT the ones needed to
+  // bootstrap the acceptance UI itself — otherwise a terms version bump locks
+  // returning users out of the very screen that lets them re-accept:
+  //   - /api/auth/legal/*  → fetch active terms + POST acceptance
+  //   - /api/auth/me       → read-only identity, required to persist the
+  //                          session in the OAuth/login callback before the
+  //                          OnboardingGate can render TermsAcceptanceScreen
+  // Action/tenant endpoints stay gated, so users still cannot use the app
+  // until they accept.
+  if (!isTermsExemptPath(c.req.path)) {
     const db = buildDatabase(c.env);
     const terms = await checkTermsAcceptance(db, payload.sub);
     if (terms.needsAcceptance) {
