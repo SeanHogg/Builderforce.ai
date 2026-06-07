@@ -2,7 +2,14 @@
 
 import Link from 'next/link';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { agentHosts, workflows, type AgentHost, type ToolAuditEvent, type Workflow } from '@/lib/builderforceApi';
+import {
+  agentHosts,
+  cloudAgents as cloudAgentsApi,
+  workflows,
+  type AgentHost,
+  type ToolAuditEvent,
+  type Workflow,
+} from '@/lib/builderforceApi';
 import { AgentHostGateway } from '@/lib/agentHostGateway';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 
@@ -28,12 +35,28 @@ export interface ObservabilityContentProps {
   agentHostName?: string;
 }
 
+/** Both self-hosted hosts and cloud agents are agents — one unified directory. */
+type AgentKind = 'host' | 'cloud';
+
+interface UnifiedAgent {
+  /** Stable selection key: `host:<id>` or `cloud:<ref>`. */
+  key: string;
+  kind: AgentKind;
+  /** agent_hosts.id for kind 'host'. */
+  hostId?: number;
+  /** ide_agents.id (cloud ref) for kind 'cloud'. */
+  cloudRef?: string;
+  name: string;
+  /** Live-connection status — hosts only. */
+  online?: boolean;
+}
+
 interface LogLine {
   ts: string;
   level: string;
   msg: string;
-  agentHostId: number;
-  agentHostName: string;
+  agentKey: string;
+  agentName: string;
 }
 
 interface TimelineTrack {
@@ -43,8 +66,8 @@ interface TimelineTrack {
   endMs: number;
   status: string;
   detail?: string;
-  agentHostId: number;
-  agentHostName: string;
+  agentKey: string;
+  agentName: string;
 }
 
 function truncate(s: unknown, n: number): string {
@@ -66,7 +89,7 @@ function fmtDuration(ms: number): string {
   return `${(ms / 60000).toFixed(1)}m`;
 }
 
-const AGENT_HOST_COLORS = [
+const AGENT_COLORS = [
   'var(--coral-bright, #f97316)',
   'var(--accent, #6366f1)',
   'var(--green, #22c55e)',
@@ -74,8 +97,27 @@ const AGENT_HOST_COLORS = [
   'var(--amber, #f59e0b)',
 ];
 
-function agentHostColor(index: number): string {
-  return AGENT_HOST_COLORS[index % AGENT_HOST_COLORS.length];
+/** Stable per-agent color, indexed by position in the current selection. */
+function colorForKey(selectedKeys: string[], key: string): string {
+  const idx = selectedKeys.indexOf(key);
+  return AGENT_COLORS[(idx >= 0 ? idx : 0) % AGENT_COLORS.length];
+}
+
+const KIND_PILL: Record<AgentKind, { label: string; bg: string; color: string }> = {
+  host: { label: 'ON-PREM', bg: 'var(--bg-elevated)', color: 'var(--text-secondary)' },
+  cloud: { label: 'CLOUD', bg: 'var(--surface-coral-soft)', color: 'var(--accent)' },
+};
+
+function pillStyle(bg: string, color: string): React.CSSProperties {
+  return {
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: 0.3,
+    padding: '1px 6px',
+    borderRadius: 9999,
+    background: bg,
+    color,
+  };
 }
 
 export function ObservabilityContent({
@@ -85,17 +127,20 @@ export function ObservabilityContent({
   agentHostId: propAgentHostId,
   agentHostName: propAgentHostName,
 }: ObservabilityContentProps) {
+  const scoped = propAgentHostId != null;
   const [view, setView] = useState<ObservabilityView>(initialView);
-  const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
-  const [agentHostListLoading, setAgentHostListLoading] = useState(true);
-  const [agentHostListError, setAgentHostListError] = useState<string | null>(null);
-  const [selectedAgentHostIds, setSelectedAgentHostIds] = useState<Set<number>>(
-    propAgentHostId != null ? new Set([propAgentHostId]) : new Set()
-  );
-  const selectedIds = propAgentHostId != null ? [propAgentHostId] : Array.from(selectedAgentHostIds);
-  const selectedIdsKey = selectedIds.join(',');
 
-  // Log streaming state
+  // Directory: self-hosted hosts + cloud agents, merged into one list.
+  const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
+  const [cloudAgentList, setCloudAgentList] = useState<PoolAgent[]>([]);
+  const [dirLoading, setDirLoading] = useState(true);
+  const [dirError, setDirError] = useState<string | null>(null);
+
+  const [selectedKeySet, setSelectedKeySet] = useState<Set<string>>(
+    scoped ? new Set([`host:${propAgentHostId}`]) : new Set()
+  );
+
+  // Log streaming state (self-hosted hosts push live logs over the relay).
   const [logLines, setLogLines] = useState<LogLine[]>([]);
   const [logLevel, setLogLevel] = useState<string>('all');
   const [connState, setConnState] = useState<'connecting' | 'connected' | 'offline' | 'disconnected'>('disconnected');
@@ -103,64 +148,74 @@ export function ObservabilityContent({
   const logEndRef = useRef<HTMLDivElement | null>(null);
   const gatewaysRef = useRef<Map<number, AgentHostGateway>>(new Map());
 
-  // Timeline state
-  const [eventsByAgentHost, setEventsByAgentHost] = useState<Map<number, ToolAuditEvent[]>>(new Map());
-  const [wfListByAgentHost, setWfListByAgentHost] = useState<Map<number, Workflow[]>>(new Map());
-  const [timelineLoading, setTimelineLoading] = useState(false);
-  const [timelineError, setTimelineError] = useState<string | null>(null);
-  const [timelineViewMode, setTimelineViewMode] = useState<'list' | 'timeline'>('list');
+  // Diagnostics data (timeline + cloud-derived logs).
+  const [eventsByHost, setEventsByHost] = useState<Map<number, ToolAuditEvent[]>>(new Map());
+  const [wfListByHost, setWfListByHost] = useState<Map<number, Workflow[]>>(new Map());
+  const [cloudEventsByRef, setCloudEventsByRef] = useState<Map<string, ToolAuditEvent[]>>(new Map());
+  const [diagLoading, setDiagLoading] = useState(false);
+  const [diagError, setDiagError] = useState<string | null>(null);
+  const [timelineViewMode, setTimelineViewMode] = useState<'list' | 'gantt'>('list');
   const [categoryFilter, setCategoryFilter] = useState('');
 
-  const agentHostById = useRef<Map<number, AgentHost>>(new Map());
-  agentHostById.current = new Map(agentHostList.map((c) => [c.id, c]));
+  // ---- Unified directory + selection derivation -----------------------------
+  const unifiedAgents: UnifiedAgent[] = scoped
+    ? [{ key: `host:${propAgentHostId}`, kind: 'host', hostId: propAgentHostId, name: propAgentHostName ?? `Agent ${propAgentHostId}` }]
+    : [
+        ...agentHostList.map((h) => ({ key: `host:${h.id}`, kind: 'host' as const, hostId: h.id, name: h.name, online: h.online })),
+        ...cloudAgentList.map((a) => ({ key: `cloud:${a.ref}`, kind: 'cloud' as const, cloudRef: a.ref, name: a.name })),
+      ];
+  const agentByKey = new Map(unifiedAgents.map((a) => [a.key, a]));
 
-  // Cloud agents (run server-side via the gateway, no relay log stream) — shown
-  // for completeness so the directory matches the rest of the app.
-  const [cloudAgents, setCloudAgents] = useState<PoolAgent[]>([]);
+  const selectedKeys = scoped
+    ? [`host:${propAgentHostId}`]
+    : unifiedAgents.map((a) => a.key).filter((k) => selectedKeySet.has(k));
+  const selectionKey = selectedKeys.join(',');
+  const selectedHostIds = selectedKeys.map((k) => agentByKey.get(k)).filter((a): a is UnifiedAgent => a?.kind === 'host').map((a) => a.hostId!);
+  const selectedCloudRefs = selectedKeys.map((k) => agentByKey.get(k)).filter((a): a is UnifiedAgent => a?.kind === 'cloud').map((a) => a.cloudRef!);
+  const hostKey = selectedHostIds.join(',');
+  const cloudKey = selectedCloudRefs.join(',');
+  const hasSelection = selectedKeys.length > 0;
+  const nameForKey = (key: string) => agentByKey.get(key)?.name ?? key;
 
-  // Load agentHosts when no propAgentHostId
+  // ---- Load the directory ---------------------------------------------------
   useEffect(() => {
-    if (propAgentHostId != null) return;
-    setAgentHostListLoading(true);
-    setAgentHostListError(null);
-    agentHosts
-      .list()
-      .then((list) => {
-        setAgentHostList(list);
-        setAgentHostListError(null);
+    if (scoped) return;
+    setDirLoading(true);
+    setDirError(null);
+    Promise.all([
+      agentHosts.list().catch((e) => {
+        setDirError(e instanceof Error ? e.message : 'Failed to load agents');
+        return [] as AgentHost[];
+      }),
+      loadAgentPool().then((p) => p.filter((a) => a.kind === 'workforce')).catch(() => [] as PoolAgent[]),
+    ])
+      .then(([hosts, cloud]) => {
+        setAgentHostList(hosts);
+        setCloudAgentList(cloud);
       })
-      .catch((e) => {
-        setAgentHostList([]);
-        setAgentHostListError(e instanceof Error ? e.message : 'Failed to load agents');
-      })
-      .finally(() => setAgentHostListLoading(false));
-  }, [propAgentHostId]);
+      .finally(() => setDirLoading(false));
+  }, [scoped]);
 
-  useEffect(() => {
-    if (propAgentHostId != null) return;
-    loadAgentPool().then((p) => setCloudAgents(p.filter((a) => a.kind === 'workforce'))).catch(() => setCloudAgents([]));
-  }, [propAgentHostId]);
-
-  const toggleAgentHost = useCallback((id: number) => {
-    setSelectedAgentHostIds((prev) => {
+  const toggleAgent = useCallback((key: string) => {
+    setSelectedKeySet((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   }, []);
 
-  const selectAllAgentHosts = useCallback(() => {
-    setSelectedAgentHostIds(new Set(agentHostList.map((c) => c.id)));
-  }, [agentHostList]);
+  const selectAll = useCallback(() => {
+    setSelectedKeySet(new Set(unifiedAgents.map((a) => a.key)));
+  // unifiedAgents is derived; selectionKey/list identity covered by deps below.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentHostList, cloudAgentList]);
 
-  const clearAgentHosts = useCallback(() => {
-    setSelectedAgentHostIds(new Set());
-  }, []);
+  const clearSelection = useCallback(() => setSelectedKeySet(new Set()), []);
 
-  // Log streaming: connect to each selected agentHost WS, subscribe to logs
+  // ---- Log streaming: connect to each selected HOST, subscribe to logs -------
   useEffect(() => {
-    if (selectedIds.length === 0) {
+    if (selectedHostIds.length === 0) {
       setConnState('disconnected');
       setLogLines([]);
       gatewaysRef.current.forEach((gw) => gw.destroy());
@@ -172,48 +227,41 @@ export function ObservabilityContent({
 
     const gateways = new Map<number, AgentHostGateway>();
     const connectedIds = new Set<number>();
+    const updateConnState = () => setConnState(connectedIds.size > 0 ? 'connected' : 'offline');
 
-    const updateConnState = () => {
-      setConnState(connectedIds.size > 0 ? 'connected' : 'offline');
-    };
-
-    for (const agentHostId of selectedIds) {
-      const agentHost = agentHostById.current.get(agentHostId);
-      const agentHostName = agentHost?.name ?? `AgentHost ${agentHostId}`;
-      const url = agentHosts.wsUrl(agentHostId);
+    for (const hostId of selectedHostIds) {
+      const name = agentByKey.get(`host:${hostId}`)?.name ?? `Agent ${hostId}`;
       const gw = new AgentHostGateway({
-        url,
+        url: agentHosts.wsUrl(hostId),
         onEvent: (ev) => {
           if (ev.type === 'connected' || ev.type === 'agent_host_online') {
             gw.send({ type: 'logs.subscribe' });
-            connectedIds.add(agentHostId);
+            connectedIds.add(hostId);
             updateConnState();
             return;
           }
           if (ev.type === 'agent_host_offline' || ev.type === 'disconnected') {
-            connectedIds.delete(agentHostId);
+            connectedIds.delete(hostId);
             updateConnState();
             return;
           }
           if (ev.type !== 'message') return;
           const msg = ev.data as { type?: string; level?: string; message?: string; ts?: string };
           if (msg.type === 'log') {
-            setLogLines((prev) =>
-              [
-                ...prev.slice(-2000),
-                {
-                  ts: msg.ts ?? new Date().toISOString(),
-                  level: msg.level ?? 'info',
-                  msg: msg.message ?? '',
-                  agentHostId,
-                  agentHostName,
-                },
-              ]
-            );
+            setLogLines((prev) => [
+              ...prev.slice(-2000),
+              {
+                ts: msg.ts ?? new Date().toISOString(),
+                level: msg.level ?? 'info',
+                msg: msg.message ?? '',
+                agentKey: `host:${hostId}`,
+                agentName: name,
+              },
+            ]);
           }
         },
       });
-      gateways.set(agentHostId, gw);
+      gateways.set(hostId, gw);
     }
 
     gatewaysRef.current.forEach((gw) => gw.destroy());
@@ -223,87 +271,109 @@ export function ObservabilityContent({
       gateways.forEach((gw) => gw.destroy());
       gatewaysRef.current.clear();
     };
-  // selectedIds is intentionally omitted: selectedIdsKey is a stable join-derived key that
-  // tracks membership changes without array reference equality issues.
+  // hostKey is a stable join-derived key tracking host membership changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIdsKey]);
+  }, [hostKey]);
 
   // Auto-scroll logs
   useEffect(() => {
     if (autoScroll) logEndRef.current?.scrollIntoView();
-  }, [logLines, autoScroll]);
+  }, [logLines, cloudEventsByRef, autoScroll]);
 
-  // Timeline: fetch tool-audit and workflows from all selected agentHosts
-  const loadTimeline = useCallback(async () => {
-    if (selectedIds.length === 0) return;
-    setTimelineLoading(true);
-    setTimelineError(null);
+  // ---- Diagnostics loader: host tool-audit + workflows + cloud tool-audit ----
+  const loadDiagnostics = useCallback(async () => {
+    if (selectedHostIds.length === 0 && selectedCloudRefs.length === 0) return;
+    setDiagLoading(true);
+    setDiagError(null);
     try {
       const evMap = new Map<number, ToolAuditEvent[]>();
       const wfMap = new Map<number, Workflow[]>();
+      const cloudMap = new Map<string, ToolAuditEvent[]>();
 
-      await Promise.all(
-        selectedIds.map(async (agentHostId) => {
+      await Promise.all([
+        ...selectedHostIds.map(async (hostId) => {
           const [evts, wfsRaw] = await Promise.all([
-            agentHosts.toolAuditEvents(agentHostId, { limit: 200 }),
-            workflows.list({ agentHostId }).catch(() => [] as Workflow[]),
+            agentHosts.toolAuditEvents(hostId, { limit: 200 }),
+            workflows.list({ agentHostId: hostId }).catch(() => [] as Workflow[]),
           ]);
-          evMap.set(agentHostId, evts);
-          const wfs = await Promise.all(wfsRaw.map((w) => workflows.get(w.id).catch(() => w)));
-          wfMap.set(agentHostId, wfs);
-        })
-      );
+          evMap.set(hostId, evts);
+          wfMap.set(hostId, await Promise.all(wfsRaw.map((w) => workflows.get(w.id).catch(() => w))));
+        }),
+        ...selectedCloudRefs.map(async (ref) => {
+          cloudMap.set(ref, await cloudAgentsApi.toolAuditEvents(ref, { limit: 200 }).catch(() => [] as ToolAuditEvent[]));
+        }),
+      ]);
 
-      setEventsByAgentHost(evMap);
-      setWfListByAgentHost(wfMap);
+      setEventsByHost(evMap);
+      setWfListByHost(wfMap);
+      setCloudEventsByRef(cloudMap);
     } catch (e) {
-      setTimelineError((e as Error).message ?? 'Failed to load timeline');
+      setDiagError((e as Error).message ?? 'Failed to load diagnostics');
     } finally {
-      setTimelineLoading(false);
+      setDiagLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIdsKey]);
+  }, [selectionKey]);
 
+  // Cloud telemetry feeds BOTH the timeline and the (stream-less) cloud log view,
+  // so load it whenever the selection has a cloud agent — in either view. Host
+  // timeline data is only needed for the timeline view (host logs come via WS).
   useEffect(() => {
-    if (view === 'timeline' && selectedIds.length > 0) {
-      void loadTimeline();
-    }
+    if (!hasSelection) return;
+    if (view === 'timeline' || selectedCloudRefs.length > 0) void loadDiagnostics();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, selectedIdsKey, loadTimeline]);
+  }, [view, selectionKey, loadDiagnostics]);
 
-  const filteredLogs =
-    logLevel === 'all' ? logLines : logLines.filter((l) => l.level === logLevel);
-
-  // Build timeline tracks from all agentHosts, tagged by agentHost
-  const tracks: TimelineTrack[] = [];
-  for (const [agentHostId, evts] of eventsByAgentHost) {
-    const agentHost = agentHostById.current.get(agentHostId);
-    const agentHostName = agentHost?.name ?? `AgentHost ${agentHostId}`;
+  // ---- Derive log lines (host WS + cloud telemetry), timeline tracks --------
+  const cloudLogLines: LogLine[] = [];
+  for (const [ref, evts] of cloudEventsByRef) {
+    const name = nameForKey(`cloud:${ref}`);
     for (const ev of evts) {
-      if (categoryFilter && !(ev.category ?? '').includes(categoryFilter)) continue;
-      const startMs = new Date(ev.ts).getTime();
-      const endMs = startMs + (ev.durationMs ?? 0);
-      tracks.push({
-        label: ev.category ? `${ev.toolName} (${ev.category})` : ev.toolName,
-        kind: 'tool',
-        startMs,
-        endMs,
-        status: 'completed',
-        detail: ev.args ? truncate(ev.args, 120) : undefined,
-        agentHostId,
-        agentHostName,
+      const res = (ev.result ?? '').toLowerCase();
+      cloudLogLines.push({
+        ts: ev.ts,
+        level: res.includes('gateway 4') || res.includes('gateway 5') ? 'error' : 'info',
+        msg: `${ev.toolName}${ev.category ? ` (${ev.category})` : ''}${ev.durationMs ? ` · ${fmtDuration(ev.durationMs)}` : ''}${ev.result ? ` — ${ev.result}` : ''}`,
+        agentKey: `cloud:${ref}`,
+        agentName: name,
       });
     }
   }
-  for (const [agentHostId, wfList] of wfListByAgentHost) {
-    const agentHost = agentHostById.current.get(agentHostId);
-    const agentHostName = agentHost?.name ?? `AgentHost ${agentHostId}`;
+  const mergedLogs = [...logLines, ...cloudLogLines].sort((a, b) => a.ts.localeCompare(b.ts));
+  const filteredLogs = logLevel === 'all' ? mergedLogs : mergedLogs.filter((l) => l.level === logLevel);
+
+  const tracks: TimelineTrack[] = [];
+  const pushToolEvent = (ev: ToolAuditEvent, agentKey: string, agentName: string) => {
+    if (categoryFilter && !(ev.category ?? '').includes(categoryFilter)) return;
+    const startMs = new Date(ev.ts).getTime();
+    tracks.push({
+      label: ev.category ? `${ev.toolName} (${ev.category})` : ev.toolName,
+      kind: 'tool',
+      startMs,
+      endMs: startMs + (ev.durationMs ?? 0),
+      status: 'completed',
+      detail: ev.result ? truncate(ev.result, 120) : ev.args ? truncate(ev.args, 120) : undefined,
+      agentKey,
+      agentName,
+    });
+  };
+  for (const [hostId, evts] of eventsByHost) {
+    const key = `host:${hostId}`;
+    const name = nameForKey(key);
+    for (const ev of evts) pushToolEvent(ev, key, name);
+  }
+  for (const [ref, evts] of cloudEventsByRef) {
+    const key = `cloud:${ref}`;
+    const name = nameForKey(key);
+    for (const ev of evts) pushToolEvent(ev, key, name);
+  }
+  for (const [hostId, wfList] of wfListByHost) {
+    const key = `host:${hostId}`;
+    const name = nameForKey(key);
     for (const wf of wfList) {
       if (!wf.tasks) continue;
       for (const t of wf.tasks) {
-        const startMs = t.startedAt
-          ? new Date(t.startedAt).getTime()
-          : new Date(t.createdAt).getTime();
+        const startMs = t.startedAt ? new Date(t.startedAt).getTime() : new Date(t.createdAt).getTime();
         const endMs = t.completedAt ? new Date(t.completedAt).getTime() : startMs + 1;
         tracks.push({
           label: `${t.agentRole}: ${truncate(t.description, 60)}`,
@@ -312,108 +382,67 @@ export function ObservabilityContent({
           endMs,
           status: t.status,
           detail: t.output ? truncate(t.output, 120) : undefined,
-          agentHostId,
-          agentHostName,
+          agentKey: key,
+          agentName: name,
         });
       }
     }
   }
   tracks.sort((a, b) => a.startMs - b.startMs);
 
-  const hasSelection = selectedIds.length > 0;
+  const hasCloudSelection = selectedCloudRefs.length > 0;
+  const hasHostSelection = selectedHostIds.length > 0;
 
+  // --------------------------------------------------------------------------
   return (
-    <div
-      className={className}
-      style={{ display: 'flex', flexDirection: 'column', gap: 20, ...style }}
-    >
-      {/* Active AgentHost — above tabs */}
+    <div className={className} style={{ display: 'flex', flexDirection: 'column', gap: 20, ...style }}>
+      {/* Unified agent directory */}
       <div style={cardStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-            Self-hosted agents
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Agents</span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            Click an agent to view its diagnostics. Select more than one to compare.
           </span>
-          {propAgentHostId == null && agentHostList.length > 0 && (
-            <>
-              <button
-                type="button"
-                onClick={selectAllAgentHosts}
-                style={{
-                  padding: '4px 10px',
-                  fontSize: 11,
-                  background: 'var(--bg-deep)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 6,
-                  color: 'var(--text-secondary)',
-                  cursor: 'pointer',
-                }}
-              >
-                Select all
-              </button>
-              <button
-                type="button"
-                onClick={clearAgentHosts}
-                style={{
-                  padding: '4px 10px',
-                  fontSize: 11,
-                  background: 'var(--bg-deep)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 6,
-                  color: 'var(--text-secondary)',
-                  cursor: 'pointer',
-                }}
-              >
-                Clear
-              </button>
-            </>
+          {!scoped && unifiedAgents.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+              <button type="button" onClick={selectAll} style={smallBtn}>Select all</button>
+              <button type="button" onClick={clearSelection} style={smallBtn}>Clear</button>
+            </div>
           )}
         </div>
-        {propAgentHostId != null ? (
+
+        {scoped ? (
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            {propAgentHostName ?? `AgentHost ${propAgentHostId}`} (scoped from panel)
+            {propAgentHostName ?? `Agent ${propAgentHostId}`} (scoped from panel)
           </div>
-        ) : agentHostListLoading ? (
+        ) : dirLoading ? (
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading agents…</div>
-        ) : agentHostList.length === 0 ? (
-          <div
-            style={{
-              fontSize: 13,
-              color: 'var(--text-muted)',
-              padding: 12,
-              background: 'var(--bg-deep)',
-              borderRadius: 8,
-              border: '1px solid var(--border-subtle)',
-            }}
-          >
-            {agentHostListError ? (
-              <span>{agentHostListError}</span>
+        ) : unifiedAgents.length === 0 ? (
+          <div style={emptyBox}>
+            {dirError ? (
+              <span>{dirError}</span>
             ) : (
               <>
-                No agents connected. Register a BuilderForce Agents instance in{' '}
-                <Link href="/workforce" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>
-                  Workforce
-                </Link>{' '}
-                and connect it with the API key.
+                No agents yet. Register a self-hosted agent in{' '}
+                <Link href="/workforce" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>Workforce</Link>{' '}
+                or create a cloud agent — both appear here once they run.
               </>
             )}
           </div>
         ) : (
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 8,
-            }}
-          >
-            {agentHostList.map((c, idx) => {
-              const checked = selectedAgentHostIds.has(c.id);
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {unifiedAgents.map((a) => {
+              const checked = selectedKeySet.has(a.key);
+              const pill = KIND_PILL[a.kind];
               return (
-                <label
-                  key={c.id}
+                <button
+                  key={a.key}
+                  type="button"
+                  onClick={() => toggleAgent(a.key)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 6,
+                    gap: 8,
                     padding: '6px 12px',
                     background: checked ? 'var(--surface-coral-soft)' : 'var(--bg-deep)',
                     border: `1px solid ${checked ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
@@ -423,508 +452,223 @@ export function ObservabilityContent({
                     color: checked ? 'var(--coral-bright)' : 'var(--text-secondary)',
                   }}
                 >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleAgentHost(c.id)}
-                    style={{ accentColor: 'var(--coral-bright)' }}
-                  />
+                  {checked && (
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: colorForKey(selectedKeys, a.key), flexShrink: 0 }} />
+                  )}
+                  {a.name}
+                  <span style={pillStyle(pill.bg, pill.color)}>{pill.label}</span>
+                  {a.kind === 'host' && (
+                    <span
+                      style={pillStyle(
+                        a.online ? 'rgba(34,197,94,0.15)' : 'var(--bg-elevated)',
+                        a.online ? 'rgba(34,197,94,0.95)' : 'var(--text-muted)'
+                      )}
+                    >
+                      {a.online ? 'ONLINE' : 'OFFLINE'}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Single view toggle — diagnostics as a log view or a timeline view */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>View:</span>
+        <button type="button" onClick={() => setView('logs')} style={toggleBtn(view === 'logs')}>Log view</button>
+        <button type="button" onClick={() => setView('timeline')} style={toggleBtn(view === 'timeline')}>Timeline view</button>
+      </div>
+
+      {/* LOG VIEW */}
+      {view === 'logs' && (
+        <div style={cardStyle}>
+          {hasSelection && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+              {hasHostSelection && (
+                <>
                   <span
                     style={{
                       width: 8,
                       height: 8,
                       borderRadius: '50%',
-                      background: agentHostColor(idx),
-                      flexShrink: 0,
+                      background:
+                        connState === 'connected'
+                          ? 'var(--green, #22c55e)'
+                          : connState === 'offline'
+                            ? 'var(--red, #ef4444)'
+                            : 'var(--text-muted)',
                     }}
                   />
-                  {c.name}
-                  <span
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      letterSpacing: 0.3,
-                      padding: '1px 6px',
-                      borderRadius: 9999,
-                      background: c.online ? 'rgba(34,197,94,0.15)' : 'var(--bg-elevated)',
-                      color: c.online ? 'rgba(34,197,94,0.95)' : 'var(--text-muted)',
-                    }}
-                  >
-                    {c.online ? 'ONLINE' : 'OFFLINE'}
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Cloud agents — visible for completeness, but they run server-side via
-            the gateway and don't stream relay logs; their activity shows in their
-            runs (Architect / Task agent / workflow telemetry), not here. */}
-        {propAgentHostId == null && cloudAgents.length > 0 && (
-          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Cloud agents</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {cloudAgents.map((a) => (
-                <span
-                  key={`cloud-${a.ref}`}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
-                    background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8,
-                    fontSize: 13, color: 'var(--text-secondary)',
-                  }}
-                >
-                  {a.name}
-                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.3, padding: '1px 6px', borderRadius: 9999, background: 'var(--surface-coral-soft)', color: 'var(--accent)' }}>CLOUD</span>
-                </span>
-              ))}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
-              Cloud agents run server-side via the gateway and don&apos;t stream live relay logs. Their activity appears in their runs — Architect analyses, the Task agent panel, and workflow telemetry.
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Tabs — views into selected agents */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>View:</span>
-        <button
-          type="button"
-          onClick={() => setView('logs')}
-          style={{
-            padding: '6px 12px',
-            fontSize: 13,
-            fontWeight: 600,
-            background: view === 'logs' ? 'var(--surface-coral-soft)' : 'var(--bg-deep)',
-            color: view === 'logs' ? 'var(--coral-bright)' : 'var(--text-secondary)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
-            cursor: 'pointer',
-          }}
-        >
-          Logs
-        </button>
-        <button
-          type="button"
-          onClick={() => setView('timeline')}
-          style={{
-            padding: '6px 12px',
-            fontSize: 13,
-            fontWeight: 600,
-            background: view === 'timeline' ? 'var(--surface-coral-soft)' : 'var(--bg-deep)',
-            color: view === 'timeline' ? 'var(--coral-bright)' : 'var(--text-secondary)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
-            cursor: 'pointer',
-          }}
-        >
-          Timeline
-        </button>
-      </div>
-
-      {/* Content — Logs or Timeline */}
-      {view === 'logs' && (
-        <div style={cardStyle}>
-          {hasSelection && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                marginBottom: 10,
-                flexWrap: 'wrap',
-              }}
-            >
-              <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  background:
-                    connState === 'connected'
-                      ? 'var(--green, #22c55e)'
-                      : connState === 'offline'
-                        ? 'var(--red, #ef4444)'
-                        : 'var(--text-muted)',
-                }}
-              />
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{connState}</span>
-              <select
-                value={logLevel}
-                onChange={(e) => setLogLevel(e.target.value)}
-                style={{
-                  height: 28,
-                  padding: '3px 8px',
-                  fontSize: 12,
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 6,
-                  background: 'var(--bg-deep)',
-                  color: 'var(--text-primary)',
-                  width: 100,
-                }}
-              >
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{connState}</span>
+                </>
+              )}
+              {hasCloudSelection && (
+                <button type="button" onClick={() => void loadDiagnostics()} disabled={diagLoading} style={smallBtn}>
+                  {diagLoading ? 'Refreshing…' : 'Refresh cloud'}
+                </button>
+              )}
+              <select value={logLevel} onChange={(e) => setLogLevel(e.target.value)} style={selectStyle}>
                 <option value="all">all</option>
                 <option value="error">error</option>
                 <option value="warn">warn</option>
                 <option value="info">info</option>
                 <option value="debug">debug</option>
               </select>
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  fontSize: 12,
-                  color: 'var(--text-muted)',
-                  cursor: 'pointer',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={autoScroll}
-                  onChange={(e) => setAutoScroll(e.target.checked)}
-                />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} />
                 Auto-scroll
               </label>
-              <button
-                type="button"
-                onClick={() => setLogLines([])}
-                style={{
-                  padding: '4px 10px',
-                  fontSize: 12,
-                  background: 'var(--bg-deep)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 6,
-                  color: 'var(--text-secondary)',
-                  cursor: 'pointer',
-                }}
-              >
-                Clear
-              </button>
+              <button type="button" onClick={() => setLogLines([])} style={smallBtn}>Clear</button>
             </div>
           )}
-          <div
-            style={{
-              background: 'var(--bg-deep)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
-              padding: 12,
-              minHeight: 280,
-              fontFamily: 'var(--font-mono)',
-              fontSize: 12,
-              color: 'var(--text-muted)',
-              overflow: 'auto',
-            }}
-          >
+          {hasCloudSelection && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+              Cloud agents run server-side via the gateway (no live relay stream); their log lines are
+              derived from execution telemetry. Use “Refresh cloud” for the latest.
+            </div>
+          )}
+          <div style={logPaneStyle}>
             {!hasSelection ? (
               <div style={{ color: 'var(--text-muted)' }}>
-                {agentHostList.length === 0 && !agentHostListLoading
-                  ? 'Register an agent in Workforce first, then select above.'
-                  : 'Select one or more agents above to stream logs.'}
+                {unifiedAgents.length === 0 && !dirLoading
+                  ? 'Register or create an agent first, then select it above.'
+                  : 'Select one or more agents above to view diagnostics.'}
               </div>
             ) : filteredLogs.length === 0 ? (
-              <div style={{ color: 'var(--text-muted)' }}>
-                Waiting for log output…
-              </div>
+              <div style={{ color: 'var(--text-muted)' }}>Waiting for log output…</div>
             ) : (
-              filteredLogs.map((l, i) => {
-                const agentHostIdx = selectedIds.indexOf(l.agentHostId);
-                const color = agentHostColor(agentHostIdx >= 0 ? agentHostIdx : 0);
-                return (
-                  <div
-                    key={i}
+              filteredLogs.map((l, i) => (
+                <div
+                  key={i}
+                  style={{
+                    marginBottom: 4,
+                    color:
+                      l.level === 'error'
+                        ? 'var(--red, #ef4444)'
+                        : l.level === 'warn'
+                          ? 'var(--amber, #f59e0b)'
+                          : 'var(--text-secondary)',
+                  }}
+                >
+                  <span style={{ opacity: 0.5, marginRight: 8 }}>{l.ts.slice(11, 19)}</span>
+                  <span
                     style={{
-                      marginBottom: 4,
-                      color:
-                        l.level === 'error'
-                          ? 'var(--red, #ef4444)'
-                          : l.level === 'warn'
-                            ? 'var(--amber, #f59e0b)'
-                            : 'var(--text-secondary)',
+                      display: 'inline-block',
+                      marginRight: 8,
+                      padding: '1px 6px',
+                      borderRadius: 4,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      background: colorForKey(selectedKeys, l.agentKey),
+                      color: '#fff',
+                      opacity: 0.9,
                     }}
                   >
-                    <span style={{ opacity: 0.5, marginRight: 8 }}>
-                      {l.ts.slice(11, 19)}
-                    </span>
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        marginRight: 8,
-                        padding: '1px 6px',
-                        borderRadius: 4,
-                        fontSize: 10,
-                        fontWeight: 600,
-                        background: color,
-                        color: '#fff',
-                        opacity: 0.9,
-                      }}
-                    >
-                      {l.agentHostName}
-                    </span>
-                    <span
-                      style={{
-                        minWidth: 40,
-                        display: 'inline-block',
-                        marginRight: 8,
-                        textTransform: 'uppercase',
-                        fontSize: 10,
-                        opacity: 0.7,
-                      }}
-                    >
-                      {l.level}
-                    </span>
-                    {l.msg}
-                  </div>
-                );
-              })
+                    {l.agentName}
+                  </span>
+                  <span style={{ minWidth: 40, display: 'inline-block', marginRight: 8, textTransform: 'uppercase', fontSize: 10, opacity: 0.7 }}>
+                    {l.level}
+                  </span>
+                  {l.msg}
+                </div>
+              ))
             )}
             <div ref={logEndRef} style={{ height: 1 }} />
           </div>
         </div>
       )}
 
+      {/* TIMELINE VIEW */}
       {view === 'timeline' && (
         <div style={cardStyle}>
           <div style={{ fontWeight: 600, marginBottom: 10 }}>Timeline</div>
-          {hasSelection && (
+          {hasSelection ? (
             <>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  marginBottom: 12,
-                  flexWrap: 'wrap',
-                }}
-              >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
                 <input
                   type="text"
-                  placeholder="Category filter (e.g. thinking)"
+                  placeholder="Category filter (e.g. llm, thinking)"
                   value={categoryFilter}
                   onChange={(e) => setCategoryFilter(e.target.value)}
-                  style={{
-                    padding: '6px 10px',
-                    fontSize: 12,
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
-                    background: 'var(--bg-deep)',
-                    color: 'var(--text-primary)',
-                    width: 200,
-                  }}
+                  style={{ ...selectStyle, width: 200 }}
                 />
-                <button
-                  type="button"
-                  onClick={() => void loadTimeline()}
-                  disabled={timelineLoading}
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: 12,
-                    background: 'var(--surface-coral-soft)',
-                    color: 'var(--coral-bright)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
-                    cursor: timelineLoading ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {timelineLoading ? 'Loading…' : 'Refresh'}
+                <button type="button" onClick={() => void loadDiagnostics()} disabled={diagLoading} style={toggleBtn(true)}>
+                  {diagLoading ? 'Loading…' : 'Refresh'}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setTimelineViewMode(timelineViewMode === 'list' ? 'timeline' : 'list')}
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: 12,
-                    background: 'var(--bg-deep)',
-                    color: 'var(--text-secondary)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {timelineViewMode === 'list' ? 'Timeline' : 'List'}
+                <button type="button" onClick={() => setTimelineViewMode(timelineViewMode === 'list' ? 'gantt' : 'list')} style={smallBtn}>
+                  {timelineViewMode === 'list' ? 'Gantt' : 'List'}
                 </button>
               </div>
-              <div
-                style={{
-                  background: 'var(--bg-deep)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
-                  padding: 24,
-                  minHeight: 240,
-                  overflow: 'auto',
-                }}
-              >
-                {timelineError ? (
-                  <div style={{ color: 'var(--red, #ef4444)', fontSize: 13 }}>{timelineError}</div>
-                ) : timelineLoading && tracks.length === 0 ? (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--text-muted)',
-                      fontSize: 13,
-                    }}
-                  >
-                    Loading timeline…
-                  </div>
+              <div style={{ background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 24, minHeight: 240, overflow: 'auto' }}>
+                {diagError ? (
+                  <div style={{ color: 'var(--red, #ef4444)', fontSize: 13 }}>{diagError}</div>
+                ) : diagLoading && tracks.length === 0 ? (
+                  <div style={centerMuted}>Loading timeline…</div>
                 ) : tracks.length === 0 ? (
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--text-muted)',
-                      fontSize: 13,
-                      gap: 8,
-                    }}
-                  >
+                  <div style={{ ...centerMuted, flexDirection: 'column', gap: 8 }}>
                     <div>No timeline events</div>
-                    <div style={{ fontSize: 12 }}>
-                      Tool audit events and workflow tasks will appear here once the agentHosts run.
-                    </div>
+                    <div style={{ fontSize: 12 }}>Tool-call audit events and workflow tasks appear here once the agents run.</div>
                   </div>
                 ) : timelineViewMode === 'list' ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {tracks.map((t, i) => {
-                      const agentHostIdx = selectedIds.indexOf(t.agentHostId);
-                      const color = agentHostColor(agentHostIdx >= 0 ? agentHostIdx : 0);
-                      return (
-                        <div
-                          key={i}
+                    {tracks.map((t, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
+                        <span
                           style={{
-                            display: 'flex',
-                            alignItems: 'flex-start',
-                            gap: 10,
-                            padding: '10px 14px',
-                            background: 'var(--bg-base)',
-                            border: '1px solid var(--border-subtle)',
-                            borderRadius: 8,
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            background:
+                              t.kind === 'tool'
+                                ? 'var(--accent, #6366f1)'
+                                : t.status === 'completed'
+                                  ? 'var(--green, #22c55e)'
+                                  : t.status === 'failed'
+                                    ? 'var(--red, #ef4444)'
+                                    : t.status === 'running'
+                                      ? 'var(--blue, #3b82f6)'
+                                      : 'var(--text-muted)',
+                            marginTop: 5,
+                            flexShrink: 0,
                           }}
-                        >
-                          <span
-                            style={{
-                              width: 8,
-                              height: 8,
-                              borderRadius: '50%',
-                              background:
-                                t.kind === 'tool'
-                                  ? 'var(--accent, #6366f1)'
-                                  : t.status === 'completed'
-                                    ? 'var(--green, #22c55e)'
-                                    : t.status === 'failed'
-                                      ? 'var(--red, #ef4444)'
-                                      : t.status === 'running'
-                                        ? 'var(--blue, #3b82f6)'
-                                        : 'var(--text-muted)',
-                              marginTop: 5,
-                              flexShrink: 0,
-                            }}
-                          />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 8,
-                                marginBottom: 2,
-                                flexWrap: 'wrap',
-                              }}
-                            >
-                              <span
-                                style={{
-                                  fontSize: 10,
-                                  fontWeight: 600,
-                                  padding: '2px 6px',
-                                  borderRadius: 4,
-                                  background: color,
-                                  color: '#fff',
-                                  flexShrink: 0,
-                                }}
-                              >
-                                {t.agentHostName}
-                              </span>
-                              <span
-                                style={{
-                                  fontSize: 13,
-                                  fontWeight: 500,
-                                  color: 'var(--text-primary)',
-                                }}
-                              >
-                                {t.label}
-                              </span>
-                            </div>
-                            <div
-                              style={{
-                                fontSize: 11,
-                                color: 'var(--text-muted)',
-                                marginTop: 2,
-                              }}
-                            >
-                              {fmtTime(t.startMs)}
-                              {t.endMs > t.startMs
-                                ? ` → ${fmtTime(t.endMs)} (${fmtDuration(t.endMs - t.startMs)})`
-                                : ''}
-                            </div>
-                            {t.detail && (
-                              <div
-                                style={{
-                                  fontSize: 11,
-                                  color: 'var(--text-muted)',
-                                  marginTop: 4,
-                                  fontFamily: 'var(--font-mono)',
-                                }}
-                              >
-                                {t.detail}
-                              </div>
-                            )}
+                        />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: colorForKey(selectedKeys, t.agentKey), color: '#fff', flexShrink: 0 }}>
+                              {t.agentName}
+                            </span>
+                            <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{t.label}</span>
                           </div>
-                          <span
-                            style={{
-                              fontSize: 11,
-                              padding: '2px 8px',
-                              borderRadius: 6,
-                              background: 'var(--bg-deep)',
-                              color: 'var(--text-secondary)',
-                              flexShrink: 0,
-                            }}
-                          >
-                            {t.status}
-                          </span>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                            {fmtTime(t.startMs)}
+                            {t.endMs > t.startMs ? ` → ${fmtTime(t.endMs)} (${fmtDuration(t.endMs - t.startMs)})` : ''}
+                          </div>
+                          {t.detail && (
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'var(--font-mono)' }}>{t.detail}</div>
+                          )}
                         </div>
-                      );
-                    })}
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'var(--bg-deep)', color: 'var(--text-secondary)', flexShrink: 0 }}>
+                          {t.status}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 ) : (
-                  <TimelineBarView tracks={tracks} selectedIds={selectedIds} agentHostById={agentHostById.current} />
+                  <TimelineBarView tracks={tracks} selectedKeys={selectedKeys} />
                 )}
               </div>
             </>
-          )}
-          {!hasSelection && (
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                minHeight: 240,
-                color: 'var(--text-muted)',
-                fontSize: 13,
-                gap: 8,
-              }}
-            >
-              {agentHostList.length === 0 && !agentHostListLoading ? (
+          ) : (
+            <div style={{ ...centerMuted, flexDirection: 'column', minHeight: 240, gap: 8 }}>
+              {unifiedAgents.length === 0 && !dirLoading ? (
                 <>
-                  <span>Register an agent in Workforce first.</span>
-                  <Link href="/workforce" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>
-                    Go to Workforce →
-                  </Link>
+                  <span>Register or create an agent first.</span>
+                  <Link href="/workforce" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>Go to Workforce →</Link>
                 </>
               ) : (
-                <span>Select one or more agents above to view execution timeline.</span>
+                <span>Select one or more agents above to view the execution timeline.</span>
               )}
             </div>
           )}
@@ -934,15 +678,70 @@ export function ObservabilityContent({
   );
 }
 
-function TimelineBarView({
-  tracks,
-  selectedIds,
-  agentHostById,
-}: {
-  tracks: TimelineTrack[];
-  selectedIds: number[];
-  agentHostById: Map<number, AgentHost>;
-}) {
+// --- shared inline style helpers (kept local; this is the only consumer) -----
+const smallBtn: React.CSSProperties = {
+  padding: '4px 10px',
+  fontSize: 11,
+  background: 'var(--bg-deep)',
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 6,
+  color: 'var(--text-secondary)',
+  cursor: 'pointer',
+};
+
+const selectStyle: React.CSSProperties = {
+  height: 28,
+  padding: '3px 8px',
+  fontSize: 12,
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 6,
+  background: 'var(--bg-deep)',
+  color: 'var(--text-primary)',
+};
+
+const emptyBox: React.CSSProperties = {
+  fontSize: 13,
+  color: 'var(--text-muted)',
+  padding: 12,
+  background: 'var(--bg-deep)',
+  borderRadius: 8,
+  border: '1px solid var(--border-subtle)',
+};
+
+const logPaneStyle: React.CSSProperties = {
+  background: 'var(--bg-deep)',
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 8,
+  padding: 12,
+  minHeight: 280,
+  fontFamily: 'var(--font-mono)',
+  fontSize: 12,
+  color: 'var(--text-muted)',
+  overflow: 'auto',
+};
+
+const centerMuted: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: 'var(--text-muted)',
+  fontSize: 13,
+};
+
+function toggleBtn(active: boolean): React.CSSProperties {
+  return {
+    padding: '6px 12px',
+    fontSize: 13,
+    fontWeight: 600,
+    background: active ? 'var(--surface-coral-soft)' : 'var(--bg-deep)',
+    color: active ? 'var(--coral-bright)' : 'var(--text-secondary)',
+    border: '1px solid var(--border-subtle)',
+    borderRadius: 8,
+    cursor: 'pointer',
+  };
+}
+
+function TimelineBarView({ tracks, selectedKeys }: { tracks: TimelineTrack[]; selectedKeys: string[] }) {
   const minMs = Math.min(...tracks.map((t) => t.startMs));
   const maxMs = Math.max(...tracks.map((t) => t.endMs || t.startMs + 1));
   const totalMs = Math.max(maxMs - minMs, 1);
@@ -954,34 +753,14 @@ function TimelineBarView({
 
   return (
     <div style={{ overflowX: 'auto' }}>
-      <svg
-        width={LABEL_W + BAR_W + PAD * 2}
-        height={totalH + 24}
-        style={{ fontFamily: 'var(--font-mono, monospace)', display: 'block' }}
-      >
+      <svg width={LABEL_W + BAR_W + PAD * 2} height={totalH + 24} style={{ fontFamily: 'var(--font-mono, monospace)', display: 'block' }}>
         {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
           const ms = minMs + totalMs * pct;
           const x = LABEL_W + pct * BAR_W;
           return (
             <g key={i}>
-              <line
-                x1={x}
-                y1={0}
-                x2={x}
-                y2={totalH}
-                stroke="var(--border-subtle)"
-                strokeWidth={1}
-                strokeDasharray="4 4"
-              />
-              <text
-                x={x}
-                y={totalH + 16}
-                fontSize={9}
-                fill="var(--text-muted)"
-                textAnchor="middle"
-              >
-                {fmtTime(ms)}
-              </text>
+              <line x1={x} y1={0} x2={x} y2={totalH} stroke="var(--border-subtle)" strokeWidth={1} strokeDasharray="4 4" />
+              <text x={x} y={totalH + 16} fontSize={9} fill="var(--text-muted)" textAnchor="middle">{fmtTime(ms)}</text>
             </g>
           );
         })}
@@ -989,10 +768,9 @@ function TimelineBarView({
           const y = PAD + i * (ROW_H + 4);
           const barX = LABEL_W + ((t.startMs - minMs) / totalMs) * BAR_W;
           const barW = Math.max(((t.endMs - t.startMs) / totalMs) * BAR_W, 4);
-          const agentHostIdx = selectedIds.indexOf(t.agentHostId);
           const color =
             t.kind === 'tool'
-              ? agentHostIdx >= 0 ? AGENT_HOST_COLORS[agentHostIdx % AGENT_HOST_COLORS.length] : 'var(--accent, #6366f1)'
+              ? colorForKey(selectedKeys, t.agentKey)
               : t.status === 'completed'
                 ? 'var(--green, #22c55e)'
                 : t.status === 'failed'
@@ -1000,29 +778,13 @@ function TimelineBarView({
                   : t.status === 'running'
                     ? 'var(--blue, #3b82f6)'
                     : 'var(--text-muted)';
-          const label = `[${t.agentHostName}] ${truncate(t.label, 20)}`;
+          const label = `[${t.agentName}] ${truncate(t.label, 20)}`;
           return (
             <g key={i}>
-              <text
-                x={LABEL_W - 6}
-                y={y + ROW_H / 2 + 4}
-                fontSize={10}
-                fill="var(--text-primary)"
-                textAnchor="end"
-              >
-                {truncate(label, 28)}
-              </text>
-              <rect
-                x={barX}
-                y={y}
-                width={barW}
-                height={ROW_H}
-                rx={4}
-                fill={color}
-                opacity={0.85}
-              >
+              <text x={LABEL_W - 6} y={y + ROW_H / 2 + 4} fontSize={10} fill="var(--text-primary)" textAnchor="end">{truncate(label, 28)}</text>
+              <rect x={barX} y={y} width={barW} height={ROW_H} rx={4} fill={color} opacity={0.85}>
                 <title>
-                  {t.agentHostName}: {t.label}
+                  {t.agentName}: {t.label}
                   {'\n'}
                   {fmtTime(t.startMs)} → {fmtTime(t.endMs)}
                   {'\n'}
@@ -1030,9 +792,7 @@ function TimelineBarView({
                   {t.detail ? `\n${t.detail}` : ''}
                 </title>
               </rect>
-              <text x={barX + barW + 4} y={y + ROW_H / 2 + 4} fontSize={10} fill="var(--text-muted)">
-                {fmtDuration(t.endMs - t.startMs)}
-              </text>
+              <text x={barX + barW + 4} y={y + ROW_H / 2 + 4} fontSize={10} fill="var(--text-muted)">{fmtDuration(t.endMs - t.startMs)}</text>
             </g>
           );
         })}
