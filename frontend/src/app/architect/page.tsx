@@ -182,7 +182,6 @@ export default function ArchitectPage() {
           <AgentAssignmentPanel
             scope="architecture"
             scopeId={projectId}
-            poolProjectId={projectId}
             title="Agents for this analysis"
             emptyHint="No agents assigned to architecture analysis for this project. Assign one to have it perform the analysis."
           />
