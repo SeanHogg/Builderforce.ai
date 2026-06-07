@@ -10,7 +10,7 @@ import {
   TenantBillingStatus,
   asTenantId,
 } from '../../domain/shared/types';
-import { tenants as tenantsTable, tenantMembers as membersTable } from '../database/schema';
+import { tenants as tenantsTable, tenantMembers as membersTable, segments as segmentsTable } from '../database/schema';
 import type { Db } from '../database/connection';
 
 export class TenantRepository implements ITenantRepository {
@@ -83,6 +83,25 @@ export class TenantRepository implements ITenantRepository {
       })
       .returning();
     if (!inserted) throw new Error('Insert returned no rows');
+
+    // Mint the tenant's default segment. Design invariant (migration 0054):
+    // EVERY tenant always has >= 1 segment, so segment_id can be NOT NULL on
+    // every business entity and resolveSegment() never faults. The 0054 backfill
+    // only covered tenants that existed at migration time; new tenants must mint
+    // it here, or every request's resolveDefault() throws "No default segment".
+    // Mirrors the backfill shape (slug 'default', plan from tenant, is_default).
+    // onConflictDoNothing keeps it idempotent against the partial unique index
+    // uq_segments_one_default_per_tenant.
+    await this.db
+      .insert(segmentsTable)
+      .values({
+        tenantId:    inserted.id,
+        displayName: plain.name,
+        slug:        'default',
+        plan:        plain.plan,
+        isDefault:   true,
+      })
+      .onConflictDoNothing();
 
     // Persist initial members
     if (plain.members.length > 0) {
