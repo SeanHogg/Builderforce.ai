@@ -3,7 +3,7 @@
  *   - HTTP  → the host-authed Builderforce endpoints (Bearer agentHost API key)
  *   - Git   → the system `git` CLI, cloning/pushing through the HOST git-proxy
  *             with the agentHost key injected as an HTTP extra-header (the token
- *             itself stays server-side; we only send our OWN clk key)
+ *             itself stays server-side; we only send our OWN agent API key)
  *   - Agent → the local gateway chat.send + the coding-session completion broker
  *
  * Kept separate from the pure orchestration so the latter stays unit-testable.

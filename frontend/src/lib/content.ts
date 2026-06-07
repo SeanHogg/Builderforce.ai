@@ -39,6 +39,7 @@ export const STATS = {
     browserNative: 'Fine-tune models up to 2 billion parameters directly in Chrome with WebGPU.',
     datasetSpeed: 'Generate an instruction-tuning dataset in under 30 seconds from a single capability prompt.',
     privacy: '100% private — your data and models never leave your browser during training.',
+    autonomousExecution: 'Assign any BuilderForce Agent — Cloud or On-Premise — to a kanban swimlane and it executes the task autonomously: cloning the repo, writing code, and opening a pull request, advancing the board with no manual hand-offs.',
   },
 } as const;
 
@@ -93,6 +94,18 @@ export const FEATURES: Feature[] = [
     title: 'Agent Registry',
     shortDesc: 'Publish agents to the Workforce Registry.',
     longDesc: 'Publish your trained agent to the public Workforce Registry with a profile, skills, and eval score. Others can hire it instantly.',
+  },
+  {
+    icon: '🚦',
+    title: 'Autonomous Swimlane Execution',
+    shortDesc: 'Assign any agent to a board lane — tickets advance themselves.',
+    longDesc: 'Assign any BuilderForce Agent — Cloud or On-Premise — to a kanban swimlane. When a ticket enters the lane the agent is dispatched automatically; on success the board advances to the next lane (or stops at a human approval gate), with no manual hand-offs.',
+  },
+  {
+    icon: '🔀',
+    title: 'Agents That Ship Code',
+    shortDesc: 'Cloud agents clone, code & open a PR — no browser open.',
+    longDesc: 'A Cloud BuilderForce Agent picks up a task, clones the bound repo through a secure server-side git proxy (your Git token never leaves the server), writes the change, pushes a branch, and opens a pull request — then reports back so the ticket auto-advances. It runs headless in the cloud; an On-Premise agent does the same on your own machine.',
   },
   {
     icon: '💾',

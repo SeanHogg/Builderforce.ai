@@ -30,7 +30,7 @@ const git = (args: string[], cwd?: string) =>
   exec("git", args, { cwd, maxBuffer: 64 * 1024 * 1024 });
 
 const AGENT_NODE_ID = "42";
-const API_KEY = "clk_test_key";
+const API_KEY = "test_agent_key";
 const DISPATCH_ID = "disp-e2e-0001";
 
 let tmpRoot: string;

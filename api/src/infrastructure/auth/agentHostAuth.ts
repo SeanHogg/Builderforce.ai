@@ -1,7 +1,7 @@
 /**
- * agentHostAuth — shared agentHost (claw) API-key authentication.
+ * agentHostAuth — shared BuilderForce Agent (agentHost) API-key authentication.
  *
- * A registered agentHost authenticates with its `clk_*` key either as
+ * A registered agent authenticates with its API key either as
  * `Authorization: Bearer <key>` + `X-AgentHost-Id: <id>`, or as
  * `?agentHostId=<id>&key=<key>` query params. Both the workflow claim/result
  * endpoints and the swimlane dispatch-result endpoint need EXACTLY this check,
@@ -18,7 +18,7 @@ export interface AuthedAgentHost {
   tenantId: number;
 }
 
-/** Verify a `clk_*` key against the stored hash for agentHost `id`. */
+/** Verify an agent API key against the stored hash for agentHost `id`. */
 export async function verifyAgentHostApiKey(
   db: Db,
   id: number,
