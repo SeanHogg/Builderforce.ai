@@ -1675,26 +1675,30 @@ full `api/src` rename (`Claw*`→`AgentHost*`, table `coderclaw_instances`→`ag
   commit/branch (intentional — pending review). Fixing (explicit `producesPrd` flag on the planning step + a
   `prd_edit`/section-merge tool agents can call) unblocks: collaborative PRD authoring across the swimlane.
 
-- **V1's ticket workspace is prompt-steered, not a hard-enforced cwd.** The ticket-workspace flow now runs on
-  **both engines** ([builderforce-relay.ts](agent-runtime/src/infra/builderforce-relay.ts) `ensureTaskWorkspace`/
-  `emitTaskChanges` shared by `runV1Engine`/`runV2Engine`): each ticket gets one shared `.builderforce/tasks/<taskId>`
-  dir, the repo is cloned once, the agent runs there, changes are diffed (`git status`) and emitted as
-  per-agent `file.change` frames (persisted via the relay DO → `POST /api/agent-hosts/:id/file-change` →
-  `task_file_changes`, migration 0089; read by the Changes tab), and on Done the relay commits/pushes
-  `builderforce/task-<id>` + opens a PR via [openTaskPullRequest](api/src/application/repos/openTaskPullRequest.ts).
-  **Residual nuance:** V2 sets the SDK's `cwd` directly, but **V1** runs through the gateway's `chat.send` whose
-  agent cwd isn't relay-controlled — so V1 is *steered* into the workspace via a prompt instruction ("work in
-  the cloned repo at <dir>", the same proven pattern as the swimlane `runCodingDispatch`). If a V1 agent
-  ignores that instruction and writes elsewhere, those edits won't be captured by the workspace diff. Fixing
-  (have the gateway `chat.send` accept an explicit per-task `cwd` so V1's working dir is enforced, not
-  suggested) unblocks: guaranteed V1 change capture. The no-runtime **cloud** path still can't clone/commit
-  (CF Worker has no FS) — a connected V2/self-hosted runtime is required for the repo half of the flow.
-- **`/llm/v1/messages` meters usage but does not enforce the plan daily-token cap.** Unlike
-  [`/v1/chat/completions`](api/src/presentation/routes/llmRoutes.ts) (which gates on `llmUsageLog` SUM vs the
-  plan cap), the new BYO-key `/v1/messages` proxy logs usage but has no pre-flight cap check — reasonable when
-  the tenant pays Anthropic directly via their own key, but means workspace daily caps don't apply to V2.
-  Fixing (reuse the same daily-cap gate, or document that BYO-key spend is uncapped) unblocks: consistent
-  budget enforcement across V1 and V2.
+- **"Agents are Users" is only partial — self-assign data is persisted but not surfaced or actionable.** When a
+  cloud agent runs a ticket it now self-assigns: `dispatchAndQueue` ([runtimeRoutes.ts](api/src/presentation/routes/runtimeRoutes.ts))
+  writes `tasks.assigned_agent_ref` (= the `ide_agents.id`, migration 0090). The PRD it drafts is now linked to
+  the task (`tasks.spec_id` via `linkSpecToTask` → shows on the task's PRD tab) and recorded as an
+  agent-attributed `PRD.md` change in `task_file_changes` (shows in the Changes tab). **Still missing:**
+  (1) `assigned_agent_ref` does NOT flow through `Task` ([api/src/domain/task/Task.ts](api/src/domain/task/Task.ts)
+  `toPlain`) / the repository / the frontend `Task` type, so the kanban card + drawer don't *show* the agent
+  assignee; (2) Auto/default runs have no `cloudAgentRef`, so there's no agent identity to assign; (3) agents
+  can't yet update the ticket's description/status themselves (no agent-facing task-mutation tool); (4) agents
+  aren't modeled as first-class users (avatar/identity/permissions). Fixing (thread `assignedAgentRef` through
+  the domain entity → frontend → an AgentChip on the card; add a `task_update` agent tool; an agent-user
+  identity) unblocks: agents visibly owning and updating their tickets.
+- **`/llm/v1/messages` does not enforce the plan daily-token cap.** The endpoint now defaults to OUR model pool
+  (Messages⇄OpenAI translation via [anthropicMessagesBridge.ts](api/src/application/llm/anthropicMessagesBridge.ts),
+  reusing `llmProxyForPlan`) when no tenant Anthropic key is set, and passes through to api.anthropic.com when a
+  BYO key exists. Unlike [`/v1/chat/completions`](api/src/presentation/routes/llmRoutes.ts) it skips the
+  `llmUsageLog`-SUM daily-cap gate — now more relevant since the our-models path bills US, not the tenant.
+  Fixing (reuse the same daily-cap gate on the our-models branch) unblocks: budget enforcement for V2 on our pool.
+- **The Anthropic⇄OpenAI streaming translation needs live validation against the Claude Agent SDK.** The bridge's
+  `createAnthropicStreamEncoder`/`pipeOpenAiSseToAnthropic` map OpenAI SSE deltas → Anthropic Messages events
+  (text + tool_use), unit-tested for the common sequences — but interleaved/parallel tool-call streaming and
+  partial-JSON edge cases haven't been exercised by a real SDK run (no live model available here). Fixing
+  (run the V2 SDK against `/llm/v1/messages` and reconcile any tool_use streaming gaps) unblocks: confidence the
+  default (no-BYO-key) V2 path drives the agent loop correctly.
 - **Live execution stream is per-isolate; assistant-text deltas aren't pushed mid-run.** The
   `/executions/:id/stream` WS subscriber map ([runtimeRoutes.ts](api/src/presentation/routes/runtimeRoutes.ts))
   lives in one Worker isolate, and self-hosted mid-run frames arrive at the relay DO (a different object), so

@@ -20,6 +20,8 @@ export interface TaskProps {
   githubPrUrl: string | null;
   githubPrNumber: number | null;
   assignedAgentHostId: AgentHostId | null;
+  /** ide_agents.id of the cloud agent working this ticket (agents are assignees). */
+  assignedAgentRef: string | null;
   startDate: Date | null;
   dueDate: Date | null;
   persona: string | null;
@@ -44,7 +46,7 @@ export class Task {
   static create(
     props: Omit<
       TaskProps,
-      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived'
+      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef'
     > & {
       projectKey: string;
       projectTaskCount: number;
@@ -70,6 +72,7 @@ export class Task {
       githubPrUrl: null,
       githubPrNumber: null,
       assignedAgentHostId: null,
+      assignedAgentRef: null,
       startDate: props.startDate ?? null,
       dueDate: props.dueDate ?? null,
       persona: props.persona ?? null,
@@ -100,6 +103,7 @@ export class Task {
   get githubPrUrl(): string | null { return this.props.githubPrUrl; }
   get githubPrNumber(): number | null { return this.props.githubPrNumber; }
   get assignedAgentHostId(): AgentHostId | null { return this.props.assignedAgentHostId; }
+  get assignedAgentRef(): string | null { return this.props.assignedAgentRef; }
   get startDate(): Date | null { return this.props.startDate; }
   get dueDate(): Date | null { return this.props.dueDate; }
   get persona(): string | null { return this.props.persona; }
@@ -116,7 +120,7 @@ export class Task {
       Pick<
         TaskProps,
         'title' | 'description' | 'status' | 'priority' | 'assignedAgentType'
-        | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'startDate' | 'dueDate'
+        | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'startDate' | 'dueDate'
         | 'persona' | 'archived'
       >
     >,
