@@ -256,14 +256,18 @@ export class BuilderforceRelayService implements IRelayService {
     // Record context so the session-final handler can diff + attribute changes.
     this.pendingTaskRun = { executionId: payload.executionId, taskId: payload.taskId, agentLabel, cwd };
 
+    // The agent's cwd is enforced to `cwd` via the chat.send workspaceDir param —
+    // its file tools default there. Only add the no-commit guidance for repo tasks.
     const effectivePrompt = payload.repo?.repoId
-      ? `${prompt}\n\n[Workspace] Work in the cloned repository at: ${cwd}\nEdit files there using absolute paths. Do NOT \`git commit\`/\`git push\` — changes are committed and a PR is opened automatically when the ticket is marked Done.`
+      ? `${prompt}\n\n[Workspace] You are working in the ticket's cloned repository. Do NOT \`git commit\`/\`git push\` — changes are committed and a PR is opened automatically when the ticket is marked Done.`
       : prompt;
 
     this.gatewayClient
       ?.request("chat.send", {
         sessionKey: "main",
         message: effectivePrompt,
+        // Enforce the shared ticket workspace as the agent's working directory.
+        ...(payload.taskId != null ? { workspaceDir: cwd } : {}),
         idempotencyKey: `task-${payload.sourceType}-${payload.taskId ?? "na"}-${payload.executionId ?? Date.now()}`,
       })
       .catch((err: unknown) => {

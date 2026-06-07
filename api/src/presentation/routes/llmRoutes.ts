@@ -41,6 +41,13 @@ import {
   isSupportedProvider,
 } from '../../application/llm/tenantProviderKeyService';
 import { parseAnthropicSseUsage } from '../../application/llm/anthropicSseUsage';
+import {
+  anthropicToOpenAiRequest,
+  openAiToAnthropicMessage,
+  createAnthropicStreamEncoder,
+  pipeOpenAiSseToAnthropic,
+  type AnthropicMessagesRequest,
+} from '../../application/llm/anthropicMessagesBridge';
 import { resolveKeyCached } from '../../infrastructure/auth/keyResolutionCache';
 import type { FailoverEvent } from '../../application/llm/LlmProxyService';
 import { verifyJwt, signJwt } from '../../infrastructure/auth/JwtService';
@@ -491,79 +498,115 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   });
 
   // -----------------------------------------------------------------------
-  // POST /v1/messages — Anthropic-Messages proxy using the tenant's BYO key.
-  // The BuilderForce-V2 (Claude Agent SDK) runner points ANTHROPIC_BASE_URL at
-  // `${api}/llm`, so its Messages calls land here. We authenticate the tenant
-  // (agentHost/tenant key or JWT), swap in the tenant's stored Anthropic key,
-  // proxy to api.anthropic.com, and meter usage on the tenant's ledger.
+  // POST /v1/messages — Anthropic-Messages endpoint for the BuilderForce-V2
+  // (Claude Agent SDK) runner, which points ANTHROPIC_BASE_URL at `${api}/llm`.
+  // The Agent SDK only needs an Anthropic-Messages-compatible endpoint + any
+  // auth token (the Ollama pattern), so a tenant Anthropic key is OPTIONAL:
+  //   • BYO key present → pass through to api.anthropic.com with that key.
+  //   • No key (default) → serve from OUR multi-vendor model pool by translating
+  //     Messages ⇄ our OpenAI-compatible proxy.
+  // Usage is metered on the tenant's ledger either way.
   // -----------------------------------------------------------------------
   router.post('/v1/messages', async (c) => {
     let access: TenantAccess;
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
 
-    const anthropicKey = await getTenantProviderKey(c.env, access.tenantId, 'anthropic');
-    if (!anthropicKey) {
-      return c.json({ error: 'No Anthropic API key configured for this tenant', code: 'no_provider_key' }, 400);
-    }
-
     const bodyText = await c.req.text();
-    let parsed: { stream?: boolean; model?: unknown };
-    try { parsed = JSON.parse(bodyText) as { stream?: boolean; model?: unknown }; }
+    let parsed: AnthropicMessagesRequest & { stream?: boolean; model?: unknown };
+    try { parsed = JSON.parse(bodyText) as AnthropicMessagesRequest & { stream?: boolean; model?: unknown }; }
     catch { return c.json({ error: 'invalid JSON body' }, 400); }
     const streamed = parsed.stream === true;
     const model = typeof parsed.model === 'string' ? parsed.model : 'unknown';
-    const product = productNameForPlan(toTenantPlan(access.effectivePlan));
+    const product = productNameForPlan(access.effectivePlan, access.premiumOverride);
     const idempotencyKey = c.req.header('idempotency-key') ?? null;
 
-    const upstream = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': anthropicKey,
-        'anthropic-version': c.req.header('anthropic-version') ?? '2023-06-01',
-        ...(c.req.header('anthropic-beta') ? { 'anthropic-beta': c.req.header('anthropic-beta') as string } : {}),
-      },
-      body: bodyText,
-    });
+    const anthropicKey = await getTenantProviderKey(c.env, access.tenantId, 'anthropic');
 
-    if (!streamed) {
-      const json = (await upstream.json().catch(() => null)) as
-        | { usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } }
-        | null;
-      if (upstream.ok && json?.usage) {
-        const u = json.usage;
-        logUsage(c.env, c.executionCtx, access.tenantId, access.userId, product, model, 0, false, {
-          promptTokens: u.input_tokens ?? 0,
-          completionTokens: u.output_tokens ?? 0,
-          totalTokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
-          cacheReadTokens: u.cache_read_input_tokens ?? 0,
-          cacheCreationTokens: u.cache_creation_input_tokens ?? 0,
-        }, { engine: 'builderforce-v2' }, idempotencyKey, 'v2_agent', access.tenantApiKeyId);
+    // ── BYO Anthropic key → pass through to real Anthropic ──────────────────
+    if (anthropicKey) {
+      const upstream = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': anthropicKey,
+          'anthropic-version': c.req.header('anthropic-version') ?? '2023-06-01',
+          ...(c.req.header('anthropic-beta') ? { 'anthropic-beta': c.req.header('anthropic-beta') as string } : {}),
+        },
+        body: bodyText,
+      });
+
+      if (!streamed) {
+        const json = (await upstream.json().catch(() => null)) as
+          | { usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } }
+          | null;
+        if (upstream.ok && json?.usage) {
+          const u = json.usage;
+          logUsage(c.env, c.executionCtx, access.tenantId, access.userId, product, model, 0, false, {
+            promptTokens: u.input_tokens ?? 0,
+            completionTokens: u.output_tokens ?? 0,
+            totalTokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
+            cacheReadTokens: u.cache_read_input_tokens ?? 0,
+            cacheCreationTokens: u.cache_creation_input_tokens ?? 0,
+          }, { engine: 'builderforce-v2' }, idempotencyKey, 'v2_agent', access.tenantApiKeyId);
+        }
+        return new Response(JSON.stringify(json ?? { error: 'upstream_error' }), {
+          status: upstream.status,
+          headers: { 'content-type': 'application/json' },
+        });
       }
-      return new Response(JSON.stringify(json ?? { error: 'upstream_error' }), {
+
+      if (!upstream.body) return c.json({ error: 'no upstream body' }, 502);
+      const [toClient, toMeter] = upstream.body.tee();
+      c.executionCtx.waitUntil((async () => {
+        try {
+          const text = await new Response(toMeter).text();
+          logUsage(
+            c.env, c.executionCtx, access.tenantId, access.userId, product, model, 0, true,
+            parseAnthropicSseUsage(text), { engine: 'builderforce-v2' }, idempotencyKey, 'v2_agent', access.tenantApiKeyId,
+          );
+        } catch { /* metering is best-effort */ }
+      })());
+      return new Response(toClient, {
         status: upstream.status,
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': upstream.headers.get('content-type') ?? 'text/event-stream', 'cache-control': 'no-cache' },
       });
     }
 
-    // Streaming: tee the SSE — one branch to the client, one to a usage meter.
-    if (!upstream.body) return c.json({ error: 'no upstream body' }, 502);
-    const [toClient, toMeter] = upstream.body.tee();
-    c.executionCtx.waitUntil((async () => {
-      try {
-        const text = await new Response(toMeter).text();
+    // ── No BYO key → serve from our model pool via Messages ⇄ OpenAI translation ──
+    const isPro = access.premiumOverride || access.effectivePlan !== 'free';
+    const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
+    if (!requiredKey) return c.json({ error: 'LLM proxy not configured', code: 'proxy_unconfigured' }, 503);
+
+    const openaiBody = anthropicToOpenAiRequest(parsed);
+    const traceId = newTraceId();
+    const messageId = `msg_${traceId}`;
+    const service = llmProxyForPlan(c.env, access.effectivePlan, access.premiumOverride);
+    const result = await service.complete(openaiBody as unknown as ChatCompletionRequest, undefined, traceId);
+    logFailovers(c.env, c.executionCtx, result.failovers);
+
+    if (streamed && result.response.body) {
+      const encoder = createAnthropicStreamEncoder({ messageId, model: result.resolvedModel });
+      const stream = pipeOpenAiSseToAnthropic(result.response.body, encoder, (usage) => {
         logUsage(
-          c.env, c.executionCtx, access.tenantId, access.userId, product, model, 0, true,
-          parseAnthropicSseUsage(text), { engine: 'builderforce-v2' }, idempotencyKey, 'v2_agent', access.tenantApiKeyId,
+          c.env, c.executionCtx, access.tenantId, access.userId, product, result.resolvedModel, result.retries, true,
+          usage, { engine: 'builderforce-v2', resolvedModel: result.resolvedModel }, idempotencyKey, 'v2_agent', access.tenantApiKeyId,
         );
-      } catch { /* metering is best-effort */ }
-    })());
-    return new Response(toClient, {
-      status: upstream.status,
-      headers: {
-        'content-type': upstream.headers.get('content-type') ?? 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', 'x-builderforce-model': result.resolvedModel },
+      });
+    }
+
+    const openaiJson = await result.response.json().catch(() => null) as Record<string, unknown> | null;
+    logUsage(
+      c.env, c.executionCtx, access.tenantId, access.userId, product, result.resolvedModel, result.retries, false,
+      result.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      { engine: 'builderforce-v2', resolvedModel: result.resolvedModel }, idempotencyKey, 'v2_agent', access.tenantApiKeyId,
+    );
+    return new Response(JSON.stringify(openAiToAnthropicMessage(openaiJson, result.resolvedModel, messageId)), {
+      status: result.response.status,
+      headers: { 'content-type': 'application/json', 'x-builderforce-model': result.resolvedModel },
     });
   });
 

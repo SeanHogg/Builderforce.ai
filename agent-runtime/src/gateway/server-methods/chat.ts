@@ -726,6 +726,7 @@ export const chatHandlers: GatewayRequestHandlers = {
       }>;
       timeoutMs?: number;
       idempotencyKey: string;
+      workspaceDir?: string;
     };
     const sanitizedMessageResult = sanitizeChatSendMessageInput(p.message);
     if (!sanitizedMessageResult.ok) {
@@ -913,6 +914,7 @@ export const chatHandlers: GatewayRequestHandlers = {
           runId: clientRunId,
           abortSignal: abortController.signal,
           images: parsedImages.length > 0 ? parsedImages : undefined,
+          ...(p.workspaceDir ? { workspaceDir: p.workspaceDir } : {}),
           onAgentRunStart: (runId) => {
             agentRunStarted = true;
             startedGatewayRunId = runId;
