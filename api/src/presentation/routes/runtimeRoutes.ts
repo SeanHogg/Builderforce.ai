@@ -348,6 +348,32 @@ async function loadGovernanceContext(db: Db, tenantId: number, projectId: number
  * `PRD.md` into the actual repo) requires a connected runtime — see gap register.
  * Here we persist to the canonical PRD store the PRD tab reads.
  */
+/** Associate a spec (PRD) with the task so it surfaces on the task's PRD tab. */
+async function linkSpecToTask(db: Db, taskId: number, specId: string): Promise<void> {
+  try {
+    await db.update(tasks).set({ specId, updatedAt: new Date() }).where(eq(tasks.id, taskId));
+  } catch { /* best-effort */ }
+}
+
+/** Record a durable, agent-attributed file change for the task's Changes tab. */
+async function recordTaskFileChange(
+  env: Env,
+  tenantId: number,
+  taskId: number,
+  executionId: number,
+  path: string,
+  change: 'created' | 'modified' | 'deleted',
+  agent: string,
+): Promise<void> {
+  try {
+    const sql = neon(env.NEON_DATABASE_URL);
+    await sql`
+      INSERT INTO task_file_changes (tenant_id, task_id, execution_id, path, change, agent)
+      VALUES (${tenantId}, ${taskId}, ${executionId}, ${path}, ${change}, ${agent})
+    `;
+  } catch { /* best-effort */ }
+}
+
 async function ensureProjectPrd(
   env: Env,
   db: Db,
@@ -355,6 +381,8 @@ async function ensureProjectPrd(
   taskRow: { title: string; description: string | null },
   tenantId: number,
   projectId: number,
+  taskId: number,
+  agentLabel: string,
   model: string | undefined,
 ): Promise<string> {
   let existingId: string | undefined;
@@ -365,7 +393,10 @@ async function ensureProjectPrd(
       .where(and(eq(specs.tenantId, tenantId), eq(specs.projectId, projectId)))
       .orderBy(desc(specs.updatedAt))
       .limit(1);
-    if (existing?.prd?.trim()) return existing.prd.trim(); // PRD already exists — reuse
+    if (existing?.prd?.trim()) {
+      if (existing.id) await linkSpecToTask(db, taskId, existing.id); // keep the task linked
+      return existing.prd.trim(); // PRD already exists — reuse
+    }
     existingId = existing?.id;
   } catch { /* fall through to generate */ }
 
@@ -385,29 +416,27 @@ async function ensureProjectPrd(
   prd = prd.trim();
   if (!prd) return '';
 
+  const specId = existingId ?? crypto.randomUUID();
   try {
     const now = new Date();
-    const specId = existingId ?? crypto.randomUUID();
     await db
       .insert(specs)
       .values({ id: specId, tenantId, projectId, goal: taskRow.title, status: 'draft', prd, createdAt: now, updatedAt: now })
       .onConflictDoUpdate({ target: [specs.id], set: { prd, goal: taskRow.title, updatedAt: now } });
   } catch { /* persistence failed — still use the PRD as context below */ }
 
-  // Surface the PRD as the first change + a note (best-effort; the PRD tab is the
-  // durable surface).
+  // Associate the PRD with the task (PRD tab) and record it as the first
+  // file change, attributed to the executing agent (durable, shows in Changes).
+  await linkSpecToTask(db, taskId, specId);
+  await recordTaskFileChange(env, tenantId, taskId, executionId, 'PRD.md', existingId ? 'modified' : 'created', agentLabel);
+
+  // Best-effort live notifications (subject to cross-isolate WS delivery).
   notifyExecutionSubscribers(executionId, {
-    type: 'file_change',
-    executionId,
-    path: 'PRD.md',
-    change: existingId ? 'modified' : 'created',
-    ts: new Date().toISOString(),
+    type: 'file_change', executionId, path: 'PRD.md', change: existingId ? 'modified' : 'created', ts: new Date().toISOString(),
   });
   notifyExecutionSubscribers(executionId, {
-    type: 'message',
-    executionId,
-    role: 'assistant',
-    text: '📝 Drafted the WIP **PRD** for this task and saved it — see the **PRD** tab. Proceeding with the deliverable against it.',
+    type: 'message', executionId, role: 'assistant',
+    text: `📝 ${agentLabel} drafted the WIP **PRD** for this task and saved it — see the **PRD** tab. Proceeding with the deliverable against it.`,
     ts: new Date().toISOString(),
   });
 
@@ -426,9 +455,10 @@ async function runCloudExecution(
   runtimeService: RuntimeService,
   db: Db,
   executionId: number,
-  taskRow: { title: string; description: string | null },
+  taskRow: { id: number; title: string; description: string | null },
   tenantId: number,
   projectId: number,
+  agentLabel: string,
   payload?: string,
 ): Promise<void> {
   let model: string | undefined;
@@ -449,7 +479,7 @@ async function runCloudExecution(
 
     // Step 1 — PRD-first. Step 2 — governance/arch context (parallel reads).
     const [prd, governance] = await Promise.all([
-      ensureProjectPrd(env, db, executionId, taskRow, tenantId, projectId, model),
+      ensureProjectPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model),
       loadGovernanceContext(db, tenantId, projectId),
     ]);
 
@@ -506,27 +536,30 @@ type SubmittedExecution = { id: number; status: string; toPlain(): unknown };
  * One indexed lookup per execution-submit (not a hot read path), so it is not
  * cached. Never throws — defaults to 'builderforce-v1' on any failure.
  */
+function parseCloudAgentRef(payload: string | undefined): string | undefined {
+  if (!payload) return undefined;
+  try {
+    const p = JSON.parse(payload) as { cloudAgentRef?: unknown };
+    return typeof p.cloudAgentRef === 'string' && p.cloudAgentRef.trim() ? p.cloudAgentRef.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function resolveCloudAgent(
   env: Env,
   tenantId: number,
   payload: string | undefined,
-): Promise<{ engine: string; label?: string }> {
-  const DEFAULT = { engine: 'builderforce-v1' as const };
-  if (!payload) return DEFAULT;
-  let ref: string | undefined;
-  try {
-    const p = JSON.parse(payload) as { cloudAgentRef?: unknown };
-    if (typeof p.cloudAgentRef === 'string' && p.cloudAgentRef.trim()) ref = p.cloudAgentRef.trim();
-  } catch {
-    return DEFAULT;
-  }
+): Promise<{ engine: string; label?: string; ref?: string }> {
+  const ref = parseCloudAgentRef(payload);
+  const DEFAULT = { engine: 'builderforce-v1' as const, ref };
   if (!ref) return DEFAULT;
   try {
     const sql = neon(env.NEON_DATABASE_URL);
     const rows = (await sql`SELECT engine, name FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ engine?: string; name?: string }>;
     const engine = typeof rows[0]?.engine === 'string' && rows[0].engine ? rows[0].engine : 'builderforce-v1';
     const label = typeof rows[0]?.name === 'string' && rows[0].name ? rows[0].name : undefined;
-    return { engine, label };
+    return { engine, label, ref };
   } catch {
     return DEFAULT;
   }
@@ -564,6 +597,13 @@ async function dispatchAndQueue(
     resolveDefaultRepoForTask(db, tenantId, taskRow.id),
   ]);
 
+  // Agents are first-class assignees: when a cloud agent runs the ticket, it
+  // self-assigns as it starts the work.
+  if (agent.ref) {
+    await db.update(tasks).set({ assignedAgentRef: agent.ref, updatedAt: new Date() })
+      .where(eq(tasks.id, taskRow.id)).catch(() => { /* best-effort */ });
+  }
+
   const message: DispatchMessage = {
     type: dispatchType,
     executionId: execution.id,
@@ -584,7 +624,7 @@ async function dispatchAndQueue(
     // No online self-hosted agent took it → queue a background cloud run. The
     // 'done' notification is emitted by the background task when it settles.
     c.executionCtx.waitUntil((async () => {
-      await runCloudExecution(c.env as Env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, payload);
+      await runCloudExecution(c.env as Env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', payload);
       const updated = await runtimeService.getExecution(execution.id);
       notifyExecutionSubscribers(execution.id, {
         type: 'done',
