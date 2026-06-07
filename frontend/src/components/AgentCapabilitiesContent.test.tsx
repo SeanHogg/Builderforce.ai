@@ -15,6 +15,11 @@ vi.mock('./CapabilitiesContent', () => ({
   ),
 }));
 
+// Observability is its own component (own data deps) — isolate it here.
+vi.mock('./ObservabilityContent', () => ({
+  ObservabilityContent: () => <div data-testid="observability" />,
+}));
+
 const agent: ProjectAgent = {
   id: 7,
   tenantId: 1,

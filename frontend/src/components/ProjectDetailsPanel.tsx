@@ -5,7 +5,6 @@ import Link from 'next/link';
 import type { Project } from '@/lib/types';
 import { updateProject } from '@/lib/api';
 import { checkProjectKeyAvailable } from '@/lib/builderforceApi';
-import { ObservabilityContent } from './ObservabilityContent';
 import { TaskMgmtContent } from './TaskMgmtContent';
 import { PRDsContent } from './PRDsContent';
 import { AgentCapabilitiesContent } from './AgentCapabilitiesContent';
@@ -22,8 +21,7 @@ export type ProjectPanelTab =
   | 'prds'
   | 'capabilities'
   | 'brainChat'
-  | 'workspace'
-  | 'observability';
+  | 'workspace';
 
 export interface ProjectDetailsPanelProps {
   project: Project;
@@ -47,7 +45,6 @@ const TABS: { id: ProjectPanelTab; label: string }[] = [
   { id: 'capabilities', label: 'Agent / Capabilities' },
   { id: 'brainChat', label: 'Brain Chat' },
   { id: 'workspace', label: 'Workspace' },
-  { id: 'observability', label: 'Observability' },
 ];
 
 const panelOverlayStyle: React.CSSProperties = {
@@ -599,7 +596,6 @@ export function ProjectDetailsPanel({
           {activeTab === 'capabilities' && (
             <AgentCapabilitiesContent projectId={project.id} agentHostId={project.assignedAgentHost?.id} />
           )}
-          {activeTab === 'observability' && <ObservabilityContent />}
         </div>
       </div>
     </>

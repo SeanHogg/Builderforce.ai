@@ -3,9 +3,10 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
+import { ideProxy } from '../../application/llm/LlmProxyService';
 import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, executions, projectInsightEvents, projects, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
@@ -271,6 +272,53 @@ async function dispatchToAgentHost(env: RuntimeHonoEnv['Bindings'], agentHostId:
   return response.ok;
 }
 
+/** Extract the assistant text from a gateway chat-completion response. */
+function extractCompletion(raw: unknown): string {
+  const c = (raw as { choices?: Array<{ message?: { content?: unknown } }> } | null)?.choices?.[0];
+  return typeof c?.message?.content === 'string' ? c.message.content : '';
+}
+
+/**
+ * Run an execution server-side via the gateway when NO online agentHost took the
+ * dispatch (Auto / cloud agent with no self-hosted runtime). The task is run as a
+ * single gateway completion using the chosen model (the cloud agent's, or the
+ * default), so a cloud/auto run produces a deliverable instead of hanging in
+ * `pending` forever. Coding tasks that need a real repo/runtime still belong on
+ * an agentHost — this is the fallback so non-host runs complete. Never throws.
+ */
+async function runCloudExecution(
+  env: Env,
+  runtimeService: RuntimeService,
+  executionId: number,
+  taskRow: { title: string; description: string | null },
+  payload?: string,
+): Promise<void> {
+  let model: string | undefined;
+  try {
+    const p = payload ? (JSON.parse(payload) as { model?: unknown }) : null;
+    if (p && typeof p.model === 'string' && p.model.trim()) model = p.model.trim();
+  } catch { /* payload not JSON — use default model */ }
+
+  try {
+    await runtimeService.update(executionId, { status: ExecutionStatus.RUNNING });
+    const result = await ideProxy(env).complete({
+      messages: [
+        { role: 'system', content: 'You are a BuilderForce agent executing a project task. Produce the concrete deliverable for the task as your response.' },
+        { role: 'user', content: `Task: ${taskRow.title}\n\n${taskRow.description ?? ''}`.trim() },
+      ],
+      ...(model ? { model } : {}),
+      useCase: 'task_execution',
+    });
+    const text = extractCompletion(await result.response.json().catch(() => null));
+    await runtimeService.update(executionId, { status: ExecutionStatus.COMPLETED, result: text || '(no output produced)' });
+  } catch (e) {
+    await runtimeService.update(executionId, {
+      status: ExecutionStatus.FAILED,
+      errorMessage: e instanceof Error ? e.message : String(e),
+    });
+  }
+}
+
 async function getDispatchTargets(db: Db, tenantId: number, assignedAgentHostId?: number | null): Promise<number[]> {
   if (assignedAgentHostId != null) {
     const [row] = await db
@@ -394,7 +442,24 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         artifacts,
       };
 
-      await Promise.all(targets.map((targetId) => dispatchToAgentHost(c.env, targetId, message).catch(() => false)));
+      const delivered = (
+        await Promise.all(targets.map((targetId) => dispatchToAgentHost(c.env, targetId, message).catch(() => false)))
+      ).some(Boolean);
+
+      // No online self-hosted agent took it → run server-side via the gateway so
+      // the execution completes instead of sitting in `pending` forever.
+      if (!delivered) {
+        await runCloudExecution(c.env as Env, runtimeService, execution.id, taskRow, body.payload);
+        const updated = await runtimeService.getExecution(execution.id);
+        notifyExecutionSubscribers(execution.id, {
+          type: 'status_change',
+          executionId: execution.id,
+          status: updated.status,
+          execution: updated.toPlain(),
+          ts: new Date().toISOString(),
+        });
+        return c.json(updated.toPlain(), 201);
+      }
     }
 
     notifyExecutionSubscribers(execution.id, {
@@ -504,7 +569,24 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         artifacts,
       };
 
-      await Promise.all(targets.map((targetId) => dispatchToAgentHost(c.env, targetId, message).catch(() => false)));
+      const delivered = (
+        await Promise.all(targets.map((targetId) => dispatchToAgentHost(c.env, targetId, message).catch(() => false)))
+      ).some(Boolean);
+
+      // No online self-hosted agent took it → run server-side via the gateway so
+      // the execution completes instead of sitting in `pending` forever.
+      if (!delivered) {
+        await runCloudExecution(c.env as Env, runtimeService, execution.id, taskRow, body.payload);
+        const updated = await runtimeService.getExecution(execution.id);
+        notifyExecutionSubscribers(execution.id, {
+          type: 'status_change',
+          executionId: execution.id,
+          status: updated.status,
+          execution: updated.toPlain(),
+          ts: new Date().toISOString(),
+        });
+        return c.json(updated.toPlain(), 201);
+      }
     }
 
     notifyExecutionSubscribers(execution.id, {

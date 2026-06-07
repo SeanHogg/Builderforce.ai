@@ -155,6 +155,20 @@ export class Tenant {
     });
   }
 
+  /**
+   * Rename the workspace. Only owners and managers may do so.
+   * The slug is intentionally left unchanged so existing URLs / references stay stable.
+   */
+  rename(actorUserId: string, name: string): Tenant {
+    if (!this.canManageMembers(actorUserId)) {
+      throw new ForbiddenError('Only owners and managers can rename a workspace');
+    }
+    const trimmed = name.trim();
+    if (!trimmed) throw new ValidationError('Tenant name is required');
+    if (trimmed === this.props.name) return this;
+    return new Tenant({ ...this.props, name: trimmed, updatedAt: new Date() });
+  }
+
   suspend(): Tenant {
     return new Tenant({ ...this.props, status: TenantStatus.SUSPENDED, updatedAt: new Date() });
   }

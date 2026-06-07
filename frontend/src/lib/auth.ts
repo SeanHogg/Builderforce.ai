@@ -496,3 +496,22 @@ export async function createTenant(webToken: string, name: string): Promise<Tena
   // Creator is always the owner of a newly created workspace
   return { id: String(data.id), name: data.name, slug: data.slug, role: 'owner' };
 }
+
+/** Rename a workspace (tenant). Requires WebJWT; caller must be owner or manager. */
+export async function renameTenant(webToken: string, tenantId: string, name: string): Promise<Tenant> {
+  const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/name`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${webToken}`,
+    },
+    body: JSON.stringify({ name: name.trim() }),
+  });
+  checkUnauthorizedAndRedirect(res, !!webToken);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { message?: string; error?: string };
+    throw new Error(body.message ?? body.error ?? 'Failed to rename workspace');
+  }
+  const data = await res.json() as { id: number; name: string; slug?: string };
+  return { id: String(data.id), name: data.name, slug: data.slug };
+}
