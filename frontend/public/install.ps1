@@ -10,17 +10,17 @@
 
 .EXAMPLE
   # Interactive — shows all available agents:
-  iwr -useb https://coderclaw.ai/install.ps1 | iex
+  iwr -useb https://builderforce.ai/install.ps1 | iex
 
   # Non-interactive — install a specific agent by ID:
-  & ([scriptblock]::Create((iwr -useb https://coderclaw.ai/install.ps1 -UseBasicParsing).Content)) -AgentId "agent-abc123"
+  & ([scriptblock]::Create((iwr -useb https://builderforce.ai/install.ps1 -UseBasicParsing).Content)) -AgentId "agent-abc123"
 
 .PARAMETER AgentId
   Optional. Install a specific agent by its registry ID without showing the menu.
 
 .PARAMETER ApiUrl
   Optional. Override the Builderforce API base URL.
-  Default: https://worker.coderclaw.ai
+  Default: https://api.builderforce.ai
 
 .PARAMETER InstallDir
   Optional. Directory where agent packages are saved.
@@ -28,7 +28,7 @@
 #>
 param(
     [string]$AgentId   = "",
-    [string]$ApiUrl    = "https://worker.coderclaw.ai",
+    [string]$ApiUrl    = "https://api.builderforce.ai",
     [string]$InstallDir = "$env:USERPROFILE\.builderforce\agents"
 )
 
@@ -64,14 +64,14 @@ try {
     Write-Host "     URL tried: $ApiUrl/api/agents" -ForegroundColor DarkGray
     Write-Host "     Error    : $_" -ForegroundColor DarkGray
     Write-Host ""
-    exit 1
+    return
 }
 
 if (-not $agents -or $agents.Count -eq 0) {
     Write-Host ""
     Write-Host "  No agents are currently published in the registry." -ForegroundColor Yellow
     Write-Host ""
-    exit 0
+    return
 }
 
 # ---------------------------------------------------------------------------
@@ -106,7 +106,7 @@ if (-not $AgentId) {
         Write-Host ""
         Write-Host "  Cancelled." -ForegroundColor DarkGray
         Write-Host ""
-        exit 0
+        return
     }
 
     $selectedAgents = @()
@@ -133,7 +133,7 @@ if (-not $AgentId) {
         Write-Host ""
         Write-Host "  No valid agents selected. Nothing installed." -ForegroundColor Yellow
         Write-Host ""
-        exit 0
+        return
     }
 } else {
     # Direct install by ID (non-interactive)
@@ -142,7 +142,7 @@ if (-not $AgentId) {
         Write-Host ""
         Write-Host "  ✗  No agent with ID '$AgentId' was found in the registry." -ForegroundColor Red
         Write-Host ""
-        exit 1
+        return
     }
 }
 

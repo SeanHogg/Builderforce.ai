@@ -91,6 +91,16 @@ export class TenantService {
     return this.tenants.save(tenant);
   }
 
+  async renameTenant(
+    tenantId: number,
+    actorUserId: string,
+    name: string,
+  ): Promise<Tenant> {
+    const tenant = await this.getTenant(tenantId);
+    const updated = tenant.rename(actorUserId, name);
+    return this.tenants.update(updated);
+  }
+
   async addMember(
     tenantId: number,
     actorUserId: string,

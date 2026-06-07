@@ -5,6 +5,7 @@ import { projectAgents, type ProjectAgent } from '@/lib/builderforceApi';
 import { loadAgentPool, AGENT_KIND_LABEL, type PoolAgent } from '@/lib/agentPool';
 import { CapabilitiesContent } from './CapabilitiesContent';
 import { CronJobsContent } from './CronJobsContent';
+import { ObservabilityContent } from './ObservabilityContent';
 
 export interface AgentCapabilitiesContentProps {
   projectId: number;
@@ -249,6 +250,13 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
           )}
         </div>
       )}
+
+      {/* Observability — pick an agent above to stream its logs / timeline. Lives
+          here (not its own tab) because observability is agent-scoped. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Observability</div>
+        <ObservabilityContent />
+      </div>
     </div>
   );
 }

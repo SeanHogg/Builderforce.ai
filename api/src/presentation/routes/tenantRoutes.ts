@@ -57,6 +57,18 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     return c.json(tenant.toPlain(), 201);
   });
 
+  // PATCH /api/tenants/:id/name  – WebJWT required; renames a workspace (owner/manager only)
+  // Lives on the web-auth path so the tenant picker can rename before a tenant JWT exists.
+  router.patch('/:id/name', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
+    const id     = Number(c.req.param('id'));
+    if (!Number.isFinite(id) || id <= 0) return c.json({ error: 'invalid tenant id' }, 400);
+    const body   = await c.req.json<{ name: string }>();
+    if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
+    const tenant = await tenantService.renameTenant(id, userId, body.name);
+    return c.json(tenant.toPlain());
+  });
+
   // All routes below require a tenant-scoped JWT
   router.use('*', authMiddleware);
 
