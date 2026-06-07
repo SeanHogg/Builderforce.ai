@@ -51,6 +51,7 @@ export async function fireAddressedTrigger(
     definition: parseDefinition(defRow.definition),
     name: defRow.name,
     projectId: defRow.projectId,
+    definitionId: row.definitionId,
     target: targetFromTrigger(row),
     triggerPayload: payload,
     triggerSource: source,

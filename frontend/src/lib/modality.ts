@@ -20,6 +20,9 @@ export interface ModalityDef {
   id: ProjectModality;
   label: string;
   icon: string;
+  /** One-line description of the project type, shown on the IDE dashboard's
+   *  "new project" chooser cards. Single source so the launcher doesn't inline copy. */
+  tagline: string;
   /** Roadmap placeholder — switcher renders it disabled with a "soon" tag. */
   comingSoon?: boolean;
   /** Static system-prompt prefix injected into the Brain so the AI knows the
@@ -49,6 +52,7 @@ export const MODALITIES: ModalityDef[] = [
     id: 'designer',
     label: 'Designer',
     icon: '🎨',
+    tagline: 'Generate and build apps with Preview, Code, and a live dev server.',
     brainSystemPrompt: [
       'You are an expert AI coding assistant built into Builderforce.ai, a browser-based IDE. Help users generate and build apps.',
       'Use markdown for your response: headings, lists, bold, and fenced code blocks.',
@@ -64,6 +68,7 @@ export const MODALITIES: ModalityDef[] = [
     id: 'video',
     label: 'Video',
     icon: '🎬',
+    tagline: 'Generate short videos client-side on your own GPU via diffusion.',
     brainSystemPrompt: [
       "You are an expert video director and prompt engineer inside Builderforce.ai's AI Video Studio.",
       'The user generates short videos entirely client-side via diffusion (LCM / SD-Turbo) running on their own GPU, with Mamba SSM state carrying frame-to-frame coherence.',
@@ -79,6 +84,7 @@ export const MODALITIES: ModalityDef[] = [
     id: 'llm',
     label: 'LLM',
     icon: '🧠',
+    tagline: 'Design datasets and train a custom model, then chat with it.',
     brainSystemPrompt:
       'You are assisting with building and training a custom LLM inside Builderforce.ai. Help the user design datasets, choose architectures, and reason about training runs.',
     brainPlaceholder: 'Ask about building or training your model…',

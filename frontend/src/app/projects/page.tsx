@@ -267,6 +267,7 @@ export default function ProjectsPage() {
                 project={project}
                 onCardClick={setDetailsProject}
                 onDetailsClick={setDetailsProject}
+                onOpenIde={(p) => router.push(`/ide/dashboard?project=${p.id}`)}
                 showDetailsButton
                 onAssignedAgentClick={(ac) => {
                   const agentHost = agentHostList.find((c) => c.id === ac.id);
@@ -408,7 +409,7 @@ export default function ProjectsPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => (window.location.href = `/ide/${project.publicId ?? project.id}`)}
+                          onClick={() => router.push(`/ide/dashboard?project=${project.id}`)}
                           aria-label="Open in IDE"
                           style={{
                             padding: 6,

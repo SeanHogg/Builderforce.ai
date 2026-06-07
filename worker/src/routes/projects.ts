@@ -90,13 +90,14 @@ projects.get('/', async (c) => {
 
 projects.post('/', async (c) => {
   try {
-    const body = await c.req.json<{ name: string; description?: string; template?: string }>();
+    const body = await c.req.json<{ name: string; description?: string; template?: string; modality?: string }>();
     const sql = neon(c.env.NEON_DATABASE_URL);
     const id = generateId();
     const template = body.template ?? 'vanilla';
+    const modality = body.modality ?? 'designer';
     const rows = await sql`
-      INSERT INTO projects (id, name, description, owner_id, template)
-      VALUES (${id}, ${body.name}, ${body.description ?? null}, 'anonymous', ${template})
+      INSERT INTO projects (id, name, description, owner_id, template, modality)
+      VALUES (${id}, ${body.name}, ${body.description ?? null}, 'anonymous', ${template}, ${modality})
       RETURNING *
     `;
     await createTemplateFiles(c.env.STORAGE, id, template);

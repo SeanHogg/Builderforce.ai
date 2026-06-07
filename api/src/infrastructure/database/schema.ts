@@ -1087,6 +1087,8 @@ export const workflows = pgTable('workflows', {
   agentHostId:       integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'cascade' }),
   /** Optional project this workflow belongs to (0086). Tenant-wide when null. */
   projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  /** Source definition this run was instantiated from (0094); null for ad-hoc runs. */
+  workflowDefinitionId: uuid('workflow_definition_id').references(() => workflowDefinitions.id, { onDelete: 'set null' }),
   /** Where this run executes: 'host' (self-hosted agentHost) | 'cloud' (builderforce-hosted). */
   runtime:      varchar('runtime', { length: 16 }).notNull().default('host'),
   /** ide_agents.id of the cloud agent serving the run when runtime='cloud'. */

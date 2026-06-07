@@ -32,6 +32,7 @@ export class DrizzleStageWorkflowRunner implements StageWorkflowRunner {
       definition: parseDefinition(defRow.definition),
       name: defRow.name,
       projectId: defRow.projectId,
+      definitionId: defRow.id,
       target: runTargetFromDefinition(defRow),
       triggerSource: `swimlane:ticket:${ctx.ticketRunId}`,
     });

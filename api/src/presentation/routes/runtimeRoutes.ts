@@ -5,7 +5,7 @@ import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaul
 import { commitPrdAsPendingChange } from '../../application/repos/commitPrdToRepo';
 import { resolveTicketRepoContext, commitAgentFile, type TicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
 import { createPullRequest } from '../../application/repos/createPullRequest';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
@@ -525,6 +525,11 @@ async function recordCloudUsage(
     });
   } catch { /* best-effort */ }
 }
+
+/** Synthetic cloud-agent ref for runs dispatched to the gateway default (no named
+ *  cloud agent) — so their telemetry is still attributable to a chip on the
+ *  Observability timeline. Shared with the frontend via the cloud-agents list. */
+const DEFAULT_CLOUD_REF = '__default__';
 
 /** Shape of one tool call in an OpenAI-compatible completion response. */
 interface RawToolCall { id?: string; type?: string; function?: { name?: string; arguments?: string } }
@@ -1381,15 +1386,62 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     });
   });
 
+  // GET /api/runtime/cloud-agents
+  // The cloud agents that have ACTUALLY run (distinct cloud_agent_ref in the
+  // telemetry), tenant-scoped — so the Observability directory surfaces every
+  // cloud run, not just agents registered in the workforce pool. Runs dispatched
+  // to the gateway default (no named agent) land under the DEFAULT_CLOUD_REF
+  // bucket so their telemetry is still attributable to a chip.
+  // Intentionally uncached: this is a low-QPS interactive debug surface that must
+  // reflect a run the instant it finishes; the alternative (a cached list keyed by
+  // a version token) would force a KV write on the hot per-tool-call insert path —
+  // a worse trade than an indexed SELECT DISTINCT over a tiny per-tenant keyspace.
+  router.get('/cloud-agents', async (c) => {
+    const tenantId = c.get('tenantId');
+    const rows = await db
+      .selectDistinct({ ref: toolAuditEvents.cloudAgentRef })
+      .from(toolAuditEvents)
+      .where(and(eq(toolAuditEvents.tenantId, tenantId), isNull(toolAuditEvents.agentHostId)));
+
+    const namedRefs = rows.map((r) => r.ref).filter((r): r is string => !!r);
+    const hasDefault = rows.some((r) => r.ref == null);
+
+    // Resolve display names from the raw-SQL ide_agents table (best-effort).
+    const nameByRef = new Map<string, string>();
+    if (namedRefs.length > 0) {
+      try {
+        const sql = neon((c.env as Env).NEON_DATABASE_URL);
+        const named = (await sql`
+          SELECT id, name FROM ide_agents WHERE tenant_id = ${tenantId} AND id = ANY(${namedRefs})
+        `) as Array<{ id: string; name: string }>;
+        for (const n of named) nameByRef.set(String(n.id), n.name);
+      } catch { /* names are cosmetic — fall back to the ref */ }
+    }
+
+    const agents = [
+      ...(hasDefault ? [{ ref: DEFAULT_CLOUD_REF, name: 'BuilderForce Cloud (default)' }] : []),
+      ...namedRefs.map((r) => ({ ref: r, name: nameByRef.get(r) ?? `Cloud agent ${r}` })),
+    ];
+    return c.json({ agents });
+  });
+
   // GET /api/runtime/agents/:ref/tool-audit?limit=
-  // Tool-audit events for ONE cloud agent (ide_agents.id), tenant-scoped, newest
-  // first — the cloud-side analogue of /agent-hosts/:id/tool-audit. Feeds the
-  // unified Observability timeline so cloud agents are as observable as hosts.
+  // Tool-audit events for ONE cloud agent (ide_agents.id, or DEFAULT_CLOUD_REF for
+  // gateway-default runs), tenant-scoped, newest first — the cloud-side analogue of
+  // /agent-hosts/:id/tool-audit. Feeds the unified Observability timeline so cloud
+  // agents are as observable as hosts.
   router.get('/agents/:ref/tool-audit', async (c) => {
     const ref = c.req.param('ref');
     const tenantId = c.get('tenantId');
     const limitRaw = Number(c.req.query('limit'));
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 500) : 200;
+
+    // DEFAULT_CLOUD_REF = cloud runs with no named agent (cloud_agent_ref IS NULL);
+    // scope to cloud rows (agent_host_id IS NULL) so a host run never leaks in.
+    const refCond =
+      ref === DEFAULT_CLOUD_REF
+        ? and(isNull(toolAuditEvents.cloudAgentRef), isNull(toolAuditEvents.agentHostId))
+        : eq(toolAuditEvents.cloudAgentRef, ref);
 
     const events = await db
       .select({
@@ -1406,12 +1458,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         ts: toolAuditEvents.ts,
       })
       .from(toolAuditEvents)
-      .where(
-        and(
-          eq(toolAuditEvents.tenantId, tenantId),
-          eq(toolAuditEvents.cloudAgentRef, ref),
-        ),
-      )
+      .where(and(eq(toolAuditEvents.tenantId, tenantId), refCond))
       .orderBy(desc(toolAuditEvents.ts))
       .limit(limit);
 

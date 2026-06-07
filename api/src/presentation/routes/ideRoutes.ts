@@ -10,8 +10,12 @@ import {
   ideProxy,
   type ChatCompletionRequest,
 } from '../../application/llm/LlmProxyService';
-
-const IDE_PREFIX = 'ide/';
+import {
+  IDE_PREFIX,
+  ensureProjectTemplate,
+  templateLooksUnseeded,
+  type SeedableProject,
+} from '../../application/project/projectTemplate';
 
 function generateId(): string {
   return crypto.randomUUID();
@@ -33,6 +37,27 @@ async function resolveProjectId(env: HonoEnv['Bindings'], param: string): Promis
     return row.id;
   }
   return parseProjectIdInt(param);
+}
+
+/** Fetch the fields the template-seeding decision needs, by numeric project id. */
+async function fetchSeedableProject(env: HonoEnv['Bindings'], id: number): Promise<SeedableProject | null> {
+  const rows = await neon(env.NEON_DATABASE_URL)`
+    SELECT template, modality, source_control_repo_full_name, github_repo_url
+    FROM projects WHERE id = ${id} LIMIT 1`;
+  const row = rows[0] as {
+    template: string | null;
+    modality: string | null;
+    source_control_repo_full_name: string | null;
+    github_repo_url: string | null;
+  } | undefined;
+  if (!row) return null;
+  return {
+    id,
+    template: row.template,
+    modality: row.modality,
+    sourceControlRepoFullName: row.source_control_repo_full_name,
+    githubRepoUrl: row.github_repo_url,
+  };
 }
 
 /** Parse AI response for dataset JSON array. */
@@ -67,8 +92,23 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
     const prefix = `${IDE_PREFIX}projects/${String(projectId)}/`;
-    const listed = await bucket.list({ prefix });
-    const fileEntries = (listed.objects ?? []).map(obj => ({
+    let objects = (await bucket.list({ prefix })).objects ?? [];
+
+    // Lazy self-heal: projects created before template seeding (or via the
+    // scaffold/upsert paths that historically didn't seed) open with their
+    // template files missing or empty. When the workspace looks unseeded, seed
+    // the vanilla starter so it opens runnable. The cheap in-memory
+    // `templateLooksUnseeded` gate runs first, so healthy projects never incur
+    // the project lookup or any writes — only a freshly-/un-seeded project does.
+    const rel = objects.map(o => ({ path: o.key!.replace(prefix, ''), size: o.size }));
+    if (templateLooksUnseeded(rel)) {
+      const project = await fetchSeedableProject(c.env, projectId);
+      if (project && (await ensureProjectTemplate(bucket, project, rel)) > 0) {
+        objects = (await bucket.list({ prefix })).objects ?? [];
+      }
+    }
+
+    const fileEntries = objects.map(obj => ({
       path: obj.key!.replace(prefix, ''),
       type: 'file' as const,
       content: '',

@@ -79,6 +79,8 @@ export async function createProject(data: {
   name: string;
   description?: string;
   template?: string;
+  /** IDE project type — 'designer' | 'video' | 'llm'. Defaults server-side to 'designer'. */
+  modality?: string;
 }): Promise<Project> {
   const res = await projectsRequest<Project>('/api/projects', {
     method: 'POST',
