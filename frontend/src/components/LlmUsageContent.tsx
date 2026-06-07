@@ -101,7 +101,7 @@ export function LlmUsageContent() {
 
             {/* Model list */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {(poolTab === 'free' ? health.free : health.pro).map((m) => (
+              {((poolTab === 'free' ? health.free : health.pro) ?? []).map((m) => (
                 <div
                   key={m.model}
                   style={{

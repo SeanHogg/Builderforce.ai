@@ -1374,16 +1374,28 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   // -----------------------------------------------------------------------
   // GET /v1/health
   // -----------------------------------------------------------------------
-  router.get('/v1/health', (c) =>
-    c.json({
+  router.get('/v1/health', async (c) => {
+    // Per-model availability/cooldown for each pool, mirroring /v1/models'
+    // `status()` shape (LlmModelStatus[]). The observability UI renders these
+    // as the free/pro pool tabs, so the contract is `free`/`pro` arrays +
+    // `timestamp` — NOT bare pool counts. Global pools, so no tenant needed.
+    const [free, pro] = await Promise.all([
+      llmProxyForPlan(c.env, 'free').status(),
+      llmProxyForPlan(c.env, 'pro').status(),
+    ]);
+    return c.json({
       status: 'ok',
       service: 'builderforceLLM',
+      free,
+      pro,
+      timestamp: new Date().toISOString(),
+      // Retained for any non-UI consumer of the historical shape.
       pool: FREE_MODEL_POOL.length,
       proPool: PRO_MODEL_POOL.length,
       imagePool: FREE_IMAGE_MODEL_POOL.length,
       imageProPool: PAID_IMAGE_MODEL_POOL.length,
-    }),
-  );
+    });
+  });
 
   return router;
 }
