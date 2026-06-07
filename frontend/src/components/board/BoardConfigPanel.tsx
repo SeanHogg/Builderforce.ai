@@ -6,14 +6,13 @@ import { BoardConnectionsManager } from '../integrations/BoardConnectionsManager
 import { useBoardConfig } from './useBoardConfig';
 import {
   boardsApi,
-  projectAgents,
   workflowDefinitions,
   type Board,
   type Swimlane,
   type SwimlaneAgent,
-  type ProjectAgent,
   type WorkflowDefinitionSummary,
 } from '@/lib/builderforceApi';
+import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 
 /**
  * Board-config slide-out opened from the Task-Mgmt COG. Configures the project's
@@ -271,15 +270,17 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
   // "which agent" + an optional model override.
   const [agentSel, setAgentSel] = useState(''); // 'kind:ref'
   const [model, setModel] = useState('');
-  const [available, setAvailable] = useState<ProjectAgent[]>([]);
+  const [available, setAvailable] = useState<PoolAgent[]>([]);
   const [adding, setAdding] = useState(false);
 
+  // Any agent registered to the tenant (workforce + registered) can be assigned
+  // to a lane — register once, assign anywhere — not just project-attached ones.
   useEffect(() => {
     if (!adding) return;
     let live = true;
-    projectAgents.list(board.projectId).then((a) => { if (live) setAvailable(a); }).catch(() => {});
+    loadAgentPool().then((a) => { if (live) setAvailable(a); }).catch(() => {});
     return () => { live = false; };
-  }, [adding, board.projectId]);
+  }, [adding]);
 
   const add = async () => {
     if (!agentSel) return;
@@ -315,7 +316,7 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
             <select value={agentSel} onChange={(e) => setAgentSel(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 180 }} aria-label="Select an agent">
               <option value="">Select an agent…</option>
               {available.map((a) => (
-                <option key={`${a.agentKind}:${a.agentRef}`} value={`${a.agentKind}:${a.agentRef}`}>{a.name}</option>
+                <option key={`${a.kind}:${a.ref}`} value={`${a.kind}:${a.ref}`}>{a.name}</option>
               ))}
             </select>
             <input style={{ ...inputStyle, width: 160 }} placeholder="model (blank = default)" value={model} onChange={(e) => setModel(e.target.value)} />
@@ -324,7 +325,7 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
           </div>
           {available.length === 0 && (
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
-              No agents on this project yet — add agents to the project first.
+              No agents registered yet — create one in Workforce or register one in Settings.
             </div>
           )}
         </>

@@ -1606,6 +1606,40 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   });
 
   // -------------------------------------------------------------------------
+  // GET /api/agent-hosts/:id/usage?limit=<n>
+  // Tenant JWT auth: returns recent usage snapshots for this agentHost (newest first).
+  // Consumed by the portal usageApi.list() to render the usage tab.
+  // -------------------------------------------------------------------------
+  router.get('/:id/usage', authMiddleware as never, async (c) => {
+    const agentHostId = Number(c.req.param('id'));
+    const tenantId = c.get('tenantId') as number;
+    const limit = Math.min(Number(c.req.query('limit') ?? 50), 200);
+
+    // Ensure the agentHost belongs to this tenant
+    const agentHost = await agentHostService.getAgentHostForTenant(agentHostId, tenantId);
+    if (!agentHost) return c.json({ error: 'AgentHost not found' }, 404);
+
+    const snapshots = await db
+      .select({
+        id:               usageSnapshots.id,
+        agentHostId:      usageSnapshots.agentHostId,
+        sessionKey:       usageSnapshots.sessionKey,
+        inputTokens:      usageSnapshots.inputTokens,
+        outputTokens:     usageSnapshots.outputTokens,
+        contextTokens:    usageSnapshots.contextTokens,
+        contextWindowMax: usageSnapshots.contextWindowMax,
+        compactionCount:  usageSnapshots.compactionCount,
+        ts:               usageSnapshots.ts,
+      })
+      .from(usageSnapshots)
+      .where(and(eq(usageSnapshots.agentHostId, agentHostId), eq(usageSnapshots.tenantId, tenantId)))
+      .orderBy(desc(usageSnapshots.ts))
+      .limit(limit);
+
+    return c.json({ snapshots });
+  });
+
+  // -------------------------------------------------------------------------
   // GET /api/agent-hosts/:id/tool-audit?runId=&sessionKey=&limit=
   // Returns tool audit events for a agentHost, filterable by runId or sessionKey.
   // -------------------------------------------------------------------------
