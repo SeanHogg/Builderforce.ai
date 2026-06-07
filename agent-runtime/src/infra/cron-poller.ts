@@ -23,6 +23,8 @@ export type CronJobRecord = {
   schedule: string;
   enabled: boolean;
   taskId: number | null;
+  /** When set, the schedule belongs to a specific project agent (project_agents.id). */
+  projectAgentId: number | null;
   lastRunAt: string | null;
   nextRunAt: string | null;
 };
@@ -158,9 +160,13 @@ export class CronPollerService {
 
     let lastStatus: "success" | "error" = "success";
     try {
+      // A per-project-agent schedule runs in that agent's own session and carries
+      // its id so the run is attributed to (and can be routed as) that agent.
+      const sessionKey = job.projectAgentId != null ? `project-agent-${job.projectAgentId}` : "main";
+      const agentLine = job.projectAgentId != null ? `\nProject agent: #${job.projectAgentId}` : "";
       await this.gatewayClient.request("chat.send", {
-        sessionKey: "main",
-        message: `[Scheduled job: ${job.name}]\n\nRun cron task: ${job.name}${job.taskId != null ? ` (task #${job.taskId})` : ""}`,
+        sessionKey,
+        message: `[Scheduled job: ${job.name}]\n\nRun cron task: ${job.name}${job.taskId != null ? ` (task #${job.taskId})` : ""}${agentLine}`,
         idempotencyKey: `cron-${job.id}-${Date.now()}`,
       });
     } catch (err) {
