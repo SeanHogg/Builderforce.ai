@@ -36,6 +36,13 @@ export interface UseBrainConversationOptions {
   toolSpecs?: BrainToolSpec[];
   /** Dispatch a tool call to the registry. */
   runTool?: (name: string, args: unknown) => Promise<unknown>;
+  /**
+   * Confirm a tool call before it runs (the human-in-the-loop gate). Return
+   * false to skip the call — a `{ cancelled: true }` result is fed back to the
+   * model so it can adjust. Omit to run every requested tool immediately.
+   * Hosts typically gate only mutating tools (see BrainActions `isMutating`).
+   */
+  confirmTool?: (req: { name: string; args: unknown }) => Promise<boolean>;
   /** Create-on-demand when sending without an active chat; returns the new chat id. */
   ensureChatId?: () => Promise<number | null>;
   /** Notify the host (chats hook) that this chat got new activity. */
@@ -79,6 +86,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     model,
     toolSpecs,
     runTool,
+    confirmTool,
     ensureChatId,
     onActivity,
   } = options;
@@ -170,7 +178,15 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
             })),
           });
           for (const tc of result.toolCalls) {
-            const out = await runTool(tc.name, parseArgs(tc.args));
+            const args = parseArgs(tc.args);
+            // Human-in-the-loop gate: let the host veto (e.g. mutating tools)
+            // before anything runs. A declined call returns a recoverable result
+            // so the model can revise instead of the action silently happening.
+            if (confirmTool && !(await confirmTool({ name: tc.name, args }))) {
+              working.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify({ cancelled: true, reason: 'User declined this action.' }) });
+              continue;
+            }
+            const out = await runTool(tc.name, args);
             working.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out ?? null) });
           }
           setStreamingText('');
@@ -189,7 +205,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       setStreamingText('');
       setError('The assistant kept calling tools without finishing. Try rephrasing.');
     },
-    [persistence, stream, resolvedSystemPrompt, toolSpecs, runTool, onActivity],
+    [persistence, stream, resolvedSystemPrompt, toolSpecs, runTool, confirmTool, onActivity],
   );
 
   const send = useCallback(

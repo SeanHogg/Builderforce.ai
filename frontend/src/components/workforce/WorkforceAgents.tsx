@@ -15,7 +15,6 @@ import {
   deleteAgent,
 } from '@/lib/api';
 import type { PublishedAgent } from '@/lib/types';
-import { canDeleteAgent } from '@/lib/agentPermissions';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { FleetMeshContent } from '@/components/FleetMeshContent';
 import { UpgradeModal } from '@/components/UpgradeModal';
@@ -24,6 +23,11 @@ import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, t
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import { CloudAgentSlideOutPanel, type CloudAgentPanelTab } from './CloudAgentSlideOutPanel';
 import { ConfiguredQuickstartPopover } from './ConfiguredQuickstartPopover';
+import { AgentCard } from './AgentCard';
+import { AgentOwnerActions } from './AgentOwnerActions';
+import { AgentTypePill } from '@/components/AgentTypePill';
+import { StatusBadge } from '@/components/StatusBadge';
+import { formatAgentPrice } from '@/lib/agentPresentation';
 import { useAuth } from '@/lib/AuthContext';
 import {
   CloudAgentFormFields,
@@ -32,6 +36,8 @@ import {
   RUNTIME_LABELS,
   inputStyle,
   labelStyle,
+  btnPrimary,
+  btnSubtle,
   type CloudAgentFormState,
 } from './CloudAgentFormFields';
 
@@ -46,35 +52,11 @@ import {
 
 type AgentKind = 'cloud' | 'host';
 
-const btnPrimary: React.CSSProperties = { padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' };
-const btnSubtle: React.CSSProperties = { padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-strong)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' };
-
 // "Add agent" split button: primary action + caret that opens the configured quickstart.
 const splitMain: React.CSSProperties = { padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderTopLeftRadius: 8, borderBottomLeftRadius: 8, cursor: 'pointer' };
 const splitCaret: React.CSSProperties = { padding: '8px 10px', fontSize: 11, fontWeight: 700, background: 'var(--accent)', color: '#fff', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.25)', borderTopRightRadius: 8, borderBottomRightRadius: 8, cursor: 'pointer', lineHeight: 1 };
 
-function priceLabel(a: PublishedAgent): string {
-  if (!a.price_cents) return 'Free';
-  const dollars = (a.price_cents / 100).toFixed(2);
-  return a.pricing_model === 'consumption' ? `$${dollars}${a.price_unit ? ` / ${a.price_unit}` : ' / unit'}` : `$${dollars}`;
-}
-
-/** The "Cloud" / "Remote" designator pill shown on every card. */
-function TypePill({ kind }: { kind: AgentKind }) {
-  const remote = kind === 'host';
-  return (
-    <span style={{
-      fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase',
-      padding: '2px 7px', borderRadius: 6,
-      background: remote ? 'var(--bg-elevated)' : 'var(--surface-coral-soft)',
-      color: remote ? 'var(--text-strong)' : 'var(--accent)',
-      border: '1px solid var(--border)',
-    }}>
-      {remote ? 'Remote' : 'Cloud'}
-    </span>
-  );
-}
-
+// Host (remote agentHost) card chrome — cloud/purchased agents render via <AgentCard>.
 const cardStyle: React.CSSProperties = {
   padding: 16, display: 'flex', flexDirection: 'column', gap: 8, position: 'relative',
 };
@@ -311,13 +293,11 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-strong)', flex: 1 }}>{host.name}</span>
-                  <TypePill kind="host" />
+                  <AgentTypePill kind="host" />
                   {isDefault && (
                     <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>Default</span>
                   )}
-                  <span className={connected ? 'badge-green' : ''} style={!connected ? { background: 'var(--bg-elevated)', color: 'var(--muted)', padding: '2px 8px', borderRadius: 9999, fontSize: 11 } : {}}>
-                    {connected ? 'ONLINE' : 'OFFLINE'}
-                  </span>
+                  <StatusBadge variant={connected ? 'online' : 'offline'} />
                 </div>
                 <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{host.slug ?? host.name}</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)' }}>Last seen {lastSeen}</div>
@@ -328,62 +308,21 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
             );
           })}
 
-          {/* Cloud agents */}
+          {/* Cloud agents the tenant owns */}
           {cloudAgents.map((a) => (
-            <div key={`cloud-${a.id}`} className="card" style={cardStyle}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 600, color: 'var(--text-strong)', flex: 1 }}>{a.name}</span>
-                <TypePill kind="cloud" />
-                {a.published
-                  ? <span className="badge-green">PUBLISHED</span>
-                  : <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 9999, background: 'var(--bg-elevated)', color: 'var(--muted)' }}>DRAFT</span>}
-              </div>
-              {a.title && a.title !== a.name && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{a.title}</div>}
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 11 }}>
-                <span style={{ padding: '2px 8px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--accent)' }}>
-                  {RUNTIME_LABELS[a.runtime_support ?? 'cloud']}
-                  {a.runtime_support === 'both' && a.preferred_runtime ? ` · prefers ${a.preferred_runtime}` : ''}
-                </span>
-                <span style={{ padding: '2px 8px', borderRadius: 6, background: 'var(--bg-elevated)', color: 'var(--text-strong)' }}>{priceLabel(a)}</span>
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                {a.published
-                  ? <button type="button" style={btnSubtle} onClick={() => unpublish(a)}>Unpublish</button>
-                  : <button type="button" style={btnPrimary} onClick={() => openAgentPanel(a, 'pricing')}>Publish</button>}
-                {a.published && <button type="button" style={btnSubtle} onClick={() => openAgentPanel(a, 'pricing')}>Edit price</button>}
-                <button type="button" style={btnSubtle} onClick={() => openAgentPanel(a, 'details')}>Edit</button>
-                {canDeleteAgent(a) && (
-                  <button
-                    type="button"
-                    style={{ ...btnSubtle, color: 'var(--danger, #dc2626)', borderColor: 'rgba(239,68,68,0.3)' }}
-                    onClick={() => deleteOwned(a)}
-                    title="Delete this draft agent (only available while unpublished and unpurchased)"
-                  >
-                    Delete
-                  </button>
-                )}
-              </div>
-            </div>
+            <AgentCard
+              key={`cloud-${a.id}`}
+              agent={a}
+              variant="owned"
+              onOpenPanel={openAgentPanel}
+              onUnpublish={unpublish}
+              onDelete={deleteOwned}
+            />
           ))}
 
-          {/* Purchased (marketplace) agents — acquired from the marketplace, not
-              owned by this tenant, so no edit/publish/delete. */}
+          {/* Purchased (marketplace) agents — read-only, no owner actions. */}
           {purchasedAgents.map((a) => (
-            <div key={`purchased-${a.id}`} className="card" style={cardStyle}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 600, color: 'var(--text-strong)', flex: 1 }}>{a.name}</span>
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--accent)', border: '1px solid var(--border)' }}>
-                  Marketplace
-                </span>
-              </div>
-              {a.title && a.title !== a.name && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{a.title}</div>}
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 11 }}>
-                <span style={{ padding: '2px 8px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--accent)' }}>
-                  {RUNTIME_LABELS[a.runtime_support ?? 'cloud']}
-                </span>
-                <span style={{ padding: '2px 8px', borderRadius: 6, background: 'var(--bg-elevated)', color: 'var(--text-strong)' }}>{priceLabel(a)}</span>
-              </div>
-            </div>
+            <AgentCard key={`purchased-${a.id}`} agent={a} variant="purchased" />
           ))}
         </div>
       ) : (
@@ -418,7 +357,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                         <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>Default</span>
                       )}
                     </td>
-                    <td style={tdStyle}><TypePill kind="host" /></td>
+                    <td style={tdStyle}><AgentTypePill kind="host" /></td>
                     <td style={tdMutedStyle}>{connected ? 'Online' : 'Offline'}</td>
                     <td style={tdMutedStyle}>Remote</td>
                     <td style={tdMutedStyle}>—</td>
@@ -433,27 +372,18 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
               {cloudAgents.map((a) => (
                 <tr key={`cloud-${a.id}`} style={trStyle}>
                   <td style={tdStyle}>{a.name}</td>
-                  <td style={tdStyle}><TypePill kind="cloud" /></td>
+                  <td style={tdStyle}><AgentTypePill kind="cloud" /></td>
                   <td style={tdMutedStyle}>{a.published ? 'Published' : 'Draft'}</td>
                   <td style={tdMutedStyle}>{RUNTIME_LABELS[a.runtime_support ?? 'cloud']}</td>
-                  <td style={tdMutedStyle}>{priceLabel(a)}</td>
+                  <td style={tdMutedStyle}>{formatAgentPrice(a)}</td>
                   <td style={tdStyle}>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {a.published
-                        ? <button type="button" style={btnSubtle} onClick={() => unpublish(a)}>Unpublish</button>
-                        : <button type="button" style={btnPrimary} onClick={() => openAgentPanel(a, 'pricing')}>Publish</button>}
-                      <button type="button" style={btnSubtle} onClick={() => openAgentPanel(a, 'details')}>Edit</button>
-                      {canDeleteAgent(a) && (
-                        <button
-                          type="button"
-                          style={{ ...btnSubtle, color: 'var(--danger, #dc2626)', borderColor: 'rgba(239,68,68,0.3)' }}
-                          onClick={() => deleteOwned(a)}
-                          title="Delete this draft agent (only available while unpublished and unpurchased)"
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </div>
+                    <AgentOwnerActions
+                      agent={a}
+                      onOpenPanel={openAgentPanel}
+                      onUnpublish={unpublish}
+                      onDelete={deleteOwned}
+                      includeEditPrice={false}
+                    />
                   </td>
                 </tr>
               ))}
@@ -462,14 +392,10 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
               {purchasedAgents.map((a) => (
                 <tr key={`purchased-${a.id}`} style={trStyle}>
                   <td style={tdStyle}>{a.name}</td>
-                  <td style={tdStyle}>
-                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--accent)', border: '1px solid var(--border)' }}>
-                      Marketplace
-                    </span>
-                  </td>
+                  <td style={tdStyle}><AgentTypePill kind="marketplace" /></td>
                   <td style={tdMutedStyle}>—</td>
                   <td style={tdMutedStyle}>{RUNTIME_LABELS[a.runtime_support ?? 'cloud']}</td>
-                  <td style={tdMutedStyle}>{priceLabel(a)}</td>
+                  <td style={tdMutedStyle}>{formatAgentPrice(a)}</td>
                   <td style={tdStyle} />
                 </tr>
               ))}

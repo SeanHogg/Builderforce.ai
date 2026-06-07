@@ -81,7 +81,28 @@ export function BrainPanel({
   const [newProjectName, setNewProjectName] = useState('');
   const [creatingProject, setCreatingProject] = useState(false);
 
-  const { toolSpecs, runTool } = useBrainActions();
+  const { toolSpecs, runTool, isMutating } = useBrainActions();
+
+  // Human-in-the-loop gate: a mutating tool (create/update/delete/run/…) pauses
+  // the agent loop here for an explicit Approve/Cancel before it runs. The loop
+  // (useBrainConversation) awaits the promise we hand back from `confirmTool`.
+  const [pendingConfirm, setPendingConfirm] = useState<{ name: string; args: unknown } | null>(null);
+  const confirmResolverRef = useRef<((ok: boolean) => void) | null>(null);
+  const confirmTool = useCallback(
+    (req: { name: string; args: unknown }) => {
+      if (!isMutating(req.name, req.args)) return Promise.resolve(true);
+      return new Promise<boolean>((resolve) => {
+        confirmResolverRef.current = resolve;
+        setPendingConfirm(req);
+      });
+    },
+    [isMutating],
+  );
+  const resolveConfirm = useCallback((ok: boolean) => {
+    confirmResolverRef.current?.(ok);
+    confirmResolverRef.current = null;
+    setPendingConfirm(null);
+  }, []);
 
   // Brain agent/persona switcher: the user can run the Brain as the default
   // assistant, as a built-in modality persona, or as one of the agents assigned
@@ -138,6 +159,7 @@ export function BrainPanel({
     model: personaModel,
     toolSpecs,
     runTool,
+    confirmTool,
     ensureChatId,
     onActivity: chats.touch,
   });
@@ -371,6 +393,7 @@ export function BrainPanel({
             )}
           </div>
           <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : '12px 16px', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }}>
+            {pendingConfirm && <ToolConfirmBar req={pendingConfirm} onDecide={resolveConfirm} />}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Acting as</span>
               <select
@@ -488,6 +511,37 @@ export function BrainPanel({
 }
 
 // --- Internal pieces -------------------------------------------------------
+
+/**
+ * Human-in-the-loop confirm bar. Shown when the agent loop pauses on a mutating
+ * tool call; Approve runs it, Cancel feeds a declined result back to the model.
+ */
+function ToolConfirmBar({ req, onDecide }: { req: { name: string; args: unknown }; onDecide: (ok: boolean) => void }) {
+  const label = req.name.replace(/_/g, ' ');
+  let preview = '';
+  try {
+    const s = JSON.stringify(req.args ?? {});
+    preview = s.length > 240 ? `${s.slice(0, 240)}…` : s;
+  } catch { preview = ''; }
+  return (
+    <div
+      role="alertdialog"
+      aria-label="Confirm action"
+      style={{ marginBottom: 8, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--coral-bright, #f4726e)', background: 'var(--bg-elevated)' }}
+    >
+      <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 6 }}>
+        ⚠️ Brain wants to <strong>{label}</strong>. Approve to run it.
+      </div>
+      {preview && preview !== '{}' && (
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', wordBreak: 'break-all', marginBottom: 8 }}>{preview}</div>
+      )}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button type="button" onClick={() => onDecide(true)} style={{ padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Approve</button>
+        <button type="button" onClick={() => onDecide(false)} style={{ padding: '6px 14px', fontSize: 13, background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}>Cancel</button>
+      </div>
+    </div>
+  );
+}
 
 function MessageActions({ msg, conv, projectId }: {
   msg: BrainMessage;

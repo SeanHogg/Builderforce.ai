@@ -66,6 +66,7 @@ export {
 export {
   buildPlatformActions,
   buildPlatformCapabilities,
+  focusDomainsForPath,
   type PlatformCapability,
   type PlatformActionContext,
 } from './platformActions';

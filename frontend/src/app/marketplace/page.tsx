@@ -25,6 +25,8 @@ import type { PublishedAgent } from '@/lib/types';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
+import { AgentCard } from '@/components/workforce/AgentCard';
+import { SkillTags } from '@/components/SkillTags';
 
 type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'content' | 'workforce' | 'publish';
 
@@ -279,8 +281,9 @@ export default function MarketplacePage() {
 
   useEffect(() => {
     setLoadingAgents(true);
+    // GET /api/workforce/agents already filters WHERE status = 'active' server-side.
     listAgents()
-      .then((list) => setAgents(list.filter((a) => a.status === 'active')))
+      .then(setAgents)
       .catch(() => setAgents([]))
       .finally(() => setLoadingAgents(false));
   }, []);
@@ -593,11 +596,7 @@ export default function MarketplacePage() {
                       <strong style={{ color: 'var(--text-strong)' }}>{agent.name}</strong>
                     </td>
                     <td style={tdMutedStyle}>{agent.title || 'Workforce agent'}</td>
-                    <td style={tdMutedStyle}>
-                      {agent.skills && agent.skills.length > 0
-                        ? agent.skills.slice(0, 4).join(', ') + (agent.skills.length > 4 ? '…' : '')
-                        : '—'}
-                    </td>
+                    <td style={tdMutedStyle}><SkillTags skills={agent.skills} max={4} variant="inline" /></td>
                     <td style={tdMutedStyle}>{agent.hire_count != null ? `${agent.hire_count}×` : '—'}</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>
                       <button
@@ -617,73 +616,13 @@ export default function MarketplacePage() {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
             {filteredAgents.map((agent) => (
-              <div key={agent.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12, overflow: 'hidden' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 24 }}>👤</span>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-strong)' }}>{agent.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{agent.title || 'Workforce agent'}</div>
-                    </div>
-                  </div>
-                  <span
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      padding: '2px 8px',
-                      borderRadius: 99,
-                      background: 'var(--accent)',
-                      color: '#fff',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    Agent
-                  </span>
-                </div>
-                {agent.bio && (
-                  <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, flex: 1 }}>{agent.bio}</div>
-                )}
-                {agent.skills && agent.skills.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                    {agent.skills.slice(0, 5).map((s) => (
-                      <span
-                        key={s}
-                        style={{
-                          fontSize: 10,
-                          padding: '2px 6px',
-                          borderRadius: 99,
-                          background: 'var(--surface-2)',
-                          color: 'var(--text)',
-                          border: '1px solid var(--border)',
-                        }}
-                      >
-                        {s}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    borderTop: '1px solid var(--border)',
-                    paddingTop: 10,
-                  }}
-                >
-                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                    {agent.hire_count != null ? `Hired ${agent.hire_count}×` : null}
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    disabled={hiringId === agent.id}
-                    onClick={() => handleHire(agent.id)}
-                  >
-                    {hiringId === agent.id ? 'Hiring…' : 'Hire'}
-                  </button>
-                </div>
-              </div>
+              <AgentCard
+                key={agent.id}
+                agent={agent}
+                variant="marketplace"
+                onHire={handleHire}
+                hiring={hiringId === agent.id}
+              />
             ))}
           </div>
         )

@@ -71,6 +71,14 @@ export interface PlatformActionContext {
   navigate: (path: string) => void;
   /** Current workspace id (number) for tenant-scoped endpoints, or null. */
   getTenantId: () => number | null;
+  /**
+   * Capability domains relevant to where the user is right now (derived from the
+   * route). Their list/get/create/update tools get promoted to first-class
+   * BrainActions on top of the always-on core, so the Brain reaches for the most
+   * likely tools without bloating the always-sent tool list. See
+   * {@link focusDomainsForPath}.
+   */
+  focusDomains?: string[];
 }
 
 const S = { type: 'string' } as const;
@@ -121,7 +129,7 @@ const STATIC_ROUTES: Record<string, string> = {
   training: '/training',
   tenants: '/tenants',
   settings: '/settings',
-  settings_members: '/settings/members',
+  settings_members: '/workforce?tab=members',
   settings_api_keys: '/settings/api-keys',
   compare: '/compare',
   pricing: '/pricing',
@@ -391,11 +399,66 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
 // BrainActions = Tier-1 promoted tools + navigate + dispatcher.
 // ---------------------------------------------------------------------------
 
+/** Turn a manifest capability into a first-class BrainAction (carrying `mutates`). */
+function toAction(c: PlatformCapability, name: string, descOverride?: string): BrainAction {
+  return {
+    name,
+    description: descOverride ?? c.description,
+    parameters: c.parameters,
+    mutates: c.mutates,
+    run: (args) => c.run(args as Json),
+  };
+}
+
 /** Wrap a manifest capability as a first-class BrainAction with a flat name. */
 function promote(caps: PlatformCapability[], domain: string, method: string, name: string, descOverride?: string): BrainAction {
   const c = caps.find((x) => x.domain === domain && x.method === method);
   if (!c) throw new Error(`platformActions: missing capability ${domain}.${method}`);
-  return { name, description: descOverride ?? c.description, parameters: c.parameters, run: (args) => c.run(args as Json) };
+  return toAction(c, name, descOverride);
+}
+
+/** [domain, method, flat tool name] — the always-on Tier-1 core. */
+const STATIC_PROMOTIONS: ReadonlyArray<readonly [string, string, string]> = [
+  ['projects', 'create', 'create_project'],
+  ['projects', 'update', 'update_project'],
+  ['projects', 'delete', 'delete_project'],
+  ['projects', 'list', 'list_projects'],
+  ['tasks', 'list', 'list_tasks'],
+  ['tasks', 'create', 'create_task'],
+  ['tasks', 'update', 'update_task'],
+  ['workflows', 'list', 'list_workflows'],
+  ['workflows', 'run', 'run_workflow'],
+  ['specs', 'list', 'list_specs'],
+  ['specs', 'create', 'create_spec'],
+  ['agents_published', 'list', 'list_agents'],
+  ['agents_published', 'hire', 'hire_agent'],
+  ['cloud_agents', 'create', 'create_cloud_agent'],
+  ['skills_marketplace', 'list', 'list_skills'],
+  ['brain', 'list', 'list_chats'],
+  ['approvals', 'list', 'list_approvals'],
+  ['approvals', 'decide', 'decide_approval'],
+];
+
+/** Methods worth promoting first-class when a domain is in focus for the route. */
+const FOCUS_METHODS = ['list', 'get', 'create', 'update', 'run'];
+
+/** Map the current route to the capability domains most relevant there, so their
+ *  core tools get promoted first-class. Pure (exported for the bridge + tests). */
+export function focusDomainsForPath(pathname: string | null | undefined): string[] {
+  const p = pathname ?? '';
+  const has = (seg: string) => p === seg || p.startsWith(`${seg}/`) || p.startsWith(`${seg}?`);
+  if (has('/projects') || has('/ide') || has('/dashboard')) return ['projects', 'tasks'];
+  if (has('/tasks')) return ['tasks'];
+  if (has('/workflows')) return ['workflows', 'workflow_runs'];
+  if (has('/approvals')) return ['approvals'];
+  if (has('/workforce') || has('/agents')) return ['cloud_agents', 'agents_published'];
+  if (has('/marketplace') || has('/skills')) return ['skills_marketplace', 'artifact_assignments'];
+  if (has('/prompts')) return ['prompts'];
+  if (has('/personas')) return ['artifact_assignments'];
+  if (has('/security')) return ['security'];
+  if (has('/settings/api-keys')) return ['api_keys'];
+  if (has('/architect')) return ['repo_analysis'];
+  return [];
 }
 
 export function buildPlatformActions(ctx: PlatformActionContext): BrainAction[] {
@@ -413,6 +476,7 @@ export function buildPlatformActions(ctx: PlatformActionContext): BrainAction[] 
       },
       ['page'],
     ),
+    mutates: false,
     run: (args) => {
       const a = args as Json;
       const resolved = resolveRoute(f(a, 'page'), f(a, 'id'), f(a, 'query'));
@@ -427,6 +491,7 @@ export function buildPlatformActions(ctx: PlatformActionContext): BrainAction[] 
     name: 'open_project',
     description: 'Open a project in the IDE (use this to "launch" a project after creating it).',
     parameters: obj({ id: { ...N, description: 'Project id' }, chatId: { ...N, description: 'Optional Brain chat id to carry into the IDE.' } }, ['id']),
+    mutates: false,
     run: (args) => {
       const a = args as Json;
       const id = f(a, 'id');
@@ -442,6 +507,7 @@ export function buildPlatformActions(ctx: PlatformActionContext): BrainAction[] 
     name: 'list_platform_capabilities',
     description: 'Discover every platform capability the Brain can run (optionally filtered by domain). Use this, then call_platform_capability, for anything without a dedicated tool.',
     parameters: obj({ domain: { ...S, description: 'Optional domain filter, e.g. "tasks", "boards", "prompts".' } }),
+    mutates: false,
     run: (args) => {
       const domain = f<string | undefined>(args as Json, 'domain');
       const list = (domain ? caps.filter((c) => c.domain === domain) : caps).map((c) => ({
@@ -467,6 +533,13 @@ export function buildPlatformActions(ctx: PlatformActionContext): BrainAction[] 
       },
       ['domain', 'method'],
     ),
+    // The dispatcher proxies both reads and writes — gate it iff the targeted
+    // capability mutates, so the confirm prompt fires for write calls only.
+    mutates: (args) => {
+      const a = (args ?? {}) as Json;
+      const c = caps.find((x) => x.domain === f<string>(a, 'domain') && x.method === f<string>(a, 'method'));
+      return c ? c.mutates : false;
+    },
     run: async (args) => {
       const a = args as Json;
       const domain = f<string>(a, 'domain');
@@ -478,26 +551,22 @@ export function buildPlatformActions(ctx: PlatformActionContext): BrainAction[] 
   };
 
   // Tier-1 promoted tools (single source of truth = the manifest).
-  const promoted: BrainAction[] = [
-    promote(caps, 'projects', 'create', 'create_project'),
-    promote(caps, 'projects', 'update', 'update_project'),
-    promote(caps, 'projects', 'delete', 'delete_project'),
-    promote(caps, 'projects', 'list', 'list_projects'),
-    promote(caps, 'tasks', 'list', 'list_tasks'),
-    promote(caps, 'tasks', 'create', 'create_task'),
-    promote(caps, 'tasks', 'update', 'update_task'),
-    promote(caps, 'workflows', 'list', 'list_workflows'),
-    promote(caps, 'workflows', 'run', 'run_workflow'),
-    promote(caps, 'specs', 'list', 'list_specs'),
-    promote(caps, 'specs', 'create', 'create_spec'),
-    promote(caps, 'agents_published', 'list', 'list_agents'),
-    promote(caps, 'agents_published', 'hire', 'hire_agent'),
-    promote(caps, 'cloud_agents', 'create', 'create_cloud_agent'),
-    promote(caps, 'skills_marketplace', 'list', 'list_skills'),
-    promote(caps, 'brain', 'list', 'list_chats'),
-    promote(caps, 'approvals', 'list', 'list_approvals'),
-    promote(caps, 'approvals', 'decide', 'decide_approval'),
-  ];
+  const promotedKeys = new Set(STATIC_PROMOTIONS.map(([d, m]) => `${d}.${m}`));
+  const promoted = STATIC_PROMOTIONS.map(([d, m, name]) => promote(caps, d, m, name));
 
-  return [navigate_to, open_project, ...promoted, list_platform_capabilities, call_platform_capability];
+  // Context-aware promotion: bring the route's relevant domains' core methods
+  // first-class too, deduped against the static core and each other.
+  const seen = new Set(promoted.map((a) => a.name));
+  const focusActions: BrainAction[] = [];
+  for (const domain of ctx.focusDomains ?? []) {
+    for (const c of caps.filter((x) => x.domain === domain && FOCUS_METHODS.includes(x.method))) {
+      if (promotedKeys.has(`${c.domain}.${c.method}`)) continue;
+      const name = `${c.domain}_${c.method}`;
+      if (seen.has(name)) continue;
+      seen.add(name);
+      focusActions.push(toAction(c, name));
+    }
+  }
+
+  return [navigate_to, open_project, ...promoted, ...focusActions, list_platform_capabilities, call_platform_capability];
 }

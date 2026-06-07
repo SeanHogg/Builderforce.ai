@@ -199,6 +199,13 @@ interface BrainAction<A = unknown, R = unknown> {
     description: string;
     /** JSON Schema for the action arguments (becomes the tool's `function.parameters`). */
     parameters: Record<string, unknown>;
+    /**
+     * Whether running this action changes state — drives the host's
+     * confirm-before-mutate gate (see `useBrainConversation`'s `confirmTool`).
+     * Use a predicate when mutation depends on the args (e.g. a dispatcher tool
+     * that proxies both reads and writes). Defaults to read-only (no gate).
+     */
+    mutates?: boolean | ((args: A) => boolean);
     run(args: A): Promise<R> | R;
 }
 interface BrainActionsContextValue {
@@ -206,6 +213,8 @@ interface BrainActionsContextValue {
     toolSpecs: BrainToolSpec[];
     /** Execute a registered action by name. Returns a recoverable error object for unknown tools. */
     runTool(name: string, args: unknown): Promise<unknown>;
+    /** Whether the named action would mutate state for these args (false if unknown). */
+    isMutating(name: string, args: unknown): boolean;
     /** Register a batch of actions; returns an unregister function. (Used by the hook.) */
     register(actions: BrainAction[]): () => void;
 }
@@ -296,6 +305,16 @@ interface UseBrainConversationOptions {
     toolSpecs?: BrainToolSpec[];
     /** Dispatch a tool call to the registry. */
     runTool?: (name: string, args: unknown) => Promise<unknown>;
+    /**
+     * Confirm a tool call before it runs (the human-in-the-loop gate). Return
+     * false to skip the call — a `{ cancelled: true }` result is fed back to the
+     * model so it can adjust. Omit to run every requested tool immediately.
+     * Hosts typically gate only mutating tools (see BrainActions `isMutating`).
+     */
+    confirmTool?: (req: {
+        name: string;
+        args: unknown;
+    }) => Promise<boolean>;
     /** Create-on-demand when sending without an active chat; returns the new chat id. */
     ensureChatId?: () => Promise<number | null>;
     /** Notify the host (chats hook) that this chat got new activity. */
