@@ -5,11 +5,12 @@ import { ObservabilityContent } from '@/components/ObservabilityContent';
 import { LlmUsageContent } from '@/components/LlmUsageContent';
 import { QaContent } from '@/components/QaContent';
 
-type Tab = 'logs' | 'timeline' | 'llm' | 'qa';
+type Tab = 'logs' | 'llm' | 'qa';
 
 const TABS: { id: Tab; label: string }[] = [
+  // "Logs" holds both diagnostics views — toggle between Log view and Timeline
+  // view inside it. No separate Timeline tab (it was a redundant entry point).
   { id: 'logs', label: 'Logs' },
-  { id: 'timeline', label: 'Timeline' },
   { id: 'llm', label: 'LLM Usage' },
   { id: 'qa', label: 'Agentic QA' },
 ];
@@ -58,7 +59,6 @@ export default function ObservabilityPage() {
       </div>
 
       {tab === 'logs' && <ObservabilityContent initialView="logs" />}
-      {tab === 'timeline' && <ObservabilityContent initialView="timeline" />}
       {tab === 'llm' && <LlmUsageContent />}
       {tab === 'qa' && <QaContent />}
     </div>
