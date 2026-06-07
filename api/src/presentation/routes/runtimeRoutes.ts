@@ -309,8 +309,19 @@ async function runCloudExecution(
       ...(model ? { model } : {}),
       useCase: 'task_execution',
     });
+    // Debug trail for cloud runs: which model ran + the gateway trace id (so the
+    // run is inspectable in the LLM-trace view even though there's no live stream).
+    const debug = `[ran as ${result.resolvedModel ?? model ?? 'default'}${result.traceId ? ` · trace ${result.traceId}` : ''}]`;
+    if (result.response.status >= 400) {
+      const body = await result.response.text().catch(() => '');
+      await runtimeService.update(executionId, {
+        status: ExecutionStatus.FAILED,
+        errorMessage: `Gateway ${result.response.status}: ${body.slice(0, 300)} ${debug}`.trim(),
+      });
+      return;
+    }
     const text = extractCompletion(await result.response.json().catch(() => null));
-    await runtimeService.update(executionId, { status: ExecutionStatus.COMPLETED, result: text || '(no output produced)' });
+    await runtimeService.update(executionId, { status: ExecutionStatus.COMPLETED, result: text || `(no output produced) ${debug}` });
   } catch (e) {
     await runtimeService.update(executionId, {
       status: ExecutionStatus.FAILED,

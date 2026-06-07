@@ -1,15 +1,19 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { TaskMgmtContent } from '@/components/TaskMgmtContent';
 
 /**
  * Task Mgmt page: full task list/board with project filter (like BuilderForceAgentsLink).
  * Uses the same reusable TaskMgmtContent as the project details panel.
+ *
+ * A `?project=<id>` query param (set by the Task board button on Projects) scopes
+ * the board to a single project.
  */
 export default function TaskMgmtPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isAuthenticated, hasTenant } = useAuth();
 
   if (!isAuthenticated) {
@@ -21,6 +25,9 @@ export default function TaskMgmtPage() {
     return null;
   }
 
+  const projectParam = Number(searchParams.get('project'));
+  const scopedProjectId = Number.isFinite(projectParam) && projectParam > 0 ? projectParam : undefined;
+
   return (
     <div style={{ flex: 1, color: 'var(--text-primary)' }}>
       <main className="max-w-6xl mx-auto px-4 py-5">
@@ -31,7 +38,7 @@ export default function TaskMgmtPage() {
             scope tasks to that project.
           </p>
         </div>
-        <TaskMgmtContent />
+        <TaskMgmtContent projectId={scopedProjectId} />
       </main>
     </div>
   );

@@ -360,6 +360,32 @@ export default function ProjectsPage() {
                         </button>
                         <button
                           type="button"
+                          onClick={() => router.push(`/tasks?project=${project.id}`)}
+                          aria-label="Task board"
+                          title="Task board"
+                          style={{
+                            padding: 6,
+                            fontSize: 0,
+                            background: 'var(--bg-base)',
+                            color: 'var(--coral-bright)',
+                            border: '1px solid var(--coral-bright)',
+                            borderRadius: 8,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 32,
+                            height: 32,
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+                            <rect x="3" y="4" width="4" height="16" rx="1" />
+                            <rect x="10" y="4" width="4" height="11" rx="1" />
+                            <rect x="17" y="4" width="4" height="14" rx="1" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => (window.location.href = `/ide/${project.publicId ?? project.id}`)}
                           aria-label="Open in IDE"
                           style={{

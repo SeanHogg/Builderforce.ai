@@ -139,6 +139,18 @@ export function TaskAgentTab({ task, agentHosts, onTaskChanged }: { task: Task; 
             <span style={{ fontSize: 12, fontWeight: 600, color: STATUS_COLOR[selected.status] ?? 'var(--text-muted)' }}>{selected.status}</span>
           </div>
 
+          {(() => {
+            const errorMessage = (selected as { errorMessage?: string }).errorMessage;
+            return errorMessage ? (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--danger, #dc2626)', marginBottom: 4 }}>Error</div>
+                <div style={{ fontSize: 13, color: 'var(--danger, #dc2626)', whiteSpace: 'pre-wrap', lineHeight: 1.5, fontFamily: 'var(--font-mono)' }}>
+                  {errorMessage}
+                </div>
+              </div>
+            ) : null;
+          })()}
+
           {(result?.summary || result?.output) && (
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Output</div>
