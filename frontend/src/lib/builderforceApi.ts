@@ -298,6 +298,8 @@ export interface ToolAuditEvent {
 export interface Workflow {
   id: string;
   agentHostId: number;
+  /** Optional project this workflow belongs to (null = tenant-wide). */
+  projectId?: number | null;
   specId?: string | null;
   workflowType: string;
   status: string;
@@ -306,6 +308,9 @@ export interface Workflow {
   completedAt?: string | null;
   updatedAt: string;
   tasks?: WorkflowTask[];
+  /** Enriched by the list endpoint for card display (joins). */
+  projectName?: string | null;
+  agentHostName?: string | null;
 }
 
 export interface WorkflowTask {
@@ -349,11 +354,12 @@ export interface WorkflowGraph {
 }
 
 export const workflows = {
-  list: (params?: { status?: string; workflowType?: string; agentHostId?: number }) => {
+  list: (params?: { status?: string; workflowType?: string; agentHostId?: number; projectId?: number }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set('status', params.status);
     if (params?.workflowType) q.set('workflowType', params.workflowType);
     if (params?.agentHostId != null) q.set('agentHostId', String(params.agentHostId));
+    if (params?.projectId != null) q.set('projectId', String(params.projectId));
     const query = q.toString();
     return request<{ workflows: Workflow[] }>(
       `/api/workflows${query ? `?${query}` : ''}`

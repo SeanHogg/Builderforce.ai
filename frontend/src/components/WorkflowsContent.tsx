@@ -2,8 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { workflows, workflowDefinitions, specsApi, agentHosts, type Workflow, type WorkflowTask, type WorkflowGraph, type WorkflowDefinitionSummary, type Spec, type AgentHost } from '@/lib/builderforceApi';
+import { useRouter } from 'next/navigation';
+import { workflows, workflowDefinitions, type Workflow, type WorkflowTask, type WorkflowGraph, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
+import { fetchProjects } from '@/lib/api';
+import type { Project } from '@/lib/types';
 import { WorkflowDagView } from './WorkflowDagView';
+import { WorkflowCreatePanel } from './WorkflowCreatePanel';
 
 /** Saved visual workflow definitions (builder templates) with quick links to
  *  open the builder. Self-contained: fetches its own data and renders nothing
@@ -37,7 +41,6 @@ function SavedDefinitionsSection() {
 
 interface WorkflowsContentProps {
   projectId?: number | null;
-  compact?: boolean;
 }
 
 const cardStyle: React.CSSProperties = {
@@ -54,8 +57,6 @@ const STATUS_COLORS: Record<string, string> = {
   failed: 'var(--coral-bright, #f4726e)',
   cancelled: 'var(--text-muted)',
 };
-
-const WORKFLOW_TYPES = ['feature', 'bugfix', 'refactor', 'planning', 'adversarial', 'custom'];
 
 function WorkflowTaskRow({ task }: { task: WorkflowTask }) {
   const color = STATUS_COLORS[task.status] ?? 'var(--text-muted)';
@@ -125,13 +126,9 @@ function WorkflowTaskRow({ task }: { task: WorkflowTask }) {
   );
 }
 
-function WorkflowCard({
-  workflow,
-  onSelect,
-}: {
-  workflow: Workflow;
-  onSelect: (wf: Workflow) => void;
-}) {
+/** A single workflow as a card — mirrors the project card layout, surfacing the
+ *  associated project + agent so the two pages read the same way. */
+function WorkflowCard({ workflow, onSelect }: { workflow: Workflow; onSelect: (wf: Workflow) => void }) {
   const color = STATUS_COLORS[workflow.status] ?? 'var(--text-muted)';
   const taskCount = workflow.tasks?.length ?? 0;
   const doneCount = workflow.tasks?.filter((t) => t.status === 'completed').length ?? 0;
@@ -141,58 +138,80 @@ function WorkflowCard({
       type="button"
       onClick={() => onSelect(workflow)}
       style={{
-        ...cardStyle,
+        padding: 20,
+        background: 'var(--bg-elevated)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 12,
+        transition: 'border-color 0.2s',
         display: 'flex',
-        alignItems: 'center',
-        gap: 14,
+        flexDirection: 'column',
+        gap: 8,
         width: '100%',
         textAlign: 'left',
         cursor: 'pointer',
       }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = ''; }}
     >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              padding: '2px 7px',
-              borderRadius: 5,
-              background: `${color}22`,
-              color,
-            }}
-          >
-            {workflow.status}
-          </span>
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              padding: '2px 7px',
-              borderRadius: 5,
-              background: 'var(--bg-elevated)',
-              color: 'var(--text-muted)',
-            }}
-          >
-            {workflow.workflowType}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            padding: '2px 7px',
+            borderRadius: 5,
+            background: `${color}22`,
+            color,
+          }}
+        >
+          {workflow.status}
+        </span>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            padding: '2px 7px',
+            borderRadius: 5,
+            background: 'var(--surface-interactive)',
+            color: 'var(--text-muted)',
+          }}
+        >
+          {workflow.workflowType}
+        </span>
+      </div>
+
+      <h3 style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', margin: 0 }}>
+        {workflow.description ?? `Workflow ${workflow.id.slice(0, 8)}`}
+      </h3>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <div style={{ fontSize: 12 }}>
+          <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>Project:</span>
+          <span style={{ color: workflow.projectName ? 'var(--text-secondary)' : 'var(--text-muted)', fontWeight: workflow.projectName ? 600 : 400 }}>
+            {workflow.projectName ?? '—'}
           </span>
         </div>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
-          {workflow.description ?? `Workflow ${workflow.id.slice(0, 8)}`}
-        </div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-          {new Date(workflow.createdAt).toLocaleString()}
-          {taskCount > 0 ? ` · ${doneCount}/${taskCount} tasks done` : ''}
+        <div style={{ fontSize: 12 }}>
+          <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>Agent:</span>
+          <span style={{ color: workflow.agentHostName ? 'var(--coral-bright)' : 'var(--text-muted)', fontWeight: workflow.agentHostName ? 600 : 400 }}>
+            {workflow.agentHostName ?? `#${workflow.agentHostId}`}
+          </span>
         </div>
       </div>
-      <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0 }}>→</span>
+
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 'auto' }}>
+        {new Date(workflow.createdAt).toLocaleDateString()}
+        {taskCount > 0 ? ` · ${doneCount}/${taskCount} tasks done` : ''}
+      </div>
     </button>
   );
 }
 
-export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) {
+export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
+  const router = useRouter();
   const [wfList, setWfList] = useState<Workflow[]>([]);
+  const [projectList, setProjectList] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Workflow | null>(null);
@@ -201,34 +220,26 @@ export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) 
   const [detailTab, setDetailTab] = useState<'tasks' | 'graph'>('tasks');
   const [graph, setGraph] = useState<WorkflowGraph | null>(null);
   const [loadingGraph, setLoadingGraph] = useState(false);
-
-  // Create workflow form
   const [showCreate, setShowCreate] = useState(false);
-  const [createType, setCreateType] = useState<string>('feature');
-  const [createDesc, setCreateDesc] = useState('');
-  const [createAgentHostId, setCreateAgentHostId] = useState<number | ''>('');
-  const [createSpecId, setCreateSpecId] = useState<string>('');
-  const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
-  const [specList, setSpecList] = useState<Spec[]>([]);
-  const [creating, setCreating] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
     workflows
-      .list()
+      .list({ projectId: projectId ?? undefined })
       .then(setWfList)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [projectId]);
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
-    if (!showCreate) return;
-    agentHosts.list().then(setAgentHostList).catch(() => {});
-    specsApi.list(projectId ?? undefined).then(setSpecList).catch(() => {});
-  }, [showCreate, projectId]);
+  // Projects power the create panel's dropdown + the filter banner's name.
+  useEffect(() => { fetchProjects().then(setProjectList).catch(() => {}); }, []);
+
+  const filteredProjectName = projectId != null
+    ? projectList.find((p) => p.id === projectId)?.name ?? wfList.find((w) => w.projectName)?.projectName ?? `#${projectId}`
+    : null;
 
   const openDetail = async (wf: Workflow) => {
     setSelected(wf);
@@ -257,39 +268,6 @@ export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) 
       setLoadingGraph(false);
     }
   }, []);
-
-  const handleCreate = async () => {
-    if (!createAgentHostId) return;
-    setCreating(true);
-    try {
-      // POST /api/workflows
-      const token = (await import('@/lib/auth')).getStoredTenantToken();
-      const { AUTH_API_URL } = await import('@/lib/auth');
-      const res = await fetch(`${AUTH_API_URL}/api/workflows`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          agentHostId: Number(createAgentHostId),
-          workflowType: createType,
-          description: createDesc.trim() || undefined,
-          specId: createSpecId || undefined,
-        }),
-      });
-      if (res.ok) {
-        setShowCreate(false);
-        setCreateDesc('');
-        setCreateSpecId('');
-        load();
-      }
-    } catch {
-      // ignore
-    } finally {
-      setCreating(false);
-    }
-  };
 
   if (selected && selectedDetail) {
     const tasks = selectedDetail.tasks ?? [];
@@ -329,6 +307,7 @@ export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) 
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
               {selectedDetail.workflowType} · {selectedDetail.status}
+              {selectedDetail.projectName ? ` · ${selectedDetail.projectName}` : ''}
             </div>
           </div>
           {/* Tab switcher */}
@@ -383,153 +362,127 @@ export function WorkflowsContent({ projectId, compact }: WorkflowsContentProps) 
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        {!compact && (
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-            Workflows ({wfList.length})
-          </div>
-        )}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Workflows</h1>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6, marginBottom: 0 }}>
+            Orchestrate multi-step agent tasks. Associate a workflow with a project and agent.
+          </p>
+        </div>
         <button
           type="button"
-          onClick={() => setShowCreate(!showCreate)}
+          onClick={() => setShowCreate(true)}
           style={{
-            padding: '5px 12px',
-            fontSize: 12,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '10px 18px',
+            fontSize: '0.875rem',
             fontWeight: 600,
-            background: showCreate ? 'var(--bg-base)' : 'var(--surface-interactive)',
-            color: 'var(--text-primary)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 8,
+            background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 10,
             cursor: 'pointer',
-            marginLeft: 'auto',
+            fontFamily: 'var(--font-display)',
+            boxShadow: '0 4px 14px var(--shadow-coral-mid)',
           }}
         >
-          {showCreate ? 'Cancel' : '+ New Workflow'}
+          + New workflow
         </button>
       </div>
 
-      <SavedDefinitionsSection />
-
-      {showCreate && (
-        <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Create Workflow</div>
-
-          {/* Type */}
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {WORKFLOW_TYPES.map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setCreateType(t)}
-                style={{
-                  padding: '5px 12px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  borderRadius: 8,
-                  border: '1px solid var(--border-subtle)',
-                  background: createType === t ? 'var(--surface-coral-soft, rgba(244,114,94,0.15))' : 'var(--bg-elevated)',
-                  color: createType === t ? 'var(--coral-bright, #f4726e)' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                }}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-
-          <input
-            type="text"
-            placeholder="Description (optional)"
-            value={createDesc}
-            onChange={(e) => setCreateDesc(e.target.value)}
+      {/* Active project filter banner */}
+      {projectId != null && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '8px 14px',
+            background: 'var(--surface-coral-soft, rgba(244,114,94,0.12))',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 10,
+            fontSize: 13,
+          }}
+        >
+          <span style={{ color: 'var(--text-secondary)' }}>
+            Filtered to project <strong style={{ color: 'var(--text-primary)' }}>{filteredProjectName}</strong>
+          </span>
+          <button
+            type="button"
+            onClick={() => router.push('/workflows')}
             style={{
-              padding: '8px 12px',
-              fontSize: 13,
-              background: 'var(--bg-elevated)',
-              color: 'var(--text-primary)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
+              marginLeft: 'auto',
+              fontSize: 12,
+              fontWeight: 600,
+              color: 'var(--coral-bright)',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 0,
             }}
-          />
-
-          <div style={{ display: 'flex', gap: 8 }}>
-            <select
-              value={createAgentHostId}
-              onChange={(e) => setCreateAgentHostId(e.target.value ? Number(e.target.value) : '')}
-              style={{
-                flex: 1,
-                padding: '8px 10px',
-                fontSize: 13,
-                background: 'var(--bg-elevated)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
-              }}
-            >
-              <option value="">Select agentHost…</option>
-              {agentHostList.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-
-            {specList.length > 0 && (
-              <select
-                value={createSpecId}
-                onChange={(e) => setCreateSpecId(e.target.value)}
-                style={{
-                  flex: 1,
-                  padding: '8px 10px',
-                  fontSize: 13,
-                  background: 'var(--bg-elevated)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
-                }}
-              >
-                <option value="">Link to spec (optional)</option>
-                {specList.map((s) => (
-                  <option key={s.id} value={s.id}>{s.goal.slice(0, 60)}</option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button
-              type="button"
-              onClick={handleCreate}
-              disabled={!createAgentHostId || creating}
-              style={{
-                padding: '8px 18px',
-                fontSize: 13,
-                fontWeight: 600,
-                background: 'var(--coral-bright, #f4726e)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 8,
-                cursor: !createAgentHostId || creating ? 'not-allowed' : 'pointer',
-                opacity: !createAgentHostId || creating ? 0.5 : 1,
-              }}
-            >
-              {creating ? 'Creating…' : 'Create Workflow'}
-            </button>
-          </div>
+          >
+            Clear filter
+          </button>
         </div>
       )}
+
+      <SavedDefinitionsSection />
 
       {loading && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading workflows…</div>}
       {error && <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13 }}>Error: {error}</div>}
 
       {!loading && wfList.length === 0 && (
-        <div style={{ ...cardStyle, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
-          No workflows yet. Create one to orchestrate multi-step agent tasks.
+        <div
+          style={{
+            textAlign: 'center',
+            padding: 48,
+            background: 'var(--bg-elevated)',
+            borderRadius: 12,
+            border: '1px solid var(--border-subtle)',
+          }}
+        >
+          <div style={{ fontSize: 56, marginBottom: 16 }}>🔀</div>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
+            No workflows {projectId != null ? 'for this project ' : ''}yet. Create one to orchestrate multi-step agent tasks.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowCreate(true)}
+            style={{
+              padding: '12px 24px',
+              background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: 'var(--font-display)',
+            }}
+          >
+            New workflow
+          </button>
         </div>
       )}
 
-      {wfList.map((wf) => (
-        <WorkflowCard key={wf.id} workflow={wf} onSelect={openDetail} />
-      ))}
+      {wfList.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {wfList.map((wf) => (
+            <WorkflowCard key={wf.id} workflow={wf} onSelect={openDetail} />
+          ))}
+        </div>
+      )}
+
+      <WorkflowCreatePanel
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreated={load}
+        projects={projectList}
+        defaultProjectId={projectId}
+      />
     </div>
   );
 }

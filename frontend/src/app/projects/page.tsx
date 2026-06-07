@@ -386,6 +386,28 @@ export default function ProjectsPage() {
                         </button>
                         <button
                           type="button"
+                          onClick={() => router.push(`/workflows?projectId=${project.id}`)}
+                          aria-label="View workflows"
+                          title={`Workflows${project.workflowCount != null ? ` (${project.workflowCount})` : ''}`}
+                          style={{
+                            padding: 6,
+                            fontSize: 0,
+                            background: 'var(--bg-base)',
+                            color: 'var(--coral-bright)',
+                            border: '1px solid var(--coral-bright)',
+                            borderRadius: 8,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 32,
+                            height: 32,
+                          }}
+                        >
+                          <span style={{ fontSize: 16 }} aria-hidden>🔀</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => (window.location.href = `/ide/${project.publicId ?? project.id}`)}
                           aria-label="Open in IDE"
                           style={{

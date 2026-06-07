@@ -48,6 +48,8 @@ export interface Project {
   updatedAt?: string;
   /** From list endpoint */
   taskCount?: number;
+  /** From list endpoint: number of workflows associated with this project */
+  workflowCount?: number;
   /** From list endpoint: primary assigned Workforce agent (agentHost) for this project */
   assignedAgentHost?: { id: number; name: string } | null;
   /** From list endpoint: earliest task start date (falls back to earliest due date). ISO string. Drives the calendar/Gantt timeline. */
