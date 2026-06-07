@@ -357,7 +357,8 @@ export class BuilderforceRelayService implements IRelayService {
     const sinks: V2RunnerSinks = {
       onAssistantText: (text) =>
         this.sendToRelay({ type: "chat.message", role: "assistant", text, session: "main" }),
-      onToolUse: (toolName, toolCallId, args) =>
+      onToolUse: (toolName, toolCallId, args) => {
+        // Live view (fans out to subscribers)…
         this.sendToRelay({
           type: "tool.audit",
           sessionKey: "main",
@@ -366,7 +367,10 @@ export class BuilderforceRelayService implements IRelayService {
           category: "v2",
           args,
           ts: new Date().toISOString(),
-        }),
+        });
+        // …and durable persistence, so the run stays on the timeline after it ends.
+        void this.persistToolAudit({ executionId: payload.executionId, toolName, toolCallId, category: "v2", args });
+      },
       onResult: () => {
         /* terminal state is reported below from the runner's return value */
       },
@@ -464,6 +468,47 @@ export class BuilderforceRelayService implements IRelayService {
    * Report execution lifecycle state back to Builderforce.
    * Fire-and-forget — errors are logged but never surfaced to the caller.
    */
+  /**
+   * Persist one tool-call audit event so the run is observable on the timeline
+   * AFTER it ends — not just live. The relay frame ({@link sendToRelay}
+   * `tool.audit`) only fans out to live subscribers; this HTTP POST writes it to
+   * the durable `tool_audit_events` store via the same agent-host ingest the
+   * self-hosted path uses. Fire-and-forget; never surfaces errors.
+   */
+  private async persistToolAudit(event: {
+    executionId?: number;
+    toolName: string;
+    toolCallId?: string;
+    category?: string;
+    args?: unknown;
+  }): Promise<void> {
+    const base = normalizeBaseUrl(this.opts.baseUrl);
+    const url = `${base}/api/agent-hosts/${this.opts.agentNodeId}/tool-audit`;
+    try {
+      await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.opts.apiKey}`,
+        },
+        body: JSON.stringify({
+          // Tie the event to its execution so it's queryable per-run as well as
+          // per-host. sessionKey 'main' matches the live relay frame.
+          runId: event.executionId != null ? `exec-${event.executionId}` : undefined,
+          sessionKey: "main",
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          category: event.category,
+          args: event.args,
+          ts: new Date().toISOString(),
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch (err) {
+      logDebug(`[builderforce-relay] tool-audit persist failed: ${String(err)}`);
+    }
+  }
+
   private async reportExecutionState(
     executionId: number,
     status: "running" | "completed" | "failed" | "cancelled",

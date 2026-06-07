@@ -12,6 +12,7 @@ import {
 } from '@/lib/builderforceApi';
 import { AgentHostGateway } from '@/lib/agentHostGateway';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
+import { ExecutionTimelineChart } from './ExecutionTimelineChart';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -154,7 +155,7 @@ export function ObservabilityContent({
   const [cloudEventsByRef, setCloudEventsByRef] = useState<Map<string, ToolAuditEvent[]>>(new Map());
   const [diagLoading, setDiagLoading] = useState(false);
   const [diagError, setDiagError] = useState<string | null>(null);
-  const [timelineViewMode, setTimelineViewMode] = useState<'list' | 'gantt'>('list');
+  const [timelineViewMode, setTimelineViewMode] = useState<'list' | 'gantt'>('gantt');
   const [categoryFilter, setCategoryFilter] = useState('');
 
   // ---- Unified directory + selection derivation -----------------------------
@@ -656,7 +657,7 @@ export function ObservabilityContent({
                     ))}
                   </div>
                 ) : (
-                  <TimelineBarView tracks={tracks} selectedKeys={selectedKeys} />
+                  <ExecutionTimelineChart tracks={tracks} colorForKey={(k) => colorForKey(selectedKeys, k)} />
                 )}
               </div>
             </>
@@ -741,62 +742,3 @@ function toggleBtn(active: boolean): React.CSSProperties {
   };
 }
 
-function TimelineBarView({ tracks, selectedKeys }: { tracks: TimelineTrack[]; selectedKeys: string[] }) {
-  const minMs = Math.min(...tracks.map((t) => t.startMs));
-  const maxMs = Math.max(...tracks.map((t) => t.endMs || t.startMs + 1));
-  const totalMs = Math.max(maxMs - minMs, 1);
-  const ROW_H = 28;
-  const LABEL_W = 220;
-  const BAR_W = 400;
-  const PAD = 8;
-  const totalH = tracks.length * (ROW_H + 4) + PAD * 2;
-
-  return (
-    <div style={{ overflowX: 'auto' }}>
-      <svg width={LABEL_W + BAR_W + PAD * 2} height={totalH + 24} style={{ fontFamily: 'var(--font-mono, monospace)', display: 'block' }}>
-        {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
-          const ms = minMs + totalMs * pct;
-          const x = LABEL_W + pct * BAR_W;
-          return (
-            <g key={i}>
-              <line x1={x} y1={0} x2={x} y2={totalH} stroke="var(--border-subtle)" strokeWidth={1} strokeDasharray="4 4" />
-              <text x={x} y={totalH + 16} fontSize={9} fill="var(--text-muted)" textAnchor="middle">{fmtTime(ms)}</text>
-            </g>
-          );
-        })}
-        {tracks.map((t, i) => {
-          const y = PAD + i * (ROW_H + 4);
-          const barX = LABEL_W + ((t.startMs - minMs) / totalMs) * BAR_W;
-          const barW = Math.max(((t.endMs - t.startMs) / totalMs) * BAR_W, 4);
-          const color =
-            t.kind === 'tool'
-              ? colorForKey(selectedKeys, t.agentKey)
-              : t.status === 'completed'
-                ? 'var(--green, #22c55e)'
-                : t.status === 'failed'
-                  ? 'var(--red, #ef4444)'
-                  : t.status === 'running'
-                    ? 'var(--blue, #3b82f6)'
-                    : 'var(--text-muted)';
-          const label = `[${t.agentName}] ${truncate(t.label, 20)}`;
-          return (
-            <g key={i}>
-              <text x={LABEL_W - 6} y={y + ROW_H / 2 + 4} fontSize={10} fill="var(--text-primary)" textAnchor="end">{truncate(label, 28)}</text>
-              <rect x={barX} y={y} width={barW} height={ROW_H} rx={4} fill={color} opacity={0.85}>
-                <title>
-                  {t.agentName}: {t.label}
-                  {'\n'}
-                  {fmtTime(t.startMs)} → {fmtTime(t.endMs)}
-                  {'\n'}
-                  Duration: {fmtDuration(t.endMs - t.startMs)}
-                  {t.detail ? `\n${t.detail}` : ''}
-                </title>
-              </rect>
-              <text x={barX + barW + 4} y={y + ROW_H / 2 + 4} fontSize={10} fill="var(--text-muted)">{fmtDuration(t.endMs - t.startMs)}</text>
-            </g>
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
