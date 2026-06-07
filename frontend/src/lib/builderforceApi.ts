@@ -883,6 +883,29 @@ export const runtimeApi = {
   },
 };
 
+/**
+ * BYO LLM provider keys — a tenant stores its own Anthropic key so the gateway
+ * proxies BuilderForce-V2 (Claude Agent SDK) model calls with the tenant's key
+ * and meters them. The key is write-only: we only ever read which providers are
+ * configured, never the secret.
+ */
+export type LlmProvider = 'anthropic';
+
+export const providerKeysApi = {
+  /** Which providers the tenant has a key configured for (no secrets returned). */
+  list: (): Promise<{ providers: LlmProvider[] }> =>
+    request<{ providers: LlmProvider[] }>('/llm/provider-keys'),
+
+  set: (provider: LlmProvider, apiKey: string): Promise<{ ok: true; provider: LlmProvider }> =>
+    request<{ ok: true; provider: LlmProvider }>(`/llm/provider-keys/${provider}`, {
+      method: 'PUT',
+      body: JSON.stringify({ apiKey }),
+    }),
+
+  remove: (provider: LlmProvider): Promise<{ ok: true }> =>
+    request<{ ok: true }>(`/llm/provider-keys/${provider}`, { method: 'DELETE' }),
+};
+
 // ---------------------------------------------------------------------------
 // Approvals (human-in-the-loop decisions)
 // ---------------------------------------------------------------------------

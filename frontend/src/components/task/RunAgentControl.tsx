@@ -68,11 +68,15 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
         : null;
       const agentHostId = isHost ? Number(target.slice('host:'.length)) : undefined;
       const effectiveModel = model || cloudAgent?.baseModel || '';
+      // Forward the chosen model (explicit, or the cloud agent's own) and the
+      // cloud agent ref so the API can resolve its runtime engine (V1/V2).
+      const payloadObj: { model?: string; cloudAgentRef?: string } = {};
+      if (effectiveModel) payloadObj.model = effectiveModel;
+      if (cloudAgent?.ref) payloadObj.cloudAgentRef = cloudAgent.ref;
       const result = await runtimeApi.submitExecution({
         taskId: task.id,
         agentHostId,
-        // Forward the chosen model (explicit, or the cloud agent's own); default = gateway default.
-        payload: effectiveModel ? JSON.stringify({ model: effectiveModel }) : undefined,
+        payload: Object.keys(payloadObj).length > 0 ? JSON.stringify(payloadObj) : undefined,
       });
       if (isAwaitingApprovalExecution(result)) {
         onAwaitingApproval?.({ approvalId: result.approvalId, taskId: result.taskId, reason: result.reason });

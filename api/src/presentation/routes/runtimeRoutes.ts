@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
+import { neon } from '@neondatabase/serverless';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
@@ -36,6 +37,8 @@ type DispatchMessage = {
   executionId: number;
   taskId: number;
   payload?: string;
+  /** Agent runtime engine resolved from the run-target cloud agent (default v1). */
+  engine?: string;
   task: {
     title: string;
     description?: string | null;
@@ -367,6 +370,35 @@ async function runCloudExecution(
 type SubmittedExecution = { id: number; status: string; toPlain(): unknown };
 
 /**
+ * Resolve the agent runtime engine for a run from its payload. When the run
+ * targets a cloud agent (`payload.cloudAgentRef`), the engine is read from that
+ * agent's `ide_agents` record (authoritative, tenant-scoped); otherwise V1.
+ *
+ * One indexed lookup per execution-submit (not a hot read path), so it is not
+ * cached. Never throws — defaults to 'builderforce-v1' on any failure.
+ */
+async function resolveAgentEngine(env: Env, tenantId: number, payload: string | undefined): Promise<string> {
+  const DEFAULT = 'builderforce-v1';
+  if (!payload) return DEFAULT;
+  let ref: string | undefined;
+  try {
+    const p = JSON.parse(payload) as { cloudAgentRef?: unknown };
+    if (typeof p.cloudAgentRef === 'string' && p.cloudAgentRef.trim()) ref = p.cloudAgentRef.trim();
+  } catch {
+    return DEFAULT;
+  }
+  if (!ref) return DEFAULT;
+  try {
+    const sql = neon(env.NEON_DATABASE_URL);
+    const rows = (await sql`SELECT engine FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ engine?: string }>;
+    const engine = rows[0]?.engine;
+    return typeof engine === 'string' && engine ? engine : DEFAULT;
+  } catch {
+    return DEFAULT;
+  }
+}
+
+/**
  * Shared post-submit dispatch path for `/executions` and `/tasks/submit`.
  *
  * Tries online self-hosted agentHosts first. If none take the work, the cloud
@@ -388,17 +420,21 @@ async function dispatchAndQueue(
   const targets = await getDispatchTargets(db, tenantId, taskRow.assignedAgentHostId);
   const dispatchType: DispatchMessage['type'] = taskRow.assignedAgentHostId != null ? 'task.assign' : 'task.broadcast';
 
-  const artifacts = await resolveArtifacts(db, {
-    tenantId,
-    taskId: taskRow.id,
-    agentHostId: taskRow.assignedAgentHostId ?? undefined,
-  });
+  const [artifacts, engine] = await Promise.all([
+    resolveArtifacts(db, {
+      tenantId,
+      taskId: taskRow.id,
+      agentHostId: taskRow.assignedAgentHostId ?? undefined,
+    }),
+    resolveAgentEngine(c.env as Env, tenantId, payload),
+  ]);
 
   const message: DispatchMessage = {
     type: dispatchType,
     executionId: execution.id,
     taskId: taskRow.id,
     payload,
+    engine,
     task: { title: taskRow.title, description: taskRow.description },
     artifacts,
   };

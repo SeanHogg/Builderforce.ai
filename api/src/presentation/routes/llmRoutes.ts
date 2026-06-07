@@ -33,6 +33,14 @@ import { buildDatabase } from '../../infrastructure/database/connection';
 import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, agentHosts, tenantApiKeys, users } from '../../infrastructure/database/schema';
 import { originAllowed, deserializeScopes } from '../../application/llm/tenantApiKeyService';
 import { listToolsForTenant, callMcpTool } from '../../application/llm/mcpExtensionService';
+import {
+  getTenantProviderKey,
+  setTenantProviderKey,
+  listTenantProviderKeys,
+  deleteTenantProviderKey,
+  isSupportedProvider,
+} from '../../application/llm/tenantProviderKeyService';
+import { parseAnthropicSseUsage } from '../../application/llm/anthropicSseUsage';
 import { resolveKeyCached } from '../../infrastructure/auth/keyResolutionCache';
 import type { FailoverEvent } from '../../application/llm/LlmProxyService';
 import { verifyJwt, signJwt } from '../../infrastructure/auth/JwtService';
@@ -447,6 +455,117 @@ function wrapStreamForUsage(
 
 export function createLlmRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+
+  // -----------------------------------------------------------------------
+  // BYO provider keys — tenant-managed vendor API keys (currently Anthropic).
+  // GET    /provider-keys            → which providers have a key (no secrets)
+  // PUT    /provider-keys/:provider  → set/replace the key  { apiKey }
+  // DELETE /provider-keys/:provider  → remove the key
+  // -----------------------------------------------------------------------
+  router.get('/provider-keys', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const providers = await listTenantProviderKeys(c.env, access.tenantId);
+    return c.json({ providers });
+  });
+
+  router.put('/provider-keys/:provider', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const provider = c.req.param('provider');
+    if (!isSupportedProvider(provider)) return c.json({ error: 'unsupported provider' }, 400);
+    const body = await c.req.json<{ apiKey?: string }>().catch(() => ({} as { apiKey?: string }));
+    const apiKey = body.apiKey?.trim();
+    if (!apiKey) return c.json({ error: 'apiKey is required' }, 400);
+    await setTenantProviderKey(c.env, access.tenantId, provider, apiKey, access.userId);
+    return c.json({ ok: true, provider });
+  });
+
+  router.delete('/provider-keys/:provider', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const provider = c.req.param('provider');
+    if (!isSupportedProvider(provider)) return c.json({ error: 'unsupported provider' }, 400);
+    await deleteTenantProviderKey(c.env, access.tenantId, provider);
+    return c.json({ ok: true });
+  });
+
+  // -----------------------------------------------------------------------
+  // POST /v1/messages — Anthropic-Messages proxy using the tenant's BYO key.
+  // The BuilderForce-V2 (Claude Agent SDK) runner points ANTHROPIC_BASE_URL at
+  // `${api}/llm`, so its Messages calls land here. We authenticate the tenant
+  // (agentHost/tenant key or JWT), swap in the tenant's stored Anthropic key,
+  // proxy to api.anthropic.com, and meter usage on the tenant's ledger.
+  // -----------------------------------------------------------------------
+  router.post('/v1/messages', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+
+    const anthropicKey = await getTenantProviderKey(c.env, access.tenantId, 'anthropic');
+    if (!anthropicKey) {
+      return c.json({ error: 'No Anthropic API key configured for this tenant', code: 'no_provider_key' }, 400);
+    }
+
+    const bodyText = await c.req.text();
+    let parsed: { stream?: boolean; model?: unknown };
+    try { parsed = JSON.parse(bodyText) as { stream?: boolean; model?: unknown }; }
+    catch { return c.json({ error: 'invalid JSON body' }, 400); }
+    const streamed = parsed.stream === true;
+    const model = typeof parsed.model === 'string' ? parsed.model : 'unknown';
+    const product = productNameForPlan(toTenantPlan(access.effectivePlan));
+    const idempotencyKey = c.req.header('idempotency-key') ?? null;
+
+    const upstream = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': anthropicKey,
+        'anthropic-version': c.req.header('anthropic-version') ?? '2023-06-01',
+        ...(c.req.header('anthropic-beta') ? { 'anthropic-beta': c.req.header('anthropic-beta') as string } : {}),
+      },
+      body: bodyText,
+    });
+
+    if (!streamed) {
+      const json = (await upstream.json().catch(() => null)) as
+        | { usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } }
+        | null;
+      if (upstream.ok && json?.usage) {
+        const u = json.usage;
+        logUsage(c.env, c.executionCtx, access.tenantId, access.userId, product, model, 0, false, {
+          promptTokens: u.input_tokens ?? 0,
+          completionTokens: u.output_tokens ?? 0,
+          totalTokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
+          cacheReadTokens: u.cache_read_input_tokens ?? 0,
+          cacheCreationTokens: u.cache_creation_input_tokens ?? 0,
+        }, { engine: 'builderforce-v2' }, idempotencyKey, 'v2_agent', access.tenantApiKeyId);
+      }
+      return new Response(JSON.stringify(json ?? { error: 'upstream_error' }), {
+        status: upstream.status,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
+    // Streaming: tee the SSE — one branch to the client, one to a usage meter.
+    if (!upstream.body) return c.json({ error: 'no upstream body' }, 502);
+    const [toClient, toMeter] = upstream.body.tee();
+    c.executionCtx.waitUntil((async () => {
+      try {
+        const text = await new Response(toMeter).text();
+        logUsage(
+          c.env, c.executionCtx, access.tenantId, access.userId, product, model, 0, true,
+          parseAnthropicSseUsage(text), { engine: 'builderforce-v2' }, idempotencyKey, 'v2_agent', access.tenantApiKeyId,
+        );
+      } catch { /* metering is best-effort */ }
+    })());
+    return new Response(toClient, {
+      status: upstream.status,
+      headers: {
+        'content-type': upstream.headers.get('content-type') ?? 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+    });
+  });
 
   // -----------------------------------------------------------------------
   // POST /v1/embed-session

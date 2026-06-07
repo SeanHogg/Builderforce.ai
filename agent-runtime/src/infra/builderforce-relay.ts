@@ -43,6 +43,7 @@ import {
 import { dispatchResultToRemoteAgentNode, type RemoteDispatchOptions } from "./remote-subagent.js";
 import { setRelayHook } from "./workflow-telemetry.js";
 import { buildSteeringInjection } from "./relay-steering.js";
+import { runClaudeAgentSdkV2, type V2RunnerSinks } from "../agents/claude-agent-sdk-runner.js";
 
 function extractChatText(message: unknown): string {
   if (!message || typeof message !== "object") {
@@ -122,6 +123,10 @@ export class BuilderforceRelayService implements IRelayService {
     taskId?: number;
     sourceType: "task.assign" | "task.broadcast";
     artifacts?: { skills?: string[]; personas?: string[]; content?: string[] };
+    /** Agent runtime engine. 'builderforce-v2' runs the Claude Agent SDK. */
+    engine?: string;
+    /** Model id from the run payload (forwarded to the engine). */
+    model?: string;
   }): void {
     const lines = [
       `[Builderforce ${payload.sourceType}] ${payload.title}`,
@@ -156,6 +161,13 @@ export class BuilderforceRelayService implements IRelayService {
       void this.reportExecutionState(payload.executionId, "running");
     }
 
+    // BuilderForce-V2 → run the Claude Agent SDK loop; V1 (default) → the
+    // pi-coding-agent loop via the local gateway's chat.send.
+    if (payload.engine === "builderforce-v2") {
+      void this.runV2Engine(payload, message);
+      return;
+    }
+
     this.gatewayClient
       ?.request("chat.send", {
         sessionKey: "main",
@@ -165,6 +177,56 @@ export class BuilderforceRelayService implements IRelayService {
       .catch((err: unknown) => {
         logWarn(`[builderforce] ${payload.sourceType} dispatch failed: ${String(err)}`);
       });
+  }
+
+  /**
+   * BuilderForce-V2 engine path. Runs the Claude Agent SDK against the workspace,
+   * forwarding its events onto the same relay frames the V1 loop emits
+   * (chat.message for assistant text, tool.audit for tool calls) so the portal
+   * renders both engines identically, then reports the terminal execution state.
+   */
+  private async runV2Engine(
+    payload: { executionId?: number; model?: string; sourceType: string },
+    prompt: string,
+  ): Promise<void> {
+    const sinks: V2RunnerSinks = {
+      onAssistantText: (text) =>
+        this.sendToRelay({ type: "chat.message", role: "assistant", text, session: "main" }),
+      onToolUse: (toolName, toolCallId, args) =>
+        this.sendToRelay({
+          type: "tool.audit",
+          sessionKey: "main",
+          toolName,
+          toolCallId,
+          category: "v2",
+          args,
+          ts: new Date().toISOString(),
+        }),
+      onResult: () => {
+        /* terminal state is reported below from the runner's return value */
+      },
+    };
+
+    const result = await runClaudeAgentSdkV2(
+      {
+        prompt,
+        model: payload.model,
+        cwd: this.opts.workspaceDir ?? process.cwd(),
+        // SDK posts Messages to `${anthropicBaseUrl}/v1/messages`; the gateway's
+        // Anthropic-Messages endpoint lives under /llm.
+        anthropicBaseUrl: `${normalizeBaseUrl(this.opts.baseUrl)}/llm`,
+        gatewayAuthKey: this.opts.apiKey,
+      },
+      sinks,
+    );
+
+    if (payload.executionId != null) {
+      await this.reportExecutionState(
+        payload.executionId,
+        result.ok ? "completed" : "failed",
+        result.ok ? { result: result.text } : { errorMessage: result.text },
+      );
+    }
   }
 
   /**
@@ -630,8 +692,19 @@ export class BuilderforceRelayService implements IRelayService {
           break;
         }
 
+        // Engine selector + model are resolved by the API (engine from the cloud
+        // agent record, model from the run payload).
+        const engine = typeof msg.engine === "string" ? msg.engine : "builderforce-v1";
+        let model: string | undefined;
+        try {
+          const p = typeof msg.payload === "string" ? (JSON.parse(msg.payload) as { model?: unknown }) : null;
+          if (p && typeof p.model === "string" && p.model.trim()) model = p.model.trim();
+        } catch {
+          /* payload not JSON — use the engine default model */
+        }
+
         logWarn(
-          `[builderforce] received ${type}${taskId != null ? ` task=${taskId}` : ""}${executionId != null ? ` execution=${executionId}` : ""}`,
+          `[builderforce] received ${type}${taskId != null ? ` task=${taskId}` : ""}${executionId != null ? ` execution=${executionId}` : ""} engine=${engine}`,
         );
 
         this.dispatchTaskFromRelay({
@@ -641,6 +714,8 @@ export class BuilderforceRelayService implements IRelayService {
           executionId,
           taskId,
           artifacts,
+          engine,
+          model,
         });
         void this.syncAssignmentContext(type);
         break;

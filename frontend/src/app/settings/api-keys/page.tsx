@@ -9,6 +9,7 @@ import { AllowedOriginsBadge } from '@/components/AllowedOriginsBadge';
 import { TenantApiKeyEditor } from '@/components/TenantApiKeyEditor';
 import { TenantApiKeyUsageDrawer } from '@/components/TenantApiKeyUsageDrawer';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { ProviderKeysSettings } from '@/components/ProviderKeysSettings';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
 const cardStyle: React.CSSProperties = {
@@ -170,6 +171,10 @@ export default function ApiKeysPage() {
           />
         </div>
       )}
+
+      <div style={{ marginBottom: 20 }}>
+        <ProviderKeysSettings />
+      </div>
 
       <div style={{ ...cardStyle, marginBottom: 20 }}>
         <div style={sectionTitle}>Create a new key</div>
