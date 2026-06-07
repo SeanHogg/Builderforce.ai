@@ -1658,23 +1658,6 @@ full `api/src` rename (`Claw*`→`AgentHost*`, table `coderclaw_instances`→`ag
   not code changes, and the new Changes tab stays empty for them. A true cloud agent needs a server-side
   pi-agent runtime (container/queue consumer running the same loop as a self-hosted agentHost). Fixing
   unblocks: cloud runs that actually edit files + a populated Changes tab without a self-hosted claw.
-- **Self-hosted agent-events bus is not bridged to the execution WS stream — Changes/Tools are post-hoc only.**
-  The agent-runtime emits live `tool`/`assistant`/`file` events on its [agent-events bus](agent-runtime/src/infra/agent-events.ts),
-  but the api only learns of self-hosted progress via the terminal `PATCH /executions/:id/state` callback;
-  the new [AgentExecutionPanel](frontend/src/components/agent/AgentExecutionPanel.tsx) therefore derives
-  live file changes from `file_change` WS events that **only the cloud path emits today**, and falls back to
-  the REST `trace` (tool-call audit, post-run) for self-hosted. Fixing (have the agentHost relay agent-events
-  to a new `PATCH /executions/:id/events` or push them through the relay DO → `notifyExecutionSubscribers`
-  as `file_change`/`message` deltas) unblocks: real-time Output/Changes/Tools for self-hosted runs, not just cloud.
-- **Steering a running execution (`POST /executions/:id/messages`) is not yet consumed by the agent.**
-  The endpoint ([runtimeRoutes.ts](api/src/presentation/routes/runtimeRoutes.ts)) broadcasts the user
-  message to WS subscribers and relays it to the assigned agentHost's relay DO at `/execution-message`, but
-  (1) the agent-runtime relay has **no handler** for that path, so the message never reaches the live
-  pi-agent session, and (2) cloud completions are one-shot and can't be interrupted mid-run. Also, when the
-  WS is unavailable the chatbox echo is lost (polling refetches the execution row, not the message thread —
-  there is no `execution_messages` table). Fixing (relay-DO `/execution-message` handler that calls
-  `activeSession.prompt()` on the in-flight session + an `execution_messages` table surfaced via `trace`)
-  unblocks: genuinely chatting with / redirecting a running agent, with durable history.
 - **PRD WIP file is full-replace by the PRD-owner task only; downstream agents can't edit it.** The new
   [prd-wip.ts](agent-runtime/src/builderforce/prd-wip.ts) writes `PRD.md` at the repo root (and `git add`s it
   as a pending commit) when an `architecture-advisor` task whose description names a PRD completes, and the
@@ -1685,30 +1668,19 @@ full `api/src` rename (`Claw*`→`AgentHost*`, table `coderclaw_instances`→`ag
   commit/branch (intentional — pending review). Fixing (explicit `producesPrd` flag on the planning step + a
   `prd_edit`/section-merge tool agents can call) unblocks: collaborative PRD authoring across the swimlane.
 
-- **Cloud-agent `engine` is persisted + selectable but not yet routed to a runtime.** Migration
-  [0087_agent_engine.sql](api/migrations/0087_agent_engine.sql) adds `ide_agents.engine`
-  (`builderforce-v1` | `builderforce-v2`), surfaced in the create/edit form
-  ([CloudAgentFormFields.tsx](frontend/src/components/workforce/CloudAgentFormFields.tsx)) and saved via
-  [workforceRoutes.ts](api/src/presentation/routes/workforceRoutes.ts). **Not yet wired:** the execution
-  dispatch path ([runtimeRoutes.ts](api/src/presentation/routes/runtimeRoutes.ts) `dispatchAndQueue`) does
-  not look up the run-target agent's `engine` and include it in the `task.assign`/`task.broadcast` payload,
-  so the agent-runtime can't branch on it. Selecting `builderforce-v2` today behaves exactly like V1.
-  Fixing (resolve the cloud agent's `engine` at dispatch, add `engine` to `DispatchMessage`, branch in the
-  agent-runtime relay) unblocks: actually running the V2 engine.
-- **The V2 (Claude Agent SDK) runner does not exist yet.** `builderforce-v2` is meant to run
-  `@anthropic-ai/claude-agent-sdk` in the agent-runtime (real loop, bash/file tools, PreToolUse/PostToolUse
-  hooks → file-change events). The dependency isn't added and no runner module exists — the agent-runtime
-  only has the pi-coding-agent (V1) loop. Fixing (add the SDK dep, write a `claude-agent-sdk-runner` that the
-  relay dispatches to when `engine==='builderforce-v2'`, map its events onto the existing tool.audit /
-  chat.message / execution-state frames) unblocks: the V2 engine end to end.
-- **Gateway has no Anthropic-Messages (`/v1/messages`) BYO-key path.** The V2 engine speaks the Anthropic
-  Messages API; per the chosen design it must route through the builderforce gateway using the tenant's own
-  Anthropic key (metered centrally). The gateway today is OpenAI-shaped only
-  ([llmRoutes.ts](api/src/presentation/routes/llmRoutes.ts) `/v1/chat/completions`); there is no
-  `/v1/messages` endpoint, no per-tenant Anthropic-key storage, and no metering hook for it. Fixing (add a
-  `/v1/messages` route that authenticates the tenant, loads their stored Anthropic key, proxies to
-  `api.anthropic.com`, and meters usage; point the V2 runner's `ANTHROPIC_BASE_URL` at it) unblocks:
-  customer-BYO-key Anthropic runs through the gateway.
+- **BuilderForce-V2 needs the Claude Agent SDK's bundled `claude` CLI + a real workspace in the runtime image.**
+  The V2 runner ([claude-agent-sdk-runner.ts](agent-runtime/src/agents/claude-agent-sdk-runner.ts)) calls the
+  SDK's `query()`, which spawns the bundled `claude` CLI subprocess and operates on `cwd` (the cloned repo /
+  workspace). The agent-runtime container images ([Dockerfile](agent-runtime/Dockerfile), [fly.toml](agent-runtime/fly.toml))
+  must ship Node + the SDK's CLI and mount a writable workspace, and the cloud runtime must clone the task's
+  repo before dispatch (today only the swimlane `agent_dispatch` path clones). Fixing (bake the CLI into the
+  image + clone the repo for V2 broadcast runs) unblocks: V2 runs on cloud-deployed runtimes, not just dev.
+- **`/llm/v1/messages` meters usage but does not enforce the plan daily-token cap.** Unlike
+  [`/v1/chat/completions`](api/src/presentation/routes/llmRoutes.ts) (which gates on `llmUsageLog` SUM vs the
+  plan cap), the new BYO-key `/v1/messages` proxy logs usage but has no pre-flight cap check — reasonable when
+  the tenant pays Anthropic directly via their own key, but means workspace daily caps don't apply to V2.
+  Fixing (reuse the same daily-cap gate, or document that BYO-key spend is uncapped) unblocks: consistent
+  budget enforcement across V1 and V2.
 - **Live execution stream is per-isolate; assistant-text deltas aren't pushed mid-run.** The
   `/executions/:id/stream` WS subscriber map ([runtimeRoutes.ts](api/src/presentation/routes/runtimeRoutes.ts))
   lives in one Worker isolate, and self-hosted mid-run frames arrive at the relay DO (a different object), so
