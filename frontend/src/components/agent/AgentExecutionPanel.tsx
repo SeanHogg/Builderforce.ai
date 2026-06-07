@@ -139,7 +139,11 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   // gives instant status; this gives live Changes/Tools without cross-isolate
   // event plumbing. Bounded: only polls while running, stops on terminal.
   useEffect(() => {
-    if (selectedId == null || !isRunning) return;
+    if (selectedId == null || !isRunning) {
+      // Run settled (or none selected) — pick up changes persisted as it ended.
+      if (selectedId != null && !isRunning) loadTaskChanges();
+      return;
+    }
     const t = setInterval(() => {
       runtimeApi.trace(selectedId).then((tr) => setTrace(tr)).catch(() => { /* transient */ });
       loadTaskChanges();
