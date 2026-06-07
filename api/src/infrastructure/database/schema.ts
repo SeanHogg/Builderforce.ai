@@ -689,6 +689,9 @@ export const tasks = pgTable('tasks', {
   githubPrUrl:       varchar('github_pr_url', { length: 500 }),
   githubPrNumber:    integer('github_pr_number'),
   assignedAgentHostId:    integer('assigned_agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
+  /** ide_agents.id of the cloud agent working this ticket — the agent self-assigns
+   *  when it starts a run (agents are first-class assignees). No FK (raw-SQL table). */
+  assignedAgentRef:  text('assigned_agent_ref'),
   startDate:         timestamp('start_date'),
   dueDate:           timestamp('due_date'),
   persona:           varchar('persona', { length: 50 }),
