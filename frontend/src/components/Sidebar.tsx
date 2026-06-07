@@ -32,7 +32,7 @@ const mainNav: NavItem[] = [
     activePaths: ['/ide'],
   },
   { href: '/architect', label: 'Architect', icon: '🏛' },
-  { href: '/workflows/builder', label: 'Workflow Builder', icon: '🔀', activePaths: ['/workflows'] },
+  { href: '/workflows', label: 'Workflows', icon: '🔀', activePaths: ['/workflows'] },
   { href: '/tasks', label: 'Task Mgmt', icon: '☑' },
   { href: '/contributors', label: 'Contributors', icon: '📈' },
   { href: '/training', label: 'Training', icon: '🎓' },

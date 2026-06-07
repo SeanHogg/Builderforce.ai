@@ -1080,6 +1080,8 @@ export const workflows = pgTable('workflows', {
   // Nullable since 0080: a workflow can target the cloud runtime instead of a
   // self-hosted agentHost (then runtime='cloud' + cloudAgentRef identifies it).
   agentHostId:       integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'cascade' }),
+  /** Optional project this workflow belongs to (0086). Tenant-wide when null. */
+  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   /** Where this run executes: 'host' (self-hosted agentHost) | 'cloud' (builderforce-hosted). */
   runtime:      varchar('runtime', { length: 16 }).notNull().default('host'),
   /** ide_agents.id of the cloud agent serving the run when runtime='cloud'. */

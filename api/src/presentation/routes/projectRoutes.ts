@@ -6,7 +6,7 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { ProjectStatus, TenantRole } from '../../domain/shared/types';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentHostProjects, agentHosts, ideProjectChatMessages, ideProjectChats, projectInsightEvents, projects, sourceControlIntegrations, tasks, tenants } from '../../infrastructure/database/schema';
+import { agentHostProjects, agentHosts, ideProjectChatMessages, ideProjectChats, projectInsightEvents, projects, sourceControlIntegrations, tasks, tenants, workflows } from '../../infrastructure/database/schema';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 
 const IDE_PREFIX = 'ide/';
@@ -392,10 +392,23 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       }
     }
 
+    // Workflow counts per project — powers the "N workflows" badge + View button.
+    const workflowCounts = await db
+      .select({ projectId: workflows.projectId, workflowCount: count() })
+      .from(workflows)
+      .where(and(eq(workflows.tenantId, tenantId), inArray(workflows.projectId, projectIds)))
+      .groupBy(workflows.projectId);
+    const workflowCountByProject = new Map<number, number>(
+      workflowCounts
+        .filter((row) => row.projectId != null)
+        .map((row) => [row.projectId as number, Number(row.workflowCount)]),
+    );
+
     return c.json({
       projects: plainProjects.map((project) => ({
         ...project,
         taskCount: taskCountByProject.get(project.id) ?? 0,
+        workflowCount: workflowCountByProject.get(project.id) ?? 0,
         assignedAgentHost: assignedAgentHostByProject.get(project.id) ?? null,
         startDate: dateRangeByProject.get(project.id)?.startDate ?? null,
         dueDate: dateRangeByProject.get(project.id)?.dueDate ?? null,

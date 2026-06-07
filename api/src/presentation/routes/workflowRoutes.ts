@@ -16,7 +16,7 @@
 import { Hono } from 'hono';
 import { eq, and, asc } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { workflows, workflowTasks, telemetrySpans } from '../../infrastructure/database/schema';
+import { workflows, workflowTasks, telemetrySpans, projects, agentHosts } from '../../infrastructure/database/schema';
 import {
   resolveHostAuth,
   verifyAgentHostApiKey,
@@ -60,6 +60,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
     const body = await c.req.json<{
       id?:           string;
       agentHostId?:       number;
+      projectId?:    number | null;
       specId?:       string;
       workflowType?: 'feature' | 'bugfix' | 'refactor' | 'planning' | 'adversarial' | 'custom';
       status?:       'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
@@ -78,6 +79,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
         id:           workflowId,
         tenantId,
         agentHostId:       effectiveAgentHostId,
+        projectId:    body.projectId ?? null,
         specId:       body.specId ?? null,
         workflowType: body.workflowType ?? 'custom',
         status:       body.status ?? 'pending',
@@ -90,6 +92,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
         set: {
           status:       body.status ?? 'pending',
           description:  body.description ?? null,
+          ...(body.projectId !== undefined ? { projectId: body.projectId } : {}),
           updatedAt:    now,
           completedAt:  body.status === 'completed' || body.status === 'failed' || body.status === 'cancelled' ? now : null,
         },
@@ -177,18 +180,40 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
   // All remaining routes require tenant JWT
   router.use('*', authMiddleware);
 
-  // GET /api/workflows?status=&workflowType=&agentHostId=
+  // GET /api/workflows?status=&workflowType=&agentHostId=&projectId=
+  // Rows are enriched with projectName + agentHostName so the Workflows cards can
+  // show the associated project/agent without an N+1 follow-up per workflow.
   router.get('/', async (c) => {
     const tenantId      = c.get('tenantId') as number;
     const statusFilter  = c.req.query('status');
     const typeFilter    = c.req.query('workflowType');
     const agentHostIdFilter  = c.req.query('agentHostId') ? Number(c.req.query('agentHostId')) : null;
+    const projectIdFilter    = c.req.query('projectId') ? Number(c.req.query('projectId')) : null;
 
-    let rows = await db.select().from(workflows).where(eq(workflows.tenantId, tenantId));
+    let rows = await db
+      .select({
+        id:           workflows.id,
+        agentHostId:  workflows.agentHostId,
+        projectId:    workflows.projectId,
+        specId:       workflows.specId,
+        workflowType: workflows.workflowType,
+        status:       workflows.status,
+        description:  workflows.description,
+        createdAt:    workflows.createdAt,
+        completedAt:  workflows.completedAt,
+        updatedAt:    workflows.updatedAt,
+        projectName:  projects.name,
+        agentHostName: agentHosts.name,
+      })
+      .from(workflows)
+      .leftJoin(projects, eq(workflows.projectId, projects.id))
+      .leftJoin(agentHosts, eq(workflows.agentHostId, agentHosts.id))
+      .where(eq(workflows.tenantId, tenantId));
 
     if (statusFilter) rows = rows.filter((r) => r.status === statusFilter);
     if (typeFilter)   rows = rows.filter((r) => r.workflowType === typeFilter);
     if (agentHostIdFilter != null) rows = rows.filter((r) => r.agentHostId === agentHostIdFilter);
+    if (projectIdFilter != null) rows = rows.filter((r) => r.projectId === projectIdFilter);
 
     return c.json({ workflows: rows });
   });
@@ -213,6 +238,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
     const body = await c.req.json<{
       status?:      'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
       description?: string;
+      projectId?:   number | null;
     }>();
 
     const now = new Date();
@@ -221,6 +247,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
       .set({
         ...(body.status      !== undefined ? { status: body.status } : {}),
         ...(body.description !== undefined ? { description: body.description } : {}),
+        ...(body.projectId   !== undefined ? { projectId: body.projectId } : {}),
         ...(body.status === 'completed' || body.status === 'failed' || body.status === 'cancelled'
           ? { completedAt: now }
           : {}),

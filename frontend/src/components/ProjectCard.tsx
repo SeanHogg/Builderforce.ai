@@ -234,8 +234,34 @@ export function ProjectCard({
             {project.taskCount} task{project.taskCount !== 1 ? 's' : ''}
           </span>
         )}
+        {project.workflowCount != null && (
+          <>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>·</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              {project.workflowCount} workflow{project.workflowCount !== 1 ? 's' : ''}
+            </span>
+          </>
+        )}
         <div style={{ flex: 1, minWidth: 0 }} />
-        {/* moved to header */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            window.location.href = `/workflows?projectId=${project.id}`;
+          }}
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            color: 'var(--coral-bright)',
+            background: 'transparent',
+            border: '1px solid var(--coral-bright)',
+            borderRadius: 8,
+            padding: '4px 10px',
+            cursor: 'pointer',
+          }}
+        >
+          View workflows
+        </button>
       </div>
       <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{createdDate(project)}</p>
     </div>
