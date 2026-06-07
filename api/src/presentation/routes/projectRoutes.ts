@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { and, count, desc, eq, inArray, max, min } from 'drizzle-orm';
 import { ProjectService } from '../../application/project/ProjectService';
+import type { Project } from '../../domain/project/Project';
 import type { HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { ProjectStatus, TenantRole } from '../../domain/shared/types';
@@ -70,10 +71,30 @@ export default defineConfig({
 });`,
 };
 
-/** Seed R2 with IDE template files for a project. No-op if storage or template missing. */
-async function seedProjectTemplate(storage: R2Bucket | undefined, projectId: number, template: string | null): Promise<void> {
-  if (!storage || !template || template !== 'vanilla') return;
-  const prefix = `${IDE_PREFIX}projects/${projectId}/`;
+/**
+ * Seed R2 with the IDE starter template for a freshly-created project, so the
+ * in-browser IDE opens with a runnable scaffold instead of empty files (which
+ * forced the Run pipeline onto run-only defaults that were never persisted).
+ *
+ * Call this from EVERY project-creation path — not just the "New project" modal.
+ * The decision to seed lives here (single source of truth) rather than at each
+ * call site:
+ *   - seed when template === 'vanilla' (explicit), OR when no template was given
+ *     for a default 'designer' project that has no connected source-control repo;
+ *   - skip repo-connected projects — their files live in the git repo, not R2,
+ *     and a scaffold would shadow them;
+ *   - skip non-'designer' modalities (video/llm) — they don't run the Vite app.
+ *
+ * Only call on creation (R2 prefix is empty then) — it does not overwrite.
+ * No-op if storage is unavailable.
+ */
+async function seedProjectTemplate(storage: R2Bucket | undefined, project: Project): Promise<void> {
+  if (!storage) return;
+  const hasRepo = !!(project.sourceControlRepoFullName || project.githubRepoUrl);
+  const isDesigner = (project.modality ?? 'designer') === 'designer';
+  const wantsVanilla = project.template === 'vanilla' || (!project.template && isDesigner && !hasRepo);
+  if (!wantsVanilla) return;
+  const prefix = `${IDE_PREFIX}projects/${project.id}/`;
   await Promise.all(
     Object.entries(VANILLA_TEMPLATE).map(([path, content]) =>
       storage.put(prefix + path, content),
@@ -614,7 +635,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       governance: body.governance ?? null,
       tenantId,
     });
-    await seedProjectTemplate(c.env.UPLOADS, project.id, project.template);
+    await seedProjectTemplate(c.env.UPLOADS, project);
     return c.json(project.toPlain(), 201);
   });
 
@@ -687,6 +708,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       githubRepoUrl: assignment.value.githubRepoUrl,
     });
 
+    await seedProjectTemplate(c.env.UPLOADS, created);
     return c.json({ action: 'created', project: created.toPlain() }, 201);
   });
 
@@ -777,6 +799,11 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
           description,
           rootWorkingDirectory,
         });
+
+    // Newly scaffolded (non-repo, default designer) projects get the starter
+    // template so the IDE opens runnable — updates of an existing project keep
+    // whatever files it already has.
+    if (!existing) await seedProjectTemplate(c.env.UPLOADS, project);
 
     let selectedAgentHostId: number | null = null;
 

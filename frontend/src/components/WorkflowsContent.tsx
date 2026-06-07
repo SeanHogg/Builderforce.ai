@@ -1,43 +1,20 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { workflows, workflowDefinitions, type Workflow, type WorkflowTask, type WorkflowGraph, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
+import {
+  workflows,
+  workflowDefinitions,
+  type Workflow,
+  type WorkflowTask,
+  type WorkflowGraph,
+  type WorkflowDefinitionSummary,
+  type WorkflowRunTarget,
+} from '@/lib/builderforceApi';
 import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { WorkflowDagView } from './WorkflowDagView';
-import { WorkflowCreatePanel } from './WorkflowCreatePanel';
-
-/** Saved visual workflow definitions (builder templates) with quick links to
- *  open the builder. Self-contained: fetches its own data and renders nothing
- *  but the "Build new" entry when none exist yet. */
-function SavedDefinitionsSection() {
-  const [defs, setDefs] = useState<WorkflowDefinitionSummary[]>([]);
-  useEffect(() => { workflowDefinitions.list().then(setDefs).catch(() => {}); }, []);
-
-  return (
-    <div style={cardStyle}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: defs.length ? 10 : 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Visual workflows</div>
-        <Link href="/workflows/builder" style={{ fontSize: 12, fontWeight: 600, color: 'var(--coral-bright, #f4726e)', textDecoration: 'none' }}>
-          + Build new
-        </Link>
-      </div>
-      {defs.map((d) => (
-        <Link
-          key={d.id}
-          href={`/workflows/builder?id=${d.id}`}
-          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderTop: '1px solid var(--border-subtle)', textDecoration: 'none', color: 'var(--text-primary)' }}
-        >
-          <span style={{ fontSize: 13 }}>🔀</span>
-          <span style={{ fontSize: 12.5, fontWeight: 600, flex: 1 }}>{d.name}</span>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{new Date(d.updatedAt).toLocaleDateString()}</span>
-        </Link>
-      ))}
-    </div>
-  );
-}
+import { ViewToggle, type ViewMode } from './ViewToggle';
 
 interface WorkflowsContentProps {
   projectId?: number | null;
@@ -58,194 +35,244 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: 'var(--text-muted)',
 };
 
+const primaryBtn: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '10px 18px',
+  fontSize: '0.875rem',
+  fontWeight: 600,
+  background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
+  color: '#fff',
+  border: 'none',
+  borderRadius: 10,
+  cursor: 'pointer',
+  fontFamily: 'var(--font-display)',
+  boxShadow: '0 4px 14px var(--shadow-coral-mid)',
+};
+
+/** Derive the saved run target from a definition summary, so the list can fire a
+ *  run with the workflow's own assigned agent (no extra round-trip). */
+function savedRunTarget(def: WorkflowDefinitionSummary): WorkflowRunTarget {
+  return def.runTargetRuntime === 'cloud'
+    ? { runtime: 'cloud', cloudAgentRef: def.runTargetCloudAgentRef ?? null }
+    : { runtime: 'host', agentHostId: def.runTargetAgentHostId ?? null };
+}
+
+/** Has the workflow got an agent assigned? Every workflow needs one to run. */
+function hasAgent(def: WorkflowDefinitionSummary): boolean {
+  return def.runTargetRuntime === 'cloud' ? !!def.runTargetCloudAgentRef : !!def.runTargetAgentHostId;
+}
+
 function WorkflowTaskRow({ task }: { task: WorkflowTask }) {
   const color = STATUS_COLORS[task.status] ?? 'var(--text-muted)';
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: 10,
-        padding: '8px 0',
-        borderBottom: '1px solid var(--border-subtle)',
-      }}
-    >
-      <span
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: '50%',
-          background: color,
-          flexShrink: 0,
-          marginTop: 5,
-        }}
-      />
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, marginTop: 5 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
           {task.agentRole}
-          <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 8 }}>
-            {task.description}
-          </span>
+          <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 8 }}>{task.description}</span>
         </div>
         {task.output && (
-          <div
-            style={{
-              fontSize: 11,
-              color: 'var(--text-secondary)',
-              marginTop: 4,
-              maxHeight: 60,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, maxHeight: 60, overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {task.output}
           </div>
         )}
-        {task.error && (
-          <div style={{ fontSize: 11, color: 'var(--coral-bright, #f4726e)', marginTop: 4 }}>
-            {task.error}
-          </div>
-        )}
+        {task.error && <div style={{ fontSize: 11, color: 'var(--coral-bright, #f4726e)', marginTop: 4 }}>{task.error}</div>}
       </div>
-      <span
-        style={{
-          fontSize: 10,
-          fontWeight: 700,
-          textTransform: 'uppercase',
-          padding: '2px 7px',
-          borderRadius: 5,
-          background: `${color}22`,
-          color,
-          flexShrink: 0,
-          whiteSpace: 'nowrap',
-        }}
-      >
+      <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 5, background: `${color}22`, color, flexShrink: 0, whiteSpace: 'nowrap' }}>
         {task.status}
       </span>
     </div>
   );
 }
 
-/** A single workflow as a card — mirrors the project card layout, surfacing the
- *  associated project + agent so the two pages read the same way. */
-function WorkflowCard({ workflow, onSelect }: { workflow: Workflow; onSelect: (wf: Workflow) => void }) {
-  const color = STATUS_COLORS[workflow.status] ?? 'var(--text-muted)';
-  const taskCount = workflow.tasks?.length ?? 0;
-  const doneCount = workflow.tasks?.filter((t) => t.status === 'completed').length ?? 0;
-
+/** The project / tenant-wide scope chip — one source of truth for both views. */
+function ScopeChip({ def }: { def: WorkflowDefinitionSummary }) {
+  const bound = def.projectId != null;
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(workflow)}
+    <span
+      style={{
+        fontSize: 11,
+        fontWeight: 600,
+        padding: '2px 8px',
+        borderRadius: 5,
+        background: bound ? 'var(--surface-coral-soft, rgba(244,114,94,0.12))' : 'var(--surface-interactive)',
+        color: bound ? 'var(--coral-bright)' : 'var(--text-muted)',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {bound ? (def.projectName ?? `Project #${def.projectId}`) : 'Tenant-wide'}
+    </span>
+  );
+}
+
+/** The assigned-agent label — coral when set, a warning when unassigned (every
+ *  workflow needs an agent to execute). Shared by card + table. */
+function AgentLabel({ def }: { def: WorkflowDefinitionSummary }) {
+  if (hasAgent(def)) {
+    return <span style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{def.agentName ?? 'Assigned agent'}</span>;
+  }
+  return <span style={{ color: 'var(--coral-bright)', fontWeight: 600, opacity: 0.8 }}>⚠ No agent</span>;
+}
+
+/** A workflow (definition) as a card — mirrors the project card layout. */
+function WorkflowDefCard({
+  def,
+  onOpen,
+  onRun,
+  onDelete,
+  running,
+}: {
+  def: WorkflowDefinitionSummary;
+  onOpen: (d: WorkflowDefinitionSummary) => void;
+  onRun: (d: WorkflowDefinitionSummary) => void;
+  onDelete: (d: WorkflowDefinitionSummary) => void;
+  running: boolean;
+}) {
+  return (
+    <div
       style={{
         padding: 20,
         background: 'var(--bg-elevated)',
         border: '1px solid var(--border-subtle)',
         borderRadius: 12,
-        transition: 'border-color 0.2s',
         display: 'flex',
         flexDirection: 'column',
-        gap: 8,
-        width: '100%',
-        textAlign: 'left',
-        cursor: 'pointer',
+        gap: 10,
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = ''; }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            padding: '2px 7px',
-            borderRadius: 5,
-            background: `${color}22`,
-            color,
-          }}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <span style={{ fontSize: 18 }} aria-hidden>🔀</span>
+        <button
+          type="button"
+          onClick={() => onOpen(def)}
+          style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
         >
-          {workflow.status}
-        </span>
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            padding: '2px 7px',
-            borderRadius: 5,
-            background: 'var(--surface-interactive)',
-            color: 'var(--text-muted)',
-          }}
-        >
-          {workflow.workflowType}
-        </span>
+          <h3 style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', margin: 0 }}>{def.name}</h3>
+          {def.description && (
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '4px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+              {def.description}
+            </p>
+          )}
+        </button>
       </div>
 
-      <h3 style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', margin: 0 }}>
-        {workflow.description ?? `Workflow ${workflow.id.slice(0, 8)}`}
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <ScopeChip def={def} />
+      </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <div style={{ fontSize: 12 }}>
-          <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>Project:</span>
-          <span style={{ color: workflow.projectName ? 'var(--text-secondary)' : 'var(--text-muted)', fontWeight: workflow.projectName ? 600 : 400 }}>
-            {workflow.projectName ?? '—'}
-          </span>
-        </div>
-        <div style={{ fontSize: 12 }}>
-          <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>Agent:</span>
-          <span style={{ color: workflow.agentHostName ? 'var(--coral-bright)' : 'var(--text-muted)', fontWeight: workflow.agentHostName ? 600 : 400 }}>
-            {workflow.agentHostName ?? `#${workflow.agentHostId}`}
-          </span>
-        </div>
+      <div style={{ fontSize: 12 }}>
+        <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>Agent:</span>
+        <AgentLabel def={def} />
       </div>
 
       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 'auto' }}>
-        {new Date(workflow.createdAt).toLocaleDateString()}
-        {taskCount > 0 ? ` · ${doneCount}/${taskCount} tasks done` : ''}
+        Updated {new Date(def.updatedAt).toLocaleDateString()}
       </div>
-    </button>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button type="button" onClick={() => onOpen(def)} style={subtleBtn}>Open</button>
+        <button type="button" onClick={() => onRun(def)} disabled={running} style={{ ...subtleBtn, opacity: running ? 0.6 : 1 }}>
+          {running ? 'Running…' : '▶ Run'}
+        </button>
+        <button type="button" onClick={() => onDelete(def)} style={{ ...subtleBtn, marginLeft: 'auto' }}>Delete</button>
+      </div>
+    </div>
   );
 }
 
+const subtleBtn: React.CSSProperties = {
+  padding: '6px 12px',
+  fontSize: 12,
+  fontWeight: 600,
+  color: 'var(--coral-bright)',
+  background: 'var(--bg-base)',
+  border: '1px solid var(--coral-bright)',
+  borderRadius: 8,
+  cursor: 'pointer',
+};
+
 export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
   const router = useRouter();
-  const [wfList, setWfList] = useState<Workflow[]>([]);
+  const [defs, setDefs] = useState<WorkflowDefinitionSummary[]>([]);
+  const [runs, setRuns] = useState<Workflow[]>([]);
   const [projectList, setProjectList] = useState<Project[]>([]);
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Workflow | null>(null);
+  const [runningId, setRunningId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // Run detail (execution history) — tasks + dependency graph for one run.
   const [selectedDetail, setSelectedDetail] = useState<Workflow | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailTab, setDetailTab] = useState<'tasks' | 'graph'>('tasks');
   const [graph, setGraph] = useState<WorkflowGraph | null>(null);
   const [loadingGraph, setLoadingGraph] = useState(false);
-  const [showCreate, setShowCreate] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    workflows
-      .list({ projectId: projectId ?? undefined })
-      .then(setWfList)
-      .catch((e: Error) => setError(e.message))
+    Promise.all([
+      workflowDefinitions.list().catch((e: Error) => { setError(e.message); return [] as WorkflowDefinitionSummary[]; }),
+      workflows.list({ projectId: projectId ?? undefined }).catch(() => [] as Workflow[]),
+    ])
+      .then(([d, r]) => { setDefs(d); setRuns(r); })
       .finally(() => setLoading(false));
   }, [projectId]);
 
   useEffect(() => { load(); }, [load]);
-
-  // Projects power the create panel's dropdown + the filter banner's name.
   useEffect(() => { fetchProjects().then(setProjectList).catch(() => {}); }, []);
 
+  // Filter definitions to the active project (when the page is project-scoped).
+  const visibleDefs = projectId != null ? defs.filter((d) => d.projectId === projectId) : defs;
+
   const filteredProjectName = projectId != null
-    ? projectList.find((p) => p.id === projectId)?.name ?? wfList.find((w) => w.projectName)?.projectName ?? `#${projectId}`
+    ? projectList.find((p) => p.id === projectId)?.name
+        ?? defs.find((d) => d.projectId === projectId)?.projectName
+        ?? `#${projectId}`
     : null;
 
+  const openDef = (d: WorkflowDefinitionSummary) => router.push(`/workflows/builder?id=${d.id}`);
+  const newWorkflow = () => router.push(projectId != null ? `/workflows/builder?projectId=${projectId}` : '/workflows/builder');
+
+  const runDef = async (d: WorkflowDefinitionSummary) => {
+    if (!hasAgent(d)) {
+      setNotice(`"${d.name}" has no agent assigned — open it and pick a run target first.`);
+      return;
+    }
+    setRunningId(d.id);
+    setNotice(null);
+    try {
+      const { workflowId } = await workflowDefinitions.run(d.id, savedRunTarget(d));
+      setNotice(`Started a run of "${d.name}".`);
+      const detail = await workflows.get(workflowId).catch(() => null);
+      load();
+      if (detail) openDetail(detail);
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : 'Failed to start run');
+    } finally {
+      setRunningId(null);
+    }
+  };
+
+  const deleteDef = async (d: WorkflowDefinitionSummary) => {
+    if (!window.confirm(`Delete workflow "${d.name}"? This cannot be undone.`)) return;
+    try {
+      await workflowDefinitions.remove(d.id);
+      setDefs((prev) => prev.filter((x) => x.id !== d.id));
+    } catch {
+      setNotice('Failed to delete workflow');
+    }
+  };
+
   const openDetail = async (wf: Workflow) => {
-    setSelected(wf);
+    setSelectedDetail(wf);
     setDetailTab('tasks');
     setGraph(null);
-    if (wf.tasks) { setSelectedDetail(wf); return; }
+    if (wf.tasks) return;
     setLoadingDetail(true);
     try {
       const detail = await workflows.get(wf.id);
@@ -260,8 +287,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
   const loadGraph = useCallback(async (workflowId: string) => {
     setLoadingGraph(true);
     try {
-      const g = await workflows.getGraph(workflowId);
-      setGraph(g);
+      setGraph(await workflows.getGraph(workflowId));
     } catch {
       setGraph(null);
     } finally {
@@ -269,17 +295,14 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
     }
   }, []);
 
-  if (selected && selectedDetail) {
+  // ---- Run detail view ----------------------------------------------------
+  if (selectedDetail) {
     const tasks = selectedDetail.tasks ?? [];
     const tabBtnStyle = (active: boolean): React.CSSProperties => ({
-      padding: '5px 14px',
-      fontSize: 12,
-      fontWeight: 600,
-      borderRadius: 7,
+      padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 7,
       border: '1px solid var(--border-subtle)',
       background: active ? 'var(--surface-interactive)' : 'transparent',
-      color: active ? 'var(--text-primary)' : 'var(--text-muted)',
-      cursor: 'pointer',
+      color: active ? 'var(--text-primary)' : 'var(--text-muted)', cursor: 'pointer',
     });
 
     return (
@@ -287,41 +310,26 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button
             type="button"
-            onClick={() => { setSelected(null); setSelectedDetail(null); }}
-            style={{
-              padding: '6px 12px',
-              fontSize: 12,
-              fontWeight: 600,
-              background: 'var(--bg-base)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
-              cursor: 'pointer',
-            }}
+            onClick={() => setSelectedDetail(null)}
+            style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}
           >
             ← Back
           </button>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {selectedDetail.description ?? `Workflow ${selectedDetail.id.slice(0, 8)}`}
+              {selectedDetail.description ?? `Run ${selectedDetail.id.slice(0, 8)}`}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
               {selectedDetail.workflowType} · {selectedDetail.status}
               {selectedDetail.projectName ? ` · ${selectedDetail.projectName}` : ''}
             </div>
           </div>
-          {/* Tab switcher */}
           <div style={{ display: 'flex', gap: 4 }}>
-            <button type="button" style={tabBtnStyle(detailTab === 'tasks')} onClick={() => setDetailTab('tasks')}>
-              Tasks
-            </button>
+            <button type="button" style={tabBtnStyle(detailTab === 'tasks')} onClick={() => setDetailTab('tasks')}>Tasks</button>
             <button
               type="button"
               style={tabBtnStyle(detailTab === 'graph')}
-              onClick={() => {
-                setDetailTab('graph');
-                if (!graph && !loadingGraph) void loadGraph(selectedDetail.id);
-              }}
+              onClick={() => { setDetailTab('graph'); if (!graph && !loadingGraph) void loadGraph(selectedDetail.id); }}
             >
               Graph
             </button>
@@ -331,22 +339,18 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
         <div style={cardStyle}>
           {detailTab === 'tasks' ? (
             <>
-              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>
-                Tasks ({tasks.length})
-              </div>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>Tasks ({tasks.length})</div>
               {loadingDetail ? (
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading tasks…</div>
               ) : tasks.length === 0 ? (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No tasks in this workflow yet.</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No tasks in this run yet.</div>
               ) : (
                 tasks.map((t) => <WorkflowTaskRow key={t.id} task={t} />)
               )}
             </>
           ) : (
             <>
-              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>
-                Dependency Graph
-              </div>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>Dependency Graph</div>
               {loadingGraph ? (
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading graph…</div>
               ) : graph ? (
@@ -361,6 +365,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
     );
   }
 
+  // ---- List view ----------------------------------------------------------
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Header */}
@@ -368,121 +373,124 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Workflows</h1>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6, marginBottom: 0 }}>
-            Orchestrate multi-step agent tasks. Associate a workflow with a project and agent.
+            Visually-authored, multi-step agent automations. Each runs under a project or tenant-wide, with an assigned agent.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowCreate(true)}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '10px 18px',
-            fontSize: '0.875rem',
-            fontWeight: 600,
-            background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 10,
-            cursor: 'pointer',
-            fontFamily: 'var(--font-display)',
-            boxShadow: '0 4px 14px var(--shadow-coral-mid)',
-          }}
-        >
-          + New workflow
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <ViewToggle value={viewMode} onChange={setViewMode} />
+          <button type="button" onClick={newWorkflow} style={primaryBtn}>+ New workflow</button>
+        </div>
       </div>
 
       {/* Active project filter banner */}
       {projectId != null && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '8px 14px',
-            background: 'var(--surface-coral-soft, rgba(244,114,94,0.12))',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 10,
-            fontSize: 13,
-          }}
-        >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'var(--surface-coral-soft, rgba(244,114,94,0.12))', border: '1px solid var(--border-subtle)', borderRadius: 10, fontSize: 13 }}>
           <span style={{ color: 'var(--text-secondary)' }}>
             Filtered to project <strong style={{ color: 'var(--text-primary)' }}>{filteredProjectName}</strong>
           </span>
           <button
             type="button"
             onClick={() => router.push('/workflows')}
-            style={{
-              marginLeft: 'auto',
-              fontSize: 12,
-              fontWeight: 600,
-              color: 'var(--coral-bright)',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: 0,
-            }}
+            style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
           >
             Clear filter
           </button>
         </div>
       )}
 
-      <SavedDefinitionsSection />
+      {notice && (
+        <div style={{ ...cardStyle, fontSize: 13, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ flex: 1 }}>{notice}</span>
+          <button type="button" onClick={() => setNotice(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16 }} aria-label="Dismiss">×</button>
+        </div>
+      )}
 
       {loading && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading workflows…</div>}
       {error && <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13 }}>Error: {error}</div>}
 
-      {!loading && wfList.length === 0 && (
-        <div
-          style={{
-            textAlign: 'center',
-            padding: 48,
-            background: 'var(--bg-elevated)',
-            borderRadius: 12,
-            border: '1px solid var(--border-subtle)',
-          }}
-        >
+      {!loading && visibleDefs.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 48, background: 'var(--bg-elevated)', borderRadius: 12, border: '1px solid var(--border-subtle)' }}>
           <div style={{ fontSize: 56, marginBottom: 16 }}>🔀</div>
           <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
             No workflows {projectId != null ? 'for this project ' : ''}yet. Create one to orchestrate multi-step agent tasks.
           </p>
-          <button
-            type="button"
-            onClick={() => setShowCreate(true)}
-            style={{
-              padding: '12px 24px',
-              background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontFamily: 'var(--font-display)',
-            }}
-          >
-            New workflow
-          </button>
+          <button type="button" onClick={newWorkflow} style={{ ...primaryBtn, padding: '12px 24px' }}>New workflow</button>
         </div>
-      )}
-
-      {wfList.length > 0 && (
+      ) : viewMode === 'card' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {wfList.map((wf) => (
-            <WorkflowCard key={wf.id} workflow={wf} onSelect={openDetail} />
+          {visibleDefs.map((d) => (
+            <WorkflowDefCard key={d.id} def={d} onOpen={openDef} onRun={runDef} onDelete={deleteDef} running={runningId === d.id} />
           ))}
         </div>
+      ) : (
+        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
+                {['Name', 'Project', 'Agent', 'Updated', 'Actions'].map((h) => (
+                  <th key={h} style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleDefs.map((d) => (
+                <tr key={d.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                  <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                    <button type="button" onClick={() => openDef(d)} style={{ background: 'none', border: 'none', color: 'var(--text-primary)', fontWeight: 600, cursor: 'pointer', padding: 0, textAlign: 'left' }}>
+                      {d.name}
+                    </button>
+                  </td>
+                  <td style={{ padding: '12px 16px' }}><ScopeChip def={d} /></td>
+                  <td style={{ padding: '12px 16px' }}><AgentLabel def={d} /></td>
+                  <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{new Date(d.updatedAt).toLocaleDateString()}</td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button type="button" onClick={() => openDef(d)} style={subtleBtn}>Open</button>
+                      <button type="button" onClick={() => runDef(d)} disabled={runningId === d.id} style={{ ...subtleBtn, opacity: runningId === d.id ? 0.6 : 1 }}>
+                        {runningId === d.id ? 'Running…' : '▶ Run'}
+                      </button>
+                      <button type="button" onClick={() => deleteDef(d)} style={subtleBtn}>Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
-      <WorkflowCreatePanel
-        open={showCreate}
-        onClose={() => setShowCreate(false)}
-        onCreated={load}
-        projects={projectList}
-        defaultProjectId={projectId}
-      />
+      {/* Execution history — runs are executions OF the workflows above, kept
+          clearly subordinate so the two concepts don't read as peer lists. */}
+      {runs.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10 }}>
+            Recent runs ({runs.length})
+          </div>
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+            {runs.map((r) => {
+              const color = STATUS_COLORS[r.status] ?? 'var(--text-muted)';
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => openDetail(r)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)', background: 'none', border: 'none', borderBottomStyle: 'solid', cursor: 'pointer' }}
+                >
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                  <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {r.description ?? `Run ${r.id.slice(0, 8)}`}
+                  </span>
+                  {r.projectName && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.projectName}</span>}
+                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 5, background: `${color}22`, color, whiteSpace: 'nowrap' }}>
+                    {r.status}
+                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(r.createdAt).toLocaleDateString()}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

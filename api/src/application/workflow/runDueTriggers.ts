@@ -39,11 +39,11 @@ function targetFromTrigger(row: typeof workflowTriggers.$inferSelect): RunTarget
 /** Load the owning definition's name + parsed graph. */
 async function loadDefinition(db: Db, definitionId: string, tenantId: number) {
   const [row] = await db
-    .select({ name: workflowDefinitions.name, definition: workflowDefinitions.definition })
+    .select({ name: workflowDefinitions.name, projectId: workflowDefinitions.projectId, definition: workflowDefinitions.definition })
     .from(workflowDefinitions)
     .where(and(eq(workflowDefinitions.id, definitionId), eq(workflowDefinitions.tenantId, tenantId)));
   if (!row) return null;
-  return { name: row.name, definition: parseDefinition(row.definition) };
+  return { name: row.name, projectId: row.projectId, definition: parseDefinition(row.definition) };
 }
 
 /** Fire a schedule trigger and re-arm its next run from the cron expression. */
@@ -62,6 +62,7 @@ async function runScheduleTrigger(db: Db, row: typeof workflowTriggers.$inferSel
       segmentId: row.segmentId,
       definition: def.definition,
       name: def.name,
+      projectId: def.projectId,
       target: targetFromTrigger(row),
       triggerSource: `schedule:${row.nodeId}`,
     });
@@ -125,6 +126,7 @@ async function runRssTrigger(db: Db, row: typeof workflowTriggers.$inferSelect, 
           segmentId: row.segmentId,
           definition: def.definition,
           name: def.name,
+          projectId: def.projectId,
           target: targetFromTrigger(row),
           triggerPayload: { feedUrl, items: fresh },
           triggerSource: `rss:${row.nodeId}`,

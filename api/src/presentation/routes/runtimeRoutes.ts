@@ -1149,20 +1149,22 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     // Self-hosted runs are keyed by (agent_host_id, session_key); cloud runs have
     // neither, so their telemetry (0092) is keyed by execution_id. Pick the filter
     // that matches the run shape rather than bailing out for cloud executions.
-    const isCloudRun = plain.agentHostId == null || !plain.sessionId;
+    const hostId = plain.agentHostId;
+    const sessionId = plain.sessionId;
+    const isCloudRun = hostId == null || !sessionId;
     const usageFilter = isCloudRun
       ? and(eq(usageSnapshots.tenantId, plain.tenantId), eq(usageSnapshots.executionId, id))
       : and(
           eq(usageSnapshots.tenantId, plain.tenantId),
-          eq(usageSnapshots.agentHostId, plain.agentHostId),
-          eq(usageSnapshots.sessionKey, plain.sessionId),
+          eq(usageSnapshots.agentHostId, hostId!),
+          eq(usageSnapshots.sessionKey, sessionId!),
         );
     const toolFilter = isCloudRun
       ? and(eq(toolAuditEvents.tenantId, plain.tenantId), eq(toolAuditEvents.executionId, id))
       : and(
           eq(toolAuditEvents.tenantId, plain.tenantId),
-          eq(toolAuditEvents.agentHostId, plain.agentHostId),
-          eq(toolAuditEvents.sessionKey, plain.sessionId),
+          eq(toolAuditEvents.agentHostId, hostId!),
+          eq(toolAuditEvents.sessionKey, sessionId!),
         );
 
     const usage = await db

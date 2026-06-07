@@ -16,7 +16,7 @@
 import { Hono } from 'hono';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { workflowDefinitions, workflowTriggers, agentHosts } from '../../infrastructure/database/schema';
+import { workflowDefinitions, workflowTriggers, agentHosts, projects } from '../../infrastructure/database/schema';
 import {
   definitionToYaml,
   parseDefinition,
@@ -54,8 +54,20 @@ interface RunTargetInput {
   runTargetRuntime?: string;
   runTargetAgentHostId?: number | null;
   runTargetCloudAgentRef?: string | null;
+  /** Project this workflow belongs to; null = tenant-wide (independent). */
+  projectId?: number | null;
   /** 'project' = runs under the bound project; 'global' = tenant-wide. */
   executionScope?: string;
+}
+
+/**
+ * Resolve the execution scope from the project binding. A project binding is the
+ * source of truth: bound ⇒ 'project', unbound ⇒ 'global'. Falls back to the
+ * explicit/previous scope only when the binding is left untouched.
+ */
+function scopeFromProject(projectId: number | null | undefined, fallback: string | undefined): 'project' | 'global' {
+  if (projectId !== undefined) return projectId != null ? 'project' : 'global';
+  return coerceExecutionScope(fallback);
 }
 
 /** Normalize execution scope to the two allowed values. */
@@ -81,23 +93,55 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
-  // GET / — list this tenant's definitions (newest first). Read-through cached;
+  // GET / — list this tenant's definitions (newest first), enriched for the
+  // unified Workflows page: the bound project's name, the run-target agent's
+  // display name (self-hosted host OR cloud agent), and the execution scope —
+  // so each workflow card/row reads like a Project card. Read-through cached;
   // invalidated by every create/update/delete below.
   router.get('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const definitions = await getOrSetCached(c.env as Env, listCacheKey(tenantId), () =>
-      db
+    const definitions = await getOrSetCached(c.env as Env, listCacheKey(tenantId), async () => {
+      const rows = await db
         .select({
           id: workflowDefinitions.id,
           name: workflowDefinitions.name,
           description: workflowDefinitions.description,
+          projectId: workflowDefinitions.projectId,
+          projectName: projects.name,
+          runTargetRuntime: workflowDefinitions.runTargetRuntime,
+          runTargetAgentHostId: workflowDefinitions.runTargetAgentHostId,
+          runTargetCloudAgentRef: workflowDefinitions.runTargetCloudAgentRef,
+          agentHostName: agentHosts.name,
+          executionScope: workflowDefinitions.executionScope,
           createdAt: workflowDefinitions.createdAt,
           updatedAt: workflowDefinitions.updatedAt,
         })
         .from(workflowDefinitions)
+        .leftJoin(projects, eq(projects.id, workflowDefinitions.projectId))
+        .leftJoin(agentHosts, eq(agentHosts.id, workflowDefinitions.runTargetAgentHostId))
         .where(eq(workflowDefinitions.tenantId, tenantId))
-        .orderBy(desc(workflowDefinitions.updatedAt)),
-    );
+        .orderBy(desc(workflowDefinitions.updatedAt));
+
+      // Resolve cloud-agent run targets to names in one batched lookup (ide_agents
+      // has no Drizzle model) — avoids an N+1 over the definition list.
+      const cloudRefs = [...new Set(rows.map((r) => r.runTargetCloudAgentRef).filter((x): x is string => !!x))];
+      const cloudNames = new Map<string, string>();
+      if (cloudRefs.length > 0) {
+        const cloudRows = (await db.execute(sql`
+          SELECT id, name FROM ide_agents
+          WHERE tenant_id = ${tenantId} AND id IN (${sql.join(cloudRefs, sql`, `)})
+        `)).rows as Array<{ id: string; name: string }>;
+        for (const r of cloudRows) cloudNames.set(r.id, r.name);
+      }
+
+      return rows.map((r) => {
+        const { runTargetAgentHostId, agentHostName, ...rest } = r;
+        const agentName = r.runTargetRuntime === 'cloud'
+          ? (r.runTargetCloudAgentRef ? cloudNames.get(r.runTargetCloudAgentRef) ?? null : null)
+          : agentHostName;
+        return { ...rest, runTargetAgentHostId, agentName };
+      });
+    });
     return c.json({ definitions });
   });
 
@@ -148,9 +192,10 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       segmentId,
       name: body.name.trim(),
       description: body.description ?? null,
+      projectId: body.projectId ?? null,
       definition: JSON.stringify(def),
       ...target,
-      executionScope: coerceExecutionScope(body.executionScope),
+      executionScope: scopeFromProject(body.projectId, body.executionScope),
       createdAt: now,
       updatedAt: now,
     });
@@ -291,9 +336,14 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       .set({
         ...(body.name !== undefined ? { name: body.name.trim() } : {}),
         ...(body.description !== undefined ? { description: body.description } : {}),
+        ...(body.projectId !== undefined ? { projectId: body.projectId } : {}),
         ...(body.definition !== undefined ? { definition: JSON.stringify(coerceDefinition(body.definition)) } : {}),
         ...(runTargetTouched ? target : {}),
-        ...(body.executionScope !== undefined ? { executionScope: coerceExecutionScope(body.executionScope) } : {}),
+        // The project binding drives scope; an explicit executionScope only
+        // applies when the binding itself isn't being changed.
+        ...(body.projectId !== undefined || body.executionScope !== undefined
+          ? { executionScope: scopeFromProject(body.projectId, body.executionScope ?? existing.executionScope) }
+          : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(workflowDefinitions.id, id), eq(workflowDefinitions.tenantId, tenantId)));
@@ -364,6 +414,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       segmentId: c.get('segmentId') ?? null,
       definition: parseDefinition(defRow.definition),
       name: defRow.name,
+      projectId: defRow.projectId,
       target,
       triggerSource: 'manual',
     });

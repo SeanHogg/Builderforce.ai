@@ -1129,6 +1129,9 @@ export const workflowDefinitions = pgTable('workflow_definitions', {
   segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS
   name:        varchar('name', { length: 255 }).notNull(),
   description: text('description'),
+  // Project this workflow belongs to (0093). Tenant-wide (independent) when null;
+  // when set, execution_scope is 'project' and runs inherit this projectId.
+  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   definition:  text('definition').notNull().default('{"nodes":[],"edges":[]}'),  // serialized WorkflowDefinition JSON
   // Run target (0080): where runs of this definition execute — manual runs, and
   // every trigger-fired run, inherit this. 'host' uses runTargetAgentHostId,
