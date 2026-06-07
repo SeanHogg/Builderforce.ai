@@ -1508,6 +1508,25 @@ full `api/src` rename (`Claw*`→`AgentHost*`, table `coderclaw_instances`→`ag
   for future asset sweeps: an image is only "dead" if NO reference (including its *renamed* form)
   resolves to it — I briefly mis-deleted `coderclaw.png` before realising `/agents.png` was its
   orphaned reference, and recovered it from `git show HEAD:`.
+- **`frontend/public/install.ps1` crash + stale URLs FIXED; deeper connect-agent flow mismatch LOGGED.**
+  Root cause (again): the rename sweep covered `frontend/src` but **not `frontend/public/`**, so
+  `install.ps1` still had `worker.coderclaw.ai` (dead) as its default `$ApiUrl` and `coderclaw.ai`
+  in docs. Worse, it called `exit` on failure — and the Workforce "Connect a new agent" one-liner
+  runs it via `iwr | iex` (in-process), where `exit` **terminates the user's PowerShell session**
+  (the reported "crash"). Fixed: URLs → `api.builderforce.ai`/`builderforce.ai`, and every `exit N`
+  → `return` so a failure ends the script without killing the host shell. **STILL BROKEN (logged,
+  needs design):** `install.ps1` is a *marketplace-agent registry browser* — it ignores
+  `$env:BUILDERFORCE_TOKEN` / `$env:BUILDERFORCE_WORKSPACE` that the "Connect a new agent" popover
+  injects, so it never registers the machine as an AgentHost into the workgroup. The popover promises
+  "the agent installs and registers straight into this workgroup"; install.ps1 doesn't. Fixing it
+  (download+install the agent-runtime, then register via the token/workspace) unblocks real self-host
+  onboarding.
+- **The "coderclaw" still visible on `/workforce` was DATA, not code** — the tenant/workgroup row
+  (`tenants.id=1`) was literally named/slugged `coderclaw`. `frontend/src` has **0** `coderclaw`
+  refs; the page interpolates the workgroup name. Renamed the tenant → `name='BuilderForce'`,
+  `slug='builderforce'` (0 `agent_hosts` referenced it, so the slug change was safe) and added a
+  `(workspace)` indicator next to the name in `TopBar.tsx`. Remaining `coderclaw` in `api/src` (7)
+  are comments + intentional back-compat (GitHub dispatch label, `coderclawllm/` model-id prefix).
 - **Two CI failures from the rebrand are now FIXED + verified** (root cause: `tsc`/`tsgo` were used
   as the local gate, but they don't run the checks CI does). (1) **Frontend** — `blogData.ts`
   imported `@/content/blog/agents-and-agent-integration.md` while the renamed file is
