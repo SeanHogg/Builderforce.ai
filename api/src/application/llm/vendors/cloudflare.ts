@@ -121,7 +121,7 @@ export const cloudflareModule: VendorModule = {
         'X-Title':      params.title ?? 'Builderforce.ai',
       },
       body: JSON.stringify(body),
-    }, params.timeoutMs);
+    }, params.timeoutMs, params.signal);
 
     if (resp.ok) {
       const raw = await resp.json();

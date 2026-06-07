@@ -24,6 +24,13 @@ export interface BrainAction<A = unknown, R = unknown> {
   description: string;
   /** JSON Schema for the action arguments (becomes the tool's `function.parameters`). */
   parameters: Record<string, unknown>;
+  /**
+   * Whether running this action changes state — drives the host's
+   * confirm-before-mutate gate (see `useBrainConversation`'s `confirmTool`).
+   * Use a predicate when mutation depends on the args (e.g. a dispatcher tool
+   * that proxies both reads and writes). Defaults to read-only (no gate).
+   */
+  mutates?: boolean | ((args: A) => boolean);
   run(args: A): Promise<R> | R;
 }
 
@@ -32,6 +39,8 @@ export interface BrainActionsContextValue {
   toolSpecs: BrainToolSpec[];
   /** Execute a registered action by name. Returns a recoverable error object for unknown tools. */
   runTool(name: string, args: unknown): Promise<unknown>;
+  /** Whether the named action would mutate state for these args (false if unknown). */
+  isMutating(name: string, args: unknown): boolean;
   /** Register a batch of actions; returns an unregister function. (Used by the hook.) */
   register(actions: BrainAction[]): () => void;
 }
@@ -81,6 +90,17 @@ export function BrainActionsProvider({ children }: { children: React.ReactNode }
     }
   }, []);
 
+  const isMutating = useCallback((name: string, args: unknown): boolean => {
+    const entry = registry.current.get(name);
+    if (!entry) return false;
+    const m = entry.action.mutates;
+    if (typeof m === 'function') {
+      // A throwing predicate is treated as "mutating" so we fail safe (gate it).
+      try { return !!(m as (a: unknown) => boolean)(args); } catch { return true; }
+    }
+    return !!m;
+  }, []);
+
   const toolSpecs = useMemo<BrainToolSpec[]>(() => {
     return [...registry.current.values()].map(({ action }) => ({
       type: 'function' as const,
@@ -95,8 +115,8 @@ export function BrainActionsProvider({ children }: { children: React.ReactNode }
   }, [version]);
 
   const value = useMemo<BrainActionsContextValue>(
-    () => ({ toolSpecs, runTool, register }),
-    [toolSpecs, runTool, register],
+    () => ({ toolSpecs, runTool, isMutating, register }),
+    [toolSpecs, runTool, isMutating, register],
   );
 
   return <BrainActionsContext.Provider value={value}>{children}</BrainActionsContext.Provider>;

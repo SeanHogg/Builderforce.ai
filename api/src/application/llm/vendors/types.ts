@@ -63,6 +63,11 @@ export interface VendorCallParams {
    *  take 30–50s (long-context tailoring, structured extraction) don't get
    *  killed by the free-tier 25s budget. */
   timeoutMs?: number;
+  /** Optional caller cancellation. When this aborts (e.g. an execution is
+   *  cancelled mid-run), the in-flight fetch is aborted and the cascade stops
+   *  (RequestAbortedError) instead of failing over and spending more tokens.
+   *  Undefined for normal traffic — behavior is unchanged. */
+  signal?: AbortSignal;
 }
 
 export interface VendorUsage {
@@ -253,6 +258,25 @@ export class WorkerSubrequestExhaustedError extends Error {
   }
 }
 
+/**
+ * Thrown when an EXTERNAL AbortSignal (caller cancellation, e.g. an execution
+ * cancelled mid-run) aborts the in-flight vendor fetch — distinct from the
+ * per-vendor *timeout* (which is a 408 VendorRetryableError that cascades). A
+ * caller cancel must STOP the cascade, not fail over to the next model and keep
+ * spending — so the dispatcher treats this like WorkerSubrequestExhaustedError:
+ * record the attempt and bubble up immediately.
+ */
+export class RequestAbortedError extends Error {
+  public readonly vendorId: string;
+  public readonly model: string;
+  constructor(vendorId: string, model: string) {
+    super(`[${vendorId}/${model}] request aborted by caller`);
+    this.name = 'RequestAbortedError';
+    this.vendorId = vendorId;
+    this.model = model;
+  }
+}
+
 /** Detect Cloudflare's per-invocation subrequest cap exhaustion message.
  *  Single source of truth — the substring is also matched in tests. */
 const SUBREQUEST_CAP_MARKER = 'Too many subrequests by single Worker invocation';
@@ -301,13 +325,26 @@ export async function fetchWithVendorTimeout(
   endpoint: string,
   init: RequestInit,
   timeoutMsArg?: number,
+  externalSignal?: AbortSignal,
 ): Promise<Response> {
   const timeoutMs = timeoutMsArg && timeoutMsArg > 0 ? timeoutMsArg : DEFAULT_VENDOR_CALL_TIMEOUT_MS;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // Fold the caller's cancellation into this fetch's controller so an external
+  // abort (execution cancelled mid-run) stops the in-flight request — and is
+  // distinguishable from the timeout below so the cascade stops instead of
+  // failing over. Cheap no-op when no signal is passed (normal traffic).
+  const onExternalAbort = () => controller.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+  }
   try {
     return await fetch(endpoint, { ...init, signal: controller.signal });
   } catch (err) {
+    if (externalSignal?.aborted) {
+      throw new RequestAbortedError(vendorId, model);
+    }
     if (controller.signal.aborted) {
       throw new VendorRetryableError(vendorId, model, 408, `vendor timed out after ${timeoutMs}ms`);
     }
@@ -324,6 +361,7 @@ export async function fetchWithVendorTimeout(
     throw new VendorRetryableError(vendorId, model, 0, `network: ${msg}`);
   } finally {
     clearTimeout(timer);
+    externalSignal?.removeEventListener('abort', onExternalAbort);
   }
 }
 
@@ -341,8 +379,9 @@ export async function executeChatCompletion(args: {
   title?: string;
   parseResponse?: ResponseParser;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<VendorCallResult> {
-  const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs } = args;
+  const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs, signal } = args;
   const parseResponse = args.parseResponse ?? parseOpenAIResponse;
 
   // Per-vendor timeout — see fetchWithVendorTimeout for rationale. Throws
@@ -356,7 +395,7 @@ export async function executeChatCompletion(args: {
       ...(headers ?? {}),
     },
     body: JSON.stringify(body),
-  }, timeoutMs);
+  }, timeoutMs, signal);
 
   if (resp.ok) {
     const raw = await resp.json();
@@ -407,8 +446,9 @@ export async function executeChatCompletionStream(args: {
   headers?: Record<string, string>;
   title?: string;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<VendorStreamResult> {
-  const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs } = args;
+  const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs, signal } = args;
 
   const resp = await fetchWithVendorTimeout(vendorId, model, endpoint, {
     method: 'POST',
@@ -419,7 +459,7 @@ export async function executeChatCompletionStream(args: {
       ...(headers ?? {}),
     },
     body: JSON.stringify({ ...body, stream: true }),
-  }, timeoutMs);
+  }, timeoutMs, signal);
 
   if (!resp.ok) {
     const errText = (await resp.text()).slice(0, 400);

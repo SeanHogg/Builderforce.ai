@@ -172,7 +172,7 @@ export function ViewToggle<T extends string = ViewMode>({
   };
 
   const opts: ViewOption<T>[] =
-    options ?? CANONICAL_ORDER.filter((m) => enabled[m]).map((m) => ({ value: m as T, label: labelFor(m) }));
+    options ?? CANONICAL_ORDER.filter((m) => enabled[m]).map((m) => ({ value: m as T, label: labelFor(m), icon: CANONICAL_ICONS[m] }));
 
   return (
     <div
@@ -193,8 +193,9 @@ export function ViewToggle<T extends string = ViewMode>({
           type="button"
           onClick={() => onChange(opt.value)}
           aria-pressed={value === opt.value}
-          style={buttonStyle(value === opt.value)}
+          style={{ ...buttonStyle(value === opt.value), display: 'inline-flex', alignItems: 'center', gap: 6 }}
         >
+          {opt.icon}
           {opt.label}
         </button>
       ))}

@@ -11,7 +11,7 @@ vi.mock('@/lib/builderforceApi', async (importOriginal) => {
   return { ...mod, tasksApi: { ...mod.tasksApi, list: vi.fn().mockResolvedValue([{ id: 1 }]) } };
 });
 
-import { buildPlatformActions, buildPlatformCapabilities, type PlatformActionContext } from './platformActions';
+import { buildPlatformActions, buildPlatformCapabilities, focusDomainsForPath, type PlatformActionContext } from './platformActions';
 import * as api from '@/lib/api';
 import { tasksApi } from '@/lib/builderforceApi';
 
@@ -157,5 +157,58 @@ describe('Tier-1 promotion reuses the manifest run()', () => {
     const res = await create.run({ name: 'Acme', modality: 'designer' });
     expect(api.createProject).toHaveBeenCalledWith({ name: 'Acme', modality: 'designer' });
     expect(res).toEqual({ id: 42, name: 'Acme' });
+  });
+});
+
+describe('mutation flags (drive the HITL confirm gate)', () => {
+  it('marks writes mutating and reads non-mutating', () => {
+    const actions = buildPlatformActions(makeCtx().ctx);
+    const byName = (n: string) => actions.find((a) => a.name === n)!;
+    expect(byName('create_project').mutates).toBe(true);
+    expect(byName('delete_project').mutates).toBe(true);
+    expect(byName('decide_approval').mutates).toBe(true);
+    expect(byName('list_projects').mutates).toBe(false);
+    expect(byName('navigate_to').mutates).toBe(false);
+    expect(byName('open_project').mutates).toBe(false);
+    expect(byName('list_platform_capabilities').mutates).toBe(false);
+  });
+
+  it('the dispatcher gates per the targeted capability (predicate)', () => {
+    const call = actionByName('call_platform_capability')!;
+    expect(typeof call.mutates).toBe('function');
+    const pred = call.mutates as (args: unknown) => boolean;
+    expect(pred({ domain: 'tasks', method: 'create' })).toBe(true);
+    expect(pred({ domain: 'tasks', method: 'list' })).toBe(false);
+    expect(pred({ domain: 'nope', method: 'nope' })).toBe(false);
+  });
+});
+
+describe('context-aware focus promotion', () => {
+  it('maps routes to relevant domains', () => {
+    expect(focusDomainsForPath('/workflows')).toContain('workflows');
+    expect(focusDomainsForPath('/prompts')).toEqual(['prompts']);
+    expect(focusDomainsForPath('/projects/12')).toContain('tasks');
+    expect(focusDomainsForPath('/marketing/blog')).toEqual([]);
+    expect(focusDomainsForPath(null)).toEqual([]);
+  });
+
+  it('promotes the focused domain’s core methods first-class (deduped vs the static core)', () => {
+    const navigate = vi.fn();
+    const base = buildPlatformActions({ navigate, getTenantId: () => 7 }).map((a) => a.name);
+    const focused = buildPlatformActions({ navigate, getTenantId: () => 7, focusDomains: ['prompts'] }).map((a) => a.name);
+    expect(base).not.toContain('prompts_create');
+    expect(focused).toContain('prompts_create');
+    expect(focused).toContain('prompts_list');
+    // No duplicate names introduced by promotion.
+    expect(new Set(focused).size).toBe(focused.length);
+  });
+
+  it('does not double-promote a method already in the static core', () => {
+    const navigate = vi.fn();
+    // projects.create is statically promoted as create_project; focusing projects
+    // must not also add a projects_create twin.
+    const names = buildPlatformActions({ navigate, getTenantId: () => 7, focusDomains: ['projects'] }).map((a) => a.name);
+    expect(names).not.toContain('projects_create');
+    expect(names).toContain('create_project');
   });
 });

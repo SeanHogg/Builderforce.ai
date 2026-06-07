@@ -30,6 +30,7 @@ import {
   vendorForModel,
   vendorKeyBound,
   WorkerSubrequestExhaustedError,
+  RequestAbortedError,
   type DispatchAttempt,
   type VendorEnv,
   type VendorId,
@@ -349,6 +350,7 @@ export class LlmProxyService {
     body: ChatCompletionRequest,
     requestHeaders?: Record<string, string>,
     traceId?: string,
+    signal?: AbortSignal,
   ): Promise<ProxyResult> {
     const startedAt = Date.now();
     const tid = traceId ?? newTraceId();
@@ -425,7 +427,7 @@ export class LlmProxyService {
       );
     }
 
-    const primary = await this.dispatch(candidates, body, requestHeaders);
+    const primary = await this.dispatch(candidates, body, requestHeaders, { signal });
     if (primary.response.status < 400) {
       return this.finalize(primary, tid, startedAt, candidates);
     }
@@ -613,7 +615,7 @@ export class LlmProxyService {
     candidates: string[],
     body: ChatCompletionRequest,
     requestHeaders?: Record<string, string>,
-    overrides?: { vendorEnv?: VendorEnv; timeoutMs?: number },
+    overrides?: { vendorEnv?: VendorEnv; timeoutMs?: number; signal?: AbortSignal },
   ): Promise<ProxyResult> {
     // Sanitize tool names (`governance.snapshot` → `governance__DOT__snapshot`)
     // before the body reaches a vendor — Anthropic / some Cerebras configs
@@ -632,6 +634,7 @@ export class LlmProxyService {
       ...(Object.keys(extraBody).length > 0 ? { extraBody } : {}),
       title: this.productName,
       ...(effectiveTimeoutMs ? { timeoutMs: effectiveTimeoutMs } : {}),
+      ...(overrides?.signal ? { signal: overrides.signal } : {}),
     };
 
     if (sanitizedBody.stream) {
@@ -680,6 +683,9 @@ export class LlmProxyService {
         if (err instanceof WorkerSubrequestExhaustedError) {
           return this.subrequestExhaustedResponse(candidates, schemaRetries, err);
         }
+        // Caller cancelled — propagate so complete() stops immediately instead of
+        // firing the paid backstop and spending more tokens on a cancelled run.
+        if (err instanceof RequestAbortedError) throw err;
         const errAttempts = err instanceof CascadeExhaustedError ? err.attempts : [];
         await this.applyCooldowns(errAttempts);
         return this.exhaustedResponse(candidates, schemaRetries, err, errAttempts);

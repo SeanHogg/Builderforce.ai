@@ -183,6 +183,7 @@ export const openRouterModule: VendorModule = {
       headers: HEADERS,
       ...(params.title ? { title: params.title } : {}),
       ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
+      ...(params.signal ? { signal: params.signal } : {}),
     });
   },
   async callStream(params: VendorCallParams): Promise<VendorStreamResult> {
@@ -195,6 +196,7 @@ export const openRouterModule: VendorModule = {
       headers: HEADERS,
       ...(params.title ? { title: params.title } : {}),
       ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
+      ...(params.signal ? { signal: params.signal } : {}),
     });
   },
 };

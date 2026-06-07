@@ -13,22 +13,27 @@
  */
 
 import { useMemo } from 'react';
-import { useRouter } from 'next/navigation';
-import { buildPlatformActions, useRegisterBrainActions } from '@/lib/brain';
+import { useRouter, usePathname } from 'next/navigation';
+import { buildPlatformActions, focusDomainsForPath, useRegisterBrainActions } from '@/lib/brain';
 import { useAuth } from '@/lib/AuthContext';
 
 export function PlatformActionsBridge() {
   const router = useRouter();
+  const pathname = usePathname();
   const { tenant } = useAuth();
   const tenantId = tenant?.id ?? null;
+  // Promote the current route's relevant tools first-class (string key so the
+  // memo only recomputes when the focus set actually changes, not every nav).
+  const focusKey = focusDomainsForPath(pathname).join(',');
 
   const actions = useMemo(
     () =>
       buildPlatformActions({
         navigate: (path: string) => router.push(path),
         getTenantId: () => (tenantId != null ? Number(tenantId) : null),
+        focusDomains: focusKey ? focusKey.split(',') : [],
       }),
-    [router, tenantId],
+    [router, tenantId, focusKey],
   );
 
   useRegisterBrainActions(actions);

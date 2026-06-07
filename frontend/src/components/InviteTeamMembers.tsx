@@ -184,8 +184,8 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
       {invites.length === 0 && (
         <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
           You can also invite teammates later from{' '}
-          <a href="/settings/members" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
-            Workspace Settings
+          <a href="/workforce?tab=members" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
+            Workforce → Members
           </a>
           .
         </p>

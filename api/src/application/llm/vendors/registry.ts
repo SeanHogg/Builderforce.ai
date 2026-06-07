@@ -15,6 +15,7 @@ import { openRouterModule } from './openrouter';
 import {
   VendorRetryableError,
   WorkerSubrequestExhaustedError,
+  RequestAbortedError,
   isEmptyChatResponse,
   type AiModelTier,
   type VendorCallParams,
@@ -271,6 +272,11 @@ export async function dispatchVendor(params: DispatchParams): Promise<DispatchRe
         attempts.push({ model, vendor: vendorId, status: 0, error: err.message, durationMs, kind: 'network' });
         throw err;
       }
+      // Caller cancelled mid-run — stop the cascade (don't fail over and spend more).
+      if (err instanceof RequestAbortedError) {
+        attempts.push({ model, vendor: vendorId, status: 0, error: err.message, durationMs, kind: 'aborted' });
+        throw err;
+      }
       if (err instanceof VendorRetryableError) {
         attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message) });
         console.warn(
@@ -335,6 +341,10 @@ export async function dispatchVendorStream(params: DispatchParams): Promise<Stre
       // don't burn the rest of the chain on identical 0ms failures.
       if (err instanceof WorkerSubrequestExhaustedError) {
         attempts.push({ model, vendor: vendorId, status: 0, error: err.message, durationMs, kind: 'network' });
+        throw err;
+      }
+      if (err instanceof RequestAbortedError) {
+        attempts.push({ model, vendor: vendorId, status: 0, error: err.message, durationMs, kind: 'aborted' });
         throw err;
       }
       if (err instanceof VendorRetryableError) {

@@ -20,6 +20,10 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     globals: true,
+    // Use worker threads, not child-process forks: the default `forks` pool
+    // fails to spawn workers in constrained/sandboxed CI environments
+    // (`Timeout waiting for worker to respond`); threads run the suite cleanly.
+    pool: 'threads',
   },
   resolve: {
     alias: {

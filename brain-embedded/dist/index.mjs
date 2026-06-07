@@ -161,6 +161,19 @@ function BrainActionsProvider({ children }) {
       return { error: e instanceof Error ? e.message : "Tool execution failed" };
     }
   }, []);
+  const isMutating = useCallback((name, args) => {
+    const entry = registry.current.get(name);
+    if (!entry) return false;
+    const m = entry.action.mutates;
+    if (typeof m === "function") {
+      try {
+        return !!m(args);
+      } catch {
+        return true;
+      }
+    }
+    return !!m;
+  }, []);
   const toolSpecs = useMemo2(() => {
     return [...registry.current.values()].map(({ action }) => ({
       type: "function",
@@ -172,8 +185,8 @@ function BrainActionsProvider({ children }) {
     }));
   }, [version]);
   const value = useMemo2(
-    () => ({ toolSpecs, runTool, register }),
-    [toolSpecs, runTool, register]
+    () => ({ toolSpecs, runTool, isMutating, register }),
+    [toolSpecs, runTool, isMutating, register]
   );
   return /* @__PURE__ */ jsx2(BrainActionsContext.Provider, { value, children });
 }
@@ -433,6 +446,7 @@ function useBrainConversation(options) {
     model,
     toolSpecs,
     runTool,
+    confirmTool,
     ensureChatId,
     onActivity
   } = options;
@@ -509,7 +523,12 @@ ${extraSystem}` : base;
             }))
           });
           for (const tc of result.toolCalls) {
-            const out = await runTool(tc.name, parseArgs(tc.args));
+            const args = parseArgs(tc.args);
+            if (confirmTool && !await confirmTool({ name: tc.name, args })) {
+              working.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify({ cancelled: true, reason: "User declined this action." }) });
+              continue;
+            }
+            const out = await runTool(tc.name, args);
             working.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(out ?? null) });
           }
           setStreamingText("");
@@ -525,7 +544,7 @@ ${extraSystem}` : base;
       setStreamingText("");
       setError("The assistant kept calling tools without finishing. Try rephrasing.");
     },
-    [persistence, stream, resolvedSystemPrompt, toolSpecs, runTool, onActivity]
+    [persistence, stream, resolvedSystemPrompt, toolSpecs, runTool, confirmTool, onActivity]
   );
   const send = useCallback4(
     async (text) => {

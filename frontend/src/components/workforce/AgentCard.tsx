@@ -1,12 +1,12 @@
 'use client';
 
 import type { PublishedAgent } from '@/lib/types';
-import { canDeleteAgent } from '@/lib/agentPermissions';
 import { formatAgentPrice } from '@/lib/agentPresentation';
 import { AgentTypePill } from '@/components/AgentTypePill';
 import { StatusBadge } from '@/components/StatusBadge';
 import { SkillTags } from '@/components/SkillTags';
-import { RUNTIME_LABELS, btnPrimary, btnSubtle } from './CloudAgentFormFields';
+import { RUNTIME_LABELS } from './CloudAgentFormFields';
+import { AgentOwnerActions } from './AgentOwnerActions';
 import type { CloudAgentPanelTab } from './CloudAgentSlideOutPanel';
 
 /**
@@ -100,22 +100,8 @@ export function AgentCard({
         <span style={pricePillStyle}>{formatAgentPrice(agent)}</span>
       </div>
       {!purchased && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-          {agent.published
-            ? <button type="button" style={btnSubtle} onClick={() => onUnpublish?.(agent)}>Unpublish</button>
-            : <button type="button" style={btnPrimary} onClick={() => onOpenPanel?.(agent, 'pricing')}>Publish</button>}
-          {agent.published && <button type="button" style={btnSubtle} onClick={() => onOpenPanel?.(agent, 'pricing')}>Edit price</button>}
-          <button type="button" style={btnSubtle} onClick={() => onOpenPanel?.(agent, 'details')}>Edit</button>
-          {canDeleteAgent(agent) && (
-            <button
-              type="button"
-              style={{ ...btnSubtle, color: 'var(--danger, #dc2626)', borderColor: 'rgba(239,68,68,0.3)' }}
-              onClick={() => onDelete?.(agent)}
-              title="Delete this draft agent (only available while unpublished and unpurchased)"
-            >
-              Delete
-            </button>
-          )}
+        <div style={{ marginTop: 4 }}>
+          <AgentOwnerActions agent={agent} onOpenPanel={onOpenPanel} onUnpublish={onUnpublish} onDelete={onDelete} />
         </div>
       )}
     </div>
