@@ -292,8 +292,27 @@ export interface ToolAuditEvent {
   args?: string | null;
   result?: string | null;
   durationMs?: number | null;
+  /** Set on cloud-agent telemetry rows — the execution this event belongs to. */
+  executionId?: number | null;
   ts: string;
 }
+
+/**
+ * Cloud agents (ide_agents) — server-side runs via the gateway. Unlike self-hosted
+ * hosts they have no relay log stream, but they DO push tool-audit telemetry
+ * (migration 0092), so the Observability timeline treats them as first-class.
+ */
+export const cloudAgents = {
+  /** Tool-audit events for one cloud agent (by ide_agents.id), newest first. */
+  toolAuditEvents: (ref: string, params?: { limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.limit != null) q.set('limit', String(params.limit));
+    const query = q.toString();
+    return request<{ events: ToolAuditEvent[] }>(
+      `/api/runtime/agents/${encodeURIComponent(ref)}/tool-audit${query ? `?${query}` : ''}`
+    ).then((r) => r.events);
+  },
+};
 
 export interface Workflow {
   id: string;

@@ -1184,7 +1184,13 @@ export const usageSnapshots = pgTable('usage_snapshots', {
   id:               serial('id').primaryKey(),
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  agentHostId:           integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
+  // Telemetry belongs to EITHER a self-hosted host OR a cloud agent (0092), so
+  // agent_host_id is nullable; cloud rows carry cloud_agent_ref + execution_id instead.
+  agentHostId:           integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'cascade' }),
+  /** Raw-SQL ide_agents.id for cloud-agent runs (no FK; see task.assignedAgentRef). */
+  cloudAgentRef:    varchar('cloud_agent_ref', { length: 64 }),
+  /** Execution this snapshot belongs to — the trace key for cloud runs (no live session). */
+  executionId:      integer('execution_id'),
   sessionKey:       varchar('session_key', { length: 255 }).notNull(),
   inputTokens:      integer('input_tokens').notNull().default(0),
   outputTokens:     integer('output_tokens').notNull().default(0),
@@ -1203,7 +1209,13 @@ export const toolAuditEvents = pgTable('tool_audit_events', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  agentHostId:      integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
+  // Telemetry belongs to EITHER a self-hosted host OR a cloud agent (0092), so
+  // agent_host_id is nullable; cloud rows carry cloud_agent_ref + execution_id instead.
+  agentHostId:      integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'cascade' }),
+  /** Raw-SQL ide_agents.id for cloud-agent runs (no FK; see task.assignedAgentRef). */
+  cloudAgentRef: varchar('cloud_agent_ref', { length: 64 }),
+  /** Execution this event belongs to — the trace key for cloud runs (no live session). */
+  executionId: integer('execution_id'),
   runId:       varchar('run_id', { length: 255 }),
   sessionKey:  varchar('session_key', { length: 255 }),
   toolCallId:  varchar('tool_call_id', { length: 255 }),

@@ -15,8 +15,30 @@ import type { NextRequest } from 'next/server';
  *   request through so the client renders a marketing teaser + login/CTA
  *   (RouteMarketing) rather than redirecting; signed-in-but-no-tenant → /tenants.
  */
+// Cross-origin isolation for the in-browser IDE. WebContainer needs
+// `self.crossOriginIsolated === true` to transfer a SharedArrayBuffer to its
+// worker; that requires COOP:same-origin + COEP:credentialless on the IDE
+// document. public/_headers + next.config.js set these for static/prerendered
+// routes, but @cloudflare/next-on-pages applies _headers ONLY to static assets
+// and does NOT reliably emit next.config headers() for dynamically-rendered
+// (SSR) routes. `/ide/[id]` is SSR (it fetches the project), so it slipped
+// through both and booted un-isolated — failing with "not cross-origin
+// isolated". Middleware runs in the Worker for matched routes and DOES apply to
+// the SSR response, so we set the headers here for the IDE routes. Scoped to
+// /ide on purpose: blanket credentialless on /embed/* or auth-popup routes can
+// break credentialed cross-origin frames.
+const COI_HEADERS: Record<string, string> = {
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'credentialless',
+};
+function withCoi(res: NextResponse): NextResponse {
+  for (const [k, v] of Object.entries(COI_HEADERS)) res.headers.set(k, v);
+  return res;
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const needsCoi = pathname === '/ide' || pathname.startsWith('/ide/');
 
   // Embedded surfaces (/embed/*) are framed cross-origin by host apps (e.g.
   // BurnRateOS). They authenticate via postMessage (not cookies), so we must NOT
@@ -93,10 +115,10 @@ export function middleware(request: NextRequest) {
     // Logged out → DON'T redirect to login. Let the request through so the app
     // renders a per-route marketing teaser + login/CTA (ConditionalAppShell +
     // RouteMarketing), instead of bouncing the visitor or showing a blank gate.
-    if (!webToken) return NextResponse.next();
+    if (!webToken) return needsCoi ? withCoi(NextResponse.next()) : NextResponse.next();
     // Signed in but no workspace selected → tenant picker.
     if (!tenantToken) return toTenants();
-    return NextResponse.next();
+    return needsCoi ? withCoi(NextResponse.next()) : NextResponse.next();
   }
 
   return NextResponse.next();

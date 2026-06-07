@@ -1718,6 +1718,24 @@ full `api/src` rename (`Claw*`→`AgentHost*`, table `coderclaw_instances`→`ag
   but the Output thread only fills from the terminal result or the cloud path's single assistant event.
   Fixing (host execution streaming in a Durable Object, or have the relay DO forward `chat.message` deltas to
   an execution-events channel) unblocks: true token-streaming Output for self-hosted runs.
+- **The per-execution `trace` endpoint returns the empty fallback for panel-submitted runs — `execution.sessionId`
+  is never linked to the agent's `"main"` session.** [RunAgentControl](frontend/src/components/task/RunAgentControl.tsx)
+  submits with no `sessionId`, so [RuntimeService.submit](api/src/application/runtime/RuntimeService.ts) stores
+  `sessionId: null`, but the agent always runs/persists telemetry under sessionKey `"main"`
+  ([builderforce-relay.ts](agent-runtime/src/infra/builderforce-relay.ts) runV1/runV2/steering + the V2 sinks).
+  The [`/executions/:id/trace`](api/src/presentation/routes/runtimeRoutes.ts) handler guards on `!plain.sessionId`
+  and returns `{usageSnapshots:[], toolEvents:[]}`, and even past the guard it joins
+  `toolAuditEvents.sessionKey === execution.sessionId` — so the Agent Tab's **Tools** sub-tab (and any
+  per-execution usage/output read) is always empty for self-hosted runs, despite the agent persisting the data
+  under `"main"` (which is why the per-agentHost **Observability** page, which does NOT filter by session, shows it
+  fine). This contradicts the entry above (the 4s trace re-poll surfaces *file-changes* via the separate taskId-keyed
+  `taskFileChanges`, not tool-calls). Fixing (thread a per-execution `sessionId` — e.g. `exec-<id>` — through the
+  dispatch contract → agent-runtime sessionKey + telemetry sinks + steering injection, then drop the `!sessionId`
+  fallback; OR map `execution.sessionId` to the agent's session at submit) unblocks: correct per-execution Tools /
+  usage / output in the ticket panel, and removes cross-execution telemetry bleed when an agentHost runs more than
+  one task in session `"main"`. NOTE this pass shipped the minimal Agent-Tab fixes only: the steering directive now
+  renders optimistically (the per-isolate stream echo was being dropped) and the panel links out to Observability
+  for full diagnostics — by design the ticket tab stays minimal and the full firehose lives on Observability.
 
 ---
 

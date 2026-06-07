@@ -11,6 +11,11 @@
 # COOP=same-origin + COEP=credentialless enables cross-origin isolation while
 # still allowing cross-origin fonts/images to load without CORP headers.
 # Keep this in sync with next.config.js headers().
+#
+# NOTE: this file (and next.config headers()) only reliably cover STATIC /
+# prerendered routes under next-on-pages. The dynamically-rendered IDE route
+# `/ide/[id]` is SSR, so _headers does not apply to it — its COOP/COEP are set
+# in src/middleware.ts (withCoi). Keep all three in sync.
 /*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: credentialless
