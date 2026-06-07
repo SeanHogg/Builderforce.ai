@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useState } from 'react';
 import type { Project } from '@/lib/types';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
@@ -42,12 +41,28 @@ export function ProjectCard({
       onCardClick(project);
     }
   };
-  
+
   const [showConfirm, setShowConfirm] = useState(false);
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!onDelete) return;
     setShowConfirm(true);
+  };
+
+  // Shared style for the square icon buttons in the card header so they can't drift.
+  const iconButtonStyle: React.CSSProperties = {
+    padding: 6,
+    fontSize: 0,
+    background: 'var(--bg-base)',
+    color: 'var(--coral-bright)',
+    border: '1px solid var(--coral-bright)',
+    borderRadius: 8,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 32,
+    height: 32,
   };
 
   return (
@@ -103,20 +118,7 @@ export function ProjectCard({
                 onDetailsClick?.(project);
               }}
               aria-label="Details"
-              style={{
-                padding: 6,
-                fontSize: 0,
-                background: 'var(--bg-base)',
-                color: 'var(--coral-bright)',
-                border: '1px solid var(--coral-bright)',
-                borderRadius: 8,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 32,
-                height: 32,
-              }}
+              style={iconButtonStyle}
             >
               <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
                 <path d="M9 2h6l6 6v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h4z" />
@@ -125,6 +127,23 @@ export function ProjectCard({
               </svg>
             </button>
           )}
+          {/* Task board button — opens the Task board scoped to this project */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.location.href = `/tasks?project=${project.id}`;
+            }}
+            aria-label="Task board"
+            title="Task board"
+            style={iconButtonStyle}
+          >
+            <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+              <rect x="3" y="4" width="4" height="16" rx="1" />
+              <rect x="10" y="4" width="4" height="11" rx="1" />
+              <rect x="17" y="4" width="4" height="14" rx="1" />
+            </svg>
+          </button>
           {/* IDE button */}
           <button
             type="button"
@@ -133,20 +152,7 @@ export function ProjectCard({
               window.location.href = `/ide/${project.publicId ?? project.id}`;
             }}
             aria-label="Open in IDE"
-            style={{
-              padding: 6,
-              fontSize: 0,
-              background: 'var(--bg-base)',
-              color: 'var(--coral-bright)',
-              border: '1px solid var(--coral-bright)',
-              borderRadius: 8,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 32,
-              height: 32,
-            }}
+            style={iconButtonStyle}
           >
             <span style={{ fontSize: 18 }} aria-hidden>💻</span>
           </button>
@@ -156,20 +162,7 @@ export function ProjectCard({
                 type="button"
                 onClick={handleDeleteClick}
                 aria-label="Delete project"
-                style={{
-                  padding: 6,
-                  fontSize: 0,
-                  background: 'var(--bg-base)',
-                  color: 'var(--coral-bright)',
-                  border: '1px solid var(--coral-bright)',
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 32,
-                  height: 32,
-                }}
+                style={iconButtonStyle}
               >
                 <svg
                   viewBox="0 0 24 24"
