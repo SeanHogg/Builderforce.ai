@@ -262,7 +262,7 @@ export class BuilderforceTransportAdapter implements TransportAdapter {
     // Prefer the agentNode-scoped skills endpoint when we know our agentNode id.
     const endpoint =
       this.agentNodeId != null
-        ? `${this.baseUrl}/api/agentNodes/${this.agentNodeId}/skills`
+        ? `${this.baseUrl}/api/agent-hosts/${this.agentNodeId}/skills`
         : `${this.baseUrl}/api/skills`;
 
     const response = await this.post<BuilderforceSkillResponse[] | BuilderforceSkillsEnvelope>(
@@ -298,7 +298,7 @@ export class BuilderforceTransportAdapter implements TransportAdapter {
       headers.Authorization = `Bearer ${this.authToken}`;
     }
     if (this.agentNodeId != null) {
-      headers["X-AgentNode-Id"] = String(this.agentNodeId);
+      headers["X-AgentHost-Id"] = String(this.agentNodeId);
     }
 
     const init: RequestInit = {

@@ -317,7 +317,7 @@ describe("BuilderforceTransportAdapter", () => {
       expect(result[0].version).toBe("1.0.0");
 
       const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
-      expect(url).toContain("/api/agentNodes/42/skills");
+      expect(url).toContain("/api/agent-hosts/42/skills");
     });
   });
 

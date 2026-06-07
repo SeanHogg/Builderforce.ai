@@ -31,7 +31,7 @@ describe("spec-sync", () => {
     const result = await fetchAssignedSpec(BASE_OPTS);
     expect(result).toEqual(mockSpec);
     expect(fetch).toHaveBeenCalledWith(
-      "https://api.test.com/api/agentNodes/42/spec",
+      "https://api.test.com/api/agent-hosts/42/spec",
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: "Bearer testkey" }),
       }),

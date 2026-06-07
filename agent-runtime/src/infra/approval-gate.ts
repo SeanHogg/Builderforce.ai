@@ -85,7 +85,7 @@ export class ApprovalGate {
 
     let approvalId: string;
     try {
-      const res = await fetch(`${this.baseUrl}/api/agentNodes/${this.agentNodeId}/approval-request`, {
+      const res = await fetch(`${this.baseUrl}/api/agent-hosts/${this.agentNodeId}/approval-request`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -137,9 +137,9 @@ export type ProjectContext = {
    */
   customAgent?: InstalledWorkforceAgent;
   builderforce?: {
-    /** Numeric agentNode ID returned by POST /api/agentNodes */
+    /** Numeric agentNode ID returned by POST /api/agent-hosts */
     instanceId: string;
-    /** URL-safe slug returned by POST /api/agentNodes */
+    /** URL-safe slug returned by POST /api/agent-hosts */
     instanceSlug?: string;
     /** Human-readable name for this project's agentNode instance */
     instanceName?: string;

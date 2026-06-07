@@ -27,7 +27,7 @@ export type SpecSyncOptions = {
  * Returns null if no spec is found or the endpoint is unavailable.
  */
 export async function fetchAssignedSpec(opts: SpecSyncOptions): Promise<AssignedSpec | null> {
-  const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agentNodes/${opts.agentNodeId}/spec`;
+  const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agent-hosts/${opts.agentNodeId}/spec`;
   try {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${opts.apiKey}` },
@@ -71,7 +71,7 @@ export async function pushSpec(
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${opts.apiKey}`,
-        "X-AgentNode-From": opts.agentNodeId,
+        "X-AgentHost-From": opts.agentNodeId,
       },
       body: JSON.stringify({ ...spec, agentNodeId: Number(opts.agentNodeId) }),
       signal: AbortSignal.timeout(15_000),

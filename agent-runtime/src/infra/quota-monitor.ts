@@ -29,7 +29,7 @@ export type QuotaMonitorOptions = {
  * Returns null if unavailable.
  */
 export async function fetchQuotaStatus(opts: QuotaMonitorOptions): Promise<QuotaStatus | null> {
-  const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agentNodes/${opts.agentNodeId}/quota`;
+  const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agent-hosts/${opts.agentNodeId}/quota`;
   try {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${opts.apiKey}` },

@@ -43,7 +43,7 @@ export async function resolveTaskArtifacts(
   if (context.projectId != null) {
     params.set("projectId", String(context.projectId));
   }
-  const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agentNodes/${opts.agentNodeId}/artifacts/resolve?${params}`;
+  const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agent-hosts/${opts.agentNodeId}/artifacts/resolve?${params}`;
   try {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${opts.apiKey}` },

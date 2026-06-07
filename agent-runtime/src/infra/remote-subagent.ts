@@ -2,8 +2,8 @@
  * Low-level Builderforce remote-agentNode HTTP helpers.
  *
  * Exports:
- *   - `fetchFleetEntries`   — `GET /api/agentNodes/fleet` (agentNode-authenticated).
- *   - `dispatchToRemoteAgentNode` — `POST /api/agentNodes/:targetId/forward` with HMAC payload.
+ *   - `fetchFleetEntries`   — `GET /api/agent-hosts/fleet` (agentNode-authenticated).
+ *   - `dispatchToRemoteAgentNode` — `POST /api/agent-hosts/:targetId/forward` with HMAC payload.
  *   - `dispatchResultToRemoteAgentNode` — callback path for task results.
  *
  * Higher-level concerns (capability-based routing, auto-target parsing, peer
@@ -60,12 +60,12 @@ export type FleetEntry = {
 
 /** Fetch the raw agentNode fleet entries for the current tenant. */
 export async function fetchFleetEntries(opts: RemoteDispatchOptions): Promise<FleetEntry[]> {
-  const url = `${normalizeBaseUrl(opts.baseUrl)}/api/agentNodes/fleet`;
+  const url = `${normalizeBaseUrl(opts.baseUrl)}/api/agent-hosts/fleet`;
   try {
     const res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${opts.apiKey}`,
-        "X-AgentNode-From": opts.myAgentNodeId,
+        "X-AgentHost-From": opts.myAgentNodeId,
       },
       signal: AbortSignal.timeout(15_000),
     });
@@ -153,7 +153,7 @@ export async function dispatchToRemoteAgentNode(
   // API key moved to Authorization header; payload is HMAC-signed so the
   // receiving endpoint can verify both the caller's identity and that the
   // task body has not been tampered with in transit.
-  const url = `${normalizeBaseUrl(opts.baseUrl)}/api/agentNodes/${targetAgentNodeId}/forward`;
+  const url = `${normalizeBaseUrl(opts.baseUrl)}/api/agent-hosts/${targetAgentNodeId}/forward`;
 
   const payload: Record<string, unknown> = {
     type: "remote.task",
@@ -185,9 +185,9 @@ export async function dispatchToRemoteAgentNode(
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${opts.apiKey}`,
-          "X-AgentNode-From": opts.myAgentNodeId,
+          "X-AgentHost-From": opts.myAgentNodeId,
           // SHA-256 HMAC of the exact body bytes — receiver should verify before accepting
-          "X-AgentNode-Signature": `sha256=${signature}`,
+          "X-AgentHost-Signature": `sha256=${signature}`,
         },
         body,
         signal: AbortSignal.timeout(extOpts?.timeoutMs ?? 30_000),
@@ -250,7 +250,7 @@ export async function dispatchResultToRemoteAgentNode(
   correlationId: string,
   result: string,
 ): Promise<void> {
-  const url = `${normalizeBaseUrl(opts.baseUrl)}/api/agentNodes/${callbackAgentNodeId}/forward`;
+  const url = `${normalizeBaseUrl(opts.baseUrl)}/api/agent-hosts/${callbackAgentNodeId}/forward`;
   const payload = {
     type: "remote.task.result",
     correlationId,
@@ -266,8 +266,8 @@ export async function dispatchResultToRemoteAgentNode(
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${opts.apiKey}`,
-        "X-AgentNode-From": opts.myAgentNodeId,
-        "X-AgentNode-Signature": `sha256=${signature}`,
+        "X-AgentHost-From": opts.myAgentNodeId,
+        "X-AgentHost-Signature": `sha256=${signature}`,
       },
       body,
       signal: AbortSignal.timeout(15_000),

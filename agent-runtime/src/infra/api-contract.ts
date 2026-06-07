@@ -9,7 +9,7 @@
 
 // ── BuilderForceAgents → Builderforce ──────────────────────────────────────────────────
 
-/** POST /api/agentNodes — register a BuilderForceAgents instance with Builderforce. */
+/** POST /api/agent-hosts — register a BuilderForceAgents instance with Builderforce. */
 export interface AgentNodeRegistration {
   name: string;
   workspaceDirectory?: string;
@@ -19,13 +19,13 @@ export interface AgentNodeRegistration {
   machineProfile?: Record<string, unknown>;
 }
 
-/** PATCH /api/agentNodes/:id/heartbeat — keep lastSeenAt fresh. */
+/** PATCH /api/agent-hosts/:id/heartbeat — keep lastSeenAt fresh. */
 export interface HeartbeatPayload {
   capabilities?: string[];
   machineProfile?: Record<string, unknown>;
 }
 
-/** POST /api/agentNodes/:id/forward — dispatch a task to a remote agentNode. */
+/** POST /api/agent-hosts/:id/forward — dispatch a task to a remote agentNode. */
 export interface RemoteTaskPayload {
   type: "remote.task";
   task: string;
@@ -55,7 +55,7 @@ export interface TelemetrySpan {
   attempt?: number;
 }
 
-/** PUT /api/agentNodes/:id/directories/sync — .builderforce/ sync payload. */
+/** PUT /api/agent-hosts/:id/directories/sync — .builderforce/ sync payload. */
 export interface DirectorySyncPayload {
   projectId?: number;
   absPath: string;

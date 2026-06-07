@@ -32,7 +32,7 @@ export async function syncPersonasToBuilderforce(
   if (personas.length === 0) {
     return true;
   }
-  const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agentNodes/${opts.agentNodeId}/personas`;
+  const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agent-hosts/${opts.agentNodeId}/personas`;
   try {
     const res = await fetch(url, {
       method: "PUT",

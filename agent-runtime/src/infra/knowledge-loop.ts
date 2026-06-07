@@ -338,7 +338,7 @@ export class KnowledgeLoopService {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
-          "X-AgentNode-Id": String(agentNodeId),
+          "X-AgentHost-Id": String(agentNodeId),
         },
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(10_000),
