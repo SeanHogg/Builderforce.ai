@@ -24,7 +24,8 @@ import type { CloudAgentPanelTab } from './CloudAgentSlideOutPanel';
  *                                             (publish / unpublish / edit price /
  *                                              edit / delete), wherever shown.
  *  - Non-owner on the marketplace           → Hire.
- *  - Non-owner in the workforce directory   → read-only (an agent I purchased).
+ *  - Non-owner in the workforce directory   → Unhire (an agent I hired and can
+ *                                             release from my workforce).
  *
  * `context` only disambiguates the non-owner case (a hireable listing vs. an
  * agent I already acquired); ownership itself comes from auth.
@@ -47,6 +48,8 @@ export function AgentCard({
   onDelete,
   onHire,
   hiring = false,
+  onUnhire,
+  unhiring = false,
 }: {
   agent: PublishedAgent;
   /** Which surface this card lives on — only affects the non-owner case. */
@@ -60,6 +63,9 @@ export function AgentCard({
   /** non-owner marketplace listing: hire this agent. */
   onHire?: (agentId: string) => void;
   hiring?: boolean;
+  /** non-owner workforce directory: release a hired agent. */
+  onUnhire?: (agentId: string) => void;
+  unhiring?: boolean;
 }) {
   const { tenant } = useAuth();
   const owner = isAgentOwner(agent, tenant?.id);
@@ -104,6 +110,11 @@ export function AgentCard({
           {!owner && context === 'marketplace' && (
             <button type="button" className="btn btn-primary btn-sm" disabled={hiring} onClick={() => onHire?.(agent.id)}>
               {hiring ? 'Hiring…' : 'Hire'}
+            </button>
+          )}
+          {!owner && context === 'workforce' && (
+            <button type="button" className="btn btn-secondary btn-sm" disabled={unhiring} onClick={() => onUnhire?.(agent.id)}>
+              {unhiring ? 'Unhiring…' : 'Unhire'}
             </button>
           )}
         </div>

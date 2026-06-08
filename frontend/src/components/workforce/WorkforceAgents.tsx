@@ -13,6 +13,7 @@ import {
   createCloudAgent,
   updateAgent,
   deleteAgent,
+  unhireAgent,
 } from '@/lib/api';
 import type { PublishedAgent } from '@/lib/types';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
@@ -222,6 +223,21 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     }
   };
 
+  // Release a hired (purchased) agent — these are agents the tenant did NOT
+  // create, so the action is "unhire", not "delete".
+  const [unhiringId, setUnhiringId] = useState<string | null>(null);
+  const unhire = async (agentId: string) => {
+    setUnhiringId(agentId);
+    try {
+      await unhireAgent(agentId);
+      await loadPurchased();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unhire failed');
+    } finally {
+      setUnhiringId(null);
+    }
+  };
+
   const loading = loadingHosts || loadingCloud;
   const isEmpty = hosts.length === 0 && cloudAgents.length === 0 && purchasedAgents.length === 0;
 
@@ -322,9 +338,15 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
           ))}
 
           {/* Purchased (marketplace) agents — non-owner in the workforce context,
-              so the card renders read-only (no Hire, no manage actions). */}
+              so the card offers Unhire (release from this workforce). */}
           {purchasedAgents.map((a) => (
-            <AgentCard key={`purchased-${a.id}`} agent={a} context="workforce" />
+            <AgentCard
+              key={`purchased-${a.id}`}
+              agent={a}
+              context="workforce"
+              onUnhire={unhire}
+              unhiring={unhiringId === a.id}
+            />
           ))}
         </div>
       ) : (
@@ -390,7 +412,8 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                 </tr>
               ))}
 
-              {/* Purchased (marketplace) agents — no owner actions. */}
+              {/* Purchased (marketplace) agents — not owned, so Unhire instead
+                  of the owner action set. */}
               {purchasedAgents.map((a) => (
                 <tr key={`purchased-${a.id}`} style={trStyle}>
                   <td style={tdStyle}>{a.name}</td>
@@ -398,7 +421,11 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                   <td style={tdMutedStyle}>—</td>
                   <td style={tdMutedStyle}>{RUNTIME_LABELS[a.runtime_support ?? 'cloud']}</td>
                   <td style={tdMutedStyle}>{formatAgentPrice(a)}</td>
-                  <td style={tdStyle} />
+                  <td style={tdStyle}>
+                    <button type="button" style={btnSubtle} disabled={unhiringId === a.id} onClick={() => unhire(a.id)}>
+                      {unhiringId === a.id ? 'Unhiring…' : 'Unhire'}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
