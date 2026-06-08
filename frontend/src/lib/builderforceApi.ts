@@ -1028,22 +1028,29 @@ export const providerKeysApi = {
 };
 
 // ---------------------------------------------------------------------------
-// Approvals (human-in-the-loop decisions)
+// Human-in-the-loop requests — approvals, questions, and feedback an agent
+// bubbles up for a person. One table/endpoint; `kind` distinguishes them.
 // ---------------------------------------------------------------------------
 
-export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired';
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'answered';
+
+/** What the agent is asking a human for. */
+export type RequestKind = 'approval' | 'question' | 'feedback';
 
 export interface Approval {
   id: string;
   tenantId: number;
   agentHostId: number | null;
   requestedBy: string | null;
+  kind: RequestKind;
   actionType: string;
   description: string;
   metadata: string | null;
   status: ApprovalStatus;
   reviewedBy: string | null;
   reviewNote: string | null;
+  /** Free-text human answer for question/feedback kinds (status='answered'). */
+  responseText: string | null;
   expiresAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -1060,9 +1067,10 @@ export const approvalsApi = {
 
   get: (id: string): Promise<Approval> => request<Approval>(`/api/approvals/${id}`),
 
+  /** Approve/reject an action, or answer a question/feedback request with free text. */
   decide: (
     id: string,
-    body: { status: 'approved' | 'rejected'; reviewNote?: string }
+    body: { status: 'approved' | 'rejected' | 'answered'; reviewNote?: string; responseText?: string }
   ): Promise<Approval> =>
     request<Approval>(`/api/approvals/${id}`, {
       method: 'PATCH',

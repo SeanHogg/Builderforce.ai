@@ -15,6 +15,7 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import { approvals, agentHosts, tenantMembers, users } from '../../infrastructure/database/schema';
 import { verifySecret } from '../../infrastructure/auth/HashService';
 import { checkAutoApprovalRules } from './approvalRuleRoutes';
+import { normalizeRequestKind, isAnswerableKind } from '../../domain/approval/requestKind';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
@@ -164,6 +165,7 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
     }
 
     const body = await c.req.json<{
+      kind?:        string;
       actionType:   string;
       description:  string;
       metadata?:    Record<string, unknown>;
@@ -175,10 +177,13 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
       return c.json({ error: 'actionType and description are required' }, 400);
     }
 
+    const kind = normalizeRequestKind(body.kind);
+
     // ── Auto-approval check ──────────────────────────────────────────────────
-    const autoApproved = await checkAutoApprovalRules(
-      db, tenantId, body.actionType, body.metadata ?? null,
-    );
+    // Only 'approval' kinds can auto-resolve; questions/feedback always need a
+    // human to actually answer, so they never short-circuit to a status.
+    const autoApproved = kind === 'approval'
+      && await checkAutoApprovalRules(db, tenantId, body.actionType, body.metadata ?? null);
 
     const approvalId = crypto.randomUUID();
     const now = new Date();
@@ -189,6 +194,7 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
       tenantId,
       agentHostId:      resolvedAgentHostId,
       requestedBy: body.requestedBy ?? (resolvedAgentHostId ? String(resolvedAgentHostId) : null),
+      kind,
       actionType:  body.actionType,
       description: body.description,
       metadata:    body.metadata != null ? JSON.stringify(body.metadata) : null,
@@ -209,6 +215,7 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
         body: JSON.stringify({
           type:        autoApproved ? 'approval.auto_approved' : 'approval.request',
           approvalId,
+          kind,
           actionType:  body.actionType,
           description: body.description,
           expiresAt:   body.expiresAt,
@@ -274,7 +281,9 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
     return c.json(row);
   });
 
-  // PATCH /api/approvals/:id – approve or reject
+  // PATCH /api/approvals/:id – resolve a request.
+  //   approval kind  → status 'approved' | 'rejected'
+  //   question/feedback kind → status 'answered' with a free-text responseText
   router.patch('/:id', async (c) => {
     const tenantId  = c.get('tenantId') as number;
     const userId    = c.get('userId') as string;
@@ -282,51 +291,70 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
     const env       = c.env;
 
     const body = await c.req.json<{
-      status:      'approved' | 'rejected';
-      reviewNote?: string;
+      status:        'approved' | 'rejected' | 'answered';
+      reviewNote?:   string;
+      responseText?: string;
     }>();
 
-    if (body.status !== 'approved' && body.status !== 'rejected') {
-      return c.json({ error: 'status must be "approved" or "rejected"' }, 400);
+    if (body.status !== 'approved' && body.status !== 'rejected' && body.status !== 'answered') {
+      return c.json({ error: 'status must be "approved", "rejected", or "answered"' }, 400);
+    }
+    if (body.status === 'answered' && !body.responseText?.trim()) {
+      return c.json({ error: 'responseText is required when answering' }, 400);
     }
 
     const [existing] = await db.select().from(approvals).where(and(eq(approvals.id, id), eq(approvals.tenantId, tenantId)));
     if (!existing) return c.json({ error: 'Approval not found' }, 404);
-    if (existing.status !== 'pending') return c.json({ error: 'Approval is not pending' }, 409);
+    if (existing.status !== 'pending') return c.json({ error: 'Request is not pending' }, 409);
+
+    const kind = normalizeRequestKind(existing.kind);
+    // Guard kind/status alignment: answerable kinds use 'answered'; approvals use approve/reject.
+    if (body.status === 'answered' && !isAnswerableKind(kind)) {
+      return c.json({ error: `'answered' is only valid for question/feedback requests` }, 400);
+    }
+    if (body.status !== 'answered' && isAnswerableKind(kind)) {
+      return c.json({ error: `${kind} requests are resolved with status 'answered' + responseText` }, 400);
+    }
+
+    const responseText = body.status === 'answered' ? body.responseText!.trim() : null;
 
     await db
       .update(approvals)
       .set({
-        status:     body.status,
-        reviewedBy: userId,
-        reviewNote: body.reviewNote ?? null,
-        updatedAt:  new Date(),
+        status:       body.status,
+        reviewedBy:   userId,
+        reviewNote:   body.reviewNote ?? null,
+        responseText,
+        updatedAt:    new Date(),
       })
       .where(and(eq(approvals.id, id), eq(approvals.tenantId, tenantId)));
 
-    // Notify the agentHost about the decision via the relay
+    // Notify the agentHost about the decision via the relay so the blocked gate resumes.
     if (existing.agentHostId && env.AGENT_HOST_RELAY) {
       const stub = env.AGENT_HOST_RELAY.get(env.AGENT_HOST_RELAY.idFromName(String(existing.agentHostId)));
       stub.fetch(new Request('https://internal/dispatch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type:        'approval.decision',
-          approvalId:  id,
-          status:      body.status,
-          reviewNote:  body.reviewNote,
-          reviewedBy:  userId,
+          type:         'approval.decision',
+          approvalId:   id,
+          status:       body.status,
+          reviewNote:   body.reviewNote,
+          responseText,
+          reviewedBy:   userId,
         }),
       })).catch(() => { /* best-effort */ });
     }
 
     // Slack notification on decision
     if (env.SLACK_APPROVAL_WEBHOOK_URL) {
-      const icon = body.status === 'approved' ? ':white_check_mark:' : ':x:';
+      const icon = body.status === 'approved' ? ':white_check_mark:' : body.status === 'rejected' ? ':x:' : ':speech_balloon:';
+      const verb = body.status === 'answered' ? 'answered' : body.status;
       await sendSlackNotification(
         env.SLACK_APPROVAL_WEBHOOK_URL,
-        `${icon} Approval *${body.status}* by ${userId}\n` +
+        `${icon} ${kind} *${verb}* by ${userId}\n` +
         `Action: ${existing.actionType} — ${existing.description}` +
+        (responseText ? `\nAnswer: ${responseText}` : '') +
         (body.reviewNote ? `\nNote: ${body.reviewNote}` : ''),
       );
     }

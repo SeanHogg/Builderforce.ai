@@ -9,6 +9,7 @@ import {
   createGithubIssueWorkflowTool,
   workflowStatusTool,
   gitHistoryTool,
+  askHumanTool,
 } from "../builderforce/tools/index.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { resolvePluginTools } from "../plugins/tools.js";
@@ -198,6 +199,7 @@ export function createBuilderForceAgentsTools(options?: BuilderForceAgentsToolsO
     agentFleetTool,
     projectKnowledgeTool,
     saveSessionHandoffTool,
+    askHumanTool,
     createOrchestrateTool({
       agentSessionKey: options?.agentSessionKey,
       agentChannel: options?.agentChannel,

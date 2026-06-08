@@ -136,7 +136,7 @@ export const specStatusEnum = pgEnum('spec_status', ['draft', 'ready', 'in_progr
 export const workflowTypeEnum = pgEnum('workflow_type', ['feature', 'bugfix', 'refactor', 'planning', 'adversarial', 'custom']);
 export const workflowStatusEnum = pgEnum('workflow_status', ['pending', 'running', 'completed', 'failed', 'cancelled']);
 export const workflowTaskStatusEnum = pgEnum('workflow_task_status', ['pending', 'running', 'completed', 'failed', 'cancelled']);
-export const approvalStatusEnum = pgEnum('approval_status', ['pending', 'approved', 'rejected', 'expired']);
+export const approvalStatusEnum = pgEnum('approval_status', ['pending', 'approved', 'rejected', 'expired', 'answered']);
 
 export const artifactTypeEnum = pgEnum('artifact_type', ['skill', 'persona', 'content']);
 export const assignmentScopeEnum = pgEnum('assignment_scope', ['tenant', 'host', 'project', 'task', 'agent']);
@@ -1293,12 +1293,19 @@ export const approvals = pgTable('approvals', {
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   agentHostId:      integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
   requestedBy: varchar('requested_by', { length: 36 }),   // agentHost ID or user ID as string
+  // What the agent is bubbling up for a human: 'approval' (approve/reject a
+  // high-risk action), 'question' (needs a free-text answer to proceed), or
+  // 'feedback' (wants human review/comments). All three share this table + the
+  // same blocking gate; only the kind + how it's resolved differ.
+  kind:        varchar('kind', { length: 32 }).notNull().default('approval'),
   actionType:  varchar('action_type', { length: 255 }).notNull(),
   description: text('description').notNull(),
   metadata:    text('metadata'),
   status:      approvalStatusEnum('status').notNull().default('pending'),
   reviewedBy:  varchar('reviewed_by', { length: 36 }),
   reviewNote:  text('review_note'),
+  // Free-text human answer for 'question'/'feedback' kinds (status='answered').
+  responseText: text('response_text'),
   expiresAt:   timestamp('expires_at'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),

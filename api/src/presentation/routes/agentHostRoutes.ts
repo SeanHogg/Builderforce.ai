@@ -47,6 +47,7 @@ import { neon } from '@neondatabase/serverless';
 import { executeGitProxy } from '../../application/repos/gitProxy';
 import { agentDispatches } from '../../infrastructure/database/schema';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
+import { normalizeRequestKind } from '../../domain/approval/requestKind';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
@@ -1785,6 +1786,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const body = await c.req.json<{
+      kind?:        string;
       actionType?:  string;
       description?: string;
       metadata?:    unknown;
@@ -1796,12 +1798,15 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       return c.json({ error: 'actionType and description are required' }, 400);
     }
 
+    const kind = normalizeRequestKind(body.kind);
+
     const approvalId = crypto.randomUUID();
     await db.insert(approvals).values({
       id:          approvalId,
       tenantId:    agentHost.tenantId,
       agentHostId,
       requestedBy: body.requestedBy ?? String(agentHostId),
+      kind,
       actionType:  body.actionType,
       description: body.description,
       metadata:    body.metadata != null ? JSON.stringify(body.metadata) : null,
@@ -1817,6 +1822,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
         body: JSON.stringify({
           type: 'approval.request',
           approvalId,
+          kind,
           actionType:  body.actionType,
           description: body.description,
           expiresAt:   body.expiresAt,
