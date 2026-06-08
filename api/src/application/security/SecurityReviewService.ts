@@ -9,6 +9,7 @@
  * json_object) so even a weak model yields a clean, structured finding list.
  */
 import { ideProxy } from '../llm/LlmProxyService';
+import { recordProxyUsage } from '../llm/usageLedger';
 import { AgentAssignmentService } from '../agent/AgentAssignmentService';
 import { resolveAssignedAgent, type AgentKind } from '../swimlane/resolveAssignedAgent';
 import type { Env } from '../../env';
@@ -80,6 +81,9 @@ export class SecurityReviewService {
       useCase: 'security_review',
       ...(preferredModel ? { model: preferredModel } : {}),
     });
+    // Attribute this system review to the tenant's usage ledger (previously
+    // bypassed it entirely). Best-effort.
+    await recordProxyUsage(this.db, this.env, { tenantId, useCase: 'security_review', result });
 
     const raw = await result.response.json().catch(() => null);
     const content = extractContent(raw);

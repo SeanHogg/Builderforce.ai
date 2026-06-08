@@ -24,27 +24,40 @@ interface McpToolEntry {
   parameters: Record<string, unknown>;
 }
 
-export function useMcpExtensions(): { loading: boolean; toolCount: number } {
+export interface UseMcpExtensionsOptions {
+  /**
+   * Extension ids to drop from the fetched tool list. A host that already
+   * registers some of the gateway's tools natively (e.g. first-party platform
+   * actions exposed under a `builtin` extension) passes those ids here so the
+   * Brain doesn't get the same capability twice.
+   */
+  skipExtensionIds?: string[];
+}
+
+export function useMcpExtensions(options?: UseMcpExtensionsOptions): { loading: boolean; toolCount: number } {
   const { transport } = useBrainConfig();
   const [entries, setEntries] = useState<McpToolEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  // Stable key so the fetch effect doesn't re-run on every render from a fresh array.
+  const skipKey = (options?.skipExtensionIds ?? []).join(',');
 
   useEffect(() => {
     let cancelled = false;
     const token = transport.getToken();
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (token) headers.Authorization = `Bearer ${token}`;
+    const skip = new Set(skipKey ? skipKey.split(',') : []);
 
     fetch(`${transport.baseUrl}/llm/v1/mcp/tools`, { headers })
       .then((res) => (res.ok ? res.json() : { tools: [] }))
       .then((body: { tools?: McpToolEntry[] }) => {
-        if (!cancelled) setEntries(body.tools ?? []);
+        if (!cancelled) setEntries((body.tools ?? []).filter((t) => !skip.has(t.extensionId)));
       })
       .catch(() => { if (!cancelled) setEntries([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [transport]);
+  }, [transport, skipKey]);
 
   const actions = useMemo<BrainAction[]>(
     () =>

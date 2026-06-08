@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono';
 import { and, count, desc, eq, inArray, max, min } from 'drizzle-orm';
 import { ProjectService } from '../../application/project/ProjectService';
 import { ensureProjectTemplate } from '../../application/project/projectTemplate';
+import { buildProjectKey } from '../../application/project/projectKey';
 import type { HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { ProjectStatus, TenantRole } from '../../domain/shared/types';
@@ -48,15 +49,6 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   router.use('*', authMiddleware);
 
   const normalizeName = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
-  const buildProjectKey = (tenantId: number, name: string) => {
-    const slug = name
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-Z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 36) || 'PROJECT';
-    return `${tenantId}-${slug}`.slice(0, 50);
-  };
 
   const deriveProjectName = (prompt: string) => {
     const cleaned = prompt

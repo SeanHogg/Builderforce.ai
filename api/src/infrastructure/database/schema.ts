@@ -326,6 +326,10 @@ export const llmUsageLog = pgTable('llm_usage_log', {
   cloudAgentRef:    varchar('cloud_agent_ref', { length: 64 }),
   /** Execution a cloud-run usage row belongs to (trace key). */
   executionId:      integer('execution_id'),
+  /** Authoritative cost stamped at write time from the resolved model's price
+   *  (incl. cache tiers), in millicents (1/100000 USD) — see migration 0097.
+   *  The dashboard sums this instead of re-pricing tokens at read time. */
+  costUsdMillicents: integer('cost_usd_millicents').notNull().default(0),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
 

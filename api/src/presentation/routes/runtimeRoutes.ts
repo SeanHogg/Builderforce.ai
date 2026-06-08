@@ -521,6 +521,7 @@ async function recordCloudToolEvent(
  * Best-effort — never throws.
  */
 async function recordCloudUsage(
+  env: Env,
   db: Db,
   args: { tenantId: number; cloudAgentRef?: string; executionId: number; model: string; inputTokens: number; outputTokens: number },
 ): Promise<void> {
@@ -536,7 +537,7 @@ async function recordCloudUsage(
       contextTokens: args.inputTokens + args.outputTokens,
     });
   } catch { /* best-effort */ }
-  await recordUsageRow(db, {
+  await recordUsageRow(db, env, {
     tenantId:   args.tenantId,
     userId:     null,
     llmProduct: 'builderforceLLM',
@@ -630,24 +631,49 @@ async function runCloudToolLoop(
   let finished = false;
   let cancelled = false;
 
+  // Hard cancel: a background watcher polls the (cross-isolate) execution status
+  // and aborts the in-flight gateway fetch the instant it sees CANCELLED, so a
+  // cancel mid-completion stops token spend immediately instead of running the
+  // current step to completion. The per-step check below still covers the gap
+  // between steps; together they make cancel a true interrupt.
+  const abortController = new AbortController();
+  let watcherDone = false;
+  const cancelWatcher = (async () => {
+    while (!watcherDone && !abortController.signal.aborted) {
+      await new Promise((r) => setTimeout(r, 2000));
+      if (watcherDone) break;
+      if (await isCancelled()) { abortController.abort(); cancelled = true; break; }
+    }
+  })();
+
+  try {
   for (let step = 0; step < MAX_CLOUD_TOOL_STEPS && !finished; step++) {
-    // Honor a cancel issued mid-run: the /cancel endpoint flips the DB row to
-    // CANCELLED (cross-isolate), so we re-read status before each (paid) LLM
-    // call and stop the loop instead of burning more tokens. Caps spend to at
-    // most the in-flight step.
-    if (await isCancelled()) { cancelled = true; break; }
+    // Between-step guard: stop before issuing the next (paid) call if cancelled.
+    if (cancelled || abortController.signal.aborted || await isCancelled()) { cancelled = true; break; }
     const tGen0 = Date.now();
-    const result = await ideProxy(env).complete({
-      messages: messages as unknown as ChatMessage[],
-      tools: CLOUD_AGENT_TOOLS,
-      tool_choice: 'auto',
-      ...(model ? { model } : {}),
-      useCase: 'task_execution',
-    });
+    let result: Awaited<ReturnType<ReturnType<typeof ideProxy>['complete']>>;
+    try {
+      result = await ideProxy(env).complete(
+        {
+          messages: messages as unknown as ChatMessage[],
+          tools: CLOUD_AGENT_TOOLS,
+          tool_choice: 'auto',
+          ...(model ? { model } : {}),
+          useCase: 'task_execution',
+        },
+        undefined,
+        undefined,
+        abortController.signal,
+      );
+    } catch (e) {
+      // The watcher aborted the fetch (cancel mid-call) → stop cleanly.
+      if (abortController.signal.aborted) { cancelled = true; break; }
+      throw e;
+    }
     const genMs = Date.now() - tGen0;
     const resolvedModel = result.resolvedModel ?? model ?? 'default';
     if (result.usage) {
-      await recordCloudUsage(db, {
+      await recordCloudUsage(env, db, {
         tenantId, cloudAgentRef, executionId, model: resolvedModel,
         inputTokens: result.usage.promptTokens ?? 0,
         outputTokens: result.usage.completionTokens ?? 0,
@@ -730,6 +756,12 @@ async function runCloudToolLoop(
 
       messages.push({ role: 'tool', tool_call_id: tc.id ?? '', content: JSON.stringify(toolResult) });
     }
+  }
+  } finally {
+    // Stop the cancel watcher (and let it settle) so its timer can't outlive the run.
+    watcherDone = true;
+    abortController.abort();
+    await cancelWatcher.catch(() => { /* ignore */ });
   }
 
   // Land the changes as a reviewable pending change once any file was committed.

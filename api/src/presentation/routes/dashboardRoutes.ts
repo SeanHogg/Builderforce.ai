@@ -24,8 +24,6 @@ import { TenantPlan, TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { getCatalogCached } from '../../application/llm/modelCatalog';
-
 /** SQL CASE that classifies a usage row by who produced it (0096 columns). */
 const USAGE_KIND = sql<'cloud' | 'on-prem' | 'web'>`
   case
@@ -34,38 +32,33 @@ const USAGE_KIND = sql<'cloud' | 'on-prem' | 'web'>`
     else 'web'
   end`;
 
-/** Estimated USD cost of a token split using catalog per-token prices. */
-function estimateCostUsd(priceByModel: Map<string, { prompt: number; completion: number }>, model: string, promptTokens: number, completionTokens: number): number {
-  const p = priceByModel.get(model);
-  if (!p) return 0;
-  return promptTokens * p.prompt + completionTokens * p.completion;
+/** Millicents (1/100000 USD) → USD. */
+function mcToUsd(millicents: unknown): number {
+  return Number(millicents ?? 0) / 100_000;
 }
 
 /**
- * Token + estimated-cost breakdown over the window, split by kind (cloud /
- * on-prem / web), by model, and by agent host. Cost is derived from catalog
- * per-token prices (estimate, not an authoritative billed amount — there is no
- * cost ledger yet; see gap register).
+ * Token + cost breakdown over the window, split by kind (cloud / on-prem / web),
+ * by model, and by agent host. Cost is the authoritative `cost_usd_millicents`
+ * stamped at write time (0097) — summed here, not re-priced from the catalog.
  */
-async function buildUsageBreakdown(db: Db, env: Env, tenantId: number, windowStart: Date) {
+async function buildUsageBreakdown(db: Db, tenantId: number, windowStart: Date) {
   const where = and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, windowStart));
 
-  const [byKindModel, perModel, perAgentHost, totalRow, catalog] = await Promise.all([
-    // (kind, model) so cost can be priced per model then rolled up by kind.
+  const [byKind, perModel, perAgentHost, totalRow] = await Promise.all([
     db.select({
       kind: USAGE_KIND,
-      model: llmUsageLog.model,
       promptTokens: sum(llmUsageLog.promptTokens),
       completionTokens: sum(llmUsageLog.completionTokens),
       totalTokens: sum(llmUsageLog.totalTokens),
+      costMc: sum(llmUsageLog.costUsdMillicents),
       requests: count(),
-    }).from(llmUsageLog).where(where).groupBy(USAGE_KIND, llmUsageLog.model),
+    }).from(llmUsageLog).where(where).groupBy(USAGE_KIND),
 
     db.select({
       model: llmUsageLog.model,
       totalTokens: sum(llmUsageLog.totalTokens),
-      promptTokens: sum(llmUsageLog.promptTokens),
-      completionTokens: sum(llmUsageLog.completionTokens),
+      costMc: sum(llmUsageLog.costUsdMillicents),
       requests: count(),
     }).from(llmUsageLog).where(where).groupBy(llmUsageLog.model).orderBy(desc(sum(llmUsageLog.totalTokens))).limit(50),
 
@@ -73,61 +66,44 @@ async function buildUsageBreakdown(db: Db, env: Env, tenantId: number, windowSta
     db.select({
       agentHostId: llmUsageLog.agentHostId,
       totalTokens: sum(llmUsageLog.totalTokens),
-      promptTokens: sum(llmUsageLog.promptTokens),
-      completionTokens: sum(llmUsageLog.completionTokens),
+      costMc: sum(llmUsageLog.costUsdMillicents),
       requests: count(),
     }).from(llmUsageLog).where(and(where, sql`${llmUsageLog.agentHostId} is not null`))
       .groupBy(llmUsageLog.agentHostId).orderBy(desc(sum(llmUsageLog.totalTokens))).limit(50),
 
-    db.select({ totalTokens: sum(llmUsageLog.totalTokens), totalRequests: count() }).from(llmUsageLog).where(where),
-
-    getCatalogCached(env).catch(() => []),
+    db.select({
+      totalTokens: sum(llmUsageLog.totalTokens),
+      totalRequests: count(),
+      costMc: sum(llmUsageLog.costUsdMillicents),
+    }).from(llmUsageLog).where(where),
   ]);
-
-  const priceByModel = new Map(catalog.map((m) => [m.id, m.pricing]));
-
-  // Roll (kind, model) rows up to per-kind tokens + estimated cost.
-  const kinds = new Map<string, { kind: string; promptTokens: number; completionTokens: number; totalTokens: number; requests: number; estimatedCostUsd: number }>();
-  let totalCost = 0;
-  for (const r of byKindModel) {
-    const promptTokens = Number(r.promptTokens ?? 0);
-    const completionTokens = Number(r.completionTokens ?? 0);
-    const cost = estimateCostUsd(priceByModel, r.model, promptTokens, completionTokens);
-    totalCost += cost;
-    const cur = kinds.get(r.kind) ?? { kind: r.kind, promptTokens: 0, completionTokens: 0, totalTokens: 0, requests: 0, estimatedCostUsd: 0 };
-    cur.promptTokens += promptTokens;
-    cur.completionTokens += completionTokens;
-    cur.totalTokens += Number(r.totalTokens ?? 0);
-    cur.requests += Number(r.requests ?? 0);
-    cur.estimatedCostUsd += cost;
-    kinds.set(r.kind, cur);
-  }
-
-  // drizzle sum()/count() come back as strings — coerce to numbers for the client.
-  const perModelPriced = perModel.map((m) => ({
-    model: m.model,
-    totalTokens: Number(m.totalTokens ?? 0),
-    requests: Number(m.requests ?? 0),
-    estimatedCostUsd: estimateCostUsd(priceByModel, m.model, Number(m.promptTokens ?? 0), Number(m.completionTokens ?? 0)),
-  }));
-
-  const perAgentHostNum = perAgentHost.map((h) => ({
-    agentHostId: h.agentHostId,
-    totalTokens: Number(h.totalTokens ?? 0),
-    promptTokens: Number(h.promptTokens ?? 0),
-    completionTokens: Number(h.completionTokens ?? 0),
-    requests: Number(h.requests ?? 0),
-  }));
 
   return {
     totals: {
       tokens: Number(totalRow[0]?.totalTokens ?? 0),
       requests: Number(totalRow[0]?.totalRequests ?? 0),
-      estimatedCostUsd: totalCost,
+      estimatedCostUsd: mcToUsd(totalRow[0]?.costMc),
     },
-    byKind: [...kinds.values()].sort((a, b) => b.totalTokens - a.totalTokens),
-    perModel: perModelPriced,
-    perAgentHost: perAgentHostNum,
+    byKind: byKind.map((k) => ({
+      kind: k.kind,
+      promptTokens: Number(k.promptTokens ?? 0),
+      completionTokens: Number(k.completionTokens ?? 0),
+      totalTokens: Number(k.totalTokens ?? 0),
+      requests: Number(k.requests ?? 0),
+      estimatedCostUsd: mcToUsd(k.costMc),
+    })).sort((a, b) => b.totalTokens - a.totalTokens),
+    perModel: perModel.map((m) => ({
+      model: m.model,
+      totalTokens: Number(m.totalTokens ?? 0),
+      requests: Number(m.requests ?? 0),
+      estimatedCostUsd: mcToUsd(m.costMc),
+    })),
+    perAgentHost: perAgentHost.map((h) => ({
+      agentHostId: h.agentHostId,
+      totalTokens: Number(h.totalTokens ?? 0),
+      requests: Number(h.requests ?? 0),
+      estimatedCostUsd: mcToUsd(h.costMc),
+    })),
   };
 }
 
@@ -251,7 +227,7 @@ export function createDashboardRoutes(db: Db): Hono<HonoEnv> {
     const payload = await getOrSetCached(
       c.env as Env,
       `dashboard-usage:v1:${tenantId}:${window}:${windowStart.toISOString().slice(0, 13)}`,
-      () => buildUsageBreakdown(db, c.env as Env, tenantId, windowStart),
+      () => buildUsageBreakdown(db, tenantId, windowStart),
       { kvTtlSeconds: 60, l1TtlMs: 30_000 },
     );
 
