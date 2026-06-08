@@ -2244,6 +2244,9 @@ export const reposApi = {
   setDefault: (id: string): Promise<ProjectRepository> =>
     request(`/api/repos/repositories/${id}/default`, { method: 'POST' }),
 
+  test: (id: string): Promise<{ ok: boolean; message: string }> =>
+    request(`/api/repos/repositories/${id}/test`, { method: 'POST' }),
+
   remove: (id: string): Promise<void> =>
     request<void>(`/api/repos/repositories/${id}`, { method: 'DELETE' }),
 

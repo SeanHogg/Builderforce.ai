@@ -32,6 +32,27 @@ const btnSubtle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)',
   color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
 };
+const iconBtn: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30,
+  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8,
+  cursor: 'pointer', color: 'var(--text-secondary)', padding: 0,
+};
+
+const PencilIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+  </svg>
+);
+
+const TrashIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M3 6h18" />
+    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+    <path d="M10 11v6M14 11v6" />
+  </svg>
+);
 
 export function SourceControlContent({ projectId }: { projectId: number }) {
   const [repos, setRepos] = useState<ProjectRepository[]>([]);
@@ -39,9 +60,12 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
 
-  // Add-form state
+  // Add/edit-form state (shared between linking a new repo and editing one)
   const [provider, setProvider] = useState<string>('github');
   const [owner, setOwner] = useState('');
   const [repo, setRepo] = useState('');
@@ -68,21 +92,41 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
     setProvider('github'); setOwner(''); setRepo(''); setDefaultBranch(''); setCredentialId(''); setIsDefault(false);
   };
 
-  const add = async () => {
+  const closeForm = () => { setAdding(false); setEditingId(null); resetForm(); setError(null); };
+
+  const openAdd = () => { resetForm(); setEditingId(null); setError(null); setAdding(true); };
+
+  const openEdit = (r: ProjectRepository) => {
+    setProvider(r.provider);
+    setOwner(r.owner);
+    setRepo(r.repo);
+    setDefaultBranch(r.defaultBranch ?? '');
+    setCredentialId(r.credentialId ?? '');
+    setIsDefault(r.isDefault);
+    setEditingId(r.id);
+    setError(null);
+    setAdding(true);
+  };
+
+  const submit = async () => {
     if (!owner.trim() || !repo.trim()) { setError('Owner and repo are required'); return; }
     setSaving(true); setError(null);
     try {
-      await reposApi.add(projectId, {
+      const payload = {
         provider,
         owner: owner.trim(),
         repo: repo.trim(),
         defaultBranch: defaultBranch.trim() || null,
+        // '' (the "no key" option) must become null so the binding clears /
+        // switches cleanly — an empty string would be rejected by the uuid FK.
         credentialId: credentialId || null,
         isDefault,
-      });
-      resetForm(); setAdding(false); load();
+      };
+      if (editingId) await reposApi.update(editingId, payload);
+      else await reposApi.add(projectId, payload);
+      closeForm(); load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add repository');
+      setError(e instanceof Error ? e.message : `Failed to ${editingId ? 'update' : 'add'} repository`);
     } finally {
       setSaving(false);
     }
@@ -90,6 +134,18 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
 
   const setDefault = async (id: string) => { await reposApi.setDefault(id); load(); };
   const remove = async (id: string) => { if (confirm('Remove this repository from the project?')) { await reposApi.remove(id); load(); } };
+
+  const test = async (id: string) => {
+    setTesting(id);
+    try {
+      const res = await reposApi.test(id);
+      setTestResult((prev) => ({ ...prev, [id]: res }));
+    } catch (e) {
+      setTestResult((prev) => ({ ...prev, [id]: { ok: false, message: e instanceof Error ? e.message : 'Test failed' } }));
+    } finally {
+      setTesting(null);
+    }
+  };
 
   const credName = (id: string | null) => creds.find((c) => c.id === id)?.name;
 
@@ -109,21 +165,37 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
       ) : (
         <div style={{ marginTop: 12 }}>
           {repos.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No repositories configured yet.</div>}
-          {repos.map((r) => (
-            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--border-subtle)' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--coral-bright)', minWidth: 70 }}>{r.provider}</span>
-              <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>
-                {r.owner}/{r.repo}
-                {r.defaultBranch && <span style={{ color: 'var(--text-muted)' }}> · {r.defaultBranch}</span>}
-                {r.isDefault && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--coral-bright)' }}>default</span>}
-                {r.credentialId
-                  ? <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>🔑 {credName(r.credentialId) ?? 'key'}</span>
-                  : <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--danger, #dc2626)' }}>no key</span>}
-              </span>
-              {!r.isDefault && <button type="button" style={btnSubtle} onClick={() => setDefault(r.id)}>Set default</button>}
-              <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(r.id)}>Remove</button>
-            </div>
-          ))}
+          {repos.map((r) => {
+            const result = testResult[r.id];
+            return (
+              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--border-subtle)' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--coral-bright)', minWidth: 70 }}>{r.provider}</span>
+                <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>
+                  {r.owner}/{r.repo}
+                  {r.defaultBranch && <span style={{ color: 'var(--text-muted)' }}> · {r.defaultBranch}</span>}
+                  {r.isDefault && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--coral-bright)' }}>default</span>}
+                  {r.credentialId
+                    ? <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>🔑 {credName(r.credentialId) ?? 'key'}</span>
+                    : <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--danger, #dc2626)' }}>no key</span>}
+                </span>
+                {result && (
+                  <span style={{ fontSize: 11, color: result.ok ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)' }}>
+                    ● {result.message}
+                  </span>
+                )}
+                <button type="button" style={btnSubtle} disabled={testing === r.id} onClick={() => test(r.id)}>
+                  {testing === r.id ? 'Testing…' : 'Test'}
+                </button>
+                {!r.isDefault && <button type="button" style={btnSubtle} onClick={() => setDefault(r.id)}>Set default</button>}
+                <button type="button" style={iconBtn} title="Edit repository" aria-label="Edit repository" onClick={() => openEdit(r)}>
+                  <PencilIcon />
+                </button>
+                <button type="button" style={{ ...iconBtn, color: 'var(--danger, #dc2626)' }} title="Remove repository" aria-label="Remove repository" onClick={() => remove(r.id)}>
+                  <TrashIcon />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -150,12 +222,14 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
             Set as the project&apos;s default repository
           </label>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" style={btnPrimary} disabled={saving} onClick={add}>{saving ? 'Adding…' : 'Add repository'}</button>
-            <button type="button" style={btnSubtle} onClick={() => { setAdding(false); resetForm(); setError(null); }}>Cancel</button>
+            <button type="button" style={btnPrimary} disabled={saving} onClick={submit}>
+              {saving ? 'Saving…' : editingId ? 'Save changes' : 'Add repository'}
+            </button>
+            <button type="button" style={btnSubtle} onClick={closeForm}>Cancel</button>
           </div>
         </div>
       ) : (
-        <button type="button" style={{ ...btnPrimary, marginTop: 14 }} onClick={() => setAdding(true)}>Add repository</button>
+        <button type="button" style={{ ...btnPrimary, marginTop: 14 }} onClick={openAdd}>Add repository</button>
       )}
     </div>
   );
