@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { mySessionsApi, myAdminAccessApi, type MySession, type MyAdminAccessSession } from '@/lib/builderforceApi';
 import { EmbedIntegrationSettings } from '@/components/settings/EmbedIntegrationSettings';
+import PageContainer from '@/components/PageContainer';
 import { IntegrationCredentialsManager } from '@/components/integrations/IntegrationCredentialsManager';
 import {
   getStoredUser,
@@ -150,7 +151,7 @@ export default function SettingsPage() {
   const activeSessions = sessions.filter((s) => s.isActive);
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 720, margin: '0 auto' }}>
+    <PageContainer width="readable" style={{ padding: '32px 40px' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 24 }}>Settings</h1>
 
       {/* Profile */}
@@ -457,6 +458,6 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
-    </div>
+    </PageContainer>
   );
 }

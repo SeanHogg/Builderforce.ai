@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { artifactAssignments, marketplaceStats, agentHosts } from '@/lib/builderforceApi';
 import { BUILTIN_PERSONAS, type Persona } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
+import PageContainer from '@/components/PageContainer';
 
 export default function PersonaDetailPage() {
   const params = useParams();
@@ -74,23 +75,23 @@ export default function PersonaDetailPage() {
 
   if (loading) {
     return (
-      <div style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
+      <PageContainer width="narrow" style={{ padding: 24 }}>
         <div style={{ color: 'var(--muted)' }}>Loading…</div>
-      </div>
+      </PageContainer>
     );
   }
 
   if (!persona) {
     return (
-      <div style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
+      <PageContainer width="narrow" style={{ padding: 24 }}>
         <p style={{ color: 'var(--muted)', marginBottom: 16 }}>Persona not found.</p>
         <Link href="/personas" className="btn btn-primary">Back to Personas</Link>
-      </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
+    <PageContainer width="narrow" style={{ padding: 24 }}>
       <div style={{ marginBottom: 24 }}>
         <Link href="/personas" style={{ fontSize: 13, color: 'var(--accent)', marginBottom: 8, display: 'inline-block' }}>← Back to Personas</Link>
         <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-strong)', margin: '8px 0' }}>{persona.name}</h1>
@@ -138,6 +139,6 @@ export default function PersonaDetailPage() {
           )}
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 }

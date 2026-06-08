@@ -10,6 +10,7 @@ import { TenantApiKeyEditor } from '@/components/TenantApiKeyEditor';
 import { TenantApiKeyUsageDrawer } from '@/components/TenantApiKeyUsageDrawer';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { ProviderKeysSettings } from '@/components/ProviderKeysSettings';
+import PageContainer from '@/components/PageContainer';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
 const cardStyle: React.CSSProperties = {
@@ -83,18 +84,18 @@ export default function ApiKeysPage() {
 
   if (!tenant) {
     return (
-      <div style={{ padding: '32px 40px', maxWidth: 720, margin: '0 auto' }}>
+      <PageContainer width="narrow" style={{ padding: '32px 40px' }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 }}>API Keys</h1>
         <div style={cardStyle}>
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Select a workspace to manage API keys.</p>
         </div>
-      </div>
+      </PageContainer>
     );
   }
 
   if (!isOwner) {
     return (
-      <div style={{ padding: '32px 40px', maxWidth: 720, margin: '0 auto' }}>
+      <PageContainer width="narrow" style={{ padding: '32px 40px' }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 }}>API Keys</h1>
         <div style={cardStyle}>
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
@@ -102,7 +103,7 @@ export default function ApiKeysPage() {
             tenant API keys (these credentials can spend the workspace&apos;s daily token budget).
           </p>
         </div>
-      </div>
+      </PageContainer>
     );
   }
 
@@ -153,7 +154,7 @@ export default function ApiKeysPage() {
   };
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 720, margin: '0 auto' }}>
+    <PageContainer width="narrow" style={{ padding: '32px 40px' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>API Keys</h1>
       <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>
         Tenant-scoped <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>bfk_*</code> keys for the{' '}
@@ -406,6 +407,6 @@ export default function ApiKeysPage() {
           </div>
         )}
       </div>
-    </div>
+    </PageContainer>
   );
 }

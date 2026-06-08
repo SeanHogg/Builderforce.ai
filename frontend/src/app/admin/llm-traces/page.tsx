@@ -4,11 +4,12 @@
  * "LLM Traces" tab in the main admin page.
  */
 import { LlmTracesPanel } from '../LlmTracesPanel';
+import PageContainer from '@/components/PageContainer';
 
 export default function LlmTracesPage() {
   return (
-    <div style={{ maxWidth: 1280, margin: '0 auto', padding: 24 }}>
+    <PageContainer style={{ padding: 24 }}>
       <LlmTracesPanel />
-    </div>
+    </PageContainer>
   );
 }

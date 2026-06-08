@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { WorkforceAgents } from '@/components/workforce/WorkforceAgents';
 import { ContributorsView } from '@/components/contributors/ContributorsView';
 import { MembersView } from '@/components/members/MembersView';
+import PageContainer from '@/components/PageContainer';
 
 type WorkforceTab = 'workforce' | 'contributors' | 'members';
 
@@ -44,7 +45,7 @@ function WorkforcePageInner() {
   };
 
   return (
-    <div style={{ padding: 24, width: '100%' }}>
+    <PageContainer>
       <div className="page-header" style={{ marginBottom: 16 }}>
         <h1 className="page-title" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-strong)', margin: 0 }}>Workforce</h1>
         <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>{active.sub}</p>
@@ -71,7 +72,7 @@ function WorkforcePageInner() {
       </div>
 
       {tab === 'contributors' ? <ContributorsView /> : tab === 'members' ? <MembersView /> : <WorkforceAgents tenantId={tenantId} />}
-    </div>
+    </PageContainer>
   );
 }
 

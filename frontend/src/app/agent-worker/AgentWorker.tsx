@@ -21,6 +21,7 @@ import {
   type RunHandlers,
   type RunOutcome,
 } from '@/lib/browserRuntime/runner';
+import PageContainer from '@/components/PageContainer';
 import { createBrowserAgentTransport } from '@/lib/browserRuntime/transport';
 import { runCodingDispatch } from '@/lib/browserRuntime/coding';
 import { createCodingDeps } from '@/lib/browserRuntime/factory';
@@ -85,7 +86,7 @@ export function AgentWorker({
   const ran = outcomes.filter((o) => o !== 'idle').length;
 
   return (
-    <main style={{ maxWidth: 720, margin: '2rem auto', padding: '0 1rem' }}>
+    <PageContainer width="readable" style={{ margin: '2rem 0', padding: '0 1rem' }}>
       <h1>Browser Agent Worker</h1>
       <p>
         Runs the agents assigned to your boards&apos; swimlanes directly in this tab, each on its own
@@ -111,6 +112,6 @@ export function AgentWorker({
           <li key={i}>{o}</li>
         ))}
       </ul>
-    </main>
+    </PageContainer>
   );
 }

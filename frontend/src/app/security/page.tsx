@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { securityApi, type SecurityUser, type SecuritySession } from '@/lib/builderforceApi';
 import { getStoredTenant, getStoredUser } from '@/lib/auth';
 import { AgentAssignmentPanel } from '@/components/AgentAssignmentPanel';
+import PageContainer from '@/components/PageContainer';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -107,7 +108,7 @@ export default function SecurityPage() {
   }
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 880, margin: '0 auto' }}>
+    <PageContainer width="readable" style={{ padding: '32px 40px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Security</h1>
@@ -271,6 +272,6 @@ export default function SecurityPage() {
           })}
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

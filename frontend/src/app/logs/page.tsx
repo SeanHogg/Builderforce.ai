@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { auditApi, type AuditEvent } from '@/lib/builderforceApi';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import PageContainer from '@/components/PageContainer';
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
   user_registered: 'var(--cyan-bright, #00e5cc)',
@@ -77,7 +78,7 @@ export default function LogsPage() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 1000 }}>
+    <PageContainer style={{ padding: '32px 40px' }}>
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: 4, color: 'var(--text-primary)' }}>
@@ -374,6 +375,6 @@ export default function LogsPage() {
           })}
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

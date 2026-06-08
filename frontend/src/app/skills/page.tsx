@@ -12,6 +12,7 @@ import {
 } from '@/lib/builderforceApi';
 import { BUILTIN_SKILLS, userSkillsKey, type BuiltinSkill, type UserSkill } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
+import PageContainer from '@/components/PageContainer';
 import { SkillAssignmentsContent } from '@/components/SkillAssignmentsContent';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
@@ -185,7 +186,7 @@ export default function SkillsPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto' }}>
+    <PageContainer width="readable">
       <div className="page-header" style={{ marginBottom: 24 }}>
         <div>
           <h1 className="page-title" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-strong)', margin: 0 }}>Skills</h1>
@@ -427,6 +428,6 @@ export default function SkillsPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

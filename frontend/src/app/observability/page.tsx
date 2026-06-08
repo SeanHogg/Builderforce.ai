@@ -5,6 +5,7 @@ import { ObservabilityContent } from '@/components/ObservabilityContent';
 import { LlmUsageContent } from '@/components/LlmUsageContent';
 import { QaContent } from '@/components/QaContent';
 import { ActiveRunsPanel } from '@/components/ActiveRunsPanel';
+import PageContainer from '@/components/PageContainer';
 
 type Tab = 'logs' | 'llm' | 'qa';
 
@@ -20,7 +21,7 @@ export default function ObservabilityPage() {
   const [tab, setTab] = useState<Tab>('logs');
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 1000 }}>
+    <PageContainer style={{ padding: '32px 40px' }}>
       <h1 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: 4, color: 'var(--text-primary)' }}>
         Observability
       </h1>
@@ -67,6 +68,6 @@ export default function ObservabilityPage() {
       {tab === 'logs' && <ObservabilityContent initialView="logs" />}
       {tab === 'llm' && <LlmUsageContent />}
       {tab === 'qa' && <QaContent />}
-    </div>
+    </PageContainer>
   );
 }

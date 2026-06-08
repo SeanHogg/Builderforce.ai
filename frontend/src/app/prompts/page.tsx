@@ -10,6 +10,7 @@ import {
 } from '@/lib/builderforceApi';
 import { getStoredUser } from '@/lib/auth';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import PageContainer from '@/components/PageContainer';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
 const card: React.CSSProperties = {
@@ -87,7 +88,7 @@ export default function PromptsPage() {
   };
 
   return (
-    <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
+    <PageContainer width="readable">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Prompt Library</h1>
         {isAuthed && (
@@ -219,7 +220,7 @@ export default function PromptsPage() {
           {toast}
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }
 

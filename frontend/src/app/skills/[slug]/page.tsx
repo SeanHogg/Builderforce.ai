@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { artifactAssignments, marketplaceStats, agentHosts, listMarketplaceSkills } from '@/lib/builderforceApi';
 import { BUILTIN_SKILLS, type BuiltinSkill } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
+import PageContainer from '@/components/PageContainer';
 
 export default function SkillDetailPage() {
   const params = useParams();
@@ -99,18 +100,18 @@ export default function SkillDetailPage() {
 
   if (loading) {
     return (
-      <div style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
+      <PageContainer width="narrow" style={{ padding: 24 }}>
         <div style={{ color: 'var(--muted)' }}>Loading…</div>
-      </div>
+      </PageContainer>
     );
   }
 
   if (!skill) {
     return (
-      <div style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
+      <PageContainer width="narrow" style={{ padding: 24 }}>
         <p style={{ color: 'var(--muted)', marginBottom: 16 }}>Skill not found.</p>
         <Link href="/skills" className="btn btn-primary">Back to Skills</Link>
-      </div>
+      </PageContainer>
     );
   }
 
@@ -118,7 +119,7 @@ export default function SkillDetailPage() {
   const emoji = builtin?.emoji ?? '✨';
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
+    <PageContainer width="narrow" style={{ padding: 24 }}>
       <div style={{ marginBottom: 24 }}>
         <Link href="/skills" style={{ fontSize: 13, color: 'var(--accent)', marginBottom: 8, display: 'inline-block' }}>← Back to Skills</Link>
         <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-strong)', margin: '8px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -171,6 +172,6 @@ export default function SkillDetailPage() {
           )}
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 }

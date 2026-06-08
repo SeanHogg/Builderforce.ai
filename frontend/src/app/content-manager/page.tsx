@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { marketplaceStats, llmChat, type ArtifactStats } from '@/lib/builderforceApi';
 import { contentStorageKey } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
+import PageContainer from '@/components/PageContainer';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
@@ -229,7 +230,7 @@ export default function ContentManagerPage() {
   const marketplaceCount = blocks.filter((b) => b.sharedToMarketplace).length;
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 24px 48px' }}>
+    <PageContainer style={{ padding: '24px 24px 48px' }}>
       {/* Page header: title + description on left, "New content" on right when My Content tab */}
       <div className="page-header" style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
         <div>
@@ -605,6 +606,6 @@ export default function ContentManagerPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }
