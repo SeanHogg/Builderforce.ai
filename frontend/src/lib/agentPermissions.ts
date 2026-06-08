@@ -10,3 +10,18 @@ import type { PublishedAgent } from './types';
 export function canDeleteAgent(a: Pick<PublishedAgent, 'published' | 'hire_count'>): boolean {
   return !a.published && (a.hire_count ?? 0) === 0;
 }
+
+/**
+ * Does the signed-in tenant OWN this agent? True when the agent's owner tenant
+ * matches the current tenant. Single source of truth for the "show manage
+ * actions vs. a Hire button" decision on every surface that lists agents
+ * (marketplace grid/table + workforce directory). Agent rows carry the owner as
+ * `tenant_id` (number); the auth tenant id is a string — compare numerically.
+ */
+export function isAgentOwner(
+  a: Pick<PublishedAgent, 'tenant_id'>,
+  tenantId: string | number | null | undefined
+): boolean {
+  if (a.tenant_id == null || tenantId == null || tenantId === '') return false;
+  return Number(a.tenant_id) === Number(tenantId);
+}

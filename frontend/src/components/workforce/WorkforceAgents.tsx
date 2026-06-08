@@ -308,21 +308,23 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
             );
           })}
 
-          {/* Cloud agents the tenant owns */}
+          {/* Cloud agents the tenant owns — the card detects ownership from auth
+              and renders the management actions. */}
           {cloudAgents.map((a) => (
             <AgentCard
               key={`cloud-${a.id}`}
               agent={a}
-              variant="owned"
+              context="workforce"
               onOpenPanel={openAgentPanel}
               onUnpublish={unpublish}
               onDelete={deleteOwned}
             />
           ))}
 
-          {/* Purchased (marketplace) agents — read-only, no owner actions. */}
+          {/* Purchased (marketplace) agents — non-owner in the workforce context,
+              so the card renders read-only (no Hire, no manage actions). */}
           {purchasedAgents.map((a) => (
-            <AgentCard key={`purchased-${a.id}`} agent={a} variant="purchased" />
+            <AgentCard key={`purchased-${a.id}`} agent={a} context="workforce" />
           ))}
         </div>
       ) : (
