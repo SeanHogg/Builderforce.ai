@@ -49,6 +49,7 @@ import {
 } from '../../application/swimlane/SwimlaneCoordinator';
 import { DrizzleCoordinatorStore } from '../../application/swimlane/DrizzleCoordinatorStore';
 import { DrizzleStageWorkflowRunner } from '../../application/swimlane/stageWorkflowRunner';
+import { DrizzlePrdEnsurer } from '../../application/swimlane/DrizzlePrdEnsurer';
 import {
   resolveAssignedAgent,
   AssignedAgentNotFoundError,
@@ -60,7 +61,7 @@ import {
   type AgentHostRelayNamespace,
 } from '../../application/swimlane/agentHostStageDispatcher';
 import type { WorkflowStatus } from '../../application/swimlane/transitions';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 const WORKFLOW_STATUSES: WorkflowStatus[] = ['pending', 'running', 'completed', 'failed', 'cancelled'];
@@ -93,6 +94,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       new DrizzleCoordinatorStore(db),
       new AgentHostStageDispatcher((env as BoardEnv)?.AGENT_HOST_RELAY),
       new DrizzleStageWorkflowRunner(db),
+      new DrizzlePrdEnsurer(db, env as Env),
     );
 
   // ── Boards CRUD ───────────────────────────────────────────────────────────

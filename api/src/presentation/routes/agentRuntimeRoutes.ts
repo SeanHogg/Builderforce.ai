@@ -21,13 +21,14 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import { agentDispatches } from '../../infrastructure/database/schema';
 import { SwimlaneCoordinator } from '../../application/swimlane/SwimlaneCoordinator';
 import { DrizzleCoordinatorStore } from '../../application/swimlane/DrizzleCoordinatorStore';
+import { DrizzlePrdEnsurer } from '../../application/swimlane/DrizzlePrdEnsurer';
 import {
   AgentHostStageDispatcher,
   type AgentHostRelayNamespace,
 } from '../../application/swimlane/agentHostStageDispatcher';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { openDispatchPullRequest } from '../../application/repos/openDispatchPullRequest';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 type RuntimeEnv = {
@@ -44,6 +45,8 @@ export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
     new SwimlaneCoordinator(
       new DrizzleCoordinatorStore(db),
       new AgentHostStageDispatcher((env as RuntimeEnv)?.AGENT_HOST_RELAY),
+      undefined,
+      new DrizzlePrdEnsurer(db, env as Env),
     );
 
   // Claim the next pending browser dispatch for this tenant.

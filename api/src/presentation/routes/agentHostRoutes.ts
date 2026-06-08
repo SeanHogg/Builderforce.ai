@@ -37,6 +37,7 @@ import { verifyJwt } from '../../infrastructure/auth/JwtService';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { SwimlaneCoordinator } from '../../application/swimlane/SwimlaneCoordinator';
 import { DrizzleCoordinatorStore } from '../../application/swimlane/DrizzleCoordinatorStore';
+import { DrizzlePrdEnsurer } from '../../application/swimlane/DrizzlePrdEnsurer';
 import { AgentHostStageDispatcher } from '../../application/swimlane/agentHostStageDispatcher';
 import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
@@ -1452,6 +1453,8 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const coordinator = new SwimlaneCoordinator(
       new DrizzleCoordinatorStore(db),
       new AgentHostStageDispatcher(c.env.AGENT_HOST_RELAY),
+      undefined,
+      new DrizzlePrdEnsurer(db, c.env),
     );
     try {
       await coordinator.reportDispatchResult(body.dispatchId, agentHost.tenantId, {

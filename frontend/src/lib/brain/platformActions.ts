@@ -29,7 +29,7 @@ import {
   fetchFiles, fetchFileContent, saveFile, deleteFile,
   listAgents, fetchAgent, hireAgent,
   listMyAgents, listPurchasedAgents, createCloudAgent, updateAgent, deleteAgent,
-  startRepoAnalysis, fetchRepoAnalysisRuns,
+  runArchitectureAnalysis,
 } from '@/lib/api';
 import {
   checkProjectKeyAvailable,
@@ -154,7 +154,6 @@ const STATIC_ROUTES: Record<string, string> = {
   chats: '/chats',
   contributors: '/workforce?tab=contributors',
   content_manager: '/content-manager',
-  architect: '/architect',
   agent_worker: '/agent-worker',
   training: '/training',
   tenants: '/tenants',
@@ -253,7 +252,7 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     // ---- Specs / PRDs ----------------------------------------------------
     { domain: 'specs', method: 'list', mutates: false, description: 'List specs/PRDs, optionally by project.', parameters: obj({ projectId: N }), run: (a) => specsApi.list(f(a, 'projectId')) },
     { domain: 'specs', method: 'get', mutates: false, description: 'Get a spec by id.', parameters: obj({ id: S }, ['id']), run: (a) => specsApi.get(f(a, 'id')) },
-    { domain: 'specs', method: 'create', mutates: true, description: 'Create a spec/PRD (goal + optional markdown PRD).', parameters: obj({ projectId: N, goal: S, prd: S, status: { type: 'string', enum: ['draft', 'reviewed', 'approved', 'in_progress', 'done'] } }, ['goal']), run: (a) => specsApi.create(a as Parameters<typeof specsApi.create>[0]) },
+    { domain: 'specs', method: 'create', mutates: true, description: 'Create a spec/PRD (goal + optional markdown PRD).', parameters: obj({ projectId: N, goal: S, prd: S, status: { type: 'string', enum: ['draft', 'ready', 'in_progress', 'complete'] } }, ['goal']), run: (a) => specsApi.create(a as Parameters<typeof specsApi.create>[0]) },
     updateCap({ domain: 'specs', method: 'patch', description: 'Update a spec (goal/status/prd).', parameters: obj({ id: S, goal: S, status: S, prd: S }, ['id']) }, (a, patch) => specsApi.patch(f(a, 'id'), patch as Parameters<typeof specsApi.patch>[1])),
     { domain: 'specs', method: 'delete', mutates: true, description: 'Delete a spec.', parameters: obj({ id: S }, ['id']), run: (a) => specsApi.delete(f(a, 'id')) },
 
@@ -379,11 +378,10 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     { domain: 'prompts', method: 'add_version', mutates: true, description: 'Add a new version to a prompt.', parameters: obj({ id: S, body: S, notes: S }, ['id', 'body']), run: (a) => promptLibraryApi.addVersion(f(a, 'id'), a as Parameters<typeof promptLibraryApi.addVersion>[1]) },
     { domain: 'prompts', method: 'remove', mutates: true, description: 'Delete a prompt.', parameters: obj({ id: S }, ['id']), run: (a) => promptLibraryApi.remove(f(a, 'id')) },
 
-    // ---- Analytics + repo analysis (architect) ---------------------------
+    // ---- Analytics + architecture analysis -------------------------------
     { domain: 'analytics', method: 'activity_calendar', mutates: false, description: 'Contributor activity calendar (humans + AI agents).', parameters: obj({ from: S, to: S, contributorId: N }), run: (a) => analyticsApi.activityCalendar(a as Parameters<typeof analyticsApi.activityCalendar>[0]) },
     { domain: 'analytics', method: 'sync_agents', mutates: true, description: 'Refresh AI-agent contributor data.', parameters: EMPTY, run: () => analyticsApi.syncAgents() },
-    { domain: 'repo_analysis', method: 'start', mutates: true, description: 'Start a repository analysis run (diagnostics, architecture, anti-patterns) for a project.', parameters: obj({ projectId: N }, ['projectId']), run: (a) => startRepoAnalysis(f(a, 'projectId')) },
-    { domain: 'repo_analysis', method: 'runs', mutates: false, description: 'List repository analysis runs for a project.', parameters: obj({ projectId: N }, ['projectId']), run: (a) => fetchRepoAnalysisRuns(f(a, 'projectId')) },
+    { domain: 'repo_analysis', method: 'start', mutates: true, description: 'Run the Architect: create an architecture-analysis task on a project and start it. The result is written back as a PRD. Requires a repo mapped to the project.', parameters: obj({ projectId: N }, ['projectId']), run: (a) => runArchitectureAnalysis(f(a, 'projectId')) },
 
     // ---- Brain chats + agent-host chat sessions --------------------------
     { domain: 'brain', method: 'list', mutates: false, description: 'List Brain chats, optionally filtered by project.', parameters: obj({ projectId: S, limit: N }), run: (a) => brain.listChats(a as Parameters<typeof brain.listChats>[0]) },
@@ -477,7 +475,7 @@ const FOCUS_METHODS = ['list', 'get', 'create', 'update', 'run'];
 export function focusDomainsForPath(pathname: string | null | undefined): string[] {
   const p = pathname ?? '';
   const has = (seg: string) => p === seg || p.startsWith(`${seg}/`) || p.startsWith(`${seg}?`);
-  if (has('/projects') || has('/ide') || has('/dashboard')) return ['projects', 'tasks'];
+  if (has('/projects') || has('/ide') || has('/dashboard')) return ['projects', 'tasks', 'repo_analysis'];
   if (has('/tasks')) return ['tasks'];
   if (has('/workflows')) return ['workflows', 'workflow_runs'];
   if (has('/approvals')) return ['approvals'];
@@ -487,7 +485,6 @@ export function focusDomainsForPath(pathname: string | null | undefined): string
   if (has('/personas')) return ['artifact_assignments'];
   if (has('/security')) return ['security'];
   if (has('/settings/api-keys')) return ['api_keys'];
-  if (has('/architect')) return ['repo_analysis'];
   return [];
 }
 

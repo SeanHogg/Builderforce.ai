@@ -25,7 +25,7 @@ const PUBLIC_SHELL_PREFIXES = ['/product', '/blog', '/agents', '/pricing', '/mar
 // Authenticated app routes — gated behind OnboardingGate inside AppShell.
 const APP_SHELL_EXACT = ['/dashboard', '/ide', '/training', '/tenants'];
 const APP_SHELL_PREFIXES = [
-  '/ide', '/projects', '/tasks', '/workflows', '/architect', '/agent-worker',
+  '/ide', '/projects', '/tasks', '/workflows', '/agent-worker',
   '/workforce', '/contributors', '/chats', '/brainstorm', '/content-manager',
   '/skills', '/personas', '/approvals', '/security', '/settings', '/admin',
   '/observability', '/debug', '/logs', '/timeline',

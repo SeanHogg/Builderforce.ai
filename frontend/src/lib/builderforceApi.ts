@@ -1070,6 +1070,9 @@ export const approvalsApi = {
     }),
 };
 
+/** Canonical PRD status set (0098). */
+export type SpecStatus = 'draft' | 'ready' | 'in_progress' | 'complete';
+
 /** Specs/PRDs – project PRD storage. */
 export interface Spec {
   id: string;
@@ -1080,6 +1083,8 @@ export interface Spec {
   kind?: string;
   archSpec?: string | null;
   taskList?: string | null;
+  /** Set when the spec is returned in a task's linked-PRD list. */
+  isPrimary?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -1089,7 +1094,7 @@ export const specsApi = {
     projectId?: number | null;
     goal: string;
     prd?: string | null;
-    status?: 'draft' | 'reviewed' | 'approved' | 'in_progress' | 'done';
+    status?: SpecStatus;
     kind?: 'feature' | 'architecture';
   }) =>
     request<Spec>('/api/specs', {
@@ -1107,10 +1112,38 @@ export const specsApi = {
 
   get: (id: string) => request<Spec>(`/api/specs/${id}`),
 
-  patch: (id: string, body: { goal?: string; status?: string; prd?: string | null }) =>
+  patch: (id: string, body: { goal?: string; status?: SpecStatus; prd?: string | null }) =>
     request<Spec>(`/api/specs/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   delete: (id: string) => request<void>(`/api/specs/${id}`, { method: 'DELETE' }),
+};
+
+/** Task ↔ PRD links (many-to-many, 0098). A task references 1..N project PRDs. */
+export const taskSpecsApi = {
+  /** PRDs linked to a task (primary first). */
+  list: (taskId: number) =>
+    request<{ specs: Spec[] }>(`/api/tasks/${taskId}/specs`).then((r) => r.specs ?? []),
+
+  /** Attach an existing project PRD to the task. */
+  attach: (taskId: number, specId: string, isPrimary = false) =>
+    request<{ ok: true }>(`/api/tasks/${taskId}/specs`, {
+      method: 'POST',
+      body: JSON.stringify({ specId, isPrimary }),
+    }),
+
+  /** Detach a PRD from the task. */
+  detach: (taskId: number, specId: string) =>
+    request<void>(`/api/tasks/${taskId}/specs/${specId}`, { method: 'DELETE' }),
+
+  /** Mark a linked PRD as the task's primary. */
+  setPrimary: (taskId: number, specId: string) =>
+    request<{ ok: true }>(`/api/tasks/${taskId}/specs/${specId}/primary`, { method: 'POST' }),
+
+  /** Draft + attach a PRD for a PRD-less task. */
+  generate: (taskId: number) =>
+    request<{ specId: string; prd: string; status: string }>(`/api/tasks/${taskId}/specs/generate`, {
+      method: 'POST',
+    }),
 };
 
 // ---------------------------------------------------------------------------
