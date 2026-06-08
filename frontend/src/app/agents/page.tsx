@@ -249,7 +249,7 @@ export default function AgentsHome() {
         .cc-page {
           position: relative;
           z-index: 1;
-          max-width: 1100px;
+          max-width: 1200px;
           margin: 0 auto;
           padding: 56px 24px 80px;
         }
@@ -296,8 +296,9 @@ export default function AgentsHome() {
           text-decoration: underline;
         }
         .cc-section {
-          max-width: 920px;
+          max-width: 1200px;
           margin: 64px auto 0;
+          padding: 0 24px;
         }
         .cc-h2 {
           font-family: var(--font-display);
@@ -314,12 +315,14 @@ export default function AgentsHome() {
           color: var(--text-secondary);
           line-height: 1.7;
           margin: 0 0 16px;
+          max-width: 820px;
         }
         .cc-prose-list {
           color: var(--text-secondary);
           line-height: 1.8;
           padding-left: 24px;
           margin: 0 0 16px;
+          max-width: 820px;
         }
         .cc-prose-list code,
         .cc-prose code {
@@ -384,7 +387,8 @@ export default function AgentsHome() {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
           gap: 12px;
-          max-width: 920px;
+          max-width: 1200px;
+          padding: 0 24px;
         }
         .cc-cta {
           display: flex;
