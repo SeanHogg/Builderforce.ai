@@ -71,7 +71,10 @@ export async function readRepoFile(ctx: RepoReadContext, path: string): Promise<
 export async function listRepoFiles(ctx: RepoReadContext, subPath?: string): Promise<ListFilesResult> {
   if (ctx.provider !== 'github') return { ok: false, reason: `list not implemented for provider '${ctx.provider}'` };
   const apiBase = buildGitApiBaseUrl(ctx.provider, ctx.host);
-  const url = `${apiBase}/repos/${ctx.owner}/${ctx.repo}/git/trees/${encodeURIComponent(ctx.ref)}?recursive=1`;
+  // The ref lives in the path here (not a query param); a branch like
+  // "builderforce/task-12" must keep its slash, so encode segments individually.
+  const refPath = ctx.ref.split('/').map(encodeURIComponent).join('/');
+  const url = `${apiBase}/repos/${ctx.owner}/${ctx.repo}/git/trees/${refPath}?recursive=1`;
   const res = await fetch(url, { headers: ghHeaders(ctx.token) }).catch(() => null);
   if (!res) return { ok: false, reason: 'list request failed (network)' };
   if (!res.ok) { const t = await res.text().catch(() => ''); return { ok: false, reason: `GitHub ${res.status}: ${t.slice(0, 160)}` }; }
