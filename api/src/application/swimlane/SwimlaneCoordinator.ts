@@ -68,6 +68,16 @@ export interface StageWorkflowRunner {
   ): Promise<void>;
 }
 
+/**
+ * Ensures a task has a PRD before its first agent stage runs. Injected so the
+ * coordinator stays IO-free; the Drizzle implementation drafts + links a PRD when
+ * the task has none. Idempotent — safe to call on every agent stage (it no-ops
+ * once the task already has a PRD). Optional — when absent, no auto-PRD gate runs.
+ */
+export interface TaskPrdEnsurer {
+  ensureTaskPrd(taskId: number, tenantId: number): Promise<void>;
+}
+
 export class TicketCapacityError extends Error {
   constructor(public readonly limit: number) {
     super(`Board has reached its max concurrent ticket limit (${limit}).`);
@@ -127,6 +137,8 @@ export class SwimlaneCoordinator {
     private readonly dispatcher?: StageDispatcher,
     /** Runs a lane's `run_workflow` action. Optional (see {@link StageWorkflowRunner}). */
     private readonly workflowRunner?: StageWorkflowRunner,
+    /** Auto-PRD gate run before a task's first agent stage. Optional (see {@link TaskPrdEnsurer}). */
+    private readonly prdEnsurer?: TaskPrdEnsurer,
   ) {}
 
   /**
@@ -323,6 +335,12 @@ export class SwimlaneCoordinator {
     if (assignments.length === 0) {
       await this.onStageComplete(run.id, 'completed');
       return;
+    }
+
+    // Auto-PRD gate: this lane has agents, so ensure the task has a PRD before
+    // they run. Idempotent — fires once, on the first agent stage with no PRD.
+    if (this.prdEnsurer) {
+      await this.prdEnsurer.ensureTaskPrd(run.taskId, run.tenantId);
     }
 
     const stageSeq = (await this.store.maxStageSeq(run.id)) + 1;

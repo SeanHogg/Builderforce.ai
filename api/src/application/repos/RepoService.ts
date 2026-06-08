@@ -18,11 +18,11 @@ import {
   pullRequests,
   tasks,
   projects,
-  specs,
 } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveRepoForTask } from './resolveRepo';
 import { buildPrDispatchMessage, type CreatePrMessage } from './prDispatch';
+import { findTaskPrimarySpec } from '../prd/taskPrd';
 
 export type AgentHostDispatcher = (agentHostId: number, message: CreatePrMessage) => Promise<boolean>;
 
@@ -109,7 +109,6 @@ export class RepoService {
         title: tasks.title,
         description: tasks.description,
         status: tasks.status,
-        specId: tasks.specId,
         source: tasks.source,
         assignedAgentHostId: tasks.assignedAgentHostId,
       })
@@ -152,15 +151,11 @@ export class RepoService {
       return { ok: false, code: 'no_repo', reason: 'Resolved repository not found' };
     }
 
-    // Optionally enrich PR body with the linked spec/PRD.
-    let prd: { specId?: string | null; body?: string | null } | undefined;
-    if (taskRow.specId) {
-      const [specRow] = await this.db
-        .select({ id: specs.id, prd: specs.prd })
-        .from(specs)
-        .where(and(eq(specs.id, taskRow.specId), eq(specs.tenantId, tenantId)));
-      if (specRow) prd = { specId: specRow.id, body: specRow.prd };
-    }
+    // Optionally enrich PR body with the task's primary linked spec/PRD (0098).
+    const primarySpec = await findTaskPrimarySpec(this.db, taskRow.id);
+    const prd: { specId?: string | null; body?: string | null } | undefined = primarySpec
+      ? { specId: primarySpec.id, body: primarySpec.prd }
+      : undefined;
 
     const message = buildPrDispatchMessage(
       {
@@ -205,7 +200,7 @@ export class RepoService {
         projectId: taskRow.projectId,
         repoId: repoRow.id,
         taskId: taskRow.id,
-        specId: taskRow.specId ?? null,
+        specId: primarySpec?.id ?? null,
         provider: repoRow.provider,
         branchName: message.branchName,
         baseBranch: message.base,

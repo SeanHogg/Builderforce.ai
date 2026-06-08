@@ -64,7 +64,8 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
       id?:        string;
       projectId?: number;
       goal:       string;
-      status?:    'draft' | 'reviewed' | 'approved' | 'in_progress' | 'done';
+      status?:    'draft' | 'ready' | 'in_progress' | 'complete';
+      kind?:      string;
       prd?:       string;
       archSpec?:  string;
       taskList?:  unknown;
@@ -84,6 +85,7 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
         agentHostId,
         goal:      body.goal.trim(),
         status:    body.status ?? 'draft',
+        kind:      body.kind ?? 'feature',
         prd:       body.prd ?? null,
         archSpec:  body.archSpec ?? null,
         taskList:  body.taskList != null ? JSON.stringify(body.taskList) : null,
@@ -95,6 +97,7 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
         set: {
           goal:      body.goal.trim(),
           status:    body.status ?? 'draft',
+          ...(body.kind !== undefined ? { kind: body.kind } : {}),
           prd:       body.prd ?? null,
           archSpec:  body.archSpec ?? null,
           taskList:  body.taskList != null ? JSON.stringify(body.taskList) : null,
@@ -113,10 +116,12 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
   router.get('/', async (c) => {
     const tenantId  = c.get('tenantId') as number;
     const projectId = c.req.query('projectId') ? Number(c.req.query('projectId')) : null;
+    const kind      = c.req.query('kind') || null;
 
-    const rows = projectId != null
-      ? await db.select().from(specs).where(and(eq(specs.tenantId, tenantId), eq(specs.projectId, projectId)))
-      : await db.select().from(specs).where(eq(specs.tenantId, tenantId));
+    const filters = [eq(specs.tenantId, tenantId)];
+    if (projectId != null) filters.push(eq(specs.projectId, projectId));
+    if (kind != null) filters.push(eq(specs.kind, kind));
+    const rows = await db.select().from(specs).where(and(...filters));
 
     return c.json({ specs: rows });
   });
@@ -137,7 +142,7 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
 
     const body = await c.req.json<{
       goal?:     string;
-      status?:   'draft' | 'reviewed' | 'approved' | 'in_progress' | 'done';
+      status?:   'draft' | 'ready' | 'in_progress' | 'complete';
       prd?:      string;
       archSpec?: string;
       taskList?: unknown;

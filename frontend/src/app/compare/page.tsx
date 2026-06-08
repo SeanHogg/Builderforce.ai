@@ -31,7 +31,7 @@ export default function ComparePage() {
 
       <style>{`
         .cmp { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
-        .cmp-hero { text-align: center; padding: 72px 24px 36px; max-width: 880px; margin: 0 auto; }
+        .cmp-hero { text-align: center; padding: 44px 24px 36px; max-width: 1100px; margin: 0 auto; width: 100%; }
         .cmp-eyebrow {
           font-family: var(--font-display); font-size: 0.78rem; font-weight: 600;
           letter-spacing: 0.16em; text-transform: uppercase; color: var(--coral-bright); margin-bottom: 14px;
@@ -54,7 +54,7 @@ export default function ComparePage() {
         .cmp-pillar-desc { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6; margin: 0; }
 
         .cmp-section { max-width: 1100px; margin: 0 auto; padding: 28px 24px 8px; width: 100%; }
-        .cmp-intro { font-size: 0.97rem; color: var(--text-secondary); line-height: 1.7; max-width: 820px; margin: 0 0 24px; }
+        .cmp-intro { font-size: 0.97rem; color: var(--text-secondary); line-height: 1.7; max-width: none; margin: 0 0 24px; }
 
         .cmp-table-wrap {
           overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: 16px; background: var(--surface-card);

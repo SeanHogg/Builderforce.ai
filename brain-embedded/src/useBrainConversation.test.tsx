@@ -103,6 +103,38 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     });
   });
 
+  it('carries prior-turn tool calls + results into the next turn (cross-turn grounding)', async () => {
+    // Turn 1: model resolves an entity via a tool, then answers.
+    mockStream
+      .mockResolvedValueOnce(result({ text: '', toolCalls: [{ id: 't1', name: 'do_thing', args: '{"company":"A"}' }], finishReason: 'tool_calls' }))
+      .mockResolvedValueOnce(result({ text: 'Updated A (id=123).' }))
+      // Turn 2: a fresh request in the same chat.
+      .mockResolvedValueOnce(result({ text: 'Updated B.' }));
+    const runTool = vi.fn(async () => ({ id: 123, name: 'A', url: 'a.com' }));
+
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 1, toolSpecs: [TOOL], runTool }),
+      { wrapper },
+    );
+
+    await act(async () => { await hook.current.send('update A url'); });
+    await act(async () => { await hook.current.send('update another url'); });
+
+    // The turn-2 model call must still see turn-1's tool call + result + the
+    // assistant text — the grounding that was previously dropped between turns.
+    const turn2Messages = mockStream.mock.calls[2][0].messages;
+    const roles = turn2Messages.map((m) => m.role);
+    expect(roles).toEqual(['system', 'user', 'assistant', 'tool', 'assistant', 'user']);
+    const toolMsg = turn2Messages.find((m) => m.role === 'tool');
+    expect(toolMsg?.tool_call_id).toBe('t1');
+    expect(toolMsg?.content).toContain('"id":123');
+    // Both user turns are present and distinct (no clobbering).
+    expect(turn2Messages.filter((m) => m.role === 'user').map((m) => m.content)).toEqual([
+      'update A url',
+      'update another url',
+    ]);
+  });
+
   it('honours the max-iteration cap when the model never stops calling tools', async () => {
     mockStream.mockResolvedValue(
       result({ toolCalls: [{ id: 'c', name: 'do_thing', args: '{}' }], finishReason: 'tool_calls' }),

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { Project } from '@/lib/types';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
+import { ArchitectureAnalysisButton } from './ArchitectureAnalysisButton';
 
 export interface ProjectCardProps {
   project: Project;
@@ -22,6 +23,10 @@ export interface ProjectCardProps {
    *  editor (`/ide/<id>`); the Projects page overrides this to route through the
    *  IDE dashboard scoped to the project. */
   onOpenIde?: (project: Project) => void;
+  /** Open the project Information panel on the PRDs tab (View Arch Analysis). */
+  onArchitectureView?: (project: Project) => void;
+  /** Open the project Information panel on Integrations (Run blocked: no repo). */
+  onArchitectureConfigureRepo?: (project: Project) => void;
 }
 
 const createdDate = (project: Project): string => {
@@ -39,6 +44,8 @@ export function ProjectCard({
   onDelete,
   showDeleteButton = !!onDelete,
   onOpenIde,
+  onArchitectureView,
+  onArchitectureConfigureRepo,
 }: ProjectCardProps) {
   const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -249,6 +256,13 @@ export function ProjectCard({
           </>
         )}
         <div style={{ flex: 1, minWidth: 0 }} />
+        {onArchitectureView && onArchitectureConfigureRepo && (
+          <ArchitectureAnalysisButton
+            project={project}
+            onView={onArchitectureView}
+            onConfigureRepo={onArchitectureConfigureRepo}
+          />
+        )}
         <button
           type="button"
           onClick={(e) => {

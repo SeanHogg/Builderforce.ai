@@ -28,6 +28,7 @@ import {
   agentHostSkillAssignments,
   marketplaceSkills,
   specs,
+  taskSpecs,
   platformPersonas,
 } from '../../infrastructure/database/schema';
 import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
@@ -1897,13 +1898,39 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
         and(
           eq(specs.projectId, assignment.projectId),
           eq(specs.tenantId, Number(agentHost.tenantId)),
-          inArray(specs.status, ['approved', 'in_progress']),
+          inArray(specs.status, ['ready', 'in_progress']),
         ),
       )
       .orderBy(desc(specs.updatedAt))
       .limit(1);
 
     return c.json({ spec: spec ?? null });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/agent-hosts/:id/tasks/:taskId/specs
+  // AgentHost-auth: returns the PRD(s) linked to a specific task (primary first),
+  // so the executing agent reads the TASK's PRDs, not just the project default.
+  // -------------------------------------------------------------------------
+  router.get('/:id/tasks/:taskId/specs', async (c) => {
+    const agentHostId = Number(c.req.param('id'));
+    const taskId = Number(c.req.param('taskId'));
+    const key = extractAgentHostKey(c);
+    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
+    if (!agentHost) return c.text('Unauthorized', 401);
+
+    const rows = await db
+      .select({
+        id: specs.id, goal: specs.goal, status: specs.status, prd: specs.prd,
+        archSpec: specs.archSpec, taskList: specs.taskList, projectId: specs.projectId,
+        isPrimary: taskSpecs.isPrimary, createdAt: specs.createdAt, updatedAt: specs.updatedAt,
+      })
+      .from(taskSpecs)
+      .innerJoin(specs, eq(specs.id, taskSpecs.specId))
+      .where(and(eq(taskSpecs.taskId, taskId), eq(specs.tenantId, Number(agentHost.tenantId))))
+      .orderBy(desc(taskSpecs.isPrimary), desc(specs.updatedAt));
+
+    return c.json({ specs: rows });
   });
 
   // -------------------------------------------------------------------------

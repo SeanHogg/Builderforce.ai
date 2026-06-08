@@ -438,6 +438,11 @@ function parseArgs(raw) {
     return {};
   }
 }
+function windowed(convo) {
+  let w = convo.slice(-HISTORY_WINDOW);
+  while (w.length > 0 && w[0].role === "tool") w = w.slice(1);
+  return w;
+}
 function useBrainConversation(options) {
   const { persistence, resolveSystemPrompt, stream } = useBrainConfig();
   const {
@@ -462,6 +467,7 @@ function useBrainConversation(options) {
   const [pendingAttachments, setPendingAttachments] = useState5([]);
   const [uploading, setUploading] = useState5(false);
   const autoRepliedChatIdRef = useRef3(null);
+  const transcriptRef = useRef3(/* @__PURE__ */ new Map());
   useEffect4(() => {
     let cancelled = false;
     if (chatId == null) {
@@ -498,24 +504,34 @@ function useBrainConversation(options) {
     return extraSystem ? `${base}
 ${extraSystem}` : base;
   }, [resolveSystemPrompt, systemPrompt, modality, extraSystem]);
+  const startUserTurn = useCallback4((id, priorHistory, userContent) => {
+    let convo = transcriptRef.current.get(id);
+    if (!convo) {
+      convo = priorHistory.map((m) => ({
+        role: m.role,
+        content: m.content
+      }));
+      transcriptRef.current.set(id, convo);
+    }
+    convo.push({ role: "user", content: userContent });
+  }, []);
   const runAgentLoop = useCallback4(
-    async (id, history) => {
-      const working = [
-        { role: "system", content: resolvedSystemPrompt },
-        ...history.slice(-HISTORY_WINDOW).map((m) => ({
-          role: m.role,
-          content: m.content
-        }))
-      ];
+    async (id) => {
+      const convo = transcriptRef.current.get(id) ?? [];
+      transcriptRef.current.set(id, convo);
       const tools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
       for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
         setStreamingText("");
+        const working = [
+          { role: "system", content: resolvedSystemPrompt },
+          ...windowed(convo)
+        ];
         const result = await stream(
           { messages: working, tools, tool_choice: tools ? "auto" : void 0, model },
           { onTextDelta: (d) => setStreamingText((s) => s + d) }
         );
         if (result.toolCalls.length > 0 && runTool) {
-          working.push({
+          convo.push({
             role: "assistant",
             content: result.text,
             tool_calls: result.toolCalls.map((tc) => ({
@@ -527,16 +543,17 @@ ${extraSystem}` : base;
           for (const tc of result.toolCalls) {
             const args = parseArgs(tc.args);
             if (confirmTool && !await confirmTool({ name: tc.name, args })) {
-              working.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify({ cancelled: true, reason: "User declined this action." }) });
+              convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify({ cancelled: true, reason: "User declined this action." }) });
               continue;
             }
             const out = await runTool(tc.name, args);
-            working.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(out ?? null) });
+            convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(out ?? null) });
           }
           setStreamingText("");
           continue;
         }
         const finalText = result.text.trim() || "No response.";
+        convo.push({ role: "assistant", content: finalText });
         const [assistantMsg] = await persistence.sendMessages(id, [{ role: "assistant", content: finalText }]);
         setMessages((prev) => [...prev, assistantMsg]);
         setStreamingText("");
@@ -546,7 +563,7 @@ ${extraSystem}` : base;
       setStreamingText("");
       setError("The assistant kept calling tools without finishing. Try rephrasing.");
     },
-    [persistence, stream, resolvedSystemPrompt, toolSpecs, runTool, confirmTool, onActivity]
+    [persistence, stream, resolvedSystemPrompt, toolSpecs, runTool, confirmTool, onActivity, model]
   );
   const send = useCallback4(
     async (text) => {
@@ -576,14 +593,15 @@ ${refs}`;
       try {
         const [userMsg] = await persistence.sendMessages(id, [{ role: "user", content, metadata }]);
         setMessages((prev) => [...prev, userMsg]);
-        await runAgentLoop(id, [...messages, userMsg]);
+        startUserTurn(id, messages, content);
+        await runAgentLoop(id);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Send failed");
       } finally {
         setSending(false);
       }
     },
-    [persistence, chatId, sending, pendingAttachments, messages, ensureChatId, runAgentLoop]
+    [persistence, chatId, sending, pendingAttachments, messages, ensureChatId, runAgentLoop, startUserTurn]
   );
   useEffect4(() => {
     if (chatId == null || loadingMessages || sending || messages.length === 0) return;
@@ -593,8 +611,9 @@ ${refs}`;
     autoRepliedChatIdRef.current = chatId;
     setSending(true);
     setError("");
-    runAgentLoop(chatId, messages).catch((e) => setError(e instanceof Error ? e.message : "Reply failed")).finally(() => setSending(false));
-  }, [chatId, loadingMessages, sending, messages, runAgentLoop]);
+    startUserTurn(chatId, messages.slice(0, -1), last.content);
+    runAgentLoop(chatId).catch((e) => setError(e instanceof Error ? e.message : "Reply failed")).finally(() => setSending(false));
+  }, [chatId, loadingMessages, sending, messages, runAgentLoop, startUserTurn]);
   const copyMessage = useCallback4(async (msg) => {
     try {
       await navigator.clipboard.writeText(msg.content);

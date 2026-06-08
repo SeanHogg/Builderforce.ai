@@ -1,12 +1,14 @@
 import { Hono } from 'hono';
+import { and, desc, eq } from 'drizzle-orm';
 import { TaskService } from '../../application/task/TaskService';
 import { TaskPriority, AgentType, TaskStatus } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { auditEvents } from '../../infrastructure/database/schema';
+import { auditEvents, projects, specs, taskSpecs, tasks } from '../../infrastructure/database/schema';
 import { AuditEventType } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
+import { ensureTaskPrdRecord, linkSpecToTask } from '../../application/prd/taskPrd';
 
 /** Minimal shape of the agentHost relay Durable Object namespace binding. */
 type RelayNamespace = {
@@ -153,6 +155,87 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
   router.delete('/:id', async (c) => {
     const id = Number(c.req.param('id'));
     await taskService.deleteTask(id);
+    return c.body(null, 204);
+  });
+
+  // ── Task ↔ PRD links (many-to-many via task_specs, 0098) ──────────────────
+  //
+  // A task references 1..N project PRDs, one optional primary (the canonical PRD
+  // the executing agent reads/writes). Every query is tenant-scoped by joining
+  // projects (tasks carry no tenant_id of their own).
+
+  /** Verify the task belongs to the tenant; returns its row or null. */
+  async function loadTenantTask(taskId: number, tenantId: number) {
+    const [row] = await db
+      .select({ id: tasks.id, projectId: tasks.projectId, title: tasks.title, description: tasks.description })
+      .from(tasks)
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
+      .where(and(eq(tasks.id, taskId), eq(projects.tenantId, tenantId)));
+    return row ?? null;
+  }
+
+  // GET /api/tasks/:id/specs — list the PRDs linked to this task.
+  router.get('/:id/specs', async (c) => {
+    const taskId = Number(c.req.param('id'));
+    const tenantId = c.get('tenantId');
+    if (!(await loadTenantTask(taskId, tenantId))) return c.json({ error: 'Task not found' }, 404);
+    const rows = await db
+      .select({
+        id: specs.id, goal: specs.goal, status: specs.status, prd: specs.prd,
+        projectId: specs.projectId, isPrimary: taskSpecs.isPrimary,
+        createdAt: specs.createdAt, updatedAt: specs.updatedAt,
+      })
+      .from(taskSpecs)
+      .innerJoin(specs, eq(specs.id, taskSpecs.specId))
+      .where(eq(taskSpecs.taskId, taskId))
+      .orderBy(desc(taskSpecs.isPrimary), desc(specs.updatedAt));
+    return c.json({ specs: rows });
+  });
+
+  // POST /api/tasks/:id/specs — attach an existing project PRD ({ specId, isPrimary? }).
+  router.post('/:id/specs', async (c) => {
+    const taskId = Number(c.req.param('id'));
+    const tenantId = c.get('tenantId');
+    const body = await c.req.json<{ specId: string; isPrimary?: boolean }>();
+    if (!(await loadTenantTask(taskId, tenantId))) return c.json({ error: 'Task not found' }, 404);
+    const [spec] = await db.select({ id: specs.id }).from(specs).where(and(eq(specs.id, body.specId), eq(specs.tenantId, tenantId)));
+    if (!spec) return c.json({ error: 'PRD not found' }, 404);
+    await linkSpecToTask(db, { taskId, specId: body.specId, tenantId, isPrimary: body.isPrimary ?? false });
+    return c.json({ ok: true }, 201);
+  });
+
+  // POST /api/tasks/:id/specs/generate — draft + attach a PRD for a PRD-less task.
+  router.post('/:id/specs/generate', async (c) => {
+    const taskId = Number(c.req.param('id'));
+    const tenantId = c.get('tenantId');
+    const task = await loadTenantTask(taskId, tenantId);
+    if (!task) return c.json({ error: 'Task not found' }, 404);
+    const ensured = await ensureTaskPrdRecord(db, c.env, {
+      taskId, tenantId, projectId: task.projectId,
+      title: task.title, description: task.description ?? null,
+      agentLabel: 'Product Manager',
+    });
+    if (!ensured) return c.json({ error: 'PRD generation failed' }, 502);
+    return c.json({ specId: ensured.specId, prd: ensured.prd, status: ensured.status });
+  });
+
+  // POST /api/tasks/:id/specs/:specId/primary — mark a linked PRD as the primary.
+  router.post('/:id/specs/:specId/primary', async (c) => {
+    const taskId = Number(c.req.param('id'));
+    const specId = c.req.param('specId');
+    const tenantId = c.get('tenantId');
+    if (!(await loadTenantTask(taskId, tenantId))) return c.json({ error: 'Task not found' }, 404);
+    await linkSpecToTask(db, { taskId, specId, tenantId, isPrimary: true });
+    return c.json({ ok: true });
+  });
+
+  // DELETE /api/tasks/:id/specs/:specId — detach a PRD from the task.
+  router.delete('/:id/specs/:specId', async (c) => {
+    const taskId = Number(c.req.param('id'));
+    const specId = c.req.param('specId');
+    const tenantId = c.get('tenantId');
+    if (!(await loadTenantTask(taskId, tenantId))) return c.json({ error: 'Task not found' }, 404);
+    await db.delete(taskSpecs).where(and(eq(taskSpecs.taskId, taskId), eq(taskSpecs.specId, specId)));
     return c.body(null, 204);
   });
 

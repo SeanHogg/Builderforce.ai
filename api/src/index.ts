@@ -291,7 +291,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/approval-rules',  createApprovalRuleRoutes(db));
   app.route('/api/telemetry',       createTelemetryRoutes(db));
   app.route('/api/qa',              createQaRoutes(db));
-  app.route('/api/repo-analysis',   createRepoAnalysisRoutes(db));
+  app.route('/api/repo-analysis',   createRepoAnalysisRoutes(db, taskService));
 
   // Phase 6 — Dev Analytics & Team Intelligence
   app.route('/api/integrations',    createIntegrationRoutes(db, env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET));
