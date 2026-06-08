@@ -700,7 +700,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
       { icon: '🔀', title: 'Workflow Builder', desc: 'Compose agents and tools into repeatable, approval-gated workflows.', href: '/workflows/builder' },
       { icon: '▦', title: 'Projects / Tasks', desc: 'Organize work into project workspaces — each with a full IDE, agents, and a task board — then plan, assign, and watch tasks flow across your agent workforce in board, table, calendar, or Gantt views.', href: '/projects' },
       { icon: '🕸️', title: 'Workforce Mesh', desc: 'Discover and dispatch work across local and remote AgentHosts — capacity sharing across machines and tenants.', href: '/workforce' },
-      { icon: '💬', title: 'Chats', desc: 'Talk to your agents directly, or watch them collaborate in shared conversations.', href: '/chats' },
+      { icon: '💬', title: 'Chats', desc: 'Talk to your agents directly, or watch them collaborate in shared conversations.', href: '/workforce?tab=chats' },
     ],
   },
   {
@@ -721,9 +721,9 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
     title: 'Govern & Operate',
     blurb: 'Approvals, security, and full observability — your AI Security Officer.',
     surfaces: [
-      { icon: '✅', title: 'Approvals', desc: 'Human-in-the-loop approval gates on every sensitive action your agents take.', href: '/approvals' },
+      { icon: '✅', title: 'Approvals', desc: 'Human-in-the-loop approval gates on every sensitive action your agents take.', href: '/workforce?tab=approvals' },
       { icon: '🔒', title: 'Security', desc: 'Per-tenant isolation and AES-256-GCM encrypted credentials for every integration.', href: '/security' },
-      { icon: '📊', title: 'Observability', desc: 'Full telemetry and an audit trail of every agent action, token, and tool call.', href: '/observability' },
+      { icon: '📊', title: 'Observability', desc: 'Full telemetry and an audit trail of every agent action, token, and tool call.', href: '/workforce?tab=logs' },
       { icon: '🏢', title: 'Tenants & Workspaces', desc: 'Multi-tenant workspaces with per-seat roles, members, and cost controls.', href: '/tenants' },
     ],
   },

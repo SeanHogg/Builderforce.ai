@@ -11,7 +11,7 @@ import type { NextRequest } from 'next/server';
  *
  * Feature routes (/dashboard, /ide, /projects, /training, /tasks, /workforce,
  *   /chats, /brainstorm, /content-manager, /skills, /personas, /approvals,
- *   /security, /settings, /observability, /debug, …): when logged OUT we let the
+ *   /security, /settings, /debug, …): when logged OUT we let the
  *   request through so the client renders a marketing teaser + login/CTA
  *   (RouteMarketing) rather than redirecting; signed-in-but-no-tenant → /tenants.
  */
@@ -56,15 +56,16 @@ export function middleware(request: NextRequest) {
     return res;
   }
 
-  // Redirect legacy routes to Observability
-  if (pathname === '/logs' || pathname.startsWith('/logs/')) {
+  // Observability moved onto the Workforce page as tabs; redirect the old route
+  // and its legacy aliases (/logs, /timeline) to the Workforce Logs tab.
+  if (
+    pathname === '/observability' || pathname.startsWith('/observability/') ||
+    pathname === '/logs' || pathname.startsWith('/logs/') ||
+    pathname === '/timeline' || pathname.startsWith('/timeline/')
+  ) {
     const url = request.nextUrl.clone();
-    url.pathname = '/observability';
-    return NextResponse.redirect(url);
-  }
-  if (pathname === '/timeline' || pathname.startsWith('/timeline/')) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/observability';
+    url.pathname = '/workforce';
+    url.search = '?tab=logs';
     return NextResponse.redirect(url);
   }
 
@@ -98,15 +99,12 @@ export function middleware(request: NextRequest) {
     '/tasks',
     '/workforce',
     '/contributors',
-    '/chats',
     '/brainstorm',
     '/content-manager',
     '/skills',
     '/personas',
-    '/approvals',
     '/security',
     '/settings',
-    '/observability',
     '/debug',
   ];
   const isProtected = protectedPaths.some((p) => pathname === p || pathname.startsWith(p + '/'));
@@ -138,12 +136,10 @@ export const config = {
     '/tasks/:path*',
     '/workforce/:path*',
     '/contributors/:path*',
-    '/chats/:path*',
     '/brainstorm/:path*',
     '/content-manager/:path*',
     '/skills/:path*',
     '/personas/:path*',
-    '/approvals/:path*',
     '/security/:path*',
     '/settings/:path*',
     '/observability/:path*',

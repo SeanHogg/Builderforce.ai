@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { Project } from '@/lib/types';
+import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { ArchitectureAnalysisButton } from './ArchitectureAnalysisButton';
 
@@ -9,8 +10,10 @@ export interface ProjectCardProps {
   project: Project;
   /** Called when the card body is clicked (e.g. open details panel). */
   onCardClick?: (project: Project) => void;
-  /** When true, show the Details button; when set, called when Details is clicked. */
-  onDetailsClick?: (project: Project) => void;
+  /** Open the project Information panel. The Details icon opens the default tab;
+   *  the Architecture button opens 'prds' (view result) or 'integrations' (map a
+   *  repo first). A card that can open details gets the full button group. */
+  onDetailsClick?: (project: Project, tab?: ProjectPanelTab) => void;
   /** Show the Details button. Default true when onDetailsClick is provided. */
   showDetailsButton?: boolean;
   /** When user clicks the assigned agent (Workforce), called with assignedAgentHost so parent can open agent panel. */
@@ -23,10 +26,6 @@ export interface ProjectCardProps {
    *  editor (`/ide/<id>`); the Projects page overrides this to route through the
    *  IDE dashboard scoped to the project. */
   onOpenIde?: (project: Project) => void;
-  /** Open the project Information panel on the PRDs tab (View Arch Analysis). */
-  onArchitectureView?: (project: Project) => void;
-  /** Open the project Information panel on Integrations (Run blocked: no repo). */
-  onArchitectureConfigureRepo?: (project: Project) => void;
 }
 
 const createdDate = (project: Project): string => {
@@ -44,8 +43,6 @@ export function ProjectCard({
   onDelete,
   showDeleteButton = !!onDelete,
   onOpenIde,
-  onArchitectureView,
-  onArchitectureConfigureRepo,
 }: ProjectCardProps) {
   const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -256,11 +253,11 @@ export function ProjectCard({
           </>
         )}
         <div style={{ flex: 1, minWidth: 0 }} />
-        {onArchitectureView && onArchitectureConfigureRepo && (
+        {onDetailsClick && (
           <ArchitectureAnalysisButton
             project={project}
-            onView={onArchitectureView}
-            onConfigureRepo={onArchitectureConfigureRepo}
+            onView={(p) => onDetailsClick(p, 'prds')}
+            onConfigureRepo={(p) => onDetailsClick(p, 'integrations')}
           />
         )}
         <button

@@ -35,8 +35,8 @@ const mainNav: NavItem[] = [
 ];
 
 const meshNav: NavItem[] = [
+  // Chats and Approvals are consolidated into /workforce as tabs.
   { href: '/workforce', label: 'Workforce', icon: <MascotIcon size={20} /> },
-  { href: '/chats', label: 'Chats', icon: '💬' },
 ];
 
 const extensionsNav: NavItem[] = [
@@ -47,12 +47,10 @@ const extensionsNav: NavItem[] = [
 ];
 
 const systemNav: NavItem[] = [
-  { href: '/approvals', label: 'Approvals', icon: '✅' },
   { href: '/pricing', label: 'Pricing & Billing', icon: '💳' },
   { href: '/security', label: 'Security', icon: '🔒' },
   { href: '/settings', label: 'Settings', icon: '⚙', exactMatch: true },
   { href: '/tenants', label: 'Tenant & Workspace', icon: '🏢' },
-  { href: '/observability', label: 'Observability', icon: '📊' },
 ];
 
 const adminNavItem: NavItem = { href: '/admin', label: 'Platform Admin', icon: '⚙', highlight: true };

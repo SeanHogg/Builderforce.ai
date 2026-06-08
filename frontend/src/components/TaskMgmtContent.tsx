@@ -506,7 +506,7 @@ export function TaskMgmtContent({
             (Task #{approvalGate.taskId}, approval {approvalGate.approvalId.slice(0, 8)}...)
           </span>
           <Link
-            href="/approvals"
+            href="/workforce?tab=approvals"
             style={{
               fontWeight: 700,
               color: 'var(--coral-bright)',

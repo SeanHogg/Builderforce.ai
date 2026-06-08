@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Project } from '@/lib/types';
 import type { AgentHost } from '@/lib/builderforceApi';
@@ -8,8 +9,7 @@ import { fetchProjects, createProject, deleteProject } from '@/lib/api';
 import { agentHosts } from '@/lib/builderforceApi';
 import { ProjectDetailsPanel, type ProjectPanelTab } from '@/components/ProjectDetailsPanel';
 import { ProjectCard } from '@/components/ProjectCard';
-import { ArchitectureAnalysisButton } from '@/components/ArchitectureAnalysisButton';
-import { DeleteProjectDialog } from '@/components/DeleteProjectDialog';
+import { ProjectTable } from '@/components/ProjectTable';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { ViewToggle } from '@/components/ViewToggle';
@@ -19,17 +19,22 @@ import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 
 type ProjectsView = 'card' | 'table' | 'calendar' | 'gantt';
 
-/** Where the Task board button navigates — the consolidated Projects/Tasks page, Tasks tab. */
-const taskBoardHref = (projectId: number) => `/projects?tab=tasks&project=${projectId}`;
+export interface ProjectsContentProps {
+  /** Cap the rendered list (dashboard preview). Omit to show every project. */
+  limit?: number;
+  /** When set, render a "View all" link to this href (dashboard preview). */
+  viewAllHref?: string;
+}
 
 /**
  * Projects content — full project list, create-project modal, open project → IDE.
  *
- * Reusable: rendered standalone by the Projects/Tasks page (Projects tab) and any
- * other surface that needs the project list. Auth gating is the parent's job; this
- * component fetches its own data, mirroring {@link TaskMgmtContent}.
+ * Reusable: rendered standalone by the Projects/Tasks page (Projects tab) and as
+ * the Dashboard preview (with `limit`/`viewAllHref`), so the cards, table, button
+ * group, and data source can't drift between the two surfaces. Auth gating is the
+ * parent's job; this component fetches its own data, mirroring {@link TaskMgmtContent}.
  */
-export function ProjectsContent() {
+export function ProjectsContent({ limit, viewAllHref }: ProjectsContentProps = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -45,8 +50,9 @@ export function ProjectsContent() {
   const [detailsInitialTab, setDetailsInitialTab] = useState<ProjectPanelTab>('details');
   const [viewMode, setViewMode] = useState<ProjectsView>('card');
   const [selectedAgentHost, setSelectedAgentHost] = useState<AgentHost | null>(null);
-  const [confirmProject, setConfirmProject] = useState<Project | null>(null);
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
+
+  const visibleProjects = limit != null ? projects.slice(0, limit) : projects;
 
   useEffect(() => {
     Promise.all([
@@ -100,8 +106,6 @@ export function ProjectsContent() {
     setDetailsInitialTab(tab);
     setDetailsProject(project);
   };
-  const onArchitectureView = (project: Project) => openDetails(project, 'prds');
-  const onArchitectureConfigureRepo = (project: Project) => openDetails(project, 'integrations');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -202,6 +206,11 @@ export function ProjectsContent() {
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ViewToggle value={viewMode} onChange={setViewMode} card table calendar gantt />
+          {viewAllHref && (
+            <Link href={viewAllHref} style={{ fontSize: 13, fontWeight: 600, color: 'var(--coral-bright)', textDecoration: 'none' }}>
+              View all
+            </Link>
+          )}
           <button
             type="button"
             onClick={() => setShowForm(true)}
@@ -259,15 +268,13 @@ export function ProjectsContent() {
         </div>
       ) : viewMode === 'card' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {projects.map((project) => (
+          {visibleProjects.map((project) => (
             <ProjectCard
               key={project.id}
               project={project}
               onCardClick={(p) => openDetails(p)}
-              onDetailsClick={(p) => openDetails(p)}
+              onDetailsClick={openDetails}
               onOpenIde={(p) => router.push(`/ide/dashboard?project=${p.id}`)}
-              onArchitectureView={onArchitectureView}
-              onArchitectureConfigureRepo={onArchitectureConfigureRepo}
               showDetailsButton
               onAssignedAgentClick={(ac) => {
                 const agentHost = agentHostList.find((c) => c.id === ac.id);
@@ -286,176 +293,29 @@ export function ProjectsContent() {
           ))}
         </div>
       ) : viewMode === 'calendar' ? (
-        <ScheduleCalendar items={projects} getLabel={(p) => p.name} onSelect={(p) => openDetails(p)} />
+        <ScheduleCalendar items={visibleProjects} getLabel={(p) => p.name} onSelect={(p) => openDetails(p)} />
       ) : viewMode === 'gantt' ? (
-        <ScheduleGantt items={projects} getLabel={(p) => p.name} onSelect={(p) => openDetails(p)} noun="project" />
+        <ScheduleGantt items={visibleProjects} getLabel={(p) => p.name} onSelect={(p) => openDetails(p)} noun="project" />
       ) : (
-        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Name</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Description</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Agent</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {projects.map((project) => (
-                <tr key={project.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                  <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--text-primary)' }}>{project.name}</td>
-                  <td style={{ padding: '12px 16px', color: 'var(--text-secondary)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {project.description ?? '—'}
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    {project.assignedAgentHost ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const agentHost = agentHostList.find((c) => c.id === project.assignedAgentHost!.id);
-                          if (agentHost) setSelectedAgentHost(agentHost);
-                        }}
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: 'var(--coral-bright)',
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          padding: 0,
-                          textDecoration: 'underline',
-                        }}
-                      >
-                        {project.assignedAgentHost.name}
-                      </button>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
-                    )}
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        onClick={() => openDetails(project)}
-                        aria-label="Details"
-                        style={{
-                          padding: 6,
-                          fontSize: 0,
-                          background: 'var(--bg-base)',
-                          color: 'var(--coral-bright)',
-                          border: '1px solid var(--coral-bright)',
-                          borderRadius: 8,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          width: 32,
-                          height: 32,
-                        }}
-                      >
-                        <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-                          <path d="M9 2h6l6 6v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h4z" />
-                          <circle cx="15" cy="15" r="3" />
-                          <line x1="17.5" y1="17.5" x2="21" y2="21" />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => router.push(taskBoardHref(project.id))}
-                        aria-label="Task board"
-                        title="Task board"
-                        style={{
-                          padding: 6,
-                          fontSize: 0,
-                          background: 'var(--bg-base)',
-                          color: 'var(--coral-bright)',
-                          border: '1px solid var(--coral-bright)',
-                          borderRadius: 8,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          width: 32,
-                          height: 32,
-                        }}
-                      >
-                        <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-                          <rect x="3" y="4" width="4" height="16" rx="1" />
-                          <rect x="10" y="4" width="4" height="11" rx="1" />
-                          <rect x="17" y="4" width="4" height="14" rx="1" />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/workflows?projectId=${project.id}`)}
-                        aria-label="View workflows"
-                        title={`Workflows${project.workflowCount != null ? ` (${project.workflowCount})` : ''}`}
-                        style={{
-                          padding: 6,
-                          fontSize: 0,
-                          background: 'var(--bg-base)',
-                          color: 'var(--coral-bright)',
-                          border: '1px solid var(--coral-bright)',
-                          borderRadius: 8,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          width: 32,
-                          height: 32,
-                        }}
-                      >
-                        <span style={{ fontSize: 16 }} aria-hidden>🔀</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/ide/dashboard?project=${project.id}`)}
-                        aria-label="Open in IDE"
-                        style={{
-                          padding: 6,
-                          fontSize: 0,
-                          background: 'var(--bg-base)',
-                          color: 'var(--coral-bright)',
-                          border: '1px solid var(--coral-bright)',
-                          borderRadius: 8,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          width: 32,
-                          height: 32,
-                        }}
-                      >
-                        <span style={{ fontSize: 18 }} aria-hidden>💻</span>
-                      </button>
-                      <ArchitectureAnalysisButton
-                        project={project}
-                        onView={onArchitectureView}
-                        onConfigureRepo={onArchitectureConfigureRepo}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setConfirmProject(project)}
-                        style={{
-                          padding: '6px 10px',
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: 'var(--coral-bright)',
-                          background: 'transparent',
-                          border: '1px solid var(--coral-bright)',
-                          borderRadius: 8,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ProjectTable
+          projects={visibleProjects}
+          onDetailsClick={openDetails}
+          onOpenIde={(p) => router.push(`/ide/dashboard?project=${p.id}`)}
+          onAssignedAgentClick={(ac) => {
+            const agentHost = agentHostList.find((c) => c.id === ac.id);
+            if (agentHost) setSelectedAgentHost(agentHost);
+          }}
+          onDelete={async (p) => {
+            try {
+              await deleteProject(p.id);
+              setProjects((prev) => prev.filter((x) => x.id !== p.id));
+              if (detailsProject && detailsProject.id === p.id) setDetailsProject(null);
+            } catch (err) {
+              console.error(err);
+              alert('Failed to delete project');
+            }
+          }}
+        />
       )}
 
       {detailsProject && (
@@ -490,26 +350,6 @@ export function ProjectsContent() {
         />
       )}
       <UpgradeModal error={planError} onClose={() => setPlanError(null)} />
-
-      {/* delete dialog used by the table view (prompts to move open tasks first) */}
-      <DeleteProjectDialog
-        project={confirmProject}
-        onCancel={() => setConfirmProject(null)}
-        onConfirm={async (project) => {
-          try {
-            await deleteProject(project.id);
-            setProjects((prev) => prev.filter((x) => x.id !== project.id));
-            if (detailsProject && detailsProject.id === project.id) {
-              setDetailsProject(null);
-            }
-          } catch (err) {
-            console.error(err);
-            alert('Failed to delete project');
-          } finally {
-            setConfirmProject(null);
-          }
-        }}
-      />
     </div>
   );
 }

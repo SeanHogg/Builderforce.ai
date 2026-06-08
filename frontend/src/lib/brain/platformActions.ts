@@ -146,12 +146,12 @@ const STATIC_ROUTES: Record<string, string> = {
   personas: '/personas',
   prompts: '/prompts',
   models: '/models',
-  approvals: '/approvals',
+  approvals: '/workforce?tab=approvals',
   security: '/security',
-  observability: '/observability',
-  timeline: '/timeline',
-  logs: '/logs',
-  chats: '/chats',
+  observability: '/workforce?tab=logs',
+  timeline: '/workforce?tab=logs',
+  logs: '/workforce?tab=logs',
+  chats: '/workforce?tab=chats',
   contributors: '/workforce?tab=contributors',
   content_manager: '/content-manager',
   agent_worker: '/agent-worker',
@@ -478,8 +478,7 @@ export function focusDomainsForPath(pathname: string | null | undefined): string
   if (has('/projects') || has('/ide') || has('/dashboard')) return ['projects', 'tasks', 'repo_analysis'];
   if (has('/tasks')) return ['tasks'];
   if (has('/workflows')) return ['workflows', 'workflow_runs'];
-  if (has('/approvals')) return ['approvals'];
-  if (has('/workforce') || has('/agents')) return ['cloud_agents', 'agents_published'];
+  if (has('/workforce') || has('/agents')) return ['cloud_agents', 'agents_published', 'approvals'];
   if (has('/marketplace') || has('/skills')) return ['skills_marketplace', 'artifact_assignments'];
   if (has('/prompts')) return ['prompts'];
   if (has('/personas')) return ['artifact_assignments'];

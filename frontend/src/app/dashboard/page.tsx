@@ -4,18 +4,14 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Project, Tenant } from '@/lib/types';
-import { fetchProjects, deleteProject } from '@/lib/api';
+import { fetchProjects } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 import { getMe } from '@/lib/auth';
 import { ChatInput } from '@/components/ChatInput';
 import PageContainer from '@/components/PageContainer';
-import { ProjectCard } from '@/components/ProjectCard';
-import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
+import { ProjectsContent } from '@/components/ProjectsContent';
 import { WorkforceAgents } from '@/components/workforce/WorkforceAgents';
 import { OnboardingStepper } from '@/components/OnboardingStepper';
-import { ViewToggle } from '@/components/ViewToggle';
 import { agentHosts, tasksApi, approvalsApi, type AgentHost, type Task } from '@/lib/builderforceApi';
 
 const ONBOARDING_DISMISSED_KEY = 'bf_onboarding_dismissed';
@@ -33,11 +29,7 @@ export default function DashboardPage() {
   const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
   const [loading, setLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
-  const [detailsProject, setDetailsProject] = useState<Project | null>(null);
-  const [selectedAgentHost, setSelectedAgentHost] = useState<AgentHost | null>(null);
-  const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const [activeTab, setActiveTab] = useState<'projects' | 'workforce'>('projects');
-  const [confirmProject, setConfirmProject] = useState<Project | null>(null);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [taskStats, setTaskStats] = useState<{ total: number; inProgress: number; done: number } | null>(null);
 
@@ -158,8 +150,6 @@ export default function DashboardPage() {
     return null;
   }
 
-  const projectPreview = projects.slice(0, 6);
-
   return (
     <PageContainer style={{ padding: 0 }}>
       {showOnboarding && webToken && (
@@ -212,7 +202,7 @@ export default function DashboardPage() {
           {pendingApprovalsCount > 0 && (
             <div style={{ marginTop: 8, fontSize: 12, color: 'var(--warning-text)' }}>
               {pendingApprovalsCount} pending approval{pendingApprovalsCount !== 1 ? 's' : ''} ·{' '}
-              <Link href="/approvals" style={{ color: 'var(--coral-bright)', textDecoration: 'none', fontWeight: 600 }}>
+              <Link href="/workforce?tab=approvals" style={{ color: 'var(--coral-bright)', textDecoration: 'none', fontWeight: 600 }}>
                 review now
               </Link>
             </div>
@@ -255,7 +245,7 @@ export default function DashboardPage() {
                 label: 'Pending approvals',
                 value: pendingApprovalsCount,
                 sub: pendingApprovalsCount > 0 ? 'requires review' : 'all clear',
-                href: '/approvals',
+                href: '/workforce?tab=approvals',
                 color: pendingApprovalsCount > 0 ? 'rgba(245,158,11,0.9)' : 'var(--text-muted)',
               },
             ].map(({ label, value, sub, href, color }) => (
@@ -344,292 +334,14 @@ export default function DashboardPage() {
           })}
         </div>
 
-        {/* Projects tab (preview) */}
+        {/* Projects tab (preview) — reuses ProjectsContent so the cards, table,
+            button group, and data shape match the /projects page exactly. */}
         {activeTab === 'projects' && (
-        <section style={{ marginBottom: 40 }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: 16,
-              flexWrap: 'wrap',
-              gap: 12,
-            }}
-          >
-            <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Projects</h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <ViewToggle value={viewMode} onChange={setViewMode} />
-              <Link
-                href="/projects"
-                style={{
-                  fontSize: '0.875rem',
-                  color: 'var(--text-secondary)',
-                  textDecoration: 'none',
-                  padding: '6px 12px',
-                  borderRadius: 8,
-                }}
-              >
-                View all
-              </Link>
-              <Link
-                href="/projects?create=1"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '8px 14px',
-                  fontSize: '0.875rem',
-                  fontWeight: 600,
-                  background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: 10,
-                  textDecoration: 'none',
-                  fontFamily: 'var(--font-display)',
-                  boxShadow: '0 4px 14px var(--shadow-coral-mid)',
-                }}
-              >
-                + New project
-              </Link>
-            </div>
-          </div>
-
-          {loading ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '12px 0' }}>Loading…</div>
-          ) : projects.length === 0 ? (
-            <div
-              style={{
-                padding: 28,
-                textAlign: 'center',
-                background: 'var(--bg-elevated)',
-                borderRadius: 12,
-                border: '1px solid var(--border-subtle)',
-              }}
-            >
-              <div style={{ fontSize: 48, marginBottom: 12 }}>📁</div>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>No projects yet</div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
-                Create your first project to start organizing work
-              </div>
-              <Link
-                href="/projects?create=1"
-                style={{
-                  display: 'inline-block',
-                  padding: '10px 20px',
-                  background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                  color: '#fff',
-                  borderRadius: 10,
-                  fontWeight: 600,
-                  textDecoration: 'none',
-                  fontFamily: 'var(--font-display)',
-                }}
-              >
-                Create project
-              </Link>
-            </div>
-          ) : viewMode === 'card' ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {projectPreview.map((p) => (
-                <ProjectCard
-                  key={p.id}
-                  project={p}
-                  onCardClick={setDetailsProject}
-                  onDetailsClick={setDetailsProject}
-                  showDetailsButton
-                  onAssignedAgentClick={(ac) => {
-                    const agentHost = agentHostList.find((c) => c.id === ac.id);
-                    if (agentHost) setSelectedAgentHost(agentHost);
-                  }}
-                  onDelete={async (proj) => {
-                    try {
-                      await deleteProject(proj.id);
-                      setProjects((prev) => prev.filter((x) => x.id !== proj.id));
-                      setDetailsProject((d) => (d && d.id === proj.id ? null : d));
-                    } catch (err) {
-                      console.error(err);
-                      alert('Failed to delete project');
-                    }
-                  }}
-                />
-              ))}
-            </div>
-          ) : (
-            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
-                    <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Name</th>
-                    <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Description</th>
-                    <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Agent</th>
-                    <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {projectPreview.map((project) => (
-                    <tr key={project.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                      <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--text-primary)' }}>{project.name}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--text-secondary)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {project.description ?? '—'}
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        {project.assignedAgentHost ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const agentHost = agentHostList.find((c) => c.id === project.assignedAgentHost!.id);
-                              if (agentHost) setSelectedAgentHost(agentHost);
-                            }}
-                            style={{
-                              fontSize: 12,
-                              fontWeight: 600,
-                              color: 'var(--coral-bright)',
-                              background: 'none',
-                              border: 'none',
-                              cursor: 'pointer',
-                              padding: 0,
-                              textDecoration: 'underline',
-                            }}
-                          >
-                            {project.assignedAgentHost.name}
-                          </button>
-                        ) : (
-                          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          <button
-                            type="button"
-                            onClick={() => setDetailsProject(project)}
-                            aria-label="Details"
-                            style={{
-                              padding: 6,
-                              fontSize: 0,
-                              background: 'var(--bg-base)',
-                              color: 'var(--coral-bright)',
-                              border: '1px solid var(--coral-bright)',
-                              borderRadius: 8,
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              width: 32,
-                              height: 32,
-                            }}
-                          >
-                            <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-                              <path d="M9 2h6l6 6v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h4z" />
-                              <circle cx="15" cy="15" r="3" />
-                              <line x1="17.5" y1="17.5" x2="21" y2="21" />
-                            </svg>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => (window.location.href = `/ide/${project.publicId ?? project.id}`)}
-                            aria-label="Open in IDE"
-                            style={{
-                              padding: 6,
-                              fontSize: 0,
-                              background: 'var(--bg-base)',
-                              color: 'var(--coral-bright)',
-                              border: '1px solid var(--coral-bright)',
-                              borderRadius: 8,
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              width: 32,
-                              height: 32,
-                            }}
-                          >
-                            <span style={{ fontSize: 18 }} aria-hidden>💻</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmProject(project)}
-                            style={{
-                              padding: '6px 10px',
-                              fontSize: 12,
-                              fontWeight: 600,
-                              color: 'var(--coral-bright)',
-                              background: 'transparent',
-                              border: '1px solid var(--coral-bright)',
-                              borderRadius: 8,
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-                              <polyline points="3 6 5 6 21 6" />
-                              <path d="M19 6l-1 14H6L5 6" />
-                              <path d="M10 11v6" />
-                              <path d="M14 11v6" />
-                              <path d="M9 6V4h6v2" />
-                            </svg>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+          <section style={{ marginBottom: 40 }}>
+            <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 16 }}>Projects</h2>
+            <ProjectsContent limit={6} viewAllHref="/projects" />
+          </section>
         )}
-
-        {detailsProject && (
-          <ProjectDetailsPanel
-            project={detailsProject}
-            open={!!detailsProject}
-            onClose={() => setDetailsProject(null)}
-            onProjectUpdate={(updated) => {
-              setProjects((prev) => prev.map((p) => (p.id === updated.id ? { ...updated, assignedAgentHost: p.assignedAgentHost } : p)));
-              setDetailsProject((p) => (p && p.id === updated.id ? updated : p));
-            }}
-            onDelete={async (p) => {
-              try {
-                await deleteProject(p.id);
-                setProjects((prev) => prev.filter((x) => x.id !== p.id));
-                setDetailsProject(null);
-              } catch (err) {
-                console.error(err);
-                alert('Failed to delete project');
-              }
-            }}
-          />
-        )}
-
-        {selectedAgentHost && (
-          <AgentHostSlideOutPanel
-            agentHost={selectedAgentHost}
-            open={!!selectedAgentHost}
-            onClose={() => setSelectedAgentHost(null)}
-            onDeleted={(id) => setAgentHostList((prev) => prev.filter((h) => h.id !== id))}
-          />
-        )}
-        <ConfirmDialog
-          open={!!confirmProject}
-          message={
-            confirmProject ? `Delete project "${confirmProject.name}"? This cannot be undone.` : ''
-          }
-          onCancel={() => setConfirmProject(null)}
-          onConfirm={async () => {
-            if (!confirmProject) return;
-            try {
-              await deleteProject(confirmProject.id);
-              setProjects((prev) => prev.filter((x) => x.id !== confirmProject.id));
-              if (detailsProject && detailsProject.id === confirmProject.id) {
-                setDetailsProject(null);
-              }
-            } catch (err) {
-              console.error(err);
-              alert('Failed to delete project');
-            } finally {
-              setConfirmProject(null);
-            }
-          }}
-        />
 
         {/* Workforce tab — reuses the same component as /workforce so the
             dashboard shows cloud agents AND remote hosts, not just hosts. */}
