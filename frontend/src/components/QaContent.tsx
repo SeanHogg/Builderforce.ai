@@ -36,8 +36,9 @@ import {
 // Authenticated nav routes worth smoke-testing the Builderforce app itself
 // (self-test crawl seed when no project is selected).
 const SELF_TEST_ROUTES = [
-  '/dashboard', '/projects', '/ide', '/tasks', '/chats', '/training',
-  '/skills', '/personas', '/approvals', '/settings', '/observability',
+  '/dashboard', '/projects', '/ide', '/tasks', '/training',
+  '/skills', '/personas', '/settings', '/workforce',
+  '/workforce?tab=chats', '/workforce?tab=approvals',
 ];
 
 const STATUS_COLOR: Record<string, string> = {

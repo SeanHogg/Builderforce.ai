@@ -34,7 +34,7 @@ function itemsFor(isAuthenticated: boolean, isSuperadmin: boolean): BottomItem[]
     { href: '/dashboard', label: 'Home', icon: '🏠' },
     { href: '/workforce', label: 'Workforce', icon: <MascotIcon size={22} /> },
     { href: '/workflows/builder', label: 'Workflows', icon: '🔀', activePaths: ['/workflows'] },
-    { href: '/chats', label: 'Chats', icon: '💬' },
+    { href: '/workforce?tab=chats', label: 'Chats', icon: '💬' },
     last,
   ];
 }

@@ -7,6 +7,10 @@ import * as builderforceApi from '@/lib/builderforceApi';
 
 vi.mock('@/lib/api');
 vi.mock('@/lib/builderforceApi');
+// A card with onDetailsClick renders the ArchitectureAnalysisButton, which uses the router.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+}));
 
 const sample: Project = {
   id: 1,

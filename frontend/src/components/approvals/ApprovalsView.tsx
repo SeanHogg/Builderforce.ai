@@ -1,11 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/AuthContext';
 import { approvalsApi, agentHosts, type Approval, type ApprovalStatus, type AgentHost } from '@/lib/builderforceApi';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
-import PageContainer from '@/components/PageContainer';
 
 const STATUS_OPTIONS: Array<{ value: '' | ApprovalStatus; label: string }> = [
   { value: '', label: 'All statuses' },
@@ -29,10 +26,13 @@ function statusClass(status: ApprovalStatus): string {
   return 'badge badge-neutral';
 }
 
-export default function ApprovalsPage() {
-  const router = useRouter();
-  const { isAuthenticated, hasTenant } = useAuth();
-
+/**
+ * Human-in-the-loop approval queue: review high-risk actions escalated by
+ * agentHosts and approve or reject them. Layout-only (no PageContainer/header)
+ * so it can be dropped into the Workforce tab strip; auth/tenant gating is
+ * handled by the surrounding app shell.
+ */
+export function ApprovalsView() {
   const [rows, setRows] = useState<Approval[]>([]);
   const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,16 +64,8 @@ export default function ApprovalsPage() {
   }, [status, agentHostId]);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.replace('/login?next=/approvals');
-      return;
-    }
-    if (!hasTenant) {
-      router.replace('/tenants?next=/approvals');
-      return;
-    }
     void load();
-  }, [isAuthenticated, hasTenant, router, load]);
+  }, [load]);
 
   const agentHostNameById = useMemo(() => {
     const map = new Map<number, string>();
@@ -109,74 +101,71 @@ export default function ApprovalsPage() {
   };
 
   return (
-    <PageContainer style={{ padding: '20px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: 20 }}>
-          <div>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 4 }}>Approvals</h1>
-            <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
-              Review pending high-risk actions requested by agentHosts and approve or reject them.
-            </p>
-          </div>
-          <ViewToggle value={viewMode} onChange={setViewMode} />
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+          Review pending high-risk actions escalated by agentHosts and approve or reject them.
+        </p>
+        <ViewToggle value={viewMode} onChange={setViewMode} />
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+        <select
+          className="admin-select"
+          value={status}
+          onChange={(e) => setStatus(e.target.value as '' | ApprovalStatus)}
+        >
+          {STATUS_OPTIONS.map((opt) => (
+            <option key={opt.value || 'all'} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className="admin-select"
+          value={agentHostId}
+          onChange={(e) => setAgentHostId(e.target.value)}
+        >
+          <option value="">All agentHosts</option>
+          {agentHostList.map((c) => (
+            <option key={c.id} value={String(c.id)}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search id, action, description"
+          className="admin-select"
+          style={{ minWidth: 220 }}
+        />
+
+        <button type="button" className="btn-ghost" onClick={() => void load()} disabled={loading}>
+          {loading ? 'Refreshing...' : 'Refresh'}
+        </button>
+      </div>
+
+      {error && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: '10px 12px',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 8,
+            background: 'var(--surface-rose-soft)',
+            color: 'var(--text-primary)',
+            fontSize: 13,
+          }}
+        >
+          {error}
         </div>
+      )}
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-          <select
-            className="admin-select"
-            value={status}
-            onChange={(e) => setStatus(e.target.value as '' | ApprovalStatus)}
-          >
-            {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value || 'all'} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-
-          <select
-            className="admin-select"
-            value={agentHostId}
-            onChange={(e) => setAgentHostId(e.target.value)}
-          >
-            <option value="">All agentHosts</option>
-            {agentHostList.map((c) => (
-              <option key={c.id} value={String(c.id)}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search id, action, description"
-            className="admin-select"
-            style={{ minWidth: 220 }}
-          />
-
-          <button type="button" className="btn-ghost" onClick={() => void load()} disabled={loading}>
-            {loading ? 'Refreshing...' : 'Refresh'}
-          </button>
-        </div>
-
-        {error && (
-          <div
-            style={{
-              marginBottom: 12,
-              padding: '10px 12px',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
-              background: 'var(--surface-rose-soft)',
-              color: 'var(--text-primary)',
-              fontSize: 13,
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        {viewMode === 'table' ? (
+      {viewMode === 'table' ? (
         <div className="table-wrap">
           <table className="data-table" style={{ fontSize: 13 }}>
             <thead>
@@ -252,83 +241,83 @@ export default function ApprovalsPage() {
             </tbody>
           </table>
         </div>
+      ) : (
+        loading ? (
+          <div className="text-muted" style={{ fontSize: 13, padding: '16px 0' }}>Loading approvals...</div>
+        ) : filtered.length === 0 ? (
+          <div className="text-muted" style={{ fontSize: 13, padding: '16px 0' }}>No approvals found</div>
         ) : (
-          loading ? (
-            <div className="text-muted" style={{ fontSize: 13, padding: '16px 0' }}>Loading approvals...</div>
-          ) : filtered.length === 0 ? (
-            <div className="text-muted" style={{ fontSize: 13, padding: '16px 0' }}>No approvals found</div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-              {filtered.map((row) => {
-                const isPending = row.status === 'pending';
-                const busy = busyId === row.id;
-                return (
-                  <div
-                    key={row.id}
-                    style={{
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 12,
-                      padding: 18,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 10,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14, wordBreak: 'break-word' }}>
-                        {row.actionType}
-                      </span>
-                      <span className={statusClass(row.status)} style={{ flexShrink: 0 }}>{row.status}</span>
-                    </div>
-
-                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>
-                      {row.description}
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                      {[
-                        { label: 'AgentHost', value: row.agentHostId != null ? agentHostNameById.get(row.agentHostId) ?? `#${row.agentHostId}` : '-' },
-                        { label: 'Requested By', value: row.requestedBy ?? '-' },
-                        { label: 'Requested', value: fmtDate(row.createdAt) },
-                        { label: 'Expires', value: fmtDate(row.expiresAt) },
-                        { label: 'Decision', value: row.reviewedBy ? `${row.reviewedBy}${row.reviewNote ? `: ${row.reviewNote}` : ''}` : '-' },
-                      ].map(({ label, value }) => (
-                        <div key={label}>
-                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>
-                          <div style={{ fontSize: 12, color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{value}</div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {isPending ? (
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
-                        <button
-                          type="button"
-                          className="btn-ghost"
-                          disabled={busy}
-                          onClick={() => void decide(row, 'approved')}
-                        >
-                          Approve
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-ghost"
-                          disabled={busy}
-                          onClick={() => void decide(row, 'rejected')}
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-muted" style={{ fontSize: 12 }}>No actions available</span>
-                    )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+            {filtered.map((row) => {
+              const isPending = row.status === 'pending';
+              const busy = busyId === row.id;
+              return (
+                <div
+                  key={row.id}
+                  style={{
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 12,
+                    padding: 18,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14, wordBreak: 'break-word' }}>
+                      {row.actionType}
+                    </span>
+                    <span className={statusClass(row.status)} style={{ flexShrink: 0 }}>{row.status}</span>
                   </div>
-                );
-              })}
-            </div>
-          )
-        )}
-    </PageContainer>
+
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>
+                    {row.description}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    {[
+                      { label: 'AgentHost', value: row.agentHostId != null ? agentHostNameById.get(row.agentHostId) ?? `#${row.agentHostId}` : '-' },
+                      { label: 'Requested By', value: row.requestedBy ?? '-' },
+                      { label: 'Requested', value: fmtDate(row.createdAt) },
+                      { label: 'Expires', value: fmtDate(row.expiresAt) },
+                      { label: 'Decision', value: row.reviewedBy ? `${row.reviewedBy}${row.reviewNote ? `: ${row.reviewNote}` : ''}` : '-' },
+                    ].map(({ label, value }) => (
+                      <div key={label}>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{value}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {isPending ? (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        disabled={busy}
+                        onClick={() => void decide(row, 'approved')}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        disabled={busy}
+                        onClick={() => void decide(row, 'rejected')}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-muted" style={{ fontSize: 12 }}>No actions available</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+    </div>
   );
 }

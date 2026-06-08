@@ -6,15 +6,32 @@ import { useAuth } from '@/lib/AuthContext';
 import { WorkforceAgents } from '@/components/workforce/WorkforceAgents';
 import { ContributorsView } from '@/components/contributors/ContributorsView';
 import { MembersView } from '@/components/members/MembersView';
+import { ChatsView } from '@/components/chats/ChatsView';
+import { ApprovalsView } from '@/components/approvals/ApprovalsView';
+import { ObservabilityContent } from '@/components/ObservabilityContent';
+import { LlmUsageContent } from '@/components/LlmUsageContent';
+import { QaContent } from '@/components/QaContent';
+import { ActiveRunsPanel } from '@/components/ActiveRunsPanel';
+import { Tabs } from '@/components/Tabs';
 import PageContainer from '@/components/PageContainer';
 
-type WorkforceTab = 'workforce' | 'contributors' | 'members';
+type WorkforceTab = 'workforce' | 'chats' | 'approvals' | 'contributors' | 'members' | 'logs' | 'llm' | 'qa';
 
 const TABS: ReadonlyArray<{ id: WorkforceTab; label: string; sub: string }> = [
   {
     id: 'workforce',
     label: 'Workforce',
     sub: 'Create cloud agents, register remote agents, and connect them to your workspace. Publish agents to the marketplace to earn revenue.',
+  },
+  {
+    id: 'chats',
+    label: 'Chats',
+    sub: 'Browse chat sessions across every agentHost in this workspace.',
+  },
+  {
+    id: 'approvals',
+    label: 'Approvals',
+    sub: 'Review high-risk actions escalated by your agents for human-in-the-loop sign-off.',
   },
   {
     id: 'contributors',
@@ -25,6 +42,21 @@ const TABS: ReadonlyArray<{ id: WorkforceTab; label: string; sub: string }> = [
     id: 'members',
     label: 'Members',
     sub: 'Invite teammates and manage who has access to your workspace.',
+  },
+  {
+    id: 'logs',
+    label: 'Logs',
+    sub: 'Agent logs, execution timelines, and diagnostics across your workspace.',
+  },
+  {
+    id: 'llm',
+    label: 'LLM Usage',
+    sub: 'LLM usage metrics, model health, and spend across your workspace.',
+  },
+  {
+    id: 'qa',
+    label: 'Agentic QA',
+    sub: 'Per-project QA automation — flows, generated tests, and CI runs.',
   },
 ];
 
@@ -51,27 +83,31 @@ function WorkforcePageInner() {
         <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>{active.sub}</p>
       </div>
 
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', marginBottom: 20, overflowX: 'auto' }}>
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => setTab(t.id)}
-            style={{
-              padding: '10px 16px', fontSize: 13, border: 'none', background: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-              borderBottom: `2px solid ${tab === t.id ? 'var(--coral-bright, #f4726e)' : 'transparent'}`,
-              color: tab === t.id ? 'var(--coral-bright, #f4726e)' : 'var(--text-muted)',
-              fontWeight: tab === t.id ? 600 : 400,
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs tabs={TABS} active={tab} onChange={setTab} />
 
-      {tab === 'contributors' ? <ContributorsView /> : tab === 'members' ? <MembersView /> : <WorkforceAgents tenantId={tenantId} />}
+      {tab === 'chats' ? (
+        <ChatsView />
+      ) : tab === 'approvals' ? (
+        <ApprovalsView />
+      ) : tab === 'contributors' ? (
+        <ContributorsView />
+      ) : tab === 'members' ? (
+        <MembersView />
+      ) : tab === 'logs' ? (
+        <>
+          {/* Live fleet view — what's running right now (self-hides when idle). */}
+          <div style={{ marginBottom: 24 }}>
+            <ActiveRunsPanel />
+          </div>
+          <ObservabilityContent initialView="logs" />
+        </>
+      ) : tab === 'llm' ? (
+        <LlmUsageContent />
+      ) : tab === 'qa' ? (
+        <QaContent />
+      ) : (
+        <WorkforceAgents tenantId={tenantId} />
+      )}
     </PageContainer>
   );
 }

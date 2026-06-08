@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { chatSessionsApi, type ChatSession, type ChatMessage } from '@/lib/builderforceApi';
-import PageContainer from '@/components/PageContainer';
 
 type SessionWithName = ChatSession & { agentHostName?: string };
 
@@ -13,7 +12,12 @@ const cardStyle: React.CSSProperties = {
   padding: 16,
 };
 
-export default function ChatsPage() {
+/**
+ * All chat sessions across agentHosts in the workspace, with a session list and
+ * message thread viewer. Layout-only (no PageContainer/header) so it can be
+ * dropped into the Workforce tab strip or any other shell.
+ */
+export function ChatsView() {
   const [sessions, setSessions] = useState<SessionWithName[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,14 +49,11 @@ export default function ChatsPage() {
   };
 
   return (
-    <PageContainer style={{ padding: '32px 40px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Chats</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
-            All chat sessions across agentHosts in this workspace
-          </p>
-        </div>
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+          All chat sessions across agentHosts in this workspace
+        </p>
         <button
           type="button"
           onClick={load}
@@ -60,7 +61,7 @@ export default function ChatsPage() {
           style={{
             padding: '7px 14px', fontSize: 13, fontWeight: 600,
             background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-            border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+            border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer', flexShrink: 0,
           }}
         >
           {loading ? 'Loading…' : 'Refresh'}
@@ -157,6 +158,6 @@ export default function ChatsPage() {
           </div>
         </div>
       )}
-    </PageContainer>
+    </div>
   );
 }

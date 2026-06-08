@@ -336,8 +336,8 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
               {selected?.agentHostId != null && (
                 <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
                   Minimal view — for full agent logs, tool calls, and timeline,{' '}
-                  <Link href="/observability" style={{ color: 'var(--coral-bright)' }}>
-                    open Observability →
+                  <Link href="/workforce?tab=logs" style={{ color: 'var(--coral-bright)' }}>
+                    open Workforce → Logs →
                   </Link>
                 </div>
               )}
