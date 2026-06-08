@@ -105,6 +105,17 @@ function fmtDuration(ms: number): string {
   return `${(ms / 60000).toFixed(1)}m`;
 }
 
+/** A terminal-failure trace event (the `run.failed` events emitted on
+ *  orphan-reap / FAILED transition), or a tool call that returned a gateway 4xx/5xx.
+ *  These render as error-level logs and failed (red) timeline tracks. */
+function isErrorEvent(ev: ToolAuditEvent): boolean {
+  const res = (ev.result ?? '').toLowerCase();
+  return ev.toolName === 'run.failed'
+    || ev.category === 'error'
+    || res.includes('gateway 4')
+    || res.includes('gateway 5');
+}
+
 const AGENT_COLORS = [
   'var(--coral-bright, #f97316)',
   'var(--accent, #6366f1)',
@@ -181,6 +192,8 @@ export function ObservabilityContent({
   const [diagError, setDiagError] = useState<string | null>(null);
   const [timelineViewMode, setTimelineViewMode] = useState<'list' | 'gantt'>('gantt');
   const [categoryFilter, setCategoryFilter] = useState('');
+  // Triage capture: "Copied" / "Failed" flash after the copy button is pressed.
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
 
   // ---- Unified directory + selection derivation -----------------------------
   const scopedAgent: UnifiedAgent | null = scopedHostKey != null
@@ -377,10 +390,9 @@ export function ObservabilityContent({
   for (const [ref, evts] of cloudEventsByRef) {
     const name = nameForKey(`cloud:${ref}`);
     for (const ev of evts) {
-      const res = (ev.result ?? '').toLowerCase();
       cloudLogLines.push({
         ts: ev.ts,
-        level: res.includes('gateway 4') || res.includes('gateway 5') ? 'error' : 'info',
+        level: isErrorEvent(ev) ? 'error' : 'info',
         msg: `${ev.toolName}${ev.category ? ` (${ev.category})` : ''}${ev.durationMs ? ` · ${fmtDuration(ev.durationMs)}` : ''}${ev.result ? ` — ${ev.result}` : ''}`,
         agentKey: `cloud:${ref}`,
         agentName: name,
@@ -399,7 +411,7 @@ export function ObservabilityContent({
       kind: 'tool',
       startMs,
       endMs: startMs + (ev.durationMs ?? 0),
-      status: 'completed',
+      status: isErrorEvent(ev) ? 'failed' : 'completed',
       detail: ev.result ? truncate(ev.result, 120) : ev.args ? truncate(ev.args, 120) : undefined,
       agentKey,
       agentName,
@@ -440,6 +452,60 @@ export function ObservabilityContent({
 
   const hasCloudSelection = selectedCloudRefs.length > 0;
   const hasHostSelection = selectedHostIds.length > 0;
+
+  // ---- Triage capture -------------------------------------------------------
+  // Assemble a single paste-able report of everything this view holds about the
+  // run — selected agents, every telemetry event (full args/results), the derived
+  // logs, and an errors-first summary — so it can be dropped straight into a bug
+  // report. Built from the same data the Logs/Timeline render, so it stays in sync.
+  const buildTriageReport = (): string => {
+    const cap = (s: unknown, n = 2000): string => {
+      const str = typeof s === 'string' ? s : JSON.stringify(s ?? '');
+      return str.length > n ? str.slice(0, n) + `… (+${str.length - n} chars)` : str;
+    };
+    const flatEvents: Array<{ ev: ToolAuditEvent; agentName: string }> = [];
+    for (const [hostId, evts] of eventsByHost) for (const ev of evts) flatEvents.push({ ev, agentName: nameForKey(`host:${hostId}`) });
+    for (const [ref, evts] of cloudEventsByRef) for (const ev of evts) flatEvents.push({ ev, agentName: nameForKey(`cloud:${ref}`) });
+    flatEvents.sort((a, b) => a.ev.ts.localeCompare(b.ev.ts));
+
+    const errors = flatEvents.filter((e) => isErrorEvent(e.ev));
+    const lines: string[] = [];
+    lines.push('=== BuilderForce Execution Triage ===');
+    lines.push(`Captured:  ${new Date().toISOString()}`);
+    if (propExecutionId != null) lines.push(`Execution: #${propExecutionId}`);
+    lines.push(`Agents:    ${selectedKeys.map((k) => `${nameForKey(k)} [${agentByKey.get(k)?.kind ?? '?'}]`).join(', ') || '—'}`);
+    if (hasHostSelection) lines.push(`Host link: ${connState}`);
+    lines.push(`Events: ${flatEvents.length} · Errors: ${errors.length} · Log lines: ${mergedLogs.length}`);
+
+    if (errors.length) {
+      lines.push('', `--- Errors (${errors.length}) ---`);
+      for (const { ev, agentName } of errors) {
+        lines.push(`[${ev.ts}] ${agentName} ${ev.toolName}${ev.category ? ` (${ev.category})` : ''} — ${cap(ev.result ?? ev.args ?? '')}`);
+      }
+    }
+
+    lines.push('', `--- Telemetry events (${flatEvents.length}) ---`);
+    for (const { ev, agentName } of flatEvents) {
+      lines.push(`[${ev.ts}] ${agentName} ${ev.toolName}${ev.category ? ` (${ev.category})` : ''}${ev.durationMs != null ? ` · ${ev.durationMs}ms` : ''}`);
+      if (ev.args) lines.push(`    args:   ${cap(ev.args)}`);
+      if (ev.result) lines.push(`    result: ${cap(ev.result)}`);
+    }
+
+    lines.push('', `--- Logs (${mergedLogs.length}) ---`);
+    for (const l of mergedLogs) lines.push(`[${l.ts}] ${l.level.toUpperCase().padEnd(5)} ${l.agentName} ${l.msg}`);
+
+    return lines.join('\n');
+  };
+
+  const copyTriage = async () => {
+    try {
+      await navigator.clipboard.writeText(buildTriageReport());
+      setCopyState('copied');
+    } catch {
+      setCopyState('error');
+    }
+    setTimeout(() => setCopyState('idle'), 2000);
+  };
 
   // --------------------------------------------------------------------------
   return (
@@ -573,6 +639,14 @@ export function ObservabilityContent({
                 Auto-scroll
               </label>
               <button type="button" onClick={() => setLogLines([])} style={smallBtn}>Clear</button>
+              <button
+                type="button"
+                onClick={copyTriage}
+                title="Copy a full triage report (agents, telemetry, errors, logs) to the clipboard"
+                style={copyState === 'error' ? { ...smallBtn, color: 'var(--red, #ef4444)', borderColor: 'var(--red, #ef4444)' } : smallBtn}
+              >
+                {copyState === 'copied' ? 'Copied ✓' : copyState === 'error' ? 'Copy failed' : 'Copy triage info'}
+              </button>
             </div>
           )}
           {hasCloudSelection && (
@@ -673,12 +747,12 @@ export function ObservabilityContent({
                             height: 8,
                             borderRadius: '50%',
                             background:
-                              t.kind === 'tool'
-                                ? 'var(--accent, #6366f1)'
-                                : t.status === 'completed'
-                                  ? 'var(--green, #22c55e)'
-                                  : t.status === 'failed'
-                                    ? 'var(--red, #ef4444)'
+                              t.status === 'failed'
+                                ? 'var(--red, #ef4444)'
+                                : t.kind === 'tool'
+                                  ? 'var(--accent, #6366f1)'
+                                  : t.status === 'completed'
+                                    ? 'var(--green, #22c55e)'
                                     : t.status === 'running'
                                       ? 'var(--blue, #3b82f6)'
                                       : 'var(--text-muted)',

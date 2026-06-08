@@ -38,6 +38,13 @@ export class RuntimeService {
     private readonly tasks:      ITaskRepository,
     private readonly agents:     IAgentRepository,
     private readonly audit:      IAuditRepository,
+    /**
+     * Optional sink invoked whenever an execution terminally fails (in-loop
+     * FAILED transition or orphan-reap). Wired to write a `run.failed` tool-audit
+     * event so the failure surfaces on the Observability Logs + Timeline, which
+     * are derived only from tool-audit telemetry. Best-effort by contract.
+     */
+    private readonly onTerminalFailure?: (e: Execution) => Promise<void>,
   ) {}
 
   async submit(dto: SubmitTaskDto): Promise<Execution> {
@@ -134,6 +141,8 @@ export class RuntimeService {
         resourceId:   String(e.id),
         metadata:     JSON.stringify({ reason: 'orphaned_timeout', priorStatus: e.status }),
       }));
+      // Surface the orphan failure on the Logs/Timeline (telemetry-only views).
+      await this.onTerminalFailure?.(saved);
       return saved;
     } catch {
       return e; // best-effort — never block a read on the repair
@@ -224,6 +233,11 @@ export class RuntimeService {
       resourceId:   String(saved.id),
       metadata:     dto.result ? JSON.stringify({ result: dto.result }) : null,
     }));
+
+    // A FAILED transition is invisible on the Logs/Timeline (telemetry-only
+    // views) unless it is emitted as a trace event — same gap the orphan reaper
+    // closes (see reapIfOrphaned).
+    if (dto.status === ExecutionStatus.FAILED) await this.onTerminalFailure?.(saved);
 
     return saved;
   }

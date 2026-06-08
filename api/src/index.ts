@@ -29,6 +29,7 @@ import { TenantService }   from './application/tenant/TenantService';
 import { AuthService }     from './application/auth/AuthService';
 import { AgentService }    from './application/agent/AgentService';
 import { RuntimeService }  from './application/runtime/RuntimeService';
+import { recordRunFailureEvent } from './application/runtime/recordRunFailureEvent';
 import { AuditService }    from './application/audit/AuditService';
 import { AgentHostService }     from './application/agentHost/AgentHostService';
 
@@ -154,7 +155,8 @@ function buildApp(env: Env): Hono<HonoEnv> {
   const tenantService   = new TenantService(tenantRepo, paymentProvider);
   const authService     = new AuthService(userRepo, tenantRepo, auditRepo, env.JWT_SECRET);
   const agentService    = new AgentService(agentRepo, skillRepo, auditRepo);
-  const runtimeService  = new RuntimeService(executionRepo, taskRepo, agentRepo, auditRepo);
+  const runtimeService  = new RuntimeService(executionRepo, taskRepo, agentRepo, auditRepo,
+    (e) => recordRunFailureEvent(db, e));
   const auditService    = new AuditService(auditRepo);
   const agentHostService     = new AgentHostService(agentHostRepo);
   const brainService    = new BrainService(db);
