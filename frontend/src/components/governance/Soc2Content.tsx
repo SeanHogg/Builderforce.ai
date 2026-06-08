@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useEffect, useMemo, useState } from 'react';
 import { governanceApi, type SocControl } from '@/lib/builderforceApi';
 
@@ -115,11 +117,11 @@ export function Soc2Content() {
                   <span style={{ fontWeight: 600, minWidth: 52 }}>{c.controlRef}</span>
                   <span style={{ flex: 1 }}>{c.name}</span>
                   <span aria-hidden style={{ width: 8, height: 8, borderRadius: 8, background: STATUS_COLOR[c.status] }} />
-                  <select value={c.status} onChange={(e) => setStatus(c.id, e.target.value as SocControl['status'])} style={selectStyle}>
+                  <Select value={c.status} onChange={(e) => setStatus(c.id, e.target.value as SocControl['status'])} style={selectStyle}>
                     {STATUS_ORDER.map((s) => (
                       <option key={s} value={s}>{STATUS_LABELS[s]}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               ))}
             </div>

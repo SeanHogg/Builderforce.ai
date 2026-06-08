@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import type { AgentRuntimeSupport, AgentEngine } from '@/lib/api';
 
 /**
@@ -99,19 +101,19 @@ export function CloudAgentFormFields({
       {form.runtimeSupport === 'both' && (
         <div>
           <label style={labelStyle}>Best experience on</label>
-          <select style={inputStyle} value={form.preferredRuntime} onChange={(e) => onChange({ preferredRuntime: e.target.value as 'cloud' | 'host' })}>
+          <Select style={inputStyle} value={form.preferredRuntime} onChange={(e) => onChange({ preferredRuntime: e.target.value as 'cloud' | 'host' })}>
             <option value="cloud">Cloud</option>
             <option value="host">Remote (agentHost)</option>
-          </select>
+          </Select>
         </div>
       )}
       <div>
         <label style={labelStyle}>Agent runtime engine</label>
-        <select style={inputStyle} value={form.engine} onChange={(e) => onChange({ engine: e.target.value as AgentEngine })}>
+        <Select style={inputStyle} value={form.engine} onChange={(e) => onChange({ engine: e.target.value as AgentEngine })}>
           {(Object.keys(ENGINE_LABELS) as AgentEngine[]).map((eng) => (
             <option key={eng} value={eng}>{ENGINE_LABELS[eng]}</option>
           ))}
-        </select>
+        </Select>
         <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>
           V1 runs the pi-coding-agent loop. V2 runs the Claude Agent SDK; models route through the gateway with your tenant’s Anthropic key.
         </p>

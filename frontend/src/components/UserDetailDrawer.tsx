@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useState, useEffect, useCallback } from 'react';
 import {
   adminApi,
@@ -154,7 +156,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
         {/* Tenant selector (for permission/security tabs) */}
         {(tab === 'permissions' || tab === 'sessions' || tab === 'security') && (
           <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border-color)' }}>
-            <select
+            <Select
               className="admin-select"
               value={selectedTenantId ?? ''}
               onChange={(e) => {
@@ -168,7 +170,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
               {tenants.map((t) => (
                 <option key={t.id} value={t.id}>{t.name} ({t.slug})</option>
               ))}
-            </select>
+            </Select>
           </div>
         )}
 

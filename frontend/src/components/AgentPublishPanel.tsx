@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { TrainingJob, AgentProfile, AgentPackage, MambaStateSnapshot } from '@/lib/types';
 import { publishAgent } from '@/lib/api';
@@ -289,7 +291,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
             {completedJobs.length > 0 && (
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Associated Model</label>
-                <select
+                <Select
                   value={selectedJobId}
                   onChange={e => setSelectedJobId(e.target.value)}
                   className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
@@ -300,7 +302,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                       {j.base_model} (rank={j.lora_rank})
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             )}
           </div>

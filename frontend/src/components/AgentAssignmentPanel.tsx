@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   agentAssignmentsApi,
@@ -147,7 +149,7 @@ export function AgentAssignmentPanel({
               <span style={kindBadge(a.agentKind)}>{AGENT_KIND_LABEL[a.agentKind as PoolAgent['kind']] ?? a.agentKind}</span>
               <div style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{nameFor(a)}</div>
               {showExecutionScope && (
-                <select
+                <Select
                   value={a.executionScope}
                   onChange={(e) => setExecutionScope(a, e.target.value as AgentExecutionScope)}
                   disabled={busy}
@@ -156,7 +158,7 @@ export function AgentAssignmentPanel({
                 >
                   <option value="project">runs under project</option>
                   <option value="global">runs globally</option>
-                </select>
+                </Select>
               )}
               <button type="button" onClick={() => remove(a)} disabled={busy} style={dangerBtn}>Remove</button>
             </div>

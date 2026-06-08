@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useCallback, useEffect, useState } from 'react';
 import {
   integrationsApi,
@@ -231,7 +233,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
 
       {adding ? (
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 10 }}>
-          <select
+          <Select
             value={provider}
             onChange={(e) => { setProvider(e.target.value as IntegrationProvider); setSecrets({}); }}
             style={inputStyle}
@@ -239,7 +241,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
             {providerList.map((p) => (
               <option key={p} value={p}>{PROVIDER_META[p].label}</option>
             ))}
-          </select>
+          </Select>
           <input style={inputStyle} placeholder="Label (e.g. Production GitHub)" value={name} onChange={(e) => setName(e.target.value)} />
           {meta.baseUrl && (
             <input

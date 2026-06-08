@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useState, useEffect, useCallback } from 'react';
 import { auditApi, type AuditEvent } from '@/lib/builderforceApi';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
@@ -111,7 +113,7 @@ export default function LogsPage() {
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
-        <select
+        <Select
           value={eventTypeFilter}
           onChange={(e) => setEventTypeFilter(e.target.value)}
           style={{
@@ -127,8 +129,8 @@ export default function LogsPage() {
           {EVENT_TYPE_OPTIONS.filter(Boolean).map((t) => (
             <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
           ))}
-        </select>
-        <select
+        </Select>
+        <Select
           value={resourceTypeFilter}
           onChange={(e) => setResourceTypeFilter(e.target.value)}
           style={{
@@ -144,7 +146,7 @@ export default function LogsPage() {
           {RESOURCE_TYPE_OPTIONS.filter(Boolean).map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
-        </select>
+        </Select>
         <span style={{ fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center' }}>
           {loading ? 'Loading…' : `${events.length} events`}
         </span>

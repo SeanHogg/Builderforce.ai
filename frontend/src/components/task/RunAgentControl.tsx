@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useEffect, useState } from 'react';
 import {
   runtimeApi,
@@ -93,7 +95,7 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
   return (
     <div>
       <div style={{ display: 'inline-flex', alignItems: 'stretch', border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden' }}>
-        <select value={target} onChange={(e) => setTarget(e.target.value)} style={{ ...selectStyle, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="Agent">
+        <Select value={target} onChange={(e) => setTarget(e.target.value)} style={{ ...selectStyle, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="Agent">
           <option value="">Auto (any agent)</option>
           {cloudAgents.length > 0 && (
             <optgroup label="Cloud agents">
@@ -109,11 +111,11 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
               ))}
             </optgroup>
           )}
-        </select>
-        <select value={model} onChange={(e) => setModel(e.target.value)} style={{ ...selectStyle, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="LLM model">
+        </Select>
+        <Select value={model} onChange={(e) => setModel(e.target.value)} style={{ ...selectStyle, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="LLM model">
           <option value="">{DEFAULT_MODEL_LABEL}</option>
           {models.map((m) => <option key={m} value={m}>{m}</option>)}
-        </select>
+        </Select>
         <button
           type="button"
           onClick={run}

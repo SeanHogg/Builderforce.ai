@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useEffect, useState } from 'react';
 import { SlideOutPanel } from '../SlideOutPanel';
 import { BoardConnectionsManager } from '../integrations/BoardConnectionsManager';
@@ -172,19 +174,19 @@ function LanesTab({ board, lanes, agentsByLane, reload }: {
               title="Swimlane name (shown as the board column header)"
               onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== lane.name) patchLane(lane.id, { name: v }); }}
             />
-            <select value={lane.gate} onChange={(e) => patchLane(lane.id, { gate: e.target.value })} style={inputStyle} title="Gate">
+            <Select value={lane.gate} onChange={(e) => patchLane(lane.id, { gate: e.target.value })} style={inputStyle} title="Gate">
               <option value="auto">auto</option>
               <option value="human">human gate</option>
-            </select>
-            <select value={lane.executionMode} onChange={(e) => patchLane(lane.id, { executionMode: e.target.value })} style={inputStyle} title="Execution">
+            </Select>
+            <Select value={lane.executionMode} onChange={(e) => patchLane(lane.id, { executionMode: e.target.value })} style={inputStyle} title="Execution">
               <option value="sequential">sequential</option>
               <option value="parallel">parallel</option>
-            </select>
-            <select value={lane.failurePolicy} onChange={(e) => patchLane(lane.id, { failurePolicy: e.target.value })} style={inputStyle} title="On failure">
+            </Select>
+            <Select value={lane.failurePolicy} onChange={(e) => patchLane(lane.id, { failurePolicy: e.target.value })} style={inputStyle} title="On failure">
               <option value="needs_attention">needs attention</option>
               <option value="retry">retry</option>
               <option value="skip">skip</option>
-            </select>
+            </Select>
             <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', gap: 4, alignItems: 'center' }}>
               <input type="checkbox" checked={lane.isTerminal} onChange={(e) => patchLane(lane.id, { isTerminal: e.target.checked })} /> terminal
             </label>
@@ -220,7 +222,7 @@ function LaneActionRow({ lane, lanes, workflows, patchLane }: {
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
       <span style={labelStyle}>When done</span>
-      <select
+      <Select
         value={actionType}
         onChange={(e) => patchLane(lane.id, { actionType: e.target.value, actionTarget: '' })}
         style={inputStyle}
@@ -229,22 +231,22 @@ function LaneActionRow({ lane, lanes, workflows, patchLane }: {
         <option value="advance">Advance to next lane</option>
         <option value="move_ticket">Move ticket to…</option>
         <option value="run_workflow">Run workflow…</option>
-      </select>
+      </Select>
       {actionType === 'move_ticket' && (
-        <select value={lane.actionTarget ?? ''} onChange={(e) => patchLane(lane.id, { actionTarget: e.target.value })} style={inputStyle} title="Destination lane">
+        <Select value={lane.actionTarget ?? ''} onChange={(e) => patchLane(lane.id, { actionTarget: e.target.value })} style={inputStyle} title="Destination lane">
           <option value="">Select lane…</option>
           {lanes.filter((l) => l.id !== lane.id).map((l) => <option key={l.id} value={l.key}>{l.name}</option>)}
-        </select>
+        </Select>
       )}
       {actionType === 'run_workflow' && (
-        <select value={lane.actionTarget ?? ''} onChange={(e) => patchLane(lane.id, { actionTarget: e.target.value })} style={inputStyle} title="Workflow to run">
+        <Select value={lane.actionTarget ?? ''} onChange={(e) => patchLane(lane.id, { actionTarget: e.target.value })} style={inputStyle} title="Workflow to run">
           <option value="">Select workflow…</option>
           {workflows.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-        </select>
+        </Select>
       )}
       <span style={{ width: 1, height: 18, background: 'var(--border-subtle)' }} />
       <span style={labelStyle}>Succeeds when</span>
-      <select
+      <Select
         value={lane.successPolicy ?? 'all'}
         onChange={(e) => patchLane(lane.id, { successPolicy: e.target.value, ...(e.target.value === 'n_of_m' ? {} : { successThreshold: null }) })}
         style={inputStyle}
@@ -253,7 +255,7 @@ function LaneActionRow({ lane, lanes, workflows, patchLane }: {
         <option value="all">All agents</option>
         <option value="any">At least one</option>
         <option value="n_of_m">At least N</option>
-      </select>
+      </Select>
       {lane.successPolicy === 'n_of_m' && (
         <input
           type="number" min={1} style={{ ...inputStyle, width: 64 }} defaultValue={lane.successThreshold ?? 1}
@@ -313,12 +315,12 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
       {adding ? (
         <>
           <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-            <select value={agentSel} onChange={(e) => setAgentSel(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 180 }} aria-label="Select an agent">
+            <Select value={agentSel} onChange={(e) => setAgentSel(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 180 }} aria-label="Select an agent">
               <option value="">Select an agent…</option>
               {available.map((a) => (
                 <option key={`${a.kind}:${a.ref}`} value={`${a.kind}:${a.ref}`}>{a.name}</option>
               ))}
-            </select>
+            </Select>
             <input style={{ ...inputStyle, width: 160 }} placeholder="model (blank = default)" value={model} onChange={(e) => setModel(e.target.value)} />
             <button type="button" style={btnPrimary} onClick={add} disabled={!agentSel}>Add</button>
             <button type="button" style={btnSubtle} onClick={() => { setAdding(false); setAgentSel(''); setModel(''); }}>Cancel</button>

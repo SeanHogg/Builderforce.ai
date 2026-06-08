@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useState, useEffect } from 'react';
 import { chatSessionsApi, agentHosts, dispatchApi, type ChatSession, type ChatMessage, type AgentHost } from '@/lib/builderforceApi';
 
@@ -161,7 +163,7 @@ export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsConte
               Send this session context to a target agentHost so it can resume the conversation. The last 20 messages will be included.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <select
+              <Select
                 value={handoffTargetId}
                 onChange={(e) => setHandoffTargetId(e.target.value ? Number(e.target.value) : '')}
                 style={{
@@ -179,7 +181,7 @@ export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsConte
                     {c.name}{c.online ? ' ●' : ' ○'}
                   </option>
                 ))}
-              </select>
+              </Select>
               <input
                 type="text"
                 placeholder="Handoff note (optional)"

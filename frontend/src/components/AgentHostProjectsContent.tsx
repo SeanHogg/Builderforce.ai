@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useState, useEffect, useCallback } from 'react';
 import { agentHostProjectsApi, type AgentHostProject } from '@/lib/builderforceApi';
 import { fetchProjects } from '@/lib/api';
@@ -107,7 +109,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
 
       {showAssign && (
         <div style={{ ...cardStyle, display: 'flex', gap: 8 }}>
-          <select
+          <Select
             value={selectedProjectId}
             onChange={(e) => setSelectedProjectId(e.target.value ? Number(e.target.value) : '')}
             style={{
@@ -124,7 +126,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
             {availableToAssign.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
-          </select>
+          </Select>
           <button
             type="button"
             onClick={handleAssign}

@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
@@ -68,12 +70,12 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
       <section className="cc-skills-filters">
         <div className="cc-skills-filter">
           <label htmlFor="cc-cat">Category</label>
-          <select id="cc-cat" value={category} onChange={(e) => setCategory(e.target.value)}>
+          <Select id="cc-cat" value={category} onChange={(e) => setCategory(e.target.value)}>
             <option value="">All Categories</option>
             {categories.map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="cc-skills-filter">
           <label htmlFor="cc-search">Search</label>
@@ -87,12 +89,12 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
         </div>
         <div className="cc-skills-filter">
           <label htmlFor="cc-sort">Sort</label>
-          <select id="cc-sort" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+          <Select id="cc-sort" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
             <option value="trending">Trending</option>
             <option value="newest">Newest</option>
             <option value="popular">Most Popular</option>
             <option value="downloads">Most Downloaded</option>
-          </select>
+          </Select>
         </div>
         <div className="cc-skills-filter" style={{ flex: '0 0 auto', justifyContent: 'flex-end' }}>
           <label>View</label>

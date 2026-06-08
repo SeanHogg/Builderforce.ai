@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
@@ -1646,7 +1648,7 @@ export default function AdminPage() {
                 <div>
                   <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span className="text-muted" style={{ fontSize: 14 }}>By model — last</span>
-                    <select
+                    <Select
                       value={usageDays}
                       onChange={async (e) => {
                         const days = Number(e.target.value);
@@ -1666,7 +1668,7 @@ export default function AdminPage() {
                       {[7, 14, 30, 60, 90].map((d) => (
                         <option key={d} value={d}>{d} days</option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
                   <div className="table-wrap">
                     <table className="data-table">
@@ -1946,7 +1948,7 @@ export default function AdminPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <label className="text-muted" style={{ fontSize: 14 }}>Workspace</label>
-                  <select
+                  <Select
                     className="admin-select"
                     value={securityTenantId ?? ''}
                     onChange={(e) => handleSecurityTenantChange(Number(e.target.value) || null)}
@@ -1955,11 +1957,11 @@ export default function AdminPage() {
                     {tenants.map((t) => (
                       <option key={t.id} value={t.id}>{t.name}</option>
                     ))}
-                  </select>
+                  </Select>
                   {securityTenantId && (
                     <>
                       <label className="text-muted" style={{ fontSize: 14 }}>User</label>
-                      <select
+                      <Select
                         className="admin-select"
                         value={securityUserId ?? ''}
                         onChange={(e) => handleSecurityUserSelect(e.target.value || null)}
@@ -1969,7 +1971,7 @@ export default function AdminPage() {
                         {securityUsers.map((u) => (
                           <option key={u.id} value={u.id}>{u.email}</option>
                         ))}
-                      </select>
+                      </Select>
                     </>
                   )}
                   <button type="button" className="btn-ghost" onClick={() => loadTab('security')}>↻ Refresh</button>
@@ -2094,7 +2096,7 @@ export default function AdminPage() {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                                 <label className="text-muted" style={{ fontSize: 12 }}>Disable with:</label>
-                                <select
+                                <Select
                                   className="admin-select"
                                   value={securityMfaMode}
                                   onChange={(e) => setSecurityMfaMode(e.target.value as 'totp' | 'recovery')}
@@ -2102,7 +2104,7 @@ export default function AdminPage() {
                                 >
                                   <option value="totp">TOTP code</option>
                                   <option value="recovery">Recovery code</option>
-                                </select>
+                                </Select>
                                 <input
                                   type="text"
                                   placeholder={securityMfaMode === 'totp' ? '6-digit code' : 'Recovery code'}
@@ -2361,7 +2363,7 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <select
+                  <Select
                     className="admin-select"
                     value={newsletterStatusFilter}
                     onChange={(e) => {
@@ -2373,7 +2375,7 @@ export default function AdminPage() {
                     <option value="subscribed">Subscribed</option>
                     <option value="unsubscribed">Unsubscribed</option>
                     <option value="suppressed">Suppressed</option>
-                  </select>
+                  </Select>
                   <input
                     type="text"
                     placeholder="Search email"
@@ -2479,7 +2481,7 @@ export default function AdminPage() {
                 <div className="health-card" style={{ padding: 16 }}>
                   <div className="health-label" style={{ marginBottom: 12 }}>Track send</div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <select
+                    <Select
                       className="admin-select"
                       value={newsletterTrackTemplateId}
                       onChange={(e) => setNewsletterTrackTemplateId(e.target.value)}
@@ -2489,7 +2491,7 @@ export default function AdminPage() {
                       {newsletterTemplates.map((t) => (
                         <option key={t.id} value={String(t.id)}>{t.name}</option>
                       ))}
-                    </select>
+                    </Select>
                     <input
                       type="email"
                       placeholder="Subscriber email"
@@ -2582,7 +2584,7 @@ export default function AdminPage() {
             {tab === 'privacy' && (
               <div>
                 <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <select
+                  <Select
                     className="admin-select"
                     value={privacyStatusFilter}
                     onChange={(e) => {
@@ -2594,8 +2596,8 @@ export default function AdminPage() {
                     <option value="pending">Pending</option>
                     <option value="completed">Completed</option>
                     <option value="closed">Closed</option>
-                  </select>
-                  <select
+                  </Select>
+                  <Select
                     className="admin-select"
                     value={privacyTypeFilter}
                     onChange={(e) => {
@@ -2606,7 +2608,7 @@ export default function AdminPage() {
                     <option value="">All types</option>
                     <option value="ccpa">CCPA</option>
                     <option value="gdpr">GDPR</option>
-                  </select>
+                  </Select>
                   <input
                     type="text"
                     placeholder="Search email"

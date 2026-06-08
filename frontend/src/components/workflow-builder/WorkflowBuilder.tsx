@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -94,14 +96,14 @@ function makeIntegrationNode(integ: Integration, position: XY): Node<BuilderNode
   };
 }
 
-/** Encode a run target as the `<select>` option value (`host:<id>` / `cloud:<ref>`). */
+/** Encode a run target as the `<Select>` option value (`host:<id>` / `cloud:<ref>`). */
 function runTargetToValue(t: WorkflowRunTarget | null): string {
   if (!t) return '';
   if (t.runtime === 'cloud') return t.cloudAgentRef ? `cloud:${t.cloudAgentRef}` : '';
   return t.agentHostId ? `host:${t.agentHostId}` : '';
 }
 
-/** Decode a `<select>` option value back into a run target. */
+/** Decode a `<Select>` option value back into a run target. */
 function valueToRunTarget(v: string): WorkflowRunTarget | null {
   if (v.startsWith('host:')) return { runtime: 'host', agentHostId: Number(v.slice(5)) };
   if (v.startsWith('cloud:')) return { runtime: 'cloud', cloudAgentRef: v.slice(6) };
@@ -379,7 +381,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
           style={{ ...fieldStyle, fontWeight: 700, fontSize: 14, minWidth: 220, flex: 1 }}
           placeholder="Workflow name"
         />
-        <select
+        <Select
           value={runTargetToValue(runTarget)}
           onChange={(e) => setRunTarget(valueToRunTarget(e.target.value))}
           style={fieldStyle}
@@ -396,8 +398,8 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
               {runTargets.cloudAgents.map((a) => <option key={`cloud:${a.ref}`} value={`cloud:${a.ref}`}>{a.name}</option>)}
             </optgroup>
           )}
-        </select>
-        <select
+        </Select>
+        <Select
           value={projectId ?? ''}
           onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : null)}
           style={fieldStyle}
@@ -407,7 +409,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
           {projectList.map((p) => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
-        </select>
+        </Select>
         <button type="button" style={btnSubtle} disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button>
         <button type="button" style={btnSubtle} disabled={busy} onClick={() => void exportYaml()} title="Download as YAML">Export</button>
         <button type="button" style={btnSubtle} disabled={busy} onClick={() => fileInputRef.current?.click()} title="Import a YAML/JSON workflow">Import</button>

@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useState, useEffect, useCallback } from 'react';
 import {
   updateAgent,
@@ -236,10 +238,10 @@ export function CloudAgentSlideOutPanel({
               </p>
               <div>
                 <label style={labelStyle}>Pricing model</label>
-                <select style={inputStyle} value={pricingModel} onChange={(e) => setPricingModel(e.target.value as AgentPricingModel)}>
+                <Select style={inputStyle} value={pricingModel} onChange={(e) => setPricingModel(e.target.value as AgentPricingModel)}>
                   <option value="flat_fee">Flat fee</option>
                   <option value="consumption">Consumption (per unit)</option>
-                </select>
+                </Select>
               </div>
               <div>
                 <label style={labelStyle}>Price (USD)</label>

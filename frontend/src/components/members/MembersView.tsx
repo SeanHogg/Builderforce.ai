@@ -8,6 +8,7 @@ import {
   type TenantMember,
 } from '@/lib/auth';
 import { InviteTeamMembers } from '@/components/InviteTeamMembers';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
@@ -34,6 +35,7 @@ export function MembersView() {
   const [removing, setRemoving] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<TenantMember | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('card');
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const loadMembers = useCallback(async () => {
     if (!tenant || !tenantToken) return;
@@ -77,26 +79,43 @@ export function MembersView() {
 
   if (!tenant || !tenantToken) return null;
 
+  const inviteButton = (
+    <button
+      type="button"
+      onClick={() => setInviteOpen(true)}
+      style={{
+        padding: '7px 16px',
+        fontSize: 13,
+        fontWeight: 600,
+        background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
+        color: '#fff',
+        border: 'none',
+        borderRadius: 8,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      Invite
+    </button>
+  );
+
   return (
     <>
-      {/* Invite section */}
-      <section
-        style={{
-          background: 'var(--bg-elevated)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 12,
-          padding: 20,
-          marginBottom: 24,
-        }}
+      {/* Invite slide-out panel */}
+      <SlideOutPanel
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        title="Invite a teammate"
       >
-        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Invite a teammate</h2>
-        <InviteTeamMembers
-          tenantId={String(tenant.id)}
-          tenantToken={tenantToken}
-          onInvited={() => { void loadMembers(); }}
-          onPlanLimit={(err) => setPlanError(err)}
-        />
-      </section>
+        <div style={{ padding: 20 }}>
+          <InviteTeamMembers
+            tenantId={String(tenant.id)}
+            tenantToken={tenantToken}
+            onInvited={() => { void loadMembers(); }}
+            onPlanLimit={(err) => setPlanError(err)}
+          />
+        </div>
+      </SlideOutPanel>
 
       {/* Members list */}
       <section
@@ -130,7 +149,10 @@ export function MembersView() {
               </span>
             )}
           </h2>
-          <ViewToggle value={viewMode} onChange={setViewMode} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <ViewToggle value={viewMode} onChange={setViewMode} />
+            {inviteButton}
+          </div>
         </div>
 
         {error && (
@@ -155,7 +177,7 @@ export function MembersView() {
           </div>
         ) : members.length === 0 ? (
           <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '12px 0' }}>
-            No members yet. Invite your first teammate above.
+            No members yet. Use the Invite button to add your first teammate.
           </div>
         ) : viewMode === 'card' ? (
           <div style={{ display: 'flex', flexDirection: 'column' }}>

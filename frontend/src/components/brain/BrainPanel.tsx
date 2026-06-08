@@ -14,6 +14,7 @@ import { ChatInput } from '@/components/ChatInput';
 import { ChatMessageBubble } from '@/components/ChatMessageBubble';
 import { ChatMessageActions } from '@/components/ChatMessageActions';
 import { ThemeSelect } from '@/components/ThemeSelect';
+import { Select } from '@/components/Select';
 import { fetchProjects, createProject } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import {
@@ -396,7 +397,7 @@ export function BrainPanel({
             {pendingConfirm && <ToolConfirmBar req={pendingConfirm} onDecide={resolveConfirm} />}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Acting as</span>
-              <select
+              <Select
                 value={personaSel}
                 onChange={(e) => setPersonaSel(e.target.value)}
                 aria-label="Brain agent or persona"
@@ -415,7 +416,7 @@ export function BrainPanel({
                     ))}
                   </optgroup>
                 )}
-              </select>
+              </Select>
             </div>
             <ChatInput
               value={input}

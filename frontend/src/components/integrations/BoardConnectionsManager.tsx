@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useCallback, useEffect, useState } from 'react';
 import {
   boardConnectionsApi,
@@ -164,13 +166,13 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
 
       {adding ? (
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 10 }}>
-          <select value={provider} onChange={(e) => setProvider(e.target.value)} style={inputStyle}>
+          <Select value={provider} onChange={(e) => setProvider(e.target.value)} style={inputStyle}>
             {PM_PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-          <select value={credentialId} onChange={(e) => setCredentialId(e.target.value)} style={inputStyle}>
+          </Select>
+          <Select value={credentialId} onChange={(e) => setCredentialId(e.target.value)} style={inputStyle}>
             <option value="">— Select access key —</option>
             {pmCreds.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.provider}{c.projectId == null ? ', workspace' : ''})</option>)}
-          </select>
+          </Select>
           <input
             style={inputStyle}
             placeholder={provider === 'github' ? 'Repository — owner/repo (e.g. octocat/hello-world)' : 'External board id (e.g. Jira board/project key)'}
