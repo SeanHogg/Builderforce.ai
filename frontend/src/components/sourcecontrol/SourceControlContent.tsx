@@ -10,6 +10,7 @@ import {
   type IntegrationCredential,
 } from '@/lib/builderforceApi';
 import { parseRepoIdentifier, isValidRepoSegment } from '@/lib/repoIdentifier';
+import { formatRepoDiagnostic } from '@/lib/repoDiagnostic';
 
 /**
  * Project "Source control" tab — manage the repositories a project's agents
@@ -67,6 +68,7 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Add/edit-form state (shared between linking a new repo and editing one)
   const [provider, setProvider] = useState<string>('github');
@@ -155,6 +157,25 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
   const setDefault = async (id: string) => { await reposApi.setDefault(id); load(); };
   const remove = async (id: string) => { if (confirm('Remove this repository from the project?')) { await reposApi.remove(id); load(); } };
 
+  // Copy a secret-free config snapshot (incl. the reconstructed probe URL + the
+  // latest test result) to the clipboard, for pasting into a bug report so a
+  // maintainer can diagnose a failed Test (e.g. a GitHub 404) without guessing.
+  const copyConfig = async (r: ProjectRepository) => {
+    const cred = creds.find((c) => c.id === r.credentialId) ?? null;
+    const text = formatRepoDiagnostic(
+      r,
+      cred ? { name: cred.name, provider: cred.provider, baseUrl: cred.baseUrl } : null,
+      testResult[r.id] ?? null,
+    );
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(r.id);
+      setTimeout(() => setCopiedId((cur) => (cur === r.id ? null : cur)), 2000);
+    } catch {
+      setError('Could not copy to clipboard — your browser blocked it.');
+    }
+  };
+
   const test = async (id: string) => {
     setTesting(id);
     try {
@@ -205,6 +226,14 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
                 )}
                 <button type="button" style={btnSubtle} disabled={testing === r.id} onClick={() => test(r.id)}>
                   {testing === r.id ? 'Testing…' : 'Test'}
+                </button>
+                <button
+                  type="button"
+                  style={btnSubtle}
+                  title="Copy this repo's configuration (no secrets) for diagnosing a failed Test"
+                  onClick={() => copyConfig(r)}
+                >
+                  {copiedId === r.id ? 'Copied!' : 'Copy'}
                 </button>
                 {!r.isDefault && <button type="button" style={btnSubtle} onClick={() => setDefault(r.id)}>Set default</button>}
                 <button type="button" style={iconBtn} title="Edit repository" aria-label="Edit repository" onClick={() => openEdit(r)}>
