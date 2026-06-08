@@ -9,6 +9,7 @@ import {
   type ProjectRepository,
   type IntegrationCredential,
 } from '@/lib/builderforceApi';
+import { parseRepoIdentifier, isValidRepoSegment } from '@/lib/repoIdentifier';
 
 /**
  * Project "Source control" tab — manage the repositories a project's agents

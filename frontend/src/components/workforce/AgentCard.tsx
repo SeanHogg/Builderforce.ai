@@ -23,15 +23,14 @@ import type { CloudAgentPanelTab } from './CloudAgentSlideOutPanel';
  *  - Owner (agent.tenant_id === my tenant)  → full management actions
  *                                             (publish / unpublish / edit price /
  *                                              edit / delete), wherever shown.
- *  - Non-owner on the marketplace           → Hire.
- *  - Non-owner in the workforce directory   → Unhire (an agent I hired and can
- *                                             release from my workforce).
+ *  - Non-owner + already hired              → Unhire (release it).
+ *  - Non-owner + not hired                  → Hire.
  *
- * `context` only disambiguates the non-owner case (a hireable listing vs. an
- * agent I already acquired); ownership itself comes from auth.
+ * `hired` is the only fact the card can't derive from `agent` + auth alone (it
+ * depends on the tenant's purchase set), so the caller supplies it; the
+ * Hire/Unhire branch itself lives only here. On the /workforce purchased list it
+ * is always true; on the marketplace it is membership in the purchased set.
  */
-
-export type AgentCardContext = 'marketplace' | 'workforce';
 
 const cardStyle: React.CSSProperties = {
   padding: 16, display: 'flex', flexDirection: 'column', gap: 12, position: 'relative', overflow: 'hidden',
@@ -42,7 +41,7 @@ const pricePillStyle: React.CSSProperties = { padding: '2px 8px', borderRadius: 
 
 export function AgentCard({
   agent,
-  context = 'marketplace',
+  hired = false,
   onOpenPanel,
   onUnpublish,
   onDelete,
@@ -52,18 +51,18 @@ export function AgentCard({
   unhiring = false,
 }: {
   agent: PublishedAgent;
-  /** Which surface this card lives on — only affects the non-owner case. */
-  context?: AgentCardContext;
+  /** Has the current tenant already hired this agent? Drives Hire vs Unhire. */
+  hired?: boolean;
   /** owner: open the slide-out panel on a given tab (edit / pricing). */
   onOpenPanel?: (agent: PublishedAgent, tab: CloudAgentPanelTab) => void;
   /** owner: unpublish in place. */
   onUnpublish?: (agent: PublishedAgent) => void;
   /** owner: delete (only offered when the agent is deletable). */
   onDelete?: (agent: PublishedAgent) => void;
-  /** non-owner marketplace listing: hire this agent. */
+  /** non-owner, not yet hired: hire this agent. */
   onHire?: (agentId: string) => void;
   hiring?: boolean;
-  /** non-owner workforce directory: release a hired agent. */
+  /** non-owner, already hired: release it. */
   onUnhire?: (agentId: string) => void;
   unhiring?: boolean;
 }) {
@@ -101,22 +100,21 @@ export function AgentCard({
         <span style={pricePillStyle}>{formatAgentPrice(agent)}</span>
       </div>
 
-      {/* Footer: hire count + the action row (owner manage / hire / read-only). */}
+      {/* Footer: hire count + the action row (owner manage / hire / unhire). */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <div style={{ fontSize: 11, color: 'var(--muted)' }}>
             {agent.hire_count != null ? `Hired ${agent.hire_count}×` : null}
           </div>
-          {!owner && context === 'marketplace' && (
-            <button type="button" className="btn btn-primary btn-sm" disabled={hiring} onClick={() => onHire?.(agent.id)}>
-              {hiring ? 'Hiring…' : 'Hire'}
-            </button>
-          )}
-          {!owner && context === 'workforce' && (
+          {!owner && (hired ? (
             <button type="button" className="btn btn-secondary btn-sm" disabled={unhiring} onClick={() => onUnhire?.(agent.id)}>
               {unhiring ? 'Unhiring…' : 'Unhire'}
             </button>
-          )}
+          ) : (
+            <button type="button" className="btn btn-primary btn-sm" disabled={hiring} onClick={() => onHire?.(agent.id)}>
+              {hiring ? 'Hiring…' : 'Hire'}
+            </button>
+          ))}
         </div>
         {owner && (
           <AgentOwnerActions agent={agent} onOpenPanel={onOpenPanel} onUnpublish={onUnpublish} onDelete={onDelete} />
