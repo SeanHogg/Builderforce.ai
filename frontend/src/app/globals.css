@@ -200,14 +200,26 @@ select,
 textarea {
   color: var(--text-primary) !important;
   background: var(--bg-elevated) !important;
+  /* An explicit author background opts the native control out of color-scheme
+     theming in Chrome/Windows, so the dropdown popup gets painted light even in
+     dark mode (→ white option text on a white popup). Re-assert color-scheme on
+     the control itself so the native popup paints with the right scheme. */
+  color-scheme: dark;
+}
+html[data-theme='light'] input:not([type="submit"]):not([type="button"]),
+html[data-theme='light'] select,
+html[data-theme='light'] textarea {
+  color-scheme: light;
 }
 input::placeholder,
 textarea::placeholder {
   color: var(--text-muted);
 }
-/* Native select options: force theme colors so dropdown list is readable in light and dark */
-select option {
-  background: var(--bg-elevated) !important;
+/* Native select options/optgroups: force theme colors so the dropdown list is
+   readable in light and dark (covers grouped <optgroup> options too). */
+select option,
+select optgroup {
+  background-color: var(--bg-elevated) !important;
   color: var(--text-primary) !important;
 }
 

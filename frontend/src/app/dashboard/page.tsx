@@ -12,8 +12,8 @@ import PageContainer from '@/components/PageContainer';
 import { ProjectCard } from '@/components/ProjectCard';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import MascotIcon from '@/components/MascotIcon';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
+import { WorkforceAgents } from '@/components/workforce/WorkforceAgents';
 import { OnboardingStepper } from '@/components/OnboardingStepper';
 import { ViewToggle } from '@/components/ViewToggle';
 import { agentHosts, tasksApi, approvalsApi, type AgentHost, type Task } from '@/lib/builderforceApi';
@@ -27,6 +27,7 @@ const ONBOARDING_DISMISSED_KEY = 'bf_onboarding_dismissed';
 export default function DashboardPage() {
   const router = useRouter();
   const { isAuthenticated, hasTenant, webToken, tenantToken, tenant, selectTenant } = useAuth();
+  const tenantId = tenant?.id != null ? Number(tenant.id) : undefined;
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
@@ -298,7 +299,11 @@ export default function DashboardPage() {
         >
           {([
             { key: 'projects', label: 'Projects', count: projects.length },
-            { key: 'workforce', label: 'Workforce', count: agentHostList.length },
+            // Workforce content is the shared <WorkforceAgents> component, which
+            // owns its own data (cloud agents + remote hosts). The dashboard
+            // doesn't fetch that combined total, so no count badge here rather
+            // than a misleading hosts-only number.
+            { key: 'workforce', label: 'Workforce', count: undefined },
           ] as const).map(({ key, label, count }) => {
             const active = activeTab === key;
             return (
@@ -319,7 +324,7 @@ export default function DashboardPage() {
                 }}
               >
                 {label}
-                {!loading && (
+                {!loading && count != null && (
                   <span
                     style={{
                       marginLeft: 8,
@@ -626,119 +631,9 @@ export default function DashboardPage() {
           }}
         />
 
-        {/* Workforce tab */}
-        {activeTab === 'workforce' && (
-        <section>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: 16,
-            }}
-          >
-            <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Workforce</h2>
-            <Link
-              href="/workforce"
-              style={{
-                fontSize: '0.875rem',
-                color: 'var(--text-secondary)',
-                textDecoration: 'none',
-                padding: '6px 12px',
-                borderRadius: 8,
-              }}
-            >
-              Manage workforce
-            </Link>
-          </div>
-
-          {loading ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '12px 0' }}>Loading…</div>
-          ) : agentHostList.length === 0 ? (
-            <div
-              style={{
-                padding: 28,
-                textAlign: 'center',
-                background: 'var(--bg-elevated)',
-                borderRadius: 12,
-                border: '1px solid var(--border-subtle)',
-              }}
-            >
-              <div style={{ marginBottom: 12 }}><MascotIcon size={48} /></div>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>No agents registered</div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
-                Register an agent in Workforce to start delegating work
-              </div>
-              <Link
-                href="/workforce"
-                style={{
-                  display: 'inline-block',
-                  padding: '10px 20px',
-                  background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                  color: '#fff',
-                  borderRadius: 10,
-                  fontWeight: 600,
-                  textDecoration: 'none',
-                  fontFamily: 'var(--font-display)',
-                }}
-              >
-                Open Workforce
-              </Link>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-              {agentHostList.map((c) => (
-                <div
-                  key={c.id}
-                  style={{
-                    padding: 20,
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 12,
-                    position: 'relative',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                    <div>
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{c.name}</div>
-                      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginTop: 2 }}>
-                        #{c.id}
-                      </div>
-                    </div>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 600,
-                        padding: '2px 8px',
-                        borderRadius: 6,
-                        background: c.online ? 'rgba(34, 197, 94, 0.15)' : 'var(--bg-deep)',
-                        color: c.online ? '#22c55e' : 'var(--text-muted)',
-                      }}
-                    >
-                      {c.online ? 'Online' : 'Offline'}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    {c.lastSeenAt ? `Last seen ${new Date(c.lastSeenAt).toLocaleString()}` : 'Never connected'}
-                  </div>
-                  <Link
-                    href="/workforce"
-                    style={{
-                      display: 'inline-block',
-                      marginTop: 10,
-                      fontSize: 12,
-                      color: 'var(--coral-bright)',
-                      textDecoration: 'none',
-                    }}
-                  >
-                    Manage →
-                  </Link>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-        )}
+        {/* Workforce tab — reuses the same component as /workforce so the
+            dashboard shows cloud agents AND remote hosts, not just hosts. */}
+        {activeTab === 'workforce' && <WorkforceAgents tenantId={tenantId} />}
       </main>
     </PageContainer>
   );
