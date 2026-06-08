@@ -42,7 +42,11 @@ export interface RunAgentControlProps {
 export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }: RunAgentControlProps) {
   // target encodes the run target: '' = auto, 'host:<id>' = a self-hosted
   // executor, 'cloud:<ref>' = run AS a cloud agent (its model via an executor).
-  const [target, setTarget] = useState<string>(task.assignedAgentHostId != null ? `host:${task.assignedAgentHostId}` : '');
+  // Default to the ticket's assigned agent so the control reflects who actually
+  // runs it: a cloud agent (the swimlane's agent) wins, else a self-hosted host.
+  const [target, setTarget] = useState<string>(
+    task.assignedAgentRef ? `cloud:${task.assignedAgentRef}` : task.assignedAgentHostId != null ? `host:${task.assignedAgentHostId}` : '',
+  );
   const [model, setModel] = useState<string>('');
   const [models, setModels] = useState<string[]>([]);
   const [cloudAgents, setCloudAgents] = useState<PoolAgent[]>([]);
@@ -97,13 +101,21 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
       <div style={{ display: 'inline-flex', alignItems: 'stretch', border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden' }}>
         <Select value={target} onChange={(e) => setTarget(e.target.value)} style={{ ...selectStyle, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="Agent">
           <option value="">Auto (any agent)</option>
-          {cloudAgents.length > 0 && (
-            <optgroup label="Cloud agents">
-              {cloudAgents.map((a) => (
-                <option key={`cloud:${a.ref}`} value={`cloud:${a.ref}`}>{a.name}</option>
-              ))}
-            </optgroup>
-          )}
+          {(() => {
+            // Always include the ticket's assigned cloud agent, even if the pool
+            // hasn't loaded it yet, so the default selection never renders blank.
+            const opts = cloudAgents.map((a) => ({ ref: a.ref, name: a.name }));
+            if (task.assignedAgentRef && !opts.some((o) => o.ref === task.assignedAgentRef)) {
+              opts.unshift({ ref: task.assignedAgentRef, name: 'Assigned agent' });
+            }
+            return opts.length > 0 ? (
+              <optgroup label="Cloud agents">
+                {opts.map((a) => (
+                  <option key={`cloud:${a.ref}`} value={`cloud:${a.ref}`}>{a.name}</option>
+                ))}
+              </optgroup>
+            ) : null;
+          })()}
           {agentHosts.length > 0 && (
             <optgroup label="Self-hosted agents">
               {agentHosts.map((c) => (

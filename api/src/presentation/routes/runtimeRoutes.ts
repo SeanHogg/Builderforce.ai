@@ -63,6 +63,10 @@ type ExecutionTaskRow = {
   title: string;
   description: string | null;
   assignedAgentHostId: number | null;
+  /** ide_agents.id of the cloud agent assigned to this ticket (the swimlane's
+   *  agent). The authoritative cloud-agent identity for an "Auto" run when the
+   *  caller doesn't pin one in the payload. */
+  assignedAgentRef: string | null;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   projectId: number;
 };
@@ -879,9 +883,11 @@ async function runCloudExecution(
 type SubmittedExecution = { id: number; status: string; toPlain(): unknown };
 
 /**
- * Resolve the agent runtime engine for a run from its payload. When the run
- * targets a cloud agent (`payload.cloudAgentRef`), the engine is read from that
- * agent's `ide_agents` record (authoritative, tenant-scoped); otherwise V1.
+ * Resolve the runtime engine + display label for a cloud-agent run from its
+ * `ide_agents.id`. The ref is the one the caller pinned, else the ticket's
+ * assigned agent (see {@link dispatchAndQueue}). When a ref resolves, the engine
+ * and name are read from that agent's `ide_agents` record (authoritative,
+ * tenant-scoped); otherwise V1 with no label (gateway-default bucket).
  *
  * One indexed lookup per execution-submit (not a hot read path), so it is not
  * cached. Never throws — defaults to 'builderforce-v1' on any failure.
@@ -899,9 +905,8 @@ function parseCloudAgentRef(payload: string | undefined): string | undefined {
 async function resolveCloudAgent(
   env: Env,
   tenantId: number,
-  payload: string | undefined,
+  ref: string | undefined,
 ): Promise<{ engine: string; label?: string; ref?: string }> {
-  const ref = parseCloudAgentRef(payload);
   const DEFAULT = { engine: 'builderforce-v1' as const, ref };
   if (!ref) return DEFAULT;
   try {
@@ -937,10 +942,13 @@ async function dispatchAndQueue(
   const targets = await getDispatchTargets(db, tenantId, taskRow.assignedAgentHostId);
   const dispatchType: DispatchMessage['type'] = taskRow.assignedAgentHostId != null ? 'task.assign' : 'task.broadcast';
 
-  // Parsed synchronously so the executing cloud agent's per-agent assignments
-  // (scope='agent', keyed on its ide_agents.id) fold into the resolved set —
-  // not just tenant/host/project/task scopes.
-  const cloudAgentRef = parseCloudAgentRef(payload);
+  // The executing cloud agent is whoever the caller pinned in the payload, else
+  // the ticket's assigned agent (the swimlane's agent — `tasks.assignedAgentRef`).
+  // Without this fallback an "Auto" run on a ticket assigned to a custom cloud
+  // agent silently executed + was attributed as the gateway default, not the
+  // assigned agent. Used for BOTH per-agent capability resolution (scope='agent')
+  // and run attribution (engine/label/ref).
+  const cloudAgentRef = parseCloudAgentRef(payload) ?? taskRow.assignedAgentRef ?? undefined;
   const [artifacts, agent, repoRef] = await Promise.all([
     resolveArtifacts(db, {
       tenantId,
@@ -948,7 +956,7 @@ async function dispatchAndQueue(
       agentHostId: taskRow.assignedAgentHostId ?? undefined,
       cloudAgentRef,
     }),
-    resolveCloudAgent(c.env as Env, tenantId, payload),
+    resolveCloudAgent(c.env as Env, tenantId, cloudAgentRef),
     resolveDefaultRepoForTask(db, tenantId, taskRow.id),
   ]);
 
@@ -1060,6 +1068,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         title: tasks.title,
         description: tasks.description,
         assignedAgentHostId: tasks.assignedAgentHostId,
+        assignedAgentRef: tasks.assignedAgentRef,
         priority: tasks.priority,
         projectId: tasks.projectId,
       })
@@ -1138,6 +1147,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         title: tasks.title,
         description: tasks.description,
         assignedAgentHostId: tasks.assignedAgentHostId,
+        assignedAgentRef: tasks.assignedAgentRef,
         priority: tasks.priority,
         projectId: tasks.projectId,
       })

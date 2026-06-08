@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   runtimeApi,
+  cloudAgents as cloudAgentsApi,
   type Task,
   type AgentHost,
   type Execution,
@@ -15,6 +16,7 @@ import { RunAgentControl } from '../task/RunAgentControl';
 import { ChatMessageContent } from '../ChatMessageContent';
 import { EXECUTION_STATUS_COLOR as STATUS_COLOR } from '../board/AgentChip';
 import { useExecutionStream, type ExecutionFileChange } from './useExecutionStream';
+import { ObservabilityContent } from '../ObservabilityContent';
 
 /**
  * Live execution view for a task. Queued runs stream their status, output
@@ -60,7 +62,7 @@ const CHANGE_COLOR: Record<ExecutionFileChange['change'], string> = {
   deleted: 'var(--danger, #dc2626)',
 };
 
-type SubTab = 'output' | 'changes' | 'tools';
+type SubTab = 'output' | 'changes' | 'tools' | 'logs' | 'timeline';
 const card: React.CSSProperties = { border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 14, marginBottom: 12 };
 const RUNNING = new Set(['pending', 'submitted', 'running']);
 
@@ -80,6 +82,14 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   const [sentMessages, setSentMessages] = useState<string[]>([]);
   // Durable per-agent file changes for the ticket's shared workspace (attributed).
   const [taskChanges, setTaskChanges] = useState<TaskFileChange[]>([]);
+  // Cloud-agent ref → display name, for scoping the Logs/Timeline tabs to the
+  // agent that actually executed (cloud runs carry no host name).
+  const [cloudAgentNames, setCloudAgentNames] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    cloudAgentsApi.list()
+      .then((list) => setCloudAgentNames(new Map(list.map((a) => [a.ref, a.name]))))
+      .catch(() => { /* directory unavailable — fall back to ref/defaults below */ });
+  }, []);
 
   const loadExecutions = useCallback(async (selectLatest = false) => {
     setLoading(true);
@@ -143,6 +153,20 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   }, [result, toolEvents, stream.fileChanges]);
 
   const isRunning = status != null && RUNNING.has(status);
+
+  // Scope the Logs/Timeline tabs to the agent that ACTUALLY executed the selected
+  // run: a self-hosted host (execution.agentHostId) or, for cloud runs, the
+  // ticket's assigned cloud agent (telemetry is keyed by its ide_agents.id, or
+  // the '__default__' bucket when no named agent ran).
+  const obsScopeProps = useMemo(() => {
+    const hostId = (selected as { agentHostId?: number | null } | null)?.agentHostId;
+    if (hostId != null) {
+      return { agentHostId: hostId, agentHostName: agentHosts.find((h) => h.id === hostId)?.name ?? `Agent ${hostId}` };
+    }
+    const ref = task.assignedAgentRef ?? '__default__';
+    const name = cloudAgentNames.get(ref) ?? (ref === '__default__' ? 'BuilderForce Cloud (default)' : 'Cloud agent');
+    return { cloudAgentRef: ref, cloudAgentName: name };
+  }, [selected, agentHosts, task.assignedAgentRef, cloudAgentNames]);
 
   // Auto-scroll output to the newest content as it streams.
   const outputRef = useRef<HTMLDivElement>(null);
@@ -269,7 +293,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
 
           {/* Sub-tabs */}
           <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border-subtle)', marginBottom: 10 }}>
-            {(() => { const changeCount = taskChanges.length || files.length; return [['output', 'Output'], ['changes', `Changes${changeCount ? ` (${changeCount})` : ''}`], ['tools', `Tools${toolEvents.length ? ` (${toolEvents.length})` : ''}`]] as const; })().map(([id, label]) => (
+            {(() => { const changeCount = taskChanges.length || files.length; return [['output', 'Output'], ['changes', `Changes${changeCount ? ` (${changeCount})` : ''}`], ['tools', `Tools${toolEvents.length ? ` (${toolEvents.length})` : ''}`], ['logs', 'Logs'], ['timeline', 'Timeline']] as const; })().map(([id, label]) => (
               <button
                 key={id}
                 type="button"
@@ -384,6 +408,17 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                 ))
               )}
             </div>
+          )}
+
+          {/* Logs + Timeline reuse the Observability views, scoped to the agent
+              that executed this run (host or cloud). Same component the
+              Observability page renders, so there's one source of truth. */}
+          {subTab === 'logs' && (
+            <ObservabilityContent embedded initialView="logs" {...obsScopeProps} />
+          )}
+
+          {subTab === 'timeline' && (
+            <ObservabilityContent embedded initialView="timeline" {...obsScopeProps} />
           )}
 
           {prUrl && (

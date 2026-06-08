@@ -67,6 +67,15 @@
    auto-open incidents; clean runs auto-collect SOC 2 evidence. Closes the gap-register item
    "governance/security/audit AGENTS that check repos against rules are not built."
 
+10. **[09 — PRD: Cloud Agent Validation & Hardening](./09-prd-cloud-agent-validation.md)**
+    The **validation gate** for cloud agents. Summarizes the three as-built execution paths (V1 pi
+    loop, V2 Claude Agent SDK, cloud-Worker fallback) and the dispatch→clone→work→steer→PR→telemetry
+    lifecycle, then enumerates **50 falsifiable gaps** (dispatch/engine, workspace/PR, parity,
+    steering/cancel, telemetry integrity, billing/BYO-key, security/isolation) plus a repeatable
+    `pnpm qa:cloud-agents` golden-path E2E. P0-first phasing (9a telemetry/billing → 9b isolation →
+    9c lifecycle → 9d parity+harness) so the operator can prove cloud agents deliver a merged PR
+    with no self-hosted host online before GA.
+
 > **Decision log.** PM + Agile = Phase 1 (BuilderForce owns data, autonomous dev agents, thin
 > embed shells, Tenant→Segment isolation with BurnRateOS as IdP). Security/Governance = Phase 2
 > (doc 07), same model. DSR/suppression re-home per-Segment; BurnRateOS keeps its own
