@@ -24,13 +24,55 @@
 
 import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { projects, tasks, agentHosts } from '../../infrastructure/database/schema';
 import { verifyHmacSignature } from '../../application/workflow/verifySignature';
+import { ingestRepoCiEvent, type RepoCiEvent } from '../../application/ci/ingestRepoCiEvent';
 
 /** Labels that trigger auto-dispatch. Lower-cased for comparison. */
 const DISPATCH_LABELS = new Set(['coderclaw', 'ai-task', 'host', 'ai']);
+
+/** GitHub CI/deploy events we feed back to the originating cloud execution. */
+const CI_EVENTS = new Set(['check_suite', 'check_run', 'workflow_run', 'deployment_status', 'status']);
+
+/** Map a provider conclusion/state to our normalized outcome. */
+function toOutcome(s: string | null | undefined): RepoCiEvent['outcome'] {
+  const v = (s ?? '').toLowerCase();
+  if (v === 'success') return 'success';
+  if (['failure', 'error', 'timed_out', 'cancelled', 'action_required', 'startup_failure'].includes(v)) return 'failure';
+  if (!v) return null;
+  return 'pending';
+}
+
+/** Normalize the assorted CI/deploy payloads to a single shape for correlation. */
+function normalizeCiEvent(event: string, p: Record<string, unknown>): RepoCiEvent | null {
+  const get = (o: unknown, k: string): unknown => (o && typeof o === 'object' ? (o as Record<string, unknown>)[k] : undefined);
+  const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+  if (event === 'check_suite' || event === 'check_run') {
+    const cs = (event === 'check_suite' ? p.check_suite : get(p.check_run, 'check_suite')) as Record<string, unknown> | undefined;
+    const run = p.check_run as Record<string, unknown> | undefined;
+    return { eventType: event, branch: str(get(cs, 'head_branch')), sha: str(get(cs, 'head_sha') ?? get(run, 'head_sha')),
+      outcome: toOutcome(str(get(cs, 'conclusion') ?? get(run, 'conclusion'))), rawState: str(get(cs, 'conclusion') ?? get(run, 'conclusion')), targetUrl: str(get(run, 'html_url')) };
+  }
+  if (event === 'workflow_run') {
+    const w = p.workflow_run as Record<string, unknown> | undefined;
+    return { eventType: event, branch: str(get(w, 'head_branch')), sha: str(get(w, 'head_sha')),
+      outcome: toOutcome(str(get(w, 'conclusion'))), rawState: str(get(w, 'conclusion') ?? get(w, 'status')), targetUrl: str(get(w, 'html_url')) };
+  }
+  if (event === 'deployment_status') {
+    const dep = p.deployment as Record<string, unknown> | undefined;
+    const ds = p.deployment_status as Record<string, unknown> | undefined;
+    return { eventType: event, branch: str(get(dep, 'ref')), sha: str(get(dep, 'sha')),
+      outcome: toOutcome(str(get(ds, 'state'))), rawState: str(get(ds, 'state')), targetUrl: str(get(ds, 'target_url') ?? get(ds, 'log_url')) };
+  }
+  if (event === 'status') {
+    const branches = Array.isArray(p.branches) ? (p.branches as Array<Record<string, unknown>>) : [];
+    return { eventType: event, branch: str(get(branches[0], 'name')), sha: str(p.sha),
+      outcome: toOutcome(str(p.state)), rawState: str(p.state), targetUrl: str(p.target_url) };
+  }
+  return null;
+}
 
 interface GitHubIssuePayload {
   action: string;
@@ -75,6 +117,20 @@ export function createGitHubWebhookRoutes(db: Db): Hono<HonoEnv> {
     }
 
     const event = c.req.header('X-GitHub-Event');
+
+    // CI/deploy feedback: correlate a build/deploy result back to the cloud
+    // execution that pushed the `builderforce/task-<id>` branch and record it so
+    // the run's Logs/Timeline show the outcome (and optionally merge-on-green).
+    if (event && CI_EVENTS.has(event)) {
+      let p: Record<string, unknown>;
+      try { p = JSON.parse(rawBody) as Record<string, unknown>; } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
+      const norm = normalizeCiEvent(event, p);
+      if (!norm) return c.json({ received: true, processed: false, reason: `event '${event}' not normalized` });
+      const secret = c.env.INTEGRATION_ENCRYPTION_SECRET ?? c.env.JWT_SECRET ?? '';
+      const res = await ingestRepoCiEvent(db, c.env as Env, secret, norm);
+      return c.json({ received: true, ...res });
+    }
+
     if (event !== 'issues') {
       // Acknowledge non-issue events without processing
       return c.json({ received: true, processed: false, reason: `event '${event}' not handled` });

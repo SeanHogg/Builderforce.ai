@@ -17,6 +17,7 @@ import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { getBuiltinSkillBody } from './builtinSkills';
 
 /** Per-skill readme is capped so a few large skills can't blow the context budget. */
 const SKILL_BODY_MAX_CHARS = 4_000;
@@ -60,7 +61,10 @@ async function loadSkillBody(env: Env, db: Db, slug: string): Promise<SkillBody>
       .from(marketplaceSkills)
       .where(eq(marketplaceSkills.slug, slug))
       .limit(1);
-    return row ?? null;
+    // Fall back to the builtin-skill registry so skills the self-hosted runtime
+    // ships locally (github, coding-agent, …) inject real instructions in cloud
+    // runs instead of being referenced by name only.
+    return row ?? getBuiltinSkillBody(slug);
   });
 }
 

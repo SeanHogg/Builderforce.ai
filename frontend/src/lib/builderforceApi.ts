@@ -314,10 +314,12 @@ export const cloudAgents = {
   list: () =>
     request<{ agents: CloudAgentRef[] }>(`/api/runtime/cloud-agents`).then((r) => r.agents),
 
-  /** Tool-audit events for one cloud agent (by ide_agents.id), newest first. */
-  toolAuditEvents: (ref: string, params?: { limit?: number }) => {
+  /** Tool-audit events for one cloud agent (by ide_agents.id), newest first.
+   *  Pass executionId to scope to a single run (precise per-execution telemetry). */
+  toolAuditEvents: (ref: string, params?: { limit?: number; executionId?: number }) => {
     const q = new URLSearchParams();
     if (params?.limit != null) q.set('limit', String(params.limit));
+    if (params?.executionId != null) q.set('executionId', String(params.executionId));
     const query = q.toString();
     return request<{ events: ToolAuditEvent[] }>(
       `/api/runtime/agents/${encodeURIComponent(ref)}/tool-audit${query ? `?${query}` : ''}`
@@ -871,6 +873,15 @@ export interface ExecutionTraceToolEvent {
   toolCallId?: string;
 }
 
+/** Whether a task's bound repo can actually receive the agent's commits. */
+export interface TaskRepoStatus {
+  bound: boolean;
+  hasCredential: boolean;
+  repo?: string;
+  base?: string;
+  reason?: string;
+}
+
 /** One file an agent created/modified/deleted in a task's shared workspace. */
 export interface TaskFileChange {
   path: string;
@@ -948,6 +959,10 @@ export const runtimeApi = {
   /** Per-agent file-change traceability for a task's shared ticket workspace. */
   taskFileChanges: (taskId: number): Promise<{ changes: TaskFileChange[] }> =>
     request<{ changes: TaskFileChange[] }>(`/api/runtime/tasks/${taskId}/file-changes`),
+
+  /** Whether the agent can commit code for this task (repo bound + credential). */
+  taskRepoStatus: (taskId: number): Promise<TaskRepoStatus> =>
+    request<TaskRepoStatus>(`/api/runtime/tasks/${taskId}/repo-status`),
 
   /** Cancel a running/queued execution. */
   cancel: (id: number): Promise<Execution> =>

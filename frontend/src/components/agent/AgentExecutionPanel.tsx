@@ -413,12 +413,12 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
           {/* Logs + Timeline reuse the Observability views, scoped to the agent
               that executed this run (host or cloud). Same component the
               Observability page renders, so there's one source of truth. */}
-          {subTab === 'logs' && (
-            <ObservabilityContent embedded initialView="logs" {...obsScopeProps} />
+          {subTab === 'logs' && selectedId != null && (
+            <ObservabilityContent embedded initialView="logs" executionId={selectedId} {...obsScopeProps} />
           )}
 
-          {subTab === 'timeline' && (
-            <ObservabilityContent embedded initialView="timeline" {...obsScopeProps} />
+          {subTab === 'timeline' && selectedId != null && (
+            <ObservabilityContent embedded initialView="timeline" executionId={selectedId} {...obsScopeProps} />
           )}
 
           {prUrl && (

@@ -2,6 +2,7 @@
 
 import { Select } from '@/components/Select';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import {
   runtimeApi,
@@ -9,6 +10,7 @@ import {
   isAwaitingApprovalExecution,
   type Task,
   type AgentHost,
+  type TaskRepoStatus,
 } from '@/lib/builderforceApi';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 
@@ -52,6 +54,7 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
   const [cloudAgents, setCloudAgents] = useState<PoolAgent[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [repoStatus, setRepoStatus] = useState<TaskRepoStatus | null>(null);
 
   useEffect(() => {
     llmApi.models()
@@ -62,6 +65,12 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
       .catch(() => setModels([]));
     loadAgentPool().then((p) => setCloudAgents(p.filter((a) => a.kind === 'workforce'))).catch(() => setCloudAgents([]));
   }, []);
+
+  // Surface "the agent can't commit" before a run silently degrades to a text
+  // summary. Re-checked when the task changes (binding happens in Source Control).
+  useEffect(() => {
+    runtimeApi.taskRepoStatus(task.id).then(setRepoStatus).catch(() => setRepoStatus(null));
+  }, [task.id]);
 
   const run = async () => {
     setRunning(true); setError(null);
@@ -145,6 +154,15 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
         </button>
       </div>
       {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginTop: 6 }}>{error}</div>}
+      {repoStatus && (!repoStatus.bound || !repoStatus.hasCredential) && (
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8, padding: '8px 10px', background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
+          <span style={{ color: 'var(--amber, #f59e0b)', fontWeight: 600 }}>⚠ No writable repo. </span>
+          {repoStatus.bound
+            ? 'This task’s repo has no usable credential, so the agent can’t commit or ship code — it will only return a text summary. '
+            : 'No repository is bound to this task, so the agent can’t commit or ship code — it will only return a text summary. '}
+          <Link href={`/projects/${task.projectId}`} style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>Open project → Integrations → Source Control →</Link>
+        </div>
+      )}
     </div>
   );
 }
