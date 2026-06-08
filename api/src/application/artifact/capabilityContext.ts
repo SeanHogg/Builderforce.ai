@@ -39,7 +39,9 @@ export interface CapabilityContext {
     skills: string[];
     personas: string[];
     content: string[];
-    /** Assigned slugs whose body could not be resolved (so the gap is visible, not silent). */
+    /** Assigned slugs whose body could not be resolved AND could not be honored
+     *  by name (currently personas only — skills without a body are referenced by
+     *  name instead of flagged here, so an assigned skill never reads as "missing"). */
     missing: string[];
   };
 }
@@ -145,13 +147,21 @@ export async function loadCapabilityContext(
     sections.push('### Persona', resolvedPersonas.map((r) => personaBlock(r.body)).join('\n\n'));
   }
 
-  const resolvedSkills = skillRows.filter((r): r is { slug: string; body: NonNullable<SkillBody> } => {
-    if (r.body) return true;
-    missing.push(`skill:${r.slug}`);
-    return false;
-  });
+  // A skill assigned to the agent is a real capability even when its README body
+  // isn't in the marketplace store (e.g. builtin skills like `github` /
+  // `coding-agent`, which the self-hosted runtime ships locally). Those used to be
+  // dropped and flagged "missing" — which read as "assigned skill is missing".
+  // Instead, inject the ones we have a body for in full, and reference the rest by
+  // name so the agent still honors them. (See README Consolidated Gap Register:
+  // builtin skill bodies aren't available to cloud runs for full injection.)
+  const resolvedSkills = skillRows.filter((r): r is { slug: string; body: NonNullable<SkillBody> } => Boolean(r.body));
+  const referencedSkills = skillRows.filter((r) => !r.body).map((r) => r.slug);
   if (resolvedSkills.length > 0) {
     sections.push('### Skills', resolvedSkills.map((r) => skillBlock(r.slug, r.body)).join('\n\n'));
+  }
+  if (referencedSkills.length > 0) {
+    sections.push('### Skills (referenced)',
+      `Apply these assigned skills by name (no published body available): ${referencedSkills.join(', ')}.`);
   }
 
   // Content artifacts have no body store yet (see Consolidated Gap Register), so
@@ -162,7 +172,7 @@ export async function loadCapabilityContext(
       `Assigned content references: ${content.join(', ')}. Treat these as authoritative source material for the task.`);
   }
 
-  const promptBlock = resolvedPersonas.length || resolvedSkills.length || content.length
+  const promptBlock = resolvedPersonas.length || resolvedSkills.length || referencedSkills.length || content.length
     ? sections.join('\n\n')
     : '';
 

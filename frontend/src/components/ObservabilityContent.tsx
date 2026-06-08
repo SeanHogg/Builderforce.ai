@@ -36,6 +36,16 @@ export interface ObservabilityContentProps {
   agentHostId?: number;
   /** Display name for the agentHost when agentHostId is set. */
   agentHostName?: string;
+  /** When set (e.g. from an execution panel), scope observability to this cloud
+   *  agent (ide_agents.id, or the '__default__' sentinel). Mutually exclusive
+   *  with agentHostId. */
+  cloudAgentRef?: string;
+  /** Display name for the cloud agent when cloudAgentRef is set. */
+  cloudAgentName?: string;
+  /** Embedded mode: hide the agent-directory card and the Log/Timeline toggle.
+   *  The host page wants both; a panel that already scopes the agent and picks
+   *  the view (via its own tabs) doesn't. */
+  embedded?: boolean;
 }
 
 /** Both self-hosted hosts and cloud agents are agents — one unified directory. */
@@ -129,8 +139,16 @@ export function ObservabilityContent({
   style,
   agentHostId: propAgentHostId,
   agentHostName: propAgentHostName,
+  cloudAgentRef: propCloudAgentRef,
+  cloudAgentName: propCloudAgentName,
+  embedded = false,
 }: ObservabilityContentProps) {
-  const scoped = propAgentHostId != null;
+  // Scoped mode pins the directory to a single agent (a host OR a cloud agent)
+  // instead of showing the full, selectable directory.
+  const scopedHostKey = propAgentHostId != null ? `host:${propAgentHostId}` : null;
+  const scopedCloudKey = propCloudAgentRef != null ? `cloud:${propCloudAgentRef}` : null;
+  const scopedKey = scopedHostKey ?? scopedCloudKey;
+  const scoped = scopedKey != null;
   const [view, setView] = useState<ObservabilityView>(initialView);
 
   // Directory: self-hosted hosts + cloud agents, merged into one list.
@@ -140,7 +158,7 @@ export function ObservabilityContent({
   const [dirError, setDirError] = useState<string | null>(null);
 
   const [selectedKeySet, setSelectedKeySet] = useState<Set<string>>(
-    scoped ? new Set([`host:${propAgentHostId}`]) : new Set()
+    scopedKey ? new Set([scopedKey]) : new Set()
   );
 
   // Log streaming state (self-hosted hosts push live logs over the relay).
@@ -161,16 +179,21 @@ export function ObservabilityContent({
   const [categoryFilter, setCategoryFilter] = useState('');
 
   // ---- Unified directory + selection derivation -----------------------------
-  const unifiedAgents: UnifiedAgent[] = scoped
-    ? [{ key: `host:${propAgentHostId}`, kind: 'host', hostId: propAgentHostId, name: propAgentHostName ?? `Agent ${propAgentHostId}` }]
+  const scopedAgent: UnifiedAgent | null = scopedHostKey != null
+    ? { key: scopedHostKey, kind: 'host', hostId: propAgentHostId, name: propAgentHostName ?? `Agent ${propAgentHostId}` }
+    : scopedCloudKey != null
+      ? { key: scopedCloudKey, kind: 'cloud', cloudRef: propCloudAgentRef, name: propCloudAgentName ?? 'Cloud agent' }
+      : null;
+  const unifiedAgents: UnifiedAgent[] = scopedAgent
+    ? [scopedAgent]
     : [
         ...agentHostList.map((h) => ({ key: `host:${h.id}`, kind: 'host' as const, hostId: h.id, name: h.name, online: h.online })),
         ...cloudAgentList.map((a) => ({ key: `cloud:${a.ref}`, kind: 'cloud' as const, cloudRef: a.ref, name: a.name })),
       ];
   const agentByKey = new Map(unifiedAgents.map((a) => [a.key, a]));
 
-  const selectedKeys = scoped
-    ? [`host:${propAgentHostId}`]
+  const selectedKeys = scopedKey
+    ? [scopedKey]
     : unifiedAgents.map((a) => a.key).filter((k) => selectedKeySet.has(k));
   const selectionKey = selectedKeys.join(',');
   const selectedHostIds = selectedKeys.map((k) => agentByKey.get(k)).filter((a): a is UnifiedAgent => a?.kind === 'host').map((a) => a.hostId!);
@@ -408,6 +431,7 @@ export function ObservabilityContent({
   return (
     <div className={className} style={{ display: 'flex', flexDirection: 'column', gap: 20, ...style }}>
       {/* Unified agent directory */}
+      {!embedded && (
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Agents</span>
@@ -424,7 +448,7 @@ export function ObservabilityContent({
 
         {scoped ? (
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            {propAgentHostName ?? `Agent ${propAgentHostId}`} (scoped from panel)
+            {scopedAgent?.name ?? 'Agent'} (scoped from panel)
           </div>
         ) : dirLoading ? (
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading agents…</div>
@@ -484,13 +508,16 @@ export function ObservabilityContent({
           </div>
         )}
       </div>
+      )}
 
       {/* Single view toggle — diagnostics as a log view or a timeline view */}
+      {!embedded && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>View:</span>
         <button type="button" onClick={() => setView('logs')} style={toggleBtn(view === 'logs')}>Log view</button>
         <button type="button" onClick={() => setView('timeline')} style={toggleBtn(view === 'timeline')}>Timeline view</button>
       </div>
+      )}
 
       {/* LOG VIEW */}
       {view === 'logs' && (
