@@ -1685,6 +1685,37 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       .orderBy(desc(toolAuditEvents.ts))
       .limit(limit);
 
+    // Read-path repair: a run that FAILED before the failure-telemetry emit
+    // existed (or via any path that missed it) has its reason only on
+    // executions.error_message, so the Logs/Timeline (telemetry-only views) never
+    // show it — the timeline just stops at the last successful tool call. When
+    // scoped to one execution, synthesize the terminal `run.failed` event from the
+    // execution row if it failed and no persisted failure event is present. Self-
+    // healing and idempotent (mirrors RuntimeService.reapIfOrphaned's read repair);
+    // one indexed PK lookup, only on the per-execution path.
+    if (executionId != null && !events.some((e) => e.toolName === 'run.failed')) {
+      const [exec] = await db
+        .select({ status: executions.status, errorMessage: executions.errorMessage, completedAt: executions.completedAt, updatedAt: executions.updatedAt })
+        .from(executions)
+        .where(and(eq(executions.id, executionId), eq(executions.tenantId, tenantId)))
+        .limit(1);
+      if (exec?.status === 'failed') {
+        events.unshift({
+          id: -executionId,
+          runId: null,
+          sessionKey: `exec:${executionId}`,
+          toolCallId: null,
+          toolName: 'run.failed',
+          category: 'error',
+          args: null,
+          result: exec.errorMessage ?? 'Run failed',
+          durationMs: null,
+          executionId,
+          ts: exec.completedAt ?? exec.updatedAt,
+        });
+      }
+    }
+
     return c.json({ events });
   });
 
