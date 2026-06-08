@@ -70,15 +70,19 @@ describe('loadCapabilityContext', () => {
     expect(res.summary.missing).toEqual([]);
   });
 
-  it('records assigned-but-unresolvable slugs in summary.missing', async () => {
+  it('references assigned skills with no body by name (not flagged "missing"); personas with no body stay in missing', async () => {
     const res = await loadCapabilityContext(env, makeDb(null, null), {
       skills: ['cap-ghost-skill'],
       personas: ['cap-ghost-persona'],
       content: [],
     });
-    expect(res.summary.missing).toContain('skill:cap-ghost-skill');
+    // A skill assigned to the agent is a real capability even without a published
+    // body — it must NOT read as "missing"; instead it's referenced by name so
+    // the agent still honors it.
+    expect(res.summary.missing).not.toContain('skill:cap-ghost-skill');
+    expect(res.promptBlock).toContain('Skills (referenced)');
+    expect(res.promptBlock).toContain('cap-ghost-skill');
+    // Personas without a body can't form a persona block, so they remain flagged.
     expect(res.summary.missing).toContain('persona:cap-ghost-persona');
-    // Nothing resolved and no content → no block to inject.
-    expect(res.promptBlock).toBe('');
   });
 });
