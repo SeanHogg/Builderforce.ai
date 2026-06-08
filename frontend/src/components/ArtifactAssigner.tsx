@@ -2,7 +2,8 @@
 
 import { Select } from '@/components/Select';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   artifactAssignments,
   agentHosts,
@@ -33,6 +34,9 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  // Auto-pick the first non-empty scope only once per open, so the user's
+  // manual tab choice is never overridden (e.g. after an assign re-fetches).
+  const didInitScope = useRef(false);
 
   const loadEntities = useCallback(async () => {
     setLoading(true);
@@ -46,6 +50,13 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
       setAgentHostsList(c);
       setProjectsList(p);
       setTasksList(t);
+      // The default scope is 'host', but most tenants have no agentHosts
+      // registered yet — landing on an empty dropdown reads as broken. Fall
+      // through to the first scope that actually has options.
+      if (!didInitScope.current) {
+        didInitScope.current = true;
+        if (!c.length) setScope(p.length ? 'project' : t.length ? 'task' : 'host');
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
@@ -58,6 +69,19 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
       loadEntities();
     }
   }, [open, assignmentsLoaded, loadEntities]);
+
+  // Re-arm scope auto-pick for the next open, and clear transient messages.
+  useEffect(() => {
+    if (!open) {
+      didInitScope.current = false;
+      setError('');
+      setSuccess('');
+      return;
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
 
   useEffect(() => {
     if (!open || assignmentsLoaded || (!agentHostsList.length && !projectsList.length && !tasksList.length)) return;
@@ -142,11 +166,13 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
     }
   };
 
+  const entities = scopeEntities();
+
   return (
-    <div style={{ position: 'relative', display: 'inline-block' }}>
+    <>
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => setOpen(true)}
         className="btn btn-secondary btn-sm"
         style={{ padding: '4px 10px', fontSize: 12 }}
         title="Assign to agentHost, project, or task"
@@ -154,96 +180,107 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
         📌 Assign
       </button>
 
-      {open && (
+      {open && createPortal(
         <div
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            zIndex: 100,
-            marginTop: 4,
-            background: 'var(--card-bg, var(--bg-elevated))',
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            padding: 12,
-            minWidth: 320,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
-          }}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Assign ${artifactName || artifactSlug}`}
+          className="modal-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
         >
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>Assign &quot;{artifactName || artifactSlug}&quot;</span>
-            <button type="button" className="btn btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: 11 }} onClick={() => setOpen(false)}>
-              ✕
-            </button>
-          </div>
+          <div
+            style={{
+              maxWidth: 440,
+              width: '90%',
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              padding: 20,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text-strong)' }}>
+              <span>Assign &quot;{artifactName || artifactSlug}&quot;</span>
+              <button type="button" className="btn btn-secondary btn-sm" style={{ padding: '2px 8px', fontSize: 13 }} onClick={() => setOpen(false)} aria-label="Close">
+                ✕
+              </button>
+            </div>
 
-          {error && <div style={{ color: 'var(--danger, #ef4444)', fontSize: 11, marginBottom: 8 }}>{error}</div>}
-          {success && <div style={{ color: 'var(--success, #22c55e)', fontSize: 11, marginBottom: 8 }}>{success}</div>}
+            {error && <div style={{ color: 'var(--error-text, #ef4444)', fontSize: 12, marginBottom: 8 }}>{error}</div>}
+            {success && <div style={{ color: 'var(--success-text, #22c55e)', fontSize: 12, marginBottom: 8 }}>{success}</div>}
 
-          {loading ? (
-            <div style={{ color: 'var(--muted)', fontSize: 12 }}>Loading…</div>
-          ) : (
-            <>
-              <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                {(['host', 'project', 'task'] as AssignmentScope[]).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    className={`btn btn-sm ${scope === s ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => { setScope(s); setSelectedId(''); }}
-                  >
-                    {s.charAt(0).toUpperCase() + s.slice(1)}
-                  </button>
-                ))}
-              </div>
-
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <Select
-                  className="input"
-                  style={{ flex: 1, fontSize: 12, padding: '4px 8px' }}
-                  value={selectedId}
-                  onChange={(e) => setSelectedId(e.target.value)}
-                >
-                  <option value="">Select {scope}…</option>
-                  {scopeEntities().map((e) => (
-                    <option key={e.id} value={e.id}>{e.label}</option>
-                  ))}
-                </Select>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  disabled={!selectedId || saving}
-                  onClick={handleAssign}
-                >
-                  {saving ? '…' : 'Assign'}
-                </button>
-              </div>
-
-              {assignments.length > 0 && (
-                <div style={{ marginTop: 10, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Current assignments</div>
-                  {assignments.map((a) => (
-                    <div key={`${a.scope}-${a.scopeId}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', fontSize: 12 }}>
-                      <span>
-                        <span className="badge badge-gray" style={{ fontSize: 10 }}>{a.scope}</span>{' '}
-                        {scopeLabel(a.scope, a.scopeId)}
-                      </span>
-                      <button
-                        type="button"
-                        className="btn btn-danger btn-sm"
-                        style={{ padding: '1px 6px', fontSize: 10 }}
-                        onClick={() => handleUnassign(a.scope, a.scopeId)}
-                      >
-                        ✕
-                      </button>
-                    </div>
+            {loading ? (
+              <div style={{ color: 'var(--muted)', fontSize: 13 }}>Loading…</div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                  {(['host', 'project', 'task'] as AssignmentScope[]).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      className={`btn btn-sm ${scope === s ? 'btn-primary' : 'btn-secondary'}`}
+                      onClick={() => { setScope(s); setSelectedId(''); }}
+                    >
+                      {s.charAt(0).toUpperCase() + s.slice(1)}
+                    </button>
                   ))}
                 </div>
-              )}
-            </>
-          )}
-        </div>
+
+                {entities.length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--muted)', padding: '8px 0' }}>
+                    No {scope === 'host' ? 'agentHosts' : `${scope}s`} available to assign to yet.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <Select
+                      className="input"
+                      style={{ flex: 1, fontSize: 13, padding: '6px 8px' }}
+                      value={selectedId}
+                      onChange={(e) => setSelectedId(e.target.value)}
+                    >
+                      <option value="">Select {scope}…</option>
+                      {entities.map((e) => (
+                        <option key={e.id} value={e.id}>{e.label}</option>
+                      ))}
+                    </Select>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={!selectedId || saving}
+                      onClick={handleAssign}
+                    >
+                      {saving ? '…' : 'Assign'}
+                    </button>
+                  </div>
+                )}
+
+                {assignments.length > 0 && (
+                  <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>Current assignments</div>
+                    {assignments.map((a) => (
+                      <div key={`${a.scope}-${a.scopeId}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', fontSize: 12 }}>
+                        <span>
+                          <span className="badge badge-gray" style={{ fontSize: 10 }}>{a.scope}</span>{' '}
+                          {scopeLabel(a.scope, a.scopeId)}
+                        </span>
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-sm"
+                          style={{ padding: '1px 6px', fontSize: 10 }}
+                          onClick={() => handleUnassign(a.scope, a.scopeId)}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
 }

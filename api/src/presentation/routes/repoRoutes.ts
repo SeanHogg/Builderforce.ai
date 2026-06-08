@@ -28,6 +28,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { RepoService, type AgentHostDispatcher } from '../../application/repos/RepoService';
 import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
+import { githubStatusMessage } from '../../application/integrations/githubTestError';
 import type { CreatePrMessage } from '../../application/repos/prDispatch';
 
 type RepoHonoEnv = HonoEnv & {
@@ -74,7 +75,7 @@ async function probeRepoAccess(
         });
         return res.ok
           ? { ok: true, message: `Accessible (${where})` }
-          : { ok: false, message: `GitHub API returned ${res.status}` };
+          : { ok: false, message: githubStatusMessage(res.status, 'repo', where) };
       }
       case 'gitlab': {
         const root = host && host !== 'github.com' ? `https://${host}` : 'https://gitlab.com';

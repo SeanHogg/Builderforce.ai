@@ -72,7 +72,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       sql(c.env)`
         SELECT a.* FROM ide_agents a
         JOIN agent_purchases p ON p.agent_id = a.id
-        WHERE p.tenant_id = ${tenantId} AND a.status = 'active'
+        WHERE p.tenant_id = ${tenantId} AND p.unhired_at IS NULL AND a.status = 'active'
         ORDER BY p.created_at DESC
         LIMIT 200
       ` as unknown as Promise<Record<string, unknown>[]>,
@@ -92,15 +92,48 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
     if (!agent.published) return c.json({ error: 'Agent is not published to the marketplace' }, 409);
 
-    await sql(c.env)`
+    // Insert a fresh purchase OR revive a previously soft-deleted (unhired) one.
+    // The WHERE on the conflict path means re-hiring an ALREADY-active agent is a
+    // true no-op (returns no row) — so hire_count only moves on a real
+    // inactive→active transition, never on a redundant re-hire.
+    const changed = await sql(c.env)`
       INSERT INTO agent_purchases (tenant_id, agent_id) VALUES (${tenantId}, ${id})
-      ON CONFLICT (tenant_id, agent_id) DO NOTHING
+      ON CONFLICT (tenant_id, agent_id) DO UPDATE SET unhired_at = NULL
+        WHERE agent_purchases.unhired_at IS NOT NULL
+      RETURNING id
     `;
-    const [row] = await sql(c.env)`
-      UPDATE ide_agents SET hire_count = hire_count + 1, updated_at = NOW() WHERE id = ${id} RETURNING *
-    `;
+    const [row] = changed.length > 0
+      ? await sql(c.env)`
+          UPDATE ide_agents SET hire_count = hire_count + 1, updated_at = NOW() WHERE id = ${id} RETURNING *
+        `
+      : await sql(c.env)`SELECT * FROM ide_agents WHERE id = ${id}`;
     await invalidateCached(c.env as Env, purchasedCacheKey(tenantId));
     return c.json(mapAgentRow(row));
+  });
+
+  // DELETE /agents/:id/hire — release a previously-hired marketplace agent from
+  // this tenant's workforce. SOFT delete: the purchase row stays (with unhired_at
+  // stamped) so any work the agent did keeps its hire provenance for contributor
+  // and performance history; it just drops out of the active "purchased" list.
+  // Decrements the aggregate hire counter (floored at 0). Idempotent: unhiring
+  // something not actively held is a no-op success.
+  router.delete('/agents/:id/hire', authMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const removed = await sql(c.env)`
+      UPDATE agent_purchases SET unhired_at = NOW()
+      WHERE tenant_id = ${tenantId} AND agent_id = ${id} AND unhired_at IS NULL
+      RETURNING agent_id
+    `;
+    if (removed.length === 0) {
+      await invalidateCached(c.env as Env, purchasedCacheKey(tenantId));
+      return c.json({ unhired: false });
+    }
+    await sql(c.env)`
+      UPDATE ide_agents SET hire_count = GREATEST(hire_count - 1, 0), updated_at = NOW() WHERE id = ${id}
+    `;
+    await invalidateCached(c.env as Env, purchasedCacheKey(tenantId));
+    return c.json({ unhired: true });
   });
 
   router.post('/agents', authMiddleware, async (c) => {
@@ -217,8 +250,10 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     if (existing.published) {
       return c.json({ error: 'Unpublish this agent before deleting it.' }, 409);
     }
+    // Only ACTIVE purchases block deletion — a soft-deleted (unhired) purchase is
+    // just history and must not pin the agent in place forever.
     const [purchase] = await sql(c.env)`
-      SELECT 1 FROM agent_purchases WHERE agent_id = ${id} LIMIT 1
+      SELECT 1 FROM agent_purchases WHERE agent_id = ${id} AND unhired_at IS NULL LIMIT 1
     `;
     if (purchase || Number(existing.hire_count ?? 0) > 0) {
       return c.json({ error: 'This agent has been purchased and cannot be deleted.' }, 409);

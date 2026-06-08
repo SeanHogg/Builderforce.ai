@@ -429,6 +429,12 @@ export async function hireAgent(agentId: string): Promise<PublishedAgent> {
   });
 }
 
+export async function unhireAgent(agentId: string): Promise<void> {
+  // Release a hired marketplace agent from this tenant's workforce — removes the
+  // purchase and decrements the hire counter. Mirrors hireAgent().
+  await apiRequest<{ unhired: boolean }>(`/api/workforce/agents/${agentId}/hire`, { method: 'DELETE' });
+}
+
 export async function fetchAgentPackage(agentId: string): Promise<AgentPackage> {
   return apiRequest<AgentPackage>(`${IDE}/agents/${agentId}/package`);
 }

@@ -20,6 +20,7 @@ import { integrationCredentials, integrationSyncLogs, projects } from '../../inf
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { githubStatusMessage } from '../../application/integrations/githubTestError';
 
 // ---------------------------------------------------------------------------
 // AES-256-GCM encryption helpers (Web Crypto — works in Cloudflare Workers)
@@ -89,12 +90,16 @@ function maskToken(token: string): string {
 async function testGitHub(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
   const token = creds.accessToken as string;
   if (!token) return { ok: false, message: 'accessToken is required' };
-  const res = await fetch('https://api.github.com/user', {
-    headers: { Authorization: `Bearer ${token}`, 'User-Agent': 'Builderforce/1.0', Accept: 'application/vnd.github+json' },
-  });
-  return res.ok
-    ? { ok: true, message: 'Connected' }
-    : { ok: false, message: `GitHub API returned ${res.status}` };
+  try {
+    const res = await fetch('https://api.github.com/user', {
+      headers: { Authorization: `Bearer ${token}`, 'User-Agent': 'Builderforce/1.0', Accept: 'application/vnd.github+json' },
+    });
+    return res.ok
+      ? { ok: true, message: 'Connected' }
+      : { ok: false, message: githubStatusMessage(res.status, 'token') };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : 'Network error contacting GitHub' };
+  }
 }
 
 async function testJira(
