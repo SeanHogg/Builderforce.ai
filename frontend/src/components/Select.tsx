@@ -138,7 +138,7 @@ export function Select({
   const displayLabel = selected ? selected.label : options[0]?.label ?? '';
 
   const reposition = useCallback(() => {
-    const el = containerRef.current;
+    const el = buttonRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
     setRect({ left: r.left, top: r.bottom + 2, width: r.width });
@@ -241,29 +241,8 @@ export function Select({
     }
   };
 
-  const triggerStyle: CSSProperties = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 6,
-    background: 'var(--bg-elevated)',
-    color: 'var(--text-primary)',
-    border: '1px solid var(--border-subtle)',
-    borderRadius: 6,
-    padding: '6px 10px',
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    opacity: disabled ? 0.6 : 1,
-    textAlign: 'left',
-    font: 'inherit',
-    ...style,
-  };
-
   return (
-    <div
-      ref={containerRef}
-      className={className}
-      style={{ position: 'relative', display: style?.display ?? 'inline-block', width: style?.width }}
-    >
+    <div ref={containerRef} style={{ display: 'contents' }}>
       <button
         ref={buttonRef}
         type="button"
@@ -275,6 +254,7 @@ export function Select({
         aria-expanded={open}
         aria-controls={listboxId}
         role="combobox"
+        className={className ? `bf-select-trigger ${className}` : 'bf-select-trigger'}
         onClick={(e) => {
           onClick?.(e);
           if (open) setOpen(false);
@@ -283,7 +263,7 @@ export function Select({
         onKeyDown={onKeyDown}
         onFocus={onFocus}
         onBlur={onBlur}
-        style={triggerStyle}
+        style={style}
       >
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayLabel}</span>
         <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: 14, height: 14, flexShrink: 0, stroke: 'currentColor', fill: 'none', strokeWidth: 2, opacity: 0.7 }}>

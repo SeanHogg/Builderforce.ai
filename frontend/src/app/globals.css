@@ -194,16 +194,15 @@ html[data-theme='light'] {
   --text-on-accent: #fff;
 }
 
-/* Form controls: readable text in light and dark mode (IDE dropdowns, inputs) */
+/* Form controls: readable text in light and dark mode (IDE dropdowns, inputs).
+   color-scheme keeps native pickers (date/number/color, and any stray <select>)
+   themed. App <select>s are the custom <Select> component (Select.tsx) — native
+   <option> popups can't be reliably themed on Chrome/Windows. */
 input:not([type="submit"]):not([type="button"]),
 select,
 textarea {
   color: var(--text-primary) !important;
   background: var(--bg-elevated) !important;
-  /* An explicit author background opts the native control out of color-scheme
-     theming in Chrome/Windows, so the dropdown popup gets painted light even in
-     dark mode (→ white option text on a white popup). Re-assert color-scheme on
-     the control itself so the native popup paints with the right scheme. */
   color-scheme: dark;
 }
 html[data-theme='light'] input:not([type="submit"]):not([type="button"]),
@@ -215,12 +214,27 @@ input::placeholder,
 textarea::placeholder {
   color: var(--text-muted);
 }
-/* Native select options/optgroups: force theme colors so the dropdown list is
-   readable in light and dark (covers grouped <optgroup> options too). */
-select option,
-select optgroup {
-  background-color: var(--bg-elevated) !important;
-  color: var(--text-primary) !important;
+
+/* Base appearance for the custom <Select> trigger button. Low specificity so a
+   caller's own className (e.g. .admin-select) or inline style overrides it. */
+.bf-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: auto;
+  padding: 6px 10px;
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+.bf-select-trigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 
