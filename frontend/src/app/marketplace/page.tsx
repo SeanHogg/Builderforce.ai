@@ -22,12 +22,16 @@ import {
   type Persona,
   type BuiltinSkill,
 } from '@/lib/marketplaceData';
-import { listAgents, hireAgent } from '@/lib/api';
+import { listAgents, hireAgent, updateAgent, deleteAgent } from '@/lib/api';
 import type { PublishedAgent } from '@/lib/types';
+import { isAgentOwner } from '@/lib/agentPermissions';
+import { formatAgentPrice } from '@/lib/agentPresentation';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { AgentCard } from '@/components/workforce/AgentCard';
+import { AgentOwnerActions } from '@/components/workforce/AgentOwnerActions';
+import { CloudAgentSlideOutPanel, type CloudAgentPanelTab } from '@/components/workforce/CloudAgentSlideOutPanel';
 import { SkillTags } from '@/components/SkillTags';
 
 type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'content' | 'workforce' | 'publish';
@@ -175,6 +179,11 @@ export default function MarketplacePage() {
   const [loadingAgents, setLoadingAgents] = useState(true);
   const [hiringId, setHiringId] = useState<string | null>(null);
 
+  // Owner-managed agent slide-out (edit / pricing) — owners manage their own
+  // listings in place on the marketplace, same panel as the workforce directory.
+  const [selectedAgent, setSelectedAgent] = useState<PublishedAgent | null>(null);
+  const [agentPanelTab, setAgentPanelTab] = useState<CloudAgentPanelTab>('details');
+
   // Publish skill form
   const [skillForm, setSkillForm] = useState({ name: '', slug: '', description: '', category: '', version: '1.0.0', repoUrl: '', price: '0', pricingModel: 'flat_fee' as 'flat_fee' | 'consumption', priceUnit: '' });
   const [publishing, setPublishing] = useState(false);
@@ -281,14 +290,16 @@ export default function MarketplacePage() {
     refreshListings().finally(() => setLoading(false));
   }, [refreshListings]);
 
-  useEffect(() => {
+  const loadAgents = useCallback(() => {
     setLoadingAgents(true);
     // GET /api/workforce/agents already filters WHERE status = 'active' server-side.
-    listAgents()
-      .then(setAgents)
-      .catch(() => setAgents([]))
+    return listAgents()
+      .then((list) => { setAgents(list); return list; })
+      .catch(() => { setAgents([]); return [] as PublishedAgent[]; })
       .finally(() => setLoadingAgents(false));
   }, []);
+
+  useEffect(() => { loadAgents(); }, [loadAgents]);
 
   const toggleLike = async (item: MarketplaceListing) => {
     const k = key(item.type, item.artifactSlug);
@@ -369,6 +380,26 @@ export default function MarketplacePage() {
       setHiringId(null);
     }
   }, []);
+
+  // --- Owner management of own listings ------------------------------------
+  const openAgentPanel = useCallback((a: PublishedAgent, tab: CloudAgentPanelTab) => {
+    setAgentPanelTab(tab);
+    setSelectedAgent(a);
+  }, []);
+  const unpublishAgent = useCallback(async (a: PublishedAgent) => {
+    // Unpublishing removes it from the public registry; refetch so it drops out.
+    await updateAgent(a.id, { published: false });
+    loadAgents();
+  }, [loadAgents]);
+  const deleteOwnedAgent = useCallback(async (a: PublishedAgent) => {
+    if (!confirm(`Delete agent "${a.name}"? This permanently removes it and its per-agent skills/personas. This cannot be undone.`)) return;
+    try {
+      await deleteAgent(a.id);
+      loadAgents();
+    } catch {
+      // keep UI stable
+    }
+  }, [loadAgents]);
 
   const categories: { id: MarketplaceCategory; label: string }[] = [
     { id: 'all', label: 'All' },
@@ -586,12 +617,15 @@ export default function MarketplacePage() {
                   <th style={thStyle}>Name</th>
                   <th style={thStyle}>Title</th>
                   <th style={thStyle}>Tags</th>
+                  <th style={thStyle}>Price</th>
                   <th style={thStyle}>Hires</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredAgents.map((agent) => (
+                {filteredAgents.map((agent) => {
+                  const owner = isAgentOwner(agent, tenant?.id);
+                  return (
                   <tr key={agent.id} style={trStyle}>
                     <td style={tdStyle}>
                       <span style={{ marginRight: 6 }}>👤</span>
@@ -599,19 +633,33 @@ export default function MarketplacePage() {
                     </td>
                     <td style={tdMutedStyle}>{agent.title || 'Workforce agent'}</td>
                     <td style={tdMutedStyle}><SkillTags skills={agent.skills} max={4} variant="inline" /></td>
+                    <td style={tdMutedStyle}>{formatAgentPrice(agent)}</td>
                     <td style={tdMutedStyle}>{agent.hire_count != null ? `${agent.hire_count}×` : '—'}</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        disabled={hiringId === agent.id}
-                        onClick={() => handleHire(agent.id)}
-                      >
-                        {hiringId === agent.id ? 'Hiring…' : 'Hire'}
-                      </button>
+                      {owner ? (
+                        <div style={{ display: 'inline-flex' }}>
+                          <AgentOwnerActions
+                            agent={agent}
+                            onOpenPanel={openAgentPanel}
+                            onUnpublish={unpublishAgent}
+                            onDelete={deleteOwnedAgent}
+                            includeEditPrice={false}
+                          />
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          disabled={hiringId === agent.id}
+                          onClick={() => handleHire(agent.id)}
+                        >
+                          {hiringId === agent.id ? 'Hiring…' : 'Hire'}
+                        </button>
+                      )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -621,9 +669,12 @@ export default function MarketplacePage() {
               <AgentCard
                 key={agent.id}
                 agent={agent}
-                variant="marketplace"
+                context="marketplace"
                 onHire={handleHire}
                 hiring={hiringId === agent.id}
+                onOpenPanel={openAgentPanel}
+                onUnpublish={unpublishAgent}
+                onDelete={deleteOwnedAgent}
               />
             ))}
           </div>
@@ -872,6 +923,22 @@ export default function MarketplacePage() {
             );
           })}
         </div>
+      )}
+
+      {/* Owner manages their own listing in place (edit / pricing). */}
+      {selectedAgent && (
+        <CloudAgentSlideOutPanel
+          agent={selectedAgent}
+          open={!!selectedAgent}
+          initialTab={agentPanelTab}
+          tenantId={tenant?.id != null && tenant.id !== '' ? Number(tenant.id) : undefined}
+          onClose={() => setSelectedAgent(null)}
+          onSaved={async () => {
+            const list = await loadAgents();
+            setSelectedAgent((cur) => (cur ? list.find((x) => x.id === cur.id) ?? cur : cur));
+          }}
+          onDeleted={() => { setSelectedAgent(null); loadAgents(); }}
+        />
       )}
     </div>
   );
