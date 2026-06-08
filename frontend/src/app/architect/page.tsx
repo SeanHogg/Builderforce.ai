@@ -15,6 +15,7 @@ import {
 } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
+import PageContainer from '@/components/PageContainer';
 import { AgentAssignmentPanel } from '@/components/AgentAssignmentPanel';
 
 const KIND_LABELS: Record<RepoAnalysisKind, string> = {
@@ -142,7 +143,7 @@ export default function ArchitectPage() {
   const activeMeta = artifacts.find((a) => a.kind === activeKind) ?? null;
 
   return (
-    <div style={{ maxWidth: 1000, margin: '0 auto', padding: '24px 20px' }}>
+    <PageContainer width="readable" style={{ padding: '24px 20px' }}>
       <header style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>🏛 Architect</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '6px 0 0' }}>
@@ -261,7 +262,7 @@ export default function ArchitectPage() {
           No analysis yet for this project. Click <strong>Run Architecture Analysis</strong> to generate one.
         </p>
       )}
-    </div>
+    </PageContainer>
   );
 }
 

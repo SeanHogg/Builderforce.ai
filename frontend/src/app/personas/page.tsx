@@ -12,6 +12,7 @@ import {
 } from '@/lib/builderforceApi';
 import { BUILTIN_PERSONAS, userPersonasKey, type Persona, type UserPersona } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
+import PageContainer from '@/components/PageContainer';
 import { PersonaAssignmentsContent } from '@/components/PersonaAssignmentsContent';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
@@ -189,7 +190,7 @@ export default function PersonasPage() {
   };
 
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto' }}>
+    <PageContainer width="readable">
       <div className="page-header" style={{ marginBottom: 24 }}>
         <div>
           <h1 className="page-title" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-strong)', margin: 0 }}>Personas</h1>
@@ -507,6 +508,6 @@ export default function PersonasPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

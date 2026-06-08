@@ -1126,8 +1126,7 @@ html[data-theme='light'] .nebula {
 /* Admin page (inside shell) */
 .admin-page {
   flex: 1;
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
   color: var(--text);
 }
 

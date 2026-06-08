@@ -8,6 +8,7 @@ import { fetchProjects, deleteProject } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 import { getMe } from '@/lib/auth';
 import { ChatInput } from '@/components/ChatInput';
+import PageContainer from '@/components/PageContainer';
 import { ProjectCard } from '@/components/ProjectCard';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -159,7 +160,7 @@ export default function DashboardPage() {
   const projectPreview = projects.slice(0, 6);
 
   return (
-    <div style={{ flex: 1, color: 'var(--text-primary)' }}>
+    <PageContainer style={{ padding: 0 }}>
       {showOnboarding && webToken && (
         <OnboardingStepper
           webToken={webToken}
@@ -739,6 +740,6 @@ export default function DashboardPage() {
         </section>
         )}
       </main>
-    </div>
+    </PageContainer>
   );
 }

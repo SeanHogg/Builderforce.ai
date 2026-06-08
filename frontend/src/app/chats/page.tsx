@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { chatSessionsApi, type ChatSession, type ChatMessage } from '@/lib/builderforceApi';
+import PageContainer from '@/components/PageContainer';
 
 type SessionWithName = ChatSession & { agentHostName?: string };
 
@@ -44,7 +45,7 @@ export default function ChatsPage() {
   };
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 1200, margin: '0 auto' }}>
+    <PageContainer style={{ padding: '32px 40px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Chats</h1>
@@ -156,6 +157,6 @@ export default function ChatsPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

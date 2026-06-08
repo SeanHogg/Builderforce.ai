@@ -3,6 +3,7 @@
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { WorkflowsContent } from '@/components/WorkflowsContent';
+import PageContainer from '@/components/PageContainer';
 
 function WorkflowsPageInner() {
   const searchParams = useSearchParams();
@@ -10,11 +11,9 @@ function WorkflowsPageInner() {
   const projectId = projectIdParam ? Number(projectIdParam) : null;
 
   return (
-    <div style={{ flex: 1, color: 'var(--text-primary)' }}>
-      <main className="max-w-6xl mx-auto px-4 py-5">
-        <WorkflowsContent projectId={projectId} />
-      </main>
-    </div>
+    <PageContainer style={{ padding: '20px 16px' }}>
+      <WorkflowsContent projectId={projectId} />
+    </PageContainer>
   );
 }
 

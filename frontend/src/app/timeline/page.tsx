@@ -1,15 +1,16 @@
 'use client';
 
 import { ObservabilityContent } from '@/components/ObservabilityContent';
+import PageContainer from '@/components/PageContainer';
 
 export default function TimelinePage() {
   return (
-    <div style={{ padding: 40, maxWidth: 1200 }}>
+    <PageContainer style={{ padding: 40 }}>
       <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 24 }}>Execution Timeline</h1>
       <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
         View tool audit events and workflow timelines across your agentHosts.
       </p>
       <ObservabilityContent initialView="timeline" />
-    </div>
+    </PageContainer>
   );
 }

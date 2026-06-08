@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { approvalsApi, agentHosts, type Approval, type ApprovalStatus, type AgentHost } from '@/lib/builderforceApi';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import PageContainer from '@/components/PageContainer';
 
 const STATUS_OPTIONS: Array<{ value: '' | ApprovalStatus; label: string }> = [
   { value: '', label: 'All statuses' },
@@ -108,8 +109,7 @@ export default function ApprovalsPage() {
   };
 
   return (
-    <div style={{ flex: 1, color: 'var(--text-primary)' }}>
-      <main className="max-w-6xl mx-auto px-4 py-5">
+    <PageContainer style={{ padding: '20px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: 20 }}>
           <div>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 4 }}>Approvals</h1>
@@ -329,7 +329,6 @@ export default function ApprovalsPage() {
             </div>
           )
         )}
-      </main>
-    </div>
+    </PageContainer>
   );
 }

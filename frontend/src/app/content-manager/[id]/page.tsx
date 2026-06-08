@@ -12,6 +12,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { marketplaceStats } from '@/lib/builderforceApi';
 import { contentStorageKey } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
+import PageContainer from '@/components/PageContainer';
 
 interface ContentBlock {
   id: string;
@@ -69,15 +70,15 @@ export default function ContentDetailPage() {
 
   if (!block) {
     return (
-      <div style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
+      <PageContainer width="narrow" style={{ padding: 24 }}>
         <p style={{ color: 'var(--muted)', marginBottom: 16 }}>Content not found.</p>
         <Link href="/content-manager" className="btn btn-primary">Back to Content Manager</Link>
-      </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
+    <PageContainer width="narrow" style={{ padding: 24 }}>
       <div style={{ marginBottom: 24 }}>
         <Link href="/content-manager" style={{ fontSize: 13, color: 'var(--accent)', marginBottom: 8, display: 'inline-block' }}>← Back to Content Manager</Link>
         <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-strong)', margin: '8px 0' }}>{block.title}</h1>
@@ -115,6 +116,6 @@ export default function ContentDetailPage() {
         )}
       </div>
       <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 16 }}>Updated {new Date(block.updatedAt).toLocaleString()}</div>
-    </div>
+    </PageContainer>
   );
 }

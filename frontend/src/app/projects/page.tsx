@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { ProjectsContent } from '@/components/ProjectsContent';
+import PageContainer from '@/components/PageContainer';
 import { TaskMgmtContent } from '@/components/TaskMgmtContent';
 
 type Tab = 'projects' | 'tasks';
@@ -51,8 +52,7 @@ export default function ProjectsTasksPage() {
   };
 
   return (
-    <div style={{ flex: 1, color: 'var(--text-primary)' }}>
-      <main className="w-full px-4 py-5">
+    <PageContainer style={{ padding: '20px 16px' }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 16 }}>Projects / Tasks</h1>
 
         {/* Tabs */}
@@ -91,7 +91,6 @@ export default function ProjectsTasksPage() {
         ) : (
           <TaskMgmtContent projectId={scopedProjectId} />
         )}
-      </main>
-    </div>
+    </PageContainer>
   );
 }

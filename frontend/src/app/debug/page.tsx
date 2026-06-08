@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { agentHosts, type AgentHost } from '@/lib/builderforceApi';
 import { AgentHostDebugContent } from '@/components/AgentHostDebugContent';
+import PageContainer from '@/components/PageContainer';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -27,7 +28,7 @@ export default function DebugPage() {
   }, []);
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 960, margin: '0 auto' }}>
+    <PageContainer width="readable" style={{ padding: '32px 40px' }}>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Debug</h1>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
@@ -75,6 +76,6 @@ export default function DebugPage() {
           )}
         </>
       )}
-    </div>
+    </PageContainer>
   );
 }
