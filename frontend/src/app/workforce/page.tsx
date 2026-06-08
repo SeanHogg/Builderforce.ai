@@ -7,7 +7,7 @@ import { WorkforceAgents } from '@/components/workforce/WorkforceAgents';
 import { ContributorsView } from '@/components/contributors/ContributorsView';
 import { MembersView } from '@/components/members/MembersView';
 import { ChatsView } from '@/components/chats/ChatsView';
-import { ApprovalsView } from '@/components/approvals/ApprovalsView';
+import { HumanRequestsView } from '@/components/humanRequests/HumanRequestsView';
 import { ObservabilityContent } from '@/components/ObservabilityContent';
 import { LlmUsageContent } from '@/components/LlmUsageContent';
 import { QaContent } from '@/components/QaContent';
@@ -30,8 +30,8 @@ const TABS: ReadonlyArray<{ id: WorkforceTab; label: string; sub: string }> = [
   },
   {
     id: 'approvals',
-    label: 'Approvals',
-    sub: 'Review high-risk actions escalated by your agents for human-in-the-loop sign-off.',
+    label: 'Approvals & Q&A',
+    sub: 'Resolve approvals, questions, and feedback your agents escalate for a human — sign off on actions or answer what they need to proceed.',
   },
   {
     id: 'contributors',
@@ -88,7 +88,7 @@ function WorkforcePageInner() {
       {tab === 'chats' ? (
         <ChatsView />
       ) : tab === 'approvals' ? (
-        <ApprovalsView />
+        <HumanRequestsView />
       ) : tab === 'contributors' ? (
         <ContributorsView />
       ) : tab === 'members' ? (

@@ -201,7 +201,7 @@ export default function DashboardPage() {
           </div>
           {pendingApprovalsCount > 0 && (
             <div style={{ marginTop: 8, fontSize: 12, color: 'var(--warning-text)' }}>
-              {pendingApprovalsCount} pending approval{pendingApprovalsCount !== 1 ? 's' : ''} ·{' '}
+              {pendingApprovalsCount} pending request{pendingApprovalsCount !== 1 ? 's' : ''} ·{' '}
               <Link href="/workforce?tab=approvals" style={{ color: 'var(--coral-bright)', textDecoration: 'none', fontWeight: 600 }}>
                 review now
               </Link>
@@ -242,7 +242,7 @@ export default function DashboardPage() {
                 color: connectedAgentHosts.length > 0 ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)',
               },
               {
-                label: 'Pending approvals',
+                label: 'Pending requests',
                 value: pendingApprovalsCount,
                 sub: pendingApprovalsCount > 0 ? 'requires review' : 'all clear',
                 href: '/workforce?tab=approvals',

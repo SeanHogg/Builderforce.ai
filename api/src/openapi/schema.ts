@@ -131,12 +131,14 @@ export interface TaskBroadcastMessage {
   };
 }
 
-/** Relay message: manager approved or rejected a pending approval request. */
+/** Relay message: a human resolved a pending request (approval/question/feedback). */
 export interface ApprovalDecisionMessage {
   type: 'approval.decision';
   approvalId: string;
-  /** 'approved' | 'rejected' */
+  /** 'approved' | 'rejected' | 'answered' */
   status: string;
+  /** Free-text human answer when status is 'answered' (question/feedback kinds). */
+  responseText?: string;
 }
 
 // ── Shared ────────────────────────────────────────────────────────────────────

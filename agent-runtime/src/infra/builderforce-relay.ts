@@ -1126,12 +1126,14 @@ export class BuilderforceRelayService implements IRelayService {
       }
 
       case "approval.decision": {
-        // Manager approved or rejected a pending approval request in the portal.
+        // A human resolved a pending request in the portal: approved/rejected an
+        // action, or answered a question/feedback request with free text.
         const approvalId = typeof msg.approvalId === "string" ? msg.approvalId : "";
         const decision = typeof msg.status === "string" ? msg.status : "";
-        if (approvalId && (decision === "approved" || decision === "rejected")) {
+        const responseText = typeof msg.responseText === "string" ? msg.responseText : undefined;
+        if (approvalId && (decision === "approved" || decision === "rejected" || decision === "answered")) {
           logWarn(`[builderforce-relay] approval.decision ${approvalId}: ${decision}`);
-          resolveApproval(approvalId, decision);
+          resolveApproval(approvalId, decision, responseText);
         }
         break;
       }
