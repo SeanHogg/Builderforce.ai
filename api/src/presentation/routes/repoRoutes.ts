@@ -27,6 +27,7 @@ import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { RepoService, type AgentHostDispatcher } from '../../application/repos/RepoService';
+import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
 import type { CreatePrMessage } from '../../application/repos/prDispatch';
 
 type RepoHonoEnv = HonoEnv & {
@@ -47,6 +48,57 @@ function makeAgentHostDispatcher(env: RepoHonoEnv['Bindings']): AgentHostDispatc
     });
     return response.ok;
   };
+}
+
+/**
+ * Probe that a repo is actually reachable with its linked credential's token.
+ * Used by the "Test" button in the project Integrations tab so an operator can
+ * confirm a repo is accessible before dispatching agents against it. This is a
+ * live provider round-trip by design (it verifies the token + repo visibility),
+ * so it is intentionally not cached.
+ */
+async function probeRepoAccess(
+  provider: string,
+  host: string | null,
+  owner: string,
+  repo: string,
+  token: string,
+): Promise<{ ok: boolean; message: string }> {
+  const where = `${owner}/${repo}`;
+  try {
+    switch (provider) {
+      case 'github': {
+        const apiRoot = !host || host === 'github.com' ? 'https://api.github.com' : `https://${host}/api/v3`;
+        const res = await fetch(`${apiRoot}/repos/${owner}/${repo}`, {
+          headers: { Authorization: `Bearer ${token}`, 'User-Agent': 'Builderforce/1.0', Accept: 'application/vnd.github+json' },
+        });
+        return res.ok
+          ? { ok: true, message: `Accessible (${where})` }
+          : { ok: false, message: `GitHub API returned ${res.status}` };
+      }
+      case 'gitlab': {
+        const root = host && host !== 'github.com' ? `https://${host}` : 'https://gitlab.com';
+        const res = await fetch(`${root}/api/v4/projects/${encodeURIComponent(where)}`, {
+          headers: { Authorization: `Bearer ${token}`, 'PRIVATE-TOKEN': token },
+        });
+        return res.ok
+          ? { ok: true, message: `Accessible (${where})` }
+          : { ok: false, message: `GitLab API returned ${res.status}` };
+      }
+      case 'bitbucket': {
+        const res = await fetch(`https://api.bitbucket.org/2.0/repositories/${owner}/${repo}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        return res.ok
+          ? { ok: true, message: `Accessible (${where})` }
+          : { ok: false, message: `Bitbucket API returned ${res.status}` };
+      }
+      default:
+        return { ok: false, message: `Accessibility test not available for provider: ${provider}` };
+    }
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : 'Network error during accessibility test' };
+  }
 }
 
 export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
@@ -96,7 +148,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
         cloneUrlHttps: body.cloneUrlHttps ?? null,
         isDefault: body.isDefault ?? false,
         matchHints: body.matchHints ?? null,
-        credentialId: body.credentialId ?? null,
+        credentialId: body.credentialId || null,
         segmentId: (c.get('segmentId') as string | undefined) ?? null,
       },
       tenantId,
@@ -146,7 +198,9 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
         ...(body.matchHints !== undefined
           ? { matchHints: body.matchHints != null ? JSON.stringify(body.matchHints) : null }
           : {}),
-        ...(body.credentialId !== undefined ? { credentialId: body.credentialId } : {}),
+        // Coerce '' → null: the column is a uuid FK, so an empty string would
+        // make the update fail (and the row appear to "revert" to its old key).
+        ...(body.credentialId !== undefined ? { credentialId: body.credentialId || null } : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
@@ -191,6 +245,35 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       .from(projectRepositories)
       .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
     return c.json(row);
+  });
+
+  // POST /api/repos/repositories/:id/test — confirm the repo is reachable with
+  // its linked credential. Mirrors the integration-key "Test" probe so an
+  // operator can validate end-to-end accessibility from the Integrations tab.
+  router.post('/repositories/:id/test', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
+    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+
+    const resolved = await resolveRepoCredential(db, secret, tenantId, id);
+    if (isResolveError(resolved)) {
+      // A genuinely missing repo is a 404; "no key" / "no token" are surfaced as
+      // a non-OK test result the UI renders inline next to the row.
+      if (resolved.status === 404 && resolved.error === 'Repository not found') {
+        return c.json({ error: resolved.error }, 404);
+      }
+      return c.json({ ok: false, message: resolved.error });
+    }
+
+    const result = await probeRepoAccess(
+      resolved.repo.provider,
+      resolved.repo.host,
+      resolved.repo.owner,
+      resolved.repo.repo,
+      resolved.token,
+    );
+    return c.json(result);
   });
 
   // DELETE /api/repos/repositories/:id
