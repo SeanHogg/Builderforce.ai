@@ -52,7 +52,7 @@ export default function ProjectsTasksPage() {
 
   return (
     <div style={{ flex: 1, color: 'var(--text-primary)' }}>
-      <main className="max-w-6xl mx-auto px-4 py-5">
+      <main className="w-full px-4 py-5">
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 16 }}>Projects / Tasks</h1>
 
         {/* Tabs */}
