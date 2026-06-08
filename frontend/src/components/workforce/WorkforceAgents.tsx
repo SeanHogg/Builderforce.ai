@@ -340,20 +340,19 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
             <AgentCard
               key={`cloud-${a.id}`}
               agent={a}
-              context="workforce"
               onOpenPanel={openAgentPanel}
               onUnpublish={unpublish}
               onDelete={deleteOwned}
             />
           ))}
 
-          {/* Purchased (marketplace) agents — non-owner in the workforce context,
-              so the card offers Unhire (release from this workforce). */}
+          {/* Purchased (marketplace) agents — already hired, so the card offers
+              Unhire (release from this workforce). */}
           {visiblePurchased.map((a) => (
             <AgentCard
               key={`purchased-${a.id}`}
               agent={a}
-              context="workforce"
+              hired
               onUnhire={unhire}
               unhiring={unhiringId === a.id}
             />

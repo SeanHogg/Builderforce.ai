@@ -226,6 +226,12 @@ export interface PublishedAgent {
   pricing_model?: 'flat_fee' | 'consumption';
   price_unit?: string | null;
   published?: boolean;
+  /**
+   * Number of tenants CURRENTLY holding this agent (active, non-unhired
+   * purchases). Owner-only metric — populated by GET /agents/mine, not by the
+   * public marketplace list. Distinct from `hire_count` (cumulative times hired).
+   */
+  active_hires?: number;
 }
 
 /** Portable agent package that can be downloaded and used to deploy the agent. */

@@ -22,7 +22,7 @@ import {
   type Persona,
   type BuiltinSkill,
 } from '@/lib/marketplaceData';
-import { listAgents, hireAgent, updateAgent, deleteAgent } from '@/lib/api';
+import { listAgents, listPurchasedAgents, hireAgent, unhireAgent, updateAgent, deleteAgent } from '@/lib/api';
 import type { PublishedAgent } from '@/lib/types';
 import { isAgentOwner } from '@/lib/agentPermissions';
 import { formatAgentPrice } from '@/lib/agentPresentation';
@@ -178,6 +178,9 @@ export default function MarketplacePage() {
   const [agents, setAgents] = useState<PublishedAgent[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
   const [hiringId, setHiringId] = useState<string | null>(null);
+  const [unhiringId, setUnhiringId] = useState<string | null>(null);
+  // Agents this tenant has already hired — drives Hire vs Unhire on each listing.
+  const [hiredIds, setHiredIds] = useState<Set<string>>(new Set());
 
   // Owner-managed agent slide-out (edit / pricing) — owners manage their own
   // listings in place on the marketplace, same panel as the workforce directory.
@@ -301,6 +304,17 @@ export default function MarketplacePage() {
 
   useEffect(() => { loadAgents(); }, [loadAgents]);
 
+  // Which listings has this tenant already hired? Only authenticated users have a
+  // purchase set; anonymous browsers see Hire on everything.
+  const loadHired = useCallback(() => {
+    if (!isAuthenticated) { setHiredIds(new Set()); return Promise.resolve(); }
+    return listPurchasedAgents()
+      .then((list) => setHiredIds(new Set(list.map((a) => a.id))))
+      .catch(() => setHiredIds(new Set()));
+  }, [isAuthenticated]);
+
+  useEffect(() => { loadHired(); }, [loadHired]);
+
   const toggleLike = async (item: MarketplaceListing) => {
     const k = key(item.type, item.artifactSlug);
     const prev = stats[k] ?? { likes: 0, installs: 0, liked: false };
@@ -374,10 +388,25 @@ export default function MarketplacePage() {
     try {
       const updated = await hireAgent(agentId);
       setAgents((prev) => prev.map((a) => (a.id === agentId ? updated : a)));
+      setHiredIds((prev) => new Set(prev).add(agentId));
     } catch {
       // keep UI stable
     } finally {
       setHiringId(null);
+    }
+  }, []);
+
+  const handleUnhire = useCallback(async (agentId: string) => {
+    setUnhiringId(agentId);
+    try {
+      await unhireAgent(agentId);
+      setHiredIds((prev) => { const next = new Set(prev); next.delete(agentId); return next; });
+      // hire_count is cumulative (unhire doesn't decrement), so the listing's
+      // displayed count is unchanged — no need to refetch the agent row.
+    } catch {
+      // keep UI stable
+    } finally {
+      setUnhiringId(null);
     }
   }, []);
 
@@ -646,6 +675,15 @@ export default function MarketplacePage() {
                             includeEditPrice={false}
                           />
                         </div>
+                      ) : hiredIds.has(agent.id) ? (
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          disabled={unhiringId === agent.id}
+                          onClick={() => handleUnhire(agent.id)}
+                        >
+                          {unhiringId === agent.id ? 'Unhiring…' : 'Unhire'}
+                        </button>
                       ) : (
                         <button
                           type="button"
@@ -669,9 +707,11 @@ export default function MarketplacePage() {
               <AgentCard
                 key={agent.id}
                 agent={agent}
-                context="marketplace"
+                hired={hiredIds.has(agent.id)}
                 onHire={handleHire}
                 hiring={hiringId === agent.id}
+                onUnhire={handleUnhire}
+                unhiring={unhiringId === agent.id}
                 onOpenPanel={openAgentPanel}
                 onUnpublish={unpublishAgent}
                 onDelete={deleteOwnedAgent}

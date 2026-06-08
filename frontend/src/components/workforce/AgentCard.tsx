@@ -105,6 +105,9 @@ export function AgentCard({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <div style={{ fontSize: 11, color: 'var(--muted)' }}>
             {agent.hire_count != null ? `Hired ${agent.hire_count}×` : null}
+            {/* "In use" (active holders) is an owner-only signal — never shown to
+                non-owners, who can't see how/whether others are using it. */}
+            {owner && agent.active_hires != null ? ` · ${agent.active_hires} in use` : null}
           </div>
           {!owner && (hired ? (
             <button type="button" className="btn btn-secondary btn-sm" disabled={unhiring} onClick={() => onUnhire?.(agent.id)}>

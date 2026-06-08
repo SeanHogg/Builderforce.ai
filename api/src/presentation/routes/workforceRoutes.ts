@@ -54,10 +54,17 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   // Registered BEFORE GET /agents/:id so "mine" isn't swallowed by the :id route.
   router.get('/agents/mine', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
+    // active_hires = tenants CURRENTLY holding the agent (owner-only "in use"
+    // metric). Distinct from the cumulative hire_count. Owner-scoped, so it ships
+    // only on /mine, never on the public marketplace list.
     const rows = await sql(c.env)`
-      SELECT * FROM ide_agents
-      WHERE tenant_id = ${tenantId}
-      ORDER BY created_at DESC
+      SELECT a.*, (
+        SELECT COUNT(*) FROM agent_purchases p
+        WHERE p.agent_id = a.id AND p.unhired_at IS NULL
+      )::int AS active_hires
+      FROM ide_agents a
+      WHERE a.tenant_id = ${tenantId}
+      ORDER BY a.created_at DESC
       LIMIT 200
     `;
     return c.json(rows.map(mapAgentRow));
@@ -121,8 +128,8 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   // this tenant's workforce. SOFT delete: the purchase row stays (with unhired_at
   // stamped) so any work the agent did keeps its hire provenance for contributor
   // and performance history; it just drops out of the active "purchased" list.
-  // Decrements the aggregate hire counter (floored at 0). Idempotent: unhiring
-  // something not actively held is a no-op success.
+  // hire_count is CUMULATIVE ("times hired") — unhiring does NOT decrement it.
+  // Idempotent: unhiring something not actively held is a no-op success.
   router.delete('/agents/:id/hire', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
@@ -131,15 +138,8 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       WHERE tenant_id = ${tenantId} AND agent_id = ${id} AND unhired_at IS NULL
       RETURNING agent_id
     `;
-    if (removed.length === 0) {
-      await invalidateCached(c.env as Env, purchasedCacheKey(tenantId));
-      return c.json({ unhired: false });
-    }
-    await sql(c.env)`
-      UPDATE ide_agents SET hire_count = GREATEST(hire_count - 1, 0), updated_at = NOW() WHERE id = ${id}
-    `;
     await invalidateCached(c.env as Env, purchasedCacheKey(tenantId));
-    return c.json({ unhired: true });
+    return c.json({ unhired: removed.length > 0 });
   });
 
   router.post('/agents', authMiddleware, async (c) => {
@@ -250,19 +250,21 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     // Only a tenant's OWN agent that is unpublished AND has no purchases may be
     // deleted — never pull a published/purchased agent out from under buyers.
     const [existing] = await sql(c.env)`
-      SELECT published, hire_count FROM ide_agents WHERE id = ${id} AND tenant_id = ${tenantId}
+      SELECT published FROM ide_agents WHERE id = ${id} AND tenant_id = ${tenantId}
     `;
     if (!existing) return c.json({ error: 'Agent not found' }, 404);
     if (existing.published) {
       return c.json({ error: 'Unpublish this agent before deleting it.' }, 409);
     }
-    // Only ACTIVE purchases block deletion — a soft-deleted (unhired) purchase is
-    // just history and must not pin the agent in place forever.
+    // Only an ACTIVE hold blocks deletion — a soft-deleted (unhired) purchase is
+    // just history and must not pin the agent in place forever. Note we do NOT
+    // gate on hire_count: it is cumulative ("times hired") and never decrements,
+    // so an agent every buyer has since released must still be deletable.
     const [purchase] = await sql(c.env)`
       SELECT 1 FROM agent_purchases WHERE agent_id = ${id} AND unhired_at IS NULL LIMIT 1
     `;
-    if (purchase || Number(existing.hire_count ?? 0) > 0) {
-      return c.json({ error: 'This agent has been purchased and cannot be deleted.' }, 409);
+    if (purchase) {
+      return c.json({ error: 'This agent is currently hired by another workspace and cannot be deleted.' }, 409);
     }
 
     // Drop the agent and its canonical identity bridge + per-agent assignments.

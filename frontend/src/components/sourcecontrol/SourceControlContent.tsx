@@ -111,8 +111,25 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
     setAdding(true);
   };
 
+  // Split a pasted URL / `owner/repo` into the two boxes so users don't end up
+  // with a slash-laden owner that 404s the Test probe. Falls back to the raw
+  // value when the paste isn't a recognizable owner/repo pair.
+  const onOwnerChange = (value: string) => {
+    const parsed = parseRepoIdentifier(value);
+    if (parsed) { setOwner(parsed.owner); setRepo(parsed.repo); }
+    else setOwner(value);
+  };
+
   const submit = async () => {
-    if (!owner.trim() || !repo.trim()) { setError('Owner and repo are required'); return; }
+    const o = owner.trim();
+    const r = repo.trim();
+    if (!o || !r) { setError('Owner and repo are required.'); return; }
+    // Each box is a single path segment — reject a URL / slashes / spaces and say
+    // what's expected (the most common cause of the GitHub 404 on Test).
+    if (!isValidRepoSegment(o) || !isValidRepoSegment(r)) {
+      setError('Enter owner and repo as separate names, not a URL — e.g. for https://github.com/acme/app, owner = "acme", repo = "app". Letters, numbers, ".", "_" and "-" only.');
+      return;
+    }
     setSaving(true); setError(null);
     try {
       const payload = {
@@ -210,8 +227,11 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
             <Select value={provider} onChange={(e) => setProvider(e.target.value)} style={{ ...inputStyle, width: 130 }}>
               {SCM_PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
             </Select>
-            <input style={inputStyle} placeholder="owner" value={owner} onChange={(e) => setOwner(e.target.value)} />
-            <input style={inputStyle} placeholder="repo" value={repo} onChange={(e) => setRepo(e.target.value)} />
+            <input style={inputStyle} placeholder="owner (e.g. acme)" value={owner} onChange={(e) => onOwnerChange(e.target.value)} />
+            <input style={inputStyle} placeholder="repo (e.g. app)" value={repo} onChange={(e) => setRepo(e.target.value)} />
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -4 }}>
+            Owner and repo are separate names from the repo URL — for <code>https://github.com/acme/app</code>, owner is <code>acme</code> and repo is <code>app</code>. Paste a full URL into <em>owner</em> and we&apos;ll split it for you.
           </div>
           <input style={inputStyle} placeholder="default branch (optional, e.g. main)" value={defaultBranch} onChange={(e) => setDefaultBranch(e.target.value)} />
           <Select value={credentialId} onChange={(e) => setCredentialId(e.target.value)} style={inputStyle}>
