@@ -1619,7 +1619,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
 
     const result = await openTaskPullRequest(db, secret, agentHost.tenantId, taskId, body);
     if (!result.ok) return c.json({ error: result.error }, result.status);
-    return c.json({ ok: true, url: result.url, number: result.number });
+    return c.json({ ok: true, url: result.url, number: result.number, merged: result.merged, mergeError: result.mergeError });
   });
 
   // -------------------------------------------------------------------------
