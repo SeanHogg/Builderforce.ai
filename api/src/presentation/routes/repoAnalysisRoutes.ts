@@ -12,7 +12,7 @@
  *   POST /projects/:projectId/architect     Create the Architect task + start the run (DEVELOPER+)
  */
 import { Hono } from 'hono';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { executions, projects, repoAnalysisRuns, tenants } from '../../infrastructure/database/schema';
 import { RepoService } from '../../application/repos/RepoService';
@@ -55,7 +55,7 @@ export function createRepoAnalysisRoutes(db: Db, taskService: TaskService): Hono
     const [project] = await db
       .select({ id: projects.id, name: projects.name })
       .from(projects)
-      .where(eq(projects.id, projectId));
+      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)));
     if (!project) return c.json({ error: 'Project not found' }, 404);
 
     // A task cannot execute until a repo is mapped to the project — refuse early,

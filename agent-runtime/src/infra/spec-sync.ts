@@ -49,8 +49,37 @@ export async function fetchAssignedSpec(opts: SpecSyncOptions): Promise<Assigned
 }
 
 /**
+ * Fetch the PRD(s) linked to a specific task (primary first). Returns [] when
+ * none are linked or the endpoint is unavailable. This is the task-scoped context
+ * the executing agent should read — falls back to {@link fetchAssignedSpec} (the
+ * project default) when a task has no linked PRD.
+ */
+export async function fetchAssignedSpecsForTask(
+  opts: SpecSyncOptions,
+  taskId: number,
+): Promise<AssignedSpec[]> {
+  const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agent-hosts/${opts.agentNodeId}/tasks/${taskId}/specs`;
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${opts.apiKey}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) {
+      logDebug(`[spec-sync] task-specs fetch failed: HTTP ${res.status}`);
+      return [];
+    }
+    const data = (await res.json()) as { specs: AssignedSpec[] };
+    return data.specs ?? [];
+  } catch (err) {
+    logDebug(`[spec-sync] task-specs fetch error: ${String(err)}`);
+    return [];
+  }
+}
+
+/**
  * Push a spec (PRD / arch spec / task list) to Builderforce.
- * Used by the /spec command to persist the generated spec in the cloud.
+ * Used by the /spec command to persist the generated spec in the cloud. When
+ * `taskId` is set, the spec is linked to that task as its primary PRD.
  */
 export async function pushSpec(
   opts: SpecSyncOptions,
@@ -58,10 +87,11 @@ export async function pushSpec(
     id?: string;
     projectId?: number;
     goal: string;
-    status?: "draft" | "reviewed" | "approved" | "in_progress" | "done";
+    status?: "draft" | "ready" | "in_progress" | "complete";
     prd?: string;
     archSpec?: string;
     taskList?: unknown;
+    taskId?: number;
   },
 ): Promise<AssignedSpec | null> {
   const url = `${opts.baseUrl.replace(/\/$/, "")}/api/specs`;

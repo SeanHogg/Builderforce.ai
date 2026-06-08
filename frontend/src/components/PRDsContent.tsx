@@ -14,10 +14,9 @@ export interface PRDsContentProps {
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'Draft',
-  reviewed: 'Reviewed',
-  approved: 'Approved',
+  ready: 'Ready',
   in_progress: 'In progress',
-  done: 'Done',
+  complete: 'Complete',
 };
 
 export function PRDsContent({ projectId, projectName }: PRDsContentProps) {

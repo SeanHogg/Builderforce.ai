@@ -13,6 +13,7 @@ import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { SourceControlContent } from './sourcecontrol/SourceControlContent';
 import { IntegrationCredentialsManager } from './integrations/IntegrationCredentialsManager';
 import { BoardConnectionsManager } from './integrations/BoardConnectionsManager';
+import { AgentAssignmentPanel } from './AgentAssignmentPanel';
 
 export type ProjectPanelTab =
   | 'details'
@@ -572,7 +573,17 @@ export function ProjectDetailsPanel({
           )}
 
           {activeTab === 'prds' && (
-            <PRDsContent projectId={project.id} projectName={project.name} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={cardStyle}>
+                <AgentAssignmentPanel
+                  scope="architecture"
+                  scopeId={project.id}
+                  title="Architecture analysis agent"
+                  emptyHint="No agent assigned to run this project's architecture analysis. Assign one to have it perform the analysis; otherwise the default model is used."
+                />
+              </div>
+              <PRDsContent projectId={project.id} projectName={project.name} />
+            </div>
           )}
 
           {activeTab === 'brainChat' && (

@@ -17,8 +17,9 @@
 import { Hono } from 'hono';
 import { eq, and } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { specs, workflows, agentHosts } from '../../infrastructure/database/schema';
+import { specs, workflows, agentHosts, projects, tasks } from '../../infrastructure/database/schema';
 import { verifySecret } from '../../infrastructure/auth/HashService';
+import { linkSpecToTask } from '../../application/prd/taskPrd';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -69,6 +70,8 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
       prd?:       string;
       archSpec?:  string;
       taskList?:  unknown;
+      /** When present, link this spec to the task as its primary PRD (agent write-back). */
+      taskId?:    number;
     }>();
 
     if (!body.goal?.trim()) return c.json({ error: 'goal is required' }, 400);
@@ -104,6 +107,17 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
           updatedAt: now,
         },
       });
+
+    // Agent write-back: link the pushed spec to its task as the primary PRD, so
+    // "agents update the task's PRD as they work" lands on the task's linked spec.
+    if (body.taskId != null) {
+      const [task] = await db
+        .select({ id: tasks.id })
+        .from(tasks)
+        .innerJoin(projects, eq(projects.id, tasks.projectId))
+        .where(and(eq(tasks.id, body.taskId), eq(projects.tenantId, tenantId)));
+      if (task) await linkSpecToTask(db, { taskId: body.taskId, specId, tenantId, isPrimary: true });
+    }
 
     const [row] = await db.select().from(specs).where(eq(specs.id, specId));
     return c.json(row, 201);

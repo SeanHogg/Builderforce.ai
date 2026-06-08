@@ -687,7 +687,6 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
     surfaces: [
       { icon: '🏠', title: 'Dashboard', desc: 'Your command center: workspace health, recent runs, and what your AI workforce is doing right now.', href: '/dashboard' },
       { icon: '💡', title: 'Brain Storm', desc: 'Describe what you need in plain language; the Brain turns it into projects, datasets, and agents.', href: '/brainstorm' },
-      { icon: '🏛', title: 'Architect', desc: 'Plan multi-step solutions and system designs before a single line of code is written.', href: '/architect' },
       { icon: '💻', title: 'IDE Workspace', desc: 'Monaco editor, terminal, AI chat, and file explorer in one collaborative project workspace.', href: '/ide' },
       { icon: '🎓', title: 'Training', desc: 'In-browser WebGPU LoRA fine-tuning up to 2B parameters with a live evaluation engine — zero GPU bills.', href: '/training' },
     ],
