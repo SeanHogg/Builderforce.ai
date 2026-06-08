@@ -26,6 +26,8 @@ describe('AgentExecutionPanel — steering echo', () => {
     vi.resetAllMocks();
     vi.spyOn(builderforceApi.runtimeApi, 'listForTask').mockResolvedValue([RUNNING_EXECUTION]);
     vi.spyOn(builderforceApi.runtimeApi, 'taskFileChanges').mockResolvedValue({ changes: [] });
+    // Logs/Timeline tabs resolve cloud-agent names from this list on mount.
+    vi.spyOn(builderforceApi.cloudAgents, 'list').mockResolvedValue([]);
     vi.spyOn(builderforceApi.runtimeApi, 'trace').mockResolvedValue({
       execution: RUNNING_EXECUTION,
       trace: { source: 'test', usageSnapshots: [], toolEvents: [] },
