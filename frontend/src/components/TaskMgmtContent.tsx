@@ -1476,7 +1476,7 @@ export function TaskMgmtContent({
               </div>
             ) : drawerTab === 'prd' ? (
               <div style={{ flex: 1, overflow: 'auto' }}>
-                <TaskPrdTab projectId={drawerTask.projectId} />
+                <TaskPrdTab taskId={drawerTask.id} projectId={drawerTask.projectId} />
               </div>
             ) : (
             <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>

@@ -1,14 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { specsApi, type Spec } from '@/lib/builderforceApi';
+import { specsApi, taskSpecsApi, type Spec } from '@/lib/builderforceApi';
 import { ChatMessageContent } from '../ChatMessageContent';
 
 /**
  * "PRD" tab of the task details panel. Agents hand off between swimlanes via a
- * PRD, so the task panel surfaces the project's PRD(s) rendered as markdown,
- * with an expand-to-fullscreen control for comfortable reading.
+ * PRD, so this surfaces the PRD(s) rendered as markdown with an expand-to-
+ * fullscreen control.
+ *
+ * Two modes:
+ *  - task-scoped (taskId given): the PRDs LINKED to the task (many-to-many), with
+ *    attach / detach / set-primary controls and a Generate button when none exist.
+ *  - project-scoped (no taskId): a read-only view of the project's PRDs.
  */
 
 const selectStyle: React.CSSProperties = {
@@ -20,6 +25,10 @@ const iconBtn: React.CSSProperties = {
   border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-base)',
   color: 'var(--text-secondary)', cursor: 'pointer',
 };
+const textBtn: React.CSSProperties = {
+  padding: '6px 12px', fontSize: 12, border: '1px solid var(--border-subtle)', borderRadius: 8,
+  background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer',
+};
 
 function ExpandIcon() {
   return (
@@ -29,33 +38,72 @@ function ExpandIcon() {
   );
 }
 
-export function TaskPrdTab({ projectId }: { projectId: number }) {
+export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: number }) {
   const [specs, setSpecs] = useState<Spec[]>([]);
+  const [projectSpecs, setProjectSpecs] = useState<Spec[]>([]); // attach candidates (task mode)
   const [selectedId, setSelectedId] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     setLoading(true);
-    specsApi.list(projectId)
-      .then((list) => {
-        const withPrd = list.filter((s) => s.prd);
-        setSpecs(withPrd);
-        if (withPrd.length > 0) setSelectedId(withPrd[0].id);
-      })
-      .catch(() => setSpecs([]))
-      .finally(() => setLoading(false));
-  }, [projectId]);
+    try {
+      if (taskId != null) {
+        const [linked, all] = await Promise.all([taskSpecsApi.list(taskId), specsApi.list(projectId)]);
+        setSpecs(linked);
+        setProjectSpecs(all);
+        setSelectedId((prev) => (linked.some((s) => s.id === prev) ? prev : linked[0]?.id ?? ''));
+      } else {
+        const list = (await specsApi.list(projectId)).filter((s) => s.prd);
+        setSpecs(list);
+        setSelectedId((prev) => (list.some((s) => s.id === prev) ? prev : list[0]?.id ?? ''));
+      }
+    } catch {
+      setSpecs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [taskId, projectId]);
+
+  useEffect(() => { load(); }, [load]);
 
   const selected = specs.find((s) => s.id === selectedId) ?? null;
+  const linkable = projectSpecs.filter((p) => !specs.some((s) => s.id === p.id));
+
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    try { await fn(); await load(); } finally { setBusy(false); }
+  };
 
   if (loading) return <div style={{ padding: 20, fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>;
 
+  // Empty state — task mode offers Generate; project mode just informs.
   if (specs.length === 0) {
     return (
       <div style={{ padding: 20, fontSize: 13, color: 'var(--text-muted)' }}>
-        No PRD has been drafted for this project yet. Use the project&apos;s PRDs tab or Brain to draft one — agents
-        use it to hand off work between swimlanes.
+        {taskId != null ? (
+          <>
+            <p style={{ marginTop: 0 }}>This task has no PRD yet. Agents use the PRD to understand the goal and hand off
+              work between swimlanes.</p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" style={{ ...textBtn, opacity: busy ? 0.6 : 1 }} disabled={busy}
+                onClick={() => run(() => taskSpecsApi.generate(taskId))}>
+                {busy ? 'Generating…' : 'Generate PRD'}
+              </button>
+              {linkable.length > 0 && (
+                <select style={selectStyle} defaultValue="" disabled={busy}
+                  onChange={(e) => e.target.value && run(() => taskSpecsApi.attach(taskId, e.target.value, true))}>
+                  <option value="">Attach existing PRD…</option>
+                  {linkable.map((s) => <option key={s.id} value={s.id}>{s.goal || `PRD ${s.id.slice(0, 8)}`}</option>)}
+                </select>
+              )}
+            </div>
+          </>
+        ) : (
+          <>No PRD has been drafted for this project yet. Use Brain or the PRDs tab to draft one — agents use it to hand
+            off work between swimlanes.</>
+        )}
       </div>
     );
   }
@@ -71,15 +119,42 @@ export function TaskPrdTab({ projectId }: { projectId: number }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         {specs.length > 1 ? (
           <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} style={{ ...selectStyle, flex: 1 }}>
-            {specs.map((s) => <option key={s.id} value={s.id}>{s.goal || `PRD ${s.id.slice(0, 8)}`} ({s.status})</option>)}
+            {specs.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.isPrimary ? '★ ' : ''}{s.goal || `PRD ${s.id.slice(0, 8)}`} ({s.status})
+              </option>
+            ))}
           </select>
         ) : (
-          <div style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{selected?.goal || 'PRD'} <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}>· {selected?.status}</span></div>
+          <div style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>
+            {selected?.isPrimary ? '★ ' : ''}{selected?.goal || 'PRD'}
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}> · {selected?.status}</span>
+          </div>
         )}
         <button type="button" style={iconBtn} title="Expand to full screen" aria-label="Expand to full screen" onClick={() => setFullscreen(true)}>
           <ExpandIcon />
         </button>
       </div>
+
+      {/* Task-mode link controls */}
+      {taskId != null && selected && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+          {!selected.isPrimary && (
+            <button type="button" style={{ ...textBtn, opacity: busy ? 0.6 : 1 }} disabled={busy}
+              onClick={() => run(() => taskSpecsApi.setPrimary(taskId, selected.id))}>Set primary</button>
+          )}
+          <button type="button" style={{ ...textBtn, opacity: busy ? 0.6 : 1 }} disabled={busy}
+            onClick={() => run(() => taskSpecsApi.detach(taskId, selected.id))}>Detach</button>
+          {linkable.length > 0 && (
+            <select style={selectStyle} value="" disabled={busy}
+              onChange={(e) => e.target.value && run(() => taskSpecsApi.attach(taskId, e.target.value))}>
+              <option value="">Attach existing PRD…</option>
+              {linkable.map((s) => <option key={s.id} value={s.id}>{s.goal || `PRD ${s.id.slice(0, 8)}`}</option>)}
+            </select>
+          )}
+        </div>
+      )}
+
       {body}
 
       {fullscreen && createPortal(
