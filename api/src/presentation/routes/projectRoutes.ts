@@ -8,7 +8,7 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { ProjectStatus, TenantRole } from '../../domain/shared/types';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentHostProjects, agentHosts, ideProjectChatMessages, ideProjectChats, projectInsightEvents, projects, sourceControlIntegrations, tasks, tenants, workflows } from '../../infrastructure/database/schema';
+import { agentHostProjects, agentHosts, ideProjectChatMessages, ideProjectChats, projectInsightEvents, projects, sourceControlIntegrations, specs, tasks, tenants, workflows } from '../../infrastructure/database/schema';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 
 type SourceControlProvider = 'github' | 'bitbucket';
@@ -325,11 +325,24 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         .map((row) => [row.projectId as number, Number(row.workflowCount)]),
     );
 
+    // Which projects already have an architecture PRD (Architect analysis output).
+    // Drives the "Run Architecture Analysis" vs "View Arch Analysis" button. Single
+    // grouped query — no per-project round trip.
+    const archSpecRows = await db
+      .select({ projectId: specs.projectId })
+      .from(specs)
+      .where(and(eq(specs.tenantId, tenantId), inArray(specs.projectId, projectIds), eq(specs.kind, 'architecture')))
+      .groupBy(specs.projectId);
+    const hasArchByProject = new Set<number>(
+      archSpecRows.filter((row) => row.projectId != null).map((row) => row.projectId as number),
+    );
+
     return c.json({
       projects: plainProjects.map((project) => ({
         ...project,
         taskCount: taskCountByProject.get(project.id) ?? 0,
         workflowCount: workflowCountByProject.get(project.id) ?? 0,
+        hasArchitecturePrd: hasArchByProject.has(project.id),
         assignedAgentHost: assignedAgentHostByProject.get(project.id) ?? null,
         startDate: dateRangeByProject.get(project.id)?.startDate ?? null,
         dueDate: dateRangeByProject.get(project.id)?.dueDate ?? null,

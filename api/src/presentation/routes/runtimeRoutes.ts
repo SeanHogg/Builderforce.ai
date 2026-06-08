@@ -12,6 +12,7 @@ import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { loadCapabilityContext } from '../../application/artifact/capabilityContext';
 import { ideProxy, type ChatMessage } from '../../application/llm/LlmProxyService';
 import { recordUsageRow } from '../../application/llm/usageLedger';
+import { ensureTaskPrdRecord } from '../../application/prd/taskPrd';
 import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
@@ -305,12 +306,6 @@ async function dispatchToAgentHost(env: RuntimeHonoEnv['Bindings'], agentHostId:
   return response.ok;
 }
 
-/** Extract the assistant text from a gateway chat-completion response. */
-function extractCompletion(raw: unknown): string {
-  const c = (raw as { choices?: Array<{ message?: { content?: unknown } }> } | null)?.choices?.[0];
-  return typeof c?.message?.content === 'string' ? c.message.content : '';
-}
-
 /**
  * Run an execution server-side via the gateway when NO online agentHost took the
  * dispatch (Auto / cloud agent with no self-hosted runtime). The task is run as a
@@ -354,13 +349,6 @@ async function loadGovernanceContext(db: Db, tenantId: number, projectId: number
  * `PRD.md` into the actual repo) requires a connected runtime — see gap register.
  * Here we persist to the canonical PRD store the PRD tab reads.
  */
-/** Associate a spec (PRD) with the task so it surfaces on the task's PRD tab. */
-async function linkSpecToTask(db: Db, taskId: number, specId: string): Promise<void> {
-  try {
-    await db.update(tasks).set({ specId, updatedAt: new Date() }).where(eq(tasks.id, taskId));
-  } catch { /* best-effort */ }
-}
-
 /** Record a durable, agent-attributed file change for the task's Changes tab. */
 async function recordTaskFileChange(
   env: Env,
@@ -386,8 +374,8 @@ function gitSecret(env: Env): string {
 }
 
 /**
- * Task-scoped PRD. Each TASK has its own PRD (via `tasks.spec_id`), drafted with
- * an attribution header naming the authoring agent (downstream agents append
+ * Task-scoped PRD. Each TASK has its own PRD (via the `task_specs` link), drafted
+ * with an attribution header naming the authoring agent (downstream agents append
  * their own attributed updates). The PRD is:
  *   • persisted to its task-scoped spec (PRD tab),
  *   • recorded as an agent-attributed `PRD.md` change (Changes tab),
@@ -405,47 +393,14 @@ async function ensureTaskPrd(
   agentLabel: string,
   model: string | undefined,
 ): Promise<string> {
-  // Task-scoped lookup: the task's own spec, not the project's.
-  let existingSpecId: string | undefined;
-  try {
-    const [t] = await db.select({ specId: tasks.specId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
-    if (t?.specId) {
-      const [spec] = await db.select({ id: specs.id, prd: specs.prd }).from(specs).where(eq(specs.id, t.specId)).limit(1);
-      if (spec?.prd?.trim()) return spec.prd.trim(); // this task already has a PRD — reuse
-      existingSpecId = spec?.id;
-    }
-  } catch { /* fall through to generate */ }
+  // Shared generate→persist→link core (reused by the on-demand endpoint + swimlane gate).
+  const ensured = await ensureTaskPrdRecord(db, env, { taskId, tenantId, projectId, title: taskRow.title, description: taskRow.description, agentLabel, model });
+  if (!ensured) return '';
+  const { prd, status } = ensured;
+  if (status === 'reused') return prd; // already had a PRD — no new commit/notification
 
-  let prdBody = '';
-  try {
-    const gen = await ideProxy(env).complete({
-      messages: [
-        { role: 'system', content: 'You are a senior product architect drafting the WIP Product Requirements Document (PRD) that every downstream agent on this task will share. Write a concise, well-structured PRD in GitHub-flavored markdown covering: Problem & Goal, Target users / ICP roles (if relevant), Scope, Functional requirements, Acceptance criteria, and Out of scope. Output ONLY the PRD markdown — no preamble and no bracketed placeholders.' },
-        { role: 'user', content: `Task: ${taskRow.title}\n\n${taskRow.description ?? ''}`.trim() },
-      ],
-      ...(model ? { model } : {}),
-      useCase: 'prd_generation',
-    });
-    if (gen.response.status < 400) prdBody = extractCompletion(await gen.response.json().catch(() => null));
-  } catch { /* generation failed — return '' */ }
-
-  prdBody = prdBody.trim();
-  if (!prdBody) return '';
-
-  // Attribution header — each agent's update is signed so the PRD is auditable.
-  const prd = `> **PRD** — drafted by ${agentLabel} · task #${taskId}\n> _Each agent that updates this PRD signs its change below._\n\n${prdBody}`;
-
-  const specId = existingSpecId ?? crypto.randomUUID();
-  try {
-    const now = new Date();
-    await db
-      .insert(specs)
-      .values({ id: specId, tenantId, projectId, goal: taskRow.title, status: 'draft', prd, createdAt: now, updatedAt: now })
-      .onConflictDoUpdate({ target: [specs.id], set: { prd, goal: taskRow.title, updatedAt: now } });
-  } catch { /* persistence failed — still use the PRD as context below */ }
-
-  await linkSpecToTask(db, taskId, specId);
-  await recordTaskFileChange(env, tenantId, taskId, executionId, 'PRD.md', existingSpecId ? 'modified' : 'created', agentLabel);
+  const fileChange = status === 'updated' ? 'modified' : 'created';
+  await recordTaskFileChange(env, tenantId, taskId, executionId, 'PRD.md', fileChange, agentLabel);
 
   // Land PRD.md as a real pending change on the ticket's git branch (branch + PR).
   const committed = await commitPrdAsPendingChange(db, gitSecret(env), tenantId, taskId, taskRow.title, prd, agentLabel);
@@ -458,7 +413,7 @@ async function ensureTaskPrd(
   }
 
   notifyExecutionSubscribers(executionId, {
-    type: 'file_change', executionId, path: 'PRD.md', change: existingSpecId ? 'modified' : 'created', ts: new Date().toISOString(),
+    type: 'file_change', executionId, path: 'PRD.md', change: fileChange, ts: new Date().toISOString(),
   });
   notifyExecutionSubscribers(executionId, {
     type: 'message', executionId, role: 'assistant',

@@ -76,6 +76,18 @@ function parseArgs(raw: string): unknown {
   }
 }
 
+/**
+ * Trim the in-memory transcript to the history window before sending it to the
+ * model. Slicing can orphan a leading `tool` message whose owning assistant
+ * `tool_calls` turn fell off the front — the gateway rejects a tool result that
+ * doesn't follow its call — so drop any such leading tool messages.
+ */
+function windowed(convo: ChatCompletionMessage[]): ChatCompletionMessage[] {
+  let w = convo.slice(-HISTORY_WINDOW);
+  while (w.length > 0 && w[0].role === 'tool') w = w.slice(1);
+  return w;
+}
+
 export function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation {
   const { persistence, resolveSystemPrompt, stream } = useBrainConfig();
   const {
@@ -101,6 +113,14 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   const [pendingAttachments, setPendingAttachments] = useState<ChatInputAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const autoRepliedChatIdRef = useRef<number | null>(null);
+  // Rich in-memory transcript per chat: the FULL working message list (user +
+  // assistant tool-call turns + tool results + assistant text), keyed by chat
+  // id. The chat tables only persist user + final-assistant text, so without
+  // this the next turn would rebuild from text-only history and lose every
+  // entity id / tool result the model resolved in the prior turn — causing it
+  // to conflate records across turns (e.g. write company B's name onto company
+  // A). The transcript carries that grounding forward for the session lifetime.
+  const transcriptRef = useRef<Map<number, ChatCompletionMessage[]>>(new Map());
 
   // Load messages whenever the active chat changes.
   useEffect(() => {
@@ -144,23 +164,44 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   }, [resolveSystemPrompt, systemPrompt, modality, extraSystem]);
 
   /**
-   * Run the tool-call agent loop against a working message array and persist
-   * the final assistant text to `id`. Shared by `send` and auto-reply.
+   * Seed a chat's rich transcript from persisted (text-only) history the FIRST
+   * time we touch it this session, then append the new user turn. Prior turns
+   * can only carry text (the chat tables have no tool columns), but every turn
+   * from here on accumulates its full tool-call context in-memory. A no-op seed
+   * on later turns means the rich, forward-accumulated transcript always wins.
+   */
+  const startUserTurn = useCallback((id: number, priorHistory: BrainMessage[], userContent: string) => {
+    let convo = transcriptRef.current.get(id);
+    if (!convo) {
+      convo = priorHistory.map((m) => ({
+        role: m.role as ChatCompletionMessage['role'],
+        content: m.content,
+      }));
+      transcriptRef.current.set(id, convo);
+    }
+    convo.push({ role: 'user', content: userContent });
+  }, []);
+
+  /**
+   * Run the tool-call agent loop against the chat's rich transcript and persist
+   * the final assistant text to `id`. Shared by `send` and auto-reply. The
+   * caller must have appended the triggering user turn via `startUserTurn`.
    */
   const runAgentLoop = useCallback(
-    async (id: number, history: BrainMessage[]) => {
-      const working: ChatCompletionMessage[] = [
-        { role: 'system', content: resolvedSystemPrompt },
-        ...history.slice(-HISTORY_WINDOW).map((m) => ({
-          role: m.role as ChatCompletionMessage['role'],
-          content: m.content,
-        })),
-      ];
+    async (id: number) => {
+      // The transcript accumulates the assistant tool-call turns + tool results
+      // in place, so it carries forward to the next turn (the whole fix).
+      const convo = transcriptRef.current.get(id) ?? [];
+      transcriptRef.current.set(id, convo);
 
       const tools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined;
 
       for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
         setStreamingText('');
+        const working: ChatCompletionMessage[] = [
+          { role: 'system', content: resolvedSystemPrompt },
+          ...windowed(convo),
+        ];
         const result = await stream(
           { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model },
           { onTextDelta: (d) => setStreamingText((s) => s + d) },
@@ -168,7 +209,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
 
         if (result.toolCalls.length > 0 && runTool) {
           // Assistant requested tools: record the turn, run each, feed results back.
-          working.push({
+          convo.push({
             role: 'assistant',
             content: result.text,
             tool_calls: result.toolCalls.map((tc) => ({
@@ -183,18 +224,19 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
             // before anything runs. A declined call returns a recoverable result
             // so the model can revise instead of the action silently happening.
             if (confirmTool && !(await confirmTool({ name: tc.name, args }))) {
-              working.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify({ cancelled: true, reason: 'User declined this action.' }) });
+              convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify({ cancelled: true, reason: 'User declined this action.' }) });
               continue;
             }
             const out = await runTool(tc.name, args);
-            working.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out ?? null) });
+            convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out ?? null) });
           }
           setStreamingText('');
           continue;
         }
 
-        // Final text — persist and finish.
+        // Final text — record in the transcript, persist, and finish.
         const finalText = result.text.trim() || 'No response.';
+        convo.push({ role: 'assistant', content: finalText });
         const [assistantMsg] = await persistence.sendMessages(id, [{ role: 'assistant', content: finalText }]);
         setMessages((prev) => [...prev, assistantMsg]);
         setStreamingText('');
@@ -205,7 +247,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       setStreamingText('');
       setError('The assistant kept calling tools without finishing. Try rephrasing.');
     },
-    [persistence, stream, resolvedSystemPrompt, toolSpecs, runTool, confirmTool, onActivity],
+    [persistence, stream, resolvedSystemPrompt, toolSpecs, runTool, confirmTool, onActivity, model],
   );
 
   const send = useCallback(
@@ -241,14 +283,17 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       try {
         const [userMsg] = await persistence.sendMessages(id, [{ role: 'user', content, metadata }]);
         setMessages((prev) => [...prev, userMsg]);
-        await runAgentLoop(id, [...messages, userMsg]);
+        // `messages` (closure) is the prior persisted history, excluding the
+        // just-sent user turn — seed from it once, then append this turn.
+        startUserTurn(id, messages, content);
+        await runAgentLoop(id);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Send failed');
       } finally {
         setSending(false);
       }
     },
-    [persistence, chatId, sending, pendingAttachments, messages, ensureChatId, runAgentLoop],
+    [persistence, chatId, sending, pendingAttachments, messages, ensureChatId, runAgentLoop, startUserTurn],
   );
 
   // Auto-reply when a chat loads with a trailing unanswered user message
@@ -261,10 +306,12 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     autoRepliedChatIdRef.current = chatId;
     setSending(true);
     setError('');
-    runAgentLoop(chatId, messages)
+    // Seed from everything before the trailing user message, then append it.
+    startUserTurn(chatId, messages.slice(0, -1), last.content);
+    runAgentLoop(chatId)
       .catch((e) => setError(e instanceof Error ? e.message : 'Reply failed'))
       .finally(() => setSending(false));
-  }, [chatId, loadingMessages, sending, messages, runAgentLoop]);
+  }, [chatId, loadingMessages, sending, messages, runAgentLoop, startUserTurn]);
 
   const copyMessage = useCallback(async (msg: BrainMessage) => {
     try {

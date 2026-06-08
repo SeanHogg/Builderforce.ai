@@ -463,7 +463,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
             style={{
               background: 'var(--panel-drawer-bg)',
               borderLeft: '1px solid var(--border-subtle)',
-              width: 'min(640px, 90vw)',
+              width: 'min(1100px, 92vw)',
               maxHeight: '100vh',
               display: 'flex',
               flexDirection: 'column',

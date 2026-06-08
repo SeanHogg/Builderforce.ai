@@ -132,7 +132,7 @@ export const auditEventTypeEnum = pgEnum('audit_event_type', [
 export const agentHostStatusEnum = pgEnum('agent_host_status', ['active', 'inactive', 'suspended']);
 export const agentHostDirectoryStatusEnum = pgEnum('agent_host_directory_status', ['pending', 'synced', 'error']);
 
-export const specStatusEnum = pgEnum('spec_status', ['draft', 'reviewed', 'approved', 'in_progress', 'done']);
+export const specStatusEnum = pgEnum('spec_status', ['draft', 'ready', 'in_progress', 'complete']);
 export const workflowTypeEnum = pgEnum('workflow_type', ['feature', 'bugfix', 'refactor', 'planning', 'adversarial', 'custom']);
 export const workflowStatusEnum = pgEnum('workflow_status', ['pending', 'running', 'completed', 'failed', 'cancelled']);
 export const workflowTaskStatusEnum = pgEnum('workflow_task_status', ['pending', 'running', 'completed', 'failed', 'cancelled']);
@@ -711,8 +711,8 @@ export const tasks = pgTable('tasks', {
   persona:           varchar('persona', { length: 50 }),
   /** Origin board provider label for tickets synced from an external board. */
   source:            varchar('source', { length: 24 }),
-  /** PRD/spec this ticket executes against (the auditable contract). */
-  specId:            uuid('spec_id').references(() => specs.id, { onDelete: 'set null' }),
+  // PRD/spec link moved to the task_specs junction (0098): a task references 1..N
+  // project PRDs (one optional primary) — see `taskSpecs` below.
   archived:          boolean('archived').notNull().default(false),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
@@ -1079,12 +1079,25 @@ export const specs = pgTable('specs', {
   agentHostId:      integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
   goal:        text('goal').notNull(),
   status:      specStatusEnum('status').notNull().default('draft'),
+  kind:        varchar('kind', { length: 32 }).notNull().default('feature'),  // 'feature' | 'architecture' (Architect analysis output)
   prd:         text('prd'),
   archSpec:    text('arch_spec'),
   taskList:    text('task_list'),      // JSON array stored as text (jsonb not available in all envs)
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
+
+// Task <-> PRD (many-to-many, 0098). A task references 1..N project PRDs; at most
+// one is marked primary (the canonical PRD the agent reads/writes for the task).
+export const taskSpecs = pgTable('task_specs', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056)
+  taskId:     integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  specId:     uuid('spec_id').notNull().references(() => specs.id, { onDelete: 'cascade' }),
+  isPrimary:  boolean('is_primary').notNull().default(false),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [unique('uq_task_specs').on(t.taskId, t.specId)]);
 
 // ---------------------------------------------------------------------------
 // Workflows — structured execution records for orchestrated multi-step plans

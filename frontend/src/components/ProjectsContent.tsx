@@ -6,8 +6,9 @@ import type { Project } from '@/lib/types';
 import type { AgentHost } from '@/lib/builderforceApi';
 import { fetchProjects, createProject, deleteProject } from '@/lib/api';
 import { agentHosts } from '@/lib/builderforceApi';
-import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
+import { ProjectDetailsPanel, type ProjectPanelTab } from '@/components/ProjectDetailsPanel';
 import { ProjectCard } from '@/components/ProjectCard';
+import { ArchitectureAnalysisButton } from '@/components/ArchitectureAnalysisButton';
 import { DeleteProjectDialog } from '@/components/DeleteProjectDialog';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { UpgradeModal } from '@/components/UpgradeModal';
@@ -41,6 +42,7 @@ export function ProjectsContent() {
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailsProject, setDetailsProject] = useState<Project | null>(null);
+  const [detailsInitialTab, setDetailsInitialTab] = useState<ProjectPanelTab>('details');
   const [viewMode, setViewMode] = useState<ProjectsView>('card');
   const [selectedAgentHost, setSelectedAgentHost] = useState<AgentHost | null>(null);
   const [confirmProject, setConfirmProject] = useState<Project | null>(null);
@@ -90,6 +92,16 @@ export function ProjectsContent() {
       setIsCreating(false);
     }
   };
+
+  // Open the project Information panel on a given tab. Used by the Details button
+  // (default tab) and the Architect button (PRDs to read the result, or
+  // Integrations when a repo must be mapped before a run can start).
+  const openDetails = (project: Project, tab: ProjectPanelTab = 'details') => {
+    setDetailsInitialTab(tab);
+    setDetailsProject(project);
+  };
+  const onArchitectureView = (project: Project) => openDetails(project, 'prds');
+  const onArchitectureConfigureRepo = (project: Project) => openDetails(project, 'integrations');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -251,9 +263,11 @@ export function ProjectsContent() {
             <ProjectCard
               key={project.id}
               project={project}
-              onCardClick={setDetailsProject}
-              onDetailsClick={setDetailsProject}
+              onCardClick={(p) => openDetails(p)}
+              onDetailsClick={(p) => openDetails(p)}
               onOpenIde={(p) => router.push(`/ide/dashboard?project=${p.id}`)}
+              onArchitectureView={onArchitectureView}
+              onArchitectureConfigureRepo={onArchitectureConfigureRepo}
               showDetailsButton
               onAssignedAgentClick={(ac) => {
                 const agentHost = agentHostList.find((c) => c.id === ac.id);
@@ -272,9 +286,9 @@ export function ProjectsContent() {
           ))}
         </div>
       ) : viewMode === 'calendar' ? (
-        <ScheduleCalendar items={projects} getLabel={(p) => p.name} onSelect={setDetailsProject} />
+        <ScheduleCalendar items={projects} getLabel={(p) => p.name} onSelect={(p) => openDetails(p)} />
       ) : viewMode === 'gantt' ? (
-        <ScheduleGantt items={projects} getLabel={(p) => p.name} onSelect={setDetailsProject} noun="project" />
+        <ScheduleGantt items={projects} getLabel={(p) => p.name} onSelect={(p) => openDetails(p)} noun="project" />
       ) : (
         <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
@@ -322,7 +336,7 @@ export function ProjectsContent() {
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <button
                         type="button"
-                        onClick={() => setDetailsProject(project)}
+                        onClick={() => openDetails(project)}
                         aria-label="Details"
                         style={{
                           padding: 6,
@@ -414,6 +428,11 @@ export function ProjectsContent() {
                       >
                         <span style={{ fontSize: 18 }} aria-hidden>💻</span>
                       </button>
+                      <ArchitectureAnalysisButton
+                        project={project}
+                        onView={onArchitectureView}
+                        onConfigureRepo={onArchitectureConfigureRepo}
+                      />
                       <button
                         type="button"
                         onClick={() => setConfirmProject(project)}
@@ -443,6 +462,7 @@ export function ProjectsContent() {
         <ProjectDetailsPanel
           project={detailsProject}
           open={!!detailsProject}
+          initialTab={detailsInitialTab}
           onClose={() => setDetailsProject(null)}
           onProjectUpdate={(updated) => {
             setProjects((prev) => prev.map((p) => (p.id === updated.id ? { ...updated, assignedAgentHost: p.assignedAgentHost } : p)));

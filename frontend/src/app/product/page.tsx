@@ -27,7 +27,7 @@ export default function ProductPage() {
 
       <style>{`
         .pp { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
-        .pp-hero { text-align: center; padding: 72px 24px 40px; max-width: 820px; margin: 0 auto; }
+        .pp-hero { text-align: center; padding: 44px 24px 40px; max-width: 820px; margin: 0 auto; }
         .pp-eyebrow {
           font-family: var(--font-display); font-size: 0.78rem; font-weight: 600;
           letter-spacing: 0.16em; text-transform: uppercase; color: var(--coral-bright); margin-bottom: 14px;

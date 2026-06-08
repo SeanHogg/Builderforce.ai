@@ -1077,6 +1077,7 @@ export interface Spec {
   goal: string;
   prd: string | null;
   status: string;
+  kind?: string;
   archSpec?: string | null;
   taskList?: string | null;
   createdAt?: string;
@@ -1089,14 +1090,18 @@ export const specsApi = {
     goal: string;
     prd?: string | null;
     status?: 'draft' | 'reviewed' | 'approved' | 'in_progress' | 'done';
+    kind?: 'feature' | 'architecture';
   }) =>
     request<Spec>('/api/specs', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
 
-  list: (projectId?: number | null) => {
-    const q = projectId != null ? `?projectId=${projectId}` : '';
+  list: (projectId?: number | null, kind?: string) => {
+    const params = new URLSearchParams();
+    if (projectId != null) params.set('projectId', String(projectId));
+    if (kind != null) params.set('kind', kind);
+    const q = params.toString() ? `?${params.toString()}` : '';
     return request<{ specs: Spec[] }>(`/api/specs${q}`).then((r) => r.specs ?? []);
   },
 

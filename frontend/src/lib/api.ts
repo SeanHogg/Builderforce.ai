@@ -504,79 +504,24 @@ export async function ensureWorkforceAgentBridge(agentId: string): Promise<numbe
 }
 
 // ---------------------------------------------------------------------------
-// Repo analysis — the Architect / Digital-Transformation tool (/api/repo-analysis)
+// Architect analysis (/api/repo-analysis)
+//
+// Launched from a project: creates an "Architecture Analysis" Task on the board
+// and kicks off the cloud analysis run. The result is written back as an
+// architecture PRD. A repo must be mapped first — otherwise the API returns 409
+// { error: 'no_repo' }, which the caller handles inline (no global error toast).
 // ---------------------------------------------------------------------------
 
-export type RepoAnalysisStatus =
-  | 'queued' | 'fetching' | 'analyzing' | 'writing_back' | 'completed' | 'partial' | 'failed';
-
-export type RepoAnalysisKind =
-  | 'diagnostic' | 'recommendation' | 'business' | 'arch_4plus1' | 'antipatterns' | 'principles';
-
-export interface RepoAnalysisRun {
-  id: string;
-  projectId: number;
-  status: RepoAnalysisStatus;
-  stage: string | null;
-  progress: number;
-  recommendation: 'brownfield' | 'greenfield' | 'parallel' | null;
-  effectivePlan: string | null;
-  tokensUsed: number;
-  error: string | null;
-  createdAt: string;
-  finishedAt: string | null;
+export interface RunArchitectureAnalysisResult {
+  task: { id: number; projectId: number; status: string };
+  executionId: number | null;
 }
 
-export interface RepoAnalysisArtifactMeta {
-  id: string;
-  kind: RepoAnalysisKind;
-  title: string | null;
-  status: 'complete' | 'skipped' | 'failed';
-  model: string | null;
-  tokens: number | null;
-  updatedAt: string;
-}
-
-export interface RepoAnalysisEvidenceMeta {
-  id: string;
-  repoId: string;
-  provider: string | null;
-  defaultBranch: string | null;
-  status: 'complete' | 'partial' | 'failed';
-  tokenEstimate: number | null;
-}
-
-export interface RepoAnalysisArtifact extends RepoAnalysisArtifactMeta {
-  bodyMd: string | null;
-  dataJson: string | null;
-}
-
-export async function startRepoAnalysis(projectId: number | string): Promise<{ run: RepoAnalysisRun }> {
-  return apiRequest<{ run: RepoAnalysisRun }>(`/api/repo-analysis/projects/${projectId}/runs`, {
+export async function runArchitectureAnalysis(projectId: number | string): Promise<RunArchitectureAnalysisResult> {
+  return apiRequest<RunArchitectureAnalysisResult>(`/api/repo-analysis/projects/${projectId}/architect`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({}),
-    // 409 = no_repo: an expected, user-actionable state the Architect page
-    // renders inline. Don't surface it as a global error toast / support ticket.
     expectedErrors: [409],
   });
-}
-
-export async function fetchRepoAnalysisRuns(projectId: number | string): Promise<{ runs: RepoAnalysisRun[]; total: number }> {
-  return apiRequest<{ runs: RepoAnalysisRun[]; total: number }>(`/api/repo-analysis/projects/${projectId}/runs`);
-}
-
-export async function fetchRepoAnalysisRun(runId: string): Promise<{
-  run: RepoAnalysisRun;
-  artifacts: RepoAnalysisArtifactMeta[];
-  evidence: RepoAnalysisEvidenceMeta[];
-}> {
-  return apiRequest(`/api/repo-analysis/runs/${runId}`);
-}
-
-export async function fetchRepoAnalysisArtifact(
-  runId: string,
-  kind: RepoAnalysisKind,
-): Promise<{ artifact: RepoAnalysisArtifact }> {
-  return apiRequest<{ artifact: RepoAnalysisArtifact }>(`/api/repo-analysis/runs/${runId}/artifacts/${kind}`);
 }

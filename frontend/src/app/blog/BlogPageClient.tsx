@@ -22,7 +22,7 @@ export default function BlogPageClient() {
         .blog-hero {
           max-width: 1100px;
           margin: 0 auto;
-          padding: 64px 24px 40px;
+          padding: 44px 24px 40px;
           text-align: center;
           animation: blog-fadeInUp 0.7s ease-out both;
         }

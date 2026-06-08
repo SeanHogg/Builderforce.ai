@@ -13,7 +13,7 @@ vi.mock('@/lib/builderforceApi', async (importOriginal) => {
 
 import { buildPlatformActions, buildPlatformCapabilities, focusDomainsForPath, type PlatformActionContext } from './platformActions';
 import * as api from '@/lib/api';
-import { tasksApi } from '@/lib/builderforceApi';
+import { tasksApi, integrationsApi } from '@/lib/builderforceApi';
 
 function makeCtx() {
   const navigate = vi.fn();
@@ -180,6 +180,36 @@ describe('mutation flags (drive the HITL confirm gate)', () => {
     expect(pred({ domain: 'tasks', method: 'create' })).toBe(true);
     expect(pred({ domain: 'tasks', method: 'list' })).toBe(false);
     expect(pred({ domain: 'nope', method: 'nope' })).toBe(false);
+  });
+});
+
+describe('update actions whitelist the patch body (no blind-forward)', () => {
+  it('drops the identifier + undeclared keys, keeps only declared fields the model set', async () => {
+    const update = vi.fn().mockResolvedValue({ ok: true });
+    const spy = vi.spyOn(integrationsApi, 'update').mockImplementation(update);
+    try {
+      const cap = buildPlatformCapabilities(makeCtx().ctx).find((c) => c.domain === 'integrations' && c.method === 'update')!;
+      // The model (mis-grounded) sends the identifier, the intended field, an
+      // undeclared/hallucinated key, AND a stray declared field it shouldn't.
+      await cap.run({ id: 'int_1', baseUrl: 'https://new.example', hallucinated: 'x' });
+      expect(spy).toHaveBeenCalledWith('int_1', { baseUrl: 'https://new.example' });
+      const [, patch] = spy.mock.calls[0];
+      expect(patch).not.toHaveProperty('id');
+      expect(patch).not.toHaveProperty('hallucinated');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('only forwards the fields actually present (true partial update)', async () => {
+    const spy = vi.spyOn(integrationsApi, 'update').mockResolvedValue({ ok: true } as never);
+    try {
+      const cap = buildPlatformCapabilities(makeCtx().ctx).find((c) => c.domain === 'integrations' && c.method === 'update')!;
+      await cap.run({ id: 'int_1', name: 'Renamed' });
+      expect(spy).toHaveBeenCalledWith('int_1', { name: 'Renamed' });
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 

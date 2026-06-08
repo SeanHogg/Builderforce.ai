@@ -93,6 +93,36 @@ function f<T = unknown>(args: Json, key: string): T {
   return args[key] as T;
 }
 
+/**
+ * Build a partial-update capability whose patch body is whitelisted to exactly
+ * the declared, non-identifier fields the model actually set.
+ *
+ * The schema's `required` keys ARE the record identifier(s) for every
+ * update/patch action; everything else is the updatable body. The old
+ * `a as Parameters<…>[1]` blind-forwarded the WHOLE args bag as the patch —
+ * identifier included, plus any stray/hallucinated key — so a misfiring model
+ * could overwrite a field it never meant to (e.g. write a new name onto an
+ * "update the url" call). `run` gets the raw args (for the identifier) and the
+ * sanitized `patch`.
+ */
+function updateCap(
+  base: Omit<PlatformCapability, 'mutates' | 'run'>,
+  run: (args: Json, patch: Json) => Promise<unknown> | unknown,
+): PlatformCapability {
+  const props = ((base.parameters as Json).properties ?? {}) as Json;
+  const required = new Set(((base.parameters as Json).required as string[] | undefined) ?? []);
+  const bodyKeys = Object.keys(props).filter((k) => !required.has(k));
+  return {
+    ...base,
+    mutates: true,
+    run: (a) => {
+      const patch: Json = {};
+      for (const k of bodyKeys) if (a[k] !== undefined) patch[k] = a[k];
+      return run(a, patch);
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Navigation route table — every user-facing app page.
 // ---------------------------------------------------------------------------
@@ -176,7 +206,7 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     { domain: 'projects', method: 'list', mutates: false, description: 'List all projects in the workspace.', parameters: EMPTY, run: () => fetchProjects() },
     { domain: 'projects', method: 'get', mutates: false, description: 'Get one project by id.', parameters: obj({ id: { ...N, description: 'Project id' } }, ['id']), run: (a) => fetchProject(f(a, 'id')) },
     { domain: 'projects', method: 'create', mutates: true, description: 'Create a new project. modality is the IDE type: designer (app builder), video, or llm.', parameters: obj({ name: S, description: S, template: S, modality: { type: 'string', enum: ['designer', 'video', 'llm'] } }, ['name']), run: (a) => createProject(a as Parameters<typeof createProject>[0]) },
-    { domain: 'projects', method: 'update', mutates: true, description: "Update a project's name/description/status/modality.", parameters: obj({ id: N, name: S, description: S, status: S, modality: S }, ['id']), run: (a) => updateProject(f(a, 'id'), a as Parameters<typeof updateProject>[1]) },
+    updateCap({ domain: 'projects', method: 'update', description: "Update a project's name/description/status/modality.", parameters: obj({ id: N, name: S, description: S, status: S, modality: S }, ['id']) }, (a, patch) => updateProject(f(a, 'id'), patch as Parameters<typeof updateProject>[1])),
     { domain: 'projects', method: 'delete', mutates: true, description: 'Delete a project permanently.', parameters: obj({ id: N }, ['id']), run: (a) => deleteProject(f(a, 'id')) },
     { domain: 'projects', method: 'check_key', mutates: false, description: 'Check whether a project key (prefix) is available.', parameters: obj({ key: S }, ['key']), run: (a) => checkProjectKeyAvailable(f(a, 'key')) },
 
@@ -190,7 +220,7 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     { domain: 'tasks', method: 'list', mutates: false, description: 'List tasks, optionally filtered by project.', parameters: obj({ projectId: N }), run: (a) => tasksApi.list(f(a, 'projectId')) },
     { domain: 'tasks', method: 'get', mutates: false, description: 'Get a task by id.', parameters: obj({ id: N }, ['id']), run: (a) => tasksApi.get(f(a, 'id')) },
     { domain: 'tasks', method: 'create', mutates: true, description: 'Create a task on a project board.', parameters: obj({ projectId: N, title: S, description: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }, dueDate: S }, ['projectId', 'title']), run: (a) => tasksApi.create(a as Parameters<typeof tasksApi.create>[0]) },
-    { domain: 'tasks', method: 'update', mutates: true, description: "Update a task (title, description, status/lane, priority, dueDate, archived).", parameters: obj({ id: N, title: S, description: S, status: S, priority: S, dueDate: S, archived: B }, ['id']), run: (a) => tasksApi.update(f(a, 'id'), a as Parameters<typeof tasksApi.update>[1]) },
+    updateCap({ domain: 'tasks', method: 'update', description: "Update a task (title, description, status/lane, priority, dueDate, archived).", parameters: obj({ id: N, title: S, description: S, status: S, priority: S, dueDate: S, archived: B }, ['id']) }, (a, patch) => tasksApi.update(f(a, 'id'), patch as Parameters<typeof tasksApi.update>[1])),
     { domain: 'tasks', method: 'delete', mutates: true, description: 'Delete a task.', parameters: obj({ id: N }, ['id']), run: (a) => tasksApi.delete(f(a, 'id')) },
     { domain: 'tasks', method: 'move', mutates: true, description: 'Move a task to another project board (re-keys it).', parameters: obj({ id: N, projectId: N }, ['id', 'projectId']), run: (a) => tasksApi.move(f(a, 'id'), f(a, 'projectId')) },
 
@@ -212,7 +242,7 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     { domain: 'workflows', method: 'run_targets', mutates: false, description: 'Available run targets (agent hosts + cloud agents).', parameters: EMPTY, run: () => workflowDefinitions.runTargets() },
     { domain: 'workflows', method: 'triggers', mutates: false, description: 'Trigger activation state (webhook/schedule/rss/email) for a workflow.', parameters: obj({ id: S }, ['id']), run: (a) => workflowDefinitions.triggers(f(a, 'id')) },
     { domain: 'workflows', method: 'create', mutates: true, description: 'Create a workflow definition.', parameters: obj({ name: S, description: S, projectId: N }, ['name']), run: (a) => workflowDefinitions.create(a as Parameters<typeof workflowDefinitions.create>[0]) },
-    { domain: 'workflows', method: 'update', mutates: true, description: 'Update a workflow definition (name/description/project).', parameters: obj({ id: S, name: S, description: S, projectId: N }, ['id']), run: (a) => workflowDefinitions.update(f(a, 'id'), a as Parameters<typeof workflowDefinitions.update>[1]) },
+    updateCap({ domain: 'workflows', method: 'update', description: 'Update a workflow definition (name/description/project).', parameters: obj({ id: S, name: S, description: S, projectId: N }, ['id']) }, (a, patch) => workflowDefinitions.update(f(a, 'id'), patch as Parameters<typeof workflowDefinitions.update>[1])),
     { domain: 'workflows', method: 'remove', mutates: true, description: 'Delete a workflow definition.', parameters: obj({ id: S }, ['id']), run: (a) => workflowDefinitions.remove(f(a, 'id')) },
     { domain: 'workflows', method: 'run', mutates: true, description: 'Run a workflow on a target. runtime is "host" (pass agentHostId) or "cloud" (pass cloudAgentRef).', parameters: obj({ id: S, runtime: { type: 'string', enum: ['host', 'cloud'] }, agentHostId: N, cloudAgentRef: S }, ['id', 'runtime']), run: (a) => workflowDefinitions.run(f(a, 'id'), { runtime: f(a, 'runtime'), agentHostId: f(a, 'agentHostId') ?? null, cloudAgentRef: f(a, 'cloudAgentRef') ?? null }) },
     { domain: 'workflows', method: 'import_yaml', mutates: true, description: 'Create a workflow from a YAML/JSON document.', parameters: obj({ name: S, yaml: S }, ['name', 'yaml']), run: (a) => workflowDefinitions.importYaml(f(a, 'name'), f(a, 'yaml')) },
@@ -224,7 +254,7 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     { domain: 'specs', method: 'list', mutates: false, description: 'List specs/PRDs, optionally by project.', parameters: obj({ projectId: N }), run: (a) => specsApi.list(f(a, 'projectId')) },
     { domain: 'specs', method: 'get', mutates: false, description: 'Get a spec by id.', parameters: obj({ id: S }, ['id']), run: (a) => specsApi.get(f(a, 'id')) },
     { domain: 'specs', method: 'create', mutates: true, description: 'Create a spec/PRD (goal + optional markdown PRD).', parameters: obj({ projectId: N, goal: S, prd: S, status: { type: 'string', enum: ['draft', 'reviewed', 'approved', 'in_progress', 'done'] } }, ['goal']), run: (a) => specsApi.create(a as Parameters<typeof specsApi.create>[0]) },
-    { domain: 'specs', method: 'patch', mutates: true, description: 'Update a spec (goal/status/prd).', parameters: obj({ id: S, goal: S, status: S, prd: S }, ['id']), run: (a) => specsApi.patch(f(a, 'id'), a as Parameters<typeof specsApi.patch>[1]) },
+    updateCap({ domain: 'specs', method: 'patch', description: 'Update a spec (goal/status/prd).', parameters: obj({ id: S, goal: S, status: S, prd: S }, ['id']) }, (a, patch) => specsApi.patch(f(a, 'id'), patch as Parameters<typeof specsApi.patch>[1])),
     { domain: 'specs', method: 'delete', mutates: true, description: 'Delete a spec.', parameters: obj({ id: S }, ['id']), run: (a) => specsApi.delete(f(a, 'id')) },
 
     // ---- Approvals (human-in-the-loop) -----------------------------------
@@ -239,7 +269,7 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     { domain: 'cloud_agents', method: 'list_mine', mutates: false, description: "The workspace's own agents (any publish state).", parameters: EMPTY, run: () => listMyAgents() },
     { domain: 'cloud_agents', method: 'list_purchased', mutates: false, description: 'Agents acquired from the marketplace.', parameters: EMPTY, run: () => listPurchasedAgents() },
     { domain: 'cloud_agents', method: 'create', mutates: true, description: 'Create a cloud agent. engine: builderforce-v1 (pi runner) or builderforce-v2 (Claude Agent SDK).', parameters: obj({ name: S, title: S, bio: S, skills: arr(S), baseModel: S, engine: { type: 'string', enum: ['builderforce-v1', 'builderforce-v2'] }, published: B }, ['name']), run: (a) => createCloudAgent(a as unknown as Parameters<typeof createCloudAgent>[0]) },
-    { domain: 'cloud_agents', method: 'update', mutates: true, description: 'Update a cloud agent (metadata or publish status).', parameters: obj({ agentId: S, name: S, title: S, bio: S, published: B, status: S }, ['agentId']), run: (a) => updateAgent(f(a, 'agentId'), a as Parameters<typeof updateAgent>[1]) },
+    updateCap({ domain: 'cloud_agents', method: 'update', description: 'Update a cloud agent (metadata or publish status).', parameters: obj({ agentId: S, name: S, title: S, bio: S, published: B, status: S }, ['agentId']) }, (a, patch) => updateAgent(f(a, 'agentId'), patch as Parameters<typeof updateAgent>[1])),
     { domain: 'cloud_agents', method: 'delete', mutates: true, description: 'Delete a cloud agent.', parameters: obj({ agentId: S }, ['agentId']), run: (a) => deleteAgent(f(a, 'agentId')) },
 
     // ---- Agent hosts (self-hosted runners) -------------------------------
@@ -278,24 +308,24 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     // ---- Cron jobs -------------------------------------------------------
     { domain: 'cron', method: 'list', mutates: false, description: 'List cron jobs on an agent host.', parameters: obj({ agentHostId: N, projectId: N }, ['agentHostId']), run: (a) => cronApi.list(f(a, 'agentHostId'), f(a, 'projectId')) },
     { domain: 'cron', method: 'create', mutates: true, description: 'Create a cron job (name + cron schedule) on an agent host.', parameters: obj({ agentHostId: N, name: S, schedule: S, taskId: N, projectId: N, enabled: B }, ['agentHostId', 'name', 'schedule']), run: (a) => cronApi.create(f(a, 'agentHostId'), a as Parameters<typeof cronApi.create>[1]) },
-    { domain: 'cron', method: 'update', mutates: true, description: 'Update a cron job.', parameters: obj({ agentHostId: N, jobId: S, name: S, schedule: S, enabled: B }, ['agentHostId', 'jobId']), run: (a) => cronApi.update(f(a, 'agentHostId'), f(a, 'jobId'), a as Parameters<typeof cronApi.update>[2]) },
+    updateCap({ domain: 'cron', method: 'update', description: 'Update a cron job.', parameters: obj({ agentHostId: N, jobId: S, name: S, schedule: S, enabled: B }, ['agentHostId', 'jobId']) }, (a, patch) => cronApi.update(f(a, 'agentHostId'), f(a, 'jobId'), patch as Parameters<typeof cronApi.update>[2])),
     { domain: 'cron', method: 'delete', mutates: true, description: 'Delete a cron job.', parameters: obj({ agentHostId: N, jobId: S }, ['agentHostId', 'jobId']), run: (a) => cronApi.delete(f(a, 'agentHostId'), f(a, 'jobId')) },
 
     // ---- Integrations + repos + board connections ------------------------
     { domain: 'integrations', method: 'list', mutates: false, description: 'List integration credentials (GitHub/GitLab/Jira/etc). Secrets are never returned.', parameters: obj({ projectId: N }), run: (a) => integrationsApi.list(f(a, 'projectId') != null ? { projectId: f(a, 'projectId') } : undefined) },
     { domain: 'integrations', method: 'create', mutates: true, description: 'Store an integration credential.', parameters: obj({ provider: { type: 'string', enum: ['github', 'gitlab', 'bitbucket', 'jira', 'confluence', 'freshservice'] }, name: S, baseUrl: S, projectId: N, credentials: obj({}) }, ['provider', 'name', 'credentials']), run: (a) => integrationsApi.create(a as unknown as Parameters<typeof integrationsApi.create>[0]) },
-    { domain: 'integrations', method: 'update', mutates: true, description: 'Update an integration credential.', parameters: obj({ id: S, name: S, baseUrl: S, isEnabled: B }, ['id']), run: (a) => integrationsApi.update(f(a, 'id'), a as Parameters<typeof integrationsApi.update>[1]) },
+    updateCap({ domain: 'integrations', method: 'update', description: 'Update an integration credential.', parameters: obj({ id: S, name: S, baseUrl: S, isEnabled: B }, ['id']) }, (a, patch) => integrationsApi.update(f(a, 'id'), patch as Parameters<typeof integrationsApi.update>[1])),
     { domain: 'integrations', method: 'remove', mutates: true, description: 'Delete an integration credential.', parameters: obj({ id: S }, ['id']), run: (a) => integrationsApi.remove(f(a, 'id')) },
     { domain: 'integrations', method: 'test', mutates: false, description: 'Test an integration connection.', parameters: obj({ id: S }, ['id']), run: (a) => integrationsApi.test(f(a, 'id')) },
     { domain: 'repos', method: 'list', mutates: false, description: 'List git repositories linked to a project.', parameters: obj({ projectId: N }, ['projectId']), run: (a) => reposApi.list(f(a, 'projectId')) },
     { domain: 'repos', method: 'add', mutates: true, description: 'Link a git repository to a project.', parameters: obj({ projectId: N, provider: S, owner: S, repo: S, defaultBranch: S, isDefault: B }, ['projectId', 'provider', 'owner', 'repo']), run: (a) => reposApi.add(f(a, 'projectId'), a as unknown as Parameters<typeof reposApi.add>[1]) },
-    { domain: 'repos', method: 'update', mutates: true, description: 'Update a linked repository.', parameters: obj({ id: S, defaultBranch: S, isDefault: B }, ['id']), run: (a) => reposApi.update(f(a, 'id'), a as Parameters<typeof reposApi.update>[1]) },
+    updateCap({ domain: 'repos', method: 'update', description: 'Update a linked repository.', parameters: obj({ id: S, defaultBranch: S, isDefault: B }, ['id']) }, (a, patch) => reposApi.update(f(a, 'id'), patch as Parameters<typeof reposApi.update>[1])),
     { domain: 'repos', method: 'set_default', mutates: true, description: 'Mark a repository as the project default.', parameters: obj({ id: S }, ['id']), run: (a) => reposApi.setDefault(f(a, 'id')) },
     { domain: 'repos', method: 'remove', mutates: true, description: 'Unlink a repository.', parameters: obj({ id: S }, ['id']), run: (a) => reposApi.remove(f(a, 'id')) },
     { domain: 'repos', method: 'list_pull_requests', mutates: false, description: 'List pull requests for a project.', parameters: obj({ projectId: N }, ['projectId']), run: (a) => reposApi.listPullRequests(f(a, 'projectId')) },
     { domain: 'board_connections', method: 'list', mutates: false, description: 'List external board connections (Jira/GitHub PM sync).', parameters: obj({ projectId: N }), run: (a) => boardConnectionsApi.list(f(a, 'projectId')) },
     { domain: 'board_connections', method: 'create', mutates: true, description: 'Create an external board connection.', parameters: obj({ projectId: N, provider: S, credentialId: S, externalBoardId: S }, ['projectId', 'provider']), run: (a) => boardConnectionsApi.create(a as unknown as Parameters<typeof boardConnectionsApi.create>[0]) },
-    { domain: 'board_connections', method: 'update', mutates: true, description: 'Update an external board connection.', parameters: obj({ id: S, status: S, externalBoardId: S }, ['id']), run: (a) => boardConnectionsApi.update(f(a, 'id'), a as Parameters<typeof boardConnectionsApi.update>[1]) },
+    updateCap({ domain: 'board_connections', method: 'update', description: 'Update an external board connection.', parameters: obj({ id: S, status: S, externalBoardId: S }, ['id']) }, (a, patch) => boardConnectionsApi.update(f(a, 'id'), patch as Parameters<typeof boardConnectionsApi.update>[1])),
     { domain: 'board_connections', method: 'remove', mutates: true, description: 'Delete an external board connection.', parameters: obj({ id: S }, ['id']), run: (a) => boardConnectionsApi.remove(f(a, 'id')) },
     { domain: 'board_connections', method: 'sync', mutates: true, description: 'Trigger a sync for an external board connection.', parameters: obj({ id: S }, ['id']), run: (a) => boardConnectionsApi.sync(f(a, 'id')) },
 
@@ -303,7 +333,7 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     { domain: 'boards', method: 'list', mutates: false, description: 'List autonomous agent boards.', parameters: EMPTY, run: () => boardsApi.list() },
     { domain: 'boards', method: 'get', mutates: false, description: 'Get a board (with swimlanes).', parameters: obj({ boardId: S }, ['boardId']), run: (a) => boardsApi.get(f(a, 'boardId')) },
     { domain: 'boards', method: 'create', mutates: true, description: 'Create an autonomous board for a project.', parameters: obj({ projectId: N, name: S, maxConcurrentTickets: N }, ['projectId', 'name']), run: (a) => boardsApi.create(a as Parameters<typeof boardsApi.create>[0]) },
-    { domain: 'boards', method: 'update', mutates: true, description: 'Update a board.', parameters: obj({ boardId: S, name: S, maxConcurrentTickets: N }, ['boardId']), run: (a) => boardsApi.update(f(a, 'boardId'), a as Parameters<typeof boardsApi.update>[1]) },
+    updateCap({ domain: 'boards', method: 'update', description: 'Update a board.', parameters: obj({ boardId: S, name: S, maxConcurrentTickets: N }, ['boardId']) }, (a, patch) => boardsApi.update(f(a, 'boardId'), patch as Parameters<typeof boardsApi.update>[1])),
     { domain: 'boards', method: 'remove', mutates: true, description: 'Delete a board.', parameters: obj({ boardId: S }, ['boardId']), run: (a) => boardsApi.remove(f(a, 'boardId')) },
     { domain: 'boards', method: 'dispatches', mutates: false, description: 'Live per-agent dispatch status across a board.', parameters: obj({ boardId: S }, ['boardId']), run: (a) => boardsApi.dispatches(f(a, 'boardId')) },
     { domain: 'swimlanes', method: 'list', mutates: false, description: 'List a board’s swimlanes.', parameters: obj({ boardId: S }, ['boardId']), run: (a) => boardsApi.swimlanes.list(f(a, 'boardId')) },
@@ -316,7 +346,7 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     // ---- Channels + workspace dirs ---------------------------------------
     { domain: 'channels', method: 'list', mutates: false, description: 'List messaging channels on an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (a) => channelsApi.list(f(a, 'agentHostId')) },
     { domain: 'channels', method: 'create', mutates: true, description: 'Create a messaging channel (whatsapp/telegram/slack/discord/teams/webhook…).', parameters: obj({ agentHostId: N, platform: S, name: S, config: S, enabled: B }, ['agentHostId', 'platform', 'name']), run: (a) => channelsApi.create(f(a, 'agentHostId'), a as Parameters<typeof channelsApi.create>[1]) },
-    { domain: 'channels', method: 'update', mutates: true, description: 'Update a messaging channel.', parameters: obj({ agentHostId: N, channelId: S, name: S, enabled: B }, ['agentHostId', 'channelId']), run: (a) => channelsApi.update(f(a, 'agentHostId'), f(a, 'channelId'), a as Parameters<typeof channelsApi.update>[2]) },
+    updateCap({ domain: 'channels', method: 'update', description: 'Update a messaging channel.', parameters: obj({ agentHostId: N, channelId: S, name: S, enabled: B }, ['agentHostId', 'channelId']) }, (a, patch) => channelsApi.update(f(a, 'agentHostId'), f(a, 'channelId'), patch as Parameters<typeof channelsApi.update>[2])),
     { domain: 'channels', method: 'delete', mutates: true, description: 'Delete a messaging channel.', parameters: obj({ agentHostId: N, channelId: S }, ['agentHostId', 'channelId']), run: (a) => channelsApi.delete(f(a, 'agentHostId'), f(a, 'channelId')) },
     { domain: 'workspace', method: 'list_directories', mutates: false, description: 'List synced directories on an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (a) => workspaceApi.listDirectories(f(a, 'agentHostId')) },
     { domain: 'workspace', method: 'list_files', mutates: false, description: 'List files in a synced directory.', parameters: obj({ agentHostId: N, directoryId: N }, ['agentHostId', 'directoryId']), run: (a) => workspaceApi.listFiles(f(a, 'agentHostId'), f(a, 'directoryId')) },
@@ -325,7 +355,7 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     // ---- Governance (SOC 2) ----------------------------------------------
     { domain: 'governance_soc2', method: 'list_controls', mutates: false, description: 'List SOC 2 controls and their status.', parameters: EMPTY, run: () => governanceApi.soc2.listControls() },
     { domain: 'governance_soc2', method: 'seed', mutates: true, description: 'Seed the SOC 2 control set.', parameters: EMPTY, run: () => governanceApi.soc2.seed() },
-    { domain: 'governance_soc2', method: 'patch_control', mutates: true, description: 'Update a SOC 2 control (status/owner/notes).', parameters: obj({ id: S, status: { type: 'string', enum: ['not_started', 'in_progress', 'ready', 'out_of_scope'] }, notes: S }, ['id']), run: (a) => governanceApi.soc2.patchControl(f(a, 'id'), a as Parameters<typeof governanceApi.soc2.patchControl>[1]) },
+    updateCap({ domain: 'governance_soc2', method: 'patch_control', description: 'Update a SOC 2 control (status/owner/notes).', parameters: obj({ id: S, status: { type: 'string', enum: ['not_started', 'in_progress', 'ready', 'out_of_scope'] }, notes: S }, ['id']) }, (a, patch) => governanceApi.soc2.patchControl(f(a, 'id'), patch as Parameters<typeof governanceApi.soc2.patchControl>[1])),
     { domain: 'governance_soc2', method: 'add_evidence', mutates: true, description: 'Attach evidence to a SOC 2 control.', parameters: obj({ id: S, title: S, evidenceType: S, url: S, note: S }, ['id', 'title', 'evidenceType']), run: (a) => governanceApi.soc2.addEvidence(f(a, 'id'), a as Parameters<typeof governanceApi.soc2.addEvidence>[1]) },
 
     // ---- Agile: planning poker + retrospectives --------------------------
@@ -345,7 +375,7 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     { domain: 'prompts', method: 'list', mutates: false, description: 'List the workspace’s prompts.', parameters: EMPTY, run: () => promptLibraryApi.list() },
     { domain: 'prompts', method: 'get', mutates: false, description: 'Get a prompt by id.', parameters: obj({ id: S }, ['id']), run: (a) => promptLibraryApi.get(f(a, 'id')) },
     { domain: 'prompts', method: 'create', mutates: true, description: 'Create a prompt template.', parameters: obj({ title: S, body: S, description: S, category: S, visibility: { type: 'string', enum: ['private', 'tenant', 'public'] } }, ['title', 'body']), run: (a) => promptLibraryApi.create(a as unknown as Parameters<typeof promptLibraryApi.create>[0]) },
-    { domain: 'prompts', method: 'update', mutates: true, description: 'Update a prompt’s metadata.', parameters: obj({ id: S, title: S, description: S, visibility: S }, ['id']), run: (a) => promptLibraryApi.update(f(a, 'id'), a as Parameters<typeof promptLibraryApi.update>[1]) },
+    updateCap({ domain: 'prompts', method: 'update', description: 'Update a prompt’s metadata.', parameters: obj({ id: S, title: S, description: S, visibility: S }, ['id']) }, (a, patch) => promptLibraryApi.update(f(a, 'id'), patch as Parameters<typeof promptLibraryApi.update>[1])),
     { domain: 'prompts', method: 'add_version', mutates: true, description: 'Add a new version to a prompt.', parameters: obj({ id: S, body: S, notes: S }, ['id', 'body']), run: (a) => promptLibraryApi.addVersion(f(a, 'id'), a as Parameters<typeof promptLibraryApi.addVersion>[1]) },
     { domain: 'prompts', method: 'remove', mutates: true, description: 'Delete a prompt.', parameters: obj({ id: S }, ['id']), run: (a) => promptLibraryApi.remove(f(a, 'id')) },
 
@@ -358,7 +388,7 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     // ---- Brain chats + agent-host chat sessions --------------------------
     { domain: 'brain', method: 'list', mutates: false, description: 'List Brain chats, optionally filtered by project.', parameters: obj({ projectId: S, limit: N }), run: (a) => brain.listChats(a as Parameters<typeof brain.listChats>[0]) },
     { domain: 'brain', method: 'create', mutates: true, description: 'Create a new Brain chat.', parameters: obj({ title: S, projectId: N }), run: (a) => brain.createChat(a as Parameters<typeof brain.createChat>[0]) },
-    { domain: 'brain', method: 'update', mutates: true, description: 'Rename a Brain chat or move it to a project.', parameters: obj({ id: N, title: S, projectId: N }, ['id']), run: (a) => brain.updateChat(f(a, 'id'), a as Parameters<typeof brain.updateChat>[1]) },
+    updateCap({ domain: 'brain', method: 'update', description: 'Rename a Brain chat or move it to a project.', parameters: obj({ id: N, title: S, projectId: N }, ['id']) }, (a, patch) => brain.updateChat(f(a, 'id'), patch as Parameters<typeof brain.updateChat>[1])),
     { domain: 'brain', method: 'delete', mutates: true, description: 'Archive a Brain chat.', parameters: obj({ id: N }, ['id']), run: (a) => brain.deleteChat(f(a, 'id')) },
     { domain: 'brain', method: 'summarize', mutates: true, description: 'Summarize a Brain chat and store the summary.', parameters: obj({ chatId: N }, ['chatId']), run: (a) => brain.summarizeChat(f(a, 'chatId')) },
     { domain: 'chat_sessions', method: 'list', mutates: false, description: 'List chat sessions on an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (a) => chatSessionsApi.list(f(a, 'agentHostId')) },

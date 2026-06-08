@@ -69,7 +69,7 @@ export default function LandingPage() {
           flex-direction: column;
           align-items: center;
           text-align: center;
-          padding: 80px 24px 64px;
+          padding: 40px 24px 64px;
           gap: 0;
         }
 
@@ -503,7 +503,7 @@ export default function LandingPage() {
 
         @media (max-width: 640px) {
           .lp-cta-box { padding: 40px 24px; }
-          .lp-hero { padding: 60px 20px 48px; }
+          .lp-hero { padding: 28px 20px 48px; }
         }
       `}</style>
 
@@ -602,7 +602,7 @@ export default function LandingPage() {
             <h2 className="section-title">
               <span className="agentHost-accent">⟩</span> Builderforce vs. Conventional Workflows
             </h2>
-            <p style={{maxWidth: '800px',margin:'0 auto 32px',color:'var(--text-secondary)'}}>
+            <p style={{maxWidth:'none',margin:'0 0 32px',color:'var(--text-secondary)'}}>
               Purpose‑built for AI agents from the ground up — not another cloud notebook or plugin.
             </p>
             <div style={{overflowX:'auto'}}>
@@ -643,7 +643,7 @@ export default function LandingPage() {
             <h2 className="section-title">
               <span className="agentHost-accent">⟩</span> {COMPARE.teaser.title}
             </h2>
-            <p style={{maxWidth:'720px',margin:'0 auto 28px',color:'var(--text-secondary)'}}>
+            <p style={{maxWidth:'none',margin:'0 auto 28px',color:'var(--text-secondary)'}}>
               {COMPARE.teaser.blurb}
             </p>
             <div className="lp-grid" style={{gap:'14px',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))'}}>
@@ -739,7 +739,7 @@ export default function LandingPage() {
             <h2 className="section-title">
               <span className="agentHost-accent">⟩</span> Latest from the blog
             </h2>
-            <p style={{maxWidth:'720px',margin:'0 auto 32px',color:'var(--text-secondary)',textAlign:'center'}}>
+            <p style={{maxWidth:'none',width:'100%',margin:'0 auto 32px',color:'var(--text-secondary)',textAlign:'center'}}>
               Deep dives, tutorials, and best practices for building and deploying
               AI agents — from WebGPU LoRA training to multi-agent orchestration.
             </p>
