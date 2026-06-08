@@ -44,7 +44,7 @@ function WorkforcePageInner() {
   };
 
   return (
-    <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
+    <div style={{ padding: 24, width: '100%' }}>
       <div className="page-header" style={{ marginBottom: 16 }}>
         <h1 className="page-title" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-strong)', margin: 0 }}>Workforce</h1>
         <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>{active.sub}</p>
