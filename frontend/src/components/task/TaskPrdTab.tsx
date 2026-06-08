@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { specsApi, taskSpecsApi, type Spec } from '@/lib/builderforceApi';
 import { ChatMessageContent } from '../ChatMessageContent';
 import { Select } from '@/components/Select';
+import { PrdCreateModal } from '../prd/PrdCreateModal';
 
 /**
  * "PRD" tab of the task details panel. Agents hand off between swimlanes via a
@@ -46,6 +47,7 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -77,6 +79,15 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
     try { await fn(); await load(); } finally { setBusy(false); }
   };
 
+  // Create a project-level PRD and link it to this task as primary.
+  const createModal = showCreate && taskId != null ? (
+    <PrdCreateModal
+      projectId={projectId}
+      onClose={() => setShowCreate(false)}
+      onCreated={async (spec) => { setShowCreate(false); await run(() => taskSpecsApi.attach(taskId, spec.id, true)); }}
+    />
+  ) : null;
+
   if (loading) return <div style={{ padding: 20, fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>;
 
   // Empty state — task mode offers Generate; project mode just informs.
@@ -90,8 +101,10 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button type="button" style={{ ...textBtn, opacity: busy ? 0.6 : 1 }} disabled={busy}
                 onClick={() => run(() => taskSpecsApi.generate(taskId))}>
-                {busy ? 'Generating…' : 'Generate PRD'}
+                {busy ? 'Generating…' : 'Generate with AI'}
               </button>
+              <button type="button" style={{ ...textBtn, opacity: busy ? 0.6 : 1 }} disabled={busy}
+                onClick={() => setShowCreate(true)}>Create PRD</button>
               {linkable.length > 0 && (
                 <Select style={selectStyle} defaultValue="" disabled={busy}
                   onChange={(e) => e.target.value && run(() => taskSpecsApi.attach(taskId, e.target.value, true))}>
@@ -105,6 +118,7 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
           <>No PRD has been drafted for this project yet. Use Brain or the PRDs tab to draft one — agents use it to hand
             off work between swimlanes.</>
         )}
+        {createModal}
       </div>
     );
   }
@@ -146,6 +160,8 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
           )}
           <button type="button" style={{ ...textBtn, opacity: busy ? 0.6 : 1 }} disabled={busy}
             onClick={() => run(() => taskSpecsApi.detach(taskId, selected.id))}>Detach</button>
+          <button type="button" style={{ ...textBtn, opacity: busy ? 0.6 : 1 }} disabled={busy}
+            onClick={() => setShowCreate(true)}>Create PRD</button>
           {linkable.length > 0 && (
             <Select style={selectStyle} value="" disabled={busy}
               onChange={(e) => e.target.value && run(() => taskSpecsApi.attach(taskId, e.target.value))}>
@@ -156,6 +172,7 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
         </div>
       )}
 
+      {createModal}
       {body}
 
       {fullscreen && createPortal(

@@ -6,6 +6,7 @@ import { specsApi, type Spec } from '@/lib/builderforceApi';
 import { ChatMessageContent } from './ChatMessageContent';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { PrdCreateModal } from './prd/PrdCreateModal';
 
 export interface PRDsContentProps {
   projectId: number;
@@ -25,10 +26,6 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [addGoal, setAddGoal] = useState('');
-  const [addPrd, setAddPrd] = useState('');
-  const [addPreview, setAddPreview] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
   const [selectedSpec, setSelectedSpec] = useState<Spec | null>(null);
   const [editPrd, setEditPrd] = useState('');
   const [editPreview, setEditPreview] = useState(true);
@@ -51,29 +48,6 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
   useEffect(() => {
     loadSpecs();
   }, [loadSpecs]);
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!addGoal.trim()) return;
-    setIsCreating(true);
-    setError(null);
-    try {
-      const spec = await specsApi.create({
-        projectId,
-        goal: addGoal.trim(),
-        prd: addPrd.trim() || null,
-        status: 'draft',
-      });
-      setSpecs((prev) => [spec, ...prev]);
-      setShowAddModal(false);
-      setAddGoal('');
-      setAddPrd('');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create PRD');
-    } finally {
-      setIsCreating(false);
-    }
-  };
 
   const handleSaveEdit = async () => {
     if (!selectedSpec) return;
@@ -321,133 +295,11 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
 
       {/* Add PRD modal */}
       {showAddModal && (
-        <div
-          className="modal-overlay"
-          role="presentation"
-          style={{ zIndex: 10004, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-          onClick={(e) => e.target === e.currentTarget && setShowAddModal(false)}
-        >
-          <div
-            style={{
-              background: 'var(--panel-drawer-bg)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 12,
-              padding: 24,
-              maxWidth: 720,
-              width: '100%',
-              maxHeight: '90vh',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>New PRD</div>
-            <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: 14, flex: 1, minHeight: 0 }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Goal / Title *</label>
-                <input
-                  required
-                  autoFocus
-                  value={addGoal}
-                  onChange={(e) => setAddGoal(e.target.value)}
-                  placeholder="e.g. User authentication flow"
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    fontSize: 13,
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
-                    background: 'var(--bg-deep)',
-                    color: 'var(--text-primary)',
-                  }}
-                />
-              </div>
-              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Content (Markdown)</label>
-                  <button
-                    type="button"
-                    onClick={() => setAddPreview((p) => !p)}
-                    style={{
-                      fontSize: 12,
-                      padding: '4px 8px',
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 6,
-                      color: 'var(--text-secondary)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {addPreview ? 'Edit' : 'Preview'}
-                  </button>
-                </div>
-                <div style={{ flex: 1, minHeight: 200, display: 'grid', gridTemplateColumns: addPreview ? '1fr 1fr' : '1fr', gap: 12 }}>
-                  <textarea
-                    value={addPrd}
-                    onChange={(e) => setAddPrd(e.target.value)}
-                    placeholder="# Overview&#10;&#10;Describe the product requirements..."
-                    style={{
-                      width: '100%',
-                      minHeight: 200,
-                      padding: '10px 12px',
-                      fontSize: 13,
-                      fontFamily: 'var(--font-mono)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
-                      background: 'var(--bg-deep)',
-                      color: 'var(--text-primary)',
-                      resize: 'vertical',
-                    }}
-                  />
-                  {addPreview && (
-                    <div
-                      style={{
-                        minHeight: 200,
-                        padding: 12,
-                        background: 'var(--bg-deep)',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 8,
-                        overflow: 'auto',
-                        fontSize: 13,
-                      }}
-                    >
-                      <div className="chat-message-markdown">
-                        {addPrd ? <ChatMessageContent content={addPrd} /> : <span style={{ color: 'var(--text-muted)' }}>Preview will appear here</span>}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-                <button
-                  type="button"
-                  onClick={() => { setShowAddModal(false); setAddGoal(''); setAddPrd(''); }}
-                  style={{ padding: '8px 16px', fontSize: 13, color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreating || !addGoal.trim()}
-                  style={{
-                    padding: '8px 18px',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: 10,
-                    cursor: isCreating || !addGoal.trim() ? 'not-allowed' : 'pointer',
-                    opacity: isCreating || !addGoal.trim() ? 0.7 : 1,
-                  }}
-                >
-                  {isCreating ? 'Creating…' : 'Create'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <PrdCreateModal
+          projectId={projectId}
+          onClose={() => setShowAddModal(false)}
+          onCreated={(spec) => { setSpecs((prev) => [spec, ...prev]); setShowAddModal(false); }}
+        />
       )}
 
       {/* Edit / View PRD drawer */}
