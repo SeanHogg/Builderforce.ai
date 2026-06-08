@@ -29,6 +29,7 @@ import { AgentOwnerActions } from './AgentOwnerActions';
 import { AgentTypePill } from '@/components/AgentTypePill';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatAgentPrice } from '@/lib/agentPresentation';
+import { isAgentOwner } from '@/lib/agentPermissions';
 import { useAuth } from '@/lib/AuthContext';
 import {
   CloudAgentFormFields,
@@ -238,8 +239,17 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     }
   };
 
+  // A tenant can no longer hire its own agent (the API rejects it), but guard the
+  // render too: never show an owned agent in the "purchased" list, or it appears
+  // twice and the duplicate renders owner actions instead of Unhire. Match on both
+  // ownership and presence in the owned list so a stale self-purchase can't slip through.
+  const ownedIds = new Set(cloudAgents.map((a) => a.id));
+  const visiblePurchased = purchasedAgents.filter(
+    (a) => !ownedIds.has(a.id) && !isAgentOwner(a, tenant?.id),
+  );
+
   const loading = loadingHosts || loadingCloud;
-  const isEmpty = hosts.length === 0 && cloudAgents.length === 0 && purchasedAgents.length === 0;
+  const isEmpty = hosts.length === 0 && cloudAgents.length === 0 && visiblePurchased.length === 0;
 
   return (
     <section>
@@ -339,7 +349,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
 
           {/* Purchased (marketplace) agents — non-owner in the workforce context,
               so the card offers Unhire (release from this workforce). */}
-          {purchasedAgents.map((a) => (
+          {visiblePurchased.map((a) => (
             <AgentCard
               key={`purchased-${a.id}`}
               agent={a}
@@ -414,7 +424,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
 
               {/* Purchased (marketplace) agents — not owned, so Unhire instead
                   of the owner action set. */}
-              {purchasedAgents.map((a) => (
+              {visiblePurchased.map((a) => (
                 <tr key={`purchased-${a.id}`} style={trStyle}>
                   <td style={tdStyle}>{a.name}</td>
                   <td style={tdStyle}><AgentTypePill kind="marketplace" /></td>

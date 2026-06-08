@@ -87,9 +87,15 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     const [agent] = await sql(c.env)`
-      SELECT id, published, status FROM ide_agents WHERE id = ${id} AND status = 'active'
+      SELECT id, published, status, tenant_id FROM ide_agents WHERE id = ${id} AND status = 'active'
     `;
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
+    // You can't hire your own agent — owned agents are already in your workforce
+    // (they show under /agents/mine). Allowing it created a self-duplicate that
+    // inflated hire_count and could not be unhired or deleted (see migration 0102).
+    if (Number(agent.tenant_id) === Number(tenantId)) {
+      return c.json({ error: 'You already own this agent — it is already in your workforce.' }, 409);
+    }
     if (!agent.published) return c.json({ error: 'Agent is not published to the marketplace' }, 409);
 
     // Insert a fresh purchase OR revive a previously soft-deleted (unhired) one.
