@@ -324,7 +324,7 @@ export default function LandingPage() {
 
         /* ════════ STATS STRIP ════════ */
         .lp-stats {
-          max-width: 900px;
+          max-width: 1200px;
           margin: 0 auto;
           padding: 0 24px 72px;
           display: grid;
@@ -380,7 +380,7 @@ export default function LandingPage() {
 
         /* ════════ FEATURES ════════ */
         .lp-features {
-          max-width: 1100px;
+          max-width: 1200px;
           margin: 0 auto;
           padding: 0 24px 72px;
         }
@@ -469,7 +469,7 @@ export default function LandingPage() {
           text-align: center;
         }
         .lp-footer-inner {
-          max-width: 1100px;
+          max-width: 1200px;
           margin: 0 auto;
           display: flex;
           flex-direction: column;
@@ -639,7 +639,7 @@ export default function LandingPage() {
 
         {/* ── Competitive teaser → /compare ── */}
         <section className="lp-section">
-          <div className="lp-features" style={{maxWidth:'940px',margin:'0 auto',textAlign:'center'}}>
+          <div className="lp-features" style={{textAlign:'center'}}>
             <h2 className="section-title">
               <span className="agentHost-accent">⟩</span> {COMPARE.teaser.title}
             </h2>
