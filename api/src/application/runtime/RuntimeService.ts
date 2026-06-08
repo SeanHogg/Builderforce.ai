@@ -82,11 +82,62 @@ export class RuntimeService {
   async getExecution(id: number): Promise<Execution> {
     const e = await this.executions.findById(asExecutionId(id));
     if (!e) throw new NotFoundError('Execution', id);
-    return e;
+    return this.reapIfOrphaned(e);
   }
 
   async listByTask(taskId: number): Promise<Execution[]> {
-    return this.executions.findByTask(asTaskId(taskId));
+    const list = await this.executions.findByTask(asTaskId(taskId));
+    return Promise.all(list.map((e) => this.reapIfOrphaned(e)));
+  }
+
+  /**
+   * Cloud runs execute in a `waitUntil` background task; if that isolate is
+   * evicted (or an update throws) before writing a terminal status, the row is
+   * left non-terminal and the UI polls "running" forever even though nothing is
+   * executing — the "says completed but still running" symptom. There is no live
+   * process to recover, so once a run exceeds a generous per-kind ceiling we mark
+   * it failed on read. Cloud runs are hard-bounded to a few minutes
+   * (PRD draft + {@link MAX_CLOUD_TOOL_STEPS} steps); a self-hosted host can
+   * legitimately run much longer, so it gets a far larger ceiling.
+   *
+   * Read-path repair (no cron needed): the stream's reconciliation poll calls
+   * `getExecution` every few seconds, so an orphan self-heals on next view.
+   * Bounded — only stale, non-terminal rows incur a write; healthy reads don't.
+   */
+  private static readonly CLOUD_ORPHAN_MS = 8 * 60_000;
+  private static readonly HOST_ORPHAN_MS = 30 * 60_000;
+
+  private isOrphaned(e: Execution, nowMs: number): boolean {
+    const live = e.status === ExecutionStatus.PENDING
+      || e.status === ExecutionStatus.SUBMITTED
+      || e.status === ExecutionStatus.RUNNING;
+    if (!live) return false;
+    const sinceMs = (e.startedAt ?? e.updatedAt ?? e.createdAt).getTime();
+    const ceiling = e.agentHostId == null
+      ? RuntimeService.CLOUD_ORPHAN_MS
+      : RuntimeService.HOST_ORPHAN_MS;
+    return nowMs - sinceMs > ceiling;
+  }
+
+  private async reapIfOrphaned(e: Execution): Promise<Execution> {
+    if (!this.isOrphaned(e, Date.now())) return e;
+    try {
+      const failed = e.markFailed(
+        'Run did not report completion in time and was marked failed (orphaned run — the background runner stopped before writing a terminal status). Re-run the task.',
+      );
+      const saved = await this.executions.update(failed);
+      await this.audit.save(AuditEvent.create({
+        tenantId:     e.tenantId,
+        userId:       null,
+        eventType:    AuditEventType.EXECUTION_FAILED,
+        resourceType: 'execution',
+        resourceId:   String(e.id),
+        metadata:     JSON.stringify({ reason: 'orphaned_timeout', priorStatus: e.status }),
+      }));
+      return saved;
+    } catch {
+      return e; // best-effort — never block a read on the repair
+    }
   }
 
   async listByTenant(tenantId: number, limit?: number): Promise<Execution[]> {
