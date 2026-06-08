@@ -5,6 +5,7 @@ import {
   isValidElement,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -121,6 +122,7 @@ export function Select({
 
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState<number>(-1);
+  const listboxId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -271,6 +273,7 @@ export function Select({
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls={listboxId}
         role="combobox"
         onClick={(e) => {
           onClick?.(e);
@@ -292,6 +295,7 @@ export function Select({
         createPortal(
           <div
             ref={popupRef}
+            id={listboxId}
             role="listbox"
             // Keep focus on the trigger so an inline-edit `onBlur` (commit-on-blur
             // pattern) doesn't fire and close the editor before the option click lands.
