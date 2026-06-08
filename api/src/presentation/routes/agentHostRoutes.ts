@@ -1617,7 +1617,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
     const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
 
-    const result = await openTaskPullRequest(db, secret, agentHost.tenantId, taskId, body);
+    const result = await openTaskPullRequest(db, secret, agentHost.tenantId, taskId, body, c.env);
     if (!result.ok) return c.json({ error: result.error }, result.status);
     return c.json({ ok: true, url: result.url, number: result.number, merged: result.merged, mergeError: result.mergeError });
   });
@@ -1744,6 +1744,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
 
     const body = await c.req.json<{
       runId?:       string;
+      executionId?: number;
       sessionKey?:  string;
       toolCallId?:  string;
       toolName?:    string;
@@ -1759,6 +1760,9 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     await db.insert(toolAuditEvents).values({
       tenantId:    agentHost.tenantId,
       agentHostId,
+      // Stamp the execution so the event is queryable per-run (the cloud Logs/
+      // Timeline scope by execution_id), giving V2/host runs parity with V1.
+      executionId: Number.isFinite(Number(body.executionId)) ? Number(body.executionId) : null,
       runId:       body.runId ?? null,
       sessionKey:  body.sessionKey ?? null,
       toolCallId:  body.toolCallId ?? null,

@@ -13,7 +13,7 @@ import { tasks, pullRequests } from '../../infrastructure/database/schema';
 import { resolveDefaultRepoForTask } from './resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
 import { createPullRequest } from './createPullRequest';
-import { mergeBranchToBase } from './mergeBranchToBase';
+import { mergeBranchToBase, cloudAutoMergeRequiresGreen } from './mergeBranchToBase';
 import type { Db } from '../../infrastructure/database/connection';
 
 export interface OpenTaskPrInput {
@@ -33,6 +33,9 @@ export async function openTaskPullRequest(
   tenantId: number,
   taskId: number,
   input: OpenTaskPrInput,
+  /** Pass the worker env so the "merge only on green CI" gate is honored. When
+   *  omitted, the default full-auto-merge policy applies (immediate merge). */
+  env?: unknown,
 ): Promise<OpenTaskPrResult> {
   if (!input.branch || typeof input.branch !== 'string') {
     return { ok: false, status: 400, error: 'branch is required' };
@@ -65,17 +68,20 @@ export async function openTaskPullRequest(
 
   // Full auto-merge + deploy: merge the ticket branch into the deploy branch so
   // the push to base triggers CI/deploy. Best-effort — a conflict/failure leaves
-  // the PR open for manual resolution rather than blocking the finalize.
-  const merge = await mergeBranchToBase({
-    provider: resolved.repo.provider,
-    host: resolved.repo.host,
-    owner: resolved.repo.owner,
-    repo: resolved.repo.repo,
-    token: resolved.token,
-    base,
-    head: input.branch.trim(),
-    message: `${title} (BuilderForce auto-merge)`,
-  });
+  // the PR open for manual resolution rather than blocking the finalize. When the
+  // operator gates on green CI, defer the merge to the CI-success webhook.
+  const merge = cloudAutoMergeRequiresGreen(env)
+    ? { ok: false as const, code: 'provider_error' as const, reason: 'deferred: merge on green CI' }
+    : await mergeBranchToBase({
+        provider: resolved.repo.provider,
+        host: resolved.repo.host,
+        owner: resolved.repo.owner,
+        repo: resolved.repo.repo,
+        token: resolved.token,
+        base,
+        head: input.branch.trim(),
+        message: `${title} (BuilderForce auto-merge)`,
+      });
 
   const now = new Date();
   await db.insert(pullRequests).values({

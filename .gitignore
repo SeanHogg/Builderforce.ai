@@ -16,8 +16,10 @@ frontend/out/
 .vercel/
 worker/.next/
 worker/dist/
-sdk/dist/
-studio/dist/
+# sdk/dist and studio/dist are committed (like studio-embedded/brain-embedded/
+# builderforce-embedded) so the CF Pages frozen install can resolve the linked
+# `@seanhogg/builderforce-sdk` + `@seanhogg/builderforce-studio` packages — their
+# `link:` targets have no build step in CI. Rebuild via `npm run build` in each.
 
 # Env
 .env

@@ -5,7 +5,7 @@ import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaul
 import { commitPrdAsPendingChange } from '../../application/repos/commitPrdToRepo';
 import { resolveTicketRepoContext, commitAgentFile, type TicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
 import { createPullRequest } from '../../application/repos/createPullRequest';
-import { mergeBranchToBase } from '../../application/repos/mergeBranchToBase';
+import { mergeBranchToBase, cloudAutoMergeRequiresGreen } from '../../application/repos/mergeBranchToBase';
 import { readRepoFile, listRepoFiles } from '../../application/repos/readRepoContents';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
@@ -810,22 +810,29 @@ async function runCloudToolLoop(
       .where(eq(tasks.id, taskRow.id))
       .catch(() => { /* best-effort */ });
 
-    // Auto-merge to the deploy branch (full auto-merge + deploy policy).
-    const m = await mergeBranchToBase({
-      provider: repoCtx.provider, host: repoCtx.host, owner: repoCtx.owner, repo: repoCtx.repo,
-      token: repoCtx.token, base: repoCtx.base, head: repoCtx.branch,
-      message: `Task #${taskRow.id}: ${taskRow.title} (BuilderForce auto-merge by ${agentLabel})`,
-    });
-    merged = m.ok;
-    mergeNote = m.ok
-      ? ` and auto-merged to \`${repoCtx.base}\` (deploy triggered)`
-      : ` — auto-merge to \`${repoCtx.base}\` failed: ${m.reason}`;
-    await recordCloudToolEvent(db, {
-      tenantId, cloudAgentRef, executionId,
-      toolName: 'merge_to_main', category: 'tool',
-      detail: { base: repoCtx.base, head: repoCtx.branch },
-      result: m.ok ? `merged${m.merged ? '' : ' (already up to date)'}${m.sha ? ` · ${m.sha.slice(0, 7)}` : ''}` : `failed: ${m.reason}`.slice(0, 300),
-    });
+    // Auto-merge to the deploy branch (full auto-merge + deploy policy). When the
+    // operator gates shipping on green CI, skip the immediate merge — a successful
+    // CI/deploy webhook merges instead (see ingestRepoCiEvent).
+    if (cloudAutoMergeRequiresGreen(env)) {
+      mergeNote = ` — pending CI (will merge to \`${repoCtx.base}\` on green)`;
+      merged = true; // not a merge failure; the gate intentionally defers it
+    } else {
+      const m = await mergeBranchToBase({
+        provider: repoCtx.provider, host: repoCtx.host, owner: repoCtx.owner, repo: repoCtx.repo,
+        token: repoCtx.token, base: repoCtx.base, head: repoCtx.branch,
+        message: `Task #${taskRow.id}: ${taskRow.title} (BuilderForce auto-merge by ${agentLabel})`,
+      });
+      merged = m.ok;
+      mergeNote = m.ok
+        ? ` and auto-merged to \`${repoCtx.base}\` (deploy triggered)`
+        : ` — auto-merge to \`${repoCtx.base}\` failed: ${m.reason}`;
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef, executionId,
+        toolName: 'merge_to_main', category: 'tool',
+        detail: { base: repoCtx.base, head: repoCtx.branch },
+        result: m.ok ? `merged${m.merged ? '' : ' (already up to date)'}${m.sha ? ` · ${m.sha.slice(0, 7)}` : ''}` : `failed: ${m.reason}`.slice(0, 300),
+      });
+    }
   }
 
   const output =
@@ -1644,11 +1651,18 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const tenantId = c.get('tenantId');
     const limitRaw = Number(c.req.query('limit'));
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 500) : 200;
+    // Optional per-execution scope: when set, return only this run's events
+    // (precise per-execution telemetry, robust to later agent re-assignment).
+    const execRaw = Number(c.req.query('executionId'));
+    const executionId = Number.isFinite(execRaw) && execRaw > 0 ? execRaw : null;
 
     // DEFAULT_CLOUD_REF = cloud runs with no named agent (cloud_agent_ref IS NULL);
     // scope to cloud rows (agent_host_id IS NULL) so a host run never leaks in.
-    const refCond =
-      ref === DEFAULT_CLOUD_REF
+    // An explicit executionId is authoritative (the events carry it directly), so
+    // it scopes regardless of which ref the run was attributed to.
+    const refCond = executionId != null
+      ? eq(toolAuditEvents.executionId, executionId)
+      : ref === DEFAULT_CLOUD_REF
         ? and(isNull(toolAuditEvents.cloudAgentRef), isNull(toolAuditEvents.agentHostId))
         : eq(toolAuditEvents.cloudAgentRef, ref);
 
@@ -1867,6 +1881,26 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       LIMIT 500
     `) as Array<{ path: string; change: string; agent: string; executionId: number | null; createdAt: string }>;
     return c.json({ changes: rows });
+  });
+
+  // GET /api/runtime/tasks/:taskId/repo-status
+  // Pre-run check for the Run control: can the agent actually commit code for this
+  // task? Reuses the same resolution the cloud loop uses (repo bound + credential
+  // decryptable), so the UI can warn "bind a repo + credential" before a run
+  // silently degrades to a text-only summary. Intentionally uncached: repo binding
+  // and credentials change interactively in Source Control, and a stale "not bound"
+  // right after the user binds one would be a worse UX than this low-QPS check.
+  router.get('/tasks/:taskId/repo-status', async (c) => {
+    const taskId = Number(c.req.param('taskId'));
+    if (!Number.isFinite(taskId)) return c.json({ bound: false, hasCredential: false, reason: 'invalid task' }, 400);
+    const r = await resolveTicketRepoContext(db, gitSecret(c.env as Env), c.get('tenantId'), taskId);
+    if (r.ok) {
+      return c.json({ bound: true, hasCredential: true, repo: `${r.ctx.owner}/${r.ctx.repo}`, base: r.ctx.base });
+    }
+    // resolveTicketRepoContext returns a single reason; distinguish "no repo" from
+    // "no credential" so the UI can point at the right fix.
+    const noRepo = /no repo bound/i.test(r.reason);
+    return c.json({ bound: !noRepo, hasCredential: false, reason: r.reason });
   });
 
   // Broadcast an existing task to all currently connected agentHosts in the tenant.

@@ -70,6 +70,21 @@ describe('loadCapabilityContext', () => {
     expect(res.summary.missing).toEqual([]);
   });
 
+  it('injects builtin skill bodies (github/coding-agent) when not in the marketplace', async () => {
+    // marketplace returns null for the skill → falls back to the builtin registry.
+    const res = await loadCapabilityContext(env, makeDb(null, null), {
+      skills: ['github'],
+      personas: [],
+      content: [],
+    });
+    expect(res.summary.missing).toEqual([]);
+    expect(res.promptBlock).toContain('### Skills');
+    expect(res.promptBlock).toContain('GitHub (github)');
+    expect(res.promptBlock).toContain('list_files');
+    // A builtin skill is fully resolved, so it is NOT in the "referenced" section.
+    expect(res.promptBlock).not.toContain('Skills (referenced)');
+  });
+
   it('references assigned skills with no body by name (not flagged "missing"); personas with no body stay in missing', async () => {
     const res = await loadCapabilityContext(env, makeDb(null, null), {
       skills: ['cap-ghost-skill'],

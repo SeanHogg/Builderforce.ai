@@ -10,6 +10,18 @@
  */
 import { buildGitApiBaseUrl } from './gitProxy';
 
+/**
+ * Auto-merge policy. Default (flag off): the cloud run merges to the deploy
+ * branch immediately on finish. When `CLOUD_AUTOMERGE_REQUIRE_GREEN` is set, the
+ * run does NOT merge on finish — a successful CI/deploy webhook merges instead
+ * ("merge only on green"). Single source of truth for both the immediate-merge
+ * sites and the webhook's merge-on-green path.
+ */
+export function cloudAutoMergeRequiresGreen(env: unknown): boolean {
+  const v = String((env as Record<string, unknown> | null)?.CLOUD_AUTOMERGE_REQUIRE_GREEN ?? '').toLowerCase();
+  return v === '1' || v === 'true';
+}
+
 export interface MergeBranchInput {
   provider: string;
   host: string | null;

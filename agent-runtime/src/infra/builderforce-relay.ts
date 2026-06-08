@@ -402,8 +402,13 @@ export class BuilderforceRelayService implements IRelayService {
   ): Promise<void> {
     const agentLabel = payload.agentLabel?.trim() || "BuilderForce-V2";
     const sinks: V2RunnerSinks = {
-      onAssistantText: (text) =>
-        this.sendToRelay({ type: "chat.message", role: "assistant", text, session: "main" }),
+      onAssistantText: (text) => {
+        // Live view…
+        this.sendToRelay({ type: "chat.message", role: "assistant", text, session: "main" });
+        // …and durable persistence, so the V2 run's natural-language turns show on
+        // the Logs/Timeline after it ends (parity with V1's `agent.message`).
+        void this.persistToolAudit({ executionId: payload.executionId, toolName: "agent.message", category: "message", result: text });
+      },
       onToolUse: (toolName, toolCallId, args) => {
         // Live view (fans out to subscribers)…
         this.sendToRelay({
@@ -550,6 +555,7 @@ export class BuilderforceRelayService implements IRelayService {
     toolCallId?: string;
     category?: string;
     args?: unknown;
+    result?: string;
   }): Promise<void> {
     const base = normalizeBaseUrl(this.opts.baseUrl);
     const url = `${base}/api/agent-hosts/${this.opts.agentNodeId}/tool-audit`;
@@ -563,12 +569,14 @@ export class BuilderforceRelayService implements IRelayService {
         body: JSON.stringify({
           // Tie the event to its execution so it's queryable per-run as well as
           // per-host. sessionKey 'main' matches the live relay frame.
+          executionId: event.executionId,
           runId: event.executionId != null ? `exec-${event.executionId}` : undefined,
           sessionKey: "main",
           toolCallId: event.toolCallId,
           toolName: event.toolName,
           category: event.category,
           args: event.args,
+          result: event.result,
           ts: new Date().toISOString(),
         }),
         signal: AbortSignal.timeout(10_000),

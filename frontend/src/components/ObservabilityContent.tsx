@@ -46,6 +46,9 @@ export interface ObservabilityContentProps {
    *  The host page wants both; a panel that already scopes the agent and picks
    *  the view (via its own tabs) doesn't. */
   embedded?: boolean;
+  /** When set, scope cloud telemetry to a single execution (precise per-run
+   *  Logs/Timeline, robust to later agent re-assignment). */
+  executionId?: number;
 }
 
 /** Both self-hosted hosts and cloud agents are agents — one unified directory. */
@@ -142,6 +145,7 @@ export function ObservabilityContent({
   cloudAgentRef: propCloudAgentRef,
   cloudAgentName: propCloudAgentName,
   embedded = false,
+  executionId: propExecutionId,
 }: ObservabilityContentProps) {
   // Scoped mode pins the directory to a single agent (a host OR a cloud agent)
   // instead of showing the full, selectable directory.
@@ -334,7 +338,7 @@ export function ObservabilityContent({
           wfMap.set(hostId, await Promise.all(wfsRaw.map((w) => workflows.get(w.id).catch(() => w))));
         }),
         ...selectedCloudRefs.map(async (ref) => {
-          cloudMap.set(ref, await cloudAgentsApi.toolAuditEvents(ref, { limit: 200 }).catch(() => [] as ToolAuditEvent[]));
+          cloudMap.set(ref, await cloudAgentsApi.toolAuditEvents(ref, { limit: 200, executionId: propExecutionId }).catch(() => [] as ToolAuditEvent[]));
         }),
       ]);
 
@@ -347,7 +351,7 @@ export function ObservabilityContent({
       setDiagLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectionKey]);
+  }, [selectionKey, propExecutionId]);
 
   // Cloud telemetry feeds BOTH the timeline and the (stream-less) cloud log view,
   // so load it whenever the selection has a cloud agent — in either view. Host
