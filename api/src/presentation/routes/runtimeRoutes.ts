@@ -697,6 +697,18 @@ async function runCloudToolLoop(
       durationMs: genMs,
     });
 
+    // The agent's natural-language turns are part of "what the agent did" — record
+    // each as its own event so the Logs/Timeline show the actual message text, not
+    // just an llm.complete counter. (Output streams the final turn separately.)
+    if (content) {
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef, executionId,
+        toolName: 'agent.message', category: 'message',
+        detail: { step, content },
+        result: content.slice(0, 280),
+      });
+    }
+
     if (toolCalls.length === 0) { finished = true; break; }
 
     // Echo the assistant turn (with its tool_calls) so tool results attach to it.
@@ -709,13 +721,19 @@ async function runCloudToolLoop(
       const tStart = Date.now();
       let toolResult: Record<string, unknown>;
 
+      // Read/list against the ticket branch only once it exists (created on the
+      // first commit). Before any write, the branch ref 404s — read from `base`
+      // instead, so the agent sees the real codebase rather than mistaking the
+      // missing branch for "no repo access".
+      const readRef = repoCtx ? (writtenPaths.size > 0 ? repoCtx.branch : repoCtx.base) : '';
+
       if (name === 'list_files') {
         if (!repoCtx) {
           toolResult = { ok: false, error: `no repo bound to this task (${repoMiss})` };
         } else {
           const sub = typeof parsed.path === 'string' ? parsed.path : undefined;
-          const ls = await listRepoFiles({ ...repoCtx, ref: repoCtx.branch }, sub);
-          toolResult = ls.ok ? { ok: true, paths: ls.paths, truncated: ls.truncated } : { ok: false, error: ls.reason };
+          const ls = await listRepoFiles({ ...repoCtx, ref: readRef }, sub);
+          toolResult = ls.ok ? { ok: true, ref: readRef, paths: ls.paths, truncated: ls.truncated } : { ok: false, error: ls.reason };
         }
       } else if (name === 'read_file') {
         const path = typeof parsed.path === 'string' ? parsed.path : '';
@@ -724,9 +742,7 @@ async function runCloudToolLoop(
         } else if (!repoCtx) {
           toolResult = { ok: false, error: `no repo bound to this task (${repoMiss})` };
         } else {
-          // Read from the ticket branch so the agent sees its own in-progress edits;
-          // a not-yet-branched file falls back to base.
-          const rf = await readRepoFile({ ...repoCtx, ref: writtenPaths.size > 0 ? repoCtx.branch : repoCtx.base }, path);
+          const rf = await readRepoFile({ ...repoCtx, ref: readRef }, path);
           toolResult = rf.ok ? { ok: true, path: rf.path, content: rf.content, truncated: rf.truncated } : { ok: false, error: rf.reason };
         }
       } else if (name === 'write_file') {

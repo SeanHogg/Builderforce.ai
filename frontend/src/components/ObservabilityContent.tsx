@@ -358,6 +358,16 @@ export function ObservabilityContent({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, selectionKey, loadDiagnostics]);
 
+  // Embedded in an execution panel, the diagnostics must stay live as the run
+  // emits events (the host page refreshes manually). Poll while embedded so the
+  // Logs/Timeline keep parity with the auto-polling Tools tab next to them.
+  useEffect(() => {
+    if (!embedded || !hasSelection) return;
+    const t = setInterval(() => { void loadDiagnostics(); }, 5000);
+    return () => clearInterval(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embedded, selectionKey, loadDiagnostics]);
+
   // ---- Derive log lines (host WS + cloud telemetry), timeline tracks --------
   const cloudLogLines: LogLine[] = [];
   for (const [ref, evts] of cloudEventsByRef) {
