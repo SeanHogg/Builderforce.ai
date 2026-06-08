@@ -6,15 +6,19 @@ export default defineConfig({
   base: '/docs',
   trailingSlash: 'never',
   // Rebrand: old CoderClaw doc slugs redirect to the BuilderForce Agents slugs.
+  // Redirect SOURCES are literal on-disk routes (Astro does not apply `base` to
+  // them), so they must be /docs-LESS to land at dist root — that's where the
+  // apex proxy looks after stripping /docs (see frontend/next.config.js).
+  // DESTINATIONS are the public /docs-prefixed URLs the browser navigates to.
   redirects: {
-    '/docs/coderclaw': '/docs/agents',
-    '/docs/coderclaw-overview': '/docs/agents-overview',
-    '/docs/coderclaw-architecture': '/docs/agents-architecture',
-    '/docs/coderclaw-vs-alternatives': '/docs/agents-vs-alternatives',
-    '/docs/coderclaw-workflows': '/docs/agents-workflows',
-    '/docs/coderclaw-link': '/docs/agents-link',
-    '/docs/start/coderclaw': '/docs/start/agents',
-    '/docs/tools/clawhub': '/docs/tools/agenthub',
+    '/coderclaw': '/docs/agents',
+    '/coderclaw-overview': '/docs/agents-overview',
+    '/coderclaw-architecture': '/docs/agents-architecture',
+    '/coderclaw-vs-alternatives': '/docs/agents-vs-alternatives',
+    '/coderclaw-workflows': '/docs/agents-workflows',
+    '/coderclaw-link': '/docs/agents-link',
+    '/start/coderclaw': '/docs/start/agents',
+    '/tools/clawhub': '/docs/tools/agenthub',
   },
   integrations: [
     starlight({
