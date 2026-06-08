@@ -121,7 +121,6 @@ export default function RegisterPageClient() {
         <div style={{ width: '100%', maxWidth: 420 }}>
           {/* Heading */}
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
-            <Image src="/agentHost.png" alt="" width={56} height={56} className="auth-mascot" style={{ filter: 'drop-shadow(0 0 16px var(--logo-glow))', marginBottom: 16 }} />
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.75rem', fontWeight: 700, marginBottom: 6, color: 'var(--text-primary)' }}>
               Create your account
             </h1>
@@ -314,10 +313,6 @@ export default function RegisterPageClient() {
         @media (min-width: 900px) {
           .auth-split-grid { grid-template-columns: 1fr 1fr !important; }
           .auth-marketing-panel { display: flex !important; }
-        }
-        /* The decorative agentHost mascot is hidden on mobile to save vertical space. */
-        @media (max-width: 640px) {
-          .auth-mascot { display: none !important; }
         }
       `}</style>
     </div>
