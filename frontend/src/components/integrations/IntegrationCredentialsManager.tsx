@@ -98,6 +98,9 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // When set, the add-form is in EDIT mode for this credential id (rotate key /
+  // rename / change base URL) rather than creating a new one.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
 
@@ -129,26 +132,61 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
 
   const meta = PROVIDER_META[provider];
 
+  const editing = editingId != null;
+
   const resetForm = () => {
     setName(''); setBaseUrl(''); setSecrets({}); setProvider(providerList[0]);
+  };
+
+  const closeForm = () => {
+    setAdding(false); setEditingId(null); resetForm(); setError(null);
+  };
+
+  // Pre-fill the form to edit an existing key. Secrets are never returned in the
+  // clear (GET masks them), so the token fields start blank: blank = keep the
+  // current key, any value = rotate it. Provider can't change on an existing key.
+  const openEdit = (c: IntegrationCredential) => {
+    setProvider(c.provider);
+    setName(c.name);
+    setBaseUrl(c.baseUrl ?? '');
+    setSecrets({});
+    setEditingId(c.id);
+    setError(null);
+    setAdding(true);
   };
 
   const save = async () => {
     setSaving(true);
     setError(null);
     try {
-      const missing = meta.secrets.find((f) => !secrets[f.key]?.trim());
-      if (missing) { setError(`${missing.label} is required`); setSaving(false); return; }
       if (meta.baseUrl === 'required' && !baseUrl.trim()) { setError('Base URL is required'); setSaving(false); return; }
-      await integrationsApi.create({
-        provider,
-        name: name.trim() || `${meta.label} key`,
-        baseUrl: meta.baseUrl ? baseUrl.trim() || null : null,
-        projectId: projectId ?? null,
-        credentials: secrets,
-      });
-      resetForm();
-      setAdding(false);
+      // The credential blob is stored/replaced wholesale, so secrets are
+      // all-or-nothing: required on create, and on edit only when rotating (if any
+      // secret field is filled, every one must be, else we'd drop the others).
+      const anySecret = meta.secrets.some((f) => secrets[f.key]?.trim());
+      if (!editing || anySecret) {
+        const missing = meta.secrets.find((f) => !secrets[f.key]?.trim());
+        if (missing) {
+          setError(editing ? `Enter all fields to rotate the key — ${missing.label} is missing` : `${missing.label} is required`);
+          setSaving(false); return;
+        }
+      }
+      if (editingId !== null) {
+        await integrationsApi.update(editingId, {
+          name: name.trim() || `${meta.label} key`,
+          baseUrl: meta.baseUrl ? baseUrl.trim() || null : null,
+          ...(anySecret ? { credentials: secrets } : {}),
+        });
+      } else {
+        await integrationsApi.create({
+          provider,
+          name: name.trim() || `${meta.label} key`,
+          baseUrl: meta.baseUrl ? baseUrl.trim() || null : null,
+          projectId: projectId ?? null,
+          credentials: secrets,
+        });
+      }
+      closeForm();
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
@@ -199,6 +237,9 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
             <button type="button" style={btnSubtle} disabled={testing === c.id} onClick={() => test(c.id)}>
               {testing === c.id ? 'Testing…' : 'Test'}
             </button>
+            <button type="button" style={btnSubtle} onClick={() => openEdit(c)}>
+              Edit
+            </button>
             <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(c.id)}>
               Delete
             </button>
@@ -233,10 +274,13 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
 
       {adding ? (
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>{editing ? `Edit ${meta.label} key` : 'Add a key'}</div>
           <Select
             value={provider}
             onChange={(e) => { setProvider(e.target.value as IntegrationProvider); setSecrets({}); }}
             style={inputStyle}
+            // Provider is fixed once a key exists — rotating/renaming only.
+            disabled={editing}
           >
             {providerList.map((p) => (
               <option key={p} value={p}>{PROVIDER_META[p].label}</option>
@@ -256,16 +300,21 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
               key={f.key}
               style={inputStyle}
               type={f.type === 'text' ? 'text' : 'password'}
-              placeholder={f.placeholder ?? f.label}
+              placeholder={editing ? `${f.label} — leave blank to keep current` : (f.placeholder ?? f.label)}
               value={secrets[f.key] ?? ''}
               onChange={(e) => setSecrets((prev) => ({ ...prev, [f.key]: e.target.value }))}
             />
           ))}
+          {editing && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              Leave the {meta.secrets.length > 1 ? 'secret fields' : 'token'} blank to keep the current key, or enter a new value to rotate it.
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" style={btnPrimary} disabled={saving} onClick={save}>
-              {saving ? 'Saving…' : 'Save key'}
+              {saving ? 'Saving…' : editing ? 'Save changes' : 'Save key'}
             </button>
-            <button type="button" style={btnSubtle} onClick={() => { setAdding(false); resetForm(); setError(null); }}>
+            <button type="button" style={btnSubtle} onClick={closeForm}>
               Cancel
             </button>
           </div>
