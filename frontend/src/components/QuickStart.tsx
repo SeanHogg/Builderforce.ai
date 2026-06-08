@@ -331,7 +331,7 @@ export default function QuickStart() {
 
       <style>{`
         .cc-quickstart {
-          max-width: 820px;
+          max-width: 1200px;
           margin: 48px auto 0;
           padding: 0 24px;
         }
