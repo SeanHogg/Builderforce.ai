@@ -58,7 +58,7 @@ const panelDrawerStyle: React.CSSProperties = {
   top: 0,
   right: 0,
   bottom: 0,
-  width: '75%',
+  width: '85%',
   maxWidth: '100%',
   borderLeft: '1px solid var(--border-subtle)',
   boxShadow: '-8px 0 24px rgba(0,0,0,0.2)',

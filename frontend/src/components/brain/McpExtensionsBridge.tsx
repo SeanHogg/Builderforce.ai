@@ -10,6 +10,10 @@
 import { useMcpExtensions } from '@/lib/brain';
 
 export function McpExtensionsBridge() {
-  useMcpExtensions();
+  // Skip the gateway's first-party `builtin` platform tools here — the browser
+  // Brain already registers those natively (and more richly) via
+  // PlatformActionsBridge, so loading them again would double the tool list.
+  // External / headless MCP clients still receive them from /v1/mcp/tools.
+  useMcpExtensions({ skipExtensionIds: ['builtin'] });
   return null;
 }

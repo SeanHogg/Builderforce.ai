@@ -247,17 +247,19 @@ function useRegisterBrainActions(actions) {
 
 // src/useMcpExtensions.ts
 var import_react3 = require("react");
-function useMcpExtensions() {
+function useMcpExtensions(options) {
   const { transport } = useBrainConfig();
   const [entries, setEntries] = (0, import_react3.useState)([]);
   const [loading, setLoading] = (0, import_react3.useState)(true);
+  const skipKey = (options?.skipExtensionIds ?? []).join(",");
   (0, import_react3.useEffect)(() => {
     let cancelled = false;
     const token = transport.getToken();
     const headers = { Accept: "application/json" };
     if (token) headers.Authorization = `Bearer ${token}`;
+    const skip = new Set(skipKey ? skipKey.split(",") : []);
     fetch(`${transport.baseUrl}/llm/v1/mcp/tools`, { headers }).then((res) => res.ok ? res.json() : { tools: [] }).then((body) => {
-      if (!cancelled) setEntries(body.tools ?? []);
+      if (!cancelled) setEntries((body.tools ?? []).filter((t) => !skip.has(t.extensionId)));
     }).catch(() => {
       if (!cancelled) setEntries([]);
     }).finally(() => {
@@ -266,7 +268,7 @@ function useMcpExtensions() {
     return () => {
       cancelled = true;
     };
-  }, [transport]);
+  }, [transport, skipKey]);
   const actions = (0, import_react3.useMemo)(
     () => entries.map((entry) => ({
       name: entry.name,

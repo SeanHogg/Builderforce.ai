@@ -880,6 +880,7 @@ export class LlmProxyService {
       if (err instanceof WorkerSubrequestExhaustedError) {
         return this.subrequestExhaustedResponse(candidates, 0, err);
       }
+      if (err instanceof RequestAbortedError) throw err;
       const errAttempts = err instanceof CascadeExhaustedError ? err.attempts : [];
       await this.applyCooldowns(errAttempts);
       return this.exhaustedResponse(candidates, 0, err, errAttempts);

@@ -4,6 +4,7 @@ import {
   isSubrequestCapMessage,
   VendorRetryableError,
   WorkerSubrequestExhaustedError,
+  RequestAbortedError,
 } from './types';
 import { dispatchVendor } from './registry';
 
@@ -57,6 +58,49 @@ describe('fetchWithVendorTimeout subrequest detection', () => {
     await expect(
       fetchWithVendorTimeout('openrouter', 'qwen/qwen3-coder:free', 'https://example/api', { method: 'POST' }),
     ).rejects.toBeInstanceOf(VendorRetryableError);
+  });
+});
+
+describe('fetchWithVendorTimeout external-signal cancellation', () => {
+  // A fetch that rejects when its signal is aborted (mirrors the platform fetch).
+  const abortingFetch = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+    const sig = init?.signal;
+    if (sig?.aborted) { reject(new DOMException('Aborted', 'AbortError')); return; }
+    sig?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+  }));
+
+  it('throws RequestAbortedError (not a timeout) when the caller signal aborts', async () => {
+    (globalThis as { fetch: typeof fetch }).fetch = abortingFetch as unknown as typeof fetch;
+    const ac = new AbortController();
+    ac.abort(); // already cancelled before the call
+
+    await expect(
+      fetchWithVendorTimeout('openrouter', 'qwen/qwen3-coder:free', 'https://example/api', { method: 'POST' }, 25_000, ac.signal),
+    ).rejects.toBeInstanceOf(RequestAbortedError);
+  });
+});
+
+describe('dispatchVendor stops the cascade on caller cancellation', () => {
+  it('does NOT walk further models once the caller aborts', async () => {
+    const fetchSpy = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      const sig = init?.signal;
+      if (sig?.aborted) { reject(new DOMException('Aborted', 'AbortError')); return; }
+      sig?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+    }));
+    (globalThis as { fetch: typeof fetch }).fetch = fetchSpy as unknown as typeof fetch;
+    const ac = new AbortController();
+    ac.abort();
+
+    await expect(
+      dispatchVendor({
+        env: { OPENROUTER_API_KEY: 'sk-test', CEREBRAS_API_KEY: 'sk-test' },
+        modelChain: ['qwen/qwen3-coder:free', 'qwen/qwen3-next-80b-a3b-instruct:free', 'llama3.1-8b'],
+        messages: [{ role: 'user', content: 'hi' }],
+        signal: ac.signal,
+      }),
+    ).rejects.toBeInstanceOf(RequestAbortedError);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1); // stopped after the first model
   });
 });
 

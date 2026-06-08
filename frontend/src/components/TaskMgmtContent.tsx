@@ -1340,7 +1340,7 @@ export function TaskMgmtContent({
               top: 0,
               right: 0,
               bottom: 0,
-              width: 'min(720px, 96vw)',
+              width: 'min(864px, 96vw)',
               borderLeft: '1px solid var(--border-subtle)',
               boxShadow: '-8px 0 24px rgba(0,0,0,0.2)',
               zIndex: 10003,

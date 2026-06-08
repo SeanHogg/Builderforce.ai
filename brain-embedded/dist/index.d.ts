@@ -231,7 +231,16 @@ declare function useBrainActions(): BrainActionsContextValue;
  */
 declare function useRegisterBrainActions(actions: BrainAction[]): void;
 
-declare function useMcpExtensions(): {
+interface UseMcpExtensionsOptions {
+    /**
+     * Extension ids to drop from the fetched tool list. A host that already
+     * registers some of the gateway's tools natively (e.g. first-party platform
+     * actions exposed under a `builtin` extension) passes those ids here so the
+     * Brain doesn't get the same capability twice.
+     */
+    skipExtensionIds?: string[];
+}
+declare function useMcpExtensions(options?: UseMcpExtensionsOptions): {
     loading: boolean;
     toolCount: number;
 };

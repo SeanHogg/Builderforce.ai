@@ -8,7 +8,7 @@
  */
 import { Hono, type Context } from 'hono';
 import { and, eq, gte, sql, sum } from 'drizzle-orm';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import {
   llmProxyForPlan,
   newTraceId,
@@ -34,6 +34,7 @@ import { buildDatabase } from '../../infrastructure/database/connection';
 import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, agentHosts, tenantApiKeys, users } from '../../infrastructure/database/schema';
 import { originAllowed, deserializeScopes } from '../../application/llm/tenantApiKeyService';
 import { listToolsForTenant, callMcpTool } from '../../application/llm/mcpExtensionService';
+import { listBuiltinTools, callBuiltinTool, BUILTIN_EXTENSION_ID } from '../../application/llm/builtinMcpService';
 import {
   getTenantProviderKey,
   setTenantProviderKey,
@@ -112,7 +113,7 @@ function logUsage(
   attribution: UsageAttribution | null = null,
 ): void {
   ctx.waitUntil(
-    recordUsageRow(buildDatabase(env), {
+    recordUsageRow(buildDatabase(env), env as Env, {
       tenantId,
       userId,
       llmProduct,
@@ -667,7 +668,8 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return respondToAccessError(c, err);
     }
     const db = buildDatabase(c.env);
-    const tools = await listToolsForTenant(db, access.tenantId, c.env.JWT_SECRET);
+    // First-party platform tools (in-process) + the tenant's external MCP servers.
+    const tools = [...listBuiltinTools(), ...await listToolsForTenant(db, access.tenantId, c.env.JWT_SECRET)];
     return c.json({ tools });
   });
 
@@ -689,13 +691,17 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
     const db = buildDatabase(c.env);
     try {
-      const result = await callMcpTool(db, {
-        tenantId: access.tenantId,
-        extensionId: body.extensionId,
-        tool: body.tool,
-        arguments: body.arguments,
-        keyMaterial: c.env.JWT_SECRET,
-      });
+      // First-party platform tools run in-process; everything else relays to the
+      // tenant's external MCP server.
+      const result = body.extensionId === BUILTIN_EXTENSION_ID
+        ? await callBuiltinTool(db, { tenantId: access.tenantId, tool: body.tool, arguments: body.arguments })
+        : await callMcpTool(db, {
+            tenantId: access.tenantId,
+            extensionId: body.extensionId,
+            tool: body.tool,
+            arguments: body.arguments,
+            keyMaterial: c.env.JWT_SECRET,
+          });
       return c.json({ result });
     } catch (e) {
       // Recoverable: hand the model a tool-error result, don't 500 the loop.
@@ -1338,6 +1344,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       idempotencyKey,
       callerUseCase,
       access.tenantApiKeyId,
+      { agentHostId: access.agentHostId },
     );
 
     if (cascadeExhausted) {
