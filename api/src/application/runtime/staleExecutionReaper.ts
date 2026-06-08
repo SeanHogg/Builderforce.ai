@@ -46,8 +46,8 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
            updated_at = now()
      WHERE status = 'running'
        AND COALESCE(started_at, created_at) < ${runningCutoff}
-    RETURNING id
-  `) as Array<{ id: number }>;
+    RETURNING id, tenant_id, agent_host_id, payload, error_message
+  `) as ReapedRow[];
 
   // Dropped queue: submitted/pending but no agent ever took it.
   const queued = (await sql`
@@ -58,8 +58,46 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
            updated_at = now()
      WHERE status IN ('pending', 'submitted')
        AND created_at < ${queuedCutoff}
-    RETURNING id
-  `) as Array<{ id: number }>;
+    RETURNING id, tenant_id, agent_host_id, payload, error_message
+  `) as ReapedRow[];
+
+  // Mirror each reaped failure onto the Observability Logs/Timeline (derived only
+  // from tool_audit_events). Without this the run just stops at its last
+  // successful tool call and the timeout reason is invisible there — the same gap
+  // RuntimeService.reapIfOrphaned / recordRunFailureEvent close on the read path.
+  await Promise.all([...running, ...queued].map(async (r) => {
+    try {
+      await sql`
+        INSERT INTO tool_audit_events
+          (tenant_id, agent_host_id, cloud_agent_ref, execution_id, session_key, tool_name, category, result, ts)
+        VALUES
+          (${r.tenant_id}, ${r.agent_host_id}, ${cloudRefFromPayload(r.payload)}, ${r.id},
+           ${'exec:' + r.id}, 'run.failed', 'error', ${r.error_message ?? 'Run failed'}, now())
+      `;
+    } catch {
+      /* telemetry is best-effort — never break the reap sweep on it */
+    }
+  }));
 
   return { failedRunning: running.length, failedQueued: queued.length };
+}
+
+interface ReapedRow {
+  id: number;
+  tenant_id: number;
+  agent_host_id: number | null;
+  payload: string | null;
+  error_message: string | null;
+}
+
+/** Cloud-agent ref pinned in the execution payload, if any (cloud runs have no
+ *  cloud_agent_ref column — attribution lives in the payload). */
+function cloudRefFromPayload(payload: string | null): string | null {
+  if (!payload) return null;
+  try {
+    const p = JSON.parse(payload) as { cloudAgentRef?: unknown };
+    return typeof p.cloudAgentRef === 'string' && p.cloudAgentRef.trim() ? p.cloudAgentRef.trim() : null;
+  } catch {
+    return null;
+  }
 }
