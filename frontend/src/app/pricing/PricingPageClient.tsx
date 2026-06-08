@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { AUTH_API_URL, getStoredTenantToken } from '@/lib/auth';
 import JsonLd from '@/components/JsonLd';
+import PageContainer from '@/components/PageContainer';
 import { pricingSchema } from '@/lib/structured-data';
 
 type Plan = 'free' | 'pro' | 'teams';
@@ -75,6 +76,34 @@ function CheckIcon({ checked, color }: { checked: boolean; color: string }) {
   );
 }
 
+const PLAN_ACCENT: Record<Plan, string> = {
+  free: 'var(--text-secondary)',
+  pro: 'var(--coral-bright, #f4726e)',
+  teams: '#60a5fa',
+};
+
+/**
+ * Per-plan call-to-action: "Current plan" when active, an upgrade button for a
+ * higher tier, or nothing for the Free base tier. Decides its own visibility so
+ * the column header and the table footer stay in sync from one definition.
+ */
+function PlanCta({ plan, effectivePlan, onUpgrade }: {
+  plan: Plan;
+  effectivePlan: Plan;
+  onUpgrade: (target: 'pro' | 'teams') => void;
+}) {
+  if (plan === effectivePlan) {
+    return <span style={{ fontSize: 12, color: PLAN_ACCENT[plan], fontWeight: 600 }}>Current plan</span>;
+  }
+  if (plan === 'free') return null; // Free is the base tier — downgrade lives in the Current Plan card.
+  return (
+    <button type="button" onClick={() => onUpgrade(plan)}
+      style={{ padding: '7px 16px', fontSize: 12, fontWeight: 600, background: PLAN_ACCENT[plan], color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer' }}>
+      Upgrade to {plan === 'teams' ? 'Teams' : 'Pro'}
+    </button>
+  );
+}
+
 export default function PricingPageClient() {
   const { tenant } = useAuth();
   const tenantId = tenant?.id != null ? Number(tenant.id) : null;
@@ -133,6 +162,8 @@ export default function PricingPageClient() {
   const upgradePrice = upgradeTarget === 'teams'
     ? (billingCycle === 'yearly' ? teamYearly * seats : teamMonthly * seats)
     : (billingCycle === 'yearly' ? proYearly : proMonthly);
+
+  const openUpgrade = (target: 'pro' | 'teams') => { setUpgradeTarget(target); setUpgradeError(null); };
 
   const handleUpgrade = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -196,7 +227,7 @@ export default function PricingPageClient() {
   return (
     <>
     <JsonLd data={pricingSchema()} />
-    <div style={{ maxWidth: 920, margin: '0 auto', padding: '24px 20px' }}>
+    <PageContainer width="readable">
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Pricing & Billing</h1>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6, marginBottom: 0 }}>
@@ -256,7 +287,12 @@ export default function PricingPageClient() {
                 </div>
               )}
             </div>
-            {effectivePlan !== 'free' && (
+            {effectivePlan === 'free' ? (
+              <button type="button" onClick={() => openUpgrade('pro')}
+                style={{ padding: '9px 18px', fontSize: 13, fontWeight: 700, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                Upgrade plan
+              </button>
+            ) : (
               <button type="button" onClick={handleDowngrade} disabled={downgrading}
                 style={{ padding: '9px 18px', fontSize: 13, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: downgrading ? 'wait' : 'pointer' }}>
                 {downgrading ? 'Downgrading…' : 'Downgrade to Free'}
@@ -264,10 +300,20 @@ export default function PricingPageClient() {
             )}
           </div>
 
-          {/* Upgrade form */}
+          {/* Upgrade form — the one place we use a modal (clicking any upgrade CTA). */}
           {upgradeTarget && effectivePlan !== upgradeTarget && (
-            <div style={cardStyle}>
-              <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="upgrade-modal-title"
+              className="modal-overlay"
+              onClick={(e) => { if (e.target === e.currentTarget) { setUpgradeTarget(null); setUpgradeError(null); } }}
+            >
+            <div
+              style={{ ...cardStyle, maxWidth: 480, width: '92%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div id="upgrade-modal-title" style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>
                 Upgrade to {upgradeTarget === 'teams' ? 'Teams' : 'Pro'}
               </div>
               <form onSubmit={handleUpgrade} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -355,6 +401,7 @@ export default function PricingPageClient() {
                 </div>
               </form>
             </div>
+            </div>
           )}
 
           {/* Plan comparison table */}
@@ -367,12 +414,15 @@ export default function PricingPageClient() {
                     <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600, borderBottom: '1px solid var(--border-subtle)' }}>Feature</th>
                     <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-subtle)', minWidth: 90 }}>
                       Free<br /><span style={{ fontWeight: 400, fontSize: 11 }}>$0</span>
+                      <div style={{ marginTop: 8 }}><PlanCta plan="free" effectivePlan={effectivePlan} onUpgrade={openUpgrade} /></div>
                     </th>
                     <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: 'var(--coral-bright, #f4726e)', borderBottom: '1px solid var(--border-subtle)', minWidth: 90 }}>
                       Pro<br /><span style={{ fontWeight: 400, fontSize: 11 }}>${proMonthly}/mo</span>
+                      <div style={{ marginTop: 8 }}><PlanCta plan="pro" effectivePlan={effectivePlan} onUpgrade={openUpgrade} /></div>
                     </th>
                     <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: '#60a5fa', borderBottom: '1px solid var(--border-subtle)', minWidth: 110 }}>
                       Teams<br /><span style={{ fontWeight: 400, fontSize: 11 }}>${teamMonthly}/seat/mo</span>
+                      <div style={{ marginTop: 8 }}><PlanCta plan="teams" effectivePlan={effectivePlan} onUpgrade={openUpgrade} /></div>
                     </th>
                   </tr>
                 </thead>
@@ -390,29 +440,13 @@ export default function PricingPageClient() {
                   <tr>
                     <td style={{ padding: '14px 12px' }} />
                     <td style={{ textAlign: 'center', padding: '14px 12px' }}>
-                      {effectivePlan === 'free'
-                        ? <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>Current plan</span>
-                        : null}
+                      <PlanCta plan="free" effectivePlan={effectivePlan} onUpgrade={openUpgrade} />
                     </td>
                     <td style={{ textAlign: 'center', padding: '14px 12px' }}>
-                      {effectivePlan === 'pro' ? (
-                        <span style={{ fontSize: 12, color: 'var(--coral-bright)', fontWeight: 600 }}>Current plan</span>
-                      ) : (
-                        <button type="button" onClick={() => { setUpgradeTarget('pro'); setUpgradeError(null); }}
-                          style={{ padding: '7px 16px', fontSize: 12, fontWeight: 600, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer' }}>
-                          Upgrade to Pro
-                        </button>
-                      )}
+                      <PlanCta plan="pro" effectivePlan={effectivePlan} onUpgrade={openUpgrade} />
                     </td>
                     <td style={{ textAlign: 'center', padding: '14px 12px' }}>
-                      {effectivePlan === 'teams' ? (
-                        <span style={{ fontSize: 12, color: '#60a5fa', fontWeight: 600 }}>Current plan</span>
-                      ) : (
-                        <button type="button" onClick={() => { setUpgradeTarget('teams'); setUpgradeError(null); }}
-                          style={{ padding: '7px 16px', fontSize: 12, fontWeight: 600, background: '#60a5fa', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer' }}>
-                          Upgrade to Teams
-                        </button>
-                      )}
+                      <PlanCta plan="teams" effectivePlan={effectivePlan} onUpgrade={openUpgrade} />
                     </td>
                   </tr>
                 </tfoot>
@@ -425,7 +459,7 @@ export default function PricingPageClient() {
 
         </div>
       )}
-    </div>
+    </PageContainer>
     </>
   );
 }
