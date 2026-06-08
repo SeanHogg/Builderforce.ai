@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   runtimeApi,
   cloudAgents as cloudAgentsApi,
+  isAwaitingApprovalExecution,
   type Task,
   type AgentHost,
   type Execution,
@@ -15,6 +16,7 @@ import {
 import { RunAgentControl } from '../task/RunAgentControl';
 import { ChatMessageContent } from '../ChatMessageContent';
 import { EXECUTION_STATUS_COLOR as STATUS_COLOR } from '../board/AgentChip';
+import { ExecutionChip } from './ExecutionChip';
 import { useExecutionStream, type ExecutionFileChange } from './useExecutionStream';
 import { ObservabilityContent } from '../ObservabilityContent';
 
@@ -82,6 +84,9 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   const [sentMessages, setSentMessages] = useState<string[]>([]);
   // Durable per-agent file changes for the ticket's shared workspace (attributed).
   const [taskChanges, setTaskChanges] = useState<TaskFileChange[]>([]);
+  // Re-run (retry/resume) of a terminal execution from its chip.
+  const [rerunningId, setRerunningId] = useState<number | null>(null);
+  const [rerunError, setRerunError] = useState<string | null>(null);
   // Cloud-agent ref → display name, for scoping the Logs/Timeline tabs to the
   // agent that actually executed (cloud runs carry no host name).
   const [cloudAgentNames, setCloudAgentNames] = useState<Map<string, string>>(new Map());
@@ -217,6 +222,33 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
     try { await runtimeApi.cancel(selectedId); loadExecutions(); } catch { /* ignore */ }
   };
 
+  // Re-run a terminal execution (failed/cancelled) — or resume a paused one — by
+  // re-submitting the task with the original run's target + payload (its model +
+  // cloud-agent ref), so the retry runs as the same agent rather than the default.
+  const rerun = async (e: Execution) => {
+    if (rerunningId != null) return;
+    setRerunningId(e.id);
+    setRerunError(null);
+    try {
+      const result = await runtimeApi.submitExecution({
+        taskId: task.id,
+        agentHostId: e.agentHostId ?? undefined,
+        payload: typeof e.payload === 'string' ? e.payload : undefined,
+      });
+      if (isAwaitingApprovalExecution(result)) {
+        setGate({ approvalId: result.approvalId, reason: result.reason });
+        return;
+      }
+      setGate(null);
+      loadExecutions(true);
+      onTaskChanged?.();
+    } catch (err) {
+      setRerunError(err instanceof Error ? err.message : 'Failed to re-run');
+    } finally {
+      setRerunningId(null);
+    }
+  };
+
   return (
     <div style={{ padding: 20 }}>
       {/* Run control */}
@@ -242,26 +274,25 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
       ) : executions.length === 0 ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No executions yet. Use Run above to queue this task to an agent.</div>
       ) : (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: rerunError ? 6 : 12 }}>
           {executions.map((e) => {
             const st = (e.id === selectedId && stream.status) || e.status;
             return (
-              <button
+              <ExecutionChip
                 key={e.id}
-                type="button"
-                onClick={() => setSelectedId(e.id)}
-                style={{
-                  padding: '6px 10px', fontSize: 12, borderRadius: 8, cursor: 'pointer',
-                  border: `1px solid ${selectedId === e.id ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
-                  background: selectedId === e.id ? 'var(--surface-coral-soft)' : 'var(--bg-elevated)',
-                  color: STATUS_COLOR[st] ?? 'var(--text-secondary)',
-                }}
-              >
-                #{e.id} · {st}
-              </button>
+                id={e.id}
+                status={st}
+                selected={selectedId === e.id}
+                onSelect={() => setSelectedId(e.id)}
+                onRerun={() => rerun(e)}
+                rerunning={rerunningId === e.id}
+              />
             );
           })}
         </div>
+      )}
+      {rerunError && (
+        <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginBottom: 12 }}>{rerunError}</div>
       )}
 
       {/* Selected execution */}
