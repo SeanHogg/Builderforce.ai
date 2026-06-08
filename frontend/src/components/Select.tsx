@@ -55,17 +55,9 @@ export interface SelectProps {
 interface FlatOption {
   value: string;
   label: ReactNode;
-  text: string;
   disabled?: boolean;
 }
 type RenderRow = { kind: 'group'; label: string } | { kind: 'option'; index: number };
-
-function textOf(node: ReactNode, fallback: string): string {
-  if (typeof node === 'string' || typeof node === 'number') return String(node);
-  if (Array.isArray(node)) return node.map((n) => textOf(n, '')).join('') || fallback;
-  if (isValidElement(node)) return textOf((node.props as { children?: ReactNode }).children, fallback);
-  return fallback;
-}
 
 /** Walk `<option>` / `<optgroup>` children into a flat option list + render rows. */
 function collect(children: ReactNode): { options: FlatOption[]; rows: RenderRow[] } {
@@ -77,7 +69,7 @@ function collect(children: ReactNode): { options: FlatOption[]; rows: RenderRow[
     const props = el.props as { value?: string | number; children?: ReactNode; disabled?: boolean };
     const value = String(props.value ?? '');
     const index = options.length;
-    options.push({ value, label: props.children, text: textOf(props.children, value), disabled: props.disabled });
+    options.push({ value, label: props.children, disabled: props.disabled });
     rows.push({ kind: 'option', index });
   };
 
