@@ -58,6 +58,15 @@
    and adds DevSecOps agents (auto-scan + security-review gate on agent PRs, auto SOC 2 evidence).
    RBAC/SSO/multi-tenant accounts stay in BurnRateOS (it's the IdP).
 
+9. **[08 — PRD: Agentic Security & Governance (Policy Packs + Governance-Auditor Agent)](./08-prd-agentic-governance.md)**
+   The "agents **enforce** the rules" moat. doc 07 made BuilderForce a security *tracker*; doc 08
+   makes it *enforce*: DB-backed policy packs + rules (PM-editable, with optional in-repo
+   `.builderforce/policies/*.yaml` overrides), a `governance-auditor` agent + `governance_audit` tool
+   that audits any connected repo against the resolved ruleset, and `governance_audit_runs` /
+   `governance_findings` under `/api/governance`. BLOCKER findings gate auto-merge; CRITICALs
+   auto-open incidents; clean runs auto-collect SOC 2 evidence. Closes the gap-register item
+   "governance/security/audit AGENTS that check repos against rules are not built."
+
 > **Decision log.** PM + Agile = Phase 1 (BuilderForce owns data, autonomous dev agents, thin
 > embed shells, Tenant→Segment isolation with BurnRateOS as IdP). Security/Governance = Phase 2
 > (doc 07), same model. DSR/suppression re-home per-Segment; BurnRateOS keeps its own

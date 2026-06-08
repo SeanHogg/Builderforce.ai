@@ -1,8 +1,10 @@
 # builderforce.ai/docs — Builderforce.ai documentation (Astro Starlight).
-# Deployed as a separate Cloudflare Pages project. To mount it under
-# builderforce.ai/docs/* configure a Workers Route or Pages Custom Domain
-# with a /docs/* path matcher. The Astro `base: '/docs'` already prefixes
-# every emitted URL.
+# Deployed as a separate Cloudflare Pages project, served at the project ROOT
+# (pages.dev/agents, pages.dev/_astro/*, ...). Astro `base: '/docs'` only
+# prefixes the emitted links/assets (in-page URLs are /docs/*); it does NOT
+# nest the build output, so files live at dist root, not dist/docs.
+# It is mounted under builderforce.ai/docs/* by the Next.js apex worker, which
+# reverse-proxies /docs/* and STRIPS the /docs prefix (see frontend/next.config.js).
 name = "builderforce-docs"
 pages_build_output_dir = "./dist"
 compatibility_date = "2024-01-01"

@@ -34,15 +34,20 @@ const nextConfig = {
   },
   async rewrites() {
     // /docs/* is the Astro Starlight site, deployed as a SEPARATE Cloudflare
-    // Pages project (`builderforce-docs`, built with Astro `base: '/docs'` so it
-    // serves under /docs/*). The apex builderforce.ai is a Pages custom domain
-    // bound to THIS Next worker, which otherwise answers /docs/* with its own
-    // 404. Reverse-proxy those requests (same-origin, no redirect) to the docs
-    // deployment so links like /docs/agents-vs-alternatives resolve. The
-    // /docs/:path* match also covers Starlight's emitted assets (/docs/_astro/*).
+    // Pages project (`builderforce-docs`). The apex builderforce.ai is a Pages
+    // custom domain bound to THIS Next worker, which otherwise answers /docs/*
+    // with its own 404. Reverse-proxy those requests (same-origin, no redirect)
+    // to the docs deployment.
+    //
+    // IMPORTANT: we STRIP the /docs prefix when forwarding. Astro `base: '/docs'`
+    // only prefixes the emitted *links/assets* (so in-page URLs are /docs/*); it
+    // does NOT nest the build *output* — content is written to dist root and
+    // therefore served at the pages.dev ROOT (pages.dev/agents, not /docs/agents).
+    // So /docs/agents must map to pages.dev/agents. Assets referenced as
+    // /docs/_astro/* likewise resolve via the strip to pages.dev/_astro/*.
     return [
-      { source: '/docs', destination: 'https://builderforce-docs.pages.dev/docs' },
-      { source: '/docs/:path*', destination: 'https://builderforce-docs.pages.dev/docs/:path*' },
+      { source: '/docs', destination: 'https://builderforce-docs.pages.dev/' },
+      { source: '/docs/:path*', destination: 'https://builderforce-docs.pages.dev/:path*' },
     ]
   },
   async headers() {
