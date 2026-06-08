@@ -11,7 +11,10 @@ vi.mock('./useExecutionStream', () => ({ useExecutionStream: vi.fn() }));
 // Isolate from the run control + markdown renderer + status palette + Link.
 vi.mock('../task/RunAgentControl', () => ({ RunAgentControl: () => <div data-testid="run-control" /> }));
 vi.mock('../ChatMessageContent', () => ({ ChatMessageContent: ({ content }: { content: string }) => <div>{content}</div> }));
-vi.mock('../board/AgentChip', () => ({ EXECUTION_STATUS_COLOR: {} as Record<string, string> }));
+vi.mock('../board/AgentChip', () => ({
+  EXECUTION_STATUS_COLOR: {} as Record<string, string>,
+  rerunAffordance: (s: string) => (s === 'failed' || s === 'cancelled' ? 'retry' : s === 'paused' ? 'resume' : null),
+}));
 vi.mock('next/link', () => ({ default: ({ children }: { children: React.ReactNode }) => <a>{children}</a> }));
 
 const mockStream = vi.mocked(useExecutionStream);
@@ -52,6 +55,32 @@ describe('AgentExecutionPanel — steering echo', () => {
     // The directive shows in the thread without waiting on a round-trip echo.
     expect(await findByText('focus on the pricing page')).toBeTruthy();
     expect(post).toHaveBeenCalledWith(10, 'focus on the pricing page');
+  });
+
+  it('shows a re-run action on a failed execution and re-submits with its target + payload', async () => {
+    const failed: Execution = { id: 17, taskId: 1, status: 'failed', agentHostId: null, payload: '{"cloudAgentRef":"agt_9","model":"x"}' };
+    vi.spyOn(builderforceApi.runtimeApi, 'listForTask').mockResolvedValue([failed]);
+    // Not running → no live stream status, so the chip shows the failed status.
+    mockStream.mockReturnValue({ status: null, execution: null, messages: [], fileChanges: [], connected: false });
+    const submit = vi.spyOn(builderforceApi.runtimeApi, 'submitExecution').mockResolvedValue({ id: 18, taskId: 1, status: 'pending' });
+    vi.spyOn(builderforceApi, 'isAwaitingApprovalExecution').mockReturnValue(false);
+
+    const { findByLabelText } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
+
+    const retry = await findByLabelText(/Re-run this task/i);
+    fireEvent.click(retry);
+
+    await waitFor(() => expect(submit).toHaveBeenCalledWith({
+      taskId: 1,
+      agentHostId: undefined,
+      payload: '{"cloudAgentRef":"agt_9","model":"x"}',
+    }));
+  });
+
+  it('does not show a re-run action on a running execution', async () => {
+    const { queryByLabelText, findByRole } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
+    await findByRole('button', { name: /#10/ });
+    expect(queryByLabelText(/Re-run this task|Resume this run/i)).toBeNull();
   });
 
   it('rolls the optimistic echo back when the post fails', async () => {

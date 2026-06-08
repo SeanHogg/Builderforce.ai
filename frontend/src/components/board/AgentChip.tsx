@@ -19,6 +19,23 @@ export const EXECUTION_STATUS_COLOR: Record<string, string> = {
 /** Statuses that mean an agent is currently working the task. */
 export const ACTIVE_EXECUTION_STATUSES = new Set(['running', 'submitted', 'pending']);
 
+/**
+ * Whether a terminal/halted execution can be kicked off again from its chip, and
+ * which affordance to show. `retry` re-runs a run that ended unsuccessfully;
+ * `resume` continues a halted one. Single source of truth so every surface that
+ * renders an execution chip agrees on when the action appears.
+ *
+ * Note: the backend execution_status enum has no `paused` value today, so the
+ * `resume` branch is currently unreachable — kept so the affordance is correct
+ * the moment a pause/resume lifecycle lands (see Consolidated Gap Register).
+ */
+export type RerunAffordance = 'retry' | 'resume';
+export function rerunAffordance(status: string | undefined): RerunAffordance | null {
+  if (status === 'failed' || status === 'cancelled') return 'retry';
+  if (status === 'paused') return 'resume';
+  return null;
+}
+
 export interface AgentChipProps {
   /** Primary label — agent role or agentHost name. */
   label: string;
