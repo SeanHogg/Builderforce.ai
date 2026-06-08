@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useEffect, useMemo, useState } from 'react';
 import { segmentTrackerClient, type TrackerRow } from '@/lib/builderforceApi';
 
@@ -165,10 +167,10 @@ function FieldInput({ field, value, onChange }: { field: TrackerField; value: un
   }
   if (field.type === 'select') {
     return (
-      <select {...common} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
+      <Select {...common} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
         <option value="">—</option>
         {(field.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
-      </select>
+      </Select>
     );
   }
   const type = field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text';

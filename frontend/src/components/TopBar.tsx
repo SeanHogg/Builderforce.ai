@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/lib/AuthContext';
@@ -170,7 +172,7 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
                 </button>
               </>
             ) : (
-              <select
+              <Select
                 className="topbar-role-preview__select"
                 value=""
                 onChange={(e) => { if (e.target.value) startPreview(e.target.value as PreviewRole); }}
@@ -180,7 +182,7 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
                 {PREVIEW_ROLES.map((r) => (
                   <option key={r} value={r}>{r}</option>
                 ))}
-              </select>
+              </Select>
             )}
           </div>
         )}

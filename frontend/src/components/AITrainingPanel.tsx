@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   SUPPORTED_MODELS,
@@ -478,7 +480,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
             {(trainingMode === 'behavior' || trainingMode === 'hybrid') && (
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Base Model</label>
-                <select
+                <Select
                   value={config.baseModel}
                   onChange={e => setConfig(c => ({ ...c, baseModel: e.target.value }))}
                   className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
@@ -488,7 +490,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                       {m.name} ({m.parameters}) — {m.task}
                     </option>
                   ))}
-                </select>
+                </Select>
                 {selectedModel && (
                   <div className="mt-1 text-xs text-gray-500 flex items-center gap-1">
                     <span className={`w-1.5 h-1.5 rounded-full ${canUseWebGPU ? 'bg-green-400' : 'bg-orange-400'}`} />
@@ -524,7 +526,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                     {isGenerating ? '⏳ Generating…' : '✨ Generate'}
                   </button>
                 </div>
-                <select
+                <Select
                   value={selectedDatasetId}
                   onChange={e => setSelectedDatasetId(e.target.value)}
                   className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
@@ -535,7 +537,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                       {d.name} ({d.example_count} examples)
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             )}
 

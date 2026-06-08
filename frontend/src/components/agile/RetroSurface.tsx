@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useCallback, useEffect, useState } from 'react';
 import { retroApi, type Retrospective, type RetroDetail } from '@/lib/builderforceApi';
 import { useRealtimeRoom } from '@/lib/embed/useRealtimeRoom';
@@ -61,9 +63,9 @@ export function RetroSurface() {
         {error && <div role="alert" style={{ color: '#dc2626', marginBottom: 8 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New retro name" style={inp} />
-          <select value={template} onChange={(e) => setTemplate(e.target.value)} style={{ ...inp, flex: '0 0 auto' }}>
+          <Select value={template} onChange={(e) => setTemplate(e.target.value)} style={{ ...inp, flex: '0 0 auto' }}>
             {TEMPLATE_OPTIONS.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
-          </select>
+          </Select>
           <button onClick={createRetro} style={btn}>Create</button>
         </div>
         <div style={{ display: 'grid', gap: 6 }}>

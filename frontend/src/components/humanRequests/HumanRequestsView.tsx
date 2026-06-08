@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { approvalsApi, agentHosts, type Approval, type ApprovalStatus, type RequestKind, type AgentHost } from '@/lib/builderforceApi';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
@@ -251,26 +253,26 @@ export function HumanRequestsView({
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
         {!defaultKind && (
-          <select className="admin-select" value={kind} onChange={(e) => setKind(e.target.value as KindFilter)}>
+          <Select className="admin-select" value={kind} onChange={(e) => setKind(e.target.value as KindFilter)}>
             {KIND_OPTIONS.map((opt) => (
               <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
             ))}
-          </select>
+          </Select>
         )}
 
-        <select className="admin-select" value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
+        <Select className="admin-select" value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
           {STATUS_OPTIONS.map((opt) => (
             <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
           ))}
-        </select>
+        </Select>
 
         {lockedAgentHostId == null && (
-          <select className="admin-select" value={agentHostId} onChange={(e) => setAgentHostId(e.target.value)}>
+          <Select className="admin-select" value={agentHostId} onChange={(e) => setAgentHostId(e.target.value)}>
             <option value="">All agentHosts</option>
             {agentHostList.map((c) => (
               <option key={c.id} value={String(c.id)}>{c.name}</option>
             ))}
-          </select>
+          </Select>
         )}
 
         {!compact && (

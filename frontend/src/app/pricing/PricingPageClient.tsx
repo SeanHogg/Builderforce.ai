@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
@@ -357,12 +359,12 @@ export default function PricingPageClient() {
                   <div style={{ display: 'flex', gap: 10 }}>
                     <div style={{ flex: 1 }}>
                       <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Card Brand</label>
-                      <select value={cardBrand} onChange={(e) => setCardBrand(e.target.value)}
+                      <Select value={cardBrand} onChange={(e) => setCardBrand(e.target.value)}
                         style={{ width: '100%', padding: '8px 10px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
                         {['visa', 'mastercard', 'amex', 'discover', 'other'].map((b) => (
                           <option key={b} value={b}>{b.charAt(0).toUpperCase() + b.slice(1)}</option>
                         ))}
-                      </select>
+                      </Select>
                     </div>
                     <div style={{ flex: 1 }}>
                       <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Card Last 4 Digits</label>

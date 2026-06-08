@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useCallback, useEffect, useState } from 'react';
 import { pokerApi, type PokerSession, type PokerSessionDetail } from '@/lib/builderforceApi';
 import { useRealtimeRoom } from '@/lib/embed/useRealtimeRoom';
@@ -102,10 +104,10 @@ export function PokerSurface() {
                 {!revealed
                   ? <button onClick={() => reveal(story.id)} style={{ ...btn, marginLeft: 'auto' }}>Reveal</button>
                   : (
-                    <select defaultValue={story.finalEstimate ?? ''} onChange={(e) => e.target.value && estimate(story.id, e.target.value)} style={{ ...inp, marginLeft: 'auto', maxWidth: 140 }}>
+                    <Select defaultValue={story.finalEstimate ?? ''} onChange={(e) => e.target.value && estimate(story.id, e.target.value)} style={{ ...inp, marginLeft: 'auto', maxWidth: 140 }}>
                       <option value="">Set estimate…</option>
                       {DECK.map((v) => <option key={v} value={v}>{v}</option>)}
-                    </select>
+                    </Select>
                   )}
               </div>
             </div>

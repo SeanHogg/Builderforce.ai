@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useEffect, useState } from 'react';
 import { fetchProjects } from '@/lib/api';
 import { PRDsContent } from '@/components/PRDsContent';
@@ -44,7 +46,7 @@ export function EmbedPrdSurface() {
     <div>
       <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
         <label htmlFor="embed-prd-project" style={{ fontSize: 12, color: 'var(--text-secondary, #64748b)' }}>Project</label>
-        <select
+        <Select
           id="embed-prd-project"
           value={selectedId ?? ''}
           onChange={(e) => setSelectedId(e.target.value ? Number(e.target.value) : null)}
@@ -58,7 +60,7 @@ export function EmbedPrdSurface() {
           {projects.map((p) => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
-        </select>
+        </Select>
       </div>
       {selected ? (
         <PRDsContent projectId={selected.id} projectName={selected.name} />

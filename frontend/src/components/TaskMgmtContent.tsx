@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
@@ -600,7 +602,7 @@ export function TaskMgmtContent({
               color: 'var(--text-primary)',
             }}
           />
-          <select
+          <Select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             style={{
@@ -620,9 +622,9 @@ export function TaskMgmtContent({
                 {s.label}
               </option>
             ))}
-          </select>
+          </Select>
           {!projectId && (
-            <select
+            <Select
               value={filterProject}
               onChange={(e) => setFilterProject(e.target.value)}
               style={{
@@ -642,9 +644,9 @@ export function TaskMgmtContent({
                   {p.name}
                 </option>
               ))}
-            </select>
+            </Select>
           )}
-          <select
+          <Select
             value={filterPriority}
             onChange={(e) => setFilterPriority(e.target.value)}
             style={{
@@ -664,7 +666,7 @@ export function TaskMgmtContent({
                 {p}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       )}
 
@@ -751,7 +753,7 @@ export function TaskMgmtContent({
                     >
                       <div style={{ position: 'absolute', top: 8, right: 8 }}>
                         {editingStatusId === task.id ? (
-                          <select
+                          <Select
                             value={task.status}
                             onChange={(e) => {
                               e.stopPropagation();
@@ -765,7 +767,7 @@ export function TaskMgmtContent({
                                 {s.label}
                               </option>
                             ))}
-                          </select>
+                          </Select>
                         ) : (
                           <span
                             className={taskStatusBadgeClass(task.status)}
@@ -886,7 +888,7 @@ export function TaskMgmtContent({
                   <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
                     {selectedIds.length} selected
                   </span>
-                  <select
+                  <Select
                     value={bulkStatus}
                     onChange={(e) => {
                       const s = e.target.value;
@@ -900,7 +902,7 @@ export function TaskMgmtContent({
                         {s.label}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                   <MoveToBoardControl
                     projects={projects}
                     currentProjectId={effectiveProjectId}
@@ -973,7 +975,7 @@ export function TaskMgmtContent({
                       </td>
                       <td style={{ padding: '10px 12px' }} onClick={(e) => e.stopPropagation()}>
                         {editingStatusId === task.id ? (
-                          <select
+                          <Select
                             value={task.status}
                             onChange={(e) => {
                               patchStatus(task.id, e.target.value);
@@ -986,7 +988,7 @@ export function TaskMgmtContent({
                                 {s.label}
                               </option>
                             ))}
-                          </select>
+                          </Select>
                         ) : (
                           <span
                             className={taskStatusBadgeClass(task.status)}
@@ -1162,7 +1164,7 @@ export function TaskMgmtContent({
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
                     Status
                   </label>
-                  <select
+                  <Select
                     value={form.status ?? 'todo'}
                     onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
                     style={{
@@ -1180,13 +1182,13 @@ export function TaskMgmtContent({
                         {s.label}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
                     Priority
                   </label>
-                  <select
+                  <Select
                     value={form.priority ?? 'medium'}
                     onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as TaskPriority }))}
                     style={{
@@ -1204,7 +1206,7 @@ export function TaskMgmtContent({
                         {p}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               </div>
               {!projectId && (
@@ -1212,7 +1214,7 @@ export function TaskMgmtContent({
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
                     Project
                   </label>
-                  <select
+                  <Select
                     value={form.projectId ?? ''}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, projectId: e.target.value ? Number(e.target.value) : undefined }))
@@ -1233,7 +1235,7 @@ export function TaskMgmtContent({
                         {p.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -1241,7 +1243,7 @@ export function TaskMgmtContent({
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
                     Assign to AgentHost
                   </label>
-                  <select
+                  <Select
                     value={form.assignedAgentHostId ?? ''}
                     onChange={(e) =>
                       setForm((f) => ({
@@ -1265,7 +1267,7 @@ export function TaskMgmtContent({
                         {c.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
@@ -1488,7 +1490,7 @@ export function TaskMgmtContent({
                   {columnLabel(drawerTask.status)}
                 </span>
                 {editingField === 'priority' ? (
-                  <select
+                  <Select
                     autoFocus
                     value={drawerTask.priority}
                     disabled={fieldSaving}
@@ -1506,7 +1508,7 @@ export function TaskMgmtContent({
                     {PRIORITIES.map((p) => (
                       <option key={p} value={p}>{p}</option>
                     ))}
-                  </select>
+                  </Select>
                 ) : (
                   <span
                     role="button"
@@ -1613,7 +1615,7 @@ export function TaskMgmtContent({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
                     <span style={{ color: 'var(--text-muted)' }}>Assignee</span>
                     {editingField === 'assignee' ? (
-                      <select
+                      <Select
                         autoFocus
                         value={drawerTask.assignedAgentHostId ?? ''}
                         disabled={fieldSaving}
@@ -1634,7 +1636,7 @@ export function TaskMgmtContent({
                         {agentHostsList.map((c) => (
                           <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
-                      </select>
+                      </Select>
                     ) : (
                       <span
                         role="button"

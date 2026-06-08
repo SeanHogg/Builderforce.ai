@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useEffect, useState } from 'react';
 
 /**
@@ -101,12 +103,12 @@ export function TenantApiKeyUsageDrawer({ expanded, load }: Props) {
         <div style={{ fontSize: 13, fontWeight: 700 }}>Recent activity</div>
         <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>
           Window:{' '}
-          <select value={days} onChange={(e) => { setDays(Number(e.target.value)); setPage(1); }}>
+          <Select value={days} onChange={(e) => { setDays(Number(e.target.value)); setPage(1); }}>
             <option value={1}>last 24h</option>
             <option value={7}>last 7 days</option>
             <option value={30}>last 30 days</option>
             <option value={90}>last 90 days</option>
-          </select>
+          </Select>
         </label>
       </div>
 

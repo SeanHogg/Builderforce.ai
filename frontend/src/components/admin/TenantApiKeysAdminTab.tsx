@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useEffect, useState } from 'react';
 import {
   adminApi,
@@ -122,7 +124,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
     <div>
       <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
         <label htmlFor="apikeys-tenant" style={{ fontSize: 13, color: 'var(--text-muted)' }}>Tenant:</label>
-        <select
+        <Select
           id="apikeys-tenant"
           value={tenantId ?? ''}
           onChange={(e) => setTenantId(Number(e.target.value))}
@@ -135,7 +137,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
           {tenants.map((t) => (
             <option key={t.id} value={t.id}>{t.name} ({t.slug})</option>
           ))}
-        </select>
+        </Select>
         {tenantId != null && (
           <button type="button" className="btn-ghost" onClick={() => setTenantId(tenantId)}>
             ↻ Refresh

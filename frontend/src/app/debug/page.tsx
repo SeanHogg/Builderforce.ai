@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useState, useEffect } from 'react';
 import { agentHosts, type AgentHost } from '@/lib/builderforceApi';
 import { AgentHostDebugContent } from '@/components/AgentHostDebugContent';
@@ -46,7 +48,7 @@ export default function DebugPage() {
         <>
           <div style={{ ...cardStyle, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 16 }}>
             <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', flexShrink: 0 }}>AgentHost</label>
-            <select
+            <Select
               value={selectedAgentHost?.id ?? ''}
               onChange={(e) => {
                 const found = agentHostList.find((c) => String(c.id) === e.target.value);
@@ -68,7 +70,7 @@ export default function DebugPage() {
                   {c.name}{c.online ? ' (connected)' : ' (offline)'}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
 
           {selectedAgentHost && (

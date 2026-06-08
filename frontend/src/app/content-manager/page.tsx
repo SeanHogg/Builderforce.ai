@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
@@ -542,18 +544,18 @@ export default function ContentManagerPage() {
                 </div>
                 <div>
                   <label className="label">Type</label>
-                  <select className="input" value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as ContentType }))}>
+                  <Select className="input" value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as ContentType }))}>
                     <option value="snippet">Snippet</option>
                     <option value="page">Page</option>
                     <option value="template">Template</option>
-                  </select>
+                  </Select>
                 </div>
                 <div>
                   <label className="label">Status</label>
-                  <select className="input" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as ContentStatus }))}>
+                  <Select className="input" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as ContentStatus }))}>
                     <option value="draft">Draft</option>
                     <option value="published">Published</option>
-                  </select>
+                  </Select>
                 </div>
               </div>
               <div>

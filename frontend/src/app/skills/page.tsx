@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -398,14 +400,14 @@ export default function SkillsPage() {
               <div style={{ display: 'flex', gap: 12 }}>
                 <div style={{ flex: 1 }}>
                   <label className="label">Category</label>
-                  <select className="input" value={createForm.category} onChange={(e) => setCreateForm((f) => ({ ...f, category: e.target.value }))}>
+                  <Select className="input" value={createForm.category} onChange={(e) => setCreateForm((f) => ({ ...f, category: e.target.value }))}>
                     <option value="general">General</option>
                     <option value="coding">Coding</option>
                     <option value="testing">Testing</option>
                     <option value="devops">DevOps</option>
                     <option value="documentation">Documentation</option>
                     <option value="security">Security</option>
-                  </select>
+                  </Select>
                 </div>
                 <div style={{ flex: 1 }}>
                   <label className="label">Version</label>

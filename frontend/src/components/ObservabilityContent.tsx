@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import Link from 'next/link';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
@@ -518,13 +520,13 @@ export function ObservabilityContent({
                   {diagLoading ? 'Refreshing…' : 'Refresh cloud'}
                 </button>
               )}
-              <select value={logLevel} onChange={(e) => setLogLevel(e.target.value)} style={selectStyle}>
+              <Select value={logLevel} onChange={(e) => setLogLevel(e.target.value)} style={selectStyle}>
                 <option value="all">all</option>
                 <option value="error">error</option>
                 <option value="warn">warn</option>
                 <option value="info">info</option>
                 <option value="debug">debug</option>
-              </select>
+              </Select>
               <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
                 <input type="checkbox" checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} />
                 Auto-scroll

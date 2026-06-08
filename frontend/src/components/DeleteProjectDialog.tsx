@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import React, { useEffect, useState } from 'react';
 import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
@@ -139,7 +141,7 @@ export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProj
                   onChange={() => setDisposition('move')}
                 />
                 <span>Move to</span>
-                <select
+                <Select
                   value={moveTargetId}
                   disabled={disposition !== 'move'}
                   onChange={(e) => setMoveTargetId(e.target.value)}
@@ -157,7 +159,7 @@ export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProj
                       {p.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             )}
 

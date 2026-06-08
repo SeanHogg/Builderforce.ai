@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import type { Node } from '@xyflow/react';
 import { NODE_KIND_MAP, isFieldVisible, type ConfigField } from './nodeKinds';
 import type { BuilderNodeData } from './BuilderNode';
@@ -42,11 +44,11 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
     const value = config[f.key];
     if (f.type === 'select') {
       return (
-        <select style={inputStyle} value={String(value ?? f.options?.[0] ?? '')} onChange={(e) => setConfig(f.key, e.target.value)}>
+        <Select style={inputStyle} value={String(value ?? f.options?.[0] ?? '')} onChange={(e) => setConfig(f.key, e.target.value)}>
           {f.options?.map((o) => (
             <option key={o} value={o}>{o}</option>
           ))}
-        </select>
+        </Select>
       );
     }
     if (f.type === 'textarea') {
@@ -104,11 +106,11 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
       {integ && integ.operations.length > 0 && (
         <label style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
           Operation
-          <select style={inputStyle} value={String(config.operation ?? integ.operations[0]?.id ?? '')} onChange={(e) => setConfig('operation', e.target.value)}>
+          <Select style={inputStyle} value={String(config.operation ?? integ.operations[0]?.id ?? '')} onChange={(e) => setConfig('operation', e.target.value)}>
             {integ.operations.map((op) => (
               <option key={op.id} value={op.id}>{op.label}</option>
             ))}
-          </select>
+          </Select>
         </label>
       )}
 

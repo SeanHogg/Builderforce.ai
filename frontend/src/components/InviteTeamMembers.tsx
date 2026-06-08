@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useState } from 'react';
 import { inviteByEmail } from '@/lib/auth';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
@@ -107,7 +109,7 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
             outline: 'none',
           }}
         />
-        <select
+        <Select
           value={role}
           onChange={(e) => setRole(e.target.value)}
           disabled={adding}
@@ -124,7 +126,7 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
           {ROLES.map((r) => (
             <option key={r.value} value={r.value}>{r.label}</option>
           ))}
-        </select>
+        </Select>
         <button
           type="submit"
           disabled={adding || !email.trim()}

@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useCallback, useEffect, useState } from 'react';
 import {
   reposApi,
@@ -204,19 +206,19 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
       {adding ? (
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 10 }}>
           <div style={{ display: 'flex', gap: 8 }}>
-            <select value={provider} onChange={(e) => setProvider(e.target.value)} style={{ ...inputStyle, width: 130 }}>
+            <Select value={provider} onChange={(e) => setProvider(e.target.value)} style={{ ...inputStyle, width: 130 }}>
               {SCM_PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
+            </Select>
             <input style={inputStyle} placeholder="owner" value={owner} onChange={(e) => setOwner(e.target.value)} />
             <input style={inputStyle} placeholder="repo" value={repo} onChange={(e) => setRepo(e.target.value)} />
           </div>
           <input style={inputStyle} placeholder="default branch (optional, e.g. main)" value={defaultBranch} onChange={(e) => setDefaultBranch(e.target.value)} />
-          <select value={credentialId} onChange={(e) => setCredentialId(e.target.value)} style={inputStyle}>
+          <Select value={credentialId} onChange={(e) => setCredentialId(e.target.value)} style={inputStyle}>
             <option value="">— Select access key —</option>
             {scmCreds.map((c) => (
               <option key={c.id} value={c.id}>{c.name} ({c.provider}{c.projectId == null ? ', workspace' : ''})</option>
             ))}
-          </select>
+          </Select>
           <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <input type="checkbox" checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />
             Set as the project&apos;s default repository

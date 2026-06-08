@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { useCart, type ArtifactType } from '@/lib/CartContext';
@@ -543,11 +545,11 @@ export default function MarketplacePage() {
                     </div>
                     <div>
                       <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Pricing Model</label>
-                      <select value={skillForm.pricingModel} onChange={(e) => setSkillForm((f) => ({ ...f, pricingModel: e.target.value as 'flat_fee' | 'consumption' }))}
+                      <Select value={skillForm.pricingModel} onChange={(e) => setSkillForm((f) => ({ ...f, pricingModel: e.target.value as 'flat_fee' | 'consumption' }))}
                         style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }}>
                         <option value="flat_fee">Flat Fee</option>
                         <option value="consumption">Consumption</option>
-                      </select>
+                      </Select>
                     </div>
                     {skillForm.pricingModel === 'consumption' && (
                       <div>

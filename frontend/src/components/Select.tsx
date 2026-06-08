@@ -28,12 +28,18 @@ import { createPortal } from 'react-dom';
 
 export interface SelectChangeEvent {
   target: { value: string };
+  /** No-op for parity with native onChange handlers that call it. */
+  stopPropagation: () => void;
 }
 
 export interface SelectProps {
   value?: string | number;
   defaultValue?: string | number;
   onChange?: (e: SelectChangeEvent) => void;
+  onClick?: (e: React.MouseEvent) => void;
+  onBlur?: () => void;
+  onFocus?: () => void;
+  autoFocus?: boolean;
   disabled?: boolean;
   required?: boolean;
   name?: string;
@@ -93,6 +99,10 @@ export function Select({
   value,
   defaultValue,
   onChange,
+  onClick,
+  onBlur,
+  onFocus,
+  autoFocus,
   disabled,
   required,
   name,
@@ -113,7 +123,14 @@ export function Select({
   const [activeIdx, setActiveIdx] = useState<number>(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const [rect, setRect] = useState<{ left: number; top: number; width: number } | null>(null);
+
+  useEffect(() => {
+    if (autoFocus) buttonRef.current?.focus();
+    // autoFocus is a mount-only intent
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const selected = options.find((o) => o.value === current);
   const displayLabel = selected ? selected.label : options[0]?.label ?? '';
@@ -135,7 +152,7 @@ export function Select({
   const commit = useCallback(
     (val: string) => {
       if (!isControlled) setInternal(val);
-      onChange?.({ target: { value: val } });
+      onChange?.({ target: { value: val }, stopPropagation: () => {} });
       setOpen(false);
     },
     [isControlled, onChange],
@@ -246,6 +263,7 @@ export function Select({
       style={{ position: 'relative', display: style?.display ?? 'inline-block', width: style?.width }}
     >
       <button
+        ref={buttonRef}
         type="button"
         id={id}
         title={title}
@@ -254,8 +272,14 @@ export function Select({
         aria-haspopup="listbox"
         aria-expanded={open}
         role="combobox"
-        onClick={() => (open ? setOpen(false) : openMenu())}
+        onClick={(e) => {
+          onClick?.(e);
+          if (open) setOpen(false);
+          else openMenu();
+        }}
         onKeyDown={onKeyDown}
+        onFocus={onFocus}
+        onBlur={onBlur}
         style={triggerStyle}
       >
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayLabel}</span>
@@ -269,6 +293,9 @@ export function Select({
           <div
             ref={popupRef}
             role="listbox"
+            // Keep focus on the trigger so an inline-edit `onBlur` (commit-on-blur
+            // pattern) doesn't fire and close the editor before the option click lands.
+            onMouseDown={(e) => e.preventDefault()}
             style={{
               position: 'fixed',
               left: rect.left,
@@ -306,7 +333,13 @@ export function Select({
                   aria-selected={isSel}
                   aria-disabled={opt.disabled}
                   onMouseEnter={() => !opt.disabled && setActiveIdx(row.index)}
-                  onClick={() => !opt.disabled && commit(opt.value)}
+                  onClick={(e) => {
+                    if (opt.disabled) return;
+                    // Portaled clicks bubble through the React tree to ancestor
+                    // card handlers — stop so selecting doesn't trigger them.
+                    e.stopPropagation();
+                    commit(opt.value);
+                  }}
                   style={{
                     padding: '7px 10px',
                     fontSize: 13,

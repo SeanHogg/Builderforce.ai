@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useEffect, useState } from 'react';
 import {
   promptLibraryApi,
@@ -122,11 +124,11 @@ export default function PromptsPage() {
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') loadPublic(q); }}
             />
-            <select style={{ ...input, width: 130 }} value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
+            <Select style={{ ...input, width: 130 }} value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
               <option value="popular">Most used</option>
               <option value="recent">Newest</option>
               <option value="featured">Featured</option>
-            </select>
+            </Select>
           </>
         )}
         {tab !== 'public' && <span style={{ flex: 1 }} />}
@@ -326,11 +328,11 @@ function CreatePromptForm({ onCreated, onError }: { onCreated: () => void; onErr
           <input style={input} placeholder="Tags (comma separated)" value={tags} onChange={(e) => setTags(e.target.value)} />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <select style={input} value={visibility} onChange={(e) => setVisibility(e.target.value as typeof visibility)}>
+          <Select style={input} value={visibility} onChange={(e) => setVisibility(e.target.value as typeof visibility)}>
             <option value="private">Private (only me)</option>
             <option value="tenant">Team</option>
             <option value="public">Public (everyone)</option>
-          </select>
+          </Select>
           <input style={input} placeholder="Recommended model (optional)" value={model} onChange={(e) => setModel(e.target.value)} />
         </div>
         <textarea

@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import React from 'react';
 import type { Project } from '@/lib/types';
 
@@ -34,7 +36,7 @@ export function MoveToBoardControl({
   if (destinations.length === 0) return null;
 
   return (
-    <select
+    <Select
       value=""
       disabled={disabled}
       aria-label={label}
@@ -62,6 +64,6 @@ export function MoveToBoardControl({
           {p.name}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }

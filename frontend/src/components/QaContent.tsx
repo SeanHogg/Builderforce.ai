@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 /**
  * Agentic QA dashboard (Observability → Agentic QA tab).
  *
@@ -123,7 +125,7 @@ export function QaContent() {
       {/* Project selector */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
         <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Project</label>
-        <select
+        <Select
           value={projectId ?? ''}
           onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : null)}
           style={{ ...inputStyle, minWidth: 240 }}
@@ -132,7 +134,7 @@ export function QaContent() {
           {projects.map((p) => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {error && (
@@ -289,12 +291,12 @@ function CredentialsSection({ projectId, credentials, busy, onRun }: {
       </p>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <input style={inputStyle} placeholder="Label (Admin user)" value={label} onChange={(e) => setLabel(e.target.value)} />
-        <select style={inputStyle} value={role} onChange={(e) => setRole(e.target.value)}>
+        <Select style={inputStyle} value={role} onChange={(e) => setRole(e.target.value)}>
           <option value="admin">admin</option>
           <option value="manager">manager</option>
           <option value="member">member</option>
           <option value="viewer">viewer</option>
-        </select>
+        </Select>
         <input style={inputStyle} placeholder="Username / email" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" />
         <input style={inputStyle} type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
         <input style={inputStyle} placeholder="/login" value={loginUrl} onChange={(e) => setLoginUrl(e.target.value)} />

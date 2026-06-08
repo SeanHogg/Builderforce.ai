@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useState, useMemo } from 'react';
 import type { AgentHost } from '@/lib/builderforceApi';
 import { dispatchApi } from '@/lib/builderforceApi';
@@ -182,7 +184,7 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
           <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
             Target AgentHost
           </label>
-          <select
+          <Select
             value={selectedAgentHost?.id ?? ''}
             onChange={(e) => {
               const id = Number(e.target.value);
@@ -206,7 +208,7 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
                 {c.name}{c.online ? ' ●' : ' ○'}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         {/* Payload */}

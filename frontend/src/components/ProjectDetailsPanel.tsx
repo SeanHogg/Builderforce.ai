@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import type { Project } from '@/lib/types';
@@ -387,7 +389,7 @@ export function ProjectDetailsPanel({
                   </div>
                   <div style={{ marginBottom: 10 }}>
                     <label htmlFor="edit-status" style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Status</label>
-                    <select
+                    <Select
                       id="edit-status"
                       value={editStatus}
                       onChange={(e) => setEditStatus(e.target.value)}
@@ -405,7 +407,7 @@ export function ProjectDetailsPanel({
                       <option value="completed">Completed</option>
                       <option value="archived">Archived</option>
                       <option value="on_hold">On hold</option>
-                    </select>
+                    </Select>
                   </div>
                   <div style={{ marginBottom: 14 }}>
                     <label htmlFor="edit-description" style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Description</label>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { specsApi, taskSpecsApi, type Spec } from '@/lib/builderforceApi';
 import { ChatMessageContent } from '../ChatMessageContent';
+import { Select } from '@/components/Select';
 
 /**
  * "PRD" tab of the task details panel. Agents hand off between swimlanes via a
@@ -92,11 +93,11 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
                 {busy ? 'Generating…' : 'Generate PRD'}
               </button>
               {linkable.length > 0 && (
-                <select style={selectStyle} defaultValue="" disabled={busy}
+                <Select style={selectStyle} defaultValue="" disabled={busy}
                   onChange={(e) => e.target.value && run(() => taskSpecsApi.attach(taskId, e.target.value, true))}>
                   <option value="">Attach existing PRD…</option>
                   {linkable.map((s) => <option key={s.id} value={s.id}>{s.goal || `PRD ${s.id.slice(0, 8)}`}</option>)}
-                </select>
+                </Select>
               )}
             </div>
           </>
@@ -118,13 +119,13 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
     <div style={{ padding: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         {specs.length > 1 ? (
-          <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} style={{ ...selectStyle, flex: 1 }}>
+          <Select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} style={{ ...selectStyle, flex: 1 }}>
             {specs.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.isPrimary ? '★ ' : ''}{s.goal || `PRD ${s.id.slice(0, 8)}`} ({s.status})
               </option>
             ))}
-          </select>
+          </Select>
         ) : (
           <div style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>
             {selected?.isPrimary ? '★ ' : ''}{selected?.goal || 'PRD'}
@@ -146,11 +147,11 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
           <button type="button" style={{ ...textBtn, opacity: busy ? 0.6 : 1 }} disabled={busy}
             onClick={() => run(() => taskSpecsApi.detach(taskId, selected.id))}>Detach</button>
           {linkable.length > 0 && (
-            <select style={selectStyle} value="" disabled={busy}
+            <Select style={selectStyle} value="" disabled={busy}
               onChange={(e) => e.target.value && run(() => taskSpecsApi.attach(taskId, e.target.value))}>
               <option value="">Attach existing PRD…</option>
               {linkable.map((s) => <option key={s.id} value={s.id}>{s.goal || `PRD ${s.id.slice(0, 8)}`}</option>)}
-            </select>
+            </Select>
           )}
         </div>
       )}

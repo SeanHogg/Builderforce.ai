@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@/components/Select';
+
 import { useState, useCallback, useEffect } from 'react';
 import {
   artifactAssignments,
@@ -196,7 +198,7 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
               </div>
 
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <select
+                <Select
                   className="input"
                   style={{ flex: 1, fontSize: 12, padding: '4px 8px' }}
                   value={selectedId}
@@ -206,7 +208,7 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
                   {scopeEntities().map((e) => (
                     <option key={e.id} value={e.id}>{e.label}</option>
                   ))}
-                </select>
+                </Select>
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
