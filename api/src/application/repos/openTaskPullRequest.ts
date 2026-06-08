@@ -13,6 +13,7 @@ import { tasks, pullRequests } from '../../infrastructure/database/schema';
 import { resolveDefaultRepoForTask } from './resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
 import { createPullRequest } from './createPullRequest';
+import { mergeBranchToBase } from './mergeBranchToBase';
 import type { Db } from '../../infrastructure/database/connection';
 
 export interface OpenTaskPrInput {
@@ -23,7 +24,7 @@ export interface OpenTaskPrInput {
 }
 
 export type OpenTaskPrResult =
-  | { ok: true; url: string; number: number }
+  | { ok: true; url: string; number: number; merged: boolean; mergeError?: string }
   | { ok: false; status: 400 | 404 | 409 | 501 | 502; error: string };
 
 export async function openTaskPullRequest(
@@ -62,6 +63,20 @@ export async function openTaskPullRequest(
     return { ok: false, status: pr.code === 'unsupported' ? 501 : 502, error: pr.reason };
   }
 
+  // Full auto-merge + deploy: merge the ticket branch into the deploy branch so
+  // the push to base triggers CI/deploy. Best-effort — a conflict/failure leaves
+  // the PR open for manual resolution rather than blocking the finalize.
+  const merge = await mergeBranchToBase({
+    provider: resolved.repo.provider,
+    host: resolved.repo.host,
+    owner: resolved.repo.owner,
+    repo: resolved.repo.repo,
+    token: resolved.token,
+    base,
+    head: input.branch.trim(),
+    message: `${title} (BuilderForce auto-merge)`,
+  });
+
   const now = new Date();
   await db.insert(pullRequests).values({
     tenantId,
@@ -74,7 +89,7 @@ export async function openTaskPullRequest(
     url: pr.url,
     branchName: input.branch.trim(),
     baseBranch: base,
-    status: 'open',
+    status: merge.ok ? 'merged' : 'open',
     createdAt: now,
     updatedAt: now,
   });
@@ -83,5 +98,5 @@ export async function openTaskPullRequest(
     .set({ githubPrUrl: pr.url, githubPrNumber: pr.number, gitBranch: input.branch.trim(), updatedAt: now })
     .where(eq(tasks.id, taskId));
 
-  return { ok: true, url: pr.url, number: pr.number };
+  return { ok: true, url: pr.url, number: pr.number, merged: merge.ok, mergeError: merge.ok ? undefined : merge.reason };
 }

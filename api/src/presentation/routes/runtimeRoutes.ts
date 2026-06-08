@@ -5,6 +5,8 @@ import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaul
 import { commitPrdAsPendingChange } from '../../application/repos/commitPrdToRepo';
 import { resolveTicketRepoContext, commitAgentFile, type TicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
 import { createPullRequest } from '../../application/repos/createPullRequest';
+import { mergeBranchToBase } from '../../application/repos/mergeBranchToBase';
+import { readRepoFile, listRepoFiles } from '../../application/repos/readRepoContents';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
@@ -527,6 +529,33 @@ const CLOUD_AGENT_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'list_files',
+      description: 'List repo files (recursively) on the ticket branch so you can discover the existing codebase before editing. Optionally pass a subdirectory to scope the listing.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Optional repo-relative subdirectory to scope to, e.g. "src/components".' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'read_file',
+      description: 'Read the FULL current contents of a repo file on the ticket branch. Always read a file before editing it so you preserve existing code and only change what is needed.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Repo-relative path, e.g. "src/feature.ts".' },
+        },
+        required: ['path'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'write_file',
       description: 'Create or update a file on the ticket branch as a reviewable pending change (a PR is opened/updated for the run). Use once per deliverable file. Provide the FULL file content.',
       parameters: {
@@ -554,7 +583,10 @@ const CLOUD_AGENT_TOOLS = [
   },
 ] as const;
 
-const MAX_CLOUD_TOOL_STEPS = 6;
+// Read→edit→write workflows need more turns than a write-only loop. Each step is
+// one gateway completion (~10-25s); 10 stays well under the cloud orphan ceiling
+// (RuntimeService.CLOUD_ORPHAN_MS = 8 min) so a healthy run never trips the reaper.
+const MAX_CLOUD_TOOL_STEPS = 10;
 
 /**
  * The cloud agent's tool-executing loop. Drives the gateway with the toolset
@@ -677,7 +709,27 @@ async function runCloudToolLoop(
       const tStart = Date.now();
       let toolResult: Record<string, unknown>;
 
-      if (name === 'write_file') {
+      if (name === 'list_files') {
+        if (!repoCtx) {
+          toolResult = { ok: false, error: `no repo bound to this task (${repoMiss})` };
+        } else {
+          const sub = typeof parsed.path === 'string' ? parsed.path : undefined;
+          const ls = await listRepoFiles({ ...repoCtx, ref: repoCtx.branch }, sub);
+          toolResult = ls.ok ? { ok: true, paths: ls.paths, truncated: ls.truncated } : { ok: false, error: ls.reason };
+        }
+      } else if (name === 'read_file') {
+        const path = typeof parsed.path === 'string' ? parsed.path : '';
+        if (!path) {
+          toolResult = { ok: false, error: 'path is required' };
+        } else if (!repoCtx) {
+          toolResult = { ok: false, error: `no repo bound to this task (${repoMiss})` };
+        } else {
+          // Read from the ticket branch so the agent sees its own in-progress edits;
+          // a not-yet-branched file falls back to base.
+          const rf = await readRepoFile({ ...repoCtx, ref: writtenPaths.size > 0 ? repoCtx.branch : repoCtx.base }, path);
+          toolResult = rf.ok ? { ok: true, path: rf.path, content: rf.content, truncated: rf.truncated } : { ok: false, error: rf.reason };
+        }
+      } else if (name === 'write_file') {
         const path = typeof parsed.path === 'string' ? parsed.path : '';
         const fileContent = typeof parsed.content === 'string' ? parsed.content : '';
         if (!path || !fileContent) {
@@ -723,9 +775,13 @@ async function runCloudToolLoop(
     await cancelWatcher.catch(() => { /* ignore */ });
   }
 
-  // Land the changes as a reviewable pending change once any file was committed.
+  // Land the changes: open a PR for the record, then auto-merge the ticket branch
+  // into the deploy branch (pushing to base is what triggers CI/deploy). Skipped
+  // on cancel so a half-done run never merges to main.
   let prOpened = false;
-  if (repoCtx && writtenPaths.size > 0) {
+  let merged = false;
+  let mergeNote = '';
+  if (repoCtx && writtenPaths.size > 0 && !cancelled) {
     const pr = await createPullRequest({
       provider: repoCtx.provider, host: repoCtx.host, owner: repoCtx.owner, repo: repoCtx.repo,
       token: repoCtx.token, head: repoCtx.branch, base: repoCtx.base,
@@ -737,14 +793,32 @@ async function runCloudToolLoop(
       .set({ gitBranch: repoCtx.branch, ...(pr.ok ? { githubPrUrl: pr.url, githubPrNumber: pr.number } : {}), updatedAt: new Date() })
       .where(eq(tasks.id, taskRow.id))
       .catch(() => { /* best-effort */ });
+
+    // Auto-merge to the deploy branch (full auto-merge + deploy policy).
+    const m = await mergeBranchToBase({
+      provider: repoCtx.provider, host: repoCtx.host, owner: repoCtx.owner, repo: repoCtx.repo,
+      token: repoCtx.token, base: repoCtx.base, head: repoCtx.branch,
+      message: `Task #${taskRow.id}: ${taskRow.title} (BuilderForce auto-merge by ${agentLabel})`,
+    });
+    merged = m.ok;
+    mergeNote = m.ok
+      ? ` and auto-merged to \`${repoCtx.base}\` (deploy triggered)`
+      : ` — auto-merge to \`${repoCtx.base}\` failed: ${m.reason}`;
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef, executionId,
+      toolName: 'merge_to_main', category: 'tool',
+      detail: { base: repoCtx.base, head: repoCtx.branch },
+      result: m.ok ? `merged${m.merged ? '' : ' (already up to date)'}${m.sha ? ` · ${m.sha.slice(0, 7)}` : ''}` : `failed: ${m.reason}`.slice(0, 300),
+    });
   }
 
   const output =
     finalOutput ||
     (writtenPaths.size > 0
-      ? `Committed ${writtenPaths.size} file(s) to \`${repoCtx?.branch}\`${prOpened ? ' and opened a pending-change PR' : ''}.`
+      ? `Committed ${writtenPaths.size} file(s) to \`${repoCtx?.branch}\`${prOpened ? ', opened a PR' : ''}${mergeNote}.`
       : cancelled ? 'Run cancelled before any output was produced.' : '(no output produced)');
-  return { ok: true, output, cancelled };
+  // A failed merge is a real failure of the "ship it" contract — surface it.
+  return { ok: !(prOpened && !merged), output, cancelled };
 }
 
 /**
@@ -834,8 +908,10 @@ async function runCloudExecution(
     // write files to the ticket branch, then finish). Each step + tool call is
     // recorded to the timeline.
     const systemPrompt = [
-      'You are a BuilderForce agent executing a project task. Follow the PRD, architecture spec, and project rules exactly. ' +
-      'Use the write_file tool to deliver each concrete file (full content, no bracketed placeholders); call finish with a summary when done. ' +
+      'You are a BuilderForce agent executing a project task against a real repository. Follow the PRD, architecture spec, and project rules exactly. ' +
+      'Workflow: call list_files to discover the codebase, read_file to read any file you intend to change (preserve existing code — only change what the task needs), ' +
+      'then write_file with the FULL updated content (no bracketed placeholders) for each deliverable file. Call finish with a summary when done. ' +
+      'When you finish, your committed changes are automatically merged to the deploy branch and deployed — so make sure the code is complete and correct before calling finish. ' +
       'If no repository is bound, return the complete deliverable in your final summary instead. Make explicit, reasonable assumptions where specifics are unknown.',
       // Assigned Skills/Personas/Content — identity + capabilities steer best from
       // the system prompt, at parity with the self-hosted gateway injection.
