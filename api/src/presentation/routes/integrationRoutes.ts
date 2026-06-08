@@ -334,6 +334,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
 
     let credentialsEnc = existing.credentialsEnc;
     let iv = existing.iv;
+    const rotated = !!body.credentials;
     if (body.credentials) {
       const encrypted = await encryptCredentials(body.credentials, encryptionSecret);
       credentialsEnc = encrypted.enc;
@@ -348,6 +349,9 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
         credentialsEnc,
         iv,
         isEnabled:      body.isEnabled ?? existing.isEnabled,
+        // Rotating the secret invalidates the prior connectivity result — clear it
+        // so the row doesn't keep showing "connected" for a key that's now gone.
+        ...(rotated ? { lastTestedAt: null, lastTestOk: null } : {}),
         updatedAt:      new Date(),
       })
       .where(and(eq(integrationCredentials.id, id), eq(integrationCredentials.tenantId, tenantId)))
