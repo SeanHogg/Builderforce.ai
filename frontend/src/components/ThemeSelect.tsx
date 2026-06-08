@@ -30,7 +30,7 @@ export function ThemeSelect({ value, onChange, options, ariaLabel, style, classN
       onChange={(e) => onChange(e.target.value)}
       aria-label={ariaLabel}
       className={className}
-      style={{ display: 'block', width: '100%', fontSize: 12, ...style }}
+      style={{ width: '100%', fontSize: 12, ...style }}
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>
