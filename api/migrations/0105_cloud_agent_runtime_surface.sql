@@ -1,0 +1,12 @@
+-- 0105_cloud_agent_runtime_surface.sql
+-- A V2 cloud agent picks WHERE it executes — its "runtime surface":
+--   • 'durable' — a Durable Object (on-demand/serverless pricing), one LLM step
+--     per alarm tick. No infra to run; survives the Workers waitUntil time limit.
+--   • 'node'    — a long-lived agent-runtime (Node service) the tenant keeps
+--     connected. Runs the full Claude Agent SDK V2 loop with no time limit.
+--
+-- The user selects the type at creation, assigns the agent to a project, then
+-- executes; dispatch routes by this column. Default 'durable' so an agent runs
+-- with no infra. (Mirrors the raw-SQL `engine` column added in 0087 — ide_agents
+-- is a raw-SQL table, not in the drizzle schema.)
+ALTER TABLE ide_agents ADD COLUMN IF NOT EXISTS runtime_surface text NOT NULL DEFAULT 'durable';

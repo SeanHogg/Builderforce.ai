@@ -448,6 +448,12 @@ export type AgentPricingModel = 'flat_fee' | 'consumption';
  * (default); `builderforce-v2` is the Claude Agent SDK runner.
  */
 export type AgentEngine = 'builderforce-v1' | 'builderforce-v2';
+/**
+ * Execution surface for a V2 cloud agent — the two types the user picks at
+ * creation. `durable` runs on a Durable Object (on-demand serverless, no infra);
+ * `node` runs on a long-lived agent-runtime (Node service) the tenant connects.
+ */
+export type AgentRuntimeSurface = 'durable' | 'node';
 
 export interface CloudAgentInput {
   name: string;
@@ -458,6 +464,7 @@ export interface CloudAgentInput {
   runtimeSupport?: AgentRuntimeSupport;
   preferredRuntime?: 'cloud' | 'host' | null;
   engine?: AgentEngine;
+  runtimeSurface?: AgentRuntimeSurface;
   /** Price in USD cents (0 = free). */
   priceCents?: number;
   pricingModel?: AgentPricingModel;

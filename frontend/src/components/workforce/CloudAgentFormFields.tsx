@@ -2,7 +2,7 @@
 
 import { Select } from '@/components/Select';
 
-import type { AgentRuntimeSupport, AgentEngine } from '@/lib/api';
+import type { AgentRuntimeSupport, AgentEngine, AgentRuntimeSurface } from '@/lib/api';
 
 /**
  * The cloud-agent identity field set, shared by the "Add agent" create modal
@@ -28,11 +28,13 @@ export interface CloudAgentFormState {
   preferredRuntime: 'cloud' | 'host';
   /** Agent runtime engine — which agent loop runs this agent's tasks. */
   engine: AgentEngine;
+  /** Execution surface for a V2 agent — durable DO vs long-lived node. */
+  runtimeSurface: AgentRuntimeSurface;
 }
 
 export const EMPTY_CLOUD_AGENT_FORM: CloudAgentFormState = {
   name: '', title: '', bio: '', skills: '', baseModel: '', runtimeSupport: 'cloud', preferredRuntime: 'cloud',
-  engine: 'builderforce-v1',
+  engine: 'builderforce-v1', runtimeSurface: 'durable',
 };
 
 export const RUNTIME_LABELS: Record<AgentRuntimeSupport, string> = {
@@ -44,6 +46,11 @@ export const RUNTIME_LABELS: Record<AgentRuntimeSupport, string> = {
 export const ENGINE_LABELS: Record<AgentEngine, string> = {
   'builderforce-v1': 'BuilderForce-V1 (pi-coding-agent)',
   'builderforce-v2': 'BuilderForce-V2 (Anthropic — Claude Agent SDK)',
+};
+
+export const RUNTIME_SURFACE_LABELS: Record<AgentRuntimeSurface, string> = {
+  durable: 'Durable (on-demand serverless — no infra)',
+  node: 'Long-lived node (your agent-runtime)',
 };
 
 export const btnPrimary: React.CSSProperties = { padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' };
@@ -118,6 +125,19 @@ export function CloudAgentFormFields({
           V1 runs the pi-coding-agent loop. V2 runs the Claude Agent SDK; models route through the gateway with your tenant’s Anthropic key.
         </p>
       </div>
+      {form.engine === 'builderforce-v2' && (
+        <div>
+          <label style={labelStyle}>Runtime surface</label>
+          <Select style={inputStyle} value={form.runtimeSurface} onChange={(e) => onChange({ runtimeSurface: e.target.value as AgentRuntimeSurface })}>
+            {(Object.keys(RUNTIME_SURFACE_LABELS) as AgentRuntimeSurface[]).map((rs) => (
+              <option key={rs} value={rs}>{RUNTIME_SURFACE_LABELS[rs]}</option>
+            ))}
+          </Select>
+          <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>
+            Durable runs on-demand (no infrastructure to keep running). Long-lived node runs on an agent-runtime you keep connected — required for very long multi-step tasks.
+          </p>
+        </div>
+      )}
       <div>
         <label style={labelStyle}>Base model (optional)</label>
         <input style={inputStyle} value={form.baseModel} onChange={(e) => onChange({ baseModel: e.target.value })} placeholder="builderforce.ai default" />
@@ -139,5 +159,7 @@ export function cloudAgentFormToInput(form: CloudAgentFormState) {
     runtimeSupport: form.runtimeSupport,
     preferredRuntime: form.runtimeSupport === 'both' ? form.preferredRuntime : null,
     engine: form.engine,
+    // Only V2 has a surface choice; V1 always uses the embedded runner.
+    runtimeSurface: form.engine === 'builderforce-v2' ? form.runtimeSurface : undefined,
   };
 }

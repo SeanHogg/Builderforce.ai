@@ -56,6 +56,7 @@ function formFromAgent(a: PublishedAgent): CloudAgentFormState {
     runtimeSupport: a.runtime_support ?? 'cloud',
     preferredRuntime: (a.preferred_runtime as 'cloud' | 'host') ?? 'cloud',
     engine: a.engine ?? 'builderforce-v1',
+    runtimeSurface: a.runtime_surface ?? 'durable',
   };
 }
 

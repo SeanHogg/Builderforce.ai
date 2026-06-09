@@ -10,6 +10,8 @@ import { readRepoFile, listRepoFiles } from '../../application/repos/readRepoCon
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
+import { resolveCloudSurface } from '../../application/runtime/cloudDispatch';
+import { NODE_RUNTIME_OFFLINE_REASON } from '../../application/runtime/orphanReasons';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { loadCapabilityContext } from '../../application/artifact/capabilityContext';
@@ -1009,15 +1011,16 @@ async function resolveCloudAgent(
   env: Env,
   tenantId: number,
   ref: string | undefined,
-): Promise<{ engine: string; label?: string; ref?: string }> {
-  const DEFAULT = { engine: 'builderforce-v1' as const, ref };
+): Promise<{ engine: string; label?: string; ref?: string; runtimeSurface: string }> {
+  const DEFAULT = { engine: 'builderforce-v1' as const, ref, runtimeSurface: 'durable' };
   if (!ref) return DEFAULT;
   try {
     const sql = neon(env.NEON_DATABASE_URL);
-    const rows = (await sql`SELECT engine, name FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ engine?: string; name?: string }>;
+    const rows = (await sql`SELECT engine, name, runtime_surface FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ engine?: string; name?: string; runtime_surface?: string }>;
     const engine = typeof rows[0]?.engine === 'string' && rows[0].engine ? rows[0].engine : 'builderforce-v1';
     const label = typeof rows[0]?.name === 'string' && rows[0].name ? rows[0].name : undefined;
-    return { engine, label, ref };
+    const runtimeSurface = rows[0]?.runtime_surface === 'node' ? 'node' : 'durable';
+    return { engine, label, ref, runtimeSurface };
   } catch {
     return DEFAULT;
   }
@@ -1082,24 +1085,48 @@ async function dispatchAndQueue(
     artifacts,
   };
 
-  const delivered = (
-    await Promise.all(targets.map((targetId) => dispatchToAgentHost(c.env, targetId, message).catch(() => false)))
-  ).some(Boolean);
+  // Route by the agent's chosen runtime surface (the two V2 cloud-agent types):
+  //   • node    → a long-lived agent-runtime (the online agentHosts). An explicit
+  //               pinned host is node-like. If none online, FAIL FAST rather than
+  //               run the doomed serverless Worker loop.
+  //   • durable → an on-demand serverless executor (no node needed).
+  const surface = resolveCloudSurface(agent.runtimeSurface, taskRow.assignedAgentHostId != null);
+
+  // Only the node surface dispatches to a long-lived agent-runtime/host.
+  const delivered = surface === 'node'
+    ? (await Promise.all(targets.map((targetId) => dispatchToAgentHost(c.env, targetId, message).catch(() => false)))).some(Boolean)
+    : false;
+
+  const notifyDone = async () => {
+    const updated = await runtimeService.getExecution(execution.id);
+    notifyExecutionSubscribers(execution.id, {
+      type: 'done',
+      executionId: execution.id,
+      status: updated.status,
+      execution: updated.toPlain(),
+      ts: new Date().toISOString(),
+    });
+  };
 
   if (!delivered) {
-    // No online self-hosted agent took it → queue a background cloud run. The
-    // 'done' notification is emitted by the background task when it settles.
-    c.executionCtx.waitUntil((async () => {
-      await runCloudExecution(c.env as Env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, payload, artifacts);
-      const updated = await runtimeService.getExecution(execution.id);
-      notifyExecutionSubscribers(execution.id, {
-        type: 'done',
-        executionId: execution.id,
-        status: updated.status,
-        execution: updated.toPlain(),
-        ts: new Date().toISOString(),
-      });
-    })());
+    if (surface === 'node') {
+      // node-surface agent but no online agent-runtime → fail fast with guidance.
+      await runtimeService.update(execution.id, {
+        status: ExecutionStatus.FAILED,
+        errorMessage: NODE_RUNTIME_OFFLINE_REASON,
+      }).catch(() => { /* best-effort; reaper backstops */ });
+      await notifyDone().catch(() => { /* best-effort */ });
+    } else {
+      // durable surface → on-demand serverless executor. INTERIM: the Worker
+      // waitUntil loop (capped at the ~30s Cloudflare wall, so multi-step coding
+      // runs fail fast at the 90s orphan ceiling). To be replaced by CloudRunnerDO
+      // (a Durable Object running one LLM step per alarm tick) — see the
+      // Consolidated Gap Register.
+      c.executionCtx.waitUntil((async () => {
+        await runCloudExecution(c.env as Env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, payload, artifacts);
+        await notifyDone();
+      })());
+    }
   }
 
   // Announce the queued/dispatched execution immediately.

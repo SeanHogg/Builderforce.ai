@@ -222,6 +222,8 @@ export interface PublishedAgent {
   preferred_runtime?: 'cloud' | 'host' | null;
   /** Agent runtime engine (migration 0087): pi-coding-agent vs Claude Agent SDK. */
   engine?: 'builderforce-v1' | 'builderforce-v2';
+  /** V2 execution surface (migration 0105): durable DO vs long-lived node. */
+  runtime_surface?: 'durable' | 'node';
   price_cents?: number;
   pricing_model?: 'flat_fee' | 'consumption';
   price_unit?: string | null;
