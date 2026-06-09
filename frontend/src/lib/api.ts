@@ -450,11 +450,11 @@ export type AgentPricingModel = 'flat_fee' | 'consumption';
 export type AgentEngine = 'builderforce-v1' | 'builderforce-v2';
 /**
  * Execution surface for a V2 cloud agent — the two types the user picks at
- * creation. Both run the full task IN THE CLOUD (no local/hybrid agent):
- * `durable` on a Durable Object (on-demand serverless, per step); `node` on a
- * long-lived cloud Node runtime kept running for very long, continuous tasks.
+ * creation. Both run the full task IN THE CLOUD (all Cloudflare, no local/hybrid
+ * agent): `durable` on a Durable Object (on-demand serverless, per step);
+ * `container` on a long-lived Cloudflare Container for very long, continuous tasks.
  */
-export type AgentRuntimeSurface = 'durable' | 'node';
+export type AgentRuntimeSurface = 'durable' | 'container';
 
 export interface CloudAgentInput {
   name: string;

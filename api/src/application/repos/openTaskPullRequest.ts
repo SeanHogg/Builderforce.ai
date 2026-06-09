@@ -9,11 +9,12 @@
  * resolving a dispatch → task.
  */
 import { eq } from 'drizzle-orm';
-import { tasks, pullRequests } from '../../infrastructure/database/schema';
+import { tasks } from '../../infrastructure/database/schema';
 import { resolveDefaultRepoForTask } from './resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
 import { createPullRequest } from './createPullRequest';
-import { mergeBranchToBase, cloudAutoMergeRequiresGreen } from './mergeBranchToBase';
+import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled } from './mergeBranchToBase';
+import { recordPullRequestRow } from './recordPullRequestRow';
 import type { Db } from '../../infrastructure/database/connection';
 
 export interface OpenTaskPrInput {
@@ -66,11 +67,14 @@ export async function openTaskPullRequest(
     return { ok: false, status: pr.code === 'unsupported' ? 501 : 502, error: pr.reason };
   }
 
-  // Full auto-merge + deploy: merge the ticket branch into the deploy branch so
-  // the push to base triggers CI/deploy. Best-effort — a conflict/failure leaves
-  // the PR open for manual resolution rather than blocking the finalize. When the
-  // operator gates on green CI, defer the merge to the CI-success webhook.
-  const merge = cloudAutoMergeRequiresGreen(env)
+  // Merge policy. DEFAULT (CLOUD_AUTOMERGE_ENABLED off): do NOT merge — leave the
+  // PR open for in-product human approval. When auto-merge is enabled: merge the
+  // ticket branch into the deploy branch now, unless the operator gates on green CI
+  // (then defer to the CI-success webhook). Best-effort — a conflict/failure leaves
+  // the PR open for manual resolution rather than blocking the finalize.
+  const merge = !cloudAutoMergeEnabled(env)
+    ? { ok: false as const, code: 'provider_error' as const, reason: 'deferred: awaiting in-product approval' }
+    : cloudAutoMergeRequiresGreen(env)
     ? { ok: false as const, code: 'provider_error' as const, reason: 'deferred: merge on green CI' }
     : await mergeBranchToBase({
         provider: resolved.repo.provider,
@@ -84,7 +88,7 @@ export async function openTaskPullRequest(
       });
 
   const now = new Date();
-  await db.insert(pullRequests).values({
+  await recordPullRequestRow(db, {
     tenantId,
     segmentId: resolved.repo.segmentId,
     projectId: resolved.repo.projectId,
@@ -96,8 +100,6 @@ export async function openTaskPullRequest(
     branchName: input.branch.trim(),
     baseBranch: base,
     status: merge.ok ? 'merged' : 'open',
-    createdAt: now,
-    updatedAt: now,
   });
   await db
     .update(tasks)

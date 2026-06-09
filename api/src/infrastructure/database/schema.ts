@@ -2913,6 +2913,8 @@ export const pullRequests = pgTable('pull_requests', {
   baseBranch:        varchar('base_branch', { length: 255 }),
   status:            varchar('status', { length: 16 }).notNull().default('open'),  // draft|open|merged|closed
   externalTicketRef: varchar('external_ticket_ref', { length: 255 }),
+  mergedBy:          varchar('merged_by', { length: 128 }),   // user id who approved the in-product merge (0106)
+  mergedAt:          timestamp('merged_at'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });

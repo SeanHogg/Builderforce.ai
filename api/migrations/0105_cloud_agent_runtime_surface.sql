@@ -1,12 +1,15 @@
 -- 0105_cloud_agent_runtime_surface.sql
--- A V2 cloud agent picks WHERE it executes — its "runtime surface":
---   • 'durable' — a Durable Object (on-demand/serverless pricing), one LLM step
---     per alarm tick. No infra to run; survives the Workers waitUntil time limit.
---   • 'node'    — a long-lived agent-runtime (Node service) the tenant keeps
---     connected. Runs the full Claude Agent SDK V2 loop with no time limit.
+-- A V2 cloud agent picks WHERE it executes — its "runtime surface". Both run the
+-- full task in the cloud (everything is Cloudflare):
+--   • 'durable'   — a Durable Object (CloudRunnerDO), one LLM step per alarm tick.
+--     On-demand/serverless; no always-on compute; survives the Workers waitUntil
+--     time limit. The default.
+--   • 'container' — a long-lived Cloudflare Container runtime for very long /
+--     continuous tasks (persistent process + shell). Container infra is a future
+--     build; until then a 'container' run falls back to the durable DO.
 --
 -- The user selects the type at creation, assigns the agent to a project, then
 -- executes; dispatch routes by this column. Default 'durable' so an agent runs
--- with no infra. (Mirrors the raw-SQL `engine` column added in 0087 — ide_agents
--- is a raw-SQL table, not in the drizzle schema.)
+-- with no always-on infra. (Mirrors the raw-SQL `engine` column added in 0087 —
+-- ide_agents is a raw-SQL table, not in the drizzle schema.)
 ALTER TABLE ide_agents ADD COLUMN IF NOT EXISTS runtime_surface text NOT NULL DEFAULT 'durable';

@@ -5,13 +5,13 @@ import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaul
 import { commitPrdAsPendingChange } from '../../application/repos/commitPrdToRepo';
 import { resolveTicketRepoContext, commitAgentFile, type TicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
 import { createPullRequest } from '../../application/repos/createPullRequest';
-import { mergeBranchToBase, cloudAutoMergeRequiresGreen } from '../../application/repos/mergeBranchToBase';
+import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled } from '../../application/repos/mergeBranchToBase';
+import { recordPullRequestRow } from '../../application/repos/recordPullRequestRow';
 import { readRepoFile, listRepoFiles } from '../../application/repos/readRepoContents';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { resolveCloudSurface } from '../../application/runtime/cloudDispatch';
-import { NODE_RUNTIME_OFFLINE_REASON } from '../../application/runtime/orphanReasons';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { loadCapabilityContext } from '../../application/artifact/capabilityContext';
@@ -578,7 +578,7 @@ const CLOUD_AGENT_TOOLS = [
     type: 'function',
     function: {
       name: 'finish',
-      description: 'Call when the task is complete. Provide a concise summary of what was delivered.',
+      description: 'Call ONLY when the task is fully complete — every deliverable file written with real, working content (no stubs/placeholders) and every task/PRD requirement implemented. Your changes open a pull request for human review, so a partial scaffold is not "done". Provide a concise summary of what was delivered.',
       parameters: {
         type: 'object',
         properties: { summary: { type: 'string', description: 'What was delivered.' } },
@@ -847,9 +847,11 @@ export async function runCloudToolLoop(
     };
   }
 
-  // Land the changes: open a PR for the record, then auto-merge the ticket branch
-  // into the deploy branch (pushing to base is what triggers CI/deploy). Skipped
-  // on cancel so a half-done run never merges to main.
+  // Land the changes: open a PR and RECORD it so it surfaces in-product for human
+  // review. By default the run STOPS here — nothing is merged to the deploy branch
+  // until a human clicks Approve & Merge (or, when CLOUD_AUTOMERGE_ENABLED is set,
+  // the legacy auto-merge path below ships it). Skipped on cancel so a half-done
+  // run never opens/merges anything.
   let prOpened = false;
   let merged = false;
   let mergeNote = '';
@@ -861,18 +863,42 @@ export async function runCloudToolLoop(
       body: `Changes for task #${taskRow.id}, by ${agentLabel}. Files: ${[...writtenPaths].join(', ')}.`,
     }).catch(() => ({ ok: false as const, code: 'provider_error' as const, reason: 'pr failed' }));
     prOpened = pr.ok;
+
+    const autoMerge = cloudAutoMergeEnabled(env);
+
+    // Record the PR row so the in-product Pull Request tab / approval flow can act
+    // on it. Status reflects the policy: 'open' when awaiting human approval; when
+    // auto-merge is enabled, it lands as 'merged' (or stays 'open' pending green CI).
+    if (pr.ok) {
+      const recordedStatus = autoMerge && !cloudAutoMergeRequiresGreen(env) ? 'merged' : 'open';
+      await recordPullRequestRow(db, {
+        tenantId, segmentId: repoCtx.segmentId, projectId: repoCtx.projectId, repoId: repoCtx.repoId,
+        taskId: taskRow.id, provider: repoCtx.provider, number: pr.number, url: pr.url,
+        branchName: repoCtx.branch, baseBranch: repoCtx.base, status: recordedStatus,
+      }).catch(() => { /* best-effort — task.githubPrUrl below is the fallback surface */ });
+    }
+
     await db.update(tasks)
       .set({ gitBranch: repoCtx.branch, ...(pr.ok ? { githubPrUrl: pr.url, githubPrNumber: pr.number } : {}), updatedAt: new Date() })
       .where(eq(tasks.id, taskRow.id))
       .catch(() => { /* best-effort */ });
 
-    // Auto-merge to the deploy branch (full auto-merge + deploy policy). When the
-    // operator gates shipping on green CI, skip the immediate merge — a successful
-    // CI/deploy webhook merges instead (see ingestRepoCiEvent).
-    if (cloudAutoMergeRequiresGreen(env)) {
+    if (!autoMerge) {
+      // Approval-gated default: open the PR and stop. A human merges in-product.
+      mergeNote = prOpened ? ` — opened a PR for review (awaiting approval before merge to \`${repoCtx.base}\`)` : '';
+      merged = false;
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef, executionId,
+        toolName: 'pr_opened', category: 'tool',
+        detail: { base: repoCtx.base, head: repoCtx.branch },
+        result: prOpened ? `opened PR #${pr.ok ? pr.number : ''} — awaiting human approval` : `pr failed: ${pr.ok ? '' : pr.reason}`.slice(0, 300),
+      });
+    } else if (cloudAutoMergeRequiresGreen(env)) {
+      // Auto-merge enabled, gated on green CI: a successful CI webhook merges later.
       mergeNote = ` — pending CI (will merge to \`${repoCtx.base}\` on green)`;
       merged = true; // not a merge failure; the gate intentionally defers it
     } else {
+      // Auto-merge enabled, immediate: ship to the deploy branch now.
       const m = await mergeBranchToBase({
         provider: repoCtx.provider, host: repoCtx.host, owner: repoCtx.owner, repo: repoCtx.repo,
         token: repoCtx.token, base: repoCtx.base, head: repoCtx.branch,
@@ -896,8 +922,10 @@ export async function runCloudToolLoop(
     (writtenPaths.size > 0
       ? `Committed ${writtenPaths.size} file(s) to \`${repoCtx?.branch}\`${prOpened ? ', opened a PR' : ''}${mergeNote}.`
       : cancelled ? 'Run cancelled before any output was produced.' : '(no output produced)');
-  // A failed merge is a real failure of the "ship it" contract — surface it.
-  return { ok: !(prOpened && !merged), output, cancelled, finished: true };
+  // Only a FAILED auto-merge breaks the "ship it" contract. Approval-gated runs end
+  // with the PR open by design, so an unmerged PR there is success, not failure.
+  const autoMergeFailed = prOpened && cloudAutoMergeEnabled(env) && !merged;
+  return { ok: !autoMergeFailed, output, cancelled, finished: true };
 }
 
 /**
@@ -957,8 +985,9 @@ export async function prepareCloudRun(
   const systemPrompt = [
     'You are a BuilderForce agent executing a project task against a real repository. Follow the PRD, architecture spec, and project rules exactly. ' +
     'Workflow: call list_files to discover the codebase, read_file to read any file you intend to change (preserve existing code — only change what the task needs), ' +
-    'then write_file with the FULL updated content (no bracketed placeholders) for each deliverable file. Call finish with a summary when done. ' +
-    'When you finish, your committed changes are automatically merged to the deploy branch and deployed — so make sure the code is complete and correct before calling finish. ' +
+    'then write_file with the FULL updated content (no bracketed placeholders) for each deliverable file. ' +
+    'Do NOT call finish while any deliverable file is still a stub/placeholder or any requirement in the task/PRD is unimplemented — keep listing, reading and writing files until the task is genuinely complete. ' +
+    'When you finish, your committed changes are opened as a PULL REQUEST for human review (a person approves the merge in-product); they are NOT auto-deployed — so the PR must contain the COMPLETE, working change, not a partial scaffold. Call finish with a summary only once everything the task requires has been written. ' +
     'If no repository is bound, return the complete deliverable in your final summary instead. Make explicit, reasonable assumptions where specifics are unknown.',
     capabilities.promptBlock || null,
   ].filter(Boolean).join('\n\n');
@@ -1088,7 +1117,7 @@ async function resolveCloudAgent(
     const rows = (await sql`SELECT engine, name, runtime_surface FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ engine?: string; name?: string; runtime_surface?: string }>;
     const engine = typeof rows[0]?.engine === 'string' && rows[0].engine ? rows[0].engine : 'builderforce-v1';
     const label = typeof rows[0]?.name === 'string' && rows[0].name ? rows[0].name : undefined;
-    const runtimeSurface = rows[0]?.runtime_surface === 'node' ? 'node' : 'durable';
+    const runtimeSurface = rows[0]?.runtime_surface === 'container' ? 'container' : 'durable';
     return { engine, label, ref, runtimeSurface };
   } catch {
     return DEFAULT;
@@ -1154,15 +1183,17 @@ async function dispatchAndQueue(
     artifacts,
   };
 
-  // Route by the agent's chosen runtime surface (the two V2 cloud-agent types):
-  //   • node    → a long-lived agent-runtime (the online agentHosts). An explicit
-  //               pinned host is node-like. If none online, FAIL FAST rather than
-  //               run the doomed serverless Worker loop.
-  //   • durable → an on-demand serverless executor (no node needed).
+  // Route by the agent's chosen runtime surface — both run in the cloud (all
+  // Cloudflare):
+  //   • container → a long-lived Cloudflare Container runtime (reached via the
+  //                 relay, like a pinned host). When none is online it falls back
+  //                 to the durable executor below — it never dies.
+  //   • durable   → the on-demand Durable Object executor (no always-on runtime).
   const surface = resolveCloudSurface(agent.runtimeSurface, taskRow.assignedAgentHostId != null);
 
-  // Only the node surface dispatches to a long-lived agent-runtime/host.
-  const delivered = surface === 'node'
+  // Only the container surface dispatches to a long-lived runtime; durable goes
+  // straight to the Durable Object.
+  const delivered = surface === 'container'
     ? (await Promise.all(targets.map((targetId) => dispatchToAgentHost(c.env, targetId, message).catch(() => false)))).some(Boolean)
     : false;
 
@@ -1178,45 +1209,46 @@ async function dispatchAndQueue(
   };
 
   if (!delivered) {
-    if (surface === 'node') {
-      // node-surface agent but no online agent-runtime → fail fast with guidance.
-      await runtimeService.update(execution.id, {
-        status: ExecutionStatus.FAILED,
-        errorMessage: NODE_RUNTIME_OFFLINE_REASON,
-      }).catch(() => { /* best-effort; reaper backstops */ });
-      await notifyDone().catch(() => { /* best-effort */ });
-    } else {
-      // durable surface → CloudRunnerDO: the full cloud agent loop runs in the
-      // cloud, one LLM step per Durable Object alarm tick, so it survives the
-      // ~30s `waitUntil` wall and runs to completion. The interim Worker loop is
-      // the fallback when the DO binding is absent (pre-deploy) or kickoff fails.
-      const runWorkerFallback = async () => {
-        await runCloudExecution(c.env as Env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, payload, artifacts);
-        await notifyDone();
-      };
-      const cloudRunner = (c.env as Env).CLOUD_RUNNER;
-      if (cloudRunner) {
-        c.executionCtx.waitUntil((async () => {
-          try {
-            const stub = cloudRunner.get(cloudRunner.idFromName(`exec:${execution.id}`));
-            const res = await stub.fetch('https://cloud-runner/start', {
-              method: 'POST',
-              body: JSON.stringify({
-                executionId: execution.id, tenantId, projectId: taskRow.projectId,
-                taskId: taskRow.id, taskTitle: taskRow.title, taskDescription: taskRow.description,
-                cloudAgentRef: agent.ref, agentLabel: agent.label ?? 'BuilderForce Agent',
-                payload, artifacts,
-              }),
-            });
-            if (!res.ok) await runWorkerFallback();
-          } catch {
-            await runWorkerFallback();
-          }
-        })());
-      } else {
-        c.executionCtx.waitUntil(runWorkerFallback());
+    // Run on the DURABLE cloud executor (CloudRunnerDO — one LLM step per alarm
+    // tick, survives the ~30s waitUntil wall; interim Worker loop as fallback).
+    // This covers BOTH the durable surface AND a container-surface run that found
+    // no long-lived Cloudflare Container online: rather than die, it degrades to
+    // the durable executor so the task still runs in the cloud. (A Cloudflare
+    // Container would add a persistent process + shell for heavy/very-long tasks;
+    // the durable executor is provider-API-backed. Recorded below so the
+    // degradation is visible, not silent.)
+    const containerFallback = surface === 'container';
+    const runWorkerFallback = async () => {
+      await runCloudExecution(c.env as Env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, payload, artifacts);
+      await notifyDone();
+    };
+    const startDurable = async () => {
+      if (containerFallback) {
+        await recordCloudToolEvent(db, {
+          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+          toolName: 'runtime.fallback', category: 'planning',
+          result: 'No long-lived Cloudflare Container online — running this task on the durable (serverless) executor instead.',
+        });
       }
-    }
+      const cloudRunner = (c.env as Env).CLOUD_RUNNER;
+      if (!cloudRunner) { await runWorkerFallback(); return; }
+      try {
+        const stub = cloudRunner.get(cloudRunner.idFromName(`exec:${execution.id}`));
+        const res = await stub.fetch('https://cloud-runner/start', {
+          method: 'POST',
+          body: JSON.stringify({
+            executionId: execution.id, tenantId, projectId: taskRow.projectId,
+            taskId: taskRow.id, taskTitle: taskRow.title, taskDescription: taskRow.description,
+            cloudAgentRef: agent.ref, agentLabel: agent.label ?? 'BuilderForce Agent',
+            payload, artifacts,
+          }),
+        });
+        if (!res.ok) await runWorkerFallback();
+      } catch {
+        await runWorkerFallback();
+      }
+    };
+    c.executionCtx.waitUntil(startDurable());
   }
 
   // Announce the queued/dispatched execution immediately.

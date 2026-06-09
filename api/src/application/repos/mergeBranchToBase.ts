@@ -22,6 +22,19 @@ export function cloudAutoMergeRequiresGreen(env: unknown): boolean {
   return v === '1' || v === 'true';
 }
 
+/**
+ * Master switch for "should a finished agent run auto-merge its branch at all?".
+ * DEFAULT OFF — agent runs open a PR and STOP, leaving the merge to a human who
+ * approves it in-product (or, when `CLOUD_AUTOMERGE_REQUIRE_GREEN`, to the green-CI
+ * webhook). Set `CLOUD_AUTOMERGE_ENABLED=1` to opt back into hands-off
+ * auto-merge + deploy. Single source of truth for both finalize sites (the cloud
+ * runner and openTaskPullRequest), so the gate never drifts between them.
+ */
+export function cloudAutoMergeEnabled(env: unknown): boolean {
+  const v = String((env as Record<string, unknown> | null)?.CLOUD_AUTOMERGE_ENABLED ?? '').toLowerCase();
+  return v === '1' || v === 'true';
+}
+
 export interface MergeBranchInput {
   provider: string;
   host: string | null;
