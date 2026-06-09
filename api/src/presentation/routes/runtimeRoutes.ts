@@ -523,6 +523,18 @@ async function recordCloudUsage(
  *  Observability timeline. Shared with the frontend via the cloud-agents list. */
 const DEFAULT_CLOUD_REF = '__default__';
 
+/** True when a finish summary claims a build / type-check / lint / test passed —
+ *  which the serverless cloud executor cannot have run (it has no shell). Used to
+ *  block a fabricated "checks pass" claim once and force an honest summary. Kept
+ *  deliberately narrow (a check noun AND a success verb) to avoid false positives
+ *  on legitimate descriptions of the work. */
+function assertsUnrunVerification(summary: string): boolean {
+  const s = summary.toLowerCase();
+  const check = /(type[\s-]?check|typecheck|\btsc\b|lint|eslint|\btest(s|ing|ed)?\b|\bbuild(s|ing)?\b|compil)/;
+  const pass = /(pass(es|ed|ing)?|succeed(s|ed)?|success|green|no\s+errors?|error[\s-]?free|will\s+now\s+pass|are\s+resolved|is\s+resolved)/;
+  return check.test(s) && pass.test(s);
+}
+
 /** Shape of one tool call in an OpenAI-compatible completion response. */
 interface RawToolCall { id?: string; type?: string; function?: { name?: string; arguments?: string } }
 
@@ -580,8 +592,16 @@ const CLOUD_AGENT_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'run_checks',
+      description: 'Request the build / type-check / lint / test suite for your changes. IMPORTANT: this serverless executor has NO shell — it cannot run them itself. The checks run in CI on the pull request your changes open, and that CI is the source of truth. Call this to confirm that fact; then write correct code. Never claim a check passed locally — you cannot run one here.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'finish',
-      description: 'Call ONLY when the task is fully complete — every deliverable file written with real, working content (no stubs/placeholders) and every task/PRD requirement implemented. Your changes open a pull request for human review, so a partial scaffold is not "done". Provide a concise summary of what was delivered.',
+      description: 'Call ONLY when the task is fully complete — every deliverable file written with real, working content (no stubs/placeholders) and every task/PRD requirement implemented. Your changes open a pull request for human review, so a partial scaffold is not "done". Provide a concise summary of what was delivered. Do NOT assert that a build/type-check/lint/test passed — you cannot run those here (CI on the PR verifies).',
       parameters: {
         type: 'object',
         properties: { summary: { type: 'string', description: 'What was delivered.' } },
@@ -673,6 +693,10 @@ export async function runCloudToolLoop(
   let finished = false;
   let cancelled = false;
   let step = startStep;
+  // Honesty gate: this executor has no shell, so it can never actually run a
+  // build/type-check/test. Reject a finish that claims one passed — once — to force
+  // an honest summary; the opened PR is annotated unverified regardless.
+  let finishBlockedOnce = false;
 
   // Hard cancel: a background watcher polls the (cross-isolate) execution status
   // and aborts the in-flight gateway fetch the instant it sees CANCELLED, so a
@@ -816,13 +840,32 @@ export async function runCloudToolLoop(
             toolResult = { ok: false, error: commit.reason };
           }
         }
+      } else if (name === 'run_checks') {
+        // No shell here — verification is deferred to CI on the PR. Answer
+        // honestly so the agent stops inventing run_code/run_command and never
+        // reports a local check as passing.
+        toolResult = {
+          ok: true,
+          ran: false,
+          note: 'This serverless executor cannot run builds, type-checks, lint, or tests — it has no shell. Your changes open a pull request and the project CI runs them there; that CI is the source of truth. Do not state that any check passed. Write correct code and call finish with an honest summary.',
+        };
       } else if (name === 'finish') {
         const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : '';
-        if (summary) finalOutput = summary;
-        finished = true;
-        toolResult = { ok: true };
+        if (summary && !finishBlockedOnce && assertsUnrunVerification(summary)) {
+          // The summary claims a check passed, but nothing was (or could be) run.
+          // Block once and force an honest restatement.
+          finishBlockedOnce = true;
+          toolResult = {
+            ok: false,
+            error: 'You stated that a build/type-check/lint/test passed or is resolved, but this executor cannot run any of those — CI on the pull request verifies them. Call finish again with a summary that does NOT claim a check passed (describe what you changed and that CI will verify), or call run_checks first.',
+          };
+        } else {
+          if (summary) finalOutput = summary;
+          finished = true;
+          toolResult = { ok: true };
+        }
       } else {
-        toolResult = { ok: false, error: `unknown tool '${name}'` };
+        toolResult = { ok: false, error: `unknown tool '${name}'. Available tools: list_files, read_file, write_file, run_checks, finish. This executor has no shell and cannot run code, builds, or tests — do not claim a check passed; CI on the PR verifies.` };
       }
 
       await recordCloudToolEvent(db, {
@@ -872,7 +915,7 @@ export async function runCloudToolLoop(
       provider: repoCtx.provider, host: repoCtx.host, owner: repoCtx.owner, repo: repoCtx.repo,
       token: repoCtx.token, head: repoCtx.branch, base: repoCtx.base,
       title: `Task #${taskRow.id}: ${taskRow.title}`,
-      body: `Changes for task #${taskRow.id}, by ${agentLabel}. Files: ${[...writtenPaths].join(', ')}.`,
+      body: `Changes for task #${taskRow.id}, by ${agentLabel}. Files: ${[...writtenPaths].join(', ')}.\n\n> ⚠ **Not verified in-agent.** This serverless executor has no shell and ran no build, type-check, lint, or tests. CI on this PR is the source of truth — do not merge on the agent's summary alone.`,
     }).catch(() => ({ ok: false as const, code: 'provider_error' as const, reason: 'pr failed' }));
     prOpened = pr.ok;
 
@@ -946,7 +989,12 @@ export async function runCloudToolLoop(
   // Only a FAILED auto-merge breaks the "ship it" contract. Approval-gated runs end
   // with the PR open by design, so an unmerged PR there is success, not failure.
   const autoMergeFailed = prOpened && cloudAutoMergeEnabled(env) && !merged;
-  return { ok: !autoMergeFailed, output, cancelled, finished: true };
+  // Mark the result unverified whenever a PR was opened: nothing was built or tested
+  // in-agent, so the summary's claims are not authoritative — CI on the PR is.
+  const unverifiedNote = prOpened
+    ? '\n\n⚠ Not verified in-agent — this serverless executor ran no build/type-check/tests. CI on the PR is the source of truth.'
+    : '';
+  return { ok: !autoMergeFailed, output: output + unverifiedNote, cancelled, finished: true };
 }
 
 /**
@@ -967,6 +1015,7 @@ export async function prepareCloudRun(
   model: string | undefined,
   artifacts: ResolvedArtifacts | undefined,
   cloudAgentRef?: string,
+  payload?: string,
 ): Promise<{ systemPrompt: string; userContent: string }> {
   const tPrep0 = Date.now();
   const [prd, governance, capabilities] = await Promise.all([
@@ -995,7 +1044,14 @@ export async function prepareCloudRun(
     });
   }
 
+  // Auto-fix runs carry a remediation block (the post-merge build failure) in the
+  // payload — surface it prominently so the agent fixes the REAL failing build.
+  const remediation = parseRemediation(payload);
+
   const userContent = [
+    remediation
+      ? `## Build failure to fix (attempt ${remediation.attempt}/${remediation.maxAttempts})\n\nA previous change for this task was merged but the build then FAILED. Fix the cause below — do not re-do unrelated work.\n\n${remediation.buildError}${remediation.runUrl ? `\n\nCI run: ${remediation.runUrl}` : ''}`
+      : null,
     prd ? `## Product Requirements Document (PRD)\n\n${prd}` : null,
     governance || null,
     `## Your Task\n\n${taskRow.title}\n\n${taskRow.description ?? ''}`.trim(),
@@ -1009,6 +1065,7 @@ export async function prepareCloudRun(
     'then write_file with the FULL updated content (no bracketed placeholders) for each deliverable file. ' +
     'Do NOT call finish while any deliverable file is still a stub/placeholder or any requirement in the task/PRD is unimplemented — keep listing, reading and writing files until the task is genuinely complete. ' +
     'When you finish, your committed changes are opened as a PULL REQUEST for human review (a person approves the merge in-product); they are NOT auto-deployed — so the PR must contain the COMPLETE, working change, not a partial scaffold. Call finish with a summary only once everything the task requires has been written. ' +
+    'You CANNOT run builds, type-checks, lint, or tests here — this executor has no shell. Those run in CI on the pull request your changes open, and that CI is the source of truth. There is NO run_code/run_command tool; if you want to acknowledge verification, call run_checks. NEVER state that a check passed, succeeded, is clean, or is resolved — you cannot run one. Write correct, complete code and finish with an honest summary. ' +
     'If no repository is bound, return the complete deliverable in your final summary instead. Make explicit, reasonable assumptions where specifics are unknown.',
     capabilities.promptBlock || null,
   ].filter(Boolean).join('\n\n');
@@ -1063,7 +1120,7 @@ async function runCloudExecution(
     });
 
     const { systemPrompt, userContent } = await prepareCloudRun(
-      env, db, executionId, taskRow, tenantId, projectId, agentLabel, model, artifacts, cloudAgentRef,
+      env, db, executionId, taskRow, tenantId, projectId, agentLabel, model, artifacts, cloudAgentRef, payload,
     );
     const { ok, output, cancelled } = await runCloudToolLoop(
       env, db, executionId, tenantId, taskRow, cloudAgentRef, agentLabel, model, systemPrompt, userContent, isCancelled, projectId,
@@ -1107,6 +1164,32 @@ async function runCloudExecution(
 type SubmittedExecution = { id: number; status: string; toPlain(): unknown };
 
 /**
+ * Fail a cloud run loudly when its engine has no executor available. The serverless
+ * durable fallback (CloudRunnerDO / the Worker loop) implements ONLY the
+ * `builderforce-v1` cloud tool-loop — it is NOT the V2 (Claude Agent SDK) runtime,
+ * which lives in agent-runtime / a long-lived Cloudflare Container. Running a V2
+ * agent on the v1 fallback would silently use a different engine + model and (the
+ * reported bug) attribute it to the gateway default. Instead, mark the run FAILED
+ * with an attributed `runtime.unavailable` event so the V2 identity is preserved on
+ * the timeline and the user is told to bring a real runtime online. Never throws.
+ */
+async function failCloudEngineUnavailable(
+  db: Db,
+  runtimeService: RuntimeService,
+  args: { tenantId: number; executionId: number; cloudAgentRef?: string; engine: string; label: string; notify: () => Promise<void> },
+): Promise<void> {
+  const msg = `${args.label} runs on the “${args.engine}” engine, which needs a long-lived BuilderForce runtime (a connected agent-runtime host, or a Cloudflare Container). None is online, so this run was NOT executed: the serverless durable fallback only runs the builderforce-v1 cloud loop and would otherwise silently use a different engine and model. Connect an agent host (or enable a Container) and re-run.`;
+  await recordCloudToolEvent(db, {
+    tenantId: args.tenantId, cloudAgentRef: args.cloudAgentRef, executionId: args.executionId,
+    toolName: 'runtime.unavailable', category: 'planning', result: msg,
+  });
+  try {
+    await runtimeService.update(args.executionId, { status: ExecutionStatus.FAILED, errorMessage: msg });
+  } catch { /* best-effort — the telemetry event already records the reason */ }
+  await args.notify().catch(() => { /* best-effort */ });
+}
+
+/**
  * Resolve the runtime engine + display label for a cloud-agent run from its
  * `ide_agents.id`. The ref is the one the caller pinned, else the ticket's
  * assigned agent (see {@link dispatchAndQueue}). When a ref resolves, the engine
@@ -1123,6 +1206,25 @@ function parseCloudAgentRef(payload: string | undefined): string | undefined {
     return typeof p.cloudAgentRef === 'string' && p.cloudAgentRef.trim() ? p.cloudAgentRef.trim() : undefined;
   } catch {
     return undefined;
+  }
+}
+
+interface RemediationContext { attempt: number; maxAttempts: number; buildError: string; runUrl: string | null }
+
+/** Parse the post-merge build-failure remediation block off an auto-fix run's payload. */
+function parseRemediation(payload: string | undefined): RemediationContext | null {
+  if (!payload) return null;
+  try {
+    const r = (JSON.parse(payload) as { remediation?: Record<string, unknown> }).remediation;
+    if (!r || r.kind !== 'build_failure' || typeof r.buildError !== 'string') return null;
+    return {
+      attempt: typeof r.attempt === 'number' ? r.attempt : 1,
+      maxAttempts: typeof r.maxAttempts === 'number' ? r.maxAttempts : 2,
+      buildError: r.buildError,
+      runUrl: typeof r.runUrl === 'string' ? r.runUrl : null,
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -1199,7 +1301,7 @@ export async function dispatchCloudRunForTask(
     taskId: params.taskId,
     agentHostId: taskRow.assignedAgentHostId ?? undefined,
     tenantId: params.tenantId,
-    submittedBy: params.submittedBy,
+    submittedBy: params.submittedBy ?? 'system:autofix',
     payload: params.payload,
   });
   await startDispatchedExecution(env, db, runtimeService, waitUntil, params.tenantId, execution as SubmittedExecution, taskRow as ExecutionTaskRow, params.payload);
@@ -1282,7 +1384,20 @@ async function startDispatchedExecution(
     });
   };
 
-  if (!delivered) {
+  if (!delivered && agent.engine !== 'builderforce-v1') {
+    // The serverless durable executor implements ONLY the builderforce-v1 cloud
+    // tool-loop (provider-API-backed, gateway-default model). It is NOT the V2
+    // (Claude Agent SDK) runtime — that runs in agent-runtime / a long-lived
+    // Cloudflare Container, reached as a host above. Running a V2 agent here would
+    // silently execute a different engine + model and attribute it to the gateway
+    // default (the reported bug: a "V2" run shown as "BuilderForce Cloud (default)"
+    // on gemini). Fail loudly instead so a V2 run never masquerades as the v1 cloud
+    // default. (README gap: the real V2 loop only runs in agent-runtime.)
+    waitUntil(failCloudEngineUnavailable(db, runtimeService, {
+      tenantId, executionId: execution.id, cloudAgentRef: agent.ref,
+      engine: agent.engine, label: agent.label ?? 'This cloud agent', notify: notifyDone,
+    }));
+  } else if (!delivered) {
     // Run on the DURABLE cloud executor (CloudRunnerDO — one LLM step per alarm
     // tick, survives the ~30s waitUntil wall; interim Worker loop as fallback).
     // This covers BOTH the durable surface AND a container-surface run that found
@@ -1322,7 +1437,7 @@ async function startDispatchedExecution(
         await runWorkerFallback();
       }
     };
-    c.executionCtx.waitUntil(startDurable());
+    waitUntil(startDurable());
   }
 
   // Announce the queued/dispatched execution immediately.

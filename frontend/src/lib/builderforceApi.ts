@@ -2332,6 +2332,8 @@ export interface PullRequestRow {
   status: string;          // draft | open | merged | closed
   mergedBy: string | null;
   mergedAt: string | null;
+  mergeSha: string | null;
+  buildStatus: string | null;  // null | pending | success | failure (post-merge build)
 }
 
 /** Live provider-side state for a PR (mirrors api getPullRequestDetail). */

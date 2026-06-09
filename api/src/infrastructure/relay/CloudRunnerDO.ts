@@ -105,7 +105,7 @@ export class CloudRunnerDO implements DurableObject {
         const { systemPrompt, userContent } = await prepareCloudRun(
           this.env, this.db, cursor.executionId,
           { id: cursor.taskId, title: cursor.taskTitle, description: cursor.taskDescription },
-          cursor.tenantId, cursor.projectId, cursor.agentLabel, cursor.model, cursor.artifacts, cursor.cloudAgentRef,
+          cursor.tenantId, cursor.projectId, cursor.agentLabel, cursor.model, cursor.artifacts, cursor.cloudAgentRef, cursor.payload,
         );
         cursor.systemPrompt = systemPrompt;
         cursor.userContent = userContent;
