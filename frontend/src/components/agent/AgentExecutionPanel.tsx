@@ -58,6 +58,21 @@ function filesFromResult(result: AgentResult | null, toolEvents: ExecutionTraceT
   return [...map.values()];
 }
 
+/**
+ * Full assistant narration from an `agent.message` trace event. The complete text
+ * is in `args.content` (the truncated `result` is the timeline preview), so prefer
+ * it and fall back to `result` for older rows.
+ */
+function agentMessageText(ev: ExecutionTraceToolEvent): string {
+  if (ev.args) {
+    try {
+      const a = JSON.parse(ev.args) as { content?: unknown };
+      if (typeof a.content === 'string' && a.content.trim()) return a.content;
+    } catch { /* fall through to result */ }
+  }
+  return (ev.result ?? '').trim();
+}
+
 const CHANGE_COLOR: Record<ExecutionFileChange['change'], string> = {
   created: 'var(--success, #16a34a)',
   modified: 'var(--coral-bright)',
@@ -139,15 +154,35 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   // Output thread: historical result (if no live assistant text yet) + streamed turns.
   const historicalText = result?.summary ?? result?.output ?? '';
   const hasLiveAssistant = stream.messages.some((m) => m.role === 'assistant');
+  // Cloud runs drop the live WS cross-isolate, so the agent's narration never
+  // reaches stream.messages and Output is stuck on "Agent is working…" even while
+  // Tools/Changes populate. It IS persisted as `agent.message` telemetry (re-polled
+  // into `trace`), so rebuild the assistant turns from it as the fallback source.
+  const tracedAssistant = useMemo(
+    () => toolEvents
+      .filter((ev) => ev.toolName === 'agent.message')
+      .map((ev) => ({ role: 'assistant' as const, text: agentMessageText(ev), ts: ev.ts }))
+      .filter((m) => m.text)
+      .sort((a, b) => a.ts.localeCompare(b.ts)), // endpoint returns newest-first
+    [toolEvents],
+  );
   const thread = useMemo(() => {
-    const base = historicalText && !hasLiveAssistant ? [{ role: 'assistant' as const, text: historicalText, ts: '' }] : [];
     // Drop optimistic echoes the stream has since delivered (match by text).
     const echoed = new Set(stream.messages.filter((m) => m.role === 'user').map((m) => m.text));
     const optimistic = sentMessages
       .filter((t) => !echoed.has(t))
       .map((text) => ({ role: 'user' as const, text, ts: '' }));
-    return [...base, ...stream.messages, ...optimistic];
-  }, [historicalText, hasLiveAssistant, stream.messages, sentMessages]);
+
+    // Host runs stream turns live and in order — use them verbatim. Cloud runs
+    // (no live assistant) rebuild assistant turns from persisted telemetry, then
+    // close with the final summary if it isn't already the last narrated turn.
+    if (hasLiveAssistant) return [...stream.messages, ...optimistic];
+    const tail = historicalText && tracedAssistant.every((a) => a.text.trim() !== historicalText.trim())
+      ? [{ role: 'assistant' as const, text: historicalText, ts: '' }]
+      : [];
+    const userTurns = stream.messages.filter((m) => m.role === 'user');
+    return [...tracedAssistant, ...tail, ...userTurns, ...optimistic];
+  }, [historicalText, hasLiveAssistant, tracedAssistant, stream.messages, sentMessages]);
 
   // Files: streamed changes win; fall back to result/tool-derived for past runs.
   const files = useMemo(() => {
