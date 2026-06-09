@@ -411,12 +411,15 @@ async function ensureTaskPrd(
   const fileChange = status === 'updated' ? 'modified' : 'created';
   await recordTaskFileChange(env, tenantId, taskId, executionId, 'PRD.md', fileChange, agentLabel);
 
-  // Land PRD.md as a real pending change on the ticket's git branch (branch + PR).
+  // Land PRD.md as a pending change on the ticket's git branch — the SAME branch
+  // the agent's code commits to. No PR is opened here; the single run PR (at
+  // finalize) covers PRD.md + all files.
   const committed = await commitPrdAsPendingChange(db, gitSecret(env), tenantId, taskId, taskRow.title, prd, agentLabel);
   if (committed.ok) {
-    // Surface the branch + PR on the ticket (Details shows the branch as a link).
+    // Surface the branch on the ticket (Details shows the branch as a link). The
+    // PR URL is set later by the finalize once the single PR is opened.
     await db.update(tasks)
-      .set({ gitBranch: committed.branch, ...(committed.prUrl ? { githubPrUrl: committed.prUrl, githubPrNumber: committed.prNumber ?? undefined } : {}), updatedAt: new Date() })
+      .set({ gitBranch: committed.branch, updatedAt: new Date() })
       .where(eq(tasks.id, taskId))
       .catch(() => { /* best-effort */ });
   }
@@ -427,7 +430,7 @@ async function ensureTaskPrd(
   notifyExecutionSubscribers(executionId, {
     type: 'message', executionId, role: 'assistant',
     text: committed.ok
-      ? `📝 ${agentLabel} drafted the PRD and committed it to branch \`${committed.branch}\`${committed.prUrl ? ` — pending change: ${committed.prUrl}` : ' (pending change)'}. See the PRD tab + Changes.`
+      ? `📝 ${agentLabel} drafted the PRD and committed it to branch \`${committed.branch}\` (pending change — included in this task's single PR). See the PRD tab + Changes.`
       : `📝 ${agentLabel} drafted the PRD (saved to the PRD tab). No git branch created: ${committed.reason}.`,
     ts: new Date().toISOString(),
   });
@@ -648,6 +651,15 @@ export async function runCloudToolLoop(
   const repoCtx: TicketRepoContext | null = repoResolved.ok ? repoResolved.ctx : null;
   const repoMiss = repoResolved.ok ? '' : repoResolved.reason;
   const writtenPaths = new Set<string>(opts?.resume?.writtenPaths ?? []);
+
+  // The PRD (committed to the ticket branch during prep) is part of this task's
+  // single PR. Seed it into writtenPaths on the first tick so the finalize opens a
+  // PR — and lists PRD.md — even if the agent ends up writing zero code files. Done
+  // once (resume is undefined on the first tick); thereafter it rides resume state.
+  if (repoCtx && !opts?.resume) {
+    const prdOnBranch = await readRepoFile({ ...repoCtx, ref: repoCtx.branch }, 'PRD.md').catch(() => null);
+    if (prdOnBranch?.ok) writtenPaths.add('PRD.md');
+  }
 
   // Resume from persisted state (DO surface) or start fresh (Worker surface).
   const messages: Array<Record<string, unknown>> = opts?.resume?.messages ?? [

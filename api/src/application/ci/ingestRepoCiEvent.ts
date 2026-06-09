@@ -18,6 +18,7 @@ import { executions, tasks, projects, toolAuditEvents } from '../../infrastructu
 import { resolveDefaultRepoForTask } from '../repos/resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen } from '../repos/mergeBranchToBase';
+import { ticketBranchName } from '../repos/commitFileAsPendingChange';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -101,7 +102,7 @@ export async function ingestRepoCiEvent(
         if (!isResolveError(resolved)) {
           const base = (resolved.repo.defaultBranch ?? 'main').trim();
           // Only merge the dedicated ticket branch, never an arbitrary green branch.
-          if (evt.branch === `builderforce/task-${taskId}`) {
+          if (evt.branch === ticketBranchName(taskId)) {
             const mr = await mergeBranchToBase({
               provider: resolved.repo.provider, host: resolved.repo.host,
               owner: resolved.repo.owner, repo: resolved.repo.repo, token: resolved.token,
