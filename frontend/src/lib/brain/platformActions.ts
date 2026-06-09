@@ -168,6 +168,9 @@ const STATIC_ROUTES: Record<string, string> = {
 
 const DYNAMIC_ROUTES: Record<string, (id: string | number) => string> = {
   project: (id) => `/projects/${id}`,
+  // The Tasks board scoped to one project — where a freshly-created task is
+  // visible. NOT `/projects/{id}` (that redirects into the IDE).
+  project_tasks: (id) => `/projects?tab=tasks&project=${id}`,
   ide_project: (id) => `/ide/${id}`,
   content_item: (id) => `/content-manager/${id}`,
   persona: (id) => `/personas/${id}`,
@@ -493,7 +496,7 @@ export function buildPlatformActions(ctx: PlatformActionContext): BrainAction[] 
   // Navigation — open any page in the app.
   const navigate_to: BrainAction = {
     name: 'navigate_to',
-    description: 'Navigate the browser to a page in the app. For pages about one project (page="project" or "ide_project") pass the numeric project id as `id`.',
+    description: 'Navigate the browser to a page in the app. For pages about one project (page="project" or "ide_project") pass the numeric project id as `id`. To show a project\'s tasks (e.g. after creating one) use page="project_tasks" with the project id.',
     parameters: obj(
       {
         page: { type: 'string', enum: ALL_PAGE_KEYS, description: 'Page key to open.' },

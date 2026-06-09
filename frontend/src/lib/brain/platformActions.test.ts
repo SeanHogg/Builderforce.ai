@@ -99,6 +99,13 @@ describe('navigate_to', () => {
     expect(navigate).toHaveBeenCalledWith('/ide/42?chat=9');
   });
 
+  it('resolves the project task board to the scoped Tasks tab (not the IDE redirect)', async () => {
+    const { ctx, navigate } = makeCtx();
+    const nav = buildPlatformActions(ctx).find((a) => a.name === 'navigate_to')!;
+    await nav.run({ page: 'project_tasks', id: 14 });
+    expect(navigate).toHaveBeenCalledWith('/projects?tab=tasks&project=14');
+  });
+
   it('errors (without navigating) on a dynamic page missing its id', async () => {
     const { ctx, navigate } = makeCtx();
     const nav = buildPlatformActions(ctx).find((a) => a.name === 'navigate_to')!;

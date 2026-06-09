@@ -40,6 +40,12 @@ export interface BrainPanelProps {
   variant: 'page' | 'docked';
   /** Lock the Brain to one project (docked-in-IDE / project pages). */
   pinnedProjectId?: number | null;
+  /**
+   * The project the user is currently viewing (e.g. the Tasks board scoped to
+   * `?project=14`). Injected into the system prompt as the default project for
+   * project-scoped actions — WITHOUT pinning chats or switching persona.
+   */
+  viewingProjectId?: number | null;
   /** Active modality — drives the docked Brain's persona. */
   modality?: BrainModality;
   /** Extra system-prompt context (e.g. the IDE's open file). */
@@ -60,6 +66,7 @@ export interface BrainPanelProps {
 export function BrainPanel({
   variant,
   pinnedProjectId = null,
+  viewingProjectId = null,
   modality = 'designer',
   extraSystem,
   initialChatId,
@@ -152,10 +159,24 @@ export function BrainPanel({
     return c?.id ?? null;
   }, [chats]);
 
+  // Tell the model which project is in context, so "create a task" / "list
+  // specs" without a named project default to it. Covers BOTH the page the user
+  // is viewing (viewingProjectId, e.g. the scoped Tasks board) and the IDE's
+  // pinned project — pinnedProjectId switches persona/chat-scoping but never told
+  // the model the numeric id. Resolve the name from the loaded projects list
+  // when available; the id is what the tools actually need.
+  const ctxProjectId = viewingProjectId ?? pinnedProjectId;
+  const ambientSystem = useMemo(() => {
+    if (ctxProjectId == null) return extraSystem;
+    const name = projects.find((p) => p.id === ctxProjectId)?.name;
+    const line = `The current project is ${name ? `"${name}" ` : ''}(projectId ${ctxProjectId}). When the user asks to create, list, or operate on tasks, specs, or other project-scoped items without naming a project, use projectId ${ctxProjectId} by default. To take them to the result, call navigate_to — do not write out absolute URLs.`;
+    return extraSystem ? `${extraSystem}\n${line}` : line;
+  }, [ctxProjectId, projects, extraSystem]);
+
   const conv = useBrainConversation({
     chatId: chats.activeChatId,
     modality,
-    extraSystem,
+    extraSystem: ambientSystem,
     systemPrompt: personaSystemPrompt,
     model: personaModel,
     toolSpecs,

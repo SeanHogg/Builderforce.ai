@@ -14,6 +14,8 @@ export interface CreateTaskDto {
   priority?: TaskPriority;
   assignedAgentType?: AgentType | null;
   assignedAgentHostId?: number | null;
+  /** Cloud agent (ide_agents.id) assigned to this task. Mutually exclusive with host. */
+  assignedAgentRef?: string | null;
   startDate?: string | null;
   dueDate?: string | null;
   persona?: string | null;
@@ -27,6 +29,8 @@ export interface UpdateTaskDto {
   priority?: TaskPriority;
   assignedAgentType?: AgentType | null;
   assignedAgentHostId?: number | null;
+  /** Cloud agent (ide_agents.id) assigned to this task. Mutually exclusive with host. */
+  assignedAgentRef?: string | null;
   githubPrUrl?: string | null;
   githubPrNumber?: number | null;
   startDate?: string | null;
@@ -81,6 +85,7 @@ export class TaskService {
       priority: dto.priority ?? TaskPriority.MEDIUM,
       assignedAgentType: dto.assignedAgentType ?? null,
       assignedAgentHostId: dto.assignedAgentHostId != null ? asAgentHostId(dto.assignedAgentHostId) : null,
+      assignedAgentRef: dto.assignedAgentRef ?? null,
       startDate: dto.startDate ? new Date(dto.startDate) : null,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
       persona: dto.persona ?? null,

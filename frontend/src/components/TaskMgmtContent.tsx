@@ -2,13 +2,14 @@
 
 import { Select } from '@/components/Select';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, type CSSProperties } from 'react';
 import Link from 'next/link';
 import {
   tasksApi,
   agentHosts,
   runtimeApi,
   boardsApi,
+  workflowDefinitions,
   isAwaitingApprovalExecution,
   type Task,
   type TaskPriority,
@@ -70,6 +71,92 @@ function formatDate(d?: string | null): string {
   return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+/** A cloud agent (ide_agents) that a task can be assigned to. */
+type CloudAgentTarget = { ref: string; name: string };
+
+// A task is assigned to EITHER a self-hosted agent host (numeric id) OR a cloud
+// agent (string ref) — never both. The two id spaces are disjoint, so we encode
+// the choice into a single <select> value (`h:<id>` / `c:<ref>` / '' = none) and
+// decode it back into the mutually-exclusive fields on change. Centralizing this
+// here keeps the create dialog, the drawer editor, and the name resolver in sync.
+function assigneeSelectValue(hostId?: number | null, ref?: string | null): string {
+  if (hostId != null) return `h:${hostId}`;
+  if (ref) return `c:${ref}`;
+  return '';
+}
+
+function parseAssigneeSelectValue(v: string): { assignedAgentHostId: number | null; assignedAgentRef: string | null } {
+  if (v.startsWith('h:')) return { assignedAgentHostId: Number(v.slice(2)), assignedAgentRef: null };
+  if (v.startsWith('c:')) return { assignedAgentHostId: null, assignedAgentRef: v.slice(2) };
+  return { assignedAgentHostId: null, assignedAgentRef: null };
+}
+
+/** Display name for whichever assignee a task carries (host or cloud agent). */
+function assigneeName(
+  hostId: number | null | undefined,
+  ref: string | null | undefined,
+  hosts: AgentHost[],
+  cloudAgents: CloudAgentTarget[],
+): string {
+  if (hostId != null) return hosts.find((h) => h.id === hostId)?.name ?? String(hostId);
+  if (ref) return cloudAgents.find((a) => a.ref === ref)?.name ?? ref;
+  return 'Unassigned';
+}
+
+/**
+ * Assignee picker shared by the create dialog and the drawer's inline editor.
+ * Lists both self-hosted agent hosts and cloud agents in grouped sections and
+ * emits the mutually-exclusive (assignedAgentHostId | assignedAgentRef) patch.
+ */
+function AssigneeSelect({
+  hosts,
+  cloudAgents,
+  hostId,
+  agentRef,
+  onChange,
+  autoFocus,
+  disabled,
+  onBlur,
+  style,
+}: {
+  hosts: AgentHost[];
+  cloudAgents: CloudAgentTarget[];
+  hostId?: number | null;
+  agentRef?: string | null;
+  onChange: (patch: { assignedAgentHostId: number | null; assignedAgentRef: string | null }) => void;
+  autoFocus?: boolean;
+  disabled?: boolean;
+  onBlur?: () => void;
+  style?: CSSProperties;
+}) {
+  return (
+    <Select
+      autoFocus={autoFocus}
+      disabled={disabled}
+      onBlur={onBlur}
+      value={assigneeSelectValue(hostId, agentRef)}
+      onChange={(e) => onChange(parseAssigneeSelectValue(e.target.value))}
+      style={style}
+    >
+      <option value="">Unassigned</option>
+      {hosts.length > 0 && (
+        <optgroup label="Agent hosts">
+          {hosts.map((h) => (
+            <option key={`h:${h.id}`} value={`h:${h.id}`}>{h.name}</option>
+          ))}
+        </optgroup>
+      )}
+      {cloudAgents.length > 0 && (
+        <optgroup label="Cloud agents">
+          {cloudAgents.map((a) => (
+            <option key={`c:${a.ref}`} value={`c:${a.ref}`}>{a.name}</option>
+          ))}
+        </optgroup>
+      )}
+    </Select>
+  );
+}
+
 export function TaskMgmtContent({
   projectId,
   projectName,
@@ -79,6 +166,7 @@ export function TaskMgmtContent({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>(projectsProp ?? []);
   const [agentHostsList, setAgentHostsList] = useState<AgentHost[]>([]);
+  const [cloudAgentsList, setCloudAgentsList] = useState<CloudAgentTarget[]>([]);
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -122,13 +210,18 @@ export function TaskMgmtContent({
     setLoading(true);
     setError(null);
     try {
-      const [tasksData, agentHostsData, execData] = await Promise.all([
+      const [tasksData, agentHostsData, execData, runTargets] = await Promise.all([
         tasksApi.list(projectId),
         agentHosts.list().catch(() => []),
         runtimeApi.listRecent().catch(() => []),
+        // Cloud agents assignable to a ticket (active, cloud-capable ide_agents).
+        // run-targets already merges hosts + cloud agents and is server-cached;
+        // we only take the cloud side here since hosts come from agentHosts.list.
+        workflowDefinitions.runTargets().catch(() => ({ hosts: [], cloudAgents: [] })),
       ]);
       setTasks(tasksData);
       setAgentHostsList(agentHostsData);
+      setCloudAgentsList(runTargets.cloudAgents);
       setExecutions(execData);
       // Always resolve the full project list (unless the parent supplied one):
       // it backs both the project filter and the "Move to board" destinations,
@@ -173,8 +266,9 @@ export function TaskMgmtContent({
 
   const projectNameById = (id?: number | null) =>
     id ? projects.find((p) => p.id === id)?.name ?? String(id) : '—';
-  const agentHostNameById = (id?: number | null) =>
-    id ? agentHostsList.find((c) => c.id === id)?.name ?? String(id) : 'Unassigned';
+  // Resolve a task's assignee (self-hosted host OR cloud agent) to its display name.
+  const taskAssigneeName = (t: { assignedAgentHostId?: number | null; assignedAgentRef?: string | null }) =>
+    assigneeName(t.assignedAgentHostId, t.assignedAgentRef, agentHostsList, cloudAgentsList);
 
   // The board being configured: the scoped project, or the single project chosen
   // in the filter. Null when viewing "All projects" — the cog stays visible but disabled.
@@ -295,6 +389,7 @@ export function TaskMgmtContent({
           status: form.status ?? editTarget.status,
           priority: (form.priority as TaskPriority) ?? editTarget.priority,
           assignedAgentHostId: form.assignedAgentHostId ?? null,
+          assignedAgentRef: form.assignedAgentRef ?? null,
           dueDate: form.dueDate ?? null,
         });
         setTasks((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
@@ -311,6 +406,7 @@ export function TaskMgmtContent({
           description: form.description || undefined,
           priority: (form.priority as TaskPriority) ?? 'medium',
           assignedAgentHostId: form.assignedAgentHostId ?? undefined,
+          assignedAgentRef: form.assignedAgentRef ?? undefined,
           dueDate: form.dueDate || undefined,
         });
         const statusToSet = form.status ?? 'todo';
@@ -344,7 +440,7 @@ export function TaskMgmtContent({
   // Persist a single edited field from the drawer's inline editors. Patches the
   // open task, syncs the list + drawer, and closes the active editor on success.
   const saveTaskField = async (
-    patch: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'assignedAgentHostId' | 'dueDate'>>
+    patch: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'assignedAgentHostId' | 'assignedAgentRef' | 'dueDate'>>
   ) => {
     if (!drawerTask) return;
     setFieldSaving(true);
@@ -823,8 +919,8 @@ export function TaskMgmtContent({
                               openTask(task, 'agent');
                             }}
                           />
-                        ) : task.assignedAgentHostId ? (
-                          <span>{agentHostNameById(task.assignedAgentHostId)}</span>
+                        ) : (task.assignedAgentHostId || task.assignedAgentRef) ? (
+                          <span>{taskAssigneeName(task)}</span>
                         ) : null}
                         {task.githubPrUrl && (
                           <a
@@ -1032,7 +1128,7 @@ export function TaskMgmtContent({
                             onClick={() => openTask(task, 'agent')}
                           />
                         ) : (
-                          agentHostNameById(task.assignedAgentHostId)
+                          taskAssigneeName(task)
                         )}
                       </td>
                       <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>
@@ -1241,16 +1337,14 @@ export function TaskMgmtContent({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                    Assign to AgentHost
+                    Assign to agent
                   </label>
-                  <Select
-                    value={form.assignedAgentHostId ?? ''}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        assignedAgentHostId: e.target.value ? Number(e.target.value) : null,
-                      }))
-                    }
+                  <AssigneeSelect
+                    hosts={agentHostsList}
+                    cloudAgents={cloudAgentsList}
+                    hostId={form.assignedAgentHostId}
+                    agentRef={form.assignedAgentRef}
+                    onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
                     style={{
                       width: '100%',
                       padding: '8px 10px',
@@ -1260,14 +1354,7 @@ export function TaskMgmtContent({
                       background: 'var(--bg-deep)',
                       color: 'var(--text-primary)',
                     }}
-                  >
-                    <option value="">Unassigned</option>
-                    {agentHostsList.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </Select>
+                  />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
@@ -1615,13 +1702,14 @@ export function TaskMgmtContent({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
                     <span style={{ color: 'var(--text-muted)' }}>Assignee</span>
                     {editingField === 'assignee' ? (
-                      <Select
+                      <AssigneeSelect
                         autoFocus
-                        value={drawerTask.assignedAgentHostId ?? ''}
+                        hosts={agentHostsList}
+                        cloudAgents={cloudAgentsList}
+                        hostId={drawerTask.assignedAgentHostId}
+                        agentRef={drawerTask.assignedAgentRef}
                         disabled={fieldSaving}
-                        onChange={(e) =>
-                          saveTaskField({ assignedAgentHostId: e.target.value ? Number(e.target.value) : null })
-                        }
+                        onChange={(patch) => saveTaskField(patch)}
                         onBlur={() => setEditingField(null)}
                         style={{
                           fontSize: 13,
@@ -1631,12 +1719,7 @@ export function TaskMgmtContent({
                           background: 'var(--bg-deep)',
                           color: 'var(--text-primary)',
                         }}
-                      >
-                        <option value="">Unassigned</option>
-                        {agentHostsList.map((c) => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </Select>
+                      />
                     ) : (
                       <span
                         role="button"
@@ -1646,7 +1729,7 @@ export function TaskMgmtContent({
                         title="Click to change assignee"
                         style={{ color: 'var(--text-primary)', cursor: 'pointer', borderBottom: '1px dashed var(--border-subtle)' }}
                       >
-                        {agentHostNameById(drawerTask.assignedAgentHostId)}
+                        {taskAssigneeName(drawerTask)}
                       </span>
                     )}
                   </div>

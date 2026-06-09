@@ -2,7 +2,7 @@
 
 import { Select } from '@/components/Select';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SlideOutPanel } from '../SlideOutPanel';
 import { BoardConnectionsManager } from '../integrations/BoardConnectionsManager';
 import { useBoardConfig } from './useBoardConfig';
@@ -52,21 +52,42 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName }: Boar
   const [provisioning, setProvisioning] = useState(false);
   const [provisionError, setProvisionError] = useState<string | null>(null);
 
+  // Tracks the board we've already auto-seeded lanes for during this open, so
+  // the empty-board heal fires at most once and never re-seeds after a user
+  // deliberately deletes lanes (each delete reload()s back through this effect).
+  const healedBoardRef = useRef<string | null>(null);
+
   // The cog is only reachable when a project board is selected, so a board is
-  // expected to exist. If none does yet, provision it (with default swimlanes
-  // mirroring the kanban columns) automatically rather than dead-ending on a
-  // "no board exists" prompt that contradicts being on the board. The
-  // provisionError guard stops this from retrying in a loop if creation fails.
+  // expected to exist, with its default swimlanes (mirroring the kanban
+  // columns). Heal both broken states automatically rather than dead-ending on
+  // a prompt that contradicts being on the board:
+  //   1. No board    -> create one (the create route seeds default lanes).
+  //   2. Empty board -> seed default lanes (covers a board left lane-less by a
+  //      pre-transaction creation failure: kanban still showed columns, but the
+  //      panel said "No swimlanes yet").
+  // The provisionError guard stops a retry loop if either step fails.
   useEffect(() => {
-    if (!open) { setProvisionError(null); return; }
-    if (loading || error || board || provisioning || provisionError) return;
-    setProvisioning(true);
-    boardsApi
-      .create({ projectId, name: `${projectName ?? 'Project'} board` })
-      .then(() => reload())
-      .catch((e) => setProvisionError(e instanceof Error ? e.message : 'Could not create board'))
-      .finally(() => setProvisioning(false));
-  }, [open, loading, error, board, provisioning, provisionError, projectId, projectName, reload]);
+    if (!open) { setProvisionError(null); healedBoardRef.current = null; return; }
+    if (loading || error || provisioning || provisionError) return;
+    if (!board) {
+      setProvisioning(true);
+      boardsApi
+        .create({ projectId, name: `${projectName ?? 'Project'} board` })
+        .then(() => reload())
+        .catch((e) => setProvisionError(e instanceof Error ? e.message : 'Could not create board'))
+        .finally(() => setProvisioning(false));
+      return;
+    }
+    if (lanes.length === 0 && healedBoardRef.current !== board.id) {
+      healedBoardRef.current = board.id;
+      setProvisioning(true);
+      boardsApi.swimlanes
+        .ensureDefaults(board.id)
+        .then(() => reload())
+        .catch((e) => setProvisionError(e instanceof Error ? e.message : 'Could not set up swimlanes'))
+        .finally(() => setProvisioning(false));
+    }
+  }, [open, loading, error, board, lanes.length, provisioning, provisionError, projectId, projectName, reload]);
 
   const shownError = error ?? provisionError;
 

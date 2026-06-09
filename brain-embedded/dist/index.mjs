@@ -260,6 +260,7 @@ import { createContext as createContext3, useCallback as useCallback2, useContex
 import { jsx as jsx3 } from "react/jsx-runtime";
 var DEFAULT_CONTEXT = {
   projectId: null,
+  viewingProjectId: null,
   modality: "designer",
   extraSystem: void 0,
   initialChatId: null
@@ -271,7 +272,7 @@ function BrainContextProvider({ children }) {
   const setContext = useCallback2((patch) => {
     setPageContext((prev) => {
       const next = { ...prev, ...patch };
-      if (next.projectId === prev.projectId && next.modality === prev.modality && next.extraSystem === prev.extraSystem && next.initialChatId === prev.initialChatId) {
+      if (next.projectId === prev.projectId && next.viewingProjectId === prev.viewingProjectId && next.modality === prev.modality && next.extraSystem === prev.extraSystem && next.initialChatId === prev.initialChatId) {
         return prev;
       }
       return next;

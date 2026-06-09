@@ -52,6 +52,8 @@ export class Task {
     > & {
       projectKey: string;
       projectTaskCount: number;
+      /** Optional cloud agent (ide_agents.id) assigned at creation time. */
+      assignedAgentRef?: string | null;
     },
   ): Task {
     if (!props.title.trim()) throw new ValidationError('Task title is required');
@@ -73,8 +75,8 @@ export class Task {
       githubIssueUrl: null,
       githubPrUrl: null,
       githubPrNumber: null,
-      assignedAgentHostId: null,
-      assignedAgentRef: null,
+      assignedAgentHostId: props.assignedAgentHostId ?? null,
+      assignedAgentRef: props.assignedAgentRef ?? null,
       gitBranch: null,
       startDate: props.startDate ?? null,
       dueDate: props.dueDate ?? null,

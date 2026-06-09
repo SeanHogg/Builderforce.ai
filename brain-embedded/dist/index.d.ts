@@ -246,8 +246,21 @@ declare function useMcpExtensions(options?: UseMcpExtensionsOptions): {
 };
 
 interface BrainPageContext {
-    /** Active project, when the current page is project-scoped (IDE, project pages). */
+    /**
+     * Active project, when the current page PINS the Brain to one project (the
+     * IDE). Pinning also switches the docked Brain to that project's modality
+     * coding persona and scopes its chats — so non-IDE pages that merely want the
+     * Brain to be *aware* of the project they're viewing should set
+     * `viewingProjectId` instead (it keeps the platform co-pilot persona).
+     */
     projectId: number | null;
+    /**
+     * The project the user is currently looking at (e.g. the Tasks board scoped to
+     * `?project=14`). Unlike `projectId`, this does NOT change the persona or pin
+     * chats — it only tells the Brain to use this project as the default for
+     * project-scoped actions when the user doesn't name one.
+     */
+    viewingProjectId: number | null;
     /** Active modality — drives the Brain's system prompt/persona. */
     modality: BrainModality;
     /** Extra system-prompt context appended for this page (e.g. the open file + content). */
