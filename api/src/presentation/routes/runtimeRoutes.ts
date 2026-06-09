@@ -7,6 +7,7 @@ import { resolveTicketRepoContext, commitAgentFile, type TicketRepoContext } fro
 import { createPullRequest } from '../../application/repos/createPullRequest';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen } from '../../application/repos/mergeBranchToBase';
 import { readRepoFile, listRepoFiles } from '../../application/repos/readRepoContents';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
@@ -484,7 +485,7 @@ async function recordCloudToolEvent(
 async function recordCloudUsage(
   env: Env,
   db: Db,
-  args: { tenantId: number; cloudAgentRef?: string; executionId: number; model: string; inputTokens: number; outputTokens: number },
+  args: { tenantId: number; cloudAgentRef?: string; executionId: number; projectId?: number | null; model: string; inputTokens: number; outputTokens: number },
 ): Promise<void> {
   try {
     await db.insert(usageSnapshots).values({
@@ -504,9 +505,11 @@ async function recordCloudUsage(
     llmProduct: 'builderforceLLM',
     model:      args.model,
     usage:      { promptTokens: args.inputTokens, completionTokens: args.outputTokens, totalTokens: args.inputTokens + args.outputTokens },
-    metadata:   { engine: 'cloud', executionId: args.executionId },
+    metadata:   { engine: 'cloud', executionId: args.executionId, projectId: args.projectId ?? null },
     useCase:    'task_execution',
-    attribution: { cloudAgentRef: args.cloudAgentRef ?? null, executionId: args.executionId },
+    // Attribute the spend to the run's cloud agent AND project so cost rolls up
+    // project → account (0103).
+    attribution: { cloudAgentRef: args.cloudAgentRef ?? null, executionId: args.executionId, projectId: args.projectId ?? null },
   });
 }
 
@@ -607,6 +610,7 @@ async function runCloudToolLoop(
   systemPrompt: string,
   userContent: string,
   isCancelled: () => Promise<boolean>,
+  projectId: number,
 ): Promise<{ ok: boolean; output: string; cancelled: boolean }> {
   const repoResolved = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskRow.id);
   const repoCtx: TicketRepoContext | null = repoResolved.ok ? repoResolved.ctx : null;
@@ -665,7 +669,7 @@ async function runCloudToolLoop(
     const resolvedModel = result.resolvedModel ?? model ?? 'default';
     if (result.usage) {
       await recordCloudUsage(env, db, {
-        tenantId, cloudAgentRef, executionId, model: resolvedModel,
+        tenantId, cloudAgentRef, executionId, projectId, model: resolvedModel,
         inputTokens: result.usage.promptTokens ?? 0,
         outputTokens: result.usage.completionTokens ?? 0,
       });
@@ -941,7 +945,7 @@ async function runCloudExecution(
       capabilities.promptBlock || null,
     ].filter(Boolean).join('\n\n');
     const { ok, output, cancelled } = await runCloudToolLoop(
-      env, db, executionId, tenantId, taskRow, cloudAgentRef, agentLabel, model, systemPrompt, userContent, isCancelled,
+      env, db, executionId, tenantId, taskRow, cloudAgentRef, agentLabel, model, systemPrompt, userContent, isCancelled, projectId,
     );
 
     // Run was cancelled mid-loop: the row is already CANCELLED (a terminal
@@ -1912,6 +1916,74 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       LIMIT 500
     `) as Array<{ path: string; change: string; agent: string; executionId: number | null; createdAt: string }>;
     return c.json({ changes: rows });
+  });
+
+  // GET /api/runtime/tasks/:taskId/file-content?path=<repo-relative path>
+  // Reads one changed file's CURRENT (ticket branch) and BASE (fork point)
+  // contents so the Changes tab can render it in a Monaco diff viewer — the same
+  // way the IDE shows a change. The agent's `write_file` content is intentionally
+  // not persisted as telemetry (runtimeRoutes write_file event strips it), so the
+  // canonical source is the committed file on the branch, read back here with the
+  // same provider read path the cloud agent's read_file tool uses.
+  //
+  // Cached read-through keyed by a version token (the latest recorded change ts
+  // for this path): a fresh agent write bumps the token → next read is live;
+  // after the run settles the content is stable and served from cache. Falls
+  // through to a live read when the path has no recorded change row.
+  router.get('/tasks/:taskId/file-content', async (c) => {
+    const taskId = Number(c.req.param('taskId'));
+    const path = (c.req.query('path') ?? '').trim();
+    if (!Number.isFinite(taskId) || !path) {
+      return c.json({ bound: false, reason: 'taskId and path are required', path, current: null, base: null }, 400);
+    }
+    const env = c.env as Env;
+    const tenantId = c.get('tenantId');
+
+    const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
+    if (!repo.ok) {
+      return c.json({ bound: false, reason: repo.reason, path, current: null, base: null });
+    }
+    const ctx = repo.ctx;
+
+    const load = async () => {
+      // Read both refs in parallel: the ticket branch (current) and its base
+      // (original). A 404 on either side is expected — created files have no base,
+      // deleted files have no current — and surfaces as a null so the viewer can
+      // pick add / delete / modify rendering.
+      const [cur, base] = await Promise.all([
+        readRepoFile({ ...ctx, ref: ctx.branch }, path),
+        readRepoFile({ ...ctx, ref: ctx.base }, path),
+      ]);
+      return {
+        bound: true,
+        path,
+        branch: ctx.branch,
+        baseBranch: ctx.base,
+        current: cur.ok ? cur.content : null,
+        base: base.ok ? base.content : null,
+        currentTruncated: cur.ok ? cur.truncated : false,
+        baseTruncated: base.ok ? base.truncated : false,
+      };
+    };
+
+    // Version token = newest change row for this path (null when unrecorded).
+    const sql = neon(env.NEON_DATABASE_URL);
+    const [ver] = (await sql`
+      SELECT created_at AS "ts"
+      FROM task_file_changes
+      WHERE task_id = ${taskId} AND tenant_id = ${tenantId} AND path = ${path}
+      ORDER BY created_at DESC
+      LIMIT 1
+    `) as Array<{ ts: string }>;
+
+    if (!ver?.ts) return c.json(await load());
+    const body = await getOrSetCached(
+      env,
+      `task-file-content:${tenantId}:${taskId}:${path}:${ver.ts}`,
+      load,
+      { kvTtlSeconds: 600 },
+    );
+    return c.json(body);
   });
 
   // GET /api/runtime/tasks/:taskId/repo-status

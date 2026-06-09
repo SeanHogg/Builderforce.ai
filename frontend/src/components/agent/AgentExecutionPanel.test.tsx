@@ -16,6 +16,11 @@ vi.mock('../board/AgentChip', () => ({
   rerunAffordance: (s: string) => (s === 'failed' || s === 'cancelled' ? 'retry' : s === 'paused' ? 'resume' : null),
 }));
 vi.mock('next/link', () => ({ default: ({ children }: { children: React.ReactNode }) => <a>{children}</a> }));
+// Stub the Monaco-backed viewer (jsdom can't load the editor) — assert it's
+// mounted with the clicked file rather than rendering a real editor.
+vi.mock('./FileChangeViewer', () => ({
+  FileChangeViewer: ({ path }: { path: string }) => <div data-testid="file-change-viewer">viewing {path}</div>,
+}));
 
 const mockStream = vi.mocked(useExecutionStream);
 const RUNNING_EXECUTION: Execution = { id: 10, taskId: 1, status: 'running', agentHostId: 3 };
@@ -106,6 +111,27 @@ describe('AgentExecutionPanel — steering echo', () => {
     const { queryByLabelText, findByRole } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
     await findByRole('button', { name: /#10/ });
     expect(queryByLabelText(/Re-run this task|Resume this run/i)).toBeNull();
+  });
+
+  it('opens a changed file in the Monaco diff viewer when its Changes row is clicked', async () => {
+    const cloudRun: Execution = { id: 30, taskId: 1, status: 'completed', agentHostId: null };
+    vi.spyOn(builderforceApi.runtimeApi, 'listForTask').mockResolvedValue([cloudRun]);
+    vi.spyOn(builderforceApi.runtimeApi, 'taskFileChanges').mockResolvedValue({
+      changes: [{ path: 'src/outlook-plugin.ts', change: 'created', agent: 'Coder Agent (V2)', executionId: 30, createdAt: '2026-06-08T21:00:00Z' }],
+    });
+    mockStream.mockReturnValue({ status: 'completed', execution: null, messages: [], fileChanges: [], connected: false });
+
+    const { findByText, getByText, getByTestId, queryByTestId } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
+
+    // Open the Changes tab and click the file row.
+    fireEvent.click(await findByText(/^Changes/));
+    expect(queryByTestId('file-change-viewer')).toBeNull();
+    fireEvent.click(getByText('src/outlook-plugin.ts'));
+
+    // The viewer mounts for that file; "All changes" returns to the list.
+    expect(getByTestId('file-change-viewer').textContent).toContain('src/outlook-plugin.ts');
+    fireEvent.click(getByText(/All changes/));
+    expect(queryByTestId('file-change-viewer')).toBeNull();
   });
 
   it('rolls the optimistic echo back when the post fails', async () => {
