@@ -14,6 +14,16 @@ import { resolveDefaultRepoForTask } from './resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
 import { commitFileToRepo, type CommitFileResult } from './commitFileToRepo';
 
+/**
+ * The single ticket branch a run's changes land on. The PRD, every agent-written
+ * file, and the finalize PR all reference THIS one branch, so a task's PRD + code
+ * live on one branch and in one PR (not a separate `-prd` branch/PR). One source of
+ * truth so the PRD-commit path and the file-commit path never diverge.
+ */
+export function ticketBranchName(taskId: number): string {
+  return `builderforce/task-${taskId}`;
+}
+
 /** Everything needed to commit files to a ticket's branch, resolved once per run. */
 export interface TicketRepoContext {
   provider: string;
@@ -63,7 +73,7 @@ export async function resolveTicketRepoContext(
       repo: resolved.repo.repo,
       token: resolved.token,
       base: (resolved.repo.defaultBranch ?? 'main').trim(),
-      branch: `builderforce/task-${taskId}`,
+      branch: ticketBranchName(taskId),
       repoId: resolved.repo.id,
       segmentId: resolved.repo.segmentId,
       projectId: resolved.repo.projectId,
