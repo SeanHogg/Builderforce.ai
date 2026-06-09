@@ -84,6 +84,34 @@ interface LaneWriteBody {
   successThreshold?: number;
 }
 
+/**
+ * Build the insert rows for a board's default status-mirroring swimlanes.
+ * Shared by the create route (seed on first creation) and the ensure-defaults
+ * heal route (re-seed a board that ended up with none) so the two paths can
+ * never drift apart.
+ */
+function buildDefaultLaneRows(
+  tenantId: number,
+  segmentId: string | null,
+  boardId: string,
+  now: Date,
+) {
+  return DEFAULT_SWIMLANES.map((l) => ({
+    tenantId,
+    segmentId,
+    boardId,
+    key: l.key,
+    name: l.name,
+    position: l.position,
+    isTerminal: l.isTerminal,
+    gate: l.gate,
+    executionMode: 'sequential',
+    failurePolicy: 'needs_attention',
+    createdAt: now,
+    updatedAt: now,
+  }));
+}
+
 export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
@@ -116,49 +144,52 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
 
     const now = new Date();
     const segmentId = body.segmentId ?? c.get('segmentId') ?? null;
-    const [row] = await db
-      .insert(boards)
-      .values({
-        tenantId,
-        segmentId,
-        projectId: body.projectId,
-        name: body.name.trim(),
-        // Autonomy is implicit (driven by lane agents + gate); no board toggle.
-        autonomous: true,
-        maxConcurrentTickets: body.maxConcurrentTickets ?? 5,
-        needsAttentionLane: body.needsAttentionLane ?? 'needs-attention',
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
+    const seedLanes = body.seedDefaultLanes !== false;
 
-    // Seed default swimlanes mirroring the kanban's task statuses so the board
-    // configuration shows the same lanes the user already sees on the board.
-    if (row && body.seedDefaultLanes !== false) {
-      await db.insert(swimlanes).values(
-        DEFAULT_SWIMLANES.map((l) => ({
+    // Board + its default swimlanes are created atomically. Previously these
+    // were two separate (HTTP) statements, so a failure after the board insert
+    // but before the lane seed left a permanently-empty board: the kanban still
+    // rendered its hardcoded default columns, but the config panel reported
+    // "No swimlanes yet". A transaction makes the board-with-lanes invariant
+    // hold on creation. Default lanes mirror the kanban's task statuses so the
+    // config panel shows the same lanes the user already sees on the board.
+    const row = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(boards)
+        .values({
           tenantId,
           segmentId,
-          boardId: row.id,
-          key: l.key,
-          name: l.name,
-          position: l.position,
-          isTerminal: l.isTerminal,
-          gate: l.gate,
-          executionMode: 'sequential',
-          failurePolicy: 'needs_attention',
+          projectId: body.projectId,
+          name: body.name.trim(),
+          // Autonomy is implicit (driven by lane agents + gate); no board toggle.
+          autonomous: true,
+          maxConcurrentTickets: body.maxConcurrentTickets ?? 5,
+          needsAttentionLane: body.needsAttentionLane ?? 'needs-attention',
           createdAt: now,
           updatedAt: now,
-        })),
-      );
-    }
+        })
+        .returning();
+
+      if (created && seedLanes) {
+        await tx.insert(swimlanes).values(buildDefaultLaneRows(tenantId, segmentId, created.id, now));
+      }
+      return created;
+    });
 
     return c.json(row, 201);
   });
 
   router.get('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const rows = await db.select().from(boards).where(eq(boards.tenantId, tenantId));
+    // Stable order: the frontend resolves a project's board with `find(byProjectId)`,
+    // and both the kanban and the config panel must pick the same one when a
+    // project happens to have more than one board. Without an explicit order the
+    // (HTTP) row order is non-deterministic, so the two could disagree.
+    const rows = await db
+      .select()
+      .from(boards)
+      .where(eq(boards.tenantId, tenantId))
+      .orderBy(asc(boards.createdAt), asc(boards.id));
     return c.json({ boards: rows });
   });
 
@@ -230,6 +261,42 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)))
       .orderBy(asc(swimlanes.position));
     return c.json({ swimlanes: lanes });
+  });
+
+  // Heal a board that has no swimlanes by seeding the default status-mirroring
+  // set. Idempotent: when the board already has lanes it returns them untouched,
+  // so it never fights a board whose lanes were deliberately customised. Covers
+  // boards left empty by a pre-transaction creation failure (the "config panel
+  // says No swimlanes yet, board still shows columns" bug). onConflictDoNothing
+  // guards the UNIQUE(board_id, key) constraint if two heals race.
+  router.post('/:boardId/swimlanes/ensure-defaults', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const boardId = c.req.param('boardId');
+    const [board] = await db
+      .select({ id: boards.id, segmentId: boards.segmentId })
+      .from(boards)
+      .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)));
+    if (!board) return c.json({ error: 'Board not found' }, 404);
+
+    const existing = await db
+      .select()
+      .from(swimlanes)
+      .where(and(eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)))
+      .orderBy(asc(swimlanes.position));
+    if (existing.length > 0) return c.json({ swimlanes: existing, seeded: false });
+
+    const now = new Date();
+    await db
+      .insert(swimlanes)
+      .values(buildDefaultLaneRows(tenantId, board.segmentId ?? null, boardId, now))
+      .onConflictDoNothing();
+
+    const lanes = await db
+      .select()
+      .from(swimlanes)
+      .where(and(eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)))
+      .orderBy(asc(swimlanes.position));
+    return c.json({ swimlanes: lanes, seeded: true });
   });
 
   router.post('/:boardId/swimlanes', async (c) => {

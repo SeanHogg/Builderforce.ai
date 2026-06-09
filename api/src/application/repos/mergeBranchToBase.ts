@@ -35,6 +35,20 @@ export function cloudAutoMergeEnabled(env: unknown): boolean {
   return v === '1' || v === 'true';
 }
 
+/**
+ * After a PR is merged, validate the deploy-branch build and auto-dispatch a fix
+ * run on failure. DEFAULT ON — set `CLOUD_AUTOFIX_ON_BUILD_FAILURE=0` (or 'false')
+ * to disable the auto-dispatch (the build outcome is still recorded). Single source
+ * of truth for the post-merge auto-fix gate.
+ */
+export function cloudAutofixOnBuildFailure(env: unknown): boolean {
+  const v = String((env as Record<string, unknown> | null)?.CLOUD_AUTOFIX_ON_BUILD_FAILURE ?? '').toLowerCase();
+  return v !== '0' && v !== 'false' && v !== 'off';
+}
+
+/** Max automatic build-fix runs per task before flagging a human. */
+export const MAX_AUTOFIX_ATTEMPTS = 2;
+
 export interface MergeBranchInput {
   provider: string;
   host: string | null;

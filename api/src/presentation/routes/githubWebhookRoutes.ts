@@ -49,27 +49,28 @@ function toOutcome(s: string | null | undefined): RepoCiEvent['outcome'] {
 function normalizeCiEvent(event: string, p: Record<string, unknown>): RepoCiEvent | null {
   const get = (o: unknown, k: string): unknown => (o && typeof o === 'object' ? (o as Record<string, unknown>)[k] : undefined);
   const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+  const num = (v: unknown): number | null => (typeof v === 'number' ? v : null);
   if (event === 'check_suite' || event === 'check_run') {
     const cs = (event === 'check_suite' ? p.check_suite : get(p.check_run, 'check_suite')) as Record<string, unknown> | undefined;
     const run = p.check_run as Record<string, unknown> | undefined;
     return { eventType: event, branch: str(get(cs, 'head_branch')), sha: str(get(cs, 'head_sha') ?? get(run, 'head_sha')),
-      outcome: toOutcome(str(get(cs, 'conclusion') ?? get(run, 'conclusion'))), rawState: str(get(cs, 'conclusion') ?? get(run, 'conclusion')), targetUrl: str(get(run, 'html_url')) };
+      outcome: toOutcome(str(get(cs, 'conclusion') ?? get(run, 'conclusion'))), rawState: str(get(cs, 'conclusion') ?? get(run, 'conclusion')), targetUrl: str(get(run, 'html_url')), runId: null };
   }
   if (event === 'workflow_run') {
     const w = p.workflow_run as Record<string, unknown> | undefined;
     return { eventType: event, branch: str(get(w, 'head_branch')), sha: str(get(w, 'head_sha')),
-      outcome: toOutcome(str(get(w, 'conclusion'))), rawState: str(get(w, 'conclusion') ?? get(w, 'status')), targetUrl: str(get(w, 'html_url')) };
+      outcome: toOutcome(str(get(w, 'conclusion'))), rawState: str(get(w, 'conclusion') ?? get(w, 'status')), targetUrl: str(get(w, 'html_url')), runId: num(get(w, 'id')) };
   }
   if (event === 'deployment_status') {
     const dep = p.deployment as Record<string, unknown> | undefined;
     const ds = p.deployment_status as Record<string, unknown> | undefined;
     return { eventType: event, branch: str(get(dep, 'ref')), sha: str(get(dep, 'sha')),
-      outcome: toOutcome(str(get(ds, 'state'))), rawState: str(get(ds, 'state')), targetUrl: str(get(ds, 'target_url') ?? get(ds, 'log_url')) };
+      outcome: toOutcome(str(get(ds, 'state'))), rawState: str(get(ds, 'state')), targetUrl: str(get(ds, 'target_url') ?? get(ds, 'log_url')), runId: null };
   }
   if (event === 'status') {
     const branches = Array.isArray(p.branches) ? (p.branches as Array<Record<string, unknown>>) : [];
     return { eventType: event, branch: str(get(branches[0], 'name')), sha: str(p.sha),
-      outcome: toOutcome(str(p.state)), rawState: str(p.state), targetUrl: str(p.target_url) };
+      outcome: toOutcome(str(p.state)), rawState: str(p.state), targetUrl: str(p.target_url), runId: null };
   }
   return null;
 }

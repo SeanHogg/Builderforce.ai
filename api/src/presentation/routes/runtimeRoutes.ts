@@ -6,7 +6,7 @@ import { commitPrdAsPendingChange } from '../../application/repos/commitPrdToRep
 import { resolveTicketRepoContext, commitAgentFile, type TicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
 import { createPullRequest } from '../../application/repos/createPullRequest';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled } from '../../application/repos/mergeBranchToBase';
-import { recordPullRequestRow } from '../../application/repos/recordPullRequestRow';
+import { recordPullRequestRow, markPullRequestMergedById } from '../../application/repos/recordPullRequestRow';
 import { readRepoFile, listRepoFiles } from '../../application/repos/readRepoContents';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
@@ -881,13 +881,17 @@ export async function runCloudToolLoop(
     // Record the PR row so the in-product Pull Request tab / approval flow can act
     // on it. Status reflects the policy: 'open' when awaiting human approval; when
     // auto-merge is enabled, it lands as 'merged' (or stays 'open' pending green CI).
+    // Keep the row id so the immediate-merge branch can stamp its merge SHA (which
+    // correlates the post-merge build back to this task).
+    let prRowId: string | null = null;
     if (pr.ok) {
       const recordedStatus = autoMerge && !cloudAutoMergeRequiresGreen(env) ? 'merged' : 'open';
-      await recordPullRequestRow(db, {
+      const prRow = await recordPullRequestRow(db, {
         tenantId, segmentId: repoCtx.segmentId, projectId: repoCtx.projectId, repoId: repoCtx.repoId,
         taskId: taskRow.id, provider: repoCtx.provider, number: pr.number, url: pr.url,
         branchName: repoCtx.branch, baseBranch: repoCtx.base, status: recordedStatus,
-      }).catch(() => { /* best-effort — task.githubPrUrl below is the fallback surface */ });
+      }).catch(() => null);
+      prRowId = prRow?.id ?? null;
     }
 
     await db.update(tasks)
@@ -917,6 +921,11 @@ export async function runCloudToolLoop(
         message: `Task #${taskRow.id}: ${taskRow.title} (BuilderForce auto-merge by ${agentLabel})`,
       });
       merged = m.ok;
+      // Stamp the merge SHA so the post-merge deploy-branch build correlates back
+      // to this task (build validation + auto-fix loop).
+      if (m.ok && prRowId) {
+        await markPullRequestMergedById(db, prRowId, tenantId, { mergeSha: m.sha ?? null }).catch(() => { /* best-effort */ });
+      }
       mergeNote = m.ok
         ? ` and auto-merged to \`${repoCtx.base}\` (deploy triggered)`
         : ` — auto-merge to \`${repoCtx.base}\` failed: ${m.reason}`;
@@ -1154,7 +1163,60 @@ async function dispatchAndQueue(
   taskRow: ExecutionTaskRow,
   payload: string | undefined,
 ): Promise<unknown> {
-  const tenantId = c.get('tenantId');
+  return startDispatchedExecution(
+    c.env as Env, db, runtimeService,
+    (p) => c.executionCtx.waitUntil(p),
+    c.get('tenantId'), execution, taskRow, payload,
+  );
+}
+
+/**
+ * Context-free dispatch: create AND start a cloud run for a task. Used by the
+ * CI-webhook auto-fix loop (no request context — it has only `env`, `db`, the
+ * injected `runtimeService`, and `waitUntil`). Returns the new execution id, or
+ * null if the task can't be resolved for the tenant.
+ */
+export async function dispatchCloudRunForTask(
+  env: Env,
+  db: Db,
+  runtimeService: RuntimeService,
+  waitUntil: (p: Promise<unknown>) => void,
+  params: { taskId: number; tenantId: number; payload?: string; submittedBy?: string },
+): Promise<number | null> {
+  const [taskRow] = await db
+    .select({
+      id: tasks.id, title: tasks.title, description: tasks.description,
+      assignedAgentHostId: tasks.assignedAgentHostId, assignedAgentRef: tasks.assignedAgentRef,
+      priority: tasks.priority, projectId: tasks.projectId,
+    })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .where(and(eq(tasks.id, params.taskId), eq(projects.tenantId, params.tenantId)))
+    .limit(1);
+  if (!taskRow) return null;
+
+  const execution = await runtimeService.submit({
+    taskId: params.taskId,
+    agentHostId: taskRow.assignedAgentHostId ?? undefined,
+    tenantId: params.tenantId,
+    submittedBy: params.submittedBy,
+    payload: params.payload,
+  });
+  await startDispatchedExecution(env, db, runtimeService, waitUntil, params.tenantId, execution as SubmittedExecution, taskRow as ExecutionTaskRow, params.payload);
+  return execution.id;
+}
+
+/** The post-submit dispatch core, free of any request context. */
+async function startDispatchedExecution(
+  env: Env,
+  db: Db,
+  runtimeService: RuntimeService,
+  waitUntil: (p: Promise<unknown>) => void,
+  tenantId: number,
+  execution: SubmittedExecution,
+  taskRow: ExecutionTaskRow,
+  payload: string | undefined,
+): Promise<unknown> {
   const targets = await getDispatchTargets(db, tenantId, taskRow.assignedAgentHostId);
   const dispatchType: DispatchMessage['type'] = taskRow.assignedAgentHostId != null ? 'task.assign' : 'task.broadcast';
 
@@ -1172,7 +1234,7 @@ async function dispatchAndQueue(
       agentHostId: taskRow.assignedAgentHostId ?? undefined,
       cloudAgentRef,
     }),
-    resolveCloudAgent(c.env as Env, tenantId, cloudAgentRef),
+    resolveCloudAgent(env, tenantId, cloudAgentRef),
     resolveDefaultRepoForTask(db, tenantId, taskRow.id),
   ]);
 
@@ -1206,7 +1268,7 @@ async function dispatchAndQueue(
   // Only the container surface dispatches to a long-lived runtime; durable goes
   // straight to the Durable Object.
   const delivered = surface === 'container'
-    ? (await Promise.all(targets.map((targetId) => dispatchToAgentHost(c.env, targetId, message).catch(() => false)))).some(Boolean)
+    ? (await Promise.all(targets.map((targetId) => dispatchToAgentHost(env as RuntimeHonoEnv['Bindings'], targetId, message).catch(() => false)))).some(Boolean)
     : false;
 
   const notifyDone = async () => {
@@ -1231,7 +1293,7 @@ async function dispatchAndQueue(
     // degradation is visible, not silent.)
     const containerFallback = surface === 'container';
     const runWorkerFallback = async () => {
-      await runCloudExecution(c.env as Env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, payload, artifacts);
+      await runCloudExecution(env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, payload, artifacts);
       await notifyDone();
     };
     const startDurable = async () => {
@@ -1242,7 +1304,7 @@ async function dispatchAndQueue(
           result: 'No long-lived Cloudflare Container online — running this task on the durable (serverless) executor instead.',
         });
       }
-      const cloudRunner = (c.env as Env).CLOUD_RUNNER;
+      const cloudRunner = env.CLOUD_RUNNER;
       if (!cloudRunner) { await runWorkerFallback(); return; }
       try {
         const stub = cloudRunner.get(cloudRunner.idFromName(`exec:${execution.id}`));

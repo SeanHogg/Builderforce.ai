@@ -32,6 +32,7 @@ import { RepoService, type AgentHostDispatcher } from '../../application/repos/R
 import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
 import { githubStatusMessage } from '../../application/integrations/githubTestError';
 import { mergePullRequest, normalizeMergeMethod } from '../../application/repos/mergePullRequest';
+import { markPullRequestMergedById } from '../../application/repos/recordPullRequestRow';
 import { getPullRequestDetail, invalidatePullRequestDetail } from '../../application/repos/getPullRequestDetail';
 import type { CreatePrMessage } from '../../application/repos/prDispatch';
 
@@ -439,11 +440,10 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       return c.json({ error: result.reason, code: result.code }, httpStatus);
     }
 
-    const [updated] = await db
-      .update(pullRequests)
-      .set({ status: 'merged', mergedBy: userId ?? null, mergedAt: new Date(), updatedAt: new Date() })
-      .where(and(eq(pullRequests.id, id), eq(pullRequests.tenantId, tenantId)))
-      .returning();
+    const updated = await markPullRequestMergedById(db, id, tenantId, {
+      mergeSha: result.sha ?? null,
+      mergedBy: userId ?? null,
+    });
 
     // Bust the cached live detail keyed by the PRE-merge updatedAt token.
     await invalidatePullRequestDetail(

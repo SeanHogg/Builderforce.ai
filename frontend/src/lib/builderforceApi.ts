@@ -798,6 +798,8 @@ export const tasksApi = {
     description?: string | null;
     priority?: TaskPriority;
     assignedAgentHostId?: number | null;
+    /** Cloud agent (ide_agents.id). Mutually exclusive with assignedAgentHostId. */
+    assignedAgentRef?: string | null;
     dueDate?: string | null;
   }): Promise<Task> =>
     request<Task>('/api/tasks', {
@@ -813,6 +815,8 @@ export const tasksApi = {
       status: string;
       priority: TaskPriority;
       assignedAgentHostId: number | null;
+      /** Cloud agent (ide_agents.id). Mutually exclusive with assignedAgentHostId. */
+      assignedAgentRef: string | null;
       dueDate: string | null;
       archived: boolean;
     }>
@@ -2507,6 +2511,9 @@ export const boardsApi = {
   swimlanes: {
     list: (boardId: string): Promise<Swimlane[]> =>
       request<{ swimlanes: Swimlane[] }>(`/api/boards/${boardId}/swimlanes`).then((r) => r.swimlanes ?? []),
+    /** Seed the default status-mirroring lanes when a board has none. Idempotent. */
+    ensureDefaults: (boardId: string): Promise<Swimlane[]> =>
+      request<{ swimlanes: Swimlane[] }>(`/api/boards/${boardId}/swimlanes/ensure-defaults`, { method: 'POST' }).then((r) => r.swimlanes ?? []),
     create: (boardId: string, body: Partial<LaneWriteBody> & { key: string; name: string }): Promise<Swimlane> =>
       request(`/api/boards/${boardId}/swimlanes`, { method: 'POST', body: JSON.stringify(body) }),
     patch: (boardId: string, laneId: string, body: Partial<LaneWriteBody>): Promise<Swimlane> =>

@@ -2915,6 +2915,8 @@ export const pullRequests = pgTable('pull_requests', {
   externalTicketRef: varchar('external_ticket_ref', { length: 255 }),
   mergedBy:          varchar('merged_by', { length: 128 }),   // user id who approved the in-product merge (0106)
   mergedAt:          timestamp('merged_at'),
+  mergeSha:          varchar('merge_sha', { length: 64 }),    // merge commit SHA — correlates post-merge CI (0107)
+  buildStatus:       varchar('build_status', { length: 16 }), // null|pending|success|failure post-merge build (0107)
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });

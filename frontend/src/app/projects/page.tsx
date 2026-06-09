@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
+import { useOptionalBrainContext } from '@/lib/brain';
 import { ProjectsContent } from '@/components/ProjectsContent';
 import PageContainer from '@/components/PageContainer';
 import { TaskMgmtContent } from '@/components/TaskMgmtContent';
@@ -27,6 +28,7 @@ export default function ProjectsTasksPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, hasTenant } = useAuth();
+  const brain = useOptionalBrainContext();
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -36,12 +38,21 @@ export default function ProjectsTasksPage() {
     }
   }, [isAuthenticated, hasTenant, router]);
 
-  if (!isAuthenticated || !hasTenant) return null;
-
   // Active tab is derived from the URL (single source of truth) — no mirrored state.
   const activeTab: Tab = searchParams.get('tab') === 'tasks' ? 'tasks' : 'projects';
   const projectParam = Number(searchParams.get('project'));
   const scopedProjectId = Number.isFinite(projectParam) && projectParam > 0 ? projectParam : undefined;
+
+  // Publish the scoped project to the Brain so "create a task" here defaults to
+  // it. Clear on unmount/navigation so the Brain doesn't keep a stale project.
+  const setBrainContext = brain?.setContext;
+  useEffect(() => {
+    if (!setBrainContext) return;
+    setBrainContext({ viewingProjectId: scopedProjectId ?? null });
+    return () => setBrainContext({ viewingProjectId: null });
+  }, [setBrainContext, scopedProjectId]);
+
+  if (!isAuthenticated || !hasTenant) return null;
 
   const selectTab = (tab: Tab) => {
     const params = new URLSearchParams(searchParams.toString());

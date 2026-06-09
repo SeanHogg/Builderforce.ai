@@ -77,6 +77,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
       priority?: TaskPriority;
       assignedAgentType?: AgentType | null;
       assignedAgentHostId?: number | null;
+      assignedAgentRef?: string | null;
       startDate?: string | null;
       dueDate?: string | null;
       persona?: string | null;
@@ -95,6 +96,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
       priority?: TaskPriority;
       assignedAgentType?: AgentType | null;
       assignedAgentHostId?: number | null;
+      assignedAgentRef?: string | null;
       githubPrUrl?: string | null;
       githubPrNumber?: number | null;
       startDate?: string | null;

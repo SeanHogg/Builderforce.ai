@@ -22,7 +22,7 @@ import { useModalDismiss } from '@/hooks/useModalDismiss';
 export function FloatingBrain() {
   const pathname = usePathname();
   const { hasTenant } = useAuth();
-  const { open, setOpen, projectId, modality, extraSystem, initialChatId } = useBrainContext();
+  const { open, setOpen, projectId, viewingProjectId, modality, extraSystem, initialChatId } = useBrainContext();
   const [initialPrompt, setInitialPrompt] = useState<string | undefined>(undefined);
 
   // Lock background scroll + close on Escape while the drawer is open. Shared
@@ -101,6 +101,7 @@ export function FloatingBrain() {
               <BrainPanel
                 variant="docked"
                 pinnedProjectId={projectId}
+                viewingProjectId={viewingProjectId}
                 modality={modality}
                 extraSystem={extraSystem}
                 initialChatId={initialChatId}
