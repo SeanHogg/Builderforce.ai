@@ -76,6 +76,13 @@ export interface Env {
    *    [[durable_objects.bindings]] name = "ANALYSIS_RUNNER" class_name = "AnalysisRunnerDO" */
   ANALYSIS_RUNNER?: DurableObjectNamespace;
 
+  /** Durable Object running a V2 cloud agent's loop one LLM step per alarm() tick
+   *  (the `durable` runtime surface). One instance per execution
+   *  (`idFromName('exec:<id>')`). Optional: when unset, durable cloud runs fall
+   *  back to the interim Worker `waitUntil` loop. Bind in wrangler.toml:
+   *    [[durable_objects.bindings]] name = "CLOUD_RUNNER" class_name = "CloudRunnerDO" */
+  CLOUD_RUNNER?: DurableObjectNamespace;
+
   /**
    * Optional KV namespace caching API-key → tenant resolutions for ~60s.
    * Without it, every chat-completion call hits the DB to validate `bfk_*` /

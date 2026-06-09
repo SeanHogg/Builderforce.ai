@@ -131,7 +131,15 @@ export class RuntimeService {
       || e.status === ExecutionStatus.SUBMITTED
       || e.status === ExecutionStatus.RUNNING;
     if (!live) return false;
-    const sinceMs = (e.startedAt ?? e.updatedAt ?? e.createdAt).getTime();
+    // Cloud runs are measured from last activity (`updatedAt`), not start: a
+    // CloudRunnerDO bumps updatedAt every alarm tick, so a healthy multi-minute
+    // run looks alive (heartbeat) and only a run that has gone silent for the
+    // ceiling is reaped. The dying interim Worker loop never bumps updatedAt mid-
+    // run, so it still fast-fails ~90s after it started. A self-hosted host
+    // measures from start with a far larger ceiling.
+    const sinceMs = this.isCloudRun(e)
+      ? (e.updatedAt ?? e.createdAt).getTime()
+      : (e.startedAt ?? e.updatedAt ?? e.createdAt).getTime();
     const ceiling = this.isCloudRun(e)
       ? RuntimeService.CLOUD_ORPHAN_MS
       : RuntimeService.HOST_ORPHAN_MS;

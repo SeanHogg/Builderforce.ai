@@ -600,7 +600,36 @@ const MAX_CLOUD_TOOL_STEPS = 10;
  * per-iteration `llm.complete` event, a per-call tool event, and a usage snapshot
  * — so the timeline shows real tool execution. Never throws.
  */
-async function runCloudToolLoop(
+/** Mid-run state the durable (DO) surface persists between alarm ticks so it can
+ *  resume the loop one step at a time. (The Worker surface runs the whole loop in
+ *  one call and never sets this.) */
+export interface CloudLoopState {
+  messages: Array<Record<string, unknown>>;
+  writtenPaths: string[];
+  /** Next absolute step index to run. */
+  step: number;
+}
+export interface CloudLoopOpts {
+  /** Resume from this persisted state instead of starting fresh. */
+  resume?: CloudLoopState;
+  /** Max iterations to run THIS call (the DO passes 1 — one LLM step per tick). */
+  maxSteps?: number;
+  /** Skip the PR/merge finalize unless the run is actually finished — so the DO
+   *  doesn't ship a half-done run between ticks. */
+  deferFinalize?: boolean;
+}
+export interface CloudLoopResult {
+  ok: boolean;
+  output: string;
+  cancelled: boolean;
+  /** True when the run reached a terminal point (finished / step cap / error /
+   *  cancel) — i.e. the finalize ran (or was skipped because cancelled). When
+   *  false, `state` carries the resume point for the next tick. */
+  finished: boolean;
+  state?: CloudLoopState;
+}
+
+export async function runCloudToolLoop(
   env: Env,
   db: Db,
   executionId: number,
@@ -613,20 +642,25 @@ async function runCloudToolLoop(
   userContent: string,
   isCancelled: () => Promise<boolean>,
   projectId: number,
-): Promise<{ ok: boolean; output: string; cancelled: boolean }> {
+  opts?: CloudLoopOpts,
+): Promise<CloudLoopResult> {
   const repoResolved = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskRow.id);
   const repoCtx: TicketRepoContext | null = repoResolved.ok ? repoResolved.ctx : null;
   const repoMiss = repoResolved.ok ? '' : repoResolved.reason;
-  const writtenPaths = new Set<string>();
+  const writtenPaths = new Set<string>(opts?.resume?.writtenPaths ?? []);
 
-  const messages: Array<Record<string, unknown>> = [
+  // Resume from persisted state (DO surface) or start fresh (Worker surface).
+  const messages: Array<Record<string, unknown>> = opts?.resume?.messages ?? [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userContent },
   ];
+  const startStep = opts?.resume?.step ?? 0;
+  const maxThisCall = opts?.maxSteps ?? MAX_CLOUD_TOOL_STEPS;
 
   let finalOutput = '';
   let finished = false;
   let cancelled = false;
+  let step = startStep;
 
   // Hard cancel: a background watcher polls the (cross-isolate) execution status
   // and aborts the in-flight gateway fetch the instant it sees CANCELLED, so a
@@ -644,7 +678,7 @@ async function runCloudToolLoop(
   })();
 
   try {
-  for (let step = 0; step < MAX_CLOUD_TOOL_STEPS && !finished; step++) {
+  for (; step < MAX_CLOUD_TOOL_STEPS && !finished && (step - startStep) < maxThisCall; step++) {
     // Between-step guard: stop before issuing the next (paid) call if cancelled.
     if (cancelled || abortController.signal.aborted || await isCancelled()) { cancelled = true; break; }
     const tGen0 = Date.now();
@@ -684,7 +718,7 @@ async function runCloudToolLoop(
         detail: { model: resolvedModel, traceId: result.traceId ?? null, step },
         result: `gateway ${result.response.status}`, durationMs: genMs,
       });
-      return { ok: false, output: `Gateway ${result.response.status}: ${body.slice(0, 300)}`, cancelled };
+      return { ok: false, output: `Gateway ${result.response.status}: ${body.slice(0, 300)}`, cancelled, finished: true };
     }
 
     const json = (await result.response.json().catch(() => null)) as
@@ -797,6 +831,22 @@ async function runCloudToolLoop(
     await cancelWatcher.catch(() => { /* ignore */ });
   }
 
+  // Durable (DO) surface: the per-tick budget is exhausted but the run isn't done
+  // (not finished, not cancelled, more steps remain). Hand back the resume state
+  // for the next alarm tick WITHOUT shipping — finalize only happens once the run
+  // truly finishes. (The Worker surface never sets deferFinalize, so it always
+  // falls through to the finalize below — behavior unchanged.)
+  const runDone = finished || cancelled || step >= MAX_CLOUD_TOOL_STEPS;
+  if (!runDone && opts?.deferFinalize) {
+    return {
+      ok: true,
+      output: '',
+      cancelled,
+      finished: false,
+      state: { messages, writtenPaths: [...writtenPaths], step },
+    };
+  }
+
   // Land the changes: open a PR for the record, then auto-merge the ticket branch
   // into the deploy branch (pushing to base is what triggers CI/deploy). Skipped
   // on cancel so a half-done run never merges to main.
@@ -847,15 +897,80 @@ async function runCloudToolLoop(
       ? `Committed ${writtenPaths.size} file(s) to \`${repoCtx?.branch}\`${prOpened ? ', opened a PR' : ''}${mergeNote}.`
       : cancelled ? 'Run cancelled before any output was produced.' : '(no output produced)');
   // A failed merge is a real failure of the "ship it" contract — surface it.
-  return { ok: !(prOpened && !merged), output, cancelled };
+  return { ok: !(prOpened && !merged), output, cancelled, finished: true };
 }
 
 /**
- * Run an execution server-side via the gateway when NO online agentHost took the
- * dispatch (Auto / cloud agent with no self-hosted runtime). Standard flow:
+ * Prep shared by both cloud surfaces (Worker `runCloudExecution` and the durable
+ * `CloudRunnerDO`): ensure a task PRD, load governance + assigned capabilities (all
+ * parallel reads), record the `context.prepare` + `capabilities.load` timeline
+ * events, and build the system + user prompts the tool loop runs against. Returns
+ * the two prompts. Never throws on the telemetry writes (best-effort).
+ */
+export async function prepareCloudRun(
+  env: Env,
+  db: Db,
+  executionId: number,
+  taskRow: { id: number; title: string; description: string | null },
+  tenantId: number,
+  projectId: number,
+  agentLabel: string,
+  model: string | undefined,
+  artifacts: ResolvedArtifacts | undefined,
+  cloudAgentRef?: string,
+): Promise<{ systemPrompt: string; userContent: string }> {
+  const tPrep0 = Date.now();
+  const [prd, governance, capabilities] = await Promise.all([
+    ensureTaskPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model),
+    loadGovernanceContext(db, tenantId, projectId),
+    loadCapabilityContext(env, db, artifacts),
+  ]);
+  await recordCloudToolEvent(db, {
+    tenantId, cloudAgentRef, executionId,
+    toolName: 'context.prepare', category: 'planning',
+    detail: { steps: ['prd', 'governance'] },
+    result: `${prd ? 'PRD ready' : 'no PRD'} · ${governance ? 'governance loaded' : 'no governance'}`,
+    durationMs: Date.now() - tPrep0,
+  });
+
+  // Record capability loading as its own timeline event so the Observability
+  // timeline shows exactly which Skills/Personas/Content the cloud agent loaded.
+  const cap = capabilities.summary;
+  if (cap.skills.length || cap.personas.length || cap.content.length) {
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef, executionId,
+      toolName: 'capabilities.load', category: 'context',
+      detail: cap,
+      result: `${cap.personas.length} persona(s), ${cap.skills.length} skill(s), ${cap.content.length} content`
+        + (cap.missing.length ? ` · ${cap.missing.length} unresolved: ${cap.missing.join(', ')}` : ''),
+    });
+  }
+
+  const userContent = [
+    prd ? `## Product Requirements Document (PRD)\n\n${prd}` : null,
+    governance || null,
+    `## Your Task\n\n${taskRow.title}\n\n${taskRow.description ?? ''}`.trim(),
+  ].filter(Boolean).join('\n\n---\n\n');
+
+  // The tool loop runs against a real repository via provider-API-backed tools
+  // (no shell): write files to the ticket branch, then finish.
+  const systemPrompt = [
+    'You are a BuilderForce agent executing a project task against a real repository. Follow the PRD, architecture spec, and project rules exactly. ' +
+    'Workflow: call list_files to discover the codebase, read_file to read any file you intend to change (preserve existing code — only change what the task needs), ' +
+    'then write_file with the FULL updated content (no bracketed placeholders) for each deliverable file. Call finish with a summary when done. ' +
+    'When you finish, your committed changes are automatically merged to the deploy branch and deployed — so make sure the code is complete and correct before calling finish. ' +
+    'If no repository is bound, return the complete deliverable in your final summary instead. Make explicit, reasonable assumptions where specifics are unknown.',
+    capabilities.promptBlock || null,
+  ].filter(Boolean).join('\n\n');
+
+  return { systemPrompt, userContent };
+}
+
+/**
+ * Run an execution server-side via the gateway (the interim `durable`-surface
+ * executor when the CloudRunnerDO binding is absent). Standard flow:
  * (1) ensure a PRD exists (generate + persist + emit as first change), then
- * (2) produce the deliverable honoring the PRD + project rules. Coding tasks that
- * need a real repo/runtime still belong on an agentHost. Never throws.
+ * (2) produce the deliverable honoring the PRD + project rules. Never throws.
  */
 async function runCloudExecution(
   env: Env,
@@ -897,55 +1012,9 @@ async function runCloudExecution(
       ts: new Date().toISOString(),
     });
 
-    // Step 1 — PRD-first. Step 2 — governance/arch context. Step 3 — assigned
-    // capabilities (Skills/Personas/Content). All three are parallel reads.
-    const tPrep0 = Date.now();
-    const [prd, governance, capabilities] = await Promise.all([
-      ensureTaskPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model),
-      loadGovernanceContext(db, tenantId, projectId),
-      loadCapabilityContext(env, db, artifacts),
-    ]);
-    await recordCloudToolEvent(db, {
-      tenantId, cloudAgentRef, executionId,
-      toolName: 'context.prepare', category: 'planning',
-      detail: { steps: ['prd', 'governance'] },
-      result: `${prd ? 'PRD ready' : 'no PRD'} · ${governance ? 'governance loaded' : 'no governance'}`,
-      durationMs: Date.now() - tPrep0,
-    });
-
-    // Record capability loading as its own timeline event so the Observability
-    // timeline shows exactly which Skills/Personas/Content the cloud agent loaded.
-    const cap = capabilities.summary;
-    if (cap.skills.length || cap.personas.length || cap.content.length) {
-      await recordCloudToolEvent(db, {
-        tenantId, cloudAgentRef, executionId,
-        toolName: 'capabilities.load', category: 'context',
-        detail: cap,
-        result: `${cap.personas.length} persona(s), ${cap.skills.length} skill(s), ${cap.content.length} content`
-          + (cap.missing.length ? ` · ${cap.missing.length} unresolved: ${cap.missing.join(', ')}` : ''),
-      });
-    }
-
-    const userContent = [
-      prd ? `## Product Requirements Document (PRD)\n\n${prd}` : null,
-      governance || null,
-      `## Your Task\n\n${taskRow.title}\n\n${taskRow.description ?? ''}`.trim(),
-    ].filter(Boolean).join('\n\n---\n\n');
-
-    // Run the agent's tool-executing loop (both V1 and V2 cloud runs execute
-    // tools here — the Worker has no shell, so tools are provider-API-backed:
-    // write files to the ticket branch, then finish). Each step + tool call is
-    // recorded to the timeline.
-    const systemPrompt = [
-      'You are a BuilderForce agent executing a project task against a real repository. Follow the PRD, architecture spec, and project rules exactly. ' +
-      'Workflow: call list_files to discover the codebase, read_file to read any file you intend to change (preserve existing code — only change what the task needs), ' +
-      'then write_file with the FULL updated content (no bracketed placeholders) for each deliverable file. Call finish with a summary when done. ' +
-      'When you finish, your committed changes are automatically merged to the deploy branch and deployed — so make sure the code is complete and correct before calling finish. ' +
-      'If no repository is bound, return the complete deliverable in your final summary instead. Make explicit, reasonable assumptions where specifics are unknown.',
-      // Assigned Skills/Personas/Content — identity + capabilities steer best from
-      // the system prompt, at parity with the self-hosted gateway injection.
-      capabilities.promptBlock || null,
-    ].filter(Boolean).join('\n\n');
+    const { systemPrompt, userContent } = await prepareCloudRun(
+      env, db, executionId, taskRow, tenantId, projectId, agentLabel, model, artifacts, cloudAgentRef,
+    );
     const { ok, output, cancelled } = await runCloudToolLoop(
       env, db, executionId, tenantId, taskRow, cloudAgentRef, agentLabel, model, systemPrompt, userContent, isCancelled, projectId,
     );
@@ -1117,15 +1186,36 @@ async function dispatchAndQueue(
       }).catch(() => { /* best-effort; reaper backstops */ });
       await notifyDone().catch(() => { /* best-effort */ });
     } else {
-      // durable surface → on-demand serverless executor. INTERIM: the Worker
-      // waitUntil loop (capped at the ~30s Cloudflare wall, so multi-step coding
-      // runs fail fast at the 90s orphan ceiling). To be replaced by CloudRunnerDO
-      // (a Durable Object running one LLM step per alarm tick) — see the
-      // Consolidated Gap Register.
-      c.executionCtx.waitUntil((async () => {
+      // durable surface → CloudRunnerDO: the full cloud agent loop runs in the
+      // cloud, one LLM step per Durable Object alarm tick, so it survives the
+      // ~30s `waitUntil` wall and runs to completion. The interim Worker loop is
+      // the fallback when the DO binding is absent (pre-deploy) or kickoff fails.
+      const runWorkerFallback = async () => {
         await runCloudExecution(c.env as Env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, payload, artifacts);
         await notifyDone();
-      })());
+      };
+      const cloudRunner = (c.env as Env).CLOUD_RUNNER;
+      if (cloudRunner) {
+        c.executionCtx.waitUntil((async () => {
+          try {
+            const stub = cloudRunner.get(cloudRunner.idFromName(`exec:${execution.id}`));
+            const res = await stub.fetch('https://cloud-runner/start', {
+              method: 'POST',
+              body: JSON.stringify({
+                executionId: execution.id, tenantId, projectId: taskRow.projectId,
+                taskId: taskRow.id, taskTitle: taskRow.title, taskDescription: taskRow.description,
+                cloudAgentRef: agent.ref, agentLabel: agent.label ?? 'BuilderForce Agent',
+                payload, artifacts,
+              }),
+            });
+            if (!res.ok) await runWorkerFallback();
+          } catch {
+            await runWorkerFallback();
+          }
+        })());
+      } else {
+        c.executionCtx.waitUntil(runWorkerFallback());
+      }
     }
   }
 

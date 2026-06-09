@@ -69,7 +69,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
            updated_at = now()
      WHERE status = 'running'
        AND agent_host_id IS NULL
-       AND COALESCE(started_at, created_at) < ${cloudRunningCutoff}
+       AND COALESCE(updated_at, created_at) < ${cloudRunningCutoff}
     RETURNING id, tenant_id, agent_host_id, payload, error_message
   `) as ReapedRow[];
 
