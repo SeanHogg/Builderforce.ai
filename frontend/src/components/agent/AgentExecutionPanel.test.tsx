@@ -57,6 +57,31 @@ describe('AgentExecutionPanel — steering echo', () => {
     expect(post).toHaveBeenCalledWith(10, 'focus on the pricing page');
   });
 
+  it('rebuilds Output from persisted agent.message telemetry when the live stream is empty (cloud run)', async () => {
+    const cloudRun: Execution = { id: 21, taskId: 1, status: 'running', agentHostId: null };
+    vi.spyOn(builderforceApi.runtimeApi, 'listForTask').mockResolvedValue([cloudRun]);
+    vi.spyOn(builderforceApi.runtimeApi, 'trace').mockResolvedValue({
+      execution: cloudRun,
+      trace: {
+        source: 'cloud-telemetry',
+        usageSnapshots: [],
+        toolEvents: [
+          { id: 2, ts: '2026-06-08T21:54:30Z', toolName: 'agent.message', args: JSON.stringify({ step: 2, content: 'Now wiring the Outlook UI.' }) },
+          { id: 1, ts: '2026-06-08T21:54:25Z', toolName: 'agent.message', args: JSON.stringify({ step: 1, content: 'Creating the plugin core logic.' }) },
+        ],
+      },
+    });
+    // Cloud WS dropped cross-isolate → no live assistant messages.
+    mockStream.mockReturnValue({ status: 'running', execution: null, messages: [], fileChanges: [], connected: false });
+
+    const { findByText, queryByText } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
+
+    // Both narrations render (oldest-first), not the "working…" placeholder.
+    expect(await findByText('Creating the plugin core logic.')).toBeTruthy();
+    expect(await findByText('Now wiring the Outlook UI.')).toBeTruthy();
+    expect(queryByText(/output will stream here/i)).toBeNull();
+  });
+
   it('shows a re-run action on a failed execution and re-submits with its target + payload', async () => {
     const failed: Execution = { id: 17, taskId: 1, status: 'failed', agentHostId: null, payload: '{"cloudAgentRef":"agt_9","model":"x"}' };
     vi.spyOn(builderforceApi.runtimeApi, 'listForTask').mockResolvedValue([failed]);
