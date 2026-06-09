@@ -20,6 +20,7 @@ import { ExecutionChip } from './ExecutionChip';
 import { useExecutionStream, type ExecutionFileChange } from './useExecutionStream';
 import { ObservabilityContent } from '../ObservabilityContent';
 import { FileChangeViewer } from './FileChangeViewer';
+import { PullRequestPanel } from './PullRequestPanel';
 
 /**
  * Live execution view for a task. Queued runs stream their status, output
@@ -114,7 +115,7 @@ function ChangeRow({
   );
 }
 
-type SubTab = 'output' | 'changes' | 'tools' | 'logs' | 'timeline';
+type SubTab = 'output' | 'changes' | 'tools' | 'logs' | 'timeline' | 'pull-request';
 const card: React.CSSProperties = { border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 14, marginBottom: 12 };
 const RUNNING = new Set(['pending', 'submitted', 'running']);
 
@@ -415,7 +416,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
 
           {/* Sub-tabs */}
           <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border-subtle)', marginBottom: 10 }}>
-            {(() => { const changeCount = taskChanges.length || files.length; return [['output', 'Output'], ['changes', `Changes${changeCount ? ` (${changeCount})` : ''}`], ['tools', `Tools${toolEvents.length ? ` (${toolEvents.length})` : ''}`], ['logs', 'Logs'], ['timeline', 'Timeline']] as const; })().map(([id, label]) => (
+            {(() => { const changeCount = taskChanges.length || files.length; const base: Array<readonly [SubTab, string]> = [['output', 'Output'], ['changes', `Changes${changeCount ? ` (${changeCount})` : ''}`], ['tools', `Tools${toolEvents.length ? ` (${toolEvents.length})` : ''}`], ['logs', 'Logs'], ['timeline', 'Timeline']]; if (prUrl) base.push(['pull-request', 'Pull Request']); return base; })().map(([id, label]) => (
               <button
                 key={id}
                 type="button"
@@ -563,10 +564,11 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
             <ObservabilityContent embedded initialView="timeline" executionId={selectedId} {...obsScopeProps} />
           )}
 
-          {prUrl && (
-            <a href={prUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 12, fontSize: 13, color: 'var(--coral-bright)', fontFamily: 'var(--font-mono)' }}>
-              View pull request →
-            </a>
+          {/* In-product PR review + Approve & Merge (replaces the old external
+              "View pull request" link). Owns its own visibility, so mounting it
+              when the task has a PR is enough. */}
+          {subTab === 'pull-request' && (
+            <PullRequestPanel taskId={task.id} onMerged={() => onTaskChanged?.()} />
           )}
         </div>
       )}

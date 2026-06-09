@@ -25,6 +25,12 @@ export interface TicketRepoContext {
   branch: string;
   /** Base branch the ticket branch forks from. */
   base: string;
+  /** project_repositories.id — carried so the run can record a pull_requests row. */
+  repoId: string;
+  /** Repo's segment (nullable) for tenant/segment scoping of recorded rows. */
+  segmentId: string | null;
+  /** Repo's project — the pull_requests row's projectId. */
+  projectId: number;
 }
 
 export type ResolveTicketRepoResult =
@@ -58,6 +64,9 @@ export async function resolveTicketRepoContext(
       token: resolved.token,
       base: (resolved.repo.defaultBranch ?? 'main').trim(),
       branch: `builderforce/task-${taskId}`,
+      repoId: resolved.repo.id,
+      segmentId: resolved.repo.segmentId,
+      projectId: resolved.repo.projectId,
     },
   };
 }

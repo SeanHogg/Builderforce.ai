@@ -50,7 +50,7 @@ export const ENGINE_LABELS: Record<AgentEngine, string> = {
 
 export const RUNTIME_SURFACE_LABELS: Record<AgentRuntimeSurface, string> = {
   durable: 'Durable (cloud, on-demand serverless)',
-  node: 'Long-lived cloud node (for very long runs)',
+  container: 'Long-lived Cloudflare Container (for very long runs)',
 };
 
 export const btnPrimary: React.CSSProperties = { padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' };
@@ -134,7 +134,7 @@ export function CloudAgentFormFields({
             ))}
           </Select>
           <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>
-            Both run the full task in the cloud. Durable executes on-demand (serverless, per step) — the default. Long-lived cloud node keeps a Node runtime running for very long, continuous tasks.
+            Both run the full task in the cloud (all Cloudflare). Durable executes on-demand on a Durable Object (per step) — the default. Long-lived Cloudflare Container keeps a process running for very long, continuous tasks (falls back to Durable until Container infra is enabled).
           </p>
         </div>
       )}

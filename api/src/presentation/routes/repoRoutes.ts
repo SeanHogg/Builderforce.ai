@@ -9,7 +9,9 @@
  * DELETE /api/repos/repositories/:id                   Remove a repo association
  * POST   /api/repos/repositories/:id/default           Mark a repo as the project default
  * POST   /api/repos/tasks/:taskId/pull-request         Dispatch PR creation to the task's agentHost
+ * GET    /api/repos/tasks/:taskId/pull-request         Latest recorded PR for a task + live provider detail
  * POST   /api/repos/pull-requests/:id/result           AgentHost callback: record PR number/url/status
+ * POST   /api/repos/pull-requests/:id/merge            Approve & merge a recorded PR (in-product)
  * GET    /api/repos/projects/:projectId/pull-requests  List a project's pull requests
  *
  * Every query is tenant-scoped. The AGENT_HOST_RELAY dispatch mirrors runtimeRoutes.ts:
@@ -23,12 +25,14 @@ import {
   pullRequests,
   projects,
 } from '../../infrastructure/database/schema';
-import type { HonoEnv } from '../../env';
+import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { RepoService, type AgentHostDispatcher } from '../../application/repos/RepoService';
 import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
 import { githubStatusMessage } from '../../application/integrations/githubTestError';
+import { mergePullRequest, normalizeMergeMethod } from '../../application/repos/mergePullRequest';
+import { getPullRequestDetail, invalidatePullRequestDetail } from '../../application/repos/getPullRequestDetail';
 import type { CreatePrMessage } from '../../application/repos/prDispatch';
 
 type RepoHonoEnv = HonoEnv & {
@@ -352,6 +356,102 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       .where(and(eq(pullRequests.projectId, projectId), eq(pullRequests.tenantId, tenantId)))
       .orderBy(desc(pullRequests.createdAt));
     return c.json({ pullRequests: rows });
+  });
+
+  // GET /api/repos/tasks/:taskId/pull-request — the latest recorded PR for a task
+  // plus its LIVE provider detail (status, mergeability, CI checks, diff stat) so
+  // the in-product Pull Request tab can render review info + gate Approve & Merge.
+  router.get('/tasks/:taskId/pull-request', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const taskId = Number(c.req.param('taskId'));
+    if (!Number.isFinite(taskId)) return c.json({ error: 'Invalid taskId' }, 400);
+
+    const [row] = await db
+      .select()
+      .from(pullRequests)
+      .where(and(eq(pullRequests.taskId, taskId), eq(pullRequests.tenantId, tenantId)))
+      .orderBy(desc(pullRequests.createdAt))
+      .limit(1);
+    // No PR yet for this task → 200 with nulls so the client renders "no PR"
+    // without treating it as an error (exception-as-control-flow is avoided).
+    if (!row) return c.json({ pullRequest: null, detail: null });
+
+    // Live detail is best-effort: the recorded row always renders even if the
+    // provider call (or credential resolution) fails — the UI degrades to the
+    // recorded status + an "open on provider" link.
+    let detail: Awaited<ReturnType<typeof getPullRequestDetail>> | null = null;
+    if (row.repoId && row.number != null) {
+      const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
+      const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+      const resolved = await resolveRepoCredential(db, secret, tenantId, row.repoId);
+      if (!isResolveError(resolved)) {
+        detail = await getPullRequestDetail(
+          c.env as Env,
+          row.id,
+          row.updatedAt instanceof Date ? row.updatedAt.toISOString() : String(row.updatedAt),
+          {
+            provider: resolved.repo.provider, host: resolved.repo.host,
+            owner: resolved.repo.owner, repo: resolved.repo.repo,
+            token: resolved.token, number: row.number,
+          },
+        );
+      }
+    }
+
+    return c.json({ pullRequest: row, detail });
+  });
+
+  // POST /api/repos/pull-requests/:id/merge — Approve & merge a recorded PR from
+  // the product. Server-side with the tenant's decrypted token; records who
+  // approved (audit) and busts the cached detail.
+  router.post('/pull-requests/:id/merge', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string | undefined;
+    const id = c.req.param('id');
+    const body = await c.req.json<{ method?: string }>().catch(() => ({} as { method?: string }));
+
+    const [row] = await db
+      .select()
+      .from(pullRequests)
+      .where(and(eq(pullRequests.id, id), eq(pullRequests.tenantId, tenantId)))
+      .limit(1);
+    if (!row) return c.json({ error: 'Pull request not found' }, 404);
+    if (row.status === 'merged') return c.json({ ok: true, alreadyMerged: true, pullRequest: row });
+    if (!row.repoId) return c.json({ error: 'PR has no linked repo to merge against' }, 409);
+    if (row.number == null) return c.json({ error: 'PR has no provider number yet (still being opened)' }, 409);
+
+    const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
+    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+    const resolved = await resolveRepoCredential(db, secret, tenantId, row.repoId);
+    if (isResolveError(resolved)) return c.json({ error: resolved.error }, resolved.status);
+
+    const result = await mergePullRequest({
+      provider: resolved.repo.provider, host: resolved.repo.host,
+      owner: resolved.repo.owner, repo: resolved.repo.repo, token: resolved.token,
+      number: row.number, method: normalizeMergeMethod(body.method),
+      commitTitle: `Task #${row.taskId ?? ''}: merge ${row.branchName ?? ''}`.trim(),
+    });
+
+    if (!result.ok) {
+      const httpStatus = result.code === 'unsupported' ? 501
+        : (result.code === 'conflict' || result.code === 'not_mergeable') ? 409
+        : 502;
+      return c.json({ error: result.reason, code: result.code }, httpStatus);
+    }
+
+    const [updated] = await db
+      .update(pullRequests)
+      .set({ status: 'merged', mergedBy: userId ?? null, mergedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(pullRequests.id, id), eq(pullRequests.tenantId, tenantId)))
+      .returning();
+
+    // Bust the cached live detail keyed by the PRE-merge updatedAt token.
+    await invalidatePullRequestDetail(
+      c.env as Env, id,
+      row.updatedAt instanceof Date ? row.updatedAt.toISOString() : String(row.updatedAt),
+    ).catch(() => { /* cache miss is fine */ });
+
+    return c.json({ ok: true, merged: result.merged, sha: result.sha, pullRequest: updated ?? row });
   });
 
   return router;

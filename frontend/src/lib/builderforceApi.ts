@@ -2297,7 +2297,66 @@ export const reposApi = {
 
   listPullRequests: (projectId: number) =>
     request<{ pullRequests: unknown[] }>(`/api/repos/projects/${projectId}/pull-requests`).then((r) => r.pullRequests ?? []),
+
+  // The latest recorded PR for a task + live provider detail (pullRequest is null
+  // when the task has no PR yet).
+  getTaskPullRequest: (taskId: number): Promise<TaskPullRequest | null> =>
+    request<{ pullRequest: PullRequestRow | null; detail: PullRequestDetail | null }>(
+      `/api/repos/tasks/${taskId}/pull-request`,
+    ).then((r) => (r.pullRequest ? { pullRequest: r.pullRequest, detail: r.detail } : null)),
+
+  // Approve & merge a recorded PR in-product (server-side with the tenant's token).
+  mergePullRequest: (prId: string, method: MergeMethod = 'squash'): Promise<MergePrResponse> =>
+    request<MergePrResponse>(`/api/repos/pull-requests/${prId}/merge`, {
+      method: 'POST',
+      body: JSON.stringify({ method }),
+    }),
 };
+
+export type MergeMethod = 'squash' | 'merge' | 'rebase';
+
+/** A recorded pull_requests row (subset the UI renders). */
+export interface PullRequestRow {
+  id: string;
+  taskId: number | null;
+  projectId: number;
+  provider: string;
+  number: number | null;
+  url: string | null;
+  branchName: string | null;
+  baseBranch: string | null;
+  status: string;          // draft | open | merged | closed
+  mergedBy: string | null;
+  mergedAt: string | null;
+}
+
+/** Live provider-side state for a PR (mirrors api getPullRequestDetail). */
+export interface PullRequestDetail {
+  supported: boolean;
+  state: string | null;
+  merged: boolean;
+  mergeable: boolean | null;
+  mergeableState: string | null;
+  additions: number | null;
+  deletions: number | null;
+  changedFiles: number | null;
+  checks: 'success' | 'failure' | 'pending' | null;
+  checksTotal: number;
+  error?: string;
+}
+
+export interface TaskPullRequest {
+  pullRequest: PullRequestRow;
+  detail: PullRequestDetail | null;
+}
+
+export interface MergePrResponse {
+  ok: boolean;
+  merged?: boolean;
+  sha?: string | null;
+  alreadyMerged?: boolean;
+  pullRequest?: PullRequestRow;
+}
 
 // ---------------------------------------------------------------------------
 // External board connections — /api/board-connections  (Jira / GitHub PM sync)

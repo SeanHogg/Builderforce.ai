@@ -16,13 +16,3 @@ export const CLOUD_ORPHAN_REASON =
 /** A self-hosted host run that lost its process/connection mid-run. */
 export const HOST_ORPHAN_REASON =
   'Run did not report completion in time and was marked failed (orphaned run — the agent host stopped before writing a terminal status). Re-run the task.';
-
-/**
- * A `node`-surface cloud agent (runs on a long-lived *cloud* node — a Node runtime
- * kept running for very long tasks) was dispatched but no such node is currently
- * available. Everything executes in the cloud; we fail fast instead of running the
- * doomed serverless Worker loop, and steer the user to the Durable surface (which
- * runs the full task in the cloud on-demand with no always-on node).
- */
-export const NODE_RUNTIME_OFFLINE_REASON =
-  'This agent is set to run on a long-lived cloud node, but none is currently available. Switch this agent to the Durable runtime surface — which runs the full task in the cloud, on-demand — and re-run.';

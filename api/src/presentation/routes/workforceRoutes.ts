@@ -28,7 +28,7 @@ const RUNTIME_SUPPORT = ['cloud', 'host', 'both'] as const;
 const PRICING_MODELS = ['flat_fee', 'consumption'] as const;
 const AGENT_ENGINES = ['builderforce-v1', 'builderforce-v2'] as const;
 /** The two V2 cloud-agent execution surfaces (see migration 0105 / cloudDispatch). */
-const RUNTIME_SURFACES = ['durable', 'node'] as const;
+const RUNTIME_SURFACES = ['durable', 'container'] as const;
 
 /**
  * `ide_agents.skills` is a `text` column holding a JSON string. The
