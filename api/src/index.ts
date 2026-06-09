@@ -125,6 +125,7 @@ import { emulationMiddleware } from './presentation/middleware/emulationMiddlewa
 export { AgentHostRelayDO } from './infrastructure/relay/AgentHostRelayDO';
 export { SessionRoomDO } from './infrastructure/relay/SessionRoomDO';
 export { AnalysisRunnerDO } from './infrastructure/relay/AnalysisRunnerDO';
+export { CloudRunnerDO } from './infrastructure/relay/CloudRunnerDO';
 export { TenantRateLimiterDO } from './infrastructure/ratelimit/TenantRateLimiterDO';
 
 // ---------------------------------------------------------------------------

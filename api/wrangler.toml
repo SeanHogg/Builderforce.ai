@@ -33,6 +33,10 @@ class_name = "SessionRoomDO"
 name = "ANALYSIS_RUNNER"
 class_name = "AnalysisRunnerDO"
 
+[[durable_objects.bindings]]
+name = "CLOUD_RUNNER"
+class_name = "CloudRunnerDO"
+
 [[r2_buckets]]
 binding = "UPLOADS"
 bucket_name = "builderforce-uploads"
@@ -66,6 +70,12 @@ tag = "v4"
 # AgentHostRelayDO (CoderClaw -> BuilderForce Agents). renamed_classes preserves
 # existing DO instances/storage across the rename. Binding: AGENT_HOST_RELAY.
 renamed_classes = [{ from = "ClawRelayDO", to = "AgentHostRelayDO" }]
+
+[[migrations]]
+tag = "v5"
+# CloudRunnerDO runs a V2 cloud agent's loop one LLM step per alarm() tick (the
+# `durable` runtime surface); alarms require a SQLite-backed Durable Object class.
+new_sqlite_classes = ["CloudRunnerDO"]
 
 # Cron triggers — see scheduled() in src/index.ts
 #   "0 9 * * *"   09:00 UTC daily: probe every LLM vendor; email superadmins on status change.
