@@ -528,9 +528,9 @@ const DEFAULT_CLOUD_REF = '__default__';
  *  block a fabricated "checks pass" claim once and force an honest summary. Kept
  *  deliberately narrow (a check noun AND a success verb) to avoid false positives
  *  on legitimate descriptions of the work. */
-function assertsUnrunVerification(summary: string): boolean {
+export function assertsUnrunVerification(summary: string): boolean {
   const s = summary.toLowerCase();
-  const check = /(type[\s-]?check|typecheck|\btsc\b|lint|eslint|\btest(s|ing|ed)?\b|\bbuild(s|ing)?\b|compil)/;
+  const check = /(type[\s-]?check|typecheck|typescript|\btsc\b|lint|eslint|\btest(s|ing|ed)?\b|\bbuild(s|ing)?\b|compil)/;
   const pass = /(pass(es|ed|ing)?|succeed(s|ed)?|success|green|no\s+errors?|error[\s-]?free|will\s+now\s+pass|are\s+resolved|is\s+resolved)/;
   return check.test(s) && pass.test(s);
 }
