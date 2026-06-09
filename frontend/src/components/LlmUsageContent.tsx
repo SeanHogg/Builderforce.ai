@@ -242,6 +242,37 @@ export function LlmUsageContent() {
             </div>
           )}
 
+          {/* By project — agent spend attributed to each project, rolling up to
+              the account total above (0103). */}
+          {bySource && bySource.perProject.length > 0 && (
+            <div style={cardStyle}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>By Project · last 7 days</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  rolls up to {fmtUsd(bySource.totals.estimatedCostUsd)} account total
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {bySource.perProject.map((p) => (
+                  <div
+                    key={p.projectId ?? 'none'}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '8px 10px', borderRadius: 8, background: 'var(--bg-elevated)',
+                    }}
+                  >
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.projectName}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{fmtNum(p.requests)} req</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--cyan-bright, #00e5cc)', flexShrink: 0 }}>{fmtNum(p.totalTokens)} tok</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--coral-bright, #f4726e)', flexShrink: 0, minWidth: 56, textAlign: 'right' }}>
+                      est. {fmtUsd(p.estimatedCostUsd)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* By model */}
           {usage.byModel && usage.byModel.length > 0 && (
             <div style={cardStyle}>

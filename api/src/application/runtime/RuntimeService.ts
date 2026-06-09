@@ -9,6 +9,7 @@ import {
   asExecutionId, asTaskId, asAgentId, asAgentHostId, asTenantId, TaskStatus,
 } from '../../domain/shared/types';
 import { NotFoundError, ForbiddenError } from '../../domain/shared/errors';
+import { CLOUD_ORPHAN_REASON, HOST_ORPHAN_REASON } from './orphanReasons';
 
 export interface SubmitTaskDto {
   taskId:      number;
@@ -102,17 +103,28 @@ export class RuntimeService {
    * evicted (or an update throws) before writing a terminal status, the row is
    * left non-terminal and the UI polls "running" forever even though nothing is
    * executing — the "says completed but still running" symptom. There is no live
-   * process to recover, so once a run exceeds a generous per-kind ceiling we mark
-   * it failed on read. Cloud runs are hard-bounded to a few minutes
-   * (PRD draft + {@link MAX_CLOUD_TOOL_STEPS} steps); a self-hosted host can
-   * legitimately run much longer, so it gets a far larger ceiling.
+   * process to recover, so once a run exceeds a per-kind ceiling we mark it failed
+   * on read.
+   *
+   * Cloud ceiling is tight on purpose: Cloudflare stops `waitUntil` work shortly
+   * after the HTTP response returns (observed ~30s), so a serverless cloud run
+   * physically cannot make progress past that. 90s = that wall + margin for the
+   * terminal-status write + clock skew, so a genuinely-dead run surfaces in ~1.5
+   * min instead of the old 8 min. A self-hosted host has a real long-lived process
+   * and legitimately runs much longer, so it keeps a far larger ceiling.
+   * (Durable multi-step cloud execution is the planned fix — see the Consolidated
+   * Gap Register's CloudRunnerDO entry; this is the interim fast-fail.)
    *
    * Read-path repair (no cron needed): the stream's reconciliation poll calls
    * `getExecution` every few seconds, so an orphan self-heals on next view.
    * Bounded — only stale, non-terminal rows incur a write; healthy reads don't.
    */
-  private static readonly CLOUD_ORPHAN_MS = 8 * 60_000;
+  private static readonly CLOUD_ORPHAN_MS = 90_000;
   private static readonly HOST_ORPHAN_MS = 30 * 60_000;
+
+  private isCloudRun(e: Execution): boolean {
+    return e.agentHostId == null;
+  }
 
   private isOrphaned(e: Execution, nowMs: number): boolean {
     const live = e.status === ExecutionStatus.PENDING
@@ -120,18 +132,22 @@ export class RuntimeService {
       || e.status === ExecutionStatus.RUNNING;
     if (!live) return false;
     const sinceMs = (e.startedAt ?? e.updatedAt ?? e.createdAt).getTime();
-    const ceiling = e.agentHostId == null
+    const ceiling = this.isCloudRun(e)
       ? RuntimeService.CLOUD_ORPHAN_MS
       : RuntimeService.HOST_ORPHAN_MS;
     return nowMs - sinceMs > ceiling;
   }
 
+  /** Actionable reason for a reaped run — cloud runs hit the serverless wall and
+   *  need a durable runtime; host runs lost their process/connection. */
+  private orphanReason(e: Execution): string {
+    return this.isCloudRun(e) ? CLOUD_ORPHAN_REASON : HOST_ORPHAN_REASON;
+  }
+
   private async reapIfOrphaned(e: Execution): Promise<Execution> {
     if (!this.isOrphaned(e, Date.now())) return e;
     try {
-      const failed = e.markFailed(
-        'Run did not report completion in time and was marked failed (orphaned run — the background runner stopped before writing a terminal status). Re-run the task.',
-      );
+      const failed = e.markFailed(this.orphanReason(e));
       const saved = await this.executions.update(failed);
       await this.audit.save(AuditEvent.create({
         tenantId:     e.tenantId,

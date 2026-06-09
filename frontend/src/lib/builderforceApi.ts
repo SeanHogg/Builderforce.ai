@@ -891,6 +891,24 @@ export interface TaskFileChange {
   createdAt: string;
 }
 
+/**
+ * A changed file's current (ticket branch) and base (fork point) contents, read
+ * back from the repo so the Changes tab can render the diff in Monaco. `current`
+ * is null for a deleted file, `base` is null for a newly created file; both are
+ * null (with `bound: false`) when no repo/credential is wired for the task.
+ */
+export interface TaskFileContent {
+  bound: boolean;
+  path: string;
+  reason?: string;
+  branch?: string;
+  baseBranch?: string;
+  current: string | null;
+  base: string | null;
+  currentTruncated?: boolean;
+  baseTruncated?: boolean;
+}
+
 export interface ExecutionTrace {
   execution: Execution;
   trace: {
@@ -960,6 +978,10 @@ export const runtimeApi = {
   taskFileChanges: (taskId: number): Promise<{ changes: TaskFileChange[] }> =>
     request<{ changes: TaskFileChange[] }>(`/api/runtime/tasks/${taskId}/file-changes`),
 
+  /** Current + base contents of one changed file, for the Changes-tab diff viewer. */
+  taskFileContent: (taskId: number, path: string): Promise<TaskFileContent> =>
+    request<TaskFileContent>(`/api/runtime/tasks/${taskId}/file-content?path=${encodeURIComponent(path)}`),
+
   /** Whether the agent can commit code for this task (repo bound + credential). */
   taskRepoStatus: (taskId: number): Promise<TaskRepoStatus> =>
     request<TaskRepoStatus>(`/api/runtime/tasks/${taskId}/repo-status`),
@@ -1011,6 +1033,9 @@ export interface DashboardUsage {
   byKind: UsageByKind[];
   perModel: Array<{ model: string; totalTokens: number; requests: number; estimatedCostUsd: number }>;
   perAgentHost: Array<{ agentHostId: number | null; totalTokens: number; requests: number }>;
+  /** Per-project spend (0103) — cost attributed to each project, rolling up to
+   *  the account total in `totals.estimatedCostUsd`. */
+  perProject: Array<{ projectId: number | null; projectName: string; totalTokens: number; requests: number; estimatedCostUsd: number }>;
 }
 
 export const dashboardApi = {

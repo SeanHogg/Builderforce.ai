@@ -15,6 +15,7 @@ import {
   approvals,
   agentHosts,
   llmUsageLog,
+  projects,
   tenants,
   workflows,
 } from '../../infrastructure/database/schema';
@@ -45,7 +46,7 @@ function mcToUsd(millicents: unknown): number {
 async function buildUsageBreakdown(db: Db, tenantId: number, windowStart: Date) {
   const where = and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, windowStart));
 
-  const [byKind, perModel, perAgentHost, totalRow] = await Promise.all([
+  const [byKind, perModel, perAgentHost, perProject, totalRow] = await Promise.all([
     db.select({
       kind: USAGE_KIND,
       promptTokens: sum(llmUsageLog.promptTokens),
@@ -70,6 +71,20 @@ async function buildUsageBreakdown(db: Db, tenantId: number, windowStart: Date) 
       requests: count(),
     }).from(llmUsageLog).where(and(where, sql`${llmUsageLog.agentHostId} is not null`))
       .groupBy(llmUsageLog.agentHostId).orderBy(desc(sum(llmUsageLog.totalTokens))).limit(50),
+
+    // Per-project spend (0103) — cost attributed to each project, the rollup
+    // beneath the account total. Joined to projects for the display name.
+    db.select({
+      projectId: llmUsageLog.projectId,
+      projectName: projects.name,
+      totalTokens: sum(llmUsageLog.totalTokens),
+      costMc: sum(llmUsageLog.costUsdMillicents),
+      requests: count(),
+    }).from(llmUsageLog)
+      .leftJoin(projects, eq(projects.id, llmUsageLog.projectId))
+      .where(and(where, sql`${llmUsageLog.projectId} is not null`))
+      .groupBy(llmUsageLog.projectId, projects.name)
+      .orderBy(desc(sum(llmUsageLog.costUsdMillicents))).limit(50),
 
     db.select({
       totalTokens: sum(llmUsageLog.totalTokens),
@@ -103,6 +118,13 @@ async function buildUsageBreakdown(db: Db, tenantId: number, windowStart: Date) 
       totalTokens: Number(h.totalTokens ?? 0),
       requests: Number(h.requests ?? 0),
       estimatedCostUsd: mcToUsd(h.costMc),
+    })),
+    perProject: perProject.map((p) => ({
+      projectId: p.projectId,
+      projectName: p.projectName ?? `Project ${p.projectId}`,
+      totalTokens: Number(p.totalTokens ?? 0),
+      requests: Number(p.requests ?? 0),
+      estimatedCostUsd: mcToUsd(p.costMc),
     })),
   };
 }
@@ -226,7 +248,7 @@ export function createDashboardRoutes(db: Db): Hono<HonoEnv> {
 
     const payload = await getOrSetCached(
       c.env as Env,
-      `dashboard-usage:v1:${tenantId}:${window}:${windowStart.toISOString().slice(0, 13)}`,
+      `dashboard-usage:v2:${tenantId}:${window}:${windowStart.toISOString().slice(0, 13)}`,
       () => buildUsageBreakdown(db, tenantId, windowStart),
       { kvTtlSeconds: 60, l1TtlMs: 30_000 },
     );
