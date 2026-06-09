@@ -326,6 +326,10 @@ export const llmUsageLog = pgTable('llm_usage_log', {
   cloudAgentRef:    varchar('cloud_agent_ref', { length: 64 }),
   /** Execution a cloud-run usage row belongs to (trace key). */
   executionId:      integer('execution_id'),
+  /** Ticket (task) this spend is attributed to (0104) — the finest grain. Cost
+   *  rolls up ticket → project → account. Stamped from the run's task; null for
+   *  web/SDK calls. */
+  taskId:           integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
   /** Project this spend is attributed to (0103) — lets cost roll up project →
    *  account. Stamped from the run's task→project; null for web/SDK calls. */
   projectId:        integer('project_id').references(() => projects.id, { onDelete: 'set null' }),

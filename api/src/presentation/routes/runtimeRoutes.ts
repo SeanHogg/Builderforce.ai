@@ -485,7 +485,7 @@ async function recordCloudToolEvent(
 async function recordCloudUsage(
   env: Env,
   db: Db,
-  args: { tenantId: number; cloudAgentRef?: string; executionId: number; projectId?: number | null; model: string; inputTokens: number; outputTokens: number },
+  args: { tenantId: number; cloudAgentRef?: string; executionId: number; taskId: number; projectId?: number | null; model: string; inputTokens: number; outputTokens: number },
 ): Promise<void> {
   try {
     await db.insert(usageSnapshots).values({
@@ -505,11 +505,11 @@ async function recordCloudUsage(
     llmProduct: 'builderforceLLM',
     model:      args.model,
     usage:      { promptTokens: args.inputTokens, completionTokens: args.outputTokens, totalTokens: args.inputTokens + args.outputTokens },
-    metadata:   { engine: 'cloud', executionId: args.executionId, projectId: args.projectId ?? null },
+    metadata:   { engine: 'cloud', executionId: args.executionId, taskId: args.taskId, projectId: args.projectId ?? null },
     useCase:    'task_execution',
-    // Attribute the spend to the run's cloud agent AND project so cost rolls up
-    // project → account (0103).
-    attribution: { cloudAgentRef: args.cloudAgentRef ?? null, executionId: args.executionId, projectId: args.projectId ?? null },
+    // Attribute the spend to the run's cloud agent + ticket + project so cost
+    // rolls up ticket → project → account (0104 / 0103).
+    attribution: { cloudAgentRef: args.cloudAgentRef ?? null, executionId: args.executionId, taskId: args.taskId, projectId: args.projectId ?? null },
   });
 }
 
@@ -669,7 +669,7 @@ async function runCloudToolLoop(
     const resolvedModel = result.resolvedModel ?? model ?? 'default';
     if (result.usage) {
       await recordCloudUsage(env, db, {
-        tenantId, cloudAgentRef, executionId, projectId, model: resolvedModel,
+        tenantId, cloudAgentRef, executionId, taskId: taskRow.id, projectId, model: resolvedModel,
         inputTokens: result.usage.promptTokens ?? 0,
         outputTokens: result.usage.completionTokens ?? 0,
       });
@@ -1899,6 +1899,41 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const taskId = Number(c.req.param('taskId'));
     const executions = await runtimeService.listByTask(taskId);
     return c.json(executions.map(e => e.toPlain()));
+  });
+
+  // GET /api/runtime/tasks/:taskId/cost
+  // Ticket-level spend: the finest grain in the ticket → project → account
+  // rollup (0104). Sums the authoritative cost_usd_millicents stamped on every
+  // usage row for this task. Cached read-through (60s): an aggregate over the
+  // append-heavy usage log that doesn't need to be to-the-second — same rationale
+  // as /dashboard/usage; the short TTL bounds staleness without an
+  // invalidate-on-every-LLM-call hook.
+  router.get('/tasks/:taskId/cost', async (c) => {
+    const taskId = Number(c.req.param('taskId'));
+    const tenantId = c.get('tenantId');
+    if (!Number.isFinite(taskId)) return c.json({ estimatedCostUsd: 0, totalTokens: 0, requests: 0 });
+    const payload = await getOrSetCached(
+      c.env as Env,
+      `task-cost:v1:${tenantId}:${taskId}`,
+      async () => {
+        const sql = neon((c.env as Env).NEON_DATABASE_URL);
+        const rows = (await sql`
+          SELECT COALESCE(SUM(cost_usd_millicents), 0)::bigint AS cost_mc,
+                 COALESCE(SUM(total_tokens), 0)::bigint       AS tokens,
+                 COUNT(*)::int                                 AS requests
+            FROM llm_usage_log
+           WHERE tenant_id = ${tenantId} AND task_id = ${taskId}
+        `) as Array<{ cost_mc: string; tokens: string; requests: number }>;
+        const r = rows[0];
+        return {
+          estimatedCostUsd: Number(r?.cost_mc ?? 0) / 100_000,
+          totalTokens: Number(r?.tokens ?? 0),
+          requests: Number(r?.requests ?? 0),
+        };
+      },
+      { kvTtlSeconds: 60, l1TtlMs: 30_000 },
+    );
+    return c.json(payload);
   });
 
   // Per-agent file-change traceability for a task's shared ticket workspace.

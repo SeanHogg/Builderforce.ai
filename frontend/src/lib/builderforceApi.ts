@@ -956,6 +956,11 @@ export const runtimeApi = {
   listForTask: (taskId: number): Promise<Execution[]> =>
     request<Execution[]>(`/api/runtime/tasks/${taskId}/executions`),
 
+  /** Ticket-level spend (the finest grain in the ticket → project → account
+   *  rollup): total estimated $, tokens, and LLM-call count for this task. */
+  taskCost: (taskId: number): Promise<{ estimatedCostUsd: number; totalTokens: number; requests: number }> =>
+    request<{ estimatedCostUsd: number; totalTokens: number; requests: number }>(`/api/runtime/tasks/${taskId}/cost`),
+
   /** Recent executions across the tenant (newest first) — used to surface which
    *  agent is actively running each task on the board. */
   listRecent: (limit = 200): Promise<Execution[]> =>
