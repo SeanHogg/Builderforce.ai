@@ -139,6 +139,8 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   // Re-run (retry/resume) of a terminal execution from its chip.
   const [rerunningId, setRerunningId] = useState<number | null>(null);
   const [rerunError, setRerunError] = useState<string | null>(null);
+  // Ticket-level spend (finest grain of the ticket → project → account rollup).
+  const [taskCost, setTaskCost] = useState<{ estimatedCostUsd: number; totalTokens: number; requests: number } | null>(null);
   // Cloud-agent ref → display name, for scoping the Logs/Timeline tabs to the
   // agent that actually executed (cloud runs carry no host name).
   const [cloudAgentNames, setCloudAgentNames] = useState<Map<string, string>>(new Map());
@@ -160,6 +162,12 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   }, [task.id, selectedId]);
 
   useEffect(() => { loadExecutions(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [task.id]);
+
+  // Ticket spend, refreshed when the run set changes (a new run adds cost). The
+  // endpoint is cached server-side, so this is a cheap aggregate read.
+  useEffect(() => {
+    runtimeApi.taskCost(task.id).then(setTaskCost).catch(() => setTaskCost(null));
+  }, [task.id, executions.length]);
 
   const loadTaskChanges = useCallback(() => {
     runtimeApi.taskFileChanges(task.id).then((r) => setTaskChanges(r.changes)).catch(() => { /* none yet */ });
@@ -341,7 +349,17 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
       </div>
 
       {/* Executions */}
-      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>Executions</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
+        <span style={{ fontWeight: 600, fontSize: 14 }}>Executions</span>
+        {taskCost && taskCost.requests > 0 && (
+          <span
+            style={{ fontSize: 12, color: 'var(--text-muted)' }}
+            title={`Ticket spend across all runs: ${taskCost.totalTokens.toLocaleString()} tokens over ${taskCost.requests} LLM call(s). Rolls up to this project, then the account.`}
+          >
+            ~{taskCost.estimatedCostUsd < 0.01 ? '<$0.01' : `$${taskCost.estimatedCostUsd.toFixed(2)}`} spent on this ticket
+          </span>
+        )}
+      </div>
       {loading ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>
       ) : executions.length === 0 ? (

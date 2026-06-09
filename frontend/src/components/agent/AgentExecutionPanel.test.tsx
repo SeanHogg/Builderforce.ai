@@ -34,6 +34,7 @@ describe('AgentExecutionPanel — steering echo', () => {
     vi.resetAllMocks();
     vi.spyOn(builderforceApi.runtimeApi, 'listForTask').mockResolvedValue([RUNNING_EXECUTION]);
     vi.spyOn(builderforceApi.runtimeApi, 'taskFileChanges').mockResolvedValue({ changes: [] });
+    vi.spyOn(builderforceApi.runtimeApi, 'taskCost').mockResolvedValue({ estimatedCostUsd: 0, totalTokens: 0, requests: 0 });
     // Logs/Timeline tabs resolve cloud-agent names from this list on mount.
     vi.spyOn(builderforceApi.cloudAgents, 'list').mockResolvedValue([]);
     vi.spyOn(builderforceApi.runtimeApi, 'trace').mockResolvedValue({
@@ -105,6 +106,12 @@ describe('AgentExecutionPanel — steering echo', () => {
       agentHostId: undefined,
       payload: '{"cloudAgentRef":"agt_9","model":"x"}',
     }));
+  });
+
+  it('shows ticket-level spend beside the Executions heading', async () => {
+    vi.spyOn(builderforceApi.runtimeApi, 'taskCost').mockResolvedValue({ estimatedCostUsd: 0.42, totalTokens: 12345, requests: 7 });
+    const { findByText } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
+    expect(await findByText(/\$0\.42 spent on this ticket/)).toBeTruthy();
   });
 
   it('does not show a re-run action on a running execution', async () => {

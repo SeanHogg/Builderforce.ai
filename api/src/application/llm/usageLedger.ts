@@ -55,6 +55,9 @@ export interface UsageAttribution {
   agentHostId?: number | null;
   cloudAgentRef?: string | null;
   executionId?: number | null;
+  /** Ticket (task) the spend is attributed to (0104) — the finest grain; rolls
+   *  up ticket → project → account. */
+  taskId?: number | null;
   /** Project the spend is attributed to (0103) — rolls up project → account. */
   projectId?: number | null;
 }
@@ -144,6 +147,7 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       agentHostId:         row.attribution?.agentHostId ?? null,
       cloudAgentRef:       row.attribution?.cloudAgentRef ?? null,
       executionId:         row.attribution?.executionId ?? null,
+      taskId:              row.attribution?.taskId ?? null,
       projectId:           row.attribution?.projectId ?? null,
       costUsdMillicents,
     });
