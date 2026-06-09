@@ -16,6 +16,12 @@ services:
       - "${BUILDERFORCE_AGENTS_BRIDGE_PORT:-18790}:18790"
     init: true
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18789/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     command:
       [
         "node",
