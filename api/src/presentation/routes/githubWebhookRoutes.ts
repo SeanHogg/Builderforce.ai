@@ -23,12 +23,15 @@
  */
 
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { projects, tasks, agentHosts } from '../../infrastructure/database/schema';
+import { projects, tasks, agentHosts, toolAuditEvents } from '../../infrastructure/database/schema';
 import { verifyHmacSignature } from '../../application/workflow/verifySignature';
-import { ingestRepoCiEvent, type RepoCiEvent } from '../../application/ci/ingestRepoCiEvent';
+import { ingestRepoCiEvent, AUTOFIX_DISPATCH_EVENT, type RepoCiEvent, type AutoFixIntent } from '../../application/ci/ingestRepoCiEvent';
+import { dispatchCloudRunForTask } from './runtimeRoutes';
+import type { RuntimeService } from '../../application/runtime/RuntimeService';
 
 /** Labels that trigger auto-dispatch. Lower-cased for comparison. */
 const DISPATCH_LABELS = new Set(['coderclaw', 'ai-task', 'host', 'ai']);
@@ -94,8 +97,35 @@ interface GitHubIssuePayload {
   installation?: { id: number };
 }
 
-export function createGitHubWebhookRoutes(db: Db): Hono<HonoEnv> {
+export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+
+  /**
+   * Post-merge build failed → dispatch an auto-fix run for the task (the agent
+   * fixes the build → new approval-gated PR). The loop-guard lives in
+   * `ingestRepoCiEvent` (it only returns an intent under the attempt cap); here we
+   * just start the run and record the `autofix.dispatch` event the guard counts.
+   */
+  const dispatchAutoFix = (c: Context<HonoEnv>, intent: AutoFixIntent): void => {
+    c.executionCtx.waitUntil((async () => {
+      try {
+        const executionId = await dispatchCloudRunForTask(
+          c.env as Env, db, runtimeService,
+          (p) => c.executionCtx.waitUntil(p),
+          { taskId: intent.taskId, tenantId: intent.tenantId, payload: intent.payload, submittedBy: 'system:autofix' },
+        );
+        if (executionId != null) {
+          await db.insert(toolAuditEvents).values({
+            tenantId: intent.tenantId, agentHostId: null, cloudAgentRef: null,
+            executionId, sessionKey: `exec:${executionId}`,
+            toolName: AUTOFIX_DISPATCH_EVENT, category: 'ci',
+            args: JSON.stringify({ taskId: intent.taskId, attempt: intent.attempt }),
+            result: `auto-fix run dispatched (attempt ${intent.attempt})`, ts: new Date(),
+          }).catch(() => { /* telemetry best-effort */ });
+        }
+      } catch { /* webhook stays 200 — never let a dispatch failure retry the hook */ }
+    })());
+  };
 
   /**
    * POST /github
@@ -129,7 +159,9 @@ export function createGitHubWebhookRoutes(db: Db): Hono<HonoEnv> {
       if (!norm) return c.json({ received: true, processed: false, reason: `event '${event}' not normalized` });
       const secret = c.env.INTEGRATION_ENCRYPTION_SECRET ?? c.env.JWT_SECRET ?? '';
       const res = await ingestRepoCiEvent(db, c.env as Env, secret, norm);
-      return c.json({ received: true, ...res });
+      // Post-merge build failed and under the attempt cap → kick off a fix run.
+      if (res.autoFix) dispatchAutoFix(c, res.autoFix);
+      return c.json({ received: true, ...res, autoFix: res.autoFix ? { dispatched: true, attempt: res.autoFix.attempt } : undefined });
     }
 
     if (event !== 'issues') {

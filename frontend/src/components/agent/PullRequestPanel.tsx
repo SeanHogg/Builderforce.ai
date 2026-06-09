@@ -61,6 +61,21 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
 
   useEffect(() => load(), [load]);
 
+  // After a merge, the deploy-branch build runs async (validated via webhook). Poll
+  // quietly (bounded) while the build is still null/pending so the badge + auto-fix
+  // status update without a manual refresh.
+  const pr0 = data?.pullRequest;
+  const buildPending = pr0?.status === 'merged' && (pr0.buildStatus == null || pr0.buildStatus === 'pending');
+  useEffect(() => {
+    if (!buildPending) return;
+    let n = 0;
+    const t = setInterval(() => {
+      if (++n > 10) { clearInterval(t); return; }  // ~3.5 min ceiling
+      reposApi.getTaskPullRequest(taskId).then((d) => { if (d) setData(d); }).catch(() => {});
+    }, 20_000);
+    return () => clearInterval(t);
+  }, [buildPending, taskId]);
+
   const merge = async () => {
     if (!data?.pullRequest) return;
     setMerging(true);
@@ -145,8 +160,22 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
       )}
 
       {isMerged && (
-        <div style={{ fontSize: 13, color: 'var(--success, #16a34a)' }}>
-          ✓ Merged{pr.mergedAt ? ` ${new Date(pr.mergedAt).toLocaleString()}` : ''}.
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ fontSize: 13, color: 'var(--success, #16a34a)' }}>
+            ✓ Merged{pr.mergedAt ? ` ${new Date(pr.mergedAt).toLocaleString()}` : ''}.
+          </div>
+          {/* Post-merge deploy-branch build validation. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+            <span style={{ color: 'var(--text-muted)' }}>Build:</span>
+            {pr.buildStatus === 'success' && <Badge label="passing" color={CHECK_COLOR.success} />}
+            {pr.buildStatus === 'failure' && <Badge label="failing" color={CHECK_COLOR.failure} />}
+            {(pr.buildStatus == null || pr.buildStatus === 'pending') && (
+              <span style={{ color: 'var(--text-muted)' }}>⏳ validating…</span>
+            )}
+            {pr.buildStatus === 'failure' && (
+              <span style={{ color: 'var(--warning, #d97706)' }}>auto-fix dispatched — a new PR will open for review.</span>
+            )}
+          </div>
         </div>
       )}
 

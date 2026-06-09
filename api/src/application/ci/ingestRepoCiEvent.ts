@@ -20,7 +20,8 @@ import { executions, tasks, projects, toolAuditEvents } from '../../infrastructu
 import { resolveDefaultRepoForTask } from '../repos/resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutofixOnBuildFailure, MAX_AUTOFIX_ATTEMPTS } from '../repos/mergeBranchToBase';
-import { ticketBranchName, markPullRequestMergedByTask, findMergedPullRequestBySha, setPullRequestBuildStatus } from '../repos/recordPullRequestRow';
+import { ticketBranchName } from '../repos/commitFileAsPendingChange';
+import { markPullRequestMergedByTask, findMergedPullRequestBySha, setPullRequestBuildStatus } from '../repos/recordPullRequestRow';
 import { fetchBuildError } from './fetchBuildError';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -136,12 +137,13 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
     const repoRef = await resolveDefaultRepoForTask(db, task.tenantId, taskId);
     if (repoRef) {
       const resolved = await resolveRepoCredential(db, secret, task.tenantId, repoRef.repoId);
-      if (!isResolveError(resolved) && evt.branch === ticketBranchName(taskId)) {
+      const ticketBranch = ticketBranchName(taskId);
+      if (!isResolveError(resolved) && evt.branch === ticketBranch) {
         const base = (resolved.repo.defaultBranch ?? 'main').trim();
         const mr = await mergeBranchToBase({
           provider: resolved.repo.provider, host: resolved.repo.host,
           owner: resolved.repo.owner, repo: resolved.repo.repo, token: resolved.token,
-          base, head: evt.branch, message: `Task #${taskId}: merge on green CI (BuilderForce)`,
+          base, head: ticketBranch, message: `Task #${taskId}: merge on green CI (BuilderForce)`,
         });
         merged = mr.ok;
         // Stamp the merge SHA so the resulting deploy-branch build correlates back.

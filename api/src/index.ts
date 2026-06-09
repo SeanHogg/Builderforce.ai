@@ -238,7 +238,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/webhooks', createWebhookRoutes(tenantService, paymentProvider));
 
   // GitHub webhook — raw body required for HMAC verification, no JWT
-  app.route('/api/webhooks', createGitHubWebhookRoutes(db));
+  app.route('/api/webhooks', createGitHubWebhookRoutes(db, runtimeService));
 
   // Public workflow trigger entrypoints (webhook) — addressed by per-trigger
   // token, optional HMAC; no JWT. Mounted with the other public webhook routes.
