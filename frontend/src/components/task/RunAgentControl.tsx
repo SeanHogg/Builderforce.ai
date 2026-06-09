@@ -78,16 +78,18 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
       // Resolve the run target. A host runs as an executor; a cloud agent runs
       // AS its model (no host — the gateway/fleet executes it).
       const isHost = target.startsWith('host:');
-      const cloudAgent = target.startsWith('cloud:')
-        ? cloudAgents.find((a) => `cloud:${a.ref}` === target)
-        : null;
+      const cloudRef = target.startsWith('cloud:') ? target.slice('cloud:'.length) : '';
+      const cloudAgent = cloudRef ? cloudAgents.find((a) => a.ref === cloudRef) : null;
       const agentHostId = isHost ? Number(target.slice('host:'.length)) : undefined;
       const effectiveModel = model || cloudAgent?.baseModel || '';
       // Forward the chosen model (explicit, or the cloud agent's own) and the
-      // cloud agent ref so the API can resolve its runtime engine (V1/V2).
+      // cloud agent ref so the API can resolve its runtime engine (V1/V2) and
+      // attribute the run. Take the ref straight from the selected target — NOT
+      // only when it's in the loaded pool — so a selected V2 agent is never lost to
+      // the gateway default just because the pool lookup missed (the reported bug).
       const payloadObj: { model?: string; cloudAgentRef?: string } = {};
       if (effectiveModel) payloadObj.model = effectiveModel;
-      if (cloudAgent?.ref) payloadObj.cloudAgentRef = cloudAgent.ref;
+      if (cloudRef) payloadObj.cloudAgentRef = cloudRef;
       const result = await runtimeApi.submitExecution({
         taskId: task.id,
         agentHostId,

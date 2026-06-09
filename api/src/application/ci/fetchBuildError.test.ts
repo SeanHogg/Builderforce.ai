@@ -7,6 +7,8 @@ afterEach(() => vi.unstubAllGlobals());
 // No KV binding → getOrSetCached falls straight through to the loader.
 const env = {} as unknown as import('../../env').Env;
 
+// Distinct runId per test — getOrSetCached keys by runId and the L1 Map persists
+// across tests in this module, so reusing an id would return a stale cached result.
 const coords = { provider: 'github', host: null, owner: 'acme', repo: 'app', token: 'tok', runId: 42, runUrl: 'https://gh/run/42' };
 
 describe('cloudAutofixOnBuildFailure', () => {
@@ -37,7 +39,7 @@ describe('fetchBuildError', () => {
         ] },
       ],
     }), { status: 200 })));
-    const be = await fetchBuildError(env, coords);
+    const be = await fetchBuildError(env, { ...coords, runId: 1042 });
     expect(be.failedJobs).toEqual(['test']);
     expect(be.summary).toContain('test');
     expect(be.summary).toContain('unit tests');
@@ -47,7 +49,7 @@ describe('fetchBuildError', () => {
   it('degrades to a URL-only summary on a non-github provider (no fetch)', async () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
-    const be = await fetchBuildError(env, { ...coords, provider: 'gitlab' });
+    const be = await fetchBuildError(env, { ...coords, provider: 'gitlab', runId: 2042 });
     expect(be.failedJobs).toEqual([]);
     expect(be.summary).toContain('https://gh/run/42');
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -55,7 +57,7 @@ describe('fetchBuildError', () => {
 
   it('degrades gracefully when the jobs API errors', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 500 })));
-    const be = await fetchBuildError(env, coords);
+    const be = await fetchBuildError(env, { ...coords, runId: 3042 });
     expect(be.failedJobs).toEqual([]);
     expect(be.summary).toContain('build failed');
   });

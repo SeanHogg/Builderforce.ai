@@ -8,6 +8,7 @@ import { auditEvents, projects, specs, taskSpecs, tasks } from '../../infrastruc
 import { AuditEventType } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
+import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
 import { ensureTaskPrdRecord, linkSpecToTask } from '../../application/prd/taskPrd';
 
 /** Minimal shape of the agentHost relay Durable Object namespace binding. */
@@ -16,37 +17,68 @@ type RelayNamespace = {
   get(id: unknown): { fetch(url: string, init?: RequestInit): Promise<Response> };
 };
 
+/** The task fields the Done-transition finalize needs to pick host vs cloud path. */
+type FinalizeTask = {
+  assignedAgentHostId?: number | null;
+  assignedAgentRef?: string | null;
+  gitBranch?: string | null;
+  githubPrUrl?: string | null;
+  title?: string | null;
+};
+
 /**
- * On task → Done, tell the agent host that ran it to finalize the shared ticket
- * workspace: commit the accumulated changes, push the branch, and open a PR.
- * Best-effort + background — never blocks the PATCH. Only the assigned host holds
- * the workspace, so a finalize without one is a no-op.
+ * On task → Done, finalize the ticket: commit the accumulated changes, push the
+ * branch, and open a PR. Best-effort + background — never blocks the PATCH.
+ *
+ * Two finalize surfaces, picked by who the task is assigned to:
+ *  - Self-hosted host (`assignedAgentHostId`): the host holds the on-disk ticket
+ *    workspace, so we relay it a `task.finalize` message and IT commits/pushes/PRs.
+ *  - Cloud agent (`assignedAgentRef`): there is no on-disk workspace — the agent
+ *    committed each `write_file` straight onto the ticket branch via the provider
+ *    API during the run, so the branch is already pushed. We just open the PR
+ *    server-side from that branch. Guarded on `gitBranch` (nothing committed → no
+ *    PR) and a missing `githubPrUrl` (the inline run-end finalize may have already
+ *    opened it — never double-open).
+ * A task with neither assignee is a no-op.
  */
 async function dispatchTaskFinalize(
   env: HonoEnv['Bindings'],
   db: Db,
   tenantId: number,
   taskId: number,
-  agentHostId: number | null,
-  title: string,
+  task: FinalizeTask,
 ): Promise<void> {
-  if (agentHostId == null) return;
-  const relay = (env as unknown as { AGENT_HOST_RELAY?: RelayNamespace }).AGENT_HOST_RELAY;
-  if (!relay) return;
-  const repoRef = await resolveDefaultRepoForTask(db, tenantId, taskId).catch(() => null);
-  try {
-    const stub = relay.get(relay.idFromName(String(agentHostId)));
-    await stub.fetch('https://relay.internal/dispatch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'task.finalize',
-        taskId,
-        title,
-        repo: repoRef ? { repoId: repoRef.repoId, defaultBranch: repoRef.defaultBranch } : null,
-      }),
-    });
-  } catch { /* host offline / relay miss — branch can be finalized manually */ }
+  const title = task.title ?? '';
+
+  if (task.assignedAgentHostId != null) {
+    const relay = (env as unknown as { AGENT_HOST_RELAY?: RelayNamespace }).AGENT_HOST_RELAY;
+    if (!relay) return;
+    const repoRef = await resolveDefaultRepoForTask(db, tenantId, taskId).catch(() => null);
+    try {
+      const stub = relay.get(relay.idFromName(String(task.assignedAgentHostId)));
+      await stub.fetch('https://relay.internal/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'task.finalize',
+          taskId,
+          title,
+          repo: repoRef ? { repoId: repoRef.repoId, defaultBranch: repoRef.defaultBranch } : null,
+        }),
+      });
+    } catch { /* host offline / relay miss — branch can be finalized manually */ }
+    return;
+  }
+
+  // Cloud agent: open the PR from the already-pushed ticket branch. Skip when the
+  // agent never committed (no branch) or a PR already exists (inline finalize).
+  if (task.assignedAgentRef && task.gitBranch && !task.githubPrUrl) {
+    const e = env as unknown as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
+    const secret = e.INTEGRATION_ENCRYPTION_SECRET ?? e.JWT_SECRET ?? '';
+    try {
+      await openTaskPullRequest(db, secret, tenantId, taskId, { branch: task.gitBranch, title }, env);
+    } catch { /* best-effort — PR can be opened manually from the pushed branch */ }
+  }
 }
 
 export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv> {
@@ -106,11 +138,18 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
     }>();
     const task = await taskService.updateTask(id, body);
 
-    // On transition to Done, finalize the ticket workspace → commit + PR.
+    // On transition to Done, finalize the ticket → commit + PR (host relay or
+    // cloud server-side; see dispatchTaskFinalize).
     if (body.status === TaskStatus.DONE) {
-      const plain = task.toPlain() as { assignedAgentHostId?: number | null; title?: string };
+      const plain = task.toPlain();
       c.executionCtx.waitUntil(
-        dispatchTaskFinalize(c.env, db, c.get('tenantId'), id, plain.assignedAgentHostId ?? null, plain.title ?? ''),
+        dispatchTaskFinalize(c.env, db, c.get('tenantId'), id, {
+          assignedAgentHostId: plain.assignedAgentHostId,
+          assignedAgentRef: plain.assignedAgentRef,
+          gitBranch: plain.gitBranch,
+          githubPrUrl: plain.githubPrUrl,
+          title: plain.title,
+        }),
       );
     }
 
