@@ -39,7 +39,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       >
         <TopBar onMenuClick={openNav} />
         <Sidebar collapsed={navCollapsed} onToggleCollapsed={toggleNav} mobileOpen={navOpen} onMobileClose={closeNav} />
-        <main className="content">{children}</main>
+        <main className="content" style={{ width: '100%', paddingLeft: 0 }}>{children}</main>
       </div>
       <MobileBottomNav />
     </div>
