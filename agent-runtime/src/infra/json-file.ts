@@ -1,23 +1,28 @@
-import fs from "node:fs";
+import fs from "node:fs/promises";
 import path from "node:path";
 
-export function loadJsonFile(pathname: string): unknown {
+export async function loadJsonFile(pathname: string): Promise<unknown | undefined> {
   try {
-    if (!fs.existsSync(pathname)) {
+    if (!(await fs.stat(pathname).catch(() => null))) {
       return undefined;
     }
-    const raw = fs.readFileSync(pathname, "utf8");
+    const raw = await fs.readFile(pathname, "utf8");
     return JSON.parse(raw) as unknown;
   } catch {
     return undefined;
   }
 }
 
-export function saveJsonFile(pathname: string, data: unknown) {
+export async function saveJsonFile(pathname: string, data: unknown) {
   const dir = path.dirname(pathname);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try {
+    await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+  } catch (err: any) {
+    // Ignore if directory already exists
+    if (err.code !== "EEXIST") {
+      throw err;
+    }
   }
-  fs.writeFileSync(pathname, `${JSON.stringify(data, null, 2)}\n`, "utf8");
-  fs.chmodSync(pathname, 0o600);
+  await fs.writeFile(pathname, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+  await fs.chmod(pathname, 0o600);
 }
