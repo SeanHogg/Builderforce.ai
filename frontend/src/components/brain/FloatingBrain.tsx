@@ -55,32 +55,45 @@ export function FloatingBrain() {
     <>
       {/* Floating launcher */}
       {!open && (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          aria-label="Open Brain assistant"
-          title="Brain assistant"
-          style={{
-            position: 'fixed',
-            right: 20,
-            bottom: 20,
-            zIndex: 9990,
-            width: 56,
-            height: 56,
-            borderRadius: '50%',
-            border: 'none',
-            cursor: 'pointer',
-            background: 'linear-gradient(135deg, var(--coral-bright, #f4726e), var(--coral-dark, #c2410c))',
-            color: '#fff',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
-            fontSize: 26,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          🧠
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            aria-label="Open Brain assistant"
+            title="Brain assistant"
+            className="brain-launcher"
+          >
+            🧠
+          </button>
+          <style>{`
+            .brain-launcher {
+              position: fixed;
+              right: 20px;
+              bottom: 20px;
+              z-index: 9990;
+              width: 56px;
+              height: 56px;
+              border-radius: 50%;
+              border: none;
+              cursor: pointer;
+              background: linear-gradient(135deg, var(--coral-bright, #f4726e), var(--coral-dark, #c2410c));
+              color: #fff;
+              box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+              font-size: 26px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            }
+            /* The mobile bottom nav is a fixed 56px bar (shown <768px). Lift the
+               launcher above it so it never covers the menu, and clear the iOS
+               safe-area inset the nav also accounts for. */
+            @media (max-width: 767px) {
+              .brain-launcher {
+                bottom: calc(56px + 16px + env(safe-area-inset-bottom, 0px));
+              }
+            }
+          `}</style>
+        </>
       )}
 
       {open && (

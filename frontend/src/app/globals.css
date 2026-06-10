@@ -1125,6 +1125,18 @@ html[data-theme='light'] .nebula {
   background: transparent;
 }
 
+/* Canonical authenticated-page padding (set by PageContainer). Generous on
+   desktop; trimmed on mobile so data/card pages run closer to full width
+   instead of leaving a wide side gutter. */
+.page-container {
+  padding: 24px;
+}
+@media (max-width: 767px) {
+  .page-container {
+    padding: 12px 8px;
+  }
+}
+
 /* Full-bleed content pages (IDE project page, workflow builder): no padding,
    no scroll — the child fills the area between the top bar and footer itself. */
 .content:has(.ide-full-height),

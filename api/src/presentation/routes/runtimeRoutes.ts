@@ -902,11 +902,38 @@ export async function runCloudToolLoop(
     };
   }
 
-  // Land the changes: open a PR and RECORD it so it surfaces in-product for human
-  // review. By default the run STOPS here — nothing is merged to the deploy branch
-  // until a human clicks Approve & Merge (or, when CLOUD_AUTOMERGE_ENABLED is set,
-  // the legacy auto-merge path below ships it). Skipped on cancel so a half-done
-  // run never opens/merges anything.
+  const fin = await finalizeCloudRun(env, db, {
+    tenantId, cloudAgentRef, executionId, taskRow, agentLabel,
+    repoCtx, writtenPaths, finalOutput, cancelled,
+  });
+  return { ok: fin.ok, output: fin.output, cancelled, finished: true };
+}
+
+/**
+ * Land a finished cloud run: open a PR (recording it for the in-product approval
+ * flow), optionally auto-merge, and emit the `pr_opened` / `merge_to_main` timeline
+ * events. The single finalize implementation, shared by the in-worker tool loop
+ * ({@link runCloudToolLoop}) and the long-lived Container executor (which runs the
+ * loop in its own process and calls this via the internal container-op endpoint).
+ * By default the run STOPS with the PR open — nothing merges to the deploy branch
+ * until a human approves (or `CLOUD_AUTOMERGE_ENABLED` ships it). Never throws.
+ */
+export async function finalizeCloudRun(
+  env: Env,
+  db: Db,
+  args: {
+    tenantId: number;
+    cloudAgentRef: string | undefined;
+    executionId: number;
+    taskRow: { id: number; title: string };
+    agentLabel: string;
+    repoCtx: TicketRepoContext | null;
+    writtenPaths: Set<string>;
+    finalOutput: string;
+    cancelled: boolean;
+  },
+): Promise<{ ok: boolean; output: string }> {
+  const { tenantId, cloudAgentRef, executionId, taskRow, agentLabel, repoCtx, writtenPaths, finalOutput, cancelled } = args;
   let prOpened = false;
   let merged = false;
   let mergeNote = '';
@@ -994,7 +1021,7 @@ export async function runCloudToolLoop(
   const unverifiedNote = prOpened
     ? '\n\n⚠ Not verified in-agent — this serverless executor ran no build/type-check/tests. CI on the PR is the source of truth.'
     : '';
-  return { ok: !autoMergeFailed, output: output + unverifiedNote, cancelled, finished: true };
+  return { ok: !autoMergeFailed, output: output + unverifiedNote };
 }
 
 /**
