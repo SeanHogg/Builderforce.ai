@@ -1,51 +1,36 @@
-> **PRD** — drafted by Coder Agent (V2) (Durable) · task #60
+> **PRD** — drafted by Coder Agent V2 (Container) · task #62
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Mobile Experience Enhancement
+# Regression - PWA Versioning
 
-## 1. Problem & Goal
+## Problem & Goal
 
-### Problem Statement
-The current mobile experience is suboptimal, characterized by:
-1.  Significant unused space on the left-hand side of content pages, preventing full utilization of the screen real estate.
-2.  The slide-out left navigation panel incorrectly displays only centered icons, lacking descriptive text and proper alignment, which hinders user navigation and comprehension.
+The goal of this regression task is to ensure that the Progressive Web App (PWA) notification mechanism is working correctly after updating the app version. Without this functionality, users may not be aware of the latest changes and subsequent deployments, leading to user frustration.
 
-### Goal
-To significantly enhance the mobile user experience by:
-1.  Ensuring all content pages occupy 100% of the viewport width, eliminating wasted space.
-2.  Rectifying the slide-out left navigation panel to display left-aligned icons accompanied by their respective text labels, improving usability and clarity.
+## Target Users / ICP roles (if relevant)
 
-## 2. Target Users / ICP Roles
-All users accessing the application via mobile devices (smartphones).
+* Any user interacting with the PWA
+* The Product Team and Engineering stakeholders who work with the PWA
 
-## 3. Scope
-This PRD specifically covers improvements to the mobile-responsive layout for all primary content pages and the visual presentation of the slide-out left navigation panel on mobile devices.
+## Scope
 
-## 4. Functional Requirements
+The scope of this task includes:
 
-### FR1: Full Width Page Content
-All content pages on mobile devices must expand to utilize 100% of the available viewport width.
+1. Verifying that the PWA notification is being set correctly after updating the app version.
+2. Ensuring that the notification is not causing any performance issues or stability issues with the PWA.
 
-### FR2: Slide-out Menu Content Display
-The slide-out left navigation panel must display both the icon and the corresponding text label for each menu item.
+## Functional requirements
 
-### FR3: Slide-out Menu Item Alignment
-Within the slide-out left navigation panel, both the icons and their text labels for each menu item must be left-aligned within their respective menu containers.
+* [ ] The PWA versioning system should update the version number in the app manifest.
+* [ ] The PWA notification should be triggered when a new version is deployed, indicating that a new version is available.
 
-## 5. Acceptance Criteria
+## Acceptance criteria
 
-### AC1: Page Width Validation
-On any mobile device (e.g., iPhone, Android phone), navigating to any content page must result in the page content spanning the full 100% width of the screen, with no observable empty or "dead" space on the left margin.
+* [ ] Upon updating the PWA version, the app manifest should have an updated version number.
+* [ ] After updating the PWA version, the user should receive a notification indicating that a new version of the app is available.
 
-### AC2: Slide-out Menu Item Text Presence
-When the slide-out left navigation panel is activated on a mobile device, every menu item displayed within the panel must clearly show both its designated icon and its descriptive text label.
+## Out of scope
 
-### AC3: Slide-out Menu Item Alignment
-When the slide-out left navigation panel is activated on a mobile device, the icons and their corresponding text labels for all menu items must be visibly aligned to the left edge of their respective item containers within the panel.
-
-## 6. Out of Scope
-*   Any changes to the desktop or tablet specific user interfaces.
-*   Alterations to the functionality, order, or presence of existing menu items.
-*   General performance optimizations beyond those inherently gained by layout adjustments.
-*   Comprehensive visual design overhauls (e.g., changes to colors, fonts, or iconography beyond what's required to meet alignment and text visibility).
-*   Accessibility enhancements not directly related to the specified layout and content display issues.
+* This task does not involve upgrading the underlying web server or infrastructure.
+* This task does not involve updating any user-facing features that could affect the notification mechanism, such as language or font selection.
+* This task does not involve testing the PWA notification on every device type and browser version.
