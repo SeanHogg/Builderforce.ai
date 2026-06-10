@@ -1164,32 +1164,6 @@ async function runCloudExecution(
 type SubmittedExecution = { id: number; status: string; toPlain(): unknown };
 
 /**
- * Fail a cloud run loudly when its engine has no executor available. The serverless
- * durable fallback (CloudRunnerDO / the Worker loop) implements ONLY the
- * `builderforce-v1` cloud tool-loop — it is NOT the V2 (Claude Agent SDK) runtime,
- * which lives in agent-runtime / a long-lived Cloudflare Container. Running a V2
- * agent on the v1 fallback would silently use a different engine + model and (the
- * reported bug) attribute it to the gateway default. Instead, mark the run FAILED
- * with an attributed `runtime.unavailable` event so the V2 identity is preserved on
- * the timeline and the user is told to bring a real runtime online. Never throws.
- */
-async function failCloudEngineUnavailable(
-  db: Db,
-  runtimeService: RuntimeService,
-  args: { tenantId: number; executionId: number; cloudAgentRef?: string; engine: string; label: string; notify: () => Promise<void> },
-): Promise<void> {
-  const msg = `${args.label} runs on the “${args.engine}” engine, which needs a long-lived BuilderForce runtime (a connected agent-runtime host, or a Cloudflare Container). None is online, so this run was NOT executed: the serverless durable fallback only runs the builderforce-v1 cloud loop and would otherwise silently use a different engine and model. Connect an agent host (or enable a Container) and re-run.`;
-  await recordCloudToolEvent(db, {
-    tenantId: args.tenantId, cloudAgentRef: args.cloudAgentRef, executionId: args.executionId,
-    toolName: 'runtime.unavailable', category: 'planning', result: msg,
-  });
-  try {
-    await runtimeService.update(args.executionId, { status: ExecutionStatus.FAILED, errorMessage: msg });
-  } catch { /* best-effort — the telemetry event already records the reason */ }
-  await args.notify().catch(() => { /* best-effort */ });
-}
-
-/**
  * Resolve the runtime engine + display label for a cloud-agent run from its
  * `ide_agents.id`. The ref is the one the caller pinned, else the ticket's
  * assigned agent (see {@link dispatchAndQueue}). When a ref resolves, the engine
@@ -1228,23 +1202,66 @@ function parseRemediation(payload: string | undefined): RemediationContext | nul
   }
 }
 
+interface ResolvedCloudAgent {
+  engine: string;
+  label?: string;
+  ref?: string;
+  runtimeSurface: string;
+  /** The agent's own gateway model, or undefined to use the default. A V2 cloud
+   *  agent must execute AS this model so a run is never silently attributed to the
+   *  v1 gateway default. */
+  baseModel?: string;
+}
+
+/** `ide_agents.base_model` sentinel meaning "no explicit model — use the default". */
+const AGENT_DEFAULT_MODEL_SENTINEL = 'builderforce-default';
+
 async function resolveCloudAgent(
   env: Env,
   tenantId: number,
   ref: string | undefined,
-): Promise<{ engine: string; label?: string; ref?: string; runtimeSurface: string }> {
-  const DEFAULT = { engine: 'builderforce-v1' as const, ref, runtimeSurface: 'durable' };
+): Promise<ResolvedCloudAgent> {
+  const DEFAULT: ResolvedCloudAgent = { engine: 'builderforce-v1', ref, runtimeSurface: 'durable' };
   if (!ref) return DEFAULT;
   try {
     const sql = neon(env.NEON_DATABASE_URL);
-    const rows = (await sql`SELECT engine, name, runtime_surface FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ engine?: string; name?: string; runtime_surface?: string }>;
+    const rows = (await sql`SELECT engine, name, runtime_surface, base_model FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ engine?: string; name?: string; runtime_surface?: string; base_model?: string }>;
     const engine = typeof rows[0]?.engine === 'string' && rows[0].engine ? rows[0].engine : 'builderforce-v1';
     const label = typeof rows[0]?.name === 'string' && rows[0].name ? rows[0].name : undefined;
     const runtimeSurface = rows[0]?.runtime_surface === 'container' ? 'container' : 'durable';
-    return { engine, label, ref, runtimeSurface };
+    const rawModel = typeof rows[0]?.base_model === 'string' ? rows[0].base_model.trim() : '';
+    const baseModel = rawModel && rawModel !== AGENT_DEFAULT_MODEL_SENTINEL ? rawModel : undefined;
+    return { engine, label, ref, runtimeSurface, baseModel };
   } catch {
     return DEFAULT;
   }
+}
+
+/**
+ * Human-readable name for a cloud agent's type — the canonical taxonomy. Used in
+ * dispatch telemetry so the timeline says exactly which of the three cloud agent
+ * types (and surface) actually ran, not a bare engine string.
+ */
+function cloudAgentTypeLabel(engine: string, surface: string): string {
+  if (engine !== 'builderforce-v2') return 'V1 Cloud Agent';
+  return surface === 'container' ? 'V2 Cloud Agent (Node/Container)' : 'V2 Cloud Agent (Durable Object)';
+}
+
+/**
+ * Ensure the execution payload carries a model: an explicitly-pinned model wins,
+ * otherwise fall back to the agent's own `base_model` so a V2 cloud run executes
+ * AS the agent's model rather than the v1 gateway default. Returns the payload
+ * unchanged when there is nothing to add (no fallback, or it can't be parsed).
+ */
+function withDefaultModel(payload: string | undefined, baseModel: string | undefined): string | undefined {
+  if (!baseModel) return payload;
+  let obj: Record<string, unknown> = {};
+  if (payload) {
+    try { obj = JSON.parse(payload) as Record<string, unknown>; } catch { return payload; }
+  }
+  if (typeof obj.model === 'string' && obj.model.trim()) return payload;
+  obj.model = baseModel;
+  return JSON.stringify(obj);
 }
 
 /**
@@ -1319,8 +1336,12 @@ async function startDispatchedExecution(
   taskRow: ExecutionTaskRow,
   payload: string | undefined,
 ): Promise<unknown> {
-  const targets = await getDispatchTargets(db, tenantId, taskRow.assignedAgentHostId);
-  const dispatchType: DispatchMessage['type'] = taskRow.assignedAgentHostId != null ? 'task.assign' : 'task.broadcast';
+  // On-Prem (hosted) execution happens ONLY when a host is explicitly pinned on the
+  // task — a cloud agent is never broadcast to a client machine. Resolve a dispatch
+  // target only for a pinned host (skips a needless all-online-hosts scan on the
+  // common cloud-run path).
+  const pinnedHostId = taskRow.assignedAgentHostId;
+  const hostTargets = pinnedHostId != null ? await getDispatchTargets(db, tenantId, pinnedHostId) : [];
 
   // The executing cloud agent is whoever the caller pinned in the payload, else
   // the ticket's assigned agent (the swimlane's agent — `tasks.assignedAgentRef`).
@@ -1348,7 +1369,7 @@ async function startDispatchedExecution(
   }
 
   const message: DispatchMessage = {
-    type: dispatchType,
+    type: 'task.assign',
     executionId: execution.id,
     taskId: taskRow.id,
     payload,
@@ -1359,18 +1380,22 @@ async function startDispatchedExecution(
     artifacts,
   };
 
-  // Route by the agent's chosen runtime surface — both run in the cloud (all
-  // Cloudflare):
-  //   • container → a long-lived Cloudflare Container runtime (reached via the
-  //                 relay, like a pinned host). When none is online it falls back
-  //                 to the durable executor below — it never dies.
-  //   • durable   → the on-demand Durable Object executor (no always-on runtime).
-  const surface = resolveCloudSurface(agent.runtimeSurface, taskRow.assignedAgentHostId != null);
+  // The three CLOUD agent types — see agent taxonomy ([[agent-types-taxonomy]]):
+  //   • V1 Cloud Agent                  — engine builderforce-v1.
+  //   • V2 Cloud Agent (Durable Object) — engine builderforce-v2, surface durable.
+  //   • V2 Cloud Agent (Node/Container) — engine builderforce-v2, surface container.
+  // ALL cloud agents execute ONLY in the cloud (all Cloudflare) — a cloud agent is
+  // NEVER dispatched to an On-Prem (hosted) agent. On-Prem hosts run as a host
+  // only when one is explicitly pinned on the task.
+  const surface = resolveCloudSurface(agent.runtimeSurface, pinnedHostId != null);
+  const isV2 = agent.engine === 'builderforce-v2';
+  const typeLabel = cloudAgentTypeLabel(agent.engine, surface);
 
-  // Only the container surface dispatches to a long-lived runtime; durable goes
-  // straight to the Durable Object.
-  const delivered = surface === 'container'
-    ? (await Promise.all(targets.map((targetId) => dispatchToAgentHost(env as RuntimeHonoEnv['Bindings'], targetId, message).catch(() => false)))).some(Boolean)
+  // Dispatch to an On-Prem host ONLY for an explicitly pinned host run (legacy
+  // AgentHost path). A V2 cloud agent never reaches a host: the 'container' surface
+  // targets a long-lived Cloudflare Container (cloud), not a client machine.
+  const delivered = pinnedHostId != null && !isV2
+    ? (await Promise.all(hostTargets.map((targetId) => dispatchToAgentHost(env as RuntimeHonoEnv['Bindings'], targetId, message).catch(() => false)))).some(Boolean)
     : false;
 
   const notifyDone = async () => {
@@ -1384,31 +1409,30 @@ async function startDispatchedExecution(
     });
   };
 
-  if (!delivered && agent.engine !== 'builderforce-v1') {
-    // The serverless durable executor implements ONLY the builderforce-v1 cloud
-    // tool-loop (provider-API-backed, gateway-default model). It is NOT the V2
-    // (Claude Agent SDK) runtime — that runs in agent-runtime / a long-lived
-    // Cloudflare Container, reached as a host above. Running a V2 agent here would
-    // silently execute a different engine + model and attribute it to the gateway
-    // default (the reported bug: a "V2" run shown as "BuilderForce Cloud (default)"
-    // on gemini). Fail loudly instead so a V2 run never masquerades as the v1 cloud
-    // default. (README gap: the real V2 loop only runs in agent-runtime.)
-    waitUntil(failCloudEngineUnavailable(db, runtimeService, {
-      tenantId, executionId: execution.id, cloudAgentRef: agent.ref,
-      engine: agent.engine, label: agent.label ?? 'This cloud agent', notify: notifyDone,
-    }));
-  } else if (!delivered) {
+  if (!delivered) {
     // Run on the DURABLE cloud executor (CloudRunnerDO — one LLM step per alarm
     // tick, survives the ~30s waitUntil wall; interim Worker loop as fallback).
-    // This covers BOTH the durable surface AND a container-surface run that found
-    // no long-lived Cloudflare Container online: rather than die, it degrades to
-    // the durable executor so the task still runs in the cloud. (A Cloudflare
-    // Container would add a persistent process + shell for heavy/very-long tasks;
-    // the durable executor is provider-API-backed. Recorded below so the
-    // degradation is visible, not silent.)
-    const containerFallback = surface === 'container';
+    // This is where ALL cloud agents run: a V1 Cloud Agent, a V2 Cloud Agent
+    // (Durable Object), and a V2 Cloud Agent (Node/Container) whose long-lived
+    // Container infra is not yet built — the last degrades here rather than failing,
+    // so the run always executes in the cloud. A V2 run carries its OWN model
+    // (resolved above) so it is never silently executed or attributed as the v1
+    // gateway default.
+    const containerFallback = isV2 && surface === 'container';
+    const effectivePayload = withDefaultModel(payload, agent.baseModel);
+
+    // Up-front diagnostics: record exactly which cloud agent type is dispatching,
+    // on which surface, with which model, so the timeline shows the routing
+    // decision (not just the eventual llm.complete calls).
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+      toolName: 'runtime.dispatch', category: 'planning',
+      detail: { agentType: typeLabel, engine: agent.engine, surface, model: agent.baseModel ?? 'gateway-default', executor: 'durable' },
+      result: `Dispatching ${typeLabel} to the durable cloud executor (model: ${agent.baseModel ?? 'gateway default'}).`,
+    });
+
     const runWorkerFallback = async () => {
-      await runCloudExecution(env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, payload, artifacts);
+      await runCloudExecution(env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, effectivePayload, artifacts);
       await notifyDone();
     };
     const startDurable = async () => {
@@ -1416,11 +1440,21 @@ async function startDispatchedExecution(
         await recordCloudToolEvent(db, {
           tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
           toolName: 'runtime.fallback', category: 'planning',
-          result: 'No long-lived Cloudflare Container online — running this task on the durable (serverless) executor instead.',
+          detail: { requestedSurface: 'container', ranOn: 'durable' },
+          result: `${typeLabel}: no long-lived Cloudflare Container is online yet — running on the durable (serverless) cloud executor instead. The run still executes fully in the cloud.`,
         });
       }
       const cloudRunner = env.CLOUD_RUNNER;
-      if (!cloudRunner) { await runWorkerFallback(); return; }
+      if (!cloudRunner) {
+        await recordCloudToolEvent(db, {
+          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+          toolName: 'runtime.fallback', category: 'planning',
+          detail: { reason: 'no CLOUD_RUNNER binding', ranOn: 'worker' },
+          result: 'Durable Object binding (CLOUD_RUNNER) not configured — running on the interim Worker loop (may not survive long multi-step runs).',
+        });
+        await runWorkerFallback();
+        return;
+      }
       try {
         const stub = cloudRunner.get(cloudRunner.idFromName(`exec:${execution.id}`));
         const res = await stub.fetch('https://cloud-runner/start', {
@@ -1429,11 +1463,25 @@ async function startDispatchedExecution(
             executionId: execution.id, tenantId, projectId: taskRow.projectId,
             taskId: taskRow.id, taskTitle: taskRow.title, taskDescription: taskRow.description,
             cloudAgentRef: agent.ref, agentLabel: agent.label ?? 'BuilderForce Agent',
-            payload, artifacts,
+            payload: effectivePayload, artifacts,
           }),
         });
-        if (!res.ok) await runWorkerFallback();
-      } catch {
+        if (!res.ok) {
+          await recordCloudToolEvent(db, {
+            tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+            toolName: 'runtime.fallback', category: 'planning',
+            detail: { reason: `CloudRunnerDO /start ${res.status}`, ranOn: 'worker' },
+            result: `Durable Object kickoff returned ${res.status} — running on the interim Worker loop instead.`,
+          });
+          await runWorkerFallback();
+        }
+      } catch (e) {
+        await recordCloudToolEvent(db, {
+          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+          toolName: 'runtime.fallback', category: 'planning',
+          detail: { reason: e instanceof Error ? e.message : String(e), ranOn: 'worker' },
+          result: 'Durable Object kickoff threw — running on the interim Worker loop instead.',
+        });
         await runWorkerFallback();
       }
     };
