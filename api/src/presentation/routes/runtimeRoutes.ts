@@ -12,6 +12,7 @@ import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { resolveCloudSurface } from '../../application/runtime/cloudDispatch';
+import { mintContainerRunToken, verifyContainerRunToken } from '../../application/runtime/containerRunToken';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { loadCapabilityContext } from '../../application/artifact/capabilityContext';
@@ -616,6 +617,194 @@ const CLOUD_AGENT_TOOLS = [
 // (RuntimeService.CLOUD_ORPHAN_MS = 8 min) so a healthy run never trips the reaper.
 const MAX_CLOUD_TOOL_STEPS = 10;
 
+// The Container surface is a long-lived process (not a per-tick DO), and its
+// real-shell build/verify loop legitimately needs more turns than the durable
+// surface. The container heartbeats `executions.updated_at` on every LLM step so a
+// healthy long run never trips the orphan reaper.
+const CONTAINER_MAX_STEPS = 40;
+
+/**
+ * Toolset for the long-lived Container executor (the `container` runtime surface).
+ * Same file tools as the durable loop, but `run_checks` (a no-op confessing "no
+ * shell") is replaced by a REAL `run_command` — the Container's whole reason to
+ * exist. list_files/read_file run against the container's local clone; write_file
+ * mirrors to the ticket branch via the container-op endpoint; run_command runs in
+ * the container's shell. The container drives this loop in its own process and
+ * sends each assistant turn to the `llm` op (which calls the gateway with THIS
+ * toolset), so the schema lives in one place.
+ */
+const CONTAINER_AGENT_TOOLS = [
+  CLOUD_AGENT_TOOLS[0], // list_files
+  CLOUD_AGENT_TOOLS[1], // read_file
+  CLOUD_AGENT_TOOLS[2], // write_file
+  {
+    type: 'function',
+    function: {
+      name: 'run_command',
+      description: 'Run a shell command in the checked-out repository (real shell). Use it to install dependencies and run the build, type-check, lint, and tests. Returns combined stdout/stderr and the exit code. Verify your changes this way BEFORE calling finish.',
+      parameters: {
+        type: 'object',
+        properties: {
+          command: { type: 'string', description: 'The shell command to run, e.g. "npm install" or "npm test".' },
+        },
+        required: ['command'],
+      },
+    },
+  },
+  CLOUD_AGENT_TOOLS[4], // finish
+] as const;
+
+/** Resolved per-run context for a container-op call, derived authoritatively from
+ *  the execution id (the container never asserts its own tenant/task). */
+interface ContainerRunContext {
+  tenantId: number;
+  taskId: number;
+  projectId: number;
+  taskTitle: string;
+  taskDescription: string | null;
+  cloudAgentRef?: string;
+  agentLabel: string;
+  model?: string;
+}
+
+/** Load (and briefly cache) the container-run context for an execution. No secret
+ *  is in this object, so it is safe to cache in the shared read-through cache. */
+async function loadContainerRunContext(env: Env, db: Db, executionId: number): Promise<ContainerRunContext | null> {
+  return getOrSetCached(env, `containerctx:${executionId}`, async () => {
+    const [exec] = await db
+      .select({ taskId: executions.taskId, tenantId: executions.tenantId, payload: executions.payload })
+      .from(executions).where(eq(executions.id, executionId)).limit(1);
+    if (!exec) return null;
+    const [task] = await db
+      .select({ title: tasks.title, description: tasks.description, projectId: tasks.projectId, assignedAgentRef: tasks.assignedAgentRef })
+      .from(tasks).where(eq(tasks.id, exec.taskId)).limit(1);
+    if (!task) return null;
+    const ref = parseCloudAgentRef(exec.payload ?? undefined) ?? task.assignedAgentRef ?? undefined;
+    const agent = await resolveCloudAgent(env, exec.tenantId, ref);
+    let payloadModel: string | undefined;
+    try {
+      const p = exec.payload ? (JSON.parse(exec.payload) as { model?: unknown }) : null;
+      if (p && typeof p.model === 'string' && p.model.trim()) payloadModel = p.model.trim();
+    } catch { /* default model */ }
+    return {
+      tenantId: exec.tenantId, taskId: exec.taskId, projectId: task.projectId,
+      taskTitle: task.title, taskDescription: task.description,
+      cloudAgentRef: agent.ref, agentLabel: agent.label ?? 'BuilderForce Agent',
+      model: payloadModel ?? agent.baseModel,
+    };
+  }, { kvTtlSeconds: 600, l1TtlMs: 600_000 });
+}
+
+/** True when the execution has been flipped to CANCELLED from another isolate. */
+async function isExecutionCancelled(db: Db, executionId: number): Promise<boolean> {
+  try {
+    const [row] = await db.select({ status: executions.status }).from(executions).where(eq(executions.id, executionId)).limit(1);
+    return row?.status === 'cancelled';
+  } catch { return false; }
+}
+
+/**
+ * Handle one container-op call from the long-lived Container executor. The container
+ * runs the agent loop in its own process and delegates to the Worker for everything
+ * that must stay server-side: the gateway LLM step (`llm`), per-file commit to the
+ * ticket branch (`write`), arbitrary telemetry (`event`), the PR finalize
+ * (`finalize`), and a cheap cancel poll (`status`). Reuses the exact same helpers as
+ * the in-Worker loop, so there is ONE implementation of metering, commit, and
+ * finalize. Authenticated by the per-run token (already verified by the caller).
+ */
+async function handleContainerOp(
+  env: Env,
+  db: Db,
+  runtimeService: RuntimeService,
+  ctx: ContainerRunContext,
+  executionId: number,
+  op: string,
+  args: Record<string, unknown>,
+): Promise<{ status: number; body: unknown }> {
+  const { tenantId, taskId, projectId, cloudAgentRef, agentLabel, model } = ctx;
+  const taskRow = { id: taskId, title: ctx.taskTitle, description: ctx.taskDescription };
+
+  if (op === 'status') {
+    return { status: 200, body: { cancelled: await isExecutionCancelled(db, executionId) } };
+  }
+
+  if (op === 'event') {
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef, executionId,
+      toolName: String(args.toolName ?? 'tool'), category: String(args.category ?? 'tool'),
+      toolCallId: typeof args.toolCallId === 'string' ? args.toolCallId : undefined,
+      detail: args.detail, result: typeof args.result === 'string' ? args.result : undefined,
+      durationMs: typeof args.durationMs === 'number' ? args.durationMs : undefined,
+    });
+    return { status: 200, body: { ok: true } };
+  }
+
+  if (op === 'llm') {
+    const messages = Array.isArray(args.messages) ? (args.messages as unknown as ChatMessage[]) : ([] as ChatMessage[]);
+    const tGen0 = Date.now();
+    const result = await ideProxy(env).complete({
+      messages, tools: CONTAINER_AGENT_TOOLS,
+      tool_choice: 'auto', ...(model ? { model } : {}), useCase: 'task_execution',
+    });
+    const resolvedModel = result.resolvedModel ?? model ?? 'default';
+    if (result.usage) {
+      await recordCloudUsage(env, db, {
+        tenantId, cloudAgentRef, executionId, taskId, projectId, model: resolvedModel,
+        inputTokens: result.usage.promptTokens ?? 0, outputTokens: result.usage.completionTokens ?? 0,
+      });
+    }
+    // Heartbeat: a live container keeps the run out of the orphan reaper.
+    await db.update(executions).set({ updatedAt: new Date() }).where(eq(executions.id, executionId)).catch(() => { /* best-effort */ });
+    if (result.response.status >= 400) {
+      const text = await result.response.text().catch(() => '');
+      await recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName: 'llm.complete', category: 'llm', detail: { model: resolvedModel, status: result.response.status }, result: `gateway ${result.response.status}`, durationMs: Date.now() - tGen0 });
+      return { status: 200, body: { error: `Gateway ${result.response.status}: ${text.slice(0, 300)}` } };
+    }
+    const json = (await result.response.json().catch(() => null)) as { choices?: Array<{ message?: { content?: unknown; tool_calls?: unknown } }> } | null;
+    const choice = json?.choices?.[0]?.message;
+    const content = typeof choice?.content === 'string' ? choice.content : '';
+    const toolCalls = Array.isArray(choice?.tool_calls) ? choice.tool_calls : [];
+    await recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName: 'llm.complete', category: 'llm', detail: { model: resolvedModel, traceId: result.traceId ?? null, toolCalls: toolCalls.length }, result: `${toolCalls.length} tool call(s)${content ? ` · ${content.length} chars` : ''}`, durationMs: Date.now() - tGen0 });
+    if (content) {
+      await recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName: 'agent.message', category: 'message', detail: { content }, result: content.slice(0, 280) });
+      notifyExecutionSubscribers(executionId, { type: 'message', executionId, role: 'assistant', text: content, ts: new Date().toISOString() });
+    }
+    return { status: 200, body: { content, toolCalls, cancelled: await isExecutionCancelled(db, executionId) } };
+  }
+
+  if (op === 'write') {
+    const path = typeof args.path === 'string' ? args.path : '';
+    const content = typeof args.content === 'string' ? args.content : '';
+    const isNew = args.isNew !== false;
+    if (!path || !content) return { status: 200, body: { ok: false, error: 'path and content are both required' } };
+    const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
+    if (!repo.ok) return { status: 200, body: { ok: false, error: `no repo bound to this task (${repo.reason}); include the file contents in your final summary instead` } };
+    const commit = await commitAgentFile(repo.ctx, path, content, `${isNew ? 'Add' : 'Update'} ${path} — task #${taskId} (${agentLabel})`);
+    if (!commit.ok) return { status: 200, body: { ok: false, error: commit.reason } };
+    await recordTaskFileChange(env, tenantId, taskId, executionId, path, isNew ? 'created' : 'modified', agentLabel);
+    notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: isNew ? 'created' : 'modified', ts: new Date().toISOString() });
+    await recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName: 'write_file', category: 'tool', detail: { path, summary: args.summary }, result: `committed to ${repo.ctx.branch}` });
+    return { status: 200, body: { ok: true, branch: repo.ctx.branch, commitUrl: commit.commitUrl } };
+  }
+
+  if (op === 'finalize') {
+    const writtenPaths = new Set<string>(Array.isArray(args.writtenPaths) ? (args.writtenPaths as unknown[]).filter((p): p is string => typeof p === 'string') : []);
+    const finalOutput = typeof args.finalOutput === 'string' ? args.finalOutput : '';
+    const cancelled = args.cancelled === true || (await isExecutionCancelled(db, executionId));
+    const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
+    const repoCtx = repo.ok ? repo.ctx : null;
+    const fin = await finalizeCloudRun(env, db, { tenantId, cloudAgentRef, executionId, taskRow, agentLabel, repoCtx, writtenPaths, finalOutput, cancelled });
+    if (!cancelled) {
+      await runtimeService.update(executionId, fin.ok ? { status: ExecutionStatus.COMPLETED, result: fin.output } : { status: ExecutionStatus.FAILED, errorMessage: fin.output }).catch(() => { /* terminal already */ });
+      const updated = await runtimeService.getExecution(executionId).catch(() => null);
+      if (updated) notifyExecutionSubscribers(executionId, { type: 'done', executionId, status: updated.status, execution: updated.toPlain(), ts: new Date().toISOString() });
+    }
+    return { status: 200, body: { ok: fin.ok, output: fin.output } };
+  }
+
+  return { status: 400, body: { error: `unknown op '${op}'` } };
+}
+
 /**
  * The cloud agent's tool-executing loop. Drives the gateway with the toolset
  * above, executes each requested tool, feeds results back, and repeats until the
@@ -1043,6 +1232,7 @@ export async function prepareCloudRun(
   artifacts: ResolvedArtifacts | undefined,
   cloudAgentRef?: string,
   payload?: string,
+  opts?: { shell?: boolean },
 ): Promise<{ systemPrompt: string; userContent: string }> {
   const tPrep0 = Date.now();
   const [prd, governance, capabilities] = await Promise.all([
@@ -1084,15 +1274,19 @@ export async function prepareCloudRun(
     `## Your Task\n\n${taskRow.title}\n\n${taskRow.description ?? ''}`.trim(),
   ].filter(Boolean).join('\n\n---\n\n');
 
-  // The tool loop runs against a real repository via provider-API-backed tools
-  // (no shell): write files to the ticket branch, then finish.
+  // The tool loop runs against a real repository. The verification sentence differs
+  // by executor: the durable surface has NO shell (CI verifies), the Container
+  // surface has a REAL shell (run_command) so the agent verifies before finishing.
+  const shellLine = opts?.shell
+    ? 'You HAVE a real shell: use run_command to install dependencies and run the project build, type-check, lint, and tests in the checked-out repo BEFORE you finish. Fix anything that fails. Only claim a check passed if you actually ran it and saw it pass; CI on the PR re-verifies.'
+    : 'You CANNOT run builds, type-checks, lint, or tests here — this executor has no shell. Those run in CI on the pull request your changes open, and that CI is the source of truth. There is NO run_code/run_command tool; if you want to acknowledge verification, call run_checks. NEVER state that a check passed, succeeded, is clean, or is resolved — you cannot run one. Write correct, complete code and finish with an honest summary.';
   const systemPrompt = [
     'You are a BuilderForce agent executing a project task against a real repository. Follow the PRD, architecture spec, and project rules exactly. ' +
     'Workflow: call list_files to discover the codebase, read_file to read any file you intend to change (preserve existing code — only change what the task needs), ' +
     'then write_file with the FULL updated content (no bracketed placeholders) for each deliverable file. ' +
     'Do NOT call finish while any deliverable file is still a stub/placeholder or any requirement in the task/PRD is unimplemented — keep listing, reading and writing files until the task is genuinely complete. ' +
     'When you finish, your committed changes are opened as a PULL REQUEST for human review (a person approves the merge in-product); they are NOT auto-deployed — so the PR must contain the COMPLETE, working change, not a partial scaffold. Call finish with a summary only once everything the task requires has been written. ' +
-    'You CANNOT run builds, type-checks, lint, or tests here — this executor has no shell. Those run in CI on the pull request your changes open, and that CI is the source of truth. There is NO run_code/run_command tool; if you want to acknowledge verification, call run_checks. NEVER state that a check passed, succeeded, is clean, or is resolved — you cannot run one. Write correct, complete code and finish with an honest summary. ' +
+    shellLine + ' ' +
     'If no repository is bound, return the complete deliverable in your final summary instead. Make explicit, reasonable assumptions where specifics are unknown.',
     capabilities.promptBlock || null,
   ].filter(Boolean).join('\n\n');
@@ -1437,15 +1631,17 @@ async function startDispatchedExecution(
   };
 
   if (!delivered) {
-    // Run on the DURABLE cloud executor (CloudRunnerDO — one LLM step per alarm
-    // tick, survives the ~30s waitUntil wall; interim Worker loop as fallback).
-    // This is where ALL cloud agents run: a V1 Cloud Agent, a V2 Cloud Agent
-    // (Durable Object), and a V2 Cloud Agent (Node/Container) whose long-lived
-    // Container infra is not yet built — the last degrades here rather than failing,
-    // so the run always executes in the cloud. A V2 run carries its OWN model
-    // (resolved above) so it is never silently executed or attributed as the v1
-    // gateway default.
-    const containerFallback = isV2 && surface === 'container';
+    // Route a V2 Cloud Agent (Node/Container) to the REAL long-lived Cloudflare
+    // Container (AgentContainerDO) when it's bound; everything else — V1 Cloud
+    // Agent, V2 Cloud Agent (Durable Object), and a container run with no Container
+    // binding — runs on the durable executor (CloudRunnerDO). A V2 run carries its
+    // OWN model so it is never silently executed/attributed as the v1 gateway default.
+    const wantsContainer = isV2 && surface === 'container';
+    const hasContainer = wantsContainer && !!env.AGENT_CONTAINER;
+    const executor: 'container' | 'durable' = hasContainer ? 'container' : 'durable';
+    // Only note a degradation when the Container surface was wanted but no binding
+    // exists; a bound-but-failed container records its own fallback note below.
+    const containerFallback = wantsContainer && !hasContainer;
     const effectivePayload = withDefaultModel(payload, agent.baseModel);
 
     // Up-front diagnostics: record exactly which cloud agent type is dispatching,
@@ -1454,8 +1650,8 @@ async function startDispatchedExecution(
     await recordCloudToolEvent(db, {
       tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
       toolName: 'runtime.dispatch', category: 'planning',
-      detail: { agentType: typeLabel, engine: agent.engine, surface, model: agent.baseModel ?? 'gateway-default', executor: 'durable' },
-      result: `Dispatching ${typeLabel} to the durable cloud executor (model: ${agent.baseModel ?? 'gateway default'}).`,
+      detail: { agentType: typeLabel, engine: agent.engine, surface, model: agent.baseModel ?? 'gateway-default', executor },
+      result: `Dispatching ${typeLabel} to the ${executor} cloud executor (model: ${agent.baseModel ?? 'gateway default'}).`,
     });
 
     const runWorkerFallback = async () => {
@@ -1512,7 +1708,61 @@ async function startDispatchedExecution(
         await runWorkerFallback();
       }
     };
-    waitUntil(startDurable());
+
+    // Start the run in a real long-lived Cloudflare Container: prep the prompts
+    // (shell-capable variant), mint the per-run callback token, hand the container a
+    // tokened clone URL for its local workspace, and POST /run. The container drives
+    // the loop in its own process and calls back into /internal/container-op. Any
+    // failure to reach the container degrades to the durable executor.
+    const startContainer = async () => {
+      const agentNs = env.AGENT_CONTAINER;
+      if (!agentNs) { await startDurable(); return; }
+      try {
+        const { systemPrompt, userContent } = await prepareCloudRun(
+          env, db, execution.id, taskRow, tenantId, taskRow.projectId,
+          agent.label ?? 'BuilderForce Agent', agent.baseModel, artifacts, agent.ref, effectivePayload,
+          { shell: true },
+        );
+        const token = await mintContainerRunToken(env.JWT_SECRET, execution.id);
+        const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskRow.id);
+        const cloneSpec = repo.ok && repo.ctx.provider.startsWith('github')
+          ? { cloneUrl: `https://x-access-token:${repo.ctx.token}@${repo.ctx.host}/${repo.ctx.owner}/${repo.ctx.repo}.git`, baseBranch: repo.ctx.base }
+          : null;
+        const internalBaseUrl = env.INTERNAL_API_BASE_URL ?? 'https://api.builderforce.ai';
+        const stub = agentNs.get(agentNs.idFromName(`exec:${execution.id}`));
+        const res = await stub.fetch('https://agent-container/run', {
+          method: 'POST',
+          body: JSON.stringify({
+            executionId: execution.id,
+            internalBaseUrl,
+            token,
+            systemPrompt,
+            userContent,
+            maxSteps: CONTAINER_MAX_STEPS,
+            repo: cloneSpec,
+          }),
+        });
+        if (!res.ok) {
+          await recordCloudToolEvent(db, {
+            tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+            toolName: 'runtime.fallback', category: 'planning',
+            detail: { reason: `AgentContainerDO /run ${res.status}`, ranOn: 'durable' },
+            result: `Cloudflare Container kickoff returned ${res.status} — running on the durable executor instead.`,
+          });
+          await startDurable();
+        }
+      } catch (e) {
+        await recordCloudToolEvent(db, {
+          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+          toolName: 'runtime.fallback', category: 'planning',
+          detail: { reason: e instanceof Error ? e.message : String(e), ranOn: 'durable' },
+          result: 'Cloudflare Container kickoff threw — running on the durable executor instead.',
+        });
+        await startDurable();
+      }
+    };
+
+    waitUntil(hasContainer ? startContainer() : startDurable());
   }
 
   // Announce the queued/dispatched execution immediately.
@@ -1555,6 +1805,25 @@ async function getDispatchTargets(db: Db, tenantId: number, assignedAgentHostId?
 
 export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hono<RuntimeHonoEnv> {
   const router = new Hono<RuntimeHonoEnv>();
+
+  // Internal container-op endpoint — called by the long-lived Container executor
+  // (AgentContainerDO), NOT by a browser/tenant. Registered BEFORE authMiddleware so
+  // it bypasses tenant JWT auth and instead authenticates with the per-run token
+  // (HMAC of the execution id). The container delegates each LLM step / commit /
+  // finalize here so metering, commit, and PR logic stay server-side (one impl).
+  router.post('/internal/container-op', async (c) => {
+    const body = await c.req.json<{ executionId?: number; token?: string; op?: string; args?: Record<string, unknown> }>().catch(() => null);
+    if (!body || typeof body.executionId !== 'number' || typeof body.token !== 'string' || typeof body.op !== 'string') {
+      return c.json({ error: 'executionId, token and op are required' }, 400);
+    }
+    const ok = await verifyContainerRunToken(c.env.JWT_SECRET, body.executionId, body.token);
+    if (!ok) return c.json({ error: 'invalid run token' }, 403);
+    const ctx = await loadContainerRunContext(c.env as Env, db, body.executionId);
+    if (!ctx) return c.json({ error: 'execution not found' }, 404);
+    const res = await handleContainerOp(c.env as Env, db, runtimeService, ctx, body.executionId, body.op, body.args ?? {});
+    return c.json(res.body as Record<string, unknown>, res.status as 200);
+  });
+
   router.use('*', authMiddleware);
 
   // Legacy compatibility (BuilderForce Link) ----------------------------------------------------
