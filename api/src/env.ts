@@ -83,6 +83,19 @@ export interface Env {
    *    [[durable_objects.bindings]] name = "CLOUD_RUNNER" class_name = "CloudRunnerDO" */
   CLOUD_RUNNER?: DurableObjectNamespace;
 
+  /** Cloudflare Container runtime for a "V2 Cloud Agent (Node/Container)" — a
+   *  long-lived Node process with a real shell (the `container` runtime surface).
+   *  One instance per execution (`idFromName('exec:<id>')`). Optional: when unset
+   *  (or the container can't start), a `container`-surface run degrades to the
+   *  durable executor so it still runs in the cloud. Backed by AgentContainerDO via
+   *  a `[[containers]]` block in wrangler.toml; binding name `AGENT_CONTAINER`. */
+  AGENT_CONTAINER?: DurableObjectNamespace;
+
+  /** Internal base URL the Container calls back into for each LLM step / repo
+   *  telemetry / PR finalize (the container-op endpoint). Defaults to the public
+   *  API origin; override for local/dev. e.g. "https://api.builderforce.ai". */
+  INTERNAL_API_BASE_URL?: string;
+
   /**
    * Optional KV namespace caching API-key → tenant resolutions for ~60s.
    * Without it, every chat-completion call hits the DB to validate `bfk_*` /

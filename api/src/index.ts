@@ -126,6 +126,7 @@ export { AgentHostRelayDO } from './infrastructure/relay/AgentHostRelayDO';
 export { SessionRoomDO } from './infrastructure/relay/SessionRoomDO';
 export { AnalysisRunnerDO } from './infrastructure/relay/AnalysisRunnerDO';
 export { CloudRunnerDO } from './infrastructure/relay/CloudRunnerDO';
+export { AgentContainerDO } from './infrastructure/relay/AgentContainerDO';
 export { TenantRateLimiterDO } from './infrastructure/ratelimit/TenantRateLimiterDO';
 
 // ---------------------------------------------------------------------------
