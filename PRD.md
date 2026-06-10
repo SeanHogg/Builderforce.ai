@@ -1,51 +1,43 @@
-> **PRD** — drafted by Coder Agent (V2) (Durable) · task #60
+> **PRD** — drafted by Coder Agent (V2) (Durable) · task #63
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Mobile Experience Enhancement
+# WIP: Cloud Agent Concurrency Issue
 
-## 1. Problem & Goal
+## Problem & Goal
 
-### Problem Statement
-The current mobile experience is suboptimal, characterized by:
-1.  Significant unused space on the left-hand side of content pages, preventing full utilization of the screen real estate.
-2.  The slide-out left navigation panel incorrectly displays only centered icons, lacking descriptive text and proper alignment, which hinders user navigation and comprehension.
+**Problem:** When a user attempts to run multiple cloud agents simultaneously, subsequent agents enter a "pending" state and do not execute if another agent is already running. This prevents users from leveraging the parallel processing capabilities of cloud agents.
 
-### Goal
-To significantly enhance the mobile user experience by:
-1.  Ensuring all content pages occupy 100% of the viewport width, eliminating wasted space.
-2.  Rectifying the slide-out left navigation panel to display left-aligned icons accompanied by their respective text labels, improving usability and clarity.
+**Goal:** Enable multiple cloud agents to run concurrently.
 
-## 2. Target Users / ICP Roles
-All users accessing the application via mobile devices (smartphones).
+## Target Users / ICP Roles
 
-## 3. Scope
-This PRD specifically covers improvements to the mobile-responsive layout for all primary content pages and the visual presentation of the slide-out left navigation panel on mobile devices.
+This issue affects all users of the cloud agent functionality. Specific roles include:
 
-## 4. Functional Requirements
+*   Data Scientists
+*   ML Engineers
+*   DevOps Engineers
+*   Any user requiring parallel execution of cloud-based tasks.
 
-### FR1: Full Width Page Content
-All content pages on mobile devices must expand to utilize 100% of the available viewport width.
+## Scope
 
-### FR2: Slide-out Menu Content Display
-The slide-out left navigation panel must display both the icon and the corresponding text label for each menu item.
+This PRD addresses the root cause of the cloud agent concurrency limitation, ensuring that multiple instances of cloud agents can be initiated and run in parallel.
 
-### FR3: Slide-out Menu Item Alignment
-Within the slide-out left navigation panel, both the icons and their text labels for each menu item must be left-aligned within their respective menu containers.
+## Functional Requirements
 
-## 5. Acceptance Criteria
+1.  **Concurrent Agent Execution:** The system must allow for multiple cloud agents to be initiated and run simultaneously without blocking subsequent agent executions.
+2.  **Resource Management (Implied):** The underlying infrastructure must be capable of handling the concurrent execution of multiple agents, implying that resource allocation mechanisms should be reviewed and potentially adjusted.
+3.  **Status Reporting:** The system should accurately reflect the running status of all concurrently executing agents.
 
-### AC1: Page Width Validation
-On any mobile device (e.g., iPhone, Android phone), navigating to any content page must result in the page content spanning the full 100% width of the screen, with no observable empty or "dead" space on the left margin.
+## Acceptance Criteria
 
-### AC2: Slide-out Menu Item Text Presence
-When the slide-out left navigation panel is activated on a mobile device, every menu item displayed within the panel must clearly show both its designated icon and its descriptive text label.
+*   **AC1:** A user can successfully initiate and run two or more cloud agents at the same time.
+*   **AC2:** All initiated cloud agents are in a "running" state (or their expected active state) and are executing their tasks.
+*   **AC3:** No initiated cloud agent enters a "pending" state due to another agent already running.
+*   **AC4:** The UI accurately displays the status of all concurrently running agents.
 
-### AC3: Slide-out Menu Item Alignment
-When the slide-out left navigation panel is activated on a mobile device, the icons and their corresponding text labels for all menu items must be visibly aligned to the left edge of their respective item containers within the panel.
+## Out of Scope
 
-## 6. Out of Scope
-*   Any changes to the desktop or tablet specific user interfaces.
-*   Alterations to the functionality, order, or presence of existing menu items.
-*   General performance optimizations beyond those inherently gained by layout adjustments.
-*   Comprehensive visual design overhauls (e.g., changes to colors, fonts, or iconography beyond what's required to meet alignment and text visibility).
-*   Accessibility enhancements not directly related to the specified layout and content display issues.
+*   Agent performance optimization (beyond enabling concurrency).
+*   Introduction of new agent types or functionalities.
+*   Changes to agent resource quotas or limits, unless directly necessitated by enabling concurrency and specifically documented.
+*   User interface redesign related to agent management.
