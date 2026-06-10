@@ -87,6 +87,8 @@ Returns `details.json` containing the parsed JSON (and validates against
 - Side effects should be handled outside this tool (for example, approvals in
   Lobster) before calling tools that send messages/emails.
 
+- **For coding and implementation tasks, the system should honor the user's explicit model selection (Option A from PRD). This means the chosen model must be used, and its associated UI features must remain available and functional. The configuration and selection mechanisms should reflect this behavior.**
+
 ## Bundled extension note
 
 This extension depends on BuilderForceAgents internal modules (the embedded agent runner).
