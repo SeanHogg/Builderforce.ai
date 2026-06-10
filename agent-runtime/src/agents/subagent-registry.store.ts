@@ -1,4 +1,4 @@
-import os from "node:os";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { resolveStateDir } from "../config/paths.js";
 import { loadJsonFile, saveJsonFile } from "../infra/json-file.js";
@@ -45,9 +45,9 @@ export function resolveSubagentRegistryPath(): string {
   return path.join(resolveSubagentStateDir(process.env), "subagents", "runs.json");
 }
 
-export function loadSubagentRegistryFromDisk(): Map<string, SubagentRunRecord> {
+export async function loadSubagentRegistryFromDisk(): Promise<Map<string, SubagentRunRecord>> {
   const pathname = resolveSubagentRegistryPath();
-  const raw = loadJsonFile(pathname);
+  const raw = await loadJsonFile(pathname);
   if (!raw || typeof raw !== "object") {
     return new Map();
   }
@@ -108,7 +108,7 @@ export function loadSubagentRegistryFromDisk(): Map<string, SubagentRunRecord> {
   }
   if (migrated) {
     try {
-      saveSubagentRegistryToDisk(out);
+      await saveSubagentRegistryToDisk(out);
     } catch {
       // ignore migration write failures
     }
@@ -116,7 +116,7 @@ export function loadSubagentRegistryFromDisk(): Map<string, SubagentRunRecord> {
   return out;
 }
 
-export function saveSubagentRegistryToDisk(runs: Map<string, SubagentRunRecord>) {
+export async function saveSubagentRegistryToDisk(runs: Map<string, SubagentRunRecord>) {
   const pathname = resolveSubagentRegistryPath();
   const serialized: Record<string, PersistedSubagentRunRecord> = {};
   for (const [runId, entry] of runs.entries()) {
@@ -126,5 +126,5 @@ export function saveSubagentRegistryToDisk(runs: Map<string, SubagentRunRecord>)
     version: REGISTRY_VERSION,
     runs: serialized,
   };
-  saveJsonFile(pathname, out);
+  await saveJsonFile(pathname, out);
 }
