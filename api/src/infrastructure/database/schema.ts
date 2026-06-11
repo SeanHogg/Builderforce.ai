@@ -799,6 +799,10 @@ export const executions = pgTable('executions', {
   payload:      text('payload'),
   result:       text('result'),
   errorMessage: text('error_message'),
+  /** Cloud agent that actually ran this execution (ide_agents.id by value, no FK).
+   *  Null for gateway-default / host runs. Written at dispatch so each run's
+   *  logs/telemetry scope to the agent that ran IT, not the ticket's current one. */
+  cloudAgentRef: varchar('cloud_agent_ref', { length: 64 }),
   startedAt:    timestamp('started_at'),
   completedAt:  timestamp('completed_at'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),

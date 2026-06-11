@@ -508,7 +508,10 @@ export function TaskMgmtContent({
       // gateway-default. The decision lives in one place (decideLaneAutoRun).
       if (!opts?.skipAutoSubmit) {
         const column = boardColumns.find((c) => c.status === status);
-        const decision = decideLaneAutoRun(column?.agents, status, board?.autonomous ?? false);
+        // Autonomy is per-lane: a lane with agents + an `auto` gate fires; a
+        // `human` gate waits. (board.autonomous is legacy/unused — always false.)
+        const laneGate = lanes.find((l) => l.key === status)?.gate;
+        const decision = decideLaneAutoRun(column?.agents, status, laneGate);
         if (decision.autoRun) {
           const payloadObj: { cloudAgentRef?: string; model?: string } = {};
           if (decision.cloudAgentRef) payloadObj.cloudAgentRef = decision.cloudAgentRef;

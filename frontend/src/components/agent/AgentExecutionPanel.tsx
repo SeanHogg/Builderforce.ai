@@ -119,6 +119,20 @@ type SubTab = 'output' | 'changes' | 'tools' | 'logs' | 'timeline' | 'pull-reque
 const card: React.CSSProperties = { border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 14, marginBottom: 12 };
 const RUNNING = new Set(['pending', 'submitted', 'running']);
 
+/** The cloud agent that ran a specific execution — read from that execution's own
+ *  persisted payload, so each run's logs/triage are scoped to the agent that
+ *  ACTUALLY ran it (not the task's current `assignedAgentRef`, which later runs
+ *  overwrite). Returns undefined for host runs / default runs with no pinned ref. */
+function execCloudAgentRef(payload: unknown): string | undefined {
+  if (typeof payload !== 'string' || !payload) return undefined;
+  try {
+    const p = JSON.parse(payload) as { cloudAgentRef?: unknown };
+    return typeof p.cloudAgentRef === 'string' && p.cloudAgentRef.trim() ? p.cloudAgentRef.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task: Task; agentHosts: AgentHost[]; onTaskChanged?: () => void }) {
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -250,7 +264,14 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
     if (hostId != null) {
       return { agentHostId: hostId, agentHostName: agentHosts.find((h) => h.id === hostId)?.name ?? `Agent ${hostId}` };
     }
-    const ref = task.assignedAgentRef ?? '__default__';
+    // Scope to the agent that ran THE SELECTED execution: its persisted
+    // `cloudAgentRef` (stamped at dispatch), else its payload, else the task's
+    // current agent for legacy runs. Using task.assignedAgentRef alone was the
+    // "logs don't update" bug: a later run reassigns the task, so viewing an older
+    // execution showed the new agent's telemetry (or empty) instead of what ran.
+    const ref = (selected as { cloudAgentRef?: string | null } | null)?.cloudAgentRef
+      ?? execCloudAgentRef(selected?.payload)
+      ?? task.assignedAgentRef ?? '__default__';
     const name = cloudAgentNames.get(ref) ?? (ref === '__default__' ? 'BuilderForce Cloud (default)' : 'Cloud agent');
     return { cloudAgentRef: ref, cloudAgentName: name };
   }, [selected, agentHosts, task.assignedAgentRef, cloudAgentNames]);

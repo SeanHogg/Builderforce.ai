@@ -98,6 +98,7 @@ function toDomain(row: typeof executionsTable.$inferSelect): Execution {
     sessionId:    row.sessionId ?? null,
     status:       row.status as ExecutionStatus,
     payload:      row.payload ?? null,
+    cloudAgentRef: row.cloudAgentRef ?? null,
     result:       row.result ?? null,
     errorMessage: row.errorMessage ?? null,
     startedAt:    row.startedAt ?? null,

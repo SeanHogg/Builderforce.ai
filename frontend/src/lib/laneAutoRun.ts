@@ -34,22 +34,27 @@ const LEGACY_AUTO_RUN_STATUSES: ReadonlySet<string> = new Set(['todo', 'in_progr
  * Decide whether a ticket entering a lane should auto-start an execution, and AS
  * which agent.
  *
- *   • Lane has a configured cloud agent → autonomous trigger: run AS that agent
- *     (pass its ref + model), gated by the board's master `autonomous` switch.
- *   • No configured cloud agent (default columns / unconfigured board) → preserve
- *     the legacy behaviour: auto-run on the active statuses with no pinned agent
- *     (the backend then falls back to the ticket's assignee or gateway default).
+ * Autonomy is per-LANE, not board-level: a lane with a configured agent + an
+ * `auto` gate fires on its own; a `human` gate waits for explicit approval. (The
+ * `boards.autonomous` column is legacy/unused — defaults false, no UI toggle —
+ * so it must NOT gate this, or every configured lane would be blocked.)
+ *
+ *   • Lane has a configured cloud agent + non-human gate → run AS that agent
+ *     (pass its ref + model so the backend resolves the right engine/model).
+ *   • Lane has a configured cloud agent + `human` gate → no auto-run (waits).
+ *   • No configured cloud agent (default columns) → legacy: auto-run on the
+ *     active statuses with no pinned agent (backend falls back to the ticket's
+ *     assignee or the gateway default).
  */
 export function decideLaneAutoRun(
   agents: LaneAgentLike[] | undefined,
   status: string,
-  boardAutonomous: boolean,
+  laneGate: 'auto' | 'human' | undefined,
 ): LaneAutoRunDecision {
   const agent = (agents ?? []).find((a) => a.runtime === 'cloud' && !!a.agentRef);
   if (agent?.agentRef) {
-    return boardAutonomous
-      ? { autoRun: true, cloudAgentRef: agent.agentRef, model: agent.model ?? undefined }
-      : { autoRun: false };
+    if (laneGate === 'human') return { autoRun: false };
+    return { autoRun: true, cloudAgentRef: agent.agentRef, model: agent.model ?? undefined };
   }
   return { autoRun: LEGACY_AUTO_RUN_STATUSES.has(status) };
 }

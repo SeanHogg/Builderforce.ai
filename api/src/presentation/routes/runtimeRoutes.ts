@@ -613,10 +613,14 @@ const CLOUD_AGENT_TOOLS = [
   },
 ] as const;
 
-// Read→edit→write workflows need more turns than a write-only loop. Each step is
-// one gateway completion (~10-25s); 10 stays well under the cloud orphan ceiling
-// (RuntimeService.CLOUD_ORPHAN_MS = 8 min) so a healthy run never trips the reaper.
-const MAX_CLOUD_TOOL_STEPS = 10;
+// Read→edit→write workflows on a multi-file task need many turns: explore the
+// repo, read several files, then write each change — 10 was too few (a real run
+// burned all 10 just exploring and shipped a PRD-only PR). The durable (DO)
+// surface runs ONE step per alarm tick and heartbeats `executions.updated_at`
+// every tick, so the orphan reaper measures liveness from the heartbeat, not the
+// total step count — a long, healthy run never trips it. 30 gives room to finish
+// real edits (the long-lived Container surface allows 40).
+const MAX_CLOUD_TOOL_STEPS = 30;
 
 // The Container surface is a long-lived process (not a per-tick DO), and its
 // real-shell build/verify loop legitimately needs more turns than the durable
@@ -1643,10 +1647,16 @@ async function startDispatchedExecution(
   ]);
 
   // Agents are first-class assignees: when a cloud agent runs the ticket, it
-  // self-assigns as it starts the work.
+  // self-assigns as it starts the work. Also stamp the EXECUTION with the agent
+  // that ran it, so its logs/telemetry stay scoped to THIS run even after a later
+  // run reassigns the ticket (the "logs show the wrong agent" bug).
   if (agent.ref) {
-    await db.update(tasks).set({ assignedAgentRef: agent.ref, updatedAt: new Date() })
-      .where(eq(tasks.id, taskRow.id)).catch(() => { /* best-effort */ });
+    await Promise.all([
+      db.update(tasks).set({ assignedAgentRef: agent.ref, updatedAt: new Date() })
+        .where(eq(tasks.id, taskRow.id)).catch(() => { /* best-effort */ }),
+      db.update(executions).set({ cloudAgentRef: agent.ref })
+        .where(eq(executions.id, execution.id)).catch(() => { /* best-effort */ }),
+    ]);
   }
 
   const message: DispatchMessage = {
