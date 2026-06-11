@@ -6,13 +6,12 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import {
   runtimeApi,
-  isAwaitingApprovalExecution,
   type Task,
   type AgentHost,
   type TaskRepoStatus,
 } from '@/lib/builderforceApi';
 import { useLlmModels } from '@/lib/useLlmModels';
-import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
+import { useTaskRunner, defaultRunTarget } from './useTaskRunner';
 
 /**
  * Run-with-agent control — replaces the old "Send to AgentHost" button. A button
@@ -44,63 +43,21 @@ export interface RunAgentControlProps {
 export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }: RunAgentControlProps) {
   // target encodes the run target: '' = auto, 'host:<id>' = a self-hosted
   // executor, 'cloud:<ref>' = run AS a cloud agent (its model via an executor).
-  // Default to the ticket's assigned agent so the control reflects who actually
-  // runs it: a cloud agent (the swimlane's agent) wins, else a self-hosted host.
-  const [target, setTarget] = useState<string>(
-    task.assignedAgentRef ? `cloud:${task.assignedAgentRef}` : task.assignedAgentHostId != null ? `host:${task.assignedAgentHostId}` : '',
-  );
+  // Default to the ticket's assignee so the control reflects who actually runs it.
+  const [target, setTarget] = useState<string>(defaultRunTarget(task));
   const [model, setModel] = useState<string>('');
   // Full plan pool + the curated tool-calling/coding subset, from the shared loader.
   const { models, codingModels } = useLlmModels();
-  const [cloudAgents, setCloudAgents] = useState<PoolAgent[]>([]);
-  const [running, setRunning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Single shared submit path (also powers the one-click RunTaskButton). It owns
+  // the run state + cloud-agent pool; we drive it with the picker's target/model.
+  const { run, running, error, cloudAgents } = useTaskRunner({ task, onRan, onAwaitingApproval });
   const [repoStatus, setRepoStatus] = useState<TaskRepoStatus | null>(null);
-
-  useEffect(() => {
-    loadAgentPool().then((p) => setCloudAgents(p.filter((a) => a.kind === 'workforce'))).catch(() => setCloudAgents([]));
-  }, []);
 
   // Surface "the agent can't commit" before a run silently degrades to a text
   // summary. Re-checked when the task changes (binding happens in Source Control).
   useEffect(() => {
     runtimeApi.taskRepoStatus(task.id).then(setRepoStatus).catch(() => setRepoStatus(null));
   }, [task.id]);
-
-  const run = async () => {
-    setRunning(true); setError(null);
-    try {
-      // Resolve the run target. A host runs as an executor; a cloud agent runs
-      // AS its model (no host — the gateway/fleet executes it).
-      const isHost = target.startsWith('host:');
-      const cloudRef = target.startsWith('cloud:') ? target.slice('cloud:'.length) : '';
-      const cloudAgent = cloudRef ? cloudAgents.find((a) => a.ref === cloudRef) : null;
-      const agentHostId = isHost ? Number(target.slice('host:'.length)) : undefined;
-      const effectiveModel = model || cloudAgent?.baseModel || '';
-      // Forward the chosen model (explicit, or the cloud agent's own) and the
-      // cloud agent ref so the API can resolve its runtime engine (V1/V2) and
-      // attribute the run. Take the ref straight from the selected target — NOT
-      // only when it's in the loaded pool — so a selected V2 agent is never lost to
-      // the gateway default just because the pool lookup missed (the reported bug).
-      const payloadObj: { model?: string; cloudAgentRef?: string } = {};
-      if (effectiveModel) payloadObj.model = effectiveModel;
-      if (cloudRef) payloadObj.cloudAgentRef = cloudRef;
-      const result = await runtimeApi.submitExecution({
-        taskId: task.id,
-        agentHostId,
-        payload: Object.keys(payloadObj).length > 0 ? JSON.stringify(payloadObj) : undefined,
-      });
-      if (isAwaitingApprovalExecution(result)) {
-        onAwaitingApproval?.({ approvalId: result.approvalId, taskId: result.taskId, reason: result.reason });
-        return;
-      }
-      onRan?.(result.id);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to run');
-    } finally {
-      setRunning(false);
-    }
-  };
 
   return (
     <div>
@@ -146,7 +103,7 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
         })()}
         <button
           type="button"
-          onClick={run}
+          onClick={() => run({ target, model })}
           disabled={running}
           style={{
             padding: '7px 16px', fontSize: 13, fontWeight: 600, border: 'none',

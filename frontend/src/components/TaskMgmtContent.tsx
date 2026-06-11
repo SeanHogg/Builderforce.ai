@@ -28,7 +28,7 @@ import { SlideOutPanel } from './SlideOutPanel';
 import { MoveToBoardControl } from './MoveToBoardControl';
 import { AgentTab } from './agent/AgentTab';
 import { TaskPrdTab } from './task/TaskPrdTab';
-import { RunAgentControl } from './task/RunAgentControl';
+import { RunTaskButton } from './task/RunTaskButton';
 import { ChatMessageContent } from './ChatMessageContent';
 import { ViewToggle } from './ViewToggle';
 import { ScheduleCalendar } from './ScheduleCalendar';
@@ -1888,23 +1888,28 @@ export function TaskMgmtContent({
                 </div>
               </div>
             </div>
+            {/* One-click Run: submits with the task's assignee-derived runtime (no
+                picker) and jumps to the Agent tab to watch. The full runtime/model
+                picker + live output live there — this shares the same submit path
+                (useTaskRunner), so there is no duplicated run control. */}
             <div
               style={{
                 flexShrink: 0,
                 borderTop: '1px solid var(--border-subtle)',
                 padding: '12px 20px',
                 background: 'var(--bg-base)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <span style={{ fontWeight: 600, fontSize: 14 }}>Run now as</span>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  pick the runtime to execute this task — starts a run and opens the Agent tab
-                </span>
-              </div>
-              <RunAgentControl
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                Runs as <strong style={{ color: 'var(--text-secondary)' }}>{taskAssigneeName(drawerTask)}</strong>. Change the runtime in the Agent tab.
+              </span>
+              <RunTaskButton
                 task={drawerTask}
-                agentHosts={agentHostsList}
+                label="Run this task"
                 onRan={() => { patchStatus(drawerTask.id, 'in_progress', { skipAutoSubmit: true }); setDrawerTab('agent'); }}
                 onAwaitingApproval={(g) => setApprovalGate({ approvalId: g.approvalId, taskId: g.taskId, reason: g.reason })}
               />
