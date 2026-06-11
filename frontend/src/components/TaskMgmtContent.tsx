@@ -194,7 +194,7 @@ export function TaskMgmtContent({
   // Inline per-field editing in the task drawer. Only one field is editable at a
   // time; `fieldDraft` holds the in-progress value (string for text/date inputs).
   const [editingField, setEditingField] = useState<
-    null | 'title' | 'description' | 'dueDate' | 'assignee' | 'priority'
+    null | 'title' | 'description' | 'dueDate' | 'assignee' | 'priority' | 'status' | 'project'
   >(null);
   const [fieldDraft, setFieldDraft] = useState('');
   const [fieldSaving, setFieldSaving] = useState(false);
@@ -1568,14 +1568,41 @@ export function TaskMgmtContent({
                 <TaskPrdTab taskId={drawerTask.id} projectId={drawerTask.projectId} />
               </div>
             ) : (
+            <>
             <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
-                <span
-                  className={taskStatusBadgeClass(drawerTask.status)}
-                  style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6 }}
-                >
-                  {columnLabel(drawerTask.status)}
-                </span>
+                {editingField === 'status' ? (
+                  <Select
+                    autoFocus
+                    value={drawerTask.status}
+                    onChange={(e) => { patchStatus(drawerTask.id, e.target.value); setEditingField(null); }}
+                    onBlur={() => setEditingField(null)}
+                    style={{
+                      fontSize: 12,
+                      padding: '3px 6px',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 6,
+                      background: 'var(--bg-deep)',
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    {statusChoices.map((s) => (
+                      <option key={s.value} value={s.value}>{s.label}</option>
+                    ))}
+                  </Select>
+                ) : (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setEditingField('status')}
+                    onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('status'); }}
+                    title="Click to change status"
+                    className={taskStatusBadgeClass(drawerTask.status)}
+                    style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, cursor: 'pointer' }}
+                  >
+                    {columnLabel(drawerTask.status)}
+                  </span>
+                )}
                 {editingField === 'priority' ? (
                   <Select
                     autoFocus
@@ -1610,24 +1637,38 @@ export function TaskMgmtContent({
                   </span>
                 )}
               </div>
-              {drawerTask.gitBranch && (
+              {(drawerTask.gitBranch || drawerTask.githubPrUrl) && (
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>Branch</div>
-                  {drawerTask.githubPrUrl ? (
-                    <a
-                      href={drawerTask.githubPrUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="View the code changes"
-                      style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--coral-bright)', wordBreak: 'break-all' }}
-                    >
-                      {drawerTask.gitBranch} →
-                    </a>
-                  ) : (
-                    <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
-                      {drawerTask.gitBranch}
-                    </span>
-                  )}
+                  <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>Branch &amp; PR</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    {drawerTask.gitBranch && (
+                      <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
+                        {drawerTask.gitBranch}
+                      </span>
+                    )}
+                    {drawerTask.githubPrUrl && (
+                      <a
+                        href={drawerTask.githubPrUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="View the code changes on GitHub"
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          fontFamily: 'var(--font-mono)',
+                          color: 'var(--coral-bright, #f4726e)',
+                          textDecoration: 'none',
+                          padding: '2px 8px',
+                          borderRadius: 6,
+                          border: '1px solid var(--border-subtle)',
+                          background: 'var(--bg-deep)',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        PR{drawerTask.githubPrNumber ? ` #${drawerTask.githubPrNumber}` : ''} →
+                      </a>
+                    )}
+                  </div>
                 </div>
               )}
               <div style={{ marginBottom: 16 }}>
@@ -1697,7 +1738,26 @@ export function TaskMgmtContent({
                 <div style={{ display: 'grid', gap: 8 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
                     <span style={{ color: 'var(--text-muted)' }}>Project</span>
-                    <span style={{ color: 'var(--text-primary)' }}>{projectNameById(drawerTask.projectId)}</span>
+                    {editingField === 'project' ? (
+                      <MoveToBoardControl
+                        projects={projects}
+                        currentProjectId={drawerTask.projectId}
+                        onMove={(projectId) => { moveTask(drawerTask.id, projectId); setEditingField(null); }}
+                        label={`${projectNameById(drawerTask.projectId)} →`}
+                        style={{ fontSize: 13, padding: '3px 6px' }}
+                      />
+                    ) : (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setEditingField('project')}
+                        onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('project'); }}
+                        title="Click to move this task to another board"
+                        style={{ color: 'var(--text-primary)', cursor: 'pointer', borderBottom: '1px dashed var(--border-subtle)' }}
+                      >
+                        {projectNameById(drawerTask.projectId)}
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
                     <span style={{ color: 'var(--text-muted)' }}>Assignee</span>
@@ -1776,60 +1836,29 @@ export function TaskMgmtContent({
                   </div>
                 </div>
               </div>
-              {drawerTask.githubPrUrl && (
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>GitHub PR</div>
-                  <a
-                    href={drawerTask.githubPrUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      fontSize: 13,
-                      color: 'var(--coral-bright, #f4726e)',
-                      textDecoration: 'none',
-                      fontFamily: 'var(--font-mono)',
-                    }}
-                  >
-                    {drawerTask.githubPrUrl}
-                    {drawerTask.githubPrNumber ? ` (#${drawerTask.githubPrNumber})` : ''}
-                  </a>
-                </div>
-              )}
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>Move to</div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {statusChoices
-                    .filter((s) => s.value !== drawerTask.status)
-                    .map((s) => (
-                      <button
-                        key={s.value}
-                        type="button"
-                        style={buttonTertiary}
-                        onClick={() => patchStatus(drawerTask.id, s.value)}
-                      >
-                        {s.label}
-                      </button>
-                    ))}
-                </div>
-              </div>
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Move to board</div>
-                <MoveToBoardControl
-                  projects={projects}
-                  currentProjectId={drawerTask.projectId}
-                  onMove={(projectId) => moveTask(drawerTask.id, projectId)}
-                />
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Run</div>
-                <RunAgentControl
-                  task={drawerTask}
-                  agentHosts={agentHostsList}
-                  onRan={() => { patchStatus(drawerTask.id, 'in_progress', { skipAutoSubmit: true }); setDrawerTab('agent'); }}
-                  onAwaitingApproval={(g) => setApprovalGate({ approvalId: g.approvalId, taskId: g.taskId, reason: g.reason })}
-                />
-              </div>
             </div>
+            <div
+              style={{
+                flexShrink: 0,
+                borderTop: '1px solid var(--border-subtle)',
+                padding: '12px 20px',
+                background: 'var(--bg-base)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ fontWeight: 600, fontSize: 14 }}>Run</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  starts an execution and opens the Agent tab
+                </span>
+              </div>
+              <RunAgentControl
+                task={drawerTask}
+                agentHosts={agentHostsList}
+                onRan={() => { patchStatus(drawerTask.id, 'in_progress', { skipAutoSubmit: true }); setDrawerTab('agent'); }}
+                onAwaitingApproval={(g) => setApprovalGate({ approvalId: g.approvalId, taskId: g.taskId, reason: g.reason })}
+              />
+            </div>
+            </>
             )}
           </div>
         </>
