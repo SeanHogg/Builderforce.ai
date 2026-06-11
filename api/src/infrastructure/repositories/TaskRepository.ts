@@ -59,6 +59,7 @@ export class TaskRepository implements ITaskRepository {
         assignedAgentType: plain.assignedAgentType ?? undefined,
         assignedAgentHostId: plain.assignedAgentHostId ?? undefined,
         assignedAgentRef:  plain.assignedAgentRef ?? undefined,
+        assignedUserId:    plain.assignedUserId ?? undefined,
         gitBranch:         plain.gitBranch ?? undefined,
         githubIssueNumber: plain.githubIssueNumber ?? undefined,
         githubIssueUrl:    plain.githubIssueUrl ?? undefined,
@@ -86,8 +87,13 @@ export class TaskRepository implements ITaskRepository {
         status:            plain.status,
         priority:          plain.priority,
         assignedAgentType: plain.assignedAgentType ?? undefined,
-        assignedAgentHostId: plain.assignedAgentHostId ?? undefined,
-        assignedAgentRef:  plain.assignedAgentRef ?? undefined,
+        // Assignee columns write real null (not undefined) so reassignment actually
+        // CLEARS the other two — a task is owned by exactly one of host/cloud/human.
+        // (Drizzle omits `undefined` from the SET clause, which would leave a stale
+        //  assignee behind; only `null` nulls the column.)
+        assignedAgentHostId: plain.assignedAgentHostId ?? null,
+        assignedAgentRef:  plain.assignedAgentRef ?? null,
+        assignedUserId:    plain.assignedUserId ?? null,
         gitBranch:         plain.gitBranch ?? undefined,
         githubIssueNumber: plain.githubIssueNumber ?? undefined,
         githubIssueUrl:    plain.githubIssueUrl ?? undefined,
@@ -166,6 +172,7 @@ function toDomain(row: Row): Task {
     assignedAgentType: (row.assignedAgentType as AgentType) ?? null,
     assignedAgentHostId: row.assignedAgentHostId != null ? asAgentHostId(row.assignedAgentHostId) : null,
     assignedAgentRef:  row.assignedAgentRef ?? null,
+    assignedUserId:    row.assignedUserId ?? null,
     gitBranch:         row.gitBranch ?? null,
     githubIssueNumber: row.githubIssueNumber ?? null,
     githubIssueUrl:    row.githubIssueUrl ?? null,

@@ -23,6 +23,7 @@ import { fetchProjects } from '@/lib/api';
 import { BoardConfigPanel } from './board/BoardConfigPanel';
 import { AgentChip } from './board/AgentChip';
 import { useBoardConfig } from './board/useBoardConfig';
+import { decideLaneAutoRun } from '@/lib/laneAutoRun';
 import { SlideOutPanel } from './SlideOutPanel';
 import { MoveToBoardControl } from './MoveToBoardControl';
 import { AgentTab } from './agent/AgentTab';
@@ -73,46 +74,65 @@ function formatDate(d?: string | null): string {
 
 /** A cloud agent (ide_agents) that a task can be assigned to. */
 type CloudAgentTarget = { ref: string; name: string };
+/** A human teammate (users.id) that a task can be assigned to. */
+type TeamMember = { id: string; name: string };
 
-// A task is assigned to EITHER a self-hosted agent host (numeric id) OR a cloud
-// agent (string ref) — never both. The two id spaces are disjoint, so we encode
-// the choice into a single <select> value (`h:<id>` / `c:<ref>` / '' = none) and
-// decode it back into the mutually-exclusive fields on change. Centralizing this
-// here keeps the create dialog, the drawer editor, and the name resolver in sync.
-function assigneeSelectValue(hostId?: number | null, ref?: string | null): string {
+// Humans and agents are one team: a task is owned by EXACTLY ONE of a self-hosted
+// agent host (numeric id), a cloud agent (string ref), or a human teammate
+// (users.id) — never more than one. The three id spaces are disjoint, so we encode
+// the choice into a single <select> value (`h:<id>` / `c:<ref>` / `u:<userId>` /
+// '' = none) and decode it back into the mutually-exclusive fields on change.
+// Centralizing this here keeps the create dialog, the drawer editor, and the name
+// resolver in sync — and decoding always emits ALL THREE fields so picking one
+// clears the others (the write path persists the nulls).
+function assigneeSelectValue(hostId?: number | null, ref?: string | null, userId?: string | null): string {
   if (hostId != null) return `h:${hostId}`;
   if (ref) return `c:${ref}`;
+  if (userId) return `u:${userId}`;
   return '';
 }
 
-function parseAssigneeSelectValue(v: string): { assignedAgentHostId: number | null; assignedAgentRef: string | null } {
-  if (v.startsWith('h:')) return { assignedAgentHostId: Number(v.slice(2)), assignedAgentRef: null };
-  if (v.startsWith('c:')) return { assignedAgentHostId: null, assignedAgentRef: v.slice(2) };
-  return { assignedAgentHostId: null, assignedAgentRef: null };
+type AssigneePatch = {
+  assignedAgentHostId: number | null;
+  assignedAgentRef: string | null;
+  assignedUserId: string | null;
+};
+
+function parseAssigneeSelectValue(v: string): AssigneePatch {
+  if (v.startsWith('h:')) return { assignedAgentHostId: Number(v.slice(2)), assignedAgentRef: null, assignedUserId: null };
+  if (v.startsWith('c:')) return { assignedAgentHostId: null, assignedAgentRef: v.slice(2), assignedUserId: null };
+  if (v.startsWith('u:')) return { assignedAgentHostId: null, assignedAgentRef: null, assignedUserId: v.slice(2) };
+  return { assignedAgentHostId: null, assignedAgentRef: null, assignedUserId: null };
 }
 
-/** Display name for whichever assignee a task carries (host or cloud agent). */
+/** Display name for whichever assignee a task carries (host, cloud agent, or human). */
 function assigneeName(
   hostId: number | null | undefined,
   ref: string | null | undefined,
+  userId: string | null | undefined,
   hosts: AgentHost[],
   cloudAgents: CloudAgentTarget[],
+  members: TeamMember[],
 ): string {
   if (hostId != null) return hosts.find((h) => h.id === hostId)?.name ?? String(hostId);
   if (ref) return cloudAgents.find((a) => a.ref === ref)?.name ?? ref;
+  if (userId) return members.find((m) => m.id === userId)?.name ?? userId;
   return 'Unassigned';
 }
 
 /**
  * Assignee picker shared by the create dialog and the drawer's inline editor.
- * Lists both self-hosted agent hosts and cloud agents in grouped sections and
- * emits the mutually-exclusive (assignedAgentHostId | assignedAgentRef) patch.
+ * Lists human teammates, self-hosted agent hosts, and cloud agents in grouped
+ * sections and emits the mutually-exclusive
+ * (assignedAgentHostId | assignedAgentRef | assignedUserId) patch.
  */
 function AssigneeSelect({
   hosts,
   cloudAgents,
+  members,
   hostId,
   agentRef,
+  userId,
   onChange,
   autoFocus,
   disabled,
@@ -121,9 +141,11 @@ function AssigneeSelect({
 }: {
   hosts: AgentHost[];
   cloudAgents: CloudAgentTarget[];
+  members: TeamMember[];
   hostId?: number | null;
   agentRef?: string | null;
-  onChange: (patch: { assignedAgentHostId: number | null; assignedAgentRef: string | null }) => void;
+  userId?: string | null;
+  onChange: (patch: AssigneePatch) => void;
   autoFocus?: boolean;
   disabled?: boolean;
   onBlur?: () => void;
@@ -134,11 +156,18 @@ function AssigneeSelect({
       autoFocus={autoFocus}
       disabled={disabled}
       onBlur={onBlur}
-      value={assigneeSelectValue(hostId, agentRef)}
+      value={assigneeSelectValue(hostId, agentRef, userId)}
       onChange={(e) => onChange(parseAssigneeSelectValue(e.target.value))}
       style={style}
     >
       <option value="">Unassigned</option>
+      {members.length > 0 && (
+        <optgroup label="Team members">
+          {members.map((m) => (
+            <option key={`u:${m.id}`} value={`u:${m.id}`}>{m.name}</option>
+          ))}
+        </optgroup>
+      )}
       {hosts.length > 0 && (
         <optgroup label="Agent hosts">
           {hosts.map((h) => (
@@ -167,6 +196,7 @@ export function TaskMgmtContent({
   const [projects, setProjects] = useState<Project[]>(projectsProp ?? []);
   const [agentHostsList, setAgentHostsList] = useState<AgentHost[]>([]);
   const [cloudAgentsList, setCloudAgentsList] = useState<CloudAgentTarget[]>([]);
+  const [membersList, setMembersList] = useState<TeamMember[]>([]);
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -210,7 +240,7 @@ export function TaskMgmtContent({
     setLoading(true);
     setError(null);
     try {
-      const [tasksData, agentHostsData, execData, runTargets] = await Promise.all([
+      const [tasksData, agentHostsData, execData, runTargets, membersData] = await Promise.all([
         tasksApi.list(projectId),
         agentHosts.list().catch(() => []),
         runtimeApi.listRecent().catch(() => []),
@@ -218,10 +248,13 @@ export function TaskMgmtContent({
         // run-targets already merges hosts + cloud agents and is server-cached;
         // we only take the cloud side here since hosts come from agentHosts.list.
         workflowDefinitions.runTargets().catch(() => ({ hosts: [], cloudAgents: [] })),
+        // Human teammates — the human half of the unified assignee picker. Server-cached.
+        tasksApi.assignees().catch(() => []),
       ]);
       setTasks(tasksData);
       setAgentHostsList(agentHostsData);
       setCloudAgentsList(runTargets.cloudAgents);
+      setMembersList(membersData);
       setExecutions(execData);
       // Always resolve the full project list (unless the parent supplied one):
       // it backs both the project filter and the "Move to board" destinations,
@@ -266,9 +299,9 @@ export function TaskMgmtContent({
 
   const projectNameById = (id?: number | null) =>
     id ? projects.find((p) => p.id === id)?.name ?? String(id) : '—';
-  // Resolve a task's assignee (self-hosted host OR cloud agent) to its display name.
-  const taskAssigneeName = (t: { assignedAgentHostId?: number | null; assignedAgentRef?: string | null }) =>
-    assigneeName(t.assignedAgentHostId, t.assignedAgentRef, agentHostsList, cloudAgentsList);
+  // Resolve a task's assignee (human teammate, self-hosted host, OR cloud agent) to its display name.
+  const taskAssigneeName = (t: { assignedAgentHostId?: number | null; assignedAgentRef?: string | null; assignedUserId?: string | null }) =>
+    assigneeName(t.assignedAgentHostId, t.assignedAgentRef, t.assignedUserId, agentHostsList, cloudAgentsList, membersList);
 
   // The board being configured: the scoped project, or the single project chosen
   // in the filter. Null when viewing "All projects" — the cog stays visible but disabled.
@@ -390,6 +423,7 @@ export function TaskMgmtContent({
           priority: (form.priority as TaskPriority) ?? editTarget.priority,
           assignedAgentHostId: form.assignedAgentHostId ?? null,
           assignedAgentRef: form.assignedAgentRef ?? null,
+          assignedUserId: form.assignedUserId ?? null,
           dueDate: form.dueDate ?? null,
         });
         setTasks((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
@@ -407,6 +441,7 @@ export function TaskMgmtContent({
           priority: (form.priority as TaskPriority) ?? 'medium',
           assignedAgentHostId: form.assignedAgentHostId ?? undefined,
           assignedAgentRef: form.assignedAgentRef ?? undefined,
+          assignedUserId: form.assignedUserId ?? undefined,
           dueDate: form.dueDate || undefined,
         });
         const statusToSet = form.status ?? 'todo';
@@ -440,7 +475,7 @@ export function TaskMgmtContent({
   // Persist a single edited field from the drawer's inline editors. Patches the
   // open task, syncs the list + drawer, and closes the active editor on success.
   const saveTaskField = async (
-    patch: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'assignedAgentHostId' | 'assignedAgentRef' | 'dueDate'>>
+    patch: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'dueDate'>>
   ) => {
     if (!drawerTask) return;
     setFieldSaving(true);
@@ -466,23 +501,35 @@ export function TaskMgmtContent({
       setTasks((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
       if (drawerTask?.id === id) setDrawerTask(updated);
 
-      // Auto-send to agentHost when moving to To Do or In Progress (user expects execution to start)
-      if (!opts?.skipAutoSubmit && (status === 'todo' || status === 'in_progress')) {
-        try {
-          const result = await runtimeApi.submitExecution({
-            taskId: id,
-            agentHostId: updated.assignedAgentHostId ?? undefined,
-          });
-
-          if (isAwaitingApprovalExecution(result)) {
-            setApprovalGate({
-              approvalId: result.approvalId,
-              taskId: result.taskId,
-              reason: result.reason,
+      // Autonomous trigger: when a ticket enters a lane, decide whether to auto-run
+      // and — critically — AS WHICH AGENT. A lane configured with a cloud agent
+      // (e.g. a Coder Agent V2) must run AS that agent: pass its ref + model so the
+      // backend resolves the right engine instead of falling back to the V1
+      // gateway-default. The decision lives in one place (decideLaneAutoRun).
+      if (!opts?.skipAutoSubmit) {
+        const column = boardColumns.find((c) => c.status === status);
+        const decision = decideLaneAutoRun(column?.agents, status, board?.autonomous ?? false);
+        if (decision.autoRun) {
+          const payloadObj: { cloudAgentRef?: string; model?: string } = {};
+          if (decision.cloudAgentRef) payloadObj.cloudAgentRef = decision.cloudAgentRef;
+          if (decision.model) payloadObj.model = decision.model;
+          try {
+            const result = await runtimeApi.submitExecution({
+              taskId: id,
+              agentHostId: updated.assignedAgentHostId ?? undefined,
+              payload: Object.keys(payloadObj).length > 0 ? JSON.stringify(payloadObj) : undefined,
             });
+
+            if (isAwaitingApprovalExecution(result)) {
+              setApprovalGate({
+                approvalId: result.approvalId,
+                taskId: result.taskId,
+                reason: result.reason,
+              });
+            }
+          } catch {
+            // Non-blocking: status was updated; execution may fail if no agentHost connected
           }
-        } catch {
-          // Non-blocking: status was updated; execution may fail if no agentHost connected
         }
       }
     } catch (e) {
@@ -919,7 +966,7 @@ export function TaskMgmtContent({
                               openTask(task, 'agent');
                             }}
                           />
-                        ) : (task.assignedAgentHostId || task.assignedAgentRef) ? (
+                        ) : (task.assignedAgentHostId || task.assignedAgentRef || task.assignedUserId) ? (
                           <span>{taskAssigneeName(task)}</span>
                         ) : null}
                         {task.githubPrUrl && (
@@ -1337,13 +1384,15 @@ export function TaskMgmtContent({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                    Assign to agent
+                    Assign to team member
                   </label>
                   <AssigneeSelect
                     hosts={agentHostsList}
                     cloudAgents={cloudAgentsList}
+                    members={membersList}
                     hostId={form.assignedAgentHostId}
                     agentRef={form.assignedAgentRef}
+                    userId={form.assignedUserId}
                     onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
                     style={{
                       width: '100%',
@@ -1760,14 +1809,16 @@ export function TaskMgmtContent({
                     )}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Assignee</span>
+                    <span style={{ color: 'var(--text-muted)' }}>Assignee / Owner</span>
                     {editingField === 'assignee' ? (
                       <AssigneeSelect
                         autoFocus
                         hosts={agentHostsList}
                         cloudAgents={cloudAgentsList}
+                        members={membersList}
                         hostId={drawerTask.assignedAgentHostId}
                         agentRef={drawerTask.assignedAgentRef}
+                        userId={drawerTask.assignedUserId}
                         disabled={fieldSaving}
                         onChange={(patch) => saveTaskField(patch)}
                         onBlur={() => setEditingField(null)}
@@ -1846,9 +1897,9 @@ export function TaskMgmtContent({
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <span style={{ fontWeight: 600, fontSize: 14 }}>Run</span>
+                <span style={{ fontWeight: 600, fontSize: 14 }}>Run now as</span>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  starts an execution and opens the Agent tab
+                  pick the runtime to execute this task — starts a run and opens the Agent tab
                 </span>
               </div>
               <RunAgentControl

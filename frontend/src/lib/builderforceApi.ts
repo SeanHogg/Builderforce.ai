@@ -763,6 +763,8 @@ export interface Task {
   assignedAgentHostId: number | null;
   /** ide_agents.id of the cloud agent working this ticket (agents are assignees). */
   assignedAgentRef: string | null;
+  /** Human assignee/owner (users.id). A task is owned by EITHER a human OR an agent. */
+  assignedUserId: string | null;
   /** Git branch the agent executes this ticket under (links to the code changes). */
   gitBranch: string | null;
   githubPrUrl: string | null;
@@ -800,6 +802,8 @@ export const tasksApi = {
     assignedAgentHostId?: number | null;
     /** Cloud agent (ide_agents.id). Mutually exclusive with assignedAgentHostId. */
     assignedAgentRef?: string | null;
+    /** Human assignee (users.id). Mutually exclusive with the agent assignees. */
+    assignedUserId?: string | null;
     dueDate?: string | null;
   }): Promise<Task> =>
     request<Task>('/api/tasks', {
@@ -817,6 +821,8 @@ export const tasksApi = {
       assignedAgentHostId: number | null;
       /** Cloud agent (ide_agents.id). Mutually exclusive with assignedAgentHostId. */
       assignedAgentRef: string | null;
+      /** Human assignee (users.id). Mutually exclusive with the agent assignees. */
+      assignedUserId: string | null;
       dueDate: string | null;
       archived: boolean;
     }>
@@ -828,6 +834,13 @@ export const tasksApi = {
 
   delete: (id: number): Promise<void> =>
     request<void>(`/api/tasks/${id}`, { method: 'DELETE' }),
+
+  /** Team members (humans) a task can be assigned to — the human half of the
+   *  unified assignee picker (agents come from the run-targets / agent-host APIs). */
+  assignees: (): Promise<{ id: string; name: string }[]> =>
+    request<{ members: { id: string; name: string }[] }>('/api/tasks/assignees').then(
+      (r) => r.members ?? [],
+    ),
 
   /** Move a task to another project ("board"). Re-keys it to the destination's prefix. */
   move: (id: number, projectId: number): Promise<Task> =>
