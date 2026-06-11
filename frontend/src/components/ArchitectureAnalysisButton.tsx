@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -29,16 +30,20 @@ export function ArchitectureAnalysisButton({ project, onView, onConfigureRepo }:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Increased padding and explicit min-size for touch targets.
   const baseStyle: React.CSSProperties = {
-    fontSize: 12,
+    fontSize: 13, // Slightly larger font
     fontWeight: 600,
     color: 'var(--coral-bright)',
     background: 'transparent',
     border: '1px solid var(--coral-bright)',
-    borderRadius: 8,
-    padding: '4px 10px',
+    borderRadius: 10, // Slightly larger radius
+    padding: '10px 18px', // Increased padding for better touch target
     cursor: 'pointer',
     whiteSpace: 'nowrap',
+    fontFamily: 'var(--font-display)', // Use display font for consistency
+    minWidth: 44, // Ensure min touch target width
+    minHeight: 44, // Ensure min touch target height
   };
 
   if (project.hasArchitecturePrd) {
