@@ -1633,10 +1633,12 @@ export interface LlmHealthResponse {
 
 type EffectivePlanLabel = 'free' | 'pro' | 'teams';
 
-/** Union response for `/llm/v1/models` — see `api/src/presentation/routes/llmRoutes.ts`. */
+/** Union response for `/llm/v1/models` — see `api/src/presentation/routes/llmRoutes.ts`.
+ *  `codingModels` is the curated tool-calling + coding subset the plan can reach —
+ *  the list a cloud-agent run should pick from. */
 export type LlmModelsResponse =
-  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; models: string[] }
-  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; object: 'list'; data: LlmModelStatus[] };
+  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; models: string[]; codingModels?: string[] }
+  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; object: 'list'; data: LlmModelStatus[]; codingModels?: string[] };
 
 export const llmApi = {
   usage: (): Promise<LlmUsageStats> =>

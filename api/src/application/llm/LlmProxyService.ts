@@ -23,6 +23,7 @@
 
 import {
   CascadeExhaustedError,
+  catalogEntry,
   dispatchVendor,
   dispatchVendorStream,
   modelsByTier,
@@ -66,6 +67,54 @@ export const PRO_PAID_MODEL_POOL: readonly string[] = modelsByTier('STANDARD', '
 
 /** Pro tries free first (cost-optimized), falls over to paid. */
 export const PRO_MODEL_POOL: readonly string[] = [...FREE_MODEL_POOL, ...PRO_PAID_MODEL_POOL];
+
+/**
+ * Curated agentic-coding pool — models that reliably (a) honour multi-turn
+ * `tools` / `tool_choice` round-trips AND (b) write competent code. This is the
+ * SINGLE SOURCE OF TRUTH for "what can drive a cloud coding agent":
+ *   - a cloud execution pins its model from here (see `runCloudToolLoop`),
+ *   - the user-facing cloud-agent model picker is filtered to this list,
+ *   - `TOOL_CAPABLE_MODELS` / `STRUCTURED_OUTPUT_MODELS` are DERIVED from it,
+ * so the picker, the runtime default, and the capability-reorder can never drift
+ * apart again (the bug this replaces: the capability sets pinned the retired
+ * `anthropic/claude-3.7-sonnet`, scoring every current Anthropic model 0 so it
+ * never floated up for a tools request).
+ *
+ * Ordered best-first across plans: PREMIUM coding models lead (Pro tenants land
+ * here), then the strongest FREE tool-capable models as the Free-plan / fallback
+ * tail. Every id MUST exist in a vendor catalog — `LlmProxyService.codingPool.test`
+ * asserts this so a catalog rename trips CI instead of silently degrading routing.
+ */
+export const CODING_MODEL_POOL: readonly string[] = [
+  // PREMIUM (paid) — selectable by Pro tenants whose key has credit.
+  'anthropic/claude-sonnet-4.6',
+  'openai/gpt-4.1',
+  'google/gemini-2.5-pro',
+  'anthropic/claude-haiku-4.5',
+  // FREE — always dispatchable on the cloud gateway's free key.
+  'qwen/qwen3-coder:free',
+  'qwen/qwen3-next-80b-a3b-instruct:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+];
+
+/**
+ * Default driver for a cloud run that has no explicit model selection. The cloud
+ * gateway (`ideProxy`) dispatches on the FREE key, so the default must be a model
+ * that is actually reachable there — the highest-priority CODING_MODEL_POOL entry
+ * that also lives in FREE_MODEL_POOL. Paid coding models stay available via an
+ * explicit (strict-pinned) user/agent selection.
+ */
+export const CODING_DEFAULT_MODEL: string =
+  CODING_MODEL_POOL.find((m) => FREE_MODEL_POOL.includes(m)) ?? FREE_MODEL_POOL[0] ?? '';
+
+/**
+ * True when `model` is a real catalog id (any vendor, any tier). Callers that
+ * hard-pin a model (`modelStrict`) use this to avoid enforcing a typo'd / retired
+ * id — which would 503 with no failover — and fall back to a safe default instead.
+ */
+export function isKnownModel(model: string | undefined): boolean {
+  return typeof model === 'string' && model.trim().length > 0 && catalogEntry(model.trim()) !== null;
+}
 
 /**
  * Premium routing pool — top PREMIUM-tier models only, used when a tenant has
@@ -190,8 +239,14 @@ export interface ChatMessage {
 }
 
 export interface ChatCompletionRequest {
-  /** Ignored for pool-based dispatch; we pick from the pool. */
+  /** Preferred model. By default a soft hint: seeded at the head of the cascade,
+   *  but the chain may fall through to other pool models on failure. Set
+   *  `modelStrict: true` to enforce it as a hard single-model pin (no failover). */
   model?: string;
+  /** When true (and `model` is set), dispatch ONLY `model` — no cascade, no
+   *  failover. Used by cloud coding agents to honour an explicit user/agent model
+   *  selection for the whole run instead of silently swapping models per turn. */
+  modelStrict?: boolean;
   messages: ChatMessage[];
   temperature?: number;
   max_tokens?: number;
@@ -1122,30 +1177,27 @@ function checkResponseFormatConformance(body: ChatCompletionRequest, raw: unknow
 // so capable models float to the front, then everything else follows.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Models that reliably honour `tools` / `tool_choice` round-trips. */
-const TOOL_CAPABLE_MODELS: ReadonlySet<string> = new Set([
-  'anthropic/claude-3.7-sonnet',
-  'openai/gpt-4.1',
-  'google/gemini-2.5-pro',
+/**
+ * Models that reliably honour `tools` / `tool_choice` round-trips. Derived from
+ * the curated coding pool (every coding model is tool-capable) plus a few models
+ * that handle tool-use well without being coding drivers. Deriving from
+ * CODING_MODEL_POOL is what keeps this set from drifting off the live catalog.
+ */
+const TOOL_ONLY_EXTRA_MODELS: readonly string[] = [
   'x-ai/grok-3-mini',
-  'qwen/qwen3-next-80b-a3b-instruct:free',
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'qwen/qwen3-coder:free',
+];
+const TOOL_CAPABLE_MODELS: ReadonlySet<string> = new Set([
+  ...CODING_MODEL_POOL,
+  ...TOOL_ONLY_EXTRA_MODELS,
 ]);
 
-/** Models that reliably emit valid JSON / honour json_schema. */
-const STRUCTURED_OUTPUT_MODELS: ReadonlySet<string> = new Set([
-  'openai/gpt-4.1',
-  'anthropic/claude-3.7-sonnet',
-  'google/gemini-2.5-pro',
-  'qwen/qwen3-coder:free',
-  'qwen/qwen3-next-80b-a3b-instruct:free',
-  'meta-llama/llama-3.3-70b-instruct:free',
-]);
+/** Models that reliably emit valid JSON / honour json_schema. The coding pool
+ *  doubles as the structured-output set — all of these honour json_schema. */
+const STRUCTURED_OUTPUT_MODELS: ReadonlySet<string> = new Set(CODING_MODEL_POOL);
 
 /** Models with image-input (vision) capability. */
 const VISION_MODELS: ReadonlySet<string> = new Set([
-  'anthropic/claude-3.7-sonnet',
+  'anthropic/claude-sonnet-4.6',
   'openai/gpt-4.1',
   'google/gemini-2.5-pro',
   'nvidia/nemotron-nano-12b-v2-vl:free',

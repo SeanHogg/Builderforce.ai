@@ -51,6 +51,10 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
   );
   const [model, setModel] = useState<string>('');
   const [models, setModels] = useState<string[]>([]);
+  // Curated tool-calling + coding models (plan-filtered) — what a cloud agent run
+  // should choose from, instead of the full 40+ free pool. Falls back to `models`
+  // if the gateway didn't supply the list.
+  const [codingModels, setCodingModels] = useState<string[]>([]);
   const [cloudAgents, setCloudAgents] = useState<PoolAgent[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,8 +65,9 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
       .then((res) => {
         const list = 'data' in res ? res.data.map((m) => m.model) : res.models;
         setModels(list ?? []);
+        setCodingModels(res.codingModels ?? []);
       })
-      .catch(() => setModels([]));
+      .catch(() => { setModels([]); setCodingModels([]); });
     loadAgentPool().then((p) => setCloudAgents(p.filter((a) => a.kind === 'workforce'))).catch(() => setCloudAgents([]));
   }, []);
 
@@ -135,10 +140,20 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
             </optgroup>
           )}
         </Select>
-        <Select value={model} onChange={(e) => setModel(e.target.value)} style={{ ...selectStyle, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="LLM model">
-          <option value="">{DEFAULT_MODEL_LABEL}</option>
-          {models.map((m) => <option key={m} value={m}>{m}</option>)}
-        </Select>
+        {(() => {
+          // A cloud-agent run is a multi-turn tool loop, so restrict its model
+          // picker to the curated tool-calling + coding list (the gateway pins one
+          // for the whole run). A self-hosted/auto run keeps the full pool.
+          const isCloud = target.startsWith('cloud:');
+          const pickList = isCloud && codingModels.length > 0 ? codingModels : models;
+          const defaultLabel = isCloud ? 'builderforce.ai (best coding model)' : DEFAULT_MODEL_LABEL;
+          return (
+            <Select value={model} onChange={(e) => setModel(e.target.value)} style={{ ...selectStyle, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="LLM model">
+              <option value="">{defaultLabel}</option>
+              {pickList.map((m) => <option key={m} value={m}>{m}</option>)}
+            </Select>
+          );
+        })()}
         <button
           type="button"
           onClick={run}
