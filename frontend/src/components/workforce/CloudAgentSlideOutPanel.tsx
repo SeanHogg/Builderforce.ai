@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Select } from '@/components/Select';
@@ -42,8 +43,17 @@ const panelDrawerStyle: React.CSSProperties = {
   borderLeft: '1px solid var(--border-subtle)', boxShadow: '-8px 0 24px rgba(0,0,0,0.2)',
   zIndex: 9999, display: 'flex', flexDirection: 'column', background: 'var(--bg-base)',
 };
-const btnPrimary: React.CSSProperties = { padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' };
-const btnSubtle: React.CSSProperties = { padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-strong)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' };
+// Adjusted btnPrimary and btnSubtle for better touch targets and consistency
+const btnPrimary: React.CSSProperties = {
+  padding: '10px 18px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff',
+  border: 'none', borderRadius: 10, cursor: 'pointer', minWidth: 44, minHeight: 44,
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+};
+const btnSubtle: React.CSSProperties = {
+  padding: '10px 18px', fontSize: 13, fontWeight: 600, background: 'var(--bg-elevated)',
+  color: 'var(--text-strong)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer',
+  minWidth: 44, minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+};
 
 function formFromAgent(a: PublishedAgent): CloudAgentFormState {
   return {
@@ -184,7 +194,9 @@ export function CloudAgentSlideOutPanel({
             ? <span className="badge-green">PUBLISHED</span>
             : <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 9999, background: 'var(--bg-elevated)', color: 'var(--muted)' }}>DRAFT</span>}
           {canDeleteAgent(agent) && (
-            <button type="button" onClick={remove} disabled={saving} style={{ ...btnSubtle, color: 'var(--error-text)' }}>Delete</button>
+            <button type="button" onClick={remove} disabled={saving} style={{ ...btnSubtle, color: 'var(--error-text)' }}>
+              Delete
+            </button>
           )}
         </div>
 
@@ -256,7 +268,9 @@ export function CloudAgentSlideOutPanel({
               )}
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 {agent.published && (
-                  <button type="button" onClick={() => savePricing(false)} disabled={saving} style={btnSubtle}>Unpublish</button>
+                  <button type="button" onClick={() => savePricing(false)} disabled={saving} style={btnSubtle}> {/* Applied adjusted btnSubtle */}
+                    Unpublish
+                  </button>
                 )}
                 <button type="button" onClick={() => savePricing(true)} disabled={saving} style={btnPrimary}>
                   {saving ? 'Saving…' : agent.published ? 'Save price' : 'Publish'}
