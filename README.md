@@ -841,6 +841,85 @@ These items completed the platform's multi-claw coordination layer. All five are
 
 ---
 
+## Cloud Agent Types
+
+Builderforce runs agents on two execution **planes** — **On-Prem (Hosted)** and **Cloud** — and the Cloud plane has **three distinct agent types**. They are easy to conflate; each has its own engine, surface, and code path. The routing decision is a single source of truth in [cloudDispatch.ts](api/src/application/runtime/cloudDispatch.ts) (`resolveCloudSurface`) and [runtimeRoutes.ts](api/src/presentation/routes/runtimeRoutes.ts) (`resolveCloudAgent` / `cloudAgentTypeLabel`); the engine/surface columns live on `ide_agents` (`engine` migration 0087, `runtime_surface` migration 0105).
+
+> **Cloud vs. On-Prem is a hard boundary.** A cloud agent executes **only** in the cloud (everything is Cloudflare — Worker, Durable Object, or Container). A cloud agent is **never** dispatched to a client machine. An **On-Prem (Hosted)** agent — an *agentHost*, of which many can run on one machine — runs a task only when a host is **explicitly pinned** to it. See the agent taxonomy ([[agent-types-taxonomy]]).
+
+### At a glance
+
+| Agent type | Engine | Surface / where it runs | Persistent shell? | Best for |
+|---|---|---|---|---|
+| **V1 Cloud Agent** | `builderforce-v1` (pi-coding-agent) — the default engine | Cloud (Worker / durable executor) | No | Existing pi-engine workloads; the legacy default |
+| **V2 Cloud Agent (Durable Object)** | `builderforce-v2` (Claude Agent SDK) | `durable` — `CloudRunnerDO`, one LLM step per `alarm()` tick. **Default V2 surface.** | No (CI verifies builds) | Most cloud tasks: on-demand, no always-on compute, survives long runs |
+| **V2 Cloud Agent (Node/Container)** | `builderforce-v2` (Claude Agent SDK) | `container` — long-lived Cloudflare Container (`AgentContainerDO`) | **Yes** (`run_command`) | Very long / continuous tasks needing a real shell to install deps + run builds/tests/lint |
+| *(On-Prem Hosted — for contrast)* | host runtime | Client machine (agentHost), only when pinned | Yes (the host's own machine) | BYO-machine execution; not a cloud agent |
+
+### V1 Cloud Agent — engine `builderforce-v1`
+
+The original cloud engine (pi-coding-agent). It is the **default** engine when an agent declares no `engine`, and the fallback `resolveCloudAgent` returns on any lookup failure.
+
+**Features**
+- Runs entirely in the cloud; no client machine involved.
+- Self-assigns the ticket as it starts work; mirrors status into the `executions` row for the polling UI.
+- Produces the same PRD / file-change / PR finalize artifacts as V2.
+
+**Pros**
+- Simplest path; the safe default for existing workloads.
+- No dependency on a tenant Anthropic key or the Claude Agent SDK toolchain.
+
+**Cons**
+- Older engine — does not benefit from the Claude Agent SDK tool loop, steering, or the per-tick durability model below.
+- No persistent shell; no real build/test verification of its own.
+
+### V2 Cloud Agent (Durable Object) — engine `builderforce-v2`, surface `durable`
+
+The modern default. Runs the Claude Agent SDK tool loop fully in the cloud across Durable Object `alarm()` ticks — **one LLM step per tick**, conversation state persisted in DO storage between ticks (`CloudRunnerDO`). V2 inference routes through the **LLM Gateway** using the tenant's **BYO Anthropic key**.
+
+**Features**
+- One step per `alarm()` tick; each tick is a fresh Worker invocation with a fresh CPU/subrequest budget, so a multi-step run **never hits the ~30s `waitUntil` wall** that kills the interim Worker executor.
+- A cursor in `state.storage` is the idempotency/resume anchor — the loop resumes exactly where it left off.
+- Heartbeats `executions.updated_at` every tick, so the orphan reaper treats an actively-ticking run as alive and only reaps a genuinely silent one.
+- The DO surface pins the **same model** for every tick of a run.
+
+**Pros**
+- On-demand serverless — no always-on compute, nothing to keep warm.
+- Robust to long runs and eviction; the canonical, recommended cloud surface.
+- Full Claude Agent SDK loop: per-tool timeline, steering/chat, approval gates.
+
+**Cons**
+- **No shell** — it cannot run builds/tests itself; correctness is verified by CI, not by the agent before finishing.
+- Per-tick overhead (alarm scheduling, state rehydrate) makes it less efficient for a single very long, chatty session than a persistent process.
+- Requires a tenant Anthropic key wired through the Gateway.
+
+> When the `CloudRunnerDO` binding is absent, an **interim Worker executor** (`runCloudExecution`) runs the whole loop inline. It works but dies at the ~30s `waitUntil` wall on long runs — it exists only as a fallback until the DO is deployed.
+
+### V2 Cloud Agent (Node/Container) — engine `builderforce-v2`, surface `container`
+
+The Claude Agent SDK loop running in a **persistent Node process inside a real Cloudflare Container** (`AgentContainerDO`). The container boots a small HTTP server; the DO is the Cloudflare-Containers control plane that starts/stops it and proxies the run. The container drives the loop and calls back into the Worker for every LLM step, repo telemetry, and the final PR — so the Worker stays the single source of truth for the Gateway, usage metering, and PR finalize.
+
+**Features**
+- **Real shell** (`run_command`): clone the repo, install deps, run actual builds / tests / lint, and verify before finishing.
+- Persistent process — runs continuously for very long tasks without per-tick overhead.
+- `enableInternet` for Gateway + GitHub reach from inside the container; stays warm `20m` after the last request, then sleeps to stop billing.
+- This is also the surface an **explicitly-pinned host** maps to (a long-lived runtime reached via the relay).
+
+**Pros**
+- Genuine end-to-end verification (the agent runs the build/tests itself, not just CI).
+- Best fit for long-running, continuous, or shell-heavy work.
+
+**Cons**
+- **Container infra is a future build.** Until it lands, a `container` run **falls back to the durable DO** so it still executes in the cloud — so today you do not actually get a persistent shell from this selection.
+- Heaviest/most expensive surface (always-on-ish process, warm-keep billing).
+- Same Gateway / tenant-Anthropic-key requirement as the durable surface.
+
+### How a type is selected at dispatch
+
+`resolveCloudAgent` reads the agent's `engine` + `runtime_surface` from `ide_agents`; `resolveCloudSurface(agentSurface, hasExplicitHost)` then picks the surface — an explicitly-pinned host ⇒ `container`, otherwise the agent's chosen surface, defaulting to `durable`. `cloudAgentTypeLabel(engine, surface)` produces the human label used for run attribution (`V1 Cloud Agent` / `V2 Cloud Agent (Durable Object)` / `V2 Cloud Agent (Node/Container)`).
+
+---
+
 ## LLM Surfaces
 
 Builderforce exposes **three distinct LLM systems** — they are easy to conflate, and each has its own code path. Scope work against the right one:
@@ -1169,6 +1248,8 @@ Roadmap entries that remain after this pass. Items closed in this pass have been
 - **Source-control repo form can't set `host`, so GitHub Enterprise / self-hosted GitLab repos can't be tested or used from the UI.** [SourceControlContent.tsx](frontend/src/components/sourcecontrol/SourceControlContent.tsx) collects only `provider` / `owner` / `repo` / `defaultBranch` / `credentialId`; it never sends `host`, so every repo falls back to the schema default `github.com` ([projectRepositories.host](api/src/infrastructure/database/schema.ts)). The backend probe already supports an enterprise host (`probeRepoAccess` builds `https://${host}/api/v3` for GitHub and `https://${host}` for GitLab in [repoRoutes.ts](api/src/presentation/routes/repoRoutes.ts)), and the PATCH/POST routes accept `host` — only the form omits it. **Note:** the owner/repo paste-splitter ([parseRepoIdentifier](frontend/src/lib/repoIdentifier.ts)) parses an enterprise host out of a pasted URL but the form discards it (no host field to receive it), so an enterprise repo pasted as a URL still probes github.com and 404s. Fixing (add an optional host input bound to the parsed host) unblocks: enterprise-hosted repos end-to-end. (The owner/repo paste-split + per-segment validation that closed the most common github.com 404 — pasting a URL into the owner box — landed this pass; the GitHub test error is also now actionable via [githubTestError.ts](api/src/application/integrations/githubTestError.ts).)
 - **`eslint-config-next` is a major version ahead of `next` (16.1.6 vs 15.5.2) — the root cause of the React-Compiler hook-rule wall above.** [frontend/package.json](frontend/package.json) pins `eslint-config-next@16.1.6` against `next@15.5.2`; the v16 config is what enables the React-Compiler-era `react-hooks` rules. The ergonomics rules are demoted to `warn` in [frontend/eslint.config.js](frontend/eslint.config.js), but `react-hooks/rules-of-hooks` correctly stays at error — and that stricter ruleset broke the deploy build a second time via a *false positive*: a plain async event handler named `usePrompt` in [frontend/src/app/prompts/page.tsx](frontend/src/app/prompts/page.tsx) was misclassified as a Hook purely because of its `use` prefix and flagged for being called inside a callback (fixed this pass by renaming to `applyPrompt`). Until the versions are aligned, every future `use`-prefixed non-hook helper will re-trip the same error-level break. Fixing (pin `eslint-config-next` to `15.x` to match `next@15.5.2`, OR deliberately upgrade `next` to 16 and budget the hook-rule refactor) unblocks: a lint ruleset that matches the framework version, and no more naming-driven false-positive build breaks.
 - **`requireTenantAccess` unit test uses a hand-rolled Drizzle chain mock.** [api/src/presentation/routes/llmRoutes.test.ts](api/src/presentation/routes/llmRoutes.test.ts) `mockDb()` synthesizes `select().from().where().limit()` chains with canned `[row]` returns. If the auth path grows another link (e.g. `.orderBy`, `.innerJoin`), the mock returns `undefined` and the test still passes while production breaks. Fixing (shared test helper or a real in-memory pg) unblocks: confidence that gateway-auth refactors are caught by tests, not prod.
+- **Cloud agent runs always dispatch through the FREE gateway pool/key regardless of the tenant's plan.** The cloud tool loop ([runCloudToolLoop](api/src/presentation/routes/runtimeRoutes.ts)) calls `ideProxy(env)`, which is hardwired to `modelPool: FREE_MODEL_POOL` on the free OpenRouter key ([LlmProxyService.ideProxy](api/src/application/llm/LlmProxyService.ts)). Consequence: a Pro tenant's cloud agent can't *default* to a premium coding model, and even an explicit premium pin (`anthropic/claude-sonnet-4.6` etc.) dispatches on the free key, which may lack credit (402) — which is exactly why this pass had to make `CODING_DEFAULT_MODEL` a FREE model and gate strict-pin behind `isKnownModel`. Fixing (resolve the tenant's plan in the cloud dispatch path and call `llmProxyForPlan(env, effectivePlan, premiumOverride)` instead of the fixed free `ideProxy`, so Pro cloud agents default to and can pin premium coding models on the credited key) unblocks: Pro cloud agents actually running on premium coding models. Discovered while making cloud-agent model selection consistent (curated `CODING_MODEL_POOL` + per-run pin).
+- **Cloud agent `base_model` is a free-text input — invalid/off-plan ids are accepted then silently downgraded.** [CloudAgentFormFields.tsx](frontend/src/components/workforce/CloudAgentFormFields.tsx) collects `base_model` as a raw text field (placeholder "builderforce.ai default"), so an owner can save a typo'd or off-plan model id into `ide_agents.base_model`. Runtime no longer 503s on this (the per-run pin now falls back to `CODING_DEFAULT_MODEL` when `isKnownModel` is false), but the agent silently runs a different model than its config claims. Fixing (replace the free-text field with a `<Select>` populated from the plan-filtered `codingModels` returned by `/llm/v1/models` — the same curated list the run picker now uses) unblocks: an agent's configured model always being a real, dispatchable coding model, and removes the silent-downgrade gap. Discovered while adding the curated coding-model picker to [RunAgentControl.tsx](frontend/src/components/task/RunAgentControl.tsx).
 - **Marketing / public-shell pages still center on `.page-inner`; not migrated to the new `PageContainer`.** This pass introduced [PageContainer](frontend/src/components/PageContainer.tsx) (`full` / `readable` / `narrow` width tiers, all left-aligned to kill the sidebar-gutter gap) and migrated every authenticated AppShell route plus `/prompts`, `/admin/llm-traces`, and `.admin-page` onto it. Deliberately left on their existing centered layout: `/marketplace` + `/models` (shared `.page-inner` = `max-width:1100px; margin:0 auto` in [globals.css](frontend/src/app/globals.css)) and the pure-marketing routes (`/pricing`, `/blog`, `/product`, `/`), because their hero-style centered design is intentional. They render in the same `PublicShell` `Sidebar`+`.content`, so when signed in they show the same left gutter the user flagged. Fixing (decide per-page whether marketing centering should yield to left-aligned `PageContainer`, then migrate `.page-inner` consumers and retire the class) unblocks: one consistent page-width primitive across the whole app, no parallel `.page-inner` / `PageContainer` width systems.
 - **`/projects/[id]` inherits the Projects/Tasks JSON-LD + canonical from the shared route layout.** The new [frontend/src/app/projects/layout.tsx](frontend/src/app/projects/layout.tsx) emits `projectsTasksSchema()` and a `canonical: /projects` for the whole `/projects` segment, so a project *detail* route (`/projects/123`) currently advertises the list page's SoftwareApplication graph and canonical. Harmless today (detail pages are auth-gated and not meant to be indexed), but if per-project detail SEO is ever wanted, give `/projects/[id]` its own `generateMetadata` + a `CreativeWork`/`Project`-style schema. Fixing unblocks: correct per-project canonical + structured data if project pages become publicly shareable.
 - **Superadmin `tokenDailyLimitOverride` AND `premiumOverride` mutations are not audit-logged.** [PATCH /api/admin/tenants/:id/token-limit-override](api/src/presentation/routes/adminRoutes.ts) and [PATCH /api/admin/tenants/:id/premium-override](api/src/presentation/routes/adminRoutes.ts) both write the change directly without inserting a row into `admin_audit_log`. Other superadmin mutations (impersonation, role changes, module assignments) record actor + before/after in [adminAuditLog](api/src/infrastructure/database/schema.ts) — these two do not. Fixing (insert an `admin_audit_log` row keyed by actor user id + tenant id + before/after value, shared helper used by both PATCH endpoints) unblocks: forensic trail for "who flipped tenant X to premium / removed the cap and when."

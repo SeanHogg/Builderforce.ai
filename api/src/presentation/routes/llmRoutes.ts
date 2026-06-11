@@ -16,6 +16,7 @@ import {
   modelPoolForPlan,
   FREE_MODEL_POOL,
   PRO_MODEL_POOL,
+  CODING_MODEL_POOL,
   type ChatCompletionRequest,
   type LlmUsage,
 } from '../../application/llm/LlmProxyService';
@@ -1052,6 +1053,13 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // Premium override implies the Pro key path (same as in /v1/chat/completions).
     const isPro = premiumOverride || effectivePlan !== 'free';
 
+    // Curated coding/tool-calling models the tenant's plan can actually reach —
+    // the list a cloud-agent run should pick from (free tenants see only the free
+    // coding models, Pro tenants also see the premium ones). Single source of
+    // truth: CODING_MODEL_POOL, intersected with the plan pool.
+    const planPool = new Set(modelPoolForPlan(effectivePlan, premiumOverride));
+    const codingModels = CODING_MODEL_POOL.filter((m) => planPool.has(m));
+
     const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
     if (!requiredKey) {
       return c.json({
@@ -1060,6 +1068,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         effectivePlan,
         ...(premiumOverride ? { premium: true } : {}),
         models: modelPoolForPlan(effectivePlan, premiumOverride),
+        codingModels,
       });
     }
 
@@ -1071,6 +1080,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       effectivePlan,
       ...(premiumOverride ? { premium: true } : {}),
       data: await service.status(),
+      codingModels,
     });
   });
 

@@ -16,7 +16,7 @@ import { mintContainerRunToken, verifyContainerRunToken } from '../../applicatio
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { loadCapabilityContext } from '../../application/artifact/capabilityContext';
-import { ideProxy, type ChatMessage } from '../../application/llm/LlmProxyService';
+import { ideProxy, CODING_DEFAULT_MODEL, isKnownModel, type ChatMessage } from '../../application/llm/LlmProxyService';
 import { recordUsageRow } from '../../application/llm/usageLedger';
 import { ensureTaskPrdRecord } from '../../application/prd/taskPrd';
 import { ExecutionStatus } from '../../domain/shared/types';
@@ -820,6 +820,10 @@ export interface CloudLoopState {
   writtenPaths: string[];
   /** Next absolute step index to run. */
   step: number;
+  /** Model pinned for the whole run, resolved on the first tick. Persisted so the
+   *  durable (DO) surface keeps every tick on the SAME model instead of letting
+   *  the gateway's round-robin cursor hop models between steps of one task. */
+  pinnedModel?: string;
 }
 export interface CloudLoopOpts {
   /** Resume from this persisted state instead of starting fresh. */
@@ -878,6 +882,23 @@ export async function runCloudToolLoop(
   const startStep = opts?.resume?.step ?? 0;
   const maxThisCall = opts?.maxSteps ?? MAX_CLOUD_TOOL_STEPS;
 
+  // Per-run model pin. A coding agent must drive the WHOLE task on one model, not
+  // hop between pool models per turn (the gateway's round-robin cursor would
+  // otherwise pick a different free model each step → inconsistent behaviour).
+  //   • Explicit selection (`model` set, from the user pick or the agent's
+  //     base_model) → hard pin: pass `modelStrict` so the gateway dispatches ONLY
+  //     that model for every turn, no silent swap.
+  //   • No selection → seed the curated coding default, then lock onto whatever
+  //     the gateway actually resolved on the first turn (non-strict, so a cold
+  //     free model can still fail over once — but only once, at the start).
+  // The resolved pin rides CloudLoopState so the DO surface keeps every tick on it.
+  // Strict only when the explicit id is a REAL catalog model — a typo'd / retired
+  // base_model would otherwise 503 the whole run with no failover; treat that as
+  // "no selection" and fall back to the curated coding default instead.
+  const strictPin = isKnownModel(model);
+  let activeModel: string = opts?.resume?.pinnedModel
+    ?? (strictPin ? model!.trim() : CODING_DEFAULT_MODEL);
+
   let finalOutput = '';
   let finished = false;
   let cancelled = false;
@@ -914,7 +935,7 @@ export async function runCloudToolLoop(
           messages: messages as unknown as ChatMessage[],
           tools: CLOUD_AGENT_TOOLS,
           tool_choice: 'auto',
-          ...(model ? { model } : {}),
+          ...(activeModel ? { model: activeModel, ...(strictPin ? { modelStrict: true } : {}) } : {}),
           useCase: 'task_execution',
         },
         undefined,
@@ -927,7 +948,11 @@ export async function runCloudToolLoop(
       throw e;
     }
     const genMs = Date.now() - tGen0;
-    const resolvedModel = result.resolvedModel ?? model ?? 'default';
+    const resolvedModel = result.resolvedModel ?? activeModel ?? 'default';
+    // Lock the non-strict run onto the model the gateway actually used on the
+    // first turn, so every later turn (and DO tick) stays on it. Strict pins
+    // already resolve to `activeModel`, so this is a no-op for them.
+    if (!strictPin && result.resolvedModel) activeModel = result.resolvedModel;
     if (result.usage) {
       await recordCloudUsage(env, db, {
         tenantId, cloudAgentRef, executionId, taskId: taskRow.id, projectId, model: resolvedModel,
@@ -1087,7 +1112,7 @@ export async function runCloudToolLoop(
       output: '',
       cancelled,
       finished: false,
-      state: { messages, writtenPaths: [...writtenPaths], step },
+      state: { messages, writtenPaths: [...writtenPaths], step, pinnedModel: activeModel },
     };
   }
 
