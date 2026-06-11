@@ -1,43 +1,64 @@
-> **PRD** — drafted by Coder Agent (V2) (Durable) · task #63
+> **PRD** — drafted by BuilderForce Agent · task #65
 > _Each agent that updates this PRD signs its change below._
 
-# WIP: Cloud Agent Concurrency Issue
+# Product Requirements Document: Mobile Experience Improvement
 
-## Problem & Goal
+## 1. Problem & Goal
 
-**Problem:** When a user attempts to run multiple cloud agents simultaneously, subsequent agents enter a "pending" state and do not execute if another agent is already running. This prevents users from leveraging the parallel processing capabilities of cloud agents.
+### 1.1 Problem Statement
+The current builderforce.ai platform offers a suboptimal experience when accessed via mobile devices (smartphones and tablets). Users encounter issues such as non-responsive layouts, difficult navigation, small touch targets, slow loading times, and inability to efficiently complete critical tasks on the go. This leads to user frustration, reduced productivity, and potentially limits platform adoption for users who primarily operate from job sites or while traveling.
 
-**Goal:** Enable multiple cloud agents to run concurrently.
+### 1.2 Goal
+To significantly enhance the mobile user experience for builderforce.ai, making it responsive, intuitive, and efficient for users to perform core tasks on mobile devices. This improvement aims to boost user satisfaction, increase engagement, and enable seamless productivity regardless of device, ultimately supporting our users' on-site operations.
 
-## Target Users / ICP Roles
+## 2. Target Users / ICP Roles
 
-This issue affects all users of the cloud agent functionality. Specific roles include:
+The primary target users benefiting from these improvements are roles that frequently access builderforce.ai from mobile devices while on-site or in transit:
 
-*   Data Scientists
-*   ML Engineers
-*   DevOps Engineers
-*   Any user requiring parallel execution of cloud-based tasks.
+*   **Builders/Contractors:** Need quick access to project details, task lists, and communication tools from the job site.
+*   **Project Managers:** Require the ability to review progress, approve changes, and communicate with teams remotely.
+*   **Site Supervisors:** Need immediate access to plans, reports, and communication channels for real-time decision-making.
+*   **Subcontractors:** Benefit from easy access to specific assigned tasks, schedules, and document uploads.
 
-## Scope
+## 3. Scope
 
-This PRD addresses the root cause of the cloud agent concurrency limitation, ensuring that multiple instances of cloud agents can be initiated and run in parallel.
+This project focuses on optimizing the existing builderforce.ai web application for mobile browsers. The scope includes responsive design implementation, UI/UX enhancements specifically for touch interfaces, and performance improvements for core functionalities across popular mobile browsers (Safari on iOS, Chrome on Android).
 
-## Functional Requirements
+## 4. Functional Requirements
 
-1.  **Concurrent Agent Execution:** The system must allow for multiple cloud agents to be initiated and run simultaneously without blocking subsequent agent executions.
-2.  **Resource Management (Implied):** The underlying infrastructure must be capable of handling the concurrent execution of multiple agents, implying that resource allocation mechanisms should be reviewed and potentially adjusted.
-3.  **Status Reporting:** The system should accurately reflect the running status of all concurrently executing agents.
+### 4.1 Responsiveness
+*   **FR.1.1:** All key dashboards, project detail pages, and forms shall be fully responsive, adapting layouts seamlessly to various mobile screen sizes (portrait and landscape).
+*   **FR.1.2:** Text and images shall scale appropriately, maintaining readability and visual integrity on mobile devices.
 
-## Acceptance Criteria
+### 4.2 Navigation & Interaction
+*   **FR.2.1:** The main navigation menu shall be accessible and intuitive on mobile (e.g., hamburger menu).
+*   **FR.2.2:** All interactive elements (buttons, links, checkboxes) shall have sufficiently large touch targets (minimum 44x44 CSS pixels) to prevent accidental taps.
+*   **FR.2.3:** Form inputs (text fields, date pickers, dropdowns) shall be optimized for mobile keyboards and touch interaction.
 
-*   **AC1:** A user can successfully initiate and run two or more cloud agents at the same time.
-*   **AC2:** All initiated cloud agents are in a "running" state (or their expected active state) and are executing their tasks.
-*   **AC3:** No initiated cloud agent enters a "pending" state due to another agent already running.
-*   **AC4:** The UI accurately displays the status of all concurrently running agents.
+### 4.3 Core Task Flow Optimization
+*   **FR.3.1:** Users shall be able to view and update project status, tasks, and deadlines from mobile.
+*   **FR.3.2:** Users shall be able to view and comment on project documents/plans from mobile.
+*   **FR.3.3:** Users shall be able to upload photos/documents directly from their mobile device's camera or gallery into project records.
+*   **FR.3.4:** The communication/messaging features shall be fully functional and easy to use on mobile.
 
-## Out of Scope
+### 4.4 Performance
+*   **FR.4.1:** Key pages and data heavy sections shall be optimized for faster load times on mobile networks (3G/4G).
+*   **FR.4.2:** Data usage shall be minimized through efficient image loading and lazy loading where appropriate.
 
-*   Agent performance optimization (beyond enabling concurrency).
-*   Introduction of new agent types or functionalities.
-*   Changes to agent resource quotas or limits, unless directly necessitated by enabling concurrency and specifically documented.
-*   User interface redesign related to agent management.
+## 5. Acceptance Criteria
+
+*   **AC.1:** All identified core pages (e.g., Dashboard, Project Details, Task List, Communication) display without horizontal scrolling on mobile devices with a viewport width between 320px and 414px (common smartphone widths).
+*   **AC.2:** All critical user flows (e.g., view project, update task status, upload photo) can be completed on a mobile device without requiring zooming or desktop-specific interactions.
+*   **AC.3:** Page load times for the top 5 most visited pages are below 5 seconds on a simulated 3G network connection.
+*   **AC.4:** All buttons and interactive elements are easily tappable by a thumb and finger without interfering with adjacent elements.
+*   **AC.5:** Mobile forms are accessible and usable with standard mobile keyboards (e.g., appropriate input types for numbers, email).
+*   **AC.6:** The application renders correctly and consistently across the latest stable versions of Chrome (Android) and Safari (iOS).
+
+## 6. Out of Scope
+
+*   Development of native iOS or Android mobile applications.
+*   Implementation of offline mode functionality.
+*   Major redesigns or feature additions to the desktop experience not directly related to mobile optimization.
+*   Support for tablet devices beyond basic responsive layout.
+*   Deep integration with device-specific hardware features (e.g., NFC, augmented reality, specific sensor data) beyond camera/photo library access.
+*   Push notifications (unless explicitly identified as critical for core task completion post-initial assessment).
