@@ -1,43 +1,47 @@
-> **PRD** — drafted by Coder Agent (V2) (Durable) · task #63
+> **PRD** — drafted by Coder Agent (V2) (Durable) · task #67
 > _Each agent that updates this PRD signs its change below._
 
-# WIP: Cloud Agent Concurrency Issue
+# PRD: Remove `googleai/gemini-2.5-flash-lite` Model
 
 ## Problem & Goal
 
-**Problem:** When a user attempts to run multiple cloud agents simultaneously, subsequent agents enter a "pending" state and do not execute if another agent is already running. This prevents users from leveraging the parallel processing capabilities of cloud agents.
-
-**Goal:** Enable multiple cloud agents to run concurrently.
+The `googleai/gemini-2.5-flash-lite` model has been identified as performing poorly and producing "garbage" output. The goal of this task is to completely remove all references and integrations of this model from the codebase to prevent its further use and reliance.
 
 ## Target Users / ICP Roles
 
-This issue affects all users of the cloud agent functionality. Specific roles include:
-
-*   Data Scientists
-*   ML Engineers
-*   DevOps Engineers
-*   Any user requiring parallel execution of cloud-based tasks.
+*   **Engineering Teams:** Responsible for code maintenance, deployment, and integration of LLM models.
+*   **Product Managers:** Overseeing the quality and performance of AI-powered features.
+*   **QA Teams:** Verifying that the problematic model is no longer accessible or being utilized.
 
 ## Scope
 
-This PRD addresses the root cause of the cloud agent concurrency limitation, ensuring that multiple instances of cloud agents can be initiated and run in parallel.
+This effort includes identifying and removing all instances where the `googleai/gemini-2.5-flash-lite` model is:
+
+*   Specified in configuration files.
+*   Called or referenced in the codebase.
+*   Used in any automated testing or CI/CD pipelines.
+*   Included in any documentation or example code.
 
 ## Functional Requirements
 
-1.  **Concurrent Agent Execution:** The system must allow for multiple cloud agents to be initiated and run simultaneously without blocking subsequent agent executions.
-2.  **Resource Management (Implied):** The underlying infrastructure must be capable of handling the concurrent execution of multiple agents, implying that resource allocation mechanisms should be reviewed and potentially adjusted.
-3.  **Status Reporting:** The system should accurately reflect the running status of all concurrently executing agents.
+1.  **Codebase Scan:** Perform a comprehensive scan of the entire codebase to locate all occurrences of `googleai/gemini-2.5-flash-lite`.
+2.  **Model Removal:** Remove all direct references to `googleai/gemini-2.5-flash-lite`.
+3.  **Configuration Update:** Update all configuration files that specify `googleai/gemini-2.5-flash-lite` as a default or available model.
+4.  **Testing & Validation:** Ensure that no tests or CI/CD pipelines attempt to use or configure this model.
+5.  **Documentation Update:** Remove any mentions of `googleai/gemini-2.5-flash-lite` from user-facing and internal documentation.
 
 ## Acceptance Criteria
 
-*   **AC1:** A user can successfully initiate and run two or more cloud agents at the same time.
-*   **AC2:** All initiated cloud agents are in a "running" state (or their expected active state) and are executing their tasks.
-*   **AC3:** No initiated cloud agent enters a "pending" state due to another agent already running.
-*   **AC4:** The UI accurately displays the status of all concurrently running agents.
+*   A code review confirms that all explicit references to `googleai/gemini-2.5-flash-lite` have been removed from the codebase.
+*   All relevant configuration files no longer list `googleai/gemini-2.5-flash-lite` as an option.
+*   Automated tests that previously interacted with this model now either use an alternative or are updated to reflect the model's absence.
+*   CI/CD pipelines run successfully without errors related to the `googleai/gemini-2.5-flash-lite` model.
+*   Documentation (internal and external) is updated to reflect the removal.
+*   A final search of the codebase and configurations yields no results for `googleai/gemini-2.5-flash-lite`.
 
 ## Out of Scope
 
-*   Agent performance optimization (beyond enabling concurrency).
-*   Introduction of new agent types or functionalities.
-*   Changes to agent resource quotas or limits, unless directly necessitated by enabling concurrency and specifically documented.
-*   User interface redesign related to agent management.
+*   Evaluating or integrating alternative LLM models.
+*   Performance testing of any other LLM models.
+*   Modifying user interfaces or user-facing features that might have previously been powered by this model (unless directly tied to its configuration).
+*   Addressing any underlying infrastructure issues that might have contributed to the model's poor performance (focus is solely on removal).
