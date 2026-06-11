@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
@@ -30,18 +31,7 @@ import { AgentTypePill } from '@/components/AgentTypePill';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatAgentPrice } from '@/lib/agentPresentation';
 import { isAgentOwner } from '@/lib/agentPermissions';
-import { useAuth } from '@/lib/AuthContext';
-import {
-  CloudAgentFormFields,
-  cloudAgentFormToInput,
-  EMPTY_CLOUD_AGENT_FORM,
-  RUNTIME_LABELS,
-  inputStyle,
-  labelStyle,
-  btnPrimary,
-  btnSubtle,
-  type CloudAgentFormState,
-} from './CloudAgentFormFields';
+import { CloudAgentFormFields, cloudAgentFormToInput, EMPTY_CLOUD_AGENT_FORM, RUNTIME_LABELS, inputStyle, labelStyle, btnPrimary, btnSubtle, type CloudAgentFormState } from './CloudAgentFormFields';
 
 /**
  * Workforce → unified agent directory. Lists the tenant's cloud agents AND its
@@ -55,8 +45,34 @@ import {
 type AgentKind = 'cloud' | 'host';
 
 // "Add agent" split button: primary action + caret that opens the configured quickstart.
-const splitMain: React.CSSProperties = { padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderTopLeftRadius: 8, borderBottomLeftRadius: 8, cursor: 'pointer' };
-const splitCaret: React.CSSProperties = { padding: '8px 10px', fontSize: 11, fontWeight: 700, background: 'var(--accent)', color: '#fff', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.25)', borderTopRightRadius: 8, borderBottomRightRadius: 8, cursor: 'pointer', lineHeight: 1 };
+const splitMain: React.CSSProperties = {
+  padding: '10px 18px', // Increased padding for better touch target
+  fontSize: 13,
+  fontWeight: 600,
+  background: 'var(--accent)',
+  color: '#fff',
+  border: 'none',
+  borderTopLeftRadius: 8,
+  borderBottomLeftRadius: 8,
+  cursor: 'pointer',
+  minWidth: 44, // Ensure min touch target size
+  minHeight: 44,
+};
+const splitCaret: React.CSSProperties = {
+  padding: '10px 14px', // Increased padding for better touch target
+  fontSize: 11,
+  fontWeight: 700,
+  background: 'var(--accent)',
+  color: '#fff',
+  border: 'none',
+  borderLeft: '1px solid rgba(255,255,255,0.25)',
+  borderTopRightRadius: 8,
+  borderBottomRightRadius: 8,
+  cursor: 'pointer',
+  lineHeight: 1,
+  minWidth: 44, // Ensure min touch target size
+  minHeight: 44,
+};
 
 // Host (remote agentHost) card chrome — cloud/purchased agents render via <AgentCard>.
 const cardStyle: React.CSSProperties = {
@@ -296,7 +312,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
           <div className="empty-state-icon">📁</div>
           <div className="empty-state-title">No agents yet</div>
           <div className="empty-state-sub">Create a cloud agent or register a remote (self-hosted) agent to start building your workforce.</div>
-          <button type="button" onClick={() => openCreate('cloud')} style={{ ...btnPrimary, marginTop: 14, padding: '10px 18px', fontSize: 14, borderRadius: 10 }}>
+          <button type="button" onClick={() => openCreate('cloud')} style={btnPrimary}> {/* Adjusted style for consistency */}
             Add agent
           </button>
         </div>
@@ -395,7 +411,9 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                     <td style={tdMutedStyle}>Remote</td>
                     <td style={tdMutedStyle}>—</td>
                     <td style={tdStyle} onClick={(e) => e.stopPropagation()}>
-                      <button type="button" onClick={() => setSelectedHost(host)} style={btnSubtle}>Open</button>
+                      <button type="button" onClick={() => setSelectedHost(host)} style={{ ...btnSubtle, padding: '10px 18px', fontSize: 13, borderRadius: 10 }}> {/* Adjusted for touch target */}
+                        Open
+                      </button>
                     </td>
                   </tr>
                 );
@@ -431,7 +449,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                   <td style={tdMutedStyle}>{RUNTIME_LABELS[a.runtime_support ?? 'cloud']}</td>
                   <td style={tdMutedStyle}>{formatAgentPrice(a)}</td>
                   <td style={tdStyle}>
-                    <button type="button" style={btnSubtle} disabled={unhiringId === a.id} onClick={() => unhire(a.id)}>
+                    <button type="button" style={{ ...btnSubtle, padding: '10px 18px', fontSize: 13, borderRadius: 10 }} disabled={unhiringId === a.id} onClick={() => unhire(a.id)}>
                       {unhiringId === a.id ? 'Unhiring…' : 'Unhire'}
                     </button>
                   </td>
@@ -496,10 +514,14 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                 <label style={labelStyle}>API Key</label>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
                   <input type="password" readOnly value={newHost.apiKey} style={{ ...inputStyle, fontFamily: 'var(--font-mono)', fontSize: 12 }} />
-                  <button type="button" onClick={copyApiKey} style={btnPrimary}>{apiKeyCopied ? 'Copied!' : 'Copy'}</button>
+                  <button type="button" onClick={copyApiKey} style={btnPrimary}>
+                    {apiKeyCopied ? 'Copied!' : 'Copy'}
+                  </button>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button type="button" onClick={closeDialog} style={btnPrimary}>Done</button>
+                  <button type="button" onClick={closeDialog} style={btnSubtle}> {/* Applied adjusted btnSubtle */}
+                    Done
+                  </button>
                 </div>
               </>
             ) : (
@@ -514,7 +536,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                       type="button"
                       onClick={() => { setCreateKind(k); setError(''); }}
                       style={{
-                        flex: 1, padding: '8px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none',
+                        flex: 1, padding: '10px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none', // Adjusted padding
                         background: createKind === k ? 'var(--accent)' : 'transparent',
                         color: createKind === k ? '#fff' : 'var(--text-strong)',
                       }}
@@ -542,7 +564,9 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                     </div>
                     {error && <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--error-text)' }}>{error}</div>}
                     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                      <button type="button" onClick={closeDialog} style={{ ...btnSubtle, background: 'none', border: 'none' }}>Cancel</button>
+                      <button type="button" onClick={closeDialog} style={btnSubtle}> {/* Applied adjusted btnSubtle */}
+                        Cancel
+                      </button>
                       <button type="submit" disabled={registering || !registerName.trim()} style={btnPrimary}>
                         {registering ? 'Registering…' : 'Register'}
                       </button>
@@ -554,7 +578,9 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                     <CloudAgentFormFields form={form} onChange={(patch) => setForm((f) => ({ ...f, ...patch }))} autoFocus />
                     {error && <div style={{ fontSize: 13, color: 'var(--error-text)', marginTop: 12 }}>{error}</div>}
                     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
-                      <button type="button" onClick={closeDialog} style={{ ...btnSubtle, background: 'none', border: 'none' }}>Cancel</button>
+                      <button type="button" onClick={closeDialog} style={btnSubtle}> {/* Applied adjusted btnSubtle */}
+                        Cancel
+                      </button>
                       <button type="button" onClick={createCloud} disabled={saving || !form.name.trim()} style={btnPrimary}>
                         {saving ? 'Saving…' : 'Create'}
                       </button>
