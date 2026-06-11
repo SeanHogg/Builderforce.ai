@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -23,8 +24,10 @@ export interface ProjectTableProps {
 
 const cellStyle: React.CSSProperties = { padding: '12px 16px' };
 const headStyle: React.CSSProperties = { ...cellStyle, fontWeight: 600, color: 'var(--text-secondary)' };
+
+// Adjusted iconButtonStyle for larger touch targets
 const iconButtonStyle: React.CSSProperties = {
-  padding: 6,
+  padding: 10, // Increased padding
   fontSize: 0,
   background: 'var(--bg-base)',
   color: 'var(--coral-bright)',
@@ -34,8 +37,10 @@ const iconButtonStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  width: 32,
-  height: 32,
+  minWidth: 44, // Ensure min touch target width
+  minHeight: 44, // Ensure min touch target height
+  width: 44, // Explicit size
+  height: 44,
 };
 
 /**
@@ -56,8 +61,8 @@ export function ProjectTable({
   const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
 
   return (
-    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', minWidth: '600px' }}> {/* Added min-width to ensure horizontal scroll */}
         <thead>
           <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
             <th style={headStyle}>Name</th>
@@ -83,10 +88,16 @@ export function ProjectTable({
                       fontWeight: 600,
                       color: 'var(--coral-bright)',
                       background: 'none',
-                      border: 'none',
+                      border: '1px solid var(--coral-bright)', // Added border for better touch target definition
+                      borderRadius: 8, // Rounded border
+                      padding: '10px 18px', // Increased padding for better touch target
                       cursor: onAssignedAgentClick ? 'pointer' : 'default',
-                      padding: 0,
-                      textDecoration: 'underline',
+                      textDecoration: 'none', // Removed underline to rely on border/background
+                      minWidth: 44, // Ensure min touch target width
+                      minHeight: 44, // Ensure min touch target height
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
                     }}
                   >
                     {project.assignedAgentHost.name}
@@ -153,14 +164,16 @@ export function ProjectTable({
                       type="button"
                       onClick={() => setConfirmProject(project)}
                       style={{
-                        padding: '6px 10px',
+                        padding: '10px 18px', // Increased padding for better touch target
                         fontSize: 12,
                         fontWeight: 600,
                         color: 'var(--coral-bright)',
                         background: 'transparent',
                         border: '1px solid var(--coral-bright)',
-                        borderRadius: 8,
+                        borderRadius: 10, // Larger radius
                         cursor: 'pointer',
+                        minWidth: 44, // Ensure min touch target width
+                        minHeight: 44, // Ensure min touch target height
                       }}
                     >
                       Delete
