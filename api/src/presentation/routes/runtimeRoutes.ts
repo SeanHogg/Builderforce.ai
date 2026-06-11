@@ -16,7 +16,8 @@ import { mintContainerRunToken, verifyContainerRunToken } from '../../applicatio
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { loadCapabilityContext } from '../../application/artifact/capabilityContext';
-import { ideProxy, CODING_DEFAULT_MODEL, isKnownModel, type ChatMessage } from '../../application/llm/LlmProxyService';
+import { llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../../application/llm/LlmProxyService';
+import { resolveTenantPlan } from './llmRoutes';
 import { recordUsageRow } from '../../application/llm/usageLedger';
 import { ensureTaskPrdRecord } from '../../application/prd/taskPrd';
 import { ExecutionStatus } from '../../domain/shared/types';
@@ -654,6 +655,21 @@ const CONTAINER_AGENT_TOOLS = [
   CLOUD_AGENT_TOOLS[4], // finish
 ] as const;
 
+/** A cloud run's LLM routing — which model pool / vendor key its tenant's plan
+ *  unlocks. Resolved once per run and reused, never recomputed per turn. */
+export type CloudRouting = { effectivePlan: EffectivePlan; premiumOverride: boolean };
+
+/** Resolve a tenant's cloud LLM routing, degrading to the free plan if the plan
+ *  lookup throws — a background cloud run must never hard-fail on plan I/O. */
+async function resolveCloudRouting(env: Env, tenantId: number): Promise<CloudRouting> {
+  try {
+    const r = await resolveTenantPlan(env, tenantId);
+    return { effectivePlan: r.effectivePlan, premiumOverride: r.premiumOverride };
+  } catch {
+    return { effectivePlan: 'free', premiumOverride: false };
+  }
+}
+
 /** Resolved per-run context for a container-op call, derived authoritatively from
  *  the execution id (the container never asserts its own tenant/task). */
 interface ContainerRunContext {
@@ -665,6 +681,10 @@ interface ContainerRunContext {
   cloudAgentRef?: string;
   agentLabel: string;
   model?: string;
+  /** The tenant's LLM routing, resolved once at context build (and cached with it)
+   *  so per-op `llm` calls pick the plan's pool/key without a per-call plan query. */
+  effectivePlan: EffectivePlan;
+  premiumOverride: boolean;
 }
 
 /** Load (and briefly cache) the container-run context for an execution. No secret
@@ -686,11 +706,13 @@ async function loadContainerRunContext(env: Env, db: Db, executionId: number): P
       const p = exec.payload ? (JSON.parse(exec.payload) as { model?: unknown }) : null;
       if (p && typeof p.model === 'string' && p.model.trim()) payloadModel = p.model.trim();
     } catch { /* default model */ }
+    const routing = await resolveCloudRouting(env, exec.tenantId);
     return {
       tenantId: exec.tenantId, taskId: exec.taskId, projectId: task.projectId,
       taskTitle: task.title, taskDescription: task.description,
       cloudAgentRef: agent.ref, agentLabel: agent.label ?? 'BuilderForce Agent',
       model: payloadModel ?? agent.baseModel,
+      effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
     };
   }, { kvTtlSeconds: 600, l1TtlMs: 600_000 });
 }
@@ -742,11 +764,17 @@ async function handleContainerOp(
   if (op === 'llm') {
     const messages = Array.isArray(args.messages) ? (args.messages as unknown as ChatMessage[]) : ([] as ChatMessage[]);
     const tGen0 = Date.now();
-    const result = await ideProxy(env).complete({
-      messages, tools: CONTAINER_AGENT_TOOLS,
-      tool_choice: 'auto', ...(model ? { model } : {}), useCase: 'task_execution',
+    // Route through the tenant's plan pool/key (not the fixed free pool) and apply
+    // the shared cloud model rule: explicit pick = hard pin, else the plan's best
+    // coding model. The container holds its own loop state, so per-op pinning is
+    // the caller's explicit `model`; the default lands on a strong coding model.
+    const pick = pickCloudModel(model, ctx.effectivePlan, ctx.premiumOverride);
+    const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride).complete({
+      messages, tools: CONTAINER_AGENT_TOOLS, tool_choice: 'auto',
+      ...(pick.model ? { model: pick.model, ...(pick.strict ? { modelStrict: true } : {}) } : {}),
+      useCase: 'task_execution',
     });
-    const resolvedModel = result.resolvedModel ?? model ?? 'default';
+    const resolvedModel = result.resolvedModel ?? pick.model ?? 'default';
     if (result.usage) {
       await recordCloudUsage(env, db, {
         tenantId, cloudAgentRef, executionId, taskId, projectId, model: resolvedModel,
@@ -824,6 +852,9 @@ export interface CloudLoopState {
    *  durable (DO) surface keeps every tick on the SAME model instead of letting
    *  the gateway's round-robin cursor hop models between steps of one task. */
   pinnedModel?: string;
+  /** The tenant's LLM routing, resolved on the first tick. Persisted so later DO
+   *  ticks reuse it (which pool / vendor key) without re-querying the plan. */
+  routing?: CloudRouting;
 }
 export interface CloudLoopOpts {
   /** Resume from this persisted state instead of starting fresh. */
@@ -882,22 +913,26 @@ export async function runCloudToolLoop(
   const startStep = opts?.resume?.step ?? 0;
   const maxThisCall = opts?.maxSteps ?? MAX_CLOUD_TOOL_STEPS;
 
+  // Resolve the tenant's plan routing once (which model pool / vendor key), then
+  // dispatch through THAT plan proxy — so a Pro cloud agent reaches premium coding
+  // models instead of the fixed free pool. Reused across every turn (and persisted
+  // so DO ticks don't re-query the plan).
+  const routing = opts?.resume?.routing ?? await resolveCloudRouting(env, tenantId);
+  const proxy = llmProxyForPlan(env, routing.effectivePlan, routing.premiumOverride);
+
   // Per-run model pin. A coding agent must drive the WHOLE task on one model, not
   // hop between pool models per turn (the gateway's round-robin cursor would
-  // otherwise pick a different free model each step → inconsistent behaviour).
-  //   • Explicit selection (`model` set, from the user pick or the agent's
-  //     base_model) → hard pin: pass `modelStrict` so the gateway dispatches ONLY
-  //     that model for every turn, no silent swap.
-  //   • No selection → seed the curated coding default, then lock onto whatever
-  //     the gateway actually resolved on the first turn (non-strict, so a cold
-  //     free model can still fail over once — but only once, at the start).
+  // otherwise pick a different model each step → inconsistent behaviour).
+  //   • Explicit selection (user pick / agent base_model, when it's a real catalog
+  //     id) → hard pin via `modelStrict`: the gateway dispatches ONLY that model,
+  //     no silent swap.
+  //   • No (or typo'd) selection → the plan's best coding model as a soft seed,
+  //     then lock onto whatever the gateway resolved on the first turn (so a cold
+  //     model can fail over once — but only once, at the start).
   // The resolved pin rides CloudLoopState so the DO surface keeps every tick on it.
-  // Strict only when the explicit id is a REAL catalog model — a typo'd / retired
-  // base_model would otherwise 503 the whole run with no failover; treat that as
-  // "no selection" and fall back to the curated coding default instead.
-  const strictPin = isKnownModel(model);
-  let activeModel: string = opts?.resume?.pinnedModel
-    ?? (strictPin ? model!.trim() : CODING_DEFAULT_MODEL);
+  const pick = pickCloudModel(model, routing.effectivePlan, routing.premiumOverride);
+  const strictPin = pick.strict;
+  let activeModel: string = opts?.resume?.pinnedModel ?? pick.model;
 
   let finalOutput = '';
   let finished = false;
@@ -928,9 +963,9 @@ export async function runCloudToolLoop(
     // Between-step guard: stop before issuing the next (paid) call if cancelled.
     if (cancelled || abortController.signal.aborted || await isCancelled()) { cancelled = true; break; }
     const tGen0 = Date.now();
-    let result: Awaited<ReturnType<ReturnType<typeof ideProxy>['complete']>>;
+    let result: Awaited<ReturnType<typeof proxy.complete>>;
     try {
-      result = await ideProxy(env).complete(
+      result = await proxy.complete(
         {
           messages: messages as unknown as ChatMessage[],
           tools: CLOUD_AGENT_TOOLS,
@@ -1112,7 +1147,7 @@ export async function runCloudToolLoop(
       output: '',
       cancelled,
       finished: false,
-      state: { messages, writtenPaths: [...writtenPaths], step, pinnedModel: activeModel },
+      state: { messages, writtenPaths: [...writtenPaths], step, pinnedModel: activeModel, routing },
     };
   }
 

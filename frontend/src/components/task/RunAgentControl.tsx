@@ -6,12 +6,12 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import {
   runtimeApi,
-  llmApi,
   isAwaitingApprovalExecution,
   type Task,
   type AgentHost,
   type TaskRepoStatus,
 } from '@/lib/builderforceApi';
+import { useLlmModels } from '@/lib/useLlmModels';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 
 /**
@@ -50,24 +50,14 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
     task.assignedAgentRef ? `cloud:${task.assignedAgentRef}` : task.assignedAgentHostId != null ? `host:${task.assignedAgentHostId}` : '',
   );
   const [model, setModel] = useState<string>('');
-  const [models, setModels] = useState<string[]>([]);
-  // Curated tool-calling + coding models (plan-filtered) — what a cloud agent run
-  // should choose from, instead of the full 40+ free pool. Falls back to `models`
-  // if the gateway didn't supply the list.
-  const [codingModels, setCodingModels] = useState<string[]>([]);
+  // Full plan pool + the curated tool-calling/coding subset, from the shared loader.
+  const { models, codingModels } = useLlmModels();
   const [cloudAgents, setCloudAgents] = useState<PoolAgent[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [repoStatus, setRepoStatus] = useState<TaskRepoStatus | null>(null);
 
   useEffect(() => {
-    llmApi.models()
-      .then((res) => {
-        const list = 'data' in res ? res.data.map((m) => m.model) : res.models;
-        setModels(list ?? []);
-        setCodingModels(res.codingModels ?? []);
-      })
-      .catch(() => { setModels([]); setCodingModels([]); });
     loadAgentPool().then((p) => setCloudAgents(p.filter((a) => a.kind === 'workforce'))).catch(() => setCloudAgents([]));
   }, []);
 

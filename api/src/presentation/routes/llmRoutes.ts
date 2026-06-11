@@ -14,9 +14,9 @@ import {
   newTraceId,
   productNameForPlan,
   modelPoolForPlan,
+  codingModelsForPlan,
   FREE_MODEL_POOL,
   PRO_MODEL_POOL,
-  CODING_MODEL_POOL,
   type ChatCompletionRequest,
   type LlmUsage,
 } from '../../application/llm/LlmProxyService';
@@ -197,11 +197,11 @@ function toTenantPlan(ep: TenantAccess['effectivePlan']): TenantPlan {
  * effective plan (downgrades to 'free' when billing isn't active).
  * Shared between every API-key-style auth path on this route.
  */
-async function resolveTenantPlan(
-  c: Context<HonoEnv>,
+export async function resolveTenantPlan(
+  env: Env,
   tenantId: number,
 ): Promise<Pick<TenantAccess, 'plan' | 'billingStatus' | 'effectivePlan' | 'tokenDailyLimitOverride' | 'premiumOverride'>> {
-  const db = buildDatabase(c.env);
+  const db = buildDatabase(env);
   const [tenantRow] = await db
     .select({
       id: tenants.id,
@@ -275,7 +275,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
       tenantApiKeyScopes: null,
       role: TenantRole.DEVELOPER,
       isSuperadmin: false,
-      ...(await resolveTenantPlan(c, agentHost.tenantId)),
+      ...(await resolveTenantPlan(c.env, agentHost.tenantId)),
     };
   }
 
@@ -344,7 +344,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
       tenantApiKeyScopes: keyScopes ?? null,
       role: TenantRole.DEVELOPER,
       isSuperadmin: false,
-      ...(await resolveTenantPlan(c, keyTenantId)),
+      ...(await resolveTenantPlan(c.env, keyTenantId)),
     };
   }
 
@@ -400,7 +400,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
     // sole source of truth — fresh on every call, instant revocation.
     // Service tokens (agentHost / embed) are never superadmin.
     isSuperadmin: !isServiceToken && dbIsSuperadmin,
-    ...(await resolveTenantPlan(c, payload.tid)),
+    ...(await resolveTenantPlan(c.env, payload.tid)),
   };
 }
 
@@ -1055,10 +1055,8 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     // Curated coding/tool-calling models the tenant's plan can actually reach —
     // the list a cloud-agent run should pick from (free tenants see only the free
-    // coding models, Pro tenants also see the premium ones). Single source of
-    // truth: CODING_MODEL_POOL, intersected with the plan pool.
-    const planPool = new Set(modelPoolForPlan(effectivePlan, premiumOverride));
-    const codingModels = CODING_MODEL_POOL.filter((m) => planPool.has(m));
+    // coding models, Pro tenants also see the premium ones).
+    const codingModels = codingModelsForPlan(effectivePlan, premiumOverride);
 
     const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
     if (!requiredKey) {
