@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Select } from '@/components/Select';
@@ -23,11 +24,12 @@ import { fetchProjects } from '@/lib/api';
 import { BoardConfigPanel } from './board/BoardConfigPanel';
 import { AgentChip } from './board/AgentChip';
 import { useBoardConfig } from './board/useBoardConfig';
+import { decideLaneAutoRun } from '@/lib/laneAutoRun';
 import { SlideOutPanel } from './SlideOutPanel';
 import { MoveToBoardControl } from './MoveToBoardControl';
 import { AgentTab } from './agent/AgentTab';
 import { TaskPrdTab } from './task/TaskPrdTab';
-import { RunAgentControl } from './task/RunAgentControl';
+import { RunTaskButton } from './task/RunTaskButton';
 import { ChatMessageContent } from './ChatMessageContent';
 import { ViewToggle } from './ViewToggle';
 import { ScheduleCalendar } from './ScheduleCalendar';
@@ -73,46 +75,60 @@ function formatDate(d?: string | null): string {
 
 /** A cloud agent (ide_agents) that a task can be assigned to. */
 type CloudAgentTarget = { ref: string; name: string };
+/** Human teammate (users.id) that a task can be assigned to. */
+type TeamMember = { id: string; name: string };
 
-// A task is assigned to EITHER a self-hosted agent host (numeric id) OR a cloud
-// agent (string ref) — never both. The two id spaces are disjoint, so we encode
-// the choice into a single <select> value (`h:<id>` / `c:<ref>` / '' = none) and
-// decode it back into the mutually-exclusive fields on change. Centralizing this
-// here keeps the create dialog, the drawer editor, and the name resolver in sync.
-function assigneeSelectValue(hostId?: number | null, ref?: string | null): string {
+// Humans and agents are one team: a task is owned by EXACTLY ONE of a self-hosted
+// agent host (numeric id), a cloud agent (string ref), or a human teammate
+// (users.id) — never more than one. The three id spaces are disjoint, so we encode
+// the choice into a single <select> value (`h:<id>` / `c:<ref>` / `u:<userId>` /
+// '' = none) and decode it back into the mutually-exclusive fields on change.
+// Centralizing this here keeps the create dialog, the drawer editor, and the name
+// resolver in sync — and decoding always emits ALL THREE fields so picking one
+// clears the others (the write path persists the nulls).
+function assigneeSelectValue(hostId?: number | null, ref?: string | null, userId?: string | null): string {
   if (hostId != null) return `h:${hostId}`;
   if (ref) return `c:${ref}`;
+  if (userId) return `u:${userId}`;
   return '';
 }
 
-function parseAssigneeSelectValue(v: string): { assignedAgentHostId: number | null; assignedAgentRef: string | null } {
-  if (v.startsWith('h:')) return { assignedAgentHostId: Number(v.slice(2)), assignedAgentRef: null };
-  if (v.startsWith('c:')) return { assignedAgentHostId: null, assignedAgentRef: v.slice(2) };
-  return { assignedAgentHostId: null, assignedAgentRef: null };
+type AssigneePatch = {
+  assignedAgentHostId: number | null;
+  assignedAgentRef: string | null;
+  assignedUserId: string | null;
+};
+
+function parseAssigneeSelectValue(v: string): AssigneePatch {
+  if (v.startsWith('h:')) return { assignedAgentHostId: Number(v.slice(2)), assignedAgentRef: null, assignedUserId: null };
+  if (v.startsWith('c:')) return { assignedAgentHostId: null, assignedAgentRef: v.slice(2), assignedUserId: null };
+  if (v.startsWith('u:')) return { assignedAgentHostId: null, assignedAgentRef: null, assignedUserId: v.slice(2) };
+  return { assignedAgentHostId: null, assignedAgentRef: null, assignedUserId: null };
 }
 
-/** Display name for whichever assignee a task carries (host or cloud agent). */
+/** Display name for whichever assignee a task carries (host, cloud agent, or human). */
 function assigneeName(
   hostId: number | null | undefined,
   ref: string | null | undefined,
+  userId: string | null | undefined,
   hosts: AgentHost[],
   cloudAgents: CloudAgentTarget[],
+  members: TeamMember[],
 ): string {
   if (hostId != null) return hosts.find((h) => h.id === hostId)?.name ?? String(hostId);
   if (ref) return cloudAgents.find((a) => a.ref === ref)?.name ?? ref;
+  if (userId) return members.find((m) => m.id === userId)?.name ?? userId;
   return 'Unassigned';
 }
 
-/**
- * Assignee picker shared by the create dialog and the drawer's inline editor.
- * Lists both self-hosted agent hosts and cloud agents in grouped sections and
- * emits the mutually-exclusive (assignedAgentHostId | assignedAgentRef) patch.
- */
+/** Assignee picker shared by the create dialog and the drawer's inline editor. */
 function AssigneeSelect({
   hosts,
   cloudAgents,
+  members,
   hostId,
   agentRef,
+  userId,
   onChange,
   autoFocus,
   disabled,
@@ -121,9 +137,11 @@ function AssigneeSelect({
 }: {
   hosts: AgentHost[];
   cloudAgents: CloudAgentTarget[];
+  members: TeamMember[];
   hostId?: number | null;
   agentRef?: string | null;
-  onChange: (patch: { assignedAgentHostId: number | null; assignedAgentRef: string | null }) => void;
+  userId?: string | null;
+  onChange: (patch: AssigneePatch) => void;
   autoFocus?: boolean;
   disabled?: boolean;
   onBlur?: () => void;
@@ -134,11 +152,18 @@ function AssigneeSelect({
       autoFocus={autoFocus}
       disabled={disabled}
       onBlur={onBlur}
-      value={assigneeSelectValue(hostId, agentRef)}
+      value={assigneeSelectValue(hostId, agentRef, userId)}
       onChange={(e) => onChange(parseAssigneeSelectValue(e.target.value))}
       style={style}
     >
       <option value="">Unassigned</option>
+      {members.length > 0 && (
+        <optgroup label="Team members">
+          {members.map((m) => (
+            <option key={`u:${m.id}`} value={`u:${m.id}`}>{m.name}</option>
+          ))}
+        </optgroup>
+      )}
       {hosts.length > 0 && (
         <optgroup label="Agent hosts">
           {hosts.map((h) => (
@@ -167,6 +192,7 @@ export function TaskMgmtContent({
   const [projects, setProjects] = useState<Project[]>(projectsProp ?? []);
   const [agentHostsList, setAgentHostsList] = useState<AgentHost[]>([]);
   const [cloudAgentsList, setCloudAgentsList] = useState<CloudAgentTarget[]>([]);
+  const [membersList, setMembersList] = useState<TeamMember[]>([]);
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -191,16 +217,14 @@ export function TaskMgmtContent({
   const [boardConfigOpen, setBoardConfigOpen] = useState(false);
   const [prdOpen, setPrdOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'details' | 'agent' | 'prd'>('details');
-  // Inline per-field editing in the task drawer. Only one field is editable at a
-  // time; `fieldDraft` holds the in-progress value (string for text/date inputs).
+  // Inline per-field editing in the task drawer.
   const [editingField, setEditingField] = useState<
     null | 'title' | 'description' | 'dueDate' | 'assignee' | 'priority' | 'status' | 'project'
   >(null);
   const [fieldDraft, setFieldDraft] = useState('');
   const [fieldSaving, setFieldSaving] = useState(false);
 
-  // Open a task drawer on a specific tab (defaults to Details). Used so clicking
-  // a running-agent chip jumps straight to the Agent tab.
+  // Open a task drawer on a specific tab.
   const openTask = useCallback((t: Task, tab: 'details' | 'agent' | 'prd' = 'details') => {
     setDrawerTab(tab);
     setDrawerTask(t);
@@ -210,22 +234,18 @@ export function TaskMgmtContent({
     setLoading(true);
     setError(null);
     try {
-      const [tasksData, agentHostsData, execData, runTargets] = await Promise.all([
+      const [tasksData, agentHostsData, execData, runTargets, membersData] = await Promise.all([
         tasksApi.list(projectId),
         agentHosts.list().catch(() => []),
         runtimeApi.listRecent().catch(() => []),
-        // Cloud agents assignable to a ticket (active, cloud-capable ide_agents).
-        // run-targets already merges hosts + cloud agents and is server-cached;
-        // we only take the cloud side here since hosts come from agentHosts.list.
         workflowDefinitions.runTargets().catch(() => ({ hosts: [], cloudAgents: [] })),
+        tasksApi.assignees().catch(() => []),
       ]);
       setTasks(tasksData);
       setAgentHostsList(agentHostsData);
       setCloudAgentsList(runTargets.cloudAgents);
+      setMembersList(membersData);
       setExecutions(execData);
-      // Always resolve the full project list (unless the parent supplied one):
-      // it backs both the project filter and the "Move to board" destinations,
-      // which are needed even in the scoped (single-project) view.
       if (projectsProp) {
         setProjects(projectsProp);
       } else {
@@ -239,9 +259,7 @@ export function TaskMgmtContent({
     }
   }, [projectId, projectsProp]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     if (view === 'board') {
@@ -250,11 +268,7 @@ export function TaskMgmtContent({
     }
   }, [view]);
 
-  // Close any open inline editor when switching tasks/tabs so a half-edited field
-  // never carries over to a different task.
-  useEffect(() => {
-    setEditingField(null);
-  }, [drawerTask?.id, drawerTab]);
+  useEffect(() => { setEditingField(null); }, [drawerTask?.id, drawerTab]);
 
   const filtered = tasks.filter((t) => {
     if (filterStatus && t.status !== filterStatus) return false;
@@ -266,36 +280,26 @@ export function TaskMgmtContent({
 
   const projectNameById = (id?: number | null) =>
     id ? projects.find((p) => p.id === id)?.name ?? String(id) : '—';
-  // Resolve a task's assignee (self-hosted host OR cloud agent) to its display name.
-  const taskAssigneeName = (t: { assignedAgentHostId?: number | null; assignedAgentRef?: string | null }) =>
-    assigneeName(t.assignedAgentHostId, t.assignedAgentRef, agentHostsList, cloudAgentsList);
+  const taskAssigneeName = (t: { assignedAgentHostId?: number | null; assignedAgentRef?: string | null; assignedUserId?: string | null }) =>
+    assigneeName(t.assignedAgentHostId, t.assignedAgentRef, t.assignedUserId, agentHostsList, cloudAgentsList, membersList);
 
-  // The board being configured: the scoped project, or the single project chosen
-  // in the filter. Null when viewing "All projects" — the cog stays visible but disabled.
   const effectiveProjectId = projectId ?? (filterProject ? Number(filterProject) : undefined);
   const effectiveProjectName =
     projectId != null ? projectName : projectNameById(effectiveProjectId);
 
-  // Swimlanes + their configured agents for the selected board, shown discretely
-  // in each column header. Only fetched for the board view of a single project.
   const { board, lanes, agentsByLane } = useBoardConfig(
     effectiveProjectId,
     effectiveProjectId != null && view === 'board' && !compact,
   );
 
-  // Live per-agent dispatch status for the board, so each lane's configured-agent
-  // chips light up with their current execution status (pending→running→done/failed).
   const [dispatches, setDispatches] = useState<BoardDispatch[]>([]);
   useEffect(() => {
-    // Only fetch in the board view; stale data from a prior board is harmless as
-    // the status chips render only here (and a board switch refetches).
     if (!board?.id || view !== 'board' || compact) return;
     let live = true;
     boardsApi.dispatches(board.id).then((d) => { if (live) setDispatches(d); }).catch(() => {});
     return () => { live = false; };
   }, [board?.id, view, compact]);
 
-  // Latest dispatch per assignment (configured agent), keyed by assignment id.
   const latestDispatchByAssignment = useMemo(() => {
     const m = new Map<string, BoardDispatch>();
     for (const d of dispatches) {
@@ -308,11 +312,6 @@ export function TaskMgmtContent({
     return m;
   }, [dispatches]);
 
-  // The board's columns ARE its swimlanes (fully configurable): each lane is a
-  // column whose key is the status a task holds while sitting in it. Renaming /
-  // reordering / adding / removing lanes and assigning agents all flow straight
-  // through to the board. When a project has no board yet, fall back to the
-  // default status columns so the board still works out of the box.
   const boardColumns = useMemo<BoardColumn[]>(() => {
     const defaults = (): BoardColumn[] =>
       BOARD_STATUSES.map((s) => ({ id: s, status: s, label: taskStatusLabel(s), agents: [] }));
@@ -325,8 +324,6 @@ export function TaskMgmtContent({
       cols.push({ id: l.id, status: l.key, label: l.name, agents: agentsByLane[l.id] ?? [] });
       covered.add(l.key);
     }
-    // Surface any status still held by tasks but with no lane (e.g. after a lane
-    // is deleted, or a legacy/custom status) so no task is ever hidden.
     for (const t of tasks) {
       if (!covered.has(t.status)) {
         cols.push({ id: `orphan:${t.status}`, status: t.status, label: taskStatusLabel(t.status), agents: [] });
@@ -336,13 +333,10 @@ export function TaskMgmtContent({
     return cols.length > 0 ? cols : defaults();
   }, [lanes, agentsByLane, tasks]);
 
-  // Status choices for dropdowns / move-to / filters = the board's columns.
   const statusChoices = boardColumns.map((c) => ({ value: c.status, label: c.label }));
-  // Label for a task's status: prefer its column's name, else a humanized label.
   const columnLabel = (status: string) =>
     boardColumns.find((c) => c.status === status)?.label ?? taskStatusLabel(status);
 
-  // Latest execution per task → which agent is actively running (or last ran) it.
   const latestExecByTask = useMemo(() => {
     const m = new Map<number, Execution>();
     for (const e of executions) {
@@ -354,10 +348,8 @@ export function TaskMgmtContent({
     return m;
   }, [executions]);
 
-  // Resolve the human-facing name of whatever agent ran an execution.
   const execAgentLabel = (e: Execution): string =>
-    (e.agentHostId != null ? agentHostsList.find((c) => c.id === e.agentHostId)?.name : null) ??
-    (e.agentHostId != null ? `AgentHost ${e.agentHostId}` : null) ??
+    (e.agentHostId != null ? agentHostsList.find((c) => c.id === e.agentHostId)?.name ?? `AgentHost ${e.agentHostId}` : null) ??
     (e.agentId != null ? `Agent ${e.agentId}` : 'Agent');
 
   const openCreate = () => {
@@ -381,6 +373,7 @@ export function TaskMgmtContent({
     e.preventDefault();
     if (!form.title?.trim()) return;
     setSaving(true);
+    setError(null);
     try {
       if (editTarget) {
         const updated = await tasksApi.update(editTarget.id, {
@@ -390,6 +383,7 @@ export function TaskMgmtContent({
           priority: (form.priority as TaskPriority) ?? editTarget.priority,
           assignedAgentHostId: form.assignedAgentHostId ?? null,
           assignedAgentRef: form.assignedAgentRef ?? null,
+          assignedUserId: form.assignedUserId ?? null,
           dueDate: form.dueDate ?? null,
         });
         setTasks((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
@@ -407,6 +401,7 @@ export function TaskMgmtContent({
           priority: (form.priority as TaskPriority) ?? 'medium',
           assignedAgentHostId: form.assignedAgentHostId ?? undefined,
           assignedAgentRef: form.assignedAgentRef ?? undefined,
+          assignedUserId: form.assignedUserId ?? undefined,
           dueDate: form.dueDate || undefined,
         });
         const statusToSet = form.status ?? 'todo';
@@ -437,10 +432,8 @@ export function TaskMgmtContent({
     }
   };
 
-  // Persist a single edited field from the drawer's inline editors. Patches the
-  // open task, syncs the list + drawer, and closes the active editor on success.
   const saveTaskField = async (
-    patch: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'assignedAgentHostId' | 'assignedAgentRef' | 'dueDate'>>
+    patch: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'dueDate'>>
   ) => {
     if (!drawerTask) return;
     setFieldSaving(true);
@@ -456,33 +449,31 @@ export function TaskMgmtContent({
     }
   };
 
-  const patchStatus = async (
-    id: number,
-    status: string,
-    opts?: { skipAutoSubmit?: boolean }
-  ) => {
+  // Patch task status and trigger auto-run if configured.
+  const patchStatus = async (id: number, status: string, opts?: { skipAutoSubmit?: boolean }) => {
     try {
       const updated = await tasksApi.update(id, { status });
       setTasks((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
       if (drawerTask?.id === id) setDrawerTask(updated);
 
-      // Auto-send to agentHost when moving to To Do or In Progress (user expects execution to start)
-      if (!opts?.skipAutoSubmit && (status === 'todo' || status === 'in_progress')) {
-        try {
-          const result = await runtimeApi.submitExecution({
-            taskId: id,
-            agentHostId: updated.assignedAgentHostId ?? undefined,
-          });
-
-          if (isAwaitingApprovalExecution(result)) {
-            setApprovalGate({
-              approvalId: result.approvalId,
-              taskId: result.taskId,
-              reason: result.reason,
+      if (!opts?.skipAutoSubmit) {
+        const column = boardColumns.find((c) => c.status === status);
+        const laneGate = lanes.find((l) => l.key === status)?.gate;
+        const decision = decideLaneAutoRun(column?.agents, status, laneGate);
+        if (decision.autoRun) {
+          const payloadObj: { cloudAgentRef?: string; model?: string } = {};
+          if (decision.cloudAgentRef) payloadObj.cloudAgentRef = decision.cloudAgentRef;
+          if (decision.model) payloadObj.model = decision.model;
+          try {
+            const result = await runtimeApi.submitExecution({
+              taskId: id,
+              agentHostId: updated.assignedAgentHostId ?? undefined,
+              payload: Object.keys(payloadObj).length > 0 ? JSON.stringify(payloadObj) : undefined,
             });
-          }
-        } catch {
-          // Non-blocking: status was updated; execution may fail if no agentHost connected
+            if (isAwaitingApprovalExecution(result)) {
+              setApprovalGate({ approvalId: result.approvalId, taskId: result.taskId, reason: result.reason });
+            }
+          } catch { /* ignore */ }
         }
       }
     } catch (e) {
@@ -514,8 +505,6 @@ export function TaskMgmtContent({
     }
   };
 
-  // Move a task to another project ("board"). The server re-keys it; we swap the
-  // returned task into state so it leaves any board-scoped/filtered view on its own.
   const moveTask = async (id: number, targetProjectId: number) => {
     try {
       const moved = await tasksApi.move(id, targetProjectId);
@@ -548,69 +537,41 @@ export function TaskMgmtContent({
     padding: 16,
   };
 
-  const buttonTertiary = {
-    padding: '6px 12px',
+  const buttonTertiary: CSSProperties = {
+    padding: '8px 14px', // Increased padding
     fontSize: 13,
     fontWeight: 600,
     background: 'var(--bg-deep)',
     color: 'var(--text-secondary)',
     border: '1px solid var(--border-subtle)',
-    borderRadius: 8,
-    cursor: 'pointer' as const,
+    borderRadius: 10, // Slightly larger radius
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 44, // Ensure min touch target width
+    minHeight: 44, // Ensure min touch target height
   };
-  const buttonPrimary = {
+  const buttonPrimary: CSSProperties = {
     ...buttonTertiary,
     background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
     color: '#fff',
     border: 'none',
+    fontSize: 14, // Slightly larger font
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {error && (
-        <div
-          style={{
-            padding: '10px 14px',
-            borderRadius: 8,
-            background: 'var(--error-bg)',
-            border: '1px solid var(--error-border)',
-            color: 'var(--error-text)',
-            fontSize: 13,
-          }}
-        >
+        <div style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)', fontSize: 13 }}>
           {error}
         </div>
       )}
 
       {approvalGate && (
-        <div
-          style={{
-            padding: '10px 14px',
-            borderRadius: 8,
-            background: 'var(--warning-bg)',
-            border: '1px solid var(--warning-border)',
-            color: 'var(--warning-text)',
-            fontSize: 13,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: 12,
-            flexWrap: 'wrap',
-          }}
-        >
-          <span>
-            {approvalGate.reason}
-            {' '}
-            (Task #{approvalGate.taskId}, approval {approvalGate.approvalId.slice(0, 8)}...)
-          </span>
-          <Link
-            href="/workforce?tab=approvals"
-            style={{
-              fontWeight: 700,
-              color: 'var(--coral-bright)',
-              textDecoration: 'none',
-            }}
-          >
+        <div style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', color: 'var(--warning-text)', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span>{approvalGate.reason} (Task #{approvalGate.taskId}, approval {approvalGate.approvalId.slice(0, 8)}...)</span>
+          <Link href="/workforce?tab=approvals" style={{ fontWeight: 700, color: 'var(--coral-bright)', textDecoration: 'none' }}>
             Open approvals
           </Link>
         </div>
@@ -630,18 +591,10 @@ export function TaskMgmtContent({
               New task
             </button>
             {(() => {
-              // Both the PRD and the board-config controls are board-scoped: they
-              // act on the single selected project, so they share one enabled gate.
               const canConfigure = effectiveProjectId != null;
               const iconBtn = {
-                ...buttonTertiary,
-                width: 36,
-                padding: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                opacity: canConfigure ? 1 : 0.4,
-                cursor: canConfigure ? 'pointer' : 'not-allowed',
+                ...buttonTertiary, width: 44, padding: 0, // Ensure touch target size
+                opacity: canConfigure ? 1 : 0.4, cursor: canConfigure ? 'pointer' : 'not-allowed',
               } as const;
               return (
                 <>
@@ -650,10 +603,9 @@ export function TaskMgmtContent({
                     onClick={() => canConfigure && setPrdOpen(true)}
                     disabled={!canConfigure}
                     style={iconBtn}
-                    aria-label="View PRD"
-                    title={canConfigure ? 'View the PRD (shared by every agent on this board)' : 'Select a single project to view its PRD'}
+                    aria-label="View PRD" title={canConfigure ? 'View the PRD' : 'Select a single project to view its PRD'}
                   >
-                    <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+                    <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                       <path d="M14 2v6h6" />
                       <line x1="8" y1="13" x2="16" y2="13" />
@@ -665,12 +617,11 @@ export function TaskMgmtContent({
                     onClick={() => canConfigure && setBoardConfigOpen(true)}
                     disabled={!canConfigure}
                     style={iconBtn}
-                    aria-label="Configure board"
-                    title={canConfigure ? 'Configure swimlanes & agents' : 'Select a single project to configure its board'}
+                    aria-label="Configure board" title={canConfigure ? 'Configure swimlanes & agents' : 'Select a single project to configure its board'}
                   >
-                    <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+                    <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
                       <circle cx="12" cy="12" r="3" />
-                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0-.33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                     </svg>
                   </button>
                 </>
@@ -688,86 +639,50 @@ export function TaskMgmtContent({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{
-              maxWidth: 200,
-              height: 32,
-              padding: '4px 10px',
-              fontSize: 13,
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
-              background: 'var(--bg-deep)',
-              color: 'var(--text-primary)',
+              maxWidth: 200, height: 36, padding: '6px 10px', fontSize: 13, border: '1px solid var(--border-subtle)',
+              borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)',
             }}
           />
           <Select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             style={{
-              maxWidth: 160,
-              height: 32,
-              padding: '4px 10px',
-              fontSize: 13,
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
-              background: 'var(--bg-deep)',
-              color: 'var(--text-primary)',
+              maxWidth: 160, height: 36, padding: '6px 10px', fontSize: 13, border: '1px solid var(--border-subtle)',
+              borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)',
             }}
           >
             <option value="">All statuses</option>
-            {statusChoices.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
+            {statusChoices.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </Select>
           {!projectId && (
             <Select
               value={filterProject}
               onChange={(e) => setFilterProject(e.target.value)}
               style={{
-                maxWidth: 180,
-                height: 32,
-                padding: '4px 10px',
-                fontSize: 13,
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
-                background: 'var(--bg-deep)',
-                color: 'var(--text-primary)',
+                maxWidth: 180, height: 36, padding: '6px 10px', fontSize: 13, border: '1px solid var(--border-subtle)',
+                borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)',
               }}
             >
               <option value="">All projects</option>
-              {projects.map((p) => (
-                <option key={p.id} value={String(p.id)}>
-                  {p.name}
-                </option>
-              ))}
+              {projects.map((p) => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
             </Select>
           )}
           <Select
             value={filterPriority}
             onChange={(e) => setFilterPriority(e.target.value)}
             style={{
-              maxWidth: 140,
-              height: 32,
-              padding: '4px 10px',
-              fontSize: 13,
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
-              background: 'var(--bg-deep)',
-              color: 'var(--text-primary)',
+              maxWidth: 140, height: 36, padding: '6px 10px', fontSize: 13, border: '1px solid var(--border-subtle)',
+              borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)',
             }}
           >
             <option value="">All priorities</option>
-            {PRIORITIES.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
+            {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
           </Select>
         </div>
       )}
 
       {loading ? (
-        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: 24 }}>Loading…</div>
       ) : view === 'board' ? (
         <div
           className="task-kanban"
@@ -776,6 +691,8 @@ export function TaskMgmtContent({
             gridTemplateColumns: `repeat(${boardColumns.length}, minmax(200px, 1fr))`,
             gap: 12,
             minHeight: 200,
+            overflowX: 'auto', // Allow horizontal scrolling for columns
+            paddingBottom: 12, // Add padding for scrollbar clearance
           }}
         >
           {boardColumns.map((column) => {
@@ -793,28 +710,17 @@ export function TaskMgmtContent({
                   padding: 12,
                   display: 'flex',
                   flexDirection: 'column',
-                  minHeight: 120,
+                  minHeight: 140, // Increased min-height for better spacing
+                  width: '100%', // Ensure it takes full width of grid column
                 }}
               >
                 <div style={{ marginBottom: 8 }}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: 'var(--text-muted)',
-                    }}
-                  >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
                     <span>{column.label}</span>
-                    <span>{tasksForStatus.length}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color:'var(--text-primary)'}}>{tasksForStatus.length}</span>
                   </div>
                   {column.agents.length > 0 && (
-                    <div
-                      style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}
-                      title="Agents configured on this swimlane"
-                    >
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }} title="Agents configured on this swimlane">
                       {column.agents.map((a) => {
                         const disp = latestDispatchByAssignment.get(a.id);
                         const label = a.name ?? a.role;
@@ -831,7 +737,7 @@ export function TaskMgmtContent({
                     </div>
                   )}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, overflowY: 'auto', maxHeight: '60vh' }}> {/* Scrollable tasks */}
                   {tasksForStatus.map((task) => {
                     const exec = latestExecByTask.get(task.id);
                     return (
@@ -845,6 +751,7 @@ export function TaskMgmtContent({
                         padding: 12,
                         cursor: 'grab',
                         position: 'relative',
+                        boxShadow: '0 2px 5px rgba(0,0,0,0.1)', // Subtle shadow for depth
                       }}
                     >
                       <div style={{ position: 'absolute', top: 8, right: 8 }}>
@@ -857,23 +764,14 @@ export function TaskMgmtContent({
                               setEditingStatusId(null);
                             }}
                             onClick={(e) => e.stopPropagation()}
+                            style={{ fontSize: 11, padding: '3px 6px', borderRadius: 6 }} // Smaller, inline select
                           >
-                            {statusChoices.map((s) => (
-                              <option key={s.value} value={s.value}>
-                                {s.label}
-                              </option>
-                            ))}
+                            {statusChoices.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                           </Select>
                         ) : (
                           <span
                             className={taskStatusBadgeClass(task.status)}
-                            style={{
-                              fontSize: 10,
-                              padding: '2px 8px',
-                              borderRadius: 4,
-                              textTransform: 'capitalize',
-                              cursor: 'pointer',
-                            }}
+                            style={{ fontSize: 10, padding: '4px 8px', borderRadius: 6, textTransform: 'capitalize', cursor: 'pointer', display: 'inline-flex', alignItems:'center', height: 24}} // Ensure minimum touch size
                             onClick={(e) => {
                               e.stopPropagation();
                               setEditingStatusId(task.id);
@@ -886,51 +784,24 @@ export function TaskMgmtContent({
                       <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--text-primary)' }}>
                         {task.title}
                       </div>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          marginTop: 6,
-                          fontSize: 11,
-                          color: 'var(--text-muted)',
-                          flexWrap: 'wrap',
-                        }}
-                      >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 11, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
                         <span style={{ fontFamily: 'var(--font-mono)' }}>{task.key}</span>
-                        <span
-                          className={PRIORITY_CLASS[task.priority]}
-                          style={{
-                            fontSize: 10,
-                            padding: '2px 6px',
-                            borderRadius: 4,
-                            textTransform: 'capitalize',
-                          }}
-                        >
-                          {task.priority}
-                        </span>
+                        <span className={PRIORITY_CLASS[task.priority]} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, textTransform: 'capitalize' }}>{task.priority}</span>
                         {exec ? (
                           <AgentChip
-                            label={execAgentLabel(exec)}
-                            status={exec.status}
-                            title={`${execAgentLabel(exec)} — execution #${exec.id} · ${exec.status}. Click to open the Agent tab.`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openTask(task, 'agent');
-                            }}
+                            label={execAgentLabel(exec)} status={exec.status}
+                            title={`${execAgentLabel(exec)} · ${exec.status}. Click for details.`}
+                            onClick={(e) => { e.stopPropagation(); openTask(task, 'agent'); }}
                           />
-                        ) : (task.assignedAgentHostId || task.assignedAgentRef) ? (
+                        ) : (task.assignedAgentHostId || task.assignedAgentRef || task.assignedUserId) ? (
                           <span>{taskAssigneeName(task)}</span>
                         ) : null}
                         {task.githubPrUrl && (
                           <a
-                            href={task.githubPrUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ color: 'var(--text-muted)', textDecoration: 'none', fontWeight: 600 }}
+                            href={task.githubPrUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+                            style={{ color: 'var(--coral-bright)', textDecoration: 'none', fontSize: 11, fontWeight: 600, padding: '2px 6px', border: '1px solid var(--border-subtle)', borderRadius: 6, background: 'var(--bg-deep)', whiteSpace: 'nowrap' }}
                           >
-                            PR#{task.githubPrNumber ?? '—'}
+                            PR #{task.githubPrNumber ?? '—'} →
                           </a>
                         )}
                         {task.dueDate && (
@@ -944,20 +815,11 @@ export function TaskMgmtContent({
                     <button
                       type="button"
                       onClick={() => {
-                        setForm({
-                          status,
-                          priority: 'medium',
-                          ...(projectId != null ? { projectId } : {}),
-                        });
+                        setForm({ status, priority: 'medium', ...(projectId != null ? { projectId } : {}) });
                         setEditTarget(null);
                         setShowModal(true);
                       }}
-                      style={{
-                        ...buttonTertiary,
-                        borderStyle: 'dashed',
-                        width: '100%',
-                        marginTop: 4,
-                      }}
+                      style={buttonTertiary} // Use buttonTertiary for add task button
                     >
                       + Add task
                     </button>
@@ -980,430 +842,155 @@ export function TaskMgmtContent({
           ) : (
             <>
               {selectedIds.length > 0 && (
-                <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                    {selectedIds.length} selected
-                  </span>
+                <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{selectedIds.length} selected</span>
                   <Select
                     value={bulkStatus}
-                    onChange={(e) => {
-                      const s = e.target.value;
-                      if (s) applyBulkStatus(s);
-                    }}
-                    style={{ padding: '4px 8px', fontSize: 13 }}
+                    onChange={(e) => { const s = e.target.value; if (s) applyBulkStatus(s); }}
+                    style={{ maxWidth: 180, height: 36, padding: '6px 10px', fontSize: 13 }} // Responsive select
                   >
                     <option value="">Bulk change status…</option>
-                    {statusChoices.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
+                    {statusChoices.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </Select>
                   <MoveToBoardControl
                     projects={projects}
                     currentProjectId={effectiveProjectId}
                     onMove={applyBulkMove}
+                    label="Move…"
+                    style={{ padding: '6px 10px', fontSize: 13 }} // Ensure button size
                   />
                 </div>
               )}
-              <div style={{ overflowX: 'auto' }}>
+              <div style={{ overflowX: 'auto' }}> {/* Horizontal scroll for table */}
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                       <th style={{ padding: '8px 12px' }}>
-                        <input
-                          type="checkbox"
-                          checked={filtered.length > 0 && selectedIds.length === filtered.length}
-                          onChange={toggleAll}
-                        />
+                        <input type="checkbox" checked={filtered.length > 0 && selectedIds.length === filtered.length} onChange={toggleAll} />
                       </th>
-                      <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                        Task
-                      </th>
-                    <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                      Status
-                    </th>
-                    <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                      Priority
-                    </th>
-                    {!projectId && (
-                      <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                        Project
-                      </th>
-                    )}
-                    <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                      Assignee
-                    </th>
-                    <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                      Due
-                    </th>
-                    <th style={{ width: 1 }} />
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((task) => {
-                    const exec = latestExecByTask.get(task.id);
-                    return (
-                    <tr
-                      key={task.id}
-                      onClick={() => openTask(task)}
-                      style={{
-                        borderBottom: '1px solid var(--border-subtle)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <td style={{ padding: '10px 12px' }}>
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(task.id)}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            toggleSelect(task.id);
-                          }}
-                        />
-                      </td>
-                      <td style={{ padding: '10px 12px' }}>
-                        <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{task.title}</div>
-                        <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
-                          {task.key}
-                        </div>
-                      </td>
-                      <td style={{ padding: '10px 12px' }} onClick={(e) => e.stopPropagation()}>
-                        {editingStatusId === task.id ? (
-                          <Select
-                            value={task.status}
-                            onChange={(e) => {
-                              patchStatus(task.id, e.target.value);
-                              setEditingStatusId(null);
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {statusChoices.map((s) => (
-                              <option key={s.value} value={s.value}>
-                                {s.label}
-                              </option>
-                            ))}
-                          </Select>
-                        ) : (
-                          <span
-                            className={taskStatusBadgeClass(task.status)}
-                            style={{
-                              fontSize: 10,
-                              padding: '2px 8px',
-                              borderRadius: 4,
-                              textTransform: 'capitalize',
-                              cursor: 'pointer',
-                            }}
-                            onClick={() => setEditingStatusId(task.id)}
-                          >
-                            {columnLabel(task.status)}
-                          </span>
-                        )}
-                      </td>
-                      <td style={{ padding: '10px 12px' }}>
-                        <span
-                          className={PRIORITY_CLASS[task.priority]}
-                          style={{
-                            fontSize: 10,
-                            padding: '2px 6px',
-                            borderRadius: 4,
-                            textTransform: 'capitalize',
-                          }}
-                        >
-                          {task.priority}
-                        </span>
-                      </td>
-                      {!projectId && (
-                        <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>
-                          {projectNameById(task.projectId)}
-                        </td>
-                      )}
-                      <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }} onClick={(e) => e.stopPropagation()}>
-                        {exec ? (
-                          <AgentChip
-                            label={execAgentLabel(exec)}
-                            status={exec.status}
-                            title={`${execAgentLabel(exec)} — execution #${exec.id} · ${exec.status}. Click to open the Agent tab.`}
-                            onClick={() => openTask(task, 'agent')}
-                          />
-                        ) : (
-                          taskAssigneeName(task)
-                        )}
-                      </td>
-                      <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>
-                        {formatDate(task.dueDate)}
-                      </td>
-                      <td style={{ padding: '10px 12px' }} onClick={(e) => e.stopPropagation()}>
-                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                          <button
-                            type="button"
-                            style={{ ...buttonTertiary, padding: '4px 8px', fontSize: 12 }}
-                            onClick={() => openTask(task)}
-                          >
-                            View
-                          </button>
-                          <button
-                            type="button"
-                            style={{ ...buttonTertiary, padding: '4px 8px', fontSize: 12 }}
-                            onClick={(e) => openEdit(task, e)}
-                          >
-                            Edit
-                          </button>
-                          <MoveToBoardControl
-                            projects={projects}
-                            currentProjectId={task.projectId}
-                            onMove={(projectId) => moveTask(task.id, projectId)}
-                            label="Move…"
-                            style={{ padding: '4px 6px', fontSize: 12 }}
-                          />
-                          <button
-                            type="button"
-                            style={{
-                              ...buttonTertiary,
-                              padding: '4px 8px',
-                              fontSize: 12,
-                              color: 'var(--error-text)',
-                              borderColor: 'var(--error-border)',
-                            }}
-                            onClick={(e) => removeTask(task, e)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
+                      <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>Task</th>
+                      <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>Status</th>
+                      <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>Priority</th>
+                      {!projectId && <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>Project</th>}
+                      <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>Assignee</th>
+                      <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>Due</th>
+                      <th style={{ width: 1 }} />
                     </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </>  
+                  </thead>
+                  <tbody>
+                    {filtered.map((task) => {
+                      const exec = latestExecByTask.get(task.id);
+                      return (
+                        <tr
+                          key={task.id}
+                          onClick={() => openTask(task)}
+                          style={{ borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer' }}
+                        >
+                          <td style={{ padding: '10px 12px' }}>
+                            <input type="checkbox" checked={selectedIds.includes(task.id)} onClick={(e) => e.stopPropagation()} onChange={(e) => { e.stopPropagation(); toggleSelect(task.id); }} />
+                          </td>
+                          <td style={{ padding: '10px 12px' }}>
+                            <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{task.title}</div>
+                            <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{task.key}</div>
+                          </td>
+                          <td style={{ padding: '10px 12px' }} onClick={(e) => e.stopPropagation()}>
+                            {editingStatusId === task.id ? (
+                              <Select value={task.status} onChange={(e) => { patchStatus(task.id, e.target.value); setEditingStatusId(null); }} onClick={(e) => e.stopPropagation()} style={{ fontSize: 11, padding: '3px 6px', borderRadius: 6 }}>
+                                {statusChoices.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                              </Select>
+                            ) : (
+                              <span className={taskStatusBadgeClass(task.status)} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 4, textTransform: 'capitalize', cursor: 'pointer', display: 'inline-block', minHeight: 24 }} onClick={(e) => { e.stopPropagation(); setEditingStatusId(task.id); }}>
+                                {columnLabel(task.status)}
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ padding: '10px 12px' }}>
+                            <span className={PRIORITY_CLASS[task.priority]} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, textTransform: 'capitalize' }}>{task.priority}</span>
+                          </td>
+                          {!projectId && (<td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>{projectNameById(task.projectId)}</td>)}
+                          <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }} onClick={(e) => e.stopPropagation()}>
+                            {exec ? (
+                              <AgentChip label={execAgentLabel(exec)} status={exec.status} title={`${execAgentLabel(exec)} · ${exec.status}. Click for details.`} onClick={() => openTask(task, 'agent')} />
+                            ) : (taskAssigneeName(task))}
+                          </td>
+                          <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>{formatDate(task.dueDate)}</td>
+                          <td style={{ padding: '10px 12px' }} onClick={(e) => e.stopPropagation()}>
+                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                              <button type="button" onClick={() => openTask(task)} style={buttonTertiary}>View</button>
+                              <button type="button" onClick={() => openEdit(task, e)} style={buttonTertiary}>Edit</button>
+                              <MoveToBoardControl projects={projects} currentProjectId={task.projectId} onMove={(projectId) => moveTask(task.id, projectId)} label="Move…" style={{ padding: '6px 10px', fontSize: 12 }} />
+                              <button type="button" onClick={(e) => removeTask(task, e)} style={{ ...buttonTertiary, color: 'var(--error-text)', borderColor: 'var(--error-border)' }}>Delete</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       )}
 
       {showModal && (
-        <div
-          className="modal-overlay"
-          role="presentation"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 10000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 24,
-          }}
-          onClick={(e) => e.target === e.currentTarget && setShowModal(false)}
-        >
-          <div
-            style={{
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 12,
-              padding: 24,
-              maxWidth: 540,
-              width: '100%',
-              maxHeight: '90vh',
-              overflow: 'auto',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>
-              {editTarget ? 'Edit task' : 'New task'}
-            </div>
+        <div className="modal-overlay" role="presentation" style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={(e) => e.target === e.currentTarget && setShowModal(false)}>
+          <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 24, maxWidth: 540, width: '100%', maxHeight: '90vh', overflow: 'auto', background: 'var(--bg-elevated)' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16, color: 'var(--text-primary)' }}>{editTarget ? 'Edit task' : 'New task'}</div>
             <form onSubmit={handleSave} style={{ display: 'grid', gap: 14 }}>
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                  Title
-                </label>
-                <input
-                  required
-                  placeholder="What needs to be done?"
-                  value={form.title ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    fontSize: 13,
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
-                    background: 'var(--bg-deep)',
-                    color: 'var(--text-primary)',
-                  }}
-                />
+                <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Title</label>
+                <input required placeholder="What needs to be done?" value={form.title ?? ''} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)' }} />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                  Description (optional)
-                </label>
-                <textarea
-                  placeholder="Additional context…"
-                  value={form.description ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                  rows={3}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    fontSize: 13,
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
-                    background: 'var(--bg-deep)',
-                    color: 'var(--text-primary)',
-                    resize: 'vertical',
-                  }}
-                />
+                <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Description (optional)</label>
+                <textarea placeholder="Additional context…" value={form.description ?? ''} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} rows={3} style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)', resize: 'vertical', boxSizing: 'border-box' }} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                    Status
-                  </label>
-                  <Select
-                    value={form.status ?? 'todo'}
-                    onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-                    style={{
-                      width: '100%',
-                      padding: '8px 10px',
-                      fontSize: 13,
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
-                      background: 'var(--bg-deep)',
-                      color: 'var(--text-primary)',
-                    }}
-                  >
-                    {statusChoices.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Status</label>
+                  <Select value={form.status ?? 'todo'} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>
+                    {statusChoices.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </Select>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                    Priority
-                  </label>
-                  <Select
-                    value={form.priority ?? 'medium'}
-                    onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as TaskPriority }))}
-                    style={{
-                      width: '100%',
-                      padding: '8px 10px',
-                      fontSize: 13,
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
-                      background: 'var(--bg-deep)',
-                      color: 'var(--text-primary)',
-                    }}
-                  >
-                    {PRIORITIES.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Priority</label>
+                  <Select value={form.priority ?? 'medium'} onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as TaskPriority }))} style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>
+                    {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
                   </Select>
                 </div>
               </div>
               {!projectId && (
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                    Project
-                  </label>
-                  <Select
-                    value={form.projectId ?? ''}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, projectId: e.target.value ? Number(e.target.value) : undefined }))
-                    }
-                    style={{
-                      width: '100%',
-                      padding: '8px 10px',
-                      fontSize: 13,
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
-                      background: 'var(--bg-deep)',
-                      color: 'var(--text-primary)',
-                    }}
-                  >
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Project</label>
+                  <Select value={form.projectId ?? ''} onChange={(e) => setForm((f) => ({ ...f, projectId: e.target.value ? Number(e.target.value) : undefined }))} style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>
                     <option value="">Select project</option>
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
+                    {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </Select>
                 </div>
               )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                    Assign to agent
-                  </label>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Assign to team member</label>
                   <AssigneeSelect
-                    hosts={agentHostsList}
-                    cloudAgents={cloudAgentsList}
-                    hostId={form.assignedAgentHostId}
-                    agentRef={form.assignedAgentRef}
+                    hosts={agentHostsList} cloudAgents={cloudAgentsList} members={membersList}
+                    hostId={form.assignedAgentHostId} agentRef={form.assignedAgentRef} userId={form.assignedUserId}
                     onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
-                    style={{
-                      width: '100%',
-                      padding: '8px 10px',
-                      fontSize: 13,
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
-                      background: 'var(--bg-deep)',
-                      color: 'var(--text-primary)',
-                    }}
+                    style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)' }}
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                    Due date (optional)
-                  </label>
-                  <input
-                    type="date"
-                    value={form.dueDate?.split('T')[0] ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value || undefined }))}
-                    style={{
-                      width: '100%',
-                      padding: '8px 10px',
-                      fontSize: 13,
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
-                      background: 'var(--bg-deep)',
-                      color: 'var(--text-primary)',
-                    }}
-                  />
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Due date (optional)</label>
+                  <input type="date" value={form.dueDate?.split('T')[0] ?? ''} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value || undefined }))} style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)' }} />
                 </div>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                  GitHub PR URL (optional)
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://github.com/org/repo/pull/123"
-                  value={(form as Record<string, unknown>).githubPrUrl as string ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, githubPrUrl: e.target.value || null } as typeof f))}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    fontSize: 13,
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
-                    background: 'var(--bg-deep)',
-                    color: 'var(--text-primary)',
-                    boxSizing: 'border-box',
-                  }}
-                />
+                <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>GitHub PR URL (optional)</label>
+                <input type="url" placeholder="https://github.com/org/repo/pull/123" value={(form as Record<string, unknown>).githubPrUrl as string ?? ''} onChange={(e) => setForm((f) => ({ ...f, githubPrUrl: e.target.value || null } as typeof f))} style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)', boxSizing: 'border-box' }} />
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-                <button type="button" style={buttonTertiary} onClick={() => setShowModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" disabled={saving} style={{ ...buttonPrimary, opacity: saving ? 0.7 : 1 }}>
-                  {saving ? 'Saving…' : editTarget ? 'Save changes' : 'Create task'}
-                </button>
+                <button type="button" style={buttonTertiary} onClick={() => setShowModal(false)}>Cancel</button>
+                <button type="submit" disabled={saving} style={{ ...buttonPrimary, opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving…' : editTarget ? 'Save changes' : 'Create task'}</button>
               </div>
             </form>
           </div>
@@ -1412,130 +999,30 @@ export function TaskMgmtContent({
 
       {drawerTask && (
         <>
-          <div
-            className="slide-panel-overlay"
-            role="presentation"
-            style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 10002,
-            }}
-            onClick={() => setDrawerTask(null)}
-          />
-          <div
-            className="slide-panel-drawer"
-            style={{
-              position: 'fixed',
-              top: 0,
-              right: 0,
-              bottom: 0,
-              width: 'min(864px, 96vw)',
-              borderLeft: '1px solid var(--border-subtle)',
-              boxShadow: '-8px 0 24px rgba(0,0,0,0.2)',
-              zIndex: 10003,
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: 16,
-                borderBottom: '1px solid var(--border-subtle)',
-              }}
-            >
-              <div style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
-                {editingField === 'title' ? (
-                  <input
-                    autoFocus
-                    value={fieldDraft}
-                    onChange={(e) => setFieldDraft(e.target.value)}
-                    onBlur={() => {
-                      const next = fieldDraft.trim();
-                      if (next && next !== drawerTask.title) saveTaskField({ title: next });
-                      else setEditingField(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); }
-                      if (e.key === 'Escape') setEditingField(null);
-                    }}
-                    style={{
-                      width: '100%',
-                      fontWeight: 700,
-                      fontSize: 16,
-                      padding: '4px 8px',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 6,
-                      background: 'var(--bg-deep)',
-                      color: 'var(--text-primary)',
-                    }}
-                  />
-                ) : (
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => { setFieldDraft(drawerTask.title); setEditingField('title'); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { setFieldDraft(drawerTask.title); setEditingField('title'); } }}
-                    title="Click to edit title"
-                    style={{ fontWeight: 700, fontSize: 16, cursor: 'text', borderRadius: 6, padding: '4px 6px', margin: '-4px -6px' }}
-                  >
-                    {drawerTask.title}
-                  </div>
-                )}
-                <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginTop: 2, paddingLeft: 6 }}>
-                  {drawerTask.key}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              <button
-                type="button"
-                onClick={(e) => removeTask(drawerTask, e)}
-                style={{
-                  width: 36,
-                  height: 36,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '1px solid var(--error-border)',
-                  borderRadius: 8,
-                  background: 'var(--bg-base)',
-                  color: 'var(--error-text)',
-                  cursor: 'pointer',
-                }}
-                aria-label="Delete task"
-                title="Delete task"
-              >
-                <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }}>
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  <line x1="10" y1="11" x2="10" y2="17" />
-                  <line x1="14" y1="11" x2="14" y2="17" />
+          <div className="slide-panel-overlay" role="presentation" onClick={() => setDrawerTask(null)} style={{ position: 'fixed', inset: 0, zIndex: 10002 }} aria-hidden />
+          <div className="slide-panel-drawer" style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(864px, 96vw)', borderLeft: '1px solid var(--border-subtle)', boxShadow: '-8px 0 24px rgba(0,0,0,0.2)', zIndex: 10003, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-base)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 16, borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => setDrawerTask(null)} aria-label="Close panel" title="Close panel" style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
               </button>
-              <button
-                type="button"
-                onClick={() => setDrawerTask(null)}
-                style={{
-                  width: 36,
-                  height: 36,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
-                  background: 'var(--bg-base)',
-                  color: 'var(--text-secondary)',
-                  cursor: 'pointer',
-                }}
-                aria-label="Close"
-              >
-                <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
+              <div style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
+                {editingField === 'title' ? (
+                  <input autoFocus value={fieldDraft} onChange={(e) => setFieldDraft(e.target.value)} onBlur={() => { const next = fieldDraft.trim(); if (next && next !== drawerTask.title) saveTaskField({ title: next }); else setEditingField(null); }} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setEditingField(null); }} style={{ width: '100%', fontWeight: 700, fontSize: 16, padding: '4px 8px', border: '1px solid var(--border-subtle)', borderRadius: 6, background: 'var(--bg-deep)', color: 'var(--text-primary)' }} />
+                ) : (
+                  <div role="button" tabIndex={0} onClick={() => { setFieldDraft(drawerTask.title); setEditingField('title'); }} onKeyDown={(e) => { if (e.key === 'Enter') { setFieldDraft(drawerTask.title); setEditingField('title'); } }} title="Click to edit title" style={{ cursor: 'text', borderRadius: 6, padding: '4px 6px', margin: '-4px -6px' }}>
+                    <span style={{ fontWeight: 700, fontSize: 16 }}>{drawerTask.title}</span>
+                  </div>
+                )}
+                <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginTop: 2, paddingLeft: 6 }}>{drawerTask.key}</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <button type="button" onClick={(e) => removeTask(drawerTask, e)} aria-label="Delete task" title="Delete task" style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--error-border)', borderRadius: 8, background: 'var(--bg-base)', color: 'var(--error-text)', cursor: 'pointer' }}>
+                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+              </button>
+              <button type="button" onClick={() => setDrawerTask(null)} aria-label="Close" title="Close" style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>
               </div>
             </div>
@@ -1549,8 +1036,8 @@ export function TaskMgmtContent({
                   onClick={() => setDrawerTab(id)}
                   style={{
                     padding: '10px 16px', fontSize: 13, border: 'none', background: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-                    borderBottom: `2px solid ${drawerTab === id ? 'var(--coral-bright, #f4726e)' : 'transparent'}`,
-                    color: drawerTab === id ? 'var(--coral-bright, #f4726e)' : 'var(--text-muted)',
+                    borderBottom: `2px solid ${drawerTab === id ? 'var(--coral-bright)' : 'transparent'}`,
+                    color: drawerTab === id ? 'var(--coral-bright)' : 'var(--text-muted)',
                     fontWeight: drawerTab === id ? 600 : 400,
                   }}
                 >
@@ -1577,61 +1064,30 @@ export function TaskMgmtContent({
                     value={drawerTask.status}
                     onChange={(e) => { patchStatus(drawerTask.id, e.target.value); setEditingField(null); }}
                     onBlur={() => setEditingField(null)}
-                    style={{
-                      fontSize: 12,
-                      padding: '3px 6px',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 6,
-                      background: 'var(--bg-deep)',
-                      color: 'var(--text-primary)',
-                    }}
+                    style={{ fontSize: 11, padding: '3px 6px', borderRadius: 6 }} // Inline select style
                   >
-                    {statusChoices.map((s) => (
-                      <option key={s.value} value={s.value}>{s.label}</option>
-                    ))}
+                    {statusChoices.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </Select>
                 ) : (
                   <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setEditingField('status')}
-                    onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('status'); }}
-                    title="Click to change status"
+                    role="button" tabIndex={0} onClick={() => setEditingField('status')} onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('status'); }}
+                    title="Click to change status" style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', height: 24 }} // Ensure touch target size
                     className={taskStatusBadgeClass(drawerTask.status)}
-                    style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, cursor: 'pointer' }}
                   >
                     {columnLabel(drawerTask.status)}
                   </span>
                 )}
                 {editingField === 'priority' ? (
                   <Select
-                    autoFocus
-                    value={drawerTask.priority}
-                    disabled={fieldSaving}
-                    onChange={(e) => saveTaskField({ priority: e.target.value as TaskPriority })}
-                    onBlur={() => setEditingField(null)}
-                    style={{
-                      fontSize: 12,
-                      padding: '3px 6px',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 6,
-                      background: 'var(--bg-deep)',
-                      color: 'var(--text-primary)',
-                    }}
+                    autoFocus value={drawerTask.priority} disabled={fieldSaving} onChange={(e) => saveTaskField({ priority: e.target.value as TaskPriority })}
+                    onBlur={() => setEditingField(null)} style={{ fontSize: 11, padding: '3px 6px', borderRadius: 6 }}
                   >
-                    {PRIORITIES.map((p) => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
+                    {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
                   </Select>
                 ) : (
                   <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setEditingField('priority')}
-                    onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('priority'); }}
-                    title="Click to change priority"
-                    className={PRIORITY_CLASS[drawerTask.priority]}
-                    style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, cursor: 'pointer' }}
+                    role="button" tabIndex={0} onClick={() => setEditingField('priority')} onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('priority'); }}
+                    title="Click to change priority" className={PRIORITY_CLASS[drawerTask.priority]} style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', height: 24 }} // Ensure touch target size
                   >
                     {drawerTask.priority}
                   </span>
@@ -1639,193 +1095,72 @@ export function TaskMgmtContent({
               </div>
               {(drawerTask.gitBranch || drawerTask.githubPrUrl) && (
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>Branch &amp; PR</div>
+                  <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14, color: 'var(--text-primary)' }}>Branch &amp; PR</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     {drawerTask.gitBranch && (
-                      <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
-                        {drawerTask.gitBranch}
-                      </span>
+                      <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>{drawerTask.gitBranch}</span>
                     )}
                     {drawerTask.githubPrUrl && (
                       <a
-                        href={drawerTask.githubPrUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="View the code changes on GitHub"
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          fontFamily: 'var(--font-mono)',
-                          color: 'var(--coral-bright, #f4726e)',
-                          textDecoration: 'none',
-                          padding: '2px 8px',
-                          borderRadius: 6,
-                          border: '1px solid var(--border-subtle)',
-                          background: 'var(--bg-deep)',
-                          whiteSpace: 'nowrap',
-                        }}
+                        href={drawerTask.githubPrUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+                        style={{ fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--coral-bright)', textDecoration: 'none', padding: '6px 12px', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-deep)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', minHeight: 32 }} // Added styles for touch target and appearance
                       >
-                        PR{drawerTask.githubPrNumber ? ` #${drawerTask.githubPrNumber}` : ''} →
+                        PR #{drawerTask.githubPrNumber ?? '—'} →
                       </a>
                     )}
                   </div>
                 </div>
               )}
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Description</div>
+                <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14, color: 'var(--text-primary)' }}>Description</div>
                 {editingField === 'description' ? (
                   <div style={{ display: 'grid', gap: 8 }}>
-                    <textarea
-                      autoFocus
-                      value={fieldDraft}
-                      onChange={(e) => setFieldDraft(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Escape') setEditingField(null); }}
-                      rows={6}
-                      placeholder="Markdown supported…"
-                      style={{
-                        width: '100%',
-                        padding: '8px 10px',
-                        fontSize: 13,
-                        fontFamily: 'var(--font-mono)',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 8,
-                        background: 'var(--bg-deep)',
-                        color: 'var(--text-primary)',
-                        resize: 'vertical',
-                        boxSizing: 'border-box',
-                      }}
-                    />
+                    <textarea autoFocus value={fieldDraft} onChange={(e) => setFieldDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') setEditingField(null); }} rows={6} placeholder="Markdown supported…" style={{ width: '100%', padding: '8px 10px', fontSize: 13, fontFamily: 'var(--font-mono)', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)', resize: 'vertical', boxSizing: 'border-box' }} />
                     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                      <button type="button" style={buttonTertiary} onClick={() => setEditingField(null)}>
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        disabled={fieldSaving}
-                        style={{ ...buttonPrimary, opacity: fieldSaving ? 0.7 : 1 }}
-                        onClick={() => saveTaskField({ description: fieldDraft.trim() || null })}
-                      >
-                        {fieldSaving ? 'Saving…' : 'Save'}
-                      </button>
+                      <button type="button" onClick={() => setEditingField(null)} style={buttonTertiary}>Cancel</button>
+                      <button type="button" disabled={fieldSaving} onClick={() => saveTaskField({ description: fieldDraft.trim() || null })} style={{ ...buttonPrimary, opacity: fieldSaving ? 0.7 : 1 }}>{fieldSaving ? 'Saving…' : 'Save'}</button>
                     </div>
                   </div>
                 ) : (
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => { setFieldDraft(drawerTask.description ?? ''); setEditingField('description'); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { setFieldDraft(drawerTask.description ?? ''); setEditingField('description'); } }}
-                    title="Click to edit description (Markdown)"
-                    style={{
-                      fontSize: 13,
-                      color: drawerTask.description ? 'var(--text-secondary)' : 'var(--text-muted)',
-                      lineHeight: 1.6,
-                      cursor: 'text',
-                      borderRadius: 8,
-                      padding: 8,
-                      margin: -8,
-                      minHeight: 24,
-                    }}
-                  >
-                    {drawerTask.description
-                      ? <ChatMessageContent content={drawerTask.description} />
-                      : 'Add a description…'}
+                  <div role="button" tabIndex={0} onClick={() => { setFieldDraft(drawerTask.description ?? ''); setEditingField('description'); }} onKeyDown={(e) => { if (e.key === 'Enter') { setFieldDraft(drawerTask.description ?? ''); setEditingField('description'); } }} title="Click to edit description (Markdown)" style={{ fontSize: 13, color: drawerTask.description ? 'var(--text-secondary)' : 'var(--text-muted)', lineHeight: 1.6, cursor: 'text', borderRadius: 8, padding: 8, margin: -8, minHeight: 24 }}>
+                    {drawerTask.description ? <ChatMessageContent content={drawerTask.description} /> : 'Add a description…'}
                   </div>
                 )}
               </div>
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>Details</div>
+                <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14, color: 'var(--text-primary)' }}>Details</div>
                 <div style={{ display: 'grid', gap: 8 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 44 }}> {/* Ensured minHeight for touch target */}
                     <span style={{ color: 'var(--text-muted)' }}>Project</span>
                     {editingField === 'project' ? (
-                      <MoveToBoardControl
-                        projects={projects}
-                        currentProjectId={drawerTask.projectId}
-                        onMove={(projectId) => { moveTask(drawerTask.id, projectId); setEditingField(null); }}
-                        label={`${projectNameById(drawerTask.projectId)} →`}
-                        style={{ fontSize: 13, padding: '3px 6px' }}
-                      />
+                      <MoveToBoardControl projects={projects} currentProjectId={drawerTask.projectId} onMove={(projectId) => { moveTask(drawerTask.id, projectId); setEditingField(null); }} label={`${projectNameById(drawerTask.projectId)} →`} style={{ fontSize: 13, padding: '6px 10px', borderRadius: 8 }} />
                     ) : (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setEditingField('project')}
-                        onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('project'); }}
-                        title="Click to move this task to another board"
-                        style={{ color: 'var(--text-primary)', cursor: 'pointer', borderBottom: '1px dashed var(--border-subtle)' }}
-                      >
+                      <span role="button" tabIndex={0} onClick={() => setEditingField('project')} onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('project'); }} title="Click to move task to another board" style={{ color: 'var(--text-primary)', cursor: 'pointer', borderBottom: '1px dashed var(--border-subtle)', padding: '4px 6px', borderRadius: 6 }}>
                         {projectNameById(drawerTask.projectId)}
                       </span>
                     )}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Assignee</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 44 }}> {/* Ensured minHeight for touch target */}
+                    <span style={{ color: 'var(--text-muted)' }}>Assignee / Owner</span>
                     {editingField === 'assignee' ? (
                       <AssigneeSelect
-                        autoFocus
-                        hosts={agentHostsList}
-                        cloudAgents={cloudAgentsList}
-                        hostId={drawerTask.assignedAgentHostId}
-                        agentRef={drawerTask.assignedAgentRef}
-                        disabled={fieldSaving}
-                        onChange={(patch) => saveTaskField(patch)}
-                        onBlur={() => setEditingField(null)}
-                        style={{
-                          fontSize: 13,
-                          padding: '3px 6px',
-                          border: '1px solid var(--border-subtle)',
-                          borderRadius: 6,
-                          background: 'var(--bg-deep)',
-                          color: 'var(--text-primary)',
-                        }}
+                        autoFocus hosts={agentHostsList} cloudAgents={cloudAgentsList} members={membersList}
+                        hostId={drawerTask.assignedAgentHostId} agentRef={drawerTask.assignedAgentRef} userId={drawerTask.assignedUserId}
+                        onChange={(patch) => saveTaskField(patch)} onBlur={() => setEditingField(null)}
+                        style={{ width: '50%', padding: '6px 8px', fontSize: 13, borderRadius: 8 }} // Adjusted style for assignee select
                       />
                     ) : (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setEditingField('assignee')}
-                        onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('assignee'); }}
-                        title="Click to change assignee"
-                        style={{ color: 'var(--text-primary)', cursor: 'pointer', borderBottom: '1px dashed var(--border-subtle)' }}
-                      >
+                      <span role="button" tabIndex={0} onClick={() => setEditingField('assignee')} onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('assignee'); }} title="Click to change assignee" style={{ color: 'var(--text-primary)', cursor: 'pointer', borderBottom: '1px dashed var(--border-subtle)', padding: '4px 6px', borderRadius: 6, display: 'inline-block' }}>
                         {taskAssigneeName(drawerTask)}
                       </span>
                     )}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 44 }}> {/* Ensured minHeight for touch target */}
                     <span style={{ color: 'var(--text-muted)' }}>Due date</span>
                     {editingField === 'dueDate' ? (
-                      <input
-                        type="date"
-                        autoFocus
-                        value={drawerTask.dueDate?.split('T')[0] ?? ''}
-                        disabled={fieldSaving}
-                        onChange={(e) => saveTaskField({ dueDate: e.target.value || null })}
-                        onBlur={() => setEditingField(null)}
-                        onKeyDown={(e) => { if (e.key === 'Escape') setEditingField(null); }}
-                        style={{
-                          fontSize: 13,
-                          padding: '3px 6px',
-                          border: '1px solid var(--border-subtle)',
-                          borderRadius: 6,
-                          background: 'var(--bg-deep)',
-                          color: 'var(--text-primary)',
-                        }}
-                      />
+                      <input type="date" autoFocus value={drawerTask.dueDate?.split('T')[0] ?? ''} disabled={fieldSaving} onChange={(e) => saveTaskField({ dueDate: e.target.value || null })} onBlur={() => setEditingField(null)} onKeyDown={(e) => { if (e.key === 'Escape') setEditingField(null); }} style={{ width: '50%', padding: '6px 8px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)' }} />
                     ) : (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setEditingField('dueDate')}
-                        onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('dueDate'); }}
-                        title="Click to set a due date"
-                        style={{
-                          color: drawerTask.dueDate ? 'var(--text-primary)' : 'var(--text-muted)',
-                          cursor: 'pointer',
-                          borderBottom: '1px dashed var(--border-subtle)',
-                        }}
-                      >
+                      <span role="button" tabIndex={0} onClick={() => setEditingField('dueDate')} onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('dueDate'); }} title="Click to set a due date" style={{ color: drawerTask.dueDate ? 'var(--text-primary)' : 'var(--text-muted)', cursor: 'pointer', borderBottom: '1px dashed var(--border-subtle)', padding: '4px 6px', borderRadius: 6, display: 'inline-block', minHeight: 24 }}>
                         {formatDate(drawerTask.dueDate) || 'None'}
                       </span>
                     )}
@@ -1836,50 +1171,19 @@ export function TaskMgmtContent({
                   </div>
                 </div>
               </div>
-            </div>
-            <div
-              style={{
-                flexShrink: 0,
-                borderTop: '1px solid var(--border-subtle)',
-                padding: '12px 20px',
-                background: 'var(--bg-base)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <span style={{ fontWeight: 600, fontSize: 14 }}>Run</span>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  starts an execution and opens the Agent tab
-                </span>
-              </div>
-              <RunAgentControl
-                task={drawerTask}
-                agentHosts={agentHostsList}
-                onRan={() => { patchStatus(drawerTask.id, 'in_progress', { skipAutoSubmit: true }); setDrawerTab('agent'); }}
-                onAwaitingApproval={(g) => setApprovalGate({ approvalId: g.approvalId, taskId: g.taskId, reason: g.reason })}
-              />
-            </div>
             </>
             )}
           </div>
-        </>
+        </div>
+      </>
       )}
 
       {effectiveProjectId != null && (
-        <BoardConfigPanel
-          open={boardConfigOpen}
-          onClose={() => setBoardConfigOpen(false)}
-          projectId={effectiveProjectId}
-          projectName={effectiveProjectName}
-        />
+        <BoardConfigPanel open={boardConfigOpen} onClose={() => setBoardConfigOpen(false)} projectId={effectiveProjectId} projectName={effectiveProjectName} />
       )}
 
       {effectiveProjectId != null && (
-        <SlideOutPanel
-          open={prdOpen}
-          onClose={() => setPrdOpen(false)}
-          title={`PRD${effectiveProjectName ? ` · ${effectiveProjectName}` : ''}`}
-          width="min(720px, 96vw)"
-        >
+        <SlideOutPanel open={prdOpen} onClose={() => setPrdOpen(false)} title={`PRD${effectiveProjectName ? ` · ${effectiveProjectName}` : ''}`} width="min(720px, 96vw)">
           <TaskPrdTab projectId={effectiveProjectId} />
         </SlideOutPanel>
       )}
