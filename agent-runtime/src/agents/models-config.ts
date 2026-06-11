@@ -88,30 +88,48 @@ export async function ensureBuilderForceAgentsModelsJson(
 
   const explicitProviders = cfg.models?.providers ?? {};
   const implicitProviders = await resolveImplicitProviders({ agentDir, explicitProviders });
-  const providers: Record<string, ProviderConfig> = mergeProviders({
+  let mergedProviders: Record<string, ProviderConfig> = mergeProviders({
     implicit: implicitProviders,
     explicit: explicitProviders,
   });
   const implicitBedrock = await resolveImplicitBedrockProvider({ agentDir, config: cfg });
   if (implicitBedrock) {
-    const existing = providers["amazon-bedrock"];
-    providers["amazon-bedrock"] = existing
+    const existing = mergedProviders["amazon-bedrock"];
+    mergedProviders["amazon-bedrock"] = existing
       ? mergeProviderModels(implicitBedrock, existing)
       : implicitBedrock;
   }
   const implicitCopilot = await resolveImplicitCopilotProvider({ agentDir });
-  if (implicitCopilot && !providers["github-copilot"]) {
-    providers["github-copilot"] = implicitCopilot;
+  if (implicitCopilot && !mergedProviders["github-copilot"]) {
+    mergedProviders["github-copilot"] = implicitCopilot;
   }
 
-  if (Object.keys(providers).length === 0) {
+  if (Object.keys(mergedProviders).length === 0) {
     return { agentDir, wrote: false };
   }
+
+  // Remove the problematic model ('googleai/gemini-2.5-flash-lite' or its normalized form)
+  // from the merged providers before normalization.
+  const filteredProviders: Record<string, ProviderConfig> = {};
+  for (const [key, provider] of Object.entries(mergedProviders)) {
+    if (provider.models) {
+      provider.models = provider.models.filter(
+        (model) =>
+          !(
+            model.id === "googleai/gemini-2.5-flash-lite" || // Exact match
+            model.id.toLowerCase() === "gemini-2.5-flash-lite" || // Normalized common ID
+            model.id.toLowerCase() === "google/gemini-2.5-flash-lite" // Normalized with provider
+          )
+      );
+    }
+    filteredProviders[key] = provider;
+  }
+  mergedProviders = filteredProviders;
 
   const mode = cfg.models?.mode ?? DEFAULT_MODE;
   const targetPath = path.join(agentDir, "models.json");
 
-  let mergedProviders = providers;
+  let finalProviders = mergedProviders;
   let existingRaw = "";
   if (mode === "merge") {
     const existing = await readJson(targetPath);
@@ -120,12 +138,12 @@ export async function ensureBuilderForceAgentsModelsJson(
         string,
         NonNullable<ModelsConfig["providers"]>[string]
       >;
-      mergedProviders = { ...existingProviders, ...providers };
+      finalProviders = { ...existingProviders, ...mergedProviders };
     }
   }
 
   const normalizedProviders = normalizeProviders({
-    providers: mergedProviders,
+    providers: finalProviders,
     agentDir,
   });
   const next = `${JSON.stringify({ providers: normalizedProviders }, null, 2)}\n`;
@@ -144,7 +162,7 @@ export async function ensureBuilderForceAgentsModelsJson(
 
   // Background Ollama discovery: if ollama has empty models, discover and patch
   // models.json when done so TUI startup is not blocked.
-  const ollamaProvider = mergedProviders?.ollama;
+  const ollamaProvider = mergedProviders?.ollama; // Use original mergedProviders for discovery
   if (
     ollamaProvider &&
     Array.isArray(ollamaProvider.models) &&
@@ -166,7 +184,16 @@ export async function ensureBuilderForceAgentsModelsJson(
         if (!ollama) {
           return;
         }
-        providers.ollama = { ...ollama, models };
+        // Filter problematic models from discovery results as well
+        const filteredModels = models.filter(
+          (model) =>
+            !(
+              model.id === "googleai/gemini-2.5-flash-lite" || // Exact match
+              model.id.toLowerCase() === "gemini-2.5-flash-lite" || // Normalized common ID
+              model.id.toLowerCase() === "google/gemini-2.5-flash-lite" // Normalized with provider
+            )
+        );
+        providers.ollama = { ...ollama, models: filteredModels };
         const normalized = normalizeProviders({ providers, agentDir });
         await fs.writeFile(targetPath, `${JSON.stringify({ providers: normalized }, null, 2)}\n`, {
           mode: 0o600,
