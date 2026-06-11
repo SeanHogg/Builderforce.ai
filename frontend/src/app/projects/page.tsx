@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect } from 'react';
@@ -73,6 +74,8 @@ export default function ProjectsTasksPage() {
             gap: 2,
             borderBottom: '1px solid var(--border-subtle)',
             marginBottom: 24,
+            overflowX: 'auto', // Enable horizontal scrolling for tabs if needed
+            paddingBottom: 2, // Ensure border is visible without content cutoff
           }}
         >
           {TABS.map(({ id, label }) => (
@@ -89,7 +92,14 @@ export default function ProjectsTasksPage() {
                 border: 'none',
                 borderBottom: activeTab === id ? '2px solid var(--coral-bright)' : '2px solid transparent',
                 cursor: 'pointer',
-                marginBottom: -1,
+                marginBottom: -1, // Pull border down to align with bottom edge
+                whiteSpace: 'nowrap', // Prevent wrapping
+                // Ensure sufficient touch target size
+                minWidth: 44,
+                minHeight: 44,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
               {label}
