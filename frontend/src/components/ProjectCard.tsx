@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -60,8 +61,9 @@ export function ProjectCard({
   };
 
   // Shared style for the square icon buttons in the card header so they can't drift.
+  // Increased padding and min-size for touch targets.
   const iconButtonStyle: React.CSSProperties = {
-    padding: 6,
+    padding: 10, // Increased padding to meet min touch target size
     fontSize: 0,
     background: 'var(--bg-base)',
     color: 'var(--coral-bright)',
@@ -71,8 +73,10 @@ export function ProjectCard({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: 32,
-    height: 32,
+    minWidth: 44, // Ensure min touch target width
+    minHeight: 44, // Ensure min touch target height
+    width: 44, // Set explicit size to ensure consistency
+    height: 44,
   };
 
   return (
@@ -227,11 +231,17 @@ export function ProjectCard({
               fontSize: 12,
               fontWeight: 600,
               color: 'var(--coral-bright)',
-              background: 'none',
-              border: 'none',
+              background: 'transparent',
+              border: '1px solid var(--coral-bright)', // Added border for better touch target definition
+              borderRadius: 8, // Rounded border
+              padding: '4px 10px', // Adequate padding
               cursor: onAssignedAgentClick ? 'pointer' : 'default',
-              padding: 0,
-              textDecoration: 'underline',
+              textDecoration: 'none', // Removed underline to rely on border/background
+              minWidth: 44, // Ensure min touch target width
+              minHeight: 44, // Ensure min touch target height
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
             {project.assignedAgentHost.name}
@@ -267,14 +277,17 @@ export function ProjectCard({
             window.location.href = `/workflows?projectId=${project.id}`;
           }}
           style={{
-            fontSize: 12,
+            fontSize: 13, // Slightly larger font
             fontWeight: 600,
             color: 'var(--coral-bright)',
             background: 'transparent',
             border: '1px solid var(--coral-bright)',
-            borderRadius: 8,
-            padding: '4px 10px',
+            borderRadius: 10, // Slightly larger radius
+            padding: '10px 18px', // Increased padding for better touch target
             cursor: 'pointer',
+            fontFamily: 'var(--font-display)',
+            minWidth: 44, // Ensure min touch target width
+            minHeight: 44, // Ensure min touch target height
           }}
         >
           View workflows
