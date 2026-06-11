@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -33,20 +34,6 @@ export type AgentHostPanelTab =
   | 'observability'
   | 'debug'
   | 'nodes';
-
-export interface AgentHostSlideOutPanelProps {
-  agentHost: AgentHost;
-  open: boolean;
-  onClose: () => void;
-  /** Current tenant id (number) for "Set as default" when available. */
-  tenantId?: number | null;
-  /** Current default agentHost id; if matches agentHost.id, show "Default" and "Clear default". */
-  defaultAgentHostId?: number | null;
-  onSetDefaultAgentHost?: (agentHostId: number | null) => Promise<void>;
-  /** Called after the agentHost is deregistered (deleted) so the parent can drop it from its list. */
-  onDeleted?: (agentHostId: number) => void;
-  initialTab?: AgentHostPanelTab;
-}
 
 const TABS: { id: AgentHostPanelTab; label: string }[] = [
   { id: 'details', label: 'Details' },
@@ -91,6 +78,23 @@ const cardStyle: React.CSSProperties = {
   border: '1px solid var(--border-subtle)',
   borderRadius: 12,
   padding: 16,
+};
+
+// Base style for action buttons within the header and PRDs section.
+// Increased padding and set min dimensions for touch targets.
+const actionButtonStyle: React.CSSProperties = {
+  padding: '10px 18px', // Increased padding
+  fontSize: 13,
+  fontWeight: 600,
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 10,
+  cursor: 'pointer',
+  fontFamily: 'var(--font-display)',
+  minWidth: 44, // Ensure min touch target width
+  minHeight: 44, // Ensure min touch target height
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
 };
 
 export function AgentHostSlideOutPanel({
@@ -202,6 +206,8 @@ export function AgentHostSlideOutPanel({
           <button
             type="button"
             onClick={onClose}
+            title="Close panel"
+            aria-label="Close panel"
             style={{
               width: 36,
               height: 36,
@@ -214,7 +220,6 @@ export function AgentHostSlideOutPanel({
               color: 'var(--text-secondary)',
               cursor: 'pointer',
             }}
-            aria-label="Close panel"
           >
             <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -262,16 +267,8 @@ export function AgentHostSlideOutPanel({
                 type="button"
                 onClick={handleClearDefault}
                 disabled={savingDefault}
-                style={{
-                  padding: '6px 12px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  background: 'var(--bg-base)',
-                  color: 'var(--text-secondary)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
-                  cursor: savingDefault ? 'wait' : 'pointer',
-                }}
+                title={savingDefault ? 'Updating...' : 'Clear default agent host'}
+                style={{ ...actionButtonStyle, background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}
               >
                 {savingDefault ? 'Updating…' : 'Clear default'}
               </button>
@@ -280,16 +277,8 @@ export function AgentHostSlideOutPanel({
                 type="button"
                 onClick={handleSetDefault}
                 disabled={savingDefault}
-                style={{
-                  padding: '6px 12px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  background: 'var(--surface-interactive)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
-                  cursor: savingDefault ? 'wait' : 'pointer',
-                }}
+                title={savingDefault ? 'Setting default...' : 'Set as default agent host'}
+                style={{ ...actionButtonStyle, background: 'var(--surface-interactive)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
               >
                 {savingDefault ? 'Setting…' : 'Set as default'}
               </button>
@@ -298,16 +287,12 @@ export function AgentHostSlideOutPanel({
             type="button"
             onClick={handleDeregister}
             disabled={deleting}
-            title="Deregister this remote agent"
+            title={deleting ? 'Deregistering...' : 'Deregister this remote agent'}
             style={{
-              padding: '6px 12px',
-              fontSize: 12,
-              fontWeight: 600,
+              ...actionButtonStyle,
               background: 'var(--surface-danger-soft, rgba(239,68,68,0.12))',
               color: 'var(--danger, #ef4444)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
-              cursor: deleting ? 'wait' : 'pointer',
             }}
           >
             {deleting ? 'Deregistering…' : 'Deregister'}
@@ -340,7 +325,7 @@ export function AgentHostSlideOutPanel({
                 borderBottom: activeTab === id ? '2px solid var(--coral-bright)' : '2px solid transparent',
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
-                marginBottom: -1,
+                marginBottom: -1, // Pull border down to align with bottom edge
               }}
             >
               {label}
@@ -427,29 +412,39 @@ export function AgentHostSlideOutPanel({
                 <Link
                   href="/brainstorm"
                   style={{
-                    padding: '8px 14px',
+                    padding: '10px 18px', // Increased padding for touch target
                     fontSize: 13,
                     fontWeight: 600,
                     background: 'var(--surface-interactive)',
                     color: 'var(--text-primary)',
                     border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
+                    borderRadius: 10, // Larger radius
                     textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minWidth: 44, // Ensure min touch target size
+                    minHeight: 44,
                   }}
                 >
                   Brainstorm / Brain
-                </Link>
+                </button>
                 <Link
                   href="/projects"
                   style={{
-                    padding: '8px 14px',
+                    padding: '10px 18px', // Increased padding for touch target
                     fontSize: 13,
                     fontWeight: 600,
                     background: 'var(--surface-interactive)',
                     color: 'var(--text-primary)',
                     border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
+                    borderRadius: 10, // Larger radius
                     textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minWidth: 44, // Ensure min touch target size
+                    minHeight: 44,
                   }}
                 >
                   Projects
