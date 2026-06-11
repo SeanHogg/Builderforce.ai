@@ -22,6 +22,8 @@ export interface TaskProps {
   assignedAgentHostId: AgentHostId | null;
   /** ide_agents.id of the cloud agent working this ticket (agents are assignees). */
   assignedAgentRef: string | null;
+  /** Human assignee/owner (users.id). Mutually exclusive with the agent assignees. */
+  assignedUserId: string | null;
   /** Git branch the agent executes this ticket under (links to the PR/code changes). */
   gitBranch: string | null;
   startDate: Date | null;
@@ -48,12 +50,14 @@ export class Task {
   static create(
     props: Omit<
       TaskProps,
-      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'gitBranch'
+      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch'
     > & {
       projectKey: string;
       projectTaskCount: number;
       /** Optional cloud agent (ide_agents.id) assigned at creation time. */
       assignedAgentRef?: string | null;
+      /** Optional human assignee (users.id) at creation time. */
+      assignedUserId?: string | null;
     },
   ): Task {
     if (!props.title.trim()) throw new ValidationError('Task title is required');
@@ -77,6 +81,7 @@ export class Task {
       githubPrNumber: null,
       assignedAgentHostId: props.assignedAgentHostId ?? null,
       assignedAgentRef: props.assignedAgentRef ?? null,
+      assignedUserId: props.assignedUserId ?? null,
       gitBranch: null,
       startDate: props.startDate ?? null,
       dueDate: props.dueDate ?? null,
@@ -109,6 +114,7 @@ export class Task {
   get githubPrNumber(): number | null { return this.props.githubPrNumber; }
   get assignedAgentHostId(): AgentHostId | null { return this.props.assignedAgentHostId; }
   get assignedAgentRef(): string | null { return this.props.assignedAgentRef; }
+  get assignedUserId(): string | null { return this.props.assignedUserId; }
   get gitBranch(): string | null { return this.props.gitBranch; }
   get startDate(): Date | null { return this.props.startDate; }
   get dueDate(): Date | null { return this.props.dueDate; }
@@ -126,7 +132,7 @@ export class Task {
       Pick<
         TaskProps,
         'title' | 'description' | 'status' | 'priority' | 'assignedAgentType'
-        | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'gitBranch' | 'startDate' | 'dueDate'
+        | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'startDate' | 'dueDate'
         | 'persona' | 'archived'
       >
     >,

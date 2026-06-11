@@ -2,9 +2,10 @@ import { Hono } from 'hono';
 import { and, desc, eq } from 'drizzle-orm';
 import { TaskService } from '../../application/task/TaskService';
 import { TaskPriority, AgentType, TaskStatus } from '../../domain/shared/types';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { auditEvents, projects, specs, taskSpecs, tasks } from '../../infrastructure/database/schema';
+import { auditEvents, projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { AuditEventType } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
@@ -93,6 +94,39 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
     return c.json({ tasks: tasks.map(t => t.toPlain()) });
   });
 
+  // GET /api/tasks/assignees — the team members (humans) a task can be assigned to.
+  // Agents/cloud agents come from their own endpoints; this fills in the human side
+  // so the assignee picker can offer "humans AND agents are one team". Registered
+  // before `/:id` so the static path isn't captured as a task id.
+  //
+  // Cached read-through (tenant membership changes rarely). It is NOT invalidated on
+  // member add/remove — those mutations live in the tenant/admin routes — so staleness
+  // is bounded by the KV TTL (5 min), which is acceptable for an assignee dropdown.
+  router.get('/assignees', async (c) => {
+    const tenantId = c.get('tenantId');
+    const members = await getOrSetCached(
+      c.env as Env,
+      `task-assignees:tenant:${tenantId}`,
+      async () => {
+        const rows = await db
+          .select({
+            id: users.id,
+            displayName: users.displayName,
+            username: users.username,
+            email: users.email,
+          })
+          .from(tenantMembers)
+          .innerJoin(users, eq(users.id, tenantMembers.userId))
+          .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.isActive, true)));
+        return rows.map((r) => ({
+          id: r.id,
+          name: r.displayName || r.username || r.email,
+        }));
+      },
+    );
+    return c.json({ members });
+  });
+
   // GET /api/tasks/:id
   router.get('/:id', async (c) => {
     const id = Number(c.req.param('id'));
@@ -110,6 +144,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
       assignedAgentType?: AgentType | null;
       assignedAgentHostId?: number | null;
       assignedAgentRef?: string | null;
+      assignedUserId?: string | null;
       startDate?: string | null;
       dueDate?: string | null;
       persona?: string | null;
@@ -129,6 +164,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
       assignedAgentType?: AgentType | null;
       assignedAgentHostId?: number | null;
       assignedAgentRef?: string | null;
+      assignedUserId?: string | null;
       githubPrUrl?: string | null;
       githubPrNumber?: number | null;
       startDate?: string | null;

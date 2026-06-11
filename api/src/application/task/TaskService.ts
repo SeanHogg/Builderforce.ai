@@ -16,6 +16,8 @@ export interface CreateTaskDto {
   assignedAgentHostId?: number | null;
   /** Cloud agent (ide_agents.id) assigned to this task. Mutually exclusive with host. */
   assignedAgentRef?: string | null;
+  /** Human assignee (users.id). Mutually exclusive with the agent assignees. */
+  assignedUserId?: string | null;
   startDate?: string | null;
   dueDate?: string | null;
   persona?: string | null;
@@ -31,6 +33,8 @@ export interface UpdateTaskDto {
   assignedAgentHostId?: number | null;
   /** Cloud agent (ide_agents.id) assigned to this task. Mutually exclusive with host. */
   assignedAgentRef?: string | null;
+  /** Human assignee (users.id). Mutually exclusive with the agent assignees. */
+  assignedUserId?: string | null;
   githubPrUrl?: string | null;
   githubPrNumber?: number | null;
   startDate?: string | null;
@@ -86,6 +90,7 @@ export class TaskService {
       assignedAgentType: dto.assignedAgentType ?? null,
       assignedAgentHostId: dto.assignedAgentHostId != null ? asAgentHostId(dto.assignedAgentHostId) : null,
       assignedAgentRef: dto.assignedAgentRef ?? null,
+      assignedUserId: dto.assignedUserId ?? null,
       startDate: dto.startDate ? new Date(dto.startDate) : null,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
       persona: dto.persona ?? null,
