@@ -4,6 +4,9 @@ import {
   CODING_DEFAULT_MODEL,
   FREE_MODEL_POOL,
   isKnownModel,
+  codingModelsForPlan,
+  codingDefaultForPlan,
+  pickCloudModel,
 } from './LlmProxyService';
 import { catalogEntry } from './vendors';
 
@@ -36,5 +39,38 @@ describe('CODING_MODEL_POOL', () => {
     expect(isKnownModel('totally/made-up-model')).toBe(false);
     expect(isKnownModel('')).toBe(false);
     expect(isKnownModel(undefined)).toBe(false);
+  });
+});
+
+describe('plan-aware coding routing', () => {
+  it('free plan sees only free coding models; pro plan also sees premium', () => {
+    const free = codingModelsForPlan('free');
+    const pro = codingModelsForPlan('pro');
+    // Free is a subset of pro, and pro carries at least one model free does not.
+    expect(free.every((m) => pro.includes(m))).toBe(true);
+    expect(pro.length).toBeGreaterThan(free.length);
+    // Every free coding model is dispatchable on the free pool.
+    expect(free.every((m) => FREE_MODEL_POOL.includes(m))).toBe(true);
+  });
+
+  it('codingDefaultForPlan upgrades the default for paid plans', () => {
+    // Free default is a free model; pro default is the pool leader (premium first).
+    expect(FREE_MODEL_POOL).toContain(codingDefaultForPlan('free'));
+    expect(codingDefaultForPlan('pro')).toBe(CODING_MODEL_POOL[0]);
+    // premiumOverride forces premium routing regardless of plan.
+    expect(codingDefaultForPlan('free', true)).toBe(CODING_MODEL_POOL[0]);
+  });
+
+  it('pickCloudModel hard-pins a real explicit id, else falls back to the plan default', () => {
+    const explicit = pickCloudModel('openai/gpt-4.1', 'pro');
+    expect(explicit).toEqual({ model: 'openai/gpt-4.1', strict: true });
+
+    // Typo'd / off-catalog id is NOT pinned — falls back to the plan's coding default.
+    const garbage = pickCloudModel('made/up-model', 'free');
+    expect(garbage.strict).toBe(false);
+    expect(garbage.model).toBe(codingDefaultForPlan('free'));
+
+    // No selection → plan default, soft.
+    expect(pickCloudModel(undefined, 'pro')).toEqual({ model: codingDefaultForPlan('pro'), strict: false });
   });
 });

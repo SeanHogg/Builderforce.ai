@@ -1060,6 +1060,42 @@ export function modelPoolForPlan(effectivePlan: EffectivePlan, premiumOverride =
   return resolveRouting(effectivePlan, premiumOverride).modelPool;
 }
 
+/**
+ * Curated coding/tool-calling models the given plan can actually reach, best-first
+ * — `CODING_MODEL_POOL` intersected with the plan's pool. The single source of
+ * truth for "which coding models to offer / default to" on a plan: a free tenant
+ * gets only the free coding models, a Pro tenant also gets the premium ones.
+ * Consumed by `/llm/v1/models` (the cloud-agent picker) AND `codingDefaultForPlan`
+ * (the cloud runtime default) so the picker and the runtime never diverge.
+ */
+export function codingModelsForPlan(effectivePlan: EffectivePlan, premiumOverride = false): string[] {
+  const pool = new Set(modelPoolForPlan(effectivePlan, premiumOverride));
+  return CODING_MODEL_POOL.filter((m) => pool.has(m));
+}
+
+/** Best coding model the plan can reach (Pro → premium, Free → free coding model),
+ *  falling back to the global free default if the plan pool somehow excludes all. */
+export function codingDefaultForPlan(effectivePlan: EffectivePlan, premiumOverride = false): string {
+  return codingModelsForPlan(effectivePlan, premiumOverride)[0] ?? CODING_DEFAULT_MODEL;
+}
+
+/**
+ * Decide the model a cloud-agent run should use for a turn, shared by every cloud
+ * executor (durable loop + container op) so the "explicit pick = hard pin, else
+ * plan's best coding model" rule lives in ONE place.
+ *   • explicit + real catalog id → hard pin (`strict`), dispatched as-is.
+ *   • absent / typo'd / off-catalog → the plan's default coding model, soft (so a
+ *     cold model can fail over once before the run locks onto what resolved).
+ */
+export function pickCloudModel(
+  explicit: string | undefined,
+  effectivePlan: EffectivePlan,
+  premiumOverride = false,
+): { model: string; strict: boolean } {
+  if (isKnownModel(explicit)) return { model: (explicit as string).trim(), strict: true };
+  return { model: codingDefaultForPlan(effectivePlan, premiumOverride), strict: false };
+}
+
 /** Free-tier proxy for IDE-internal callers (chat, dataset gen, agent inference, brain).
  *  Always uses FREE_MODEL_POOL and productName='builderforceLLM'. */
 export function ideProxy(env: ProxyEnv): LlmProxyService {

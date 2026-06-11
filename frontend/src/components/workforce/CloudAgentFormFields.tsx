@@ -3,6 +3,7 @@
 import { Select } from '@/components/Select';
 
 import type { AgentRuntimeSupport, AgentEngine, AgentRuntimeSurface } from '@/lib/api';
+import { useLlmModels } from '@/lib/useLlmModels';
 
 /**
  * The cloud-agent identity field set, shared by the "Add agent" create modal
@@ -73,6 +74,10 @@ export function CloudAgentFormFields({
   onChange: (patch: Partial<CloudAgentFormState>) => void;
   autoFocus?: boolean;
 }) {
+  // Curated tool-calling + coding models the tenant's plan can reach — the same
+  // list the run picker offers, so an agent's configured model is always a real,
+  // dispatchable coding model rather than free-text that silently downgrades.
+  const { codingModels } = useLlmModels();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div>
@@ -140,7 +145,18 @@ export function CloudAgentFormFields({
       )}
       <div>
         <label style={labelStyle}>Base model (optional)</label>
-        <input style={inputStyle} value={form.baseModel} onChange={(e) => onChange({ baseModel: e.target.value })} placeholder="builderforce.ai default" />
+        <Select style={inputStyle} value={form.baseModel} onChange={(e) => onChange({ baseModel: e.target.value })}>
+          <option value="">builderforce.ai default (best coding model)</option>
+          {codingModels.map((m) => <option key={m} value={m}>{m}</option>)}
+          {/* Preserve a previously-saved model that isn't in the current plan's list
+              so opening an existing agent never silently drops its configured model. */}
+          {form.baseModel && !codingModels.includes(form.baseModel) && (
+            <option value={form.baseModel}>{form.baseModel} (current)</option>
+          )}
+        </Select>
+        <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>
+          The tool-calling + coding model this agent runs on. A run pins one model for the whole task; leave default to use the plan’s best coding model.
+        </p>
       </div>
     </div>
   );
