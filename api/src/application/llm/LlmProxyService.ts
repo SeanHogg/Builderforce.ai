@@ -85,16 +85,25 @@ export const PRO_MODEL_POOL: readonly string[] = [...FREE_MODEL_POOL, ...PRO_PAI
  * tail. Every id MUST exist in a vendor catalog — `LlmProxyService.codingPool.test`
  * asserts this so a catalog rename trips CI instead of silently degrading routing.
  */
+// Every id below is verified against the live OpenRouter /models API (all are
+// tool-capable). The cloud gateway dispatches free runs on the OpenRouter free
+// key, so the FREE tail must be real OpenRouter `:free` slugs — NOT vendor-direct
+// NIM/Cerebras ids that 404 there. Keep this in sync with the live API, not from
+// memory (`LlmProxyService.codingPool.test` asserts every id is in the catalog).
 export const CODING_MODEL_POOL: readonly string[] = [
-  // PREMIUM (paid) — selectable by Pro tenants whose key has credit.
+  // PAID — strongest agentic coders, reachable by Pro tenants on the credited key.
   'anthropic/claude-sonnet-4.6',
   'openai/gpt-4.1',
-  'google/gemini-2.5-pro',
-  'anthropic/claude-haiku-4.5',
-  // FREE — always dispatchable on the cloud gateway's free key.
+  'xiaomi/mimo-v2.5',                          // Programming #1 on OpenRouter, $0.14/$0.28
+  'qwen/qwen3.7-plus',                         // agentic coder + vision, $0.40/$1.60
+  'deepseek/deepseek-v4-flash',               // fast cheap coder, $0.10/$0.20
+  // FREE — strong agentic coders on the OpenRouter free key (the cloud default).
+  'nex-agi/nex-n2-pro:free',                  // agentic MoE (Qwen3.5 arch), tool use
+  'nvidia/nemotron-3-ultra-550b-a55b:free',   // Programming #6, 1M context
+  'openrouter/owl-alpha',                     // agentic, Claude Code-compatible
+  'poolside/laguna-m.1:free',                 // flagship coding-agent model
   'qwen/qwen3-coder:free',
   'qwen/qwen3-next-80b-a3b-instruct:free',
-  'meta-llama/llama-3.3-70b-instruct:free',
 ];
 
 /**

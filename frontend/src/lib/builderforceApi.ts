@@ -857,6 +857,9 @@ export interface Execution {
   status: string;
   agentHostId?: number | null;
   agentId?: number | null;
+  /** Cloud agent (ide_agents.id) that ran THIS execution; null for host/default runs.
+   *  Used to scope the run's logs/telemetry to the agent that actually ran it. */
+  cloudAgentRef?: string | null;
   submittedBy?: string;
   submittedAt?: string;
   createdAt?: string;

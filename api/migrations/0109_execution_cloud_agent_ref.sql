@@ -1,0 +1,13 @@
+-- Per-execution cloud agent attribution.
+--
+-- Until now an execution recorded WHICH cloud agent ran it only in its JSON
+-- `payload` (and only when the caller pinned one) or implicitly via the ticket's
+-- mutable `tasks.assigned_agent_ref`. That made the execution panel scope its
+-- Logs/Timeline/triage by the task's CURRENT agent — so viewing an older run after
+-- a newer run reassigned the ticket showed the wrong agent's telemetry.
+--
+-- This column records the agent that ACTUALLY ran each execution, written at
+-- dispatch (startDispatchedExecution). Null = a gateway-default / host run with no
+-- named cloud agent. References ide_agents.id by value (no FK — ide_agents is a
+-- raw-SQL table, mirroring llm_usage_log.cloud_agent_ref).
+ALTER TABLE executions ADD COLUMN IF NOT EXISTS cloud_agent_ref varchar(64);

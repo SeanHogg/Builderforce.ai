@@ -93,9 +93,11 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'liquid/lfm-2.5-1.2b-instruct:free',         tier: 'FREE', label: 'LFM 2.5 1.2B Instruct (Free)',       brand: 'Liquid'    },
   { id: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free', tier: 'FREE', label: 'Dolphin Mistral 24B Venice (Free)', brand: 'CognitiveComputations' },
   { id: 'openrouter/owl-alpha',                      tier: 'FREE', label: 'OpenRouter Owl Alpha (Free)',          brand: 'OpenRouter' },
-  { id: 'deepseek/deepseek-v4-flash:free',           tier: 'FREE', label: 'DeepSeek V4 Flash (Free)',             brand: 'DeepSeek'  },
   { id: 'arcee-ai/trinity-large-thinking:free',      tier: 'FREE', label: 'Arcee Trinity Large Thinking (Free)',  brand: 'Arcee'     },
   { id: 'openai/gpt-oss-20b:free',                   tier: 'FREE', label: 'GPT-OSS 20B (Free)',                   brand: 'OpenAI'    },
+  // Strong FREE agentic coders (verified live on OpenRouter /models, tool-capable).
+  { id: 'nex-agi/nex-n2-pro:free',                   tier: 'FREE', label: 'Nex-N2-Pro (Free · agentic)',         brand: 'Nex AGI'   },
+  { id: 'nvidia/nemotron-3-ultra-550b-a55b:free',    tier: 'FREE', label: 'Nemotron 3 Ultra 550B (Free)',        brand: 'NVIDIA'    },
 
   // ── STANDARD tier — paid low-cost models, prefixed in the paid pool so
   //    Pro/Teams tenants land on cheap models before reaching PREMIUM/ULTRA.
@@ -105,6 +107,9 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'qwen/qwen3.5-9b',                           tier: 'STANDARD', label: 'Qwen 3.5 9B',              brand: 'Qwen'      },
   { id: 'z-ai/glm-4-32b',                            tier: 'STANDARD', label: 'GLM 4 32B',                brand: 'Z.AI'      },
   { id: 'openai/gpt-5-nano',                         tier: 'STANDARD', label: 'GPT-5 Nano',               brand: 'OpenAI'    },
+  // Cheap, top-ranked agentic coders (verified live; cost ~$0.1-0.3/M).
+  { id: 'xiaomi/mimo-v2.5',                          tier: 'STANDARD', label: 'MiMo-V2.5 (Programming #1)', brand: 'Xiaomi'  },
+  { id: 'deepseek/deepseek-v4-flash',                tier: 'STANDARD', label: 'DeepSeek V4 Flash',        brand: 'DeepSeek'  },
 
   // ── STANDARD tier (cont.) — cheap current-gen frontier for routing/short tasks
   { id: 'anthropic/claude-haiku-4.5',                tier: 'STANDARD', label: 'Claude Haiku 4.5',     brand: 'Anthropic' },
@@ -116,6 +121,7 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'openai/gpt-4.1',                            tier: 'PREMIUM', label: 'GPT-4.1',               brand: 'OpenAI'    },
   { id: 'openai/o4-mini',                            tier: 'PREMIUM', label: 'o4-mini (reasoning)',   brand: 'OpenAI'    },
   { id: 'google/gemini-2.5-pro',                     tier: 'PREMIUM', label: 'Gemini 2.5 Pro',        brand: 'Google'    },
+  { id: 'qwen/qwen3.7-plus',                         tier: 'PREMIUM', label: 'Qwen3.7 Plus (agentic + vision)', brand: 'Qwen' },
   { id: 'x-ai/grok-3-mini',                          tier: 'PREMIUM', label: 'Grok 3 Mini',           brand: 'xAI'       },
   { id: 'alibaba/qwen3.5-397b-a17b',                 tier: 'PREMIUM', label: 'Qwen 3.5 397B (MoE)',   brand: 'Alibaba'   },
 

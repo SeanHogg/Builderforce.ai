@@ -12,6 +12,8 @@ export interface ExecutionProps {
   status:       ExecutionStatus;
   /** JSON payload sent to the agent. */
   payload:      string | null;
+  /** Cloud agent (ide_agents.id) that ran this execution; null for host/default runs. */
+  cloudAgentRef: string | null;
   /** JSON result returned by the agent. */
   result:       string | null;
   errorMessage: string | null;
@@ -52,6 +54,7 @@ export class Execution {
       ...props,
       id:           0 as ExecutionId,
       status:       ExecutionStatus.PENDING,
+      cloudAgentRef: null, // set at dispatch once the cloud agent is resolved
       result:       null,
       errorMessage: null,
       startedAt:    null,
@@ -78,6 +81,7 @@ export class Execution {
   get sessionId():    string | null    { return this.props.sessionId; }
   get status():       ExecutionStatus  { return this.props.status; }
   get payload():      string | null    { return this.props.payload; }
+  get cloudAgentRef(): string | null   { return this.props.cloudAgentRef; }
   get result():       string | null    { return this.props.result; }
   get errorMessage(): string | null    { return this.props.errorMessage; }
   get startedAt():    Date | null      { return this.props.startedAt; }
