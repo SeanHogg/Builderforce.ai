@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { type NotificationService } from "../../src/services/notificationService";
-import { type AccountService } from "../../src/services/accountService"; // Assuming AccountService exists
+import { type AccountUtil } from "../../src/utils/accounts"; // Corrected import
 import { type TaskCompletionEvent } from "../../src/types/task"; // Assuming TaskCompletionEvent type exists
 import { Logger } from "../../src/utils/logging"; // Assuming Logger utility exists
 
@@ -15,16 +15,16 @@ type HenTaskCompletionNotifierConfig = z.infer<typeof HenTaskCompletionNotifierS
 export class HenTaskCompletionNotifier {
 	private config: HenTaskCompletionNotifierConfig;
 	private notificationService: NotificationService;
-	private accountService: AccountService; // Assuming this service is available
+	private accountUtil: AccountUtil; // Changed from AccountService to AccountUtil
 
 	constructor(
 		config: HenTaskCompletionNotifierConfig,
 		notificationService: NotificationService,
-		accountService: AccountService
+		accountUtil: AccountUtil // Changed from AccountService to AccountUtil
 	) {
 		this.config = HenTaskCompletionNotifierSchema.parse(config);
 		this.notificationService = notificationService;
-		this.accountService = accountService;
+		this.accountUtil = accountUtil; // Assign the AccountUtil instance
 	}
 
 	/**
@@ -42,7 +42,7 @@ export class HenTaskCompletionNotifier {
 			if (isLastTask) {
 				logger.info(`All Hen tasks for account ${event.accountId} are now complete. Triggering email notification.`);
 
-				// 2. Retrieve account holder's primary email
+				// 2. Retrieve account holder's primary email using AccountUtil
 				const accountHolderEmail = await this.getAccountHolderEmail(event.accountId);
 
 				if (accountHolderEmail) {
@@ -57,6 +57,14 @@ export class HenTaskCompletionNotifier {
 						body: emailBody,
 					});
 					logger.info(`Email notification sent successfully to ${accountHolderEmail} for account ${event.accountId}.`);
+
+					// Log the successful notification attempt with accountId and taskId
+					await this.notificationService.logNotificationAttempt({
+						accountId: event.accountId,
+						taskId: event.taskId,
+						channel: "email",
+						status: "sent",
+					});
 				} else {
 					logger.warn(`Could not retrieve email for account ${event.accountId}. Skipping email notification.`);
 					// Log this as a potential issue even if not an error
@@ -98,7 +106,7 @@ export class HenTaskCompletionNotifier {
 		logger.debug(`Checking if task ${completedTaskId} is the last Hen task for account ${accountId}... (placeholder logic)`);
 		// In a real scenario, you would fetch all tasks for the account, filter for 'Hen' tasks,
 		// and check if all of them are in a 'Complete' state:
-		// const accountTasks = await this.taskService.getTasksByAccountId(accountId); // Assuming taskService
+		// const accountTasks = await this.accountUtil.getAccountTasks(accountId); // Assuming AccountUtil has this method
 		// const henTasks = accountTasks.filter(task => task.type === 'Hen');
 		// return henTasks.every(task => task.status === 'Complete');
 
@@ -107,15 +115,14 @@ export class HenTaskCompletionNotifier {
 	}
 
 	/**
-	 * Retrieves the primary email address for a given account ID.
-	 * This is a placeholder and needs to be implemented using the AccountService.
+	 * Retrieves the primary email address for a given account ID using AccountUtil.
 	 * @param accountId - The ID of the account.
 	 * @returns Promise<string | null> - The account holder's email address or null if not found.
 	 */
 	private async getAccountHolderEmail(accountId: string): Promise<string | null> {
 		logger.debug(`Retrieving primary email for account ${accountId}...`);
 		try {
-			const account = await this.accountService.getAccountById(accountId); // Assuming this method exists
+			const account = await this.accountUtil.getAccountById(accountId); // Use AccountUtil
 			if (!account || !account.primaryEmail) {
 				logger.warn(`Account ${accountId} not found or has no primary email.`);
 				return null;
