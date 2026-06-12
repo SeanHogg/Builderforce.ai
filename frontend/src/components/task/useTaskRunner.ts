@@ -54,7 +54,7 @@ export function useTaskRunner({ task, onRan, onAwaitingApproval }: UseTaskRunner
   }, []);
 
   const run = useCallback(
-    async (opts?: { target?: string; model?: string }) => {
+    async (opts?: { target?: string; model?: string; repoId?: string }) => {
       const target = opts?.target ?? defaultRunTarget(task);
       const model = opts?.model ?? '';
       setRunning(true);
@@ -68,9 +68,13 @@ export function useTaskRunner({ task, onRan, onAwaitingApproval }: UseTaskRunner
         const cloudAgent = cloudRef ? cloudAgents.find((a) => a.ref === cloudRef) : null;
         const agentHostId = isHost ? Number(target.slice('host:'.length)) : undefined;
         const effectiveModel = model || cloudAgent?.baseModel || '';
-        const payloadObj: { model?: string; cloudAgentRef?: string } = {};
+        // repoId: a real id pins the run to that repo; '' explicitly clears the pin
+        // (Auto). Only sent when the caller passed it, so a one-click run leaves any
+        // existing pin untouched.
+        const payloadObj: { model?: string; cloudAgentRef?: string; repoId?: string } = {};
         if (effectiveModel) payloadObj.model = effectiveModel;
         if (cloudRef) payloadObj.cloudAgentRef = cloudRef;
+        if (opts?.repoId !== undefined) payloadObj.repoId = opts.repoId;
         const result = await runtimeApi.submitExecution({
           taskId: task.id,
           agentHostId,

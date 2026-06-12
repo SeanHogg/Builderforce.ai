@@ -767,6 +767,8 @@ export interface Task {
   assignedUserId: string | null;
   /** Git branch the agent executes this ticket under (links to the code changes). */
   gitBranch: string | null;
+  /** project_repositories.id this task's runs are pinned to (null = auto-resolve). */
+  explicitRepoId: string | null;
   githubPrUrl: string | null;
   githubPrNumber: number | null;
   startDate: string | null;

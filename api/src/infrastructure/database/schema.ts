@@ -716,6 +716,10 @@ export const tasks = pgTable('tasks', {
   assignedUserId:    varchar('assigned_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   /** Git branch the agent executes this ticket under (surfaced on Details, links to the PR). */
   gitBranch:         text('git_branch'),
+  /** project_repositories.id the run is pinned to (the "explicit" tier of
+   *  resolveRepoForTask) — lets a run target a specific repo instead of the
+   *  project default. Sticky so run/finalize/CI/PRD all use the same repo. */
+  explicitRepoId:    uuid('explicit_repo_id').references(() => projectRepositories.id, { onDelete: 'set null' }),
   startDate:         timestamp('start_date'),
   dueDate:           timestamp('due_date'),
   persona:           varchar('persona', { length: 50 }),

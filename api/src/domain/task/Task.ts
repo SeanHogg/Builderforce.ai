@@ -26,6 +26,8 @@ export interface TaskProps {
   assignedUserId: string | null;
   /** Git branch the agent executes this ticket under (links to the PR/code changes). */
   gitBranch: string | null;
+  /** project_repositories.id the run is pinned to, or null to auto-resolve (default/inferred). */
+  explicitRepoId: string | null;
   startDate: Date | null;
   dueDate: Date | null;
   persona: string | null;
@@ -50,7 +52,7 @@ export class Task {
   static create(
     props: Omit<
       TaskProps,
-      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch'
+      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId'
     > & {
       projectKey: string;
       projectTaskCount: number;
@@ -83,6 +85,7 @@ export class Task {
       assignedAgentRef: props.assignedAgentRef ?? null,
       assignedUserId: props.assignedUserId ?? null,
       gitBranch: null,
+      explicitRepoId: null,
       startDate: props.startDate ?? null,
       dueDate: props.dueDate ?? null,
       persona: props.persona ?? null,
@@ -116,6 +119,7 @@ export class Task {
   get assignedAgentRef(): string | null { return this.props.assignedAgentRef; }
   get assignedUserId(): string | null { return this.props.assignedUserId; }
   get gitBranch(): string | null { return this.props.gitBranch; }
+  get explicitRepoId(): string | null { return this.props.explicitRepoId; }
   get startDate(): Date | null { return this.props.startDate; }
   get dueDate(): Date | null { return this.props.dueDate; }
   get persona(): string | null { return this.props.persona; }
@@ -132,7 +136,7 @@ export class Task {
       Pick<
         TaskProps,
         'title' | 'description' | 'status' | 'priority' | 'assignedAgentType'
-        | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'startDate' | 'dueDate'
+        | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'startDate' | 'dueDate'
         | 'persona' | 'archived'
       >
     >,

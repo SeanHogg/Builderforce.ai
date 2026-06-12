@@ -27,7 +27,7 @@ import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentHosts, executions, projectInsightEvents, projects, specs, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
+import { agentHosts, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
 import { approvals } from '../../infrastructure/database/schema';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 
@@ -1710,6 +1710,24 @@ function parseCloudAgentRef(payload: string | undefined): string | undefined {
   }
 }
 
+/**
+ * Run-time repo selection off the payload. Returns:
+ *   • a trimmed repo id  — pin this run to that repo,
+ *   • ''                 — explicitly clear the pin (Auto-resolve),
+ *   • undefined          — key absent, leave the existing pin untouched.
+ * The tri-state lets "Auto" un-pin without clobbering a pin set by a prior run.
+ */
+function parseRepoId(payload: string | undefined): string | undefined {
+  if (!payload) return undefined;
+  try {
+    const p = JSON.parse(payload) as { repoId?: unknown };
+    if (!('repoId' in p)) return undefined;
+    return typeof p.repoId === 'string' ? p.repoId.trim() : '';
+  } catch {
+    return undefined;
+  }
+}
+
 interface RemediationContext { attempt: number; maxAttempts: number; buildError: string; runUrl: string | null }
 
 /** Parse the post-merge build-failure remediation block off an auto-fix run's payload. */
@@ -1877,6 +1895,25 @@ async function startDispatchedExecution(
   // assigned agent. Used for BOTH per-agent capability resolution (scope='agent')
   // and run attribution (engine/label/ref).
   const cloudAgentRef = parseCloudAgentRef(payload) ?? taskRow.assignedAgentRef ?? undefined;
+
+  // Run-time repo selection: a caller can pin which of the project's repos this run
+  // (and its sticky finalize/CI/PRD) targets. Persist it on the task BEFORE we
+  // resolve the repo below so resolveDefaultRepoForTask honors the pin; '' clears it
+  // (Auto). Pin only a repo that actually belongs to this task's project — the
+  // picker is project-scoped; this guards a stale/cross-project id.
+  const repoIdSel = parseRepoId(payload);
+  if (repoIdSel !== undefined) {
+    const repoId = repoIdSel || null;
+    const valid = repoId == null
+      || (await db.select({ id: projectRepositories.id }).from(projectRepositories)
+            .where(and(eq(projectRepositories.id, repoId), eq(projectRepositories.projectId, taskRow.projectId), eq(projectRepositories.tenantId, tenantId)))
+            .limit(1)).length > 0;
+    if (valid) {
+      await db.update(tasks).set({ explicitRepoId: repoId, updatedAt: new Date() })
+        .where(eq(tasks.id, taskRow.id)).catch(() => { /* best-effort */ });
+    }
+  }
+
   const [artifacts, agent, repoRef] = await Promise.all([
     resolveArtifacts(db, {
       tenantId,
