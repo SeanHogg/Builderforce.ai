@@ -387,29 +387,79 @@ function gitSecret(env: Env): string {
 }
 
 /**
- * What a PRIOR pass already committed to this task's branch (relative to base),
- * so a re-run is aware of it and can reconcile/clean up rather than blindly append.
- * Best-effort: no repo bound, an unreachable provider, or a clean first run all
- * yield `[]` (never throws — context prep must not fail on this).
+ * The repo the agent will actually run against, surfaced up-front so a WRONG or
+ * EMPTY binding is visible BEFORE the model spends a single LLM call. Bundles:
+ *   • the bound repo's identity (or why none is bound),
+ *   • a compact top-level listing of the base branch + total file count — the
+ *     "is this the right repo?" signal (exec #54 returned a conceptual non-answer
+ *     because the agent was never shown the repo only contained `agent-runtime`),
+ *   • what a PRIOR pass committed to this task's branch (so a re-run reconciles
+ *     and cleans up dead files rather than blindly appending).
+ *
+ * Resolves the ticket repo ONCE (was a separate call per concern). The base-branch
+ * tree is slow-changing and re-read on every re-run of the same task, so it is
+ * served through the read-through cache keyed by repo+base. Best-effort: any miss
+ * yields an empty workspace (never throws — context prep must not fail on this).
  */
-async function loadPriorBranchChanges(
+interface WorkspaceContext {
+  /** Bound repo identity, or null when no usable repo is bound. */
+  repo: { owner: string; repo: string; provider: string; base: string } | null;
+  /** Why no repo (when `repo` is null) — surfaced to the agent + the timeline. */
+  reason?: string;
+  /** Top-level entries (dirs as `name/`, root files as `name`) on the base branch. */
+  topLevel: string[];
+  /** Total blob count on the base branch (capped by the tree lister). */
+  fileCount: number;
+  truncated: boolean;
+  /** Files a prior pass already committed to this task's branch. */
+  priorChanges: Array<{ path: string; status: string }>;
+}
+
+async function loadWorkspaceContext(
+  env: Env,
   db: Db,
   secret: string,
   tenantId: number,
   taskId: number,
-): Promise<Array<{ path: string; status: string }>> {
+): Promise<WorkspaceContext> {
+  const empty: WorkspaceContext = { repo: null, topLevel: [], fileCount: 0, truncated: false, priorChanges: [] };
   try {
     const resolved = await resolveTicketRepoContext(db, secret, tenantId, taskId);
-    if (!resolved.ok) return [];
+    if (!resolved.ok) return { ...empty, reason: resolved.reason };
     const { ctx } = resolved;
-    const diff = await listBranchDiff(
-      { provider: ctx.provider, host: ctx.host, owner: ctx.owner, repo: ctx.repo, token: ctx.token, ref: ctx.branch },
-      ctx.base,
-      ctx.branch,
-    );
-    return diff.ok ? diff.files : [];
+    const readCtx = { provider: ctx.provider, host: ctx.host, owner: ctx.owner, repo: ctx.repo, token: ctx.token, ref: ctx.base };
+
+    const [listing, diff] = await Promise.all([
+      getOrSetCached(
+        env,
+        `repo-tree:${ctx.repoId}:${ctx.base}`,
+        () => listRepoFiles(readCtx),
+        { kvTtlSeconds: 120, l1TtlMs: 30_000 },
+      ),
+      listBranchDiff({ ...readCtx, ref: ctx.branch }, ctx.base, ctx.branch),
+    ]);
+
+    let topLevel: string[] = [];
+    let fileCount = 0;
+    let truncated = false;
+    if (listing.ok) {
+      fileCount = listing.paths.length;
+      truncated = listing.truncated;
+      topLevel = [...new Set(listing.paths.map((p) => {
+        const i = p.indexOf('/');
+        return i === -1 ? p : `${p.slice(0, i)}/`;
+      }))].sort().slice(0, 40);
+    }
+
+    return {
+      repo: { owner: ctx.owner, repo: ctx.repo, provider: ctx.provider, base: ctx.base },
+      topLevel,
+      fileCount,
+      truncated,
+      priorChanges: diff.ok ? diff.files : [],
+    };
   } catch {
-    return [];
+    return empty;
   }
 }
 
@@ -1458,20 +1508,24 @@ export async function prepareCloudRun(
   opts?: { shell?: boolean },
 ): Promise<{ systemPrompt: string; userContent: string }> {
   const tPrep0 = Date.now();
-  const [prd, governance, capabilities, priorChanges] = await Promise.all([
+  const [prd, governance, capabilities, workspace] = await Promise.all([
     ensureTaskPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model),
     loadGovernanceContext(db, tenantId, projectId),
     loadCapabilityContext(env, db, artifacts),
-    // Load what a PRIOR pass already committed to this task's branch so a re-run
-    // reconciles against it (and can delete dead/stub files) instead of appending
-    // blindly. Best-effort: a clean first run / no repo yields an empty list.
-    loadPriorBranchChanges(db, gitSecret(env), tenantId, taskRow.id),
+    // The repo the agent runs against — its identity + top-level shape (so a wrong/
+    // empty binding is visible before any LLM spend) AND what a prior pass already
+    // committed to this branch (so a re-run reconciles instead of blindly appending).
+    // Best-effort: a clean first run / no repo yields an empty workspace.
+    loadWorkspaceContext(env, db, gitSecret(env), tenantId, taskRow.id),
   ]);
+  const priorChanges = workspace.priorChanges;
+  const repoLabel = workspace.repo ? `${workspace.repo.owner}/${workspace.repo.repo}` : null;
   await recordCloudToolEvent(db, {
     tenantId, cloudAgentRef, executionId,
     toolName: 'context.prepare', category: 'planning',
-    detail: { steps: ['prd', 'governance', 'diff'], priorFiles: priorChanges.length },
+    detail: { steps: ['prd', 'governance', 'workspace', 'diff'], repo: repoLabel, fileCount: workspace.fileCount, priorFiles: priorChanges.length },
     result: `${prd ? 'PRD ready' : 'no PRD'} · ${governance ? 'governance loaded' : 'no governance'}`
+      + ` · ${repoLabel ? `workspace ${repoLabel} (${workspace.fileCount}${workspace.truncated ? '+' : ''} file(s))` : `no repo bound${workspace.reason ? ` (${workspace.reason})` : ''}`}`
       + ` · ${priorChanges.length ? `${priorChanges.length} prior file(s) on branch` : 'clean branch'}`,
     durationMs: Date.now() - tPrep0,
   });
@@ -1493,6 +1547,17 @@ export async function prepareCloudRun(
   // payload — surface it prominently so the agent fixes the REAL failing build.
   const remediation = parseRemediation(payload);
 
+  // Show the agent the repo it's about to edit BEFORE it spends an LLM call, so a
+  // wrong/empty binding is caught up-front instead of after a conceptual non-answer
+  // (the exec #54 failure: the agent never saw that only `agent-runtime` was bound).
+  const workspaceBlock = workspace.repo
+    ? `## Repository / workspace\n\n`
+      + `Your changes run against **${repoLabel}** (base \`${workspace.repo.base}\`), which currently contains ${workspace.fileCount}${workspace.truncated ? '+' : ''} file(s). Top-level entries:\n\n`
+      + (workspace.topLevel.length ? workspace.topLevel.map((p) => `- \`${p}\``).join('\n') : '_(empty repository)_')
+      + `\n\nIf these files are clearly UNRELATED to what the task asks for (e.g. the task is about a website but this repo holds none of its code), do NOT invent a conceptual answer or edit unrelated files — say so plainly in your summary, name the bound repository (${repoLabel}), and state that the correct repo must be bound. Explore with list_files / search_code before concluding.`
+    : `## Repository / workspace\n\n`
+      + `⚠ No repository is bound to this task${workspace.reason ? ` (${workspace.reason})` : ''}, so there are no files to edit. Return the complete deliverable in your final summary and state that a repository must be bound before code can ship.`;
+
   const priorChangesBlock = priorChanges.length
     ? `## Files already on this branch from prior passes\n\n`
       + `A previous run already committed these files to this task's branch. They are part of the OPEN pull request. `
@@ -1506,6 +1571,7 @@ export async function prepareCloudRun(
       : null,
     prd ? `## Product Requirements Document (PRD)\n\n${prd}` : null,
     governance || null,
+    workspaceBlock,
     priorChangesBlock,
     `## Your Task\n\n${taskRow.title}\n\n${taskRow.description ?? ''}`.trim(),
   ].filter(Boolean).join('\n\n---\n\n');
@@ -1522,6 +1588,7 @@ export async function prepareCloudRun(
     'use list_files to understand structure, read_file to read any file you intend to change (preserve existing code — only change what the task needs), ' +
     'then write_file with the FULL updated content (no bracketed placeholders) for each deliverable file. ' +
     'If search_code returns 0 matches for the thing a task says to change/remove, that means it is not in the codebase — say so in your summary instead of inventing an unrelated edit. ' +
+    'If the bound repository (see "Repository / workspace") has no files related to the task, report that the wrong repo appears bound and name it — do NOT produce a conceptual stand-in against unrelated code. ' +
     'Do NOT call finish while any deliverable file is still a stub/placeholder or any requirement in the task/PRD is unimplemented — keep listing, reading and writing files until the task is genuinely complete. ' +
     'Reconcile the branch against the task, do not just append: if a file already on this branch (see "Files already on this branch") is dead code — a stub, an unreferenced file, or something that should not ship in this PR — remove it with delete_file (confirm it is unused via search_code first). The PR should contain only the files the task genuinely needs. ' +
     'When you finish, your committed changes are opened as a PULL REQUEST for human review (a person approves the merge in-product); they are NOT auto-deployed — so the PR must contain the COMPLETE, working change, not a partial scaffold. Call finish with a summary only once everything the task requires has been written. ' +
