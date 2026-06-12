@@ -6,9 +6,11 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import {
   runtimeApi,
+  reposApi,
   type Task,
   type AgentHost,
   type TaskRepoStatus,
+  type ProjectRepository,
 } from '@/lib/builderforceApi';
 import { useLlmModels } from '@/lib/useLlmModels';
 import { useTaskRunner, defaultRunTarget } from './useTaskRunner';
@@ -52,6 +54,11 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
   // the run state + cloud-agent pool; we drive it with the picker's target/model.
   const { run, running, error, cloudAgents } = useTaskRunner({ task, onRan, onAwaitingApproval });
   const [repoStatus, setRepoStatus] = useState<TaskRepoStatus | null>(null);
+  // Run-time repo selection. '' = Auto (default/inferred); a repo id pins this run
+  // (and its finalize/CI/PRD) to that repo. Defaults to the task's existing pin so
+  // reopening reflects the bound repo — fixes "agent ran against the wrong repo".
+  const [repos, setRepos] = useState<ProjectRepository[]>([]);
+  const [repoId, setRepoId] = useState<string>(task.explicitRepoId ?? '');
 
   // Surface "the agent can't commit" before a run silently degrades to a text
   // summary. Re-checked when the task changes (binding happens in Source Control).
@@ -59,10 +66,18 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
     runtimeApi.taskRepoStatus(task.id).then(setRepoStatus).catch(() => setRepoStatus(null));
   }, [task.id]);
 
+  // The project's repos, for the run-time repo picker (only shown when >1 exists).
+  useEffect(() => {
+    reposApi.list(task.projectId).then(setRepos).catch(() => setRepos([]));
+  }, [task.projectId]);
+
   return (
     <div>
-      <div style={{ display: 'inline-flex', alignItems: 'stretch', border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden' }}>
-        <Select value={target} onChange={(e) => setTarget(e.target.value)} style={{ ...selectStyle, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="Agent">
+      {/* Fills the available width and lets the two selects shrink (min-width:0
+          → the trigger's label ellipsis kicks in) so long model names don't push
+          the group past a narrow panel on mobile. Run stays fixed on the right. */}
+      <div style={{ display: 'flex', width: '100%', maxWidth: '100%', alignItems: 'stretch', border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden' }}>
+        <Select value={target} onChange={(e) => setTarget(e.target.value)} style={{ ...selectStyle, flex: '1 1 0', minWidth: 0, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="Agent">
           <option value="">Auto (any agent)</option>
           {(() => {
             // Always include the ticket's assigned cloud agent, even if the pool
@@ -95,20 +110,32 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
           const pickList = isCloud && codingModels.length > 0 ? codingModels : models;
           const defaultLabel = isCloud ? 'builderforce.ai (best coding model)' : DEFAULT_MODEL_LABEL;
           return (
-            <Select value={model} onChange={(e) => setModel(e.target.value)} style={{ ...selectStyle, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="LLM model">
+            <Select value={model} onChange={(e) => setModel(e.target.value)} style={{ ...selectStyle, flex: '1 1 0', minWidth: 0, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="LLM model">
               <option value="">{defaultLabel}</option>
               {pickList.map((m) => <option key={m} value={m}>{m}</option>)}
             </Select>
           );
         })()}
+        {/* Repo picker — only when the project has >1 repo (otherwise there's
+            nothing to choose; a single/zero-repo project auto-resolves). Lets a run
+            target the RIGHT repo instead of the project default. */}
+        {repos.length > 1 && (
+          <Select value={repoId} onChange={(e) => setRepoId(e.target.value)} style={{ ...selectStyle, flex: '1 1 0', minWidth: 0, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="Repository">
+            <option value="">Auto (default repo)</option>
+            {repos.map((r) => (
+              <option key={r.id} value={r.id}>{r.owner}/{r.repo}{r.isDefault ? ' (default)' : ''}</option>
+            ))}
+          </Select>
+        )}
         <button
           type="button"
-          onClick={() => run({ target, model })}
+          onClick={() => run({ target, model, ...(repos.length > 1 ? { repoId } : {}) })}
           disabled={running}
           style={{
             padding: '7px 16px', fontSize: 13, fontWeight: 600, border: 'none',
             background: 'var(--coral-bright)', color: '#fff', cursor: running ? 'default' : 'pointer',
             opacity: running ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 6,
+            flexShrink: 0, whiteSpace: 'nowrap',
           }}
         >
           {running ? 'Running…' : 'Run'}

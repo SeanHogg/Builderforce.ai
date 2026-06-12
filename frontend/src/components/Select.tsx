@@ -257,7 +257,7 @@ export function Select({
         onBlur={onBlur}
         style={style}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayLabel}</span>
+        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayLabel}</span>
         <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: 14, height: 14, flexShrink: 0, stroke: 'currentColor', fill: 'none', strokeWidth: 2, opacity: 0.7 }}>
           <path d="M6 9l6 6 6-6" />
         </svg>

@@ -34,7 +34,14 @@ import { githubStatusMessage } from '../../application/integrations/githubTestEr
 import { mergePullRequest, normalizeMergeMethod } from '../../application/repos/mergePullRequest';
 import { markPullRequestMergedById } from '../../application/repos/recordPullRequestRow';
 import { getPullRequestDetail, invalidatePullRequestDetail } from '../../application/repos/getPullRequestDetail';
+import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { CreatePrMessage } from '../../application/repos/prDispatch';
+
+/** Read-through cache key for a project's repo list (the picker + SourceControl read
+ *  this; it changes only on the CRUD routes below, which all invalidate it). */
+function reposCacheKey(tenantId: number, projectId: number): string {
+  return `project-repos:${tenantId}:${projectId}`;
+}
 
 type RepoHonoEnv = HonoEnv & {
   Bindings: HonoEnv['Bindings'] & {
@@ -160,6 +167,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       tenantId,
     );
 
+    await invalidateCached(c.env as Env, reposCacheKey(tenantId, projectId));
     return c.json(row, 201);
   });
 
@@ -170,7 +178,12 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid projectId' }, 400);
 
     const service = new RepoService(db, makeAgentHostDispatcher(c.env));
-    const repos = await service.listRepos(projectId, tenantId);
+    const repos = await getOrSetCached(
+      c.env as Env,
+      reposCacheKey(tenantId, projectId),
+      () => service.listRepos(projectId, tenantId),
+      { kvTtlSeconds: 300, l1TtlMs: 30_000 },
+    );
     return c.json({ repositories: repos });
   });
 
@@ -216,6 +229,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       .from(projectRepositories)
       .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
     if (!row) return c.json({ error: 'Repository not found' }, 404);
+    await invalidateCached(c.env as Env, reposCacheKey(tenantId, row.projectId));
     return c.json(row);
   });
 
@@ -250,6 +264,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       .select()
       .from(projectRepositories)
       .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
+    await invalidateCached(c.env as Env, reposCacheKey(tenantId, target.projectId));
     return c.json(row);
   });
 
@@ -286,9 +301,15 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
   router.delete('/repositories/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
+    // Capture the projectId before deleting so we can bust its repo-list cache.
+    const [row] = await db
+      .select({ projectId: projectRepositories.projectId })
+      .from(projectRepositories)
+      .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
     await db
       .delete(projectRepositories)
       .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
+    if (row) await invalidateCached(c.env as Env, reposCacheKey(tenantId, row.projectId));
     return c.body(null, 204);
   });
 
