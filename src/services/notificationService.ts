@@ -1,37 +1,95 @@
-import { sendEmail } from '../utils/email'; // Assuming an email utility function exists
-import { getAccountEmail } from '../utils/accounts'; // Assuming an account utility function exists
-import { logNotificationAttempt } from '../utils/logging'; // Assuming a logging utility function exists
+import { type EmailService } from "../utils/email"; // Assuming EmailService is in utils/email.ts
+import { type Logger } from "../utils/logging"; // Assuming Logger is in utils/logging.ts
+import { type AccountUtil } from "../utils/accounts"; // Assuming AccountUtil is in utils/accounts.ts
 
-const PLATFORM_NAME = "BuilderForce"; // To be replaced with actual platform name
+// Define types for clarity
+export interface EmailOptions {
+	to: string;
+	subject: string;
+	body: string;
+}
 
-/**
- * Sends an email notification to the account holder when all Hen tasks are complete.
- *
- * @param accountId - The ID of the account for which tasks are completed.
- */
-export async function sendHenTaskCompletionEmail(accountId: string): Promise<void> {
-  try {
-    const emailAddress = await getAccountEmail(accountId);
-    if (!emailAddress) {
-      await logNotificationAttempt(accountId, 'hen_task_completion', 'failure', 'Account email not found');
-      console.error(`Could not send Hen task completion email: Account email not found for account ${accountId}`);
-      return;
-    }
+export interface NotificationLogEntry {
+	accountId: string;
+	taskId?: string; // Optional: if the notification is related to a specific task
+	channel: "email" | "sms" | "in_app"; // Extended for future use
+	status: "sent" | "failed" | "pending";
+	reason?: string; // For failures or more details
+	timestamp: Date;
+}
 
-    const subject = "Your Hen Tasks are Complete!";
-    const body = `Good news! All Hen tasks for your account are now complete. Log in to ${PLATFORM_NAME} to view details and next steps. Thank you for using our service!`;
+export class NotificationService {
+	private emailService: EmailService;
+	private logger: Logger;
+	private accountUtil: AccountUtil; // Used here to potentially get account details for logging if needed
 
-    await sendEmail({
-      to: emailAddress,
-      subject: subject,
-      body: body,
-    });
+	constructor(emailService: EmailService, logger: Logger, accountUtil: AccountUtil) {
+		this.emailService = emailService;
+		this.logger = logger.child("NotificationService"); // Create a child logger for this service
+		this.accountUtil = accountUtil;
+	}
 
-    await logNotificationAttempt(accountId, 'hen_task_completion', 'success', 'Email sent successfully');
-    console.log(`Successfully sent Hen task completion email to ${emailAddress} for account ${accountId}`);
+	/**
+	 * Sends an email notification.
+	 * @param options - The email content and recipient.
+	 * @returns Promise<void>
+	 */
+	public async sendEmail(options: EmailOptions): Promise<void> {
+		this.logger.debug(`Sending email to ${options.to} with subject: ${options.subject}`);
+		try {
+			await this.emailService.send(options);
+			this.logger.info(`Email sent successfully to ${options.to}.`);
+			// Log the successful attempt
+			await this.logNotificationAttempt({
+				accountId: "unknown", // Determine accountId if possible, otherwise keep as unknown
+				channel: "email",
+				status: "sent",
+				// taskId is not directly available here, might need to be passed if relevant
+			});
+		} catch (error) {
+			this.logger.error(`Failed to send email to ${options.to}:`, error);
+			// Log the failed attempt
+			await this.logNotificationAttempt({
+				accountId: "unknown", // Determine accountId if possible
+				channel: "email",
+				status: "failed",
+				reason: error instanceof Error ? error.message : String(error),
+			});
+			throw error; // Re-throw the error to be handled by the caller
+		}
+	}
 
-  } catch (error) {
-    await logNotificationAttempt(accountId, 'hen_task_completion', 'failure', `Error sending email: ${error.message}`);
-    console.error(`Failed to send Hen task completion email for account ${accountId}:`, error);
-  }
+	/**
+	 * Logs an attempt to send a notification.
+	 * This is a placeholder for actual logging (e.g., to a database or file).
+	 * @param logEntry - Details of the notification attempt.
+	 * @returns Promise<void>
+	 */
+	public async logNotificationAttempt(logEntry: Omit<NotificationLogEntry, 'timestamp' | 'accountId' | 'taskId'> & Partial<Pick<NotificationLogEntry, 'accountId' | 'taskId'>>): Promise<void> {
+		const fullLogEntry: NotificationLogEntry = {
+			...logEntry,
+			timestamp: new Date(),
+			accountId: logEntry.accountId ?? "unknown", // Default to unknown if not provided
+			taskId: logEntry.taskId ?? undefined,
+		};
+		this.logger.info(`Notification Log: Channel=${fullLogEntry.channel}, Status=${fullLogEntry.status}, AccountID=${fullLogEntry.accountId}, TaskID=${fullLogEntry.taskId ?? 'N/A'}, Reason=${fullLogEntry.reason ?? 'N/A'}`);
+
+		// TODO: Implement actual persistent logging (e.g., to a database, file, or dedicated logging service)
+		// For now, we are just logging to the console via the logger.
+	}
+
+	/**
+	 * Fetches account details, potentially populating accountId in log entries.
+	 * This is a placeholder method.
+	 */
+	private async populateAccountIdIfMissing(logEntry: Omit<NotificationLogEntry, 'timestamp' | 'accountId' | 'taskId'> & Partial<Pick<NotificationLogEntry, 'accountId' | 'taskId'>>): Promise<string> {
+		if (logEntry.accountId && logEntry.accountId !== "unknown") {
+			return logEntry.accountId;
+		}
+		// In a real implementation, you might try to infer the accountId
+		// from the context of the event that triggered the notification.
+		// For example, if the sendEmail method is called with an accountId.
+		// For now, we return 'unknown'.
+		return "unknown";
+	}
 }
