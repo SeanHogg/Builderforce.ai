@@ -9,6 +9,7 @@ import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled }
 import { recordPullRequestRow, markPullRequestMergedById } from '../../application/repos/recordPullRequestRow';
 import { readRepoFile, listRepoFiles, searchRepoCode, listBranchDiff } from '../../application/repos/readRepoContents';
 import { verifyWrittenFiles } from '../../application/repos/verifyWrittenFiles';
+import { scanWrittenForPlaceholders } from '../../application/repos/scanForPlaceholders';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
@@ -679,6 +680,12 @@ const CLOUD_AGENT_TOOLS = [
 // real edits (the long-lived Container surface allows 40).
 const MAX_CLOUD_TOOL_STEPS = 30;
 
+// Anti-stub finish gate: how many times a single synchronous loop invocation will
+// block a finish that still ships placeholder/stub code before letting the PR open
+// anyway (human-reviewed, annotated unverified). The durable surface resets this
+// per tick, so there it is effectively block-until-clean, bounded by the step cap.
+const MAX_PLACEHOLDER_FINISH_BLOCKS = 2;
+
 // The Container surface is a long-lived process (not a per-tick DO), and its
 // real-shell build/verify loop legitimately needs more turns than the durable
 // surface. The container heartbeats `executions.updated_at` on every LLM step so a
@@ -1015,6 +1022,10 @@ export async function runCloudToolLoop(
   // build/type-check/test. Reject a finish that claims one passed — once — to force
   // an honest summary; the opened PR is annotated unverified regardless.
   let finishBlockedOnce = false;
+  // Anti-stub gate: count finish attempts blocked because committed files still
+  // contain placeholder/stub code, so the agent is forced to ship a real
+  // implementation (or delete the dead file) — see MAX_PLACEHOLDER_FINISH_BLOCKS.
+  let placeholderBlocks = 0;
 
   // Hard cancel: a background watcher polls the (cross-isolate) execution status
   // and aborts the in-flight gateway fetch the instant it sees CANCELLED, so a
@@ -1229,14 +1240,37 @@ export async function runCloudToolLoop(
         }
       } else if (name === 'finish') {
         const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : '';
+        // Two finish gates, in order. Either yields a block message that forces the
+        // agent to call finish again once it has corrected the run; null = ship.
+        let finishBlock: string | null = null;
         if (summary && !finishBlockedOnce && assertsUnrunVerification(summary)) {
-          // The summary claims a check passed, but nothing was (or could be) run.
-          // Block once and force an honest restatement.
+          // (1) Honesty: the summary claims a check passed, but nothing was (or
+          // could be) run. Block once and force an honest restatement.
           finishBlockedOnce = true;
-          toolResult = {
-            ok: false,
-            error: 'You stated that a build/type-check/lint/test passed or is resolved, but this executor cannot run any of those — CI on the pull request verifies them. Call finish again with a summary that does NOT claim a check passed (describe what you changed and that CI will verify), or call run_checks first.',
-          };
+          finishBlock =
+            'You stated that a build/type-check/lint/test passed or is resolved, but this executor cannot run any of those — CI on the pull request verifies them. Call finish again with a summary that does NOT claim a check passed (describe what you changed and that CI will verify), or call run_checks first.';
+        } else if (repoCtx && writtenPaths.size > 0 && placeholderBlocks < MAX_PLACEHOLDER_FINISH_BLOCKS) {
+          // (2) Anti-stub: refuse to ship placeholder/scaffold code. Read the
+          // committed files back and block if any still contain stub markers — the
+          // agent must implement them for real (using the existing infrastructure)
+          // or remove the dead file with delete_file.
+          const scan = await scanWrittenForPlaceholders({ ...repoCtx, ref: repoCtx.branch }, writtenPaths);
+          if (scan.flagged.length) {
+            placeholderBlocks += 1;
+            finishBlock =
+              `Cannot finish — ${scan.flagged.length} committed file(s) still contain placeholder/stub code instead of a real implementation. `
+              + 'Replace each stub with a working implementation that uses the existing infrastructure (search_code for it first), or if a file is dead code that should not ship in this PR, remove it with delete_file. Then call finish again.\n'
+              + scan.flagged.map((f) => `- ${f.path}: ${f.markers.join('; ')}`).join('\n');
+            await recordCloudToolEvent(db, {
+              tenantId, cloudAgentRef, executionId,
+              toolName: 'finish.blocked', category: 'tool',
+              detail: { reason: 'placeholders', files: scan.flagged },
+              result: `Blocked finish: ${scan.flagged.map((f) => f.path).join(', ')}`,
+            });
+          }
+        }
+        if (finishBlock) {
+          toolResult = { ok: false, error: finishBlock };
         } else {
           if (summary) finalOutput = summary;
           finished = true;
