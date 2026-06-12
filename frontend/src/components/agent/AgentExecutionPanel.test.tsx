@@ -110,6 +110,32 @@ describe('AgentExecutionPanel — steering echo', () => {
     }));
   });
 
+  it('shows the per-run agent in the execution header from the run’s own fields + telemetry', async () => {
+    // A cloud run stamped with its own agent ref + a runtime.dispatch event that
+    // recorded the engine type it ACTUALLY ran as.
+    const cloudRun: Execution = { id: 40, taskId: 1, status: 'completed', agentHostId: null, cloudAgentRef: 'agt_v2' };
+    vi.spyOn(builderforceApi.runtimeApi, 'listForTask').mockResolvedValue([cloudRun]);
+    vi.spyOn(builderforceApi.cloudAgents, 'list').mockResolvedValue([{ ref: 'agt_v2', name: 'Coder Agent' }] as never);
+    vi.spyOn(builderforceApi.runtimeApi, 'trace').mockResolvedValue({
+      execution: cloudRun,
+      trace: {
+        source: 'cloud-telemetry',
+        usageSnapshots: [],
+        toolEvents: [
+          { id: 1, ts: '2026-06-12T05:15:44Z', toolName: 'runtime.dispatch', args: JSON.stringify({ agentType: 'V2 Cloud Agent (Node/Container)', engine: 'builderforce-v2', surface: 'container' }) },
+        ],
+      },
+    });
+    mockStream.mockReturnValue({ status: 'completed', execution: null, messages: [], fileChanges: [], connected: false });
+
+    const { findByText, findByTitle } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
+
+    // The header shows the run's own agent name (not the task's current assignment)…
+    expect((await findByTitle('Agent that ran this execution')).textContent).toContain('Coder Agent');
+    // …and the engine type it actually dispatched as, from its own telemetry.
+    expect(await findByText(/ran as V2 Cloud Agent \(Node\/Container\)/)).toBeTruthy();
+  });
+
   it('shows ticket-level spend beside the Executions heading', async () => {
     vi.spyOn(builderforceApi.runtimeApi, 'taskCost').mockResolvedValue({ estimatedCostUsd: 0.42, totalTokens: 12345, requests: 7 });
     const { findByText } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
