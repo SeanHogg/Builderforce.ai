@@ -14,6 +14,8 @@ export type TaskSubmitRequest = {
   thinking?: string;
   sessionId?: string;
   parentTaskId?: string;
+  /** Account ID that owns this task. Required for Hen task notification. */
+  accountId?: string;
   metadata?: Record<string, unknown>;
 };
 
@@ -36,6 +38,8 @@ export type TaskState = {
   id: string;
   status: TaskStatus;
   agentId?: string;
+  /** Account ID that owns this task. Used to group Hen tasks per account. */
+  accountId?: string;
   description: string;
   sessionId?: string;
   parentTaskId?: string;
@@ -212,4 +216,43 @@ export type BuilderforceConfig = {
   pollIntervalMs?: number;
   /** Request timeout in ms. Default: 30000 */
   timeoutMs?: number;
+};
+
+// ---------------------------------------------------------------------------
+// Notification domain types (Hen task completion)
+// ---------------------------------------------------------------------------
+
+/**
+ * Port: Retrieves the primary email address for an account holder.
+ * Single Responsibility — only account → email resolution.
+ */
+export interface AccountEmailResolver {
+  /**
+   * @returns The primary email for the account, or `null` if unknown.
+   */
+  getPrimaryEmail(accountId: string): Promise<string | null>;
+}
+
+/**
+ * Port: Sends an email notification.
+ * Single Responsibility — only email dispatch.
+ */
+export interface EmailNotifier {
+  /**
+   * Send an email notification.
+   * @returns `true` if the send succeeded, `false` otherwise.
+   */
+  send(to: string, subject: string, html: string): Promise<boolean>;
+}
+
+/**
+ * Notification log entry for auditing (FR.5).
+ */
+export type NotificationLogEntry = {
+  accountId: string;
+  email: string;
+  subject: string;
+  sentAt: Date;
+  success: boolean;
+  errorMessage?: string;
 };
