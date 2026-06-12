@@ -1,9 +1,10 @@
+import { z } from "zod";
 import { type LLMTask } from "@builderforce/llm-agent";
 import { type TaskCompletionEvent, type TaskUpdateEvent } from "../src/types/task"; // Assuming these types exist
 import { HenTaskCompletionNotifier, HenTaskCompletionNotifierSchema } from "./hen-task-completion-notifier";
 import { Logger } from "../src/utils/logging"; // Assuming Logger utility exists
 import { type NotificationService } from "../src/services/notificationService"; // Assuming NotificationService exists
-import { type AccountService } from "../src/services/accountService"; // Assuming AccountService exists
+import { type AccountUtil } from "../src/utils/accounts"; // Assuming AccountUtil exists
 
 const logger = new Logger("LLMTaskTool");
 
@@ -21,13 +22,13 @@ type LLMTaskExtensionConfig = z.infer<typeof HenTaskCompletionNotifierToolConfig
 export class LLMTaskTool {
 	private config: LLMTaskExtensionConfig;
 	private notificationService: NotificationService;
-	private accountService: AccountService;
+	private accountUtil: AccountUtil; // Changed from AccountService to AccountUtil as per the created file
 	private henTaskCompletionNotifier?: HenTaskCompletionNotifier;
 
-	constructor(config: LLMTaskExtensionConfig, notificationService: NotificationService, accountService: AccountService) {
+	constructor(config: LLMTaskExtensionConfig, notificationService: NotificationService, accountUtil: AccountUtil) {
 		this.config = HenTaskCompletionNotifierToolConfigSchema.parse(config);
 		this.notificationService = notificationService;
-		this.accountService = accountService;
+		this.accountUtil = accountUtil; // Assign the AccountUtil instance
 		this.initializeNotifier();
 	}
 
@@ -35,7 +36,7 @@ export class LLMTaskTool {
 		this.henTaskCompletionNotifier = new HenTaskCompletionNotifier(
 			this.config,
 			this.notificationService,
-			this.accountService
+			this.accountUtil // Pass AccountUtil instance here
 		);
 		logger.info("HenTaskCompletionNotifier initialized.");
 	}
@@ -55,6 +56,7 @@ export class LLMTaskTool {
 					await this.henTaskCompletionNotifier.handleTaskCompletion(event);
 				} catch (err) {
 					logger.error("Error in HenTaskCompletionNotifier during task completion:", err);
+					// Optionally log this error to the notification service as well if it's a critical failure
 				}
 			} else {
 				logger.warn("HenTaskCompletionNotifier not initialized. Cannot handle task completion.");
