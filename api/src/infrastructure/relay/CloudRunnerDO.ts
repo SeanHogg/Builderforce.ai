@@ -15,7 +15,7 @@
 import { eq } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../database/connection';
 import { executions } from '../database/schema';
-import { prepareCloudRun, runCloudToolLoop, type CloudLoopState } from '../../presentation/routes/runtimeRoutes';
+import { prepareCloudRun, runCloudToolLoop, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
 import { releasePendingSteers } from '../../application/runtime/executionSteering';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env } from '../../env';

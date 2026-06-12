@@ -33,6 +33,37 @@ describe('searchRepoCode', () => {
     expect(r.truncated).toBe(false);
   });
 
+  it('splits a compound "a OR b" query into per-term searches and unions the hits', async () => {
+    // Regression: GitHub REST code-search has no OR operator, so a single quoted
+    // compound query matched the literal phrase (incl. " OR ") and returned 0 for
+    // every realistic search — blinding the agent. Each term must search on its own.
+    const seen: string[] = [];
+    const fetchMock = vi.fn(async (url: string) => {
+      const decoded = decodeURIComponent(url);
+      // never the whole phrase as one literal
+      expect(decoded).not.toContain('"swimlane OR ticket"');
+      if (decoded.includes('"swimlane"')) { seen.push('swimlane'); return new Response(JSON.stringify({
+        total_count: 1, items: [{ path: 'src/Board.tsx', text_matches: [{ fragment: 'swimlane' }] }],
+      }), { status: 200 }); }
+      if (decoded.includes('"ticket"')) { seen.push('ticket'); return new Response(JSON.stringify({
+        // overlaps Board.tsx (dedup) plus a unique file
+        total_count: 2, items: [
+          { path: 'src/Board.tsx', text_matches: [{ fragment: 'ticket' }] },
+          { path: 'src/Card.tsx', text_matches: [{ fragment: 'ticket' }] },
+        ],
+      }), { status: 200 }); }
+      return new Response(JSON.stringify({ total_count: 0, items: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const r = await searchRepoCode(ctx, 'swimlane OR ticket');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(seen.sort()).toEqual(['swimlane', 'ticket']);
+    // deduped by path: Board.tsx appears once despite matching both terms
+    expect(r.matches.map((m) => m.path)).toEqual(['src/Board.tsx', 'src/Card.tsx']);
+  });
+
   it('reports zero matches cleanly (the "nothing to remove" signal)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ total_count: 0, items: [] }), { status: 200 })) as unknown as typeof fetch);
     const r = await searchRepoCode(ctx, 'does-not-exist');

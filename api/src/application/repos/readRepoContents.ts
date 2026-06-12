@@ -93,29 +93,55 @@ export async function searchRepoCode(
   if (!query.trim()) return { ok: false, reason: 'query is required' };
   const apiBase = buildGitApiBaseUrl(ctx.provider, ctx.host);
   const perPage = Math.min(Math.max(opts?.maxResults ?? 30, 1), 50);
-  // Quote the term so GitHub matches the literal token sequence, scoped to the repo.
-  const q = `${JSON.stringify(query)} repo:${ctx.owner}/${ctx.repo}`;
-  const url = `${apiBase}/search/code?q=${encodeURIComponent(q)}&per_page=${perPage}`;
-  const res = await fetch(url, {
-    headers: { ...ghHeaders(ctx.token), Accept: 'application/vnd.github.text-match+json' },
-  }).catch(() => null);
-  if (!res) return { ok: false, reason: 'search request failed (network)' };
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    return { ok: false, reason: `GitHub ${res.status}: ${t.slice(0, 160)}` };
+  // GitHub's REST /search/code has NO boolean `OR` operator: a quoted query is an
+  // exact-phrase match. So a model's natural compound query ("a OR b OR c") would
+  // be matched verbatim — including the literal " OR "s — and return 0 for every
+  // realistic search, leaving the agent blind. Split on " OR " and union the hits;
+  // the common single-term case still runs exactly one request. Cap the fan-out so
+  // a sprawling query can't burn GitHub's tight code-search rate limit.
+  const terms = query.split(/\s+OR\s+/i).map((t) => t.trim()).filter(Boolean).slice(0, 5);
+  const reqs = terms.map(async (term) => {
+    // Quote each term so GitHub matches the literal token sequence, scoped to the repo.
+    const q = `${JSON.stringify(term)} repo:${ctx.owner}/${ctx.repo}`;
+    const url = `${apiBase}/search/code?q=${encodeURIComponent(q)}&per_page=${perPage}`;
+    const res = await fetch(url, {
+      headers: { ...ghHeaders(ctx.token), Accept: 'application/vnd.github.text-match+json' },
+    }).catch(() => null);
+    if (!res) return { reason: 'search request failed (network)' as const };
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      return { reason: `GitHub ${res.status}: ${t.slice(0, 160)}` };
+    }
+    const json = (await res.json().catch(() => null)) as {
+      total_count?: number;
+      items?: Array<{ path?: string; text_matches?: Array<{ fragment?: string }> }>;
+    } | null;
+    return { items: json?.items ?? [], total: json?.total_count ?? 0 };
+  });
+  const results = await Promise.all(reqs);
+  // If every term's request failed (not just returned 0), surface the error.
+  if (results.every((r) => 'reason' in r)) {
+    return { ok: false, reason: (results[0] as { reason: string }).reason };
   }
-  const json = (await res.json().catch(() => null)) as {
-    total_count?: number;
-    items?: Array<{ path?: string; text_matches?: Array<{ fragment?: string }> }>;
-  } | null;
-  const items = json?.items ?? [];
-  const matches = items
-    .map((it) => ({
-      path: it.path ?? '',
-      fragments: (it.text_matches ?? []).map((m) => (m.fragment ?? '').trim()).filter(Boolean).slice(0, 3),
-    }))
-    .filter((m) => m.path);
-  const total = json?.total_count ?? matches.length;
+  // Union by path, keeping the first fragments seen for each file.
+  const byPath = new Map<string, { path: string; fragments: string[] }>();
+  let totalCount = 0;
+  for (const r of results) {
+    if ('reason' in r) continue;
+    totalCount += r.total;
+    for (const it of r.items) {
+      const path = it.path ?? '';
+      if (!path || byPath.has(path)) continue;
+      byPath.set(path, {
+        path,
+        fragments: (it.text_matches ?? []).map((m) => (m.fragment ?? '').trim()).filter(Boolean).slice(0, 3),
+      });
+    }
+  }
+  const matches = [...byPath.values()].slice(0, perPage);
+  // total_count is per-term and double-counts files matching multiple terms; the
+  // deduped match count is the honest floor for "is it truncated".
+  const total = Math.max(totalCount, matches.length);
   return { ok: true, matches, total, truncated: total > matches.length };
 }
 
