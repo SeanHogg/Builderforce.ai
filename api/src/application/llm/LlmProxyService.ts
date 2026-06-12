@@ -186,6 +186,21 @@ export const FREE_VENDOR_CALL_TIMEOUT_MS = 15_000;
 export const GUARANTEED_BACKSTOP_MODEL = 'google/gemini-2.5-flash-lite';
 
 /**
+ * Coding-capable backstop chain — the reliability floor for a *coding* run.
+ *
+ * `GUARANTEED_BACKSTOP_MODEL` (gemini-2.5-flash-lite) is a cheap general model
+ * chosen for low variance, NOT for code. When an autonomous coding agent's soft
+ * pin exhausts the coding pool, flooring onto a non-coding model means the run
+ * flails and gives up without writing code (observed in execution #59). So a
+ * coding proxy floors onto the cheapest reliable *paid coder* instead —
+ * `deepseek/deepseek-v4-flash` ($0.10/$0.20, a `CODING_MODEL_POOL` member,
+ * reachable on the credited OpenRouter key like the general backstop) — and only
+ * then onto `GUARANTEED_BACKSTOP_MODEL` as the absolute last resort, so the
+ * "never hard-fail" guarantee is preserved while a coder is strongly preferred.
+ */
+export const CODING_BACKSTOP_MODELS: readonly string[] = ['deepseek/deepseek-v4-flash', GUARANTEED_BACKSTOP_MODEL];
+
+/**
  * Premium fallback chain — appended to *every* non-strict candidate chain so a
  * fully-saturated free pool never surfaces an `LLM_UNAVAILABLE` / cascade-
  * exhausted 429 to the caller. Direct Google AI (`googleai/*`) is tried first
@@ -382,6 +397,11 @@ export interface LlmProxyOptions {
    *  `PREMIUM_VENDOR_CALL_TIMEOUT_MS` so PREMIUM-tier long-context calls
    *  aren't killed by the free-tier 25s budget. */
   vendorCallTimeoutMs?: number;
+  /** Reliability-floor chain dispatched (on the credited key) after the primary
+   *  cascade fails. Defaults to `[GUARANTEED_BACKSTOP_MODEL]`. Coding runtimes
+   *  pass `CODING_BACKSTOP_MODELS` so an exhausted coding cascade floors onto a
+   *  coder, not the general-purpose backstop. Tried in order. */
+  backstopModels?: readonly string[];
 }
 
 export class LlmProxyService {
@@ -391,6 +411,7 @@ export class LlmProxyService {
   private readonly productName: ProductName;
   private readonly isPro: boolean;
   private readonly vendorCallTimeoutMs: number | undefined;
+  private readonly backstopModels: readonly string[];
 
   constructor(env: ProxyEnv, options?: LlmProxyOptions) {
     this.env = env;
@@ -399,6 +420,7 @@ export class LlmProxyService {
     this.productName = options?.productName ?? 'builderforceLLM';
     this.isPro = this.productName === 'builderforceLLMPro' || this.productName === 'builderforceLLMTeams';
     this.vendorCallTimeoutMs = options?.vendorCallTimeoutMs;
+    this.backstopModels = options?.backstopModels?.length ? options.backstopModels : [GUARANTEED_BACKSTOP_MODEL];
   }
 
   // --- Public entry points --------------------------------------------------
@@ -490,7 +512,7 @@ export class LlmProxyService {
       // guaranteed paid backstop (credited key) is the last chance before we
       // surface a hard failure.
       const backstop = await this.dispatchBackstop(body, requestHeaders);
-      if (backstop) return this.finalize(backstop, tid, startedAt, [GUARANTEED_BACKSTOP_MODEL], 'success');
+      if (backstop) return this.finalize(backstop, tid, startedAt, [...this.backstopModels], 'success');
       return this.finalize(
         this.exhaustedResponse(
           seed.slice(),
@@ -516,7 +538,7 @@ export class LlmProxyService {
       backstop.failovers = [...primary.failovers, ...backstop.failovers];
       backstop.retries   = primary.retries + backstop.retries;
       backstop.attempts  = [...(primary.attempts ?? []), ...(backstop.attempts ?? [])];
-      return this.finalize(backstop, tid, startedAt, [...candidates, GUARANTEED_BACKSTOP_MODEL], 'success');
+      return this.finalize(backstop, tid, startedAt, [...candidates, ...this.backstopModels], 'success');
     }
     return this.finalize(primary, tid, startedAt, candidates);
   }
@@ -678,7 +700,7 @@ export class LlmProxyService {
   ): Promise<ProxyResult | null> {
     const creditedEnv = this.creditedVendorEnv();
     if (!creditedEnv.OPENROUTER_API_KEY) return null; // no paid key to fall back to
-    const result = await this.dispatch([GUARANTEED_BACKSTOP_MODEL], body, requestHeaders, {
+    const result = await this.dispatch([...this.backstopModels], body, requestHeaders, {
       vendorEnv: creditedEnv,
       timeoutMs: PREMIUM_VENDOR_CALL_TIMEOUT_MS,
     });
@@ -1061,6 +1083,7 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
+  opts?: { backstopModels?: readonly string[] },
 ): LlmProxyService {
   const { productName, modelPool, vendorCallTimeoutMs } = resolveRouting(effectivePlan, premiumOverride);
   return new LlmProxyService(env, {
@@ -1068,6 +1091,7 @@ export function llmProxyForPlan(
     preferredPoolSize: PREFERRED_POOL_SIZE,
     productName,
     ...(vendorCallTimeoutMs ? { vendorCallTimeoutMs } : {}),
+    ...(opts?.backstopModels ? { backstopModels: opts.backstopModels } : {}),
   });
 }
 
