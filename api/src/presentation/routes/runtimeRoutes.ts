@@ -21,7 +21,8 @@ import { loadCapabilityContext } from '../../application/artifact/capabilityCont
 import { llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../../application/llm/LlmProxyService';
 import { resolveTenantPlan } from './llmRoutes';
 import { recordUsageRow } from '../../application/llm/usageLedger';
-import { ensureTaskPrdRecord } from '../../application/prd/taskPrd';
+import { ensureTaskPrdRecord, appendTaskPrdRevision } from '../../application/prd/taskPrd';
+import { enqueueExecutionMessage, pullPendingSteering, listExecutionMessages, releasePendingSteers } from '../../application/runtime/executionSteering';
 import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
@@ -489,34 +490,83 @@ async function ensureTaskPrd(
   const { prd, status } = ensured;
   if (status === 'reused') return prd; // already had a PRD — no new commit/notification
 
-  const fileChange = status === 'updated' ? 'modified' : 'created';
-  await recordTaskFileChange(env, tenantId, taskId, executionId, 'PRD.md', fileChange, agentLabel);
+  await landPrdChange(env, db, {
+    executionId, tenantId, taskId, taskTitle: taskRow.title, prd, agentLabel,
+    isUpdate: status === 'updated',
+    message: (branch) => branch
+      ? `📝 ${agentLabel} drafted the PRD and committed it to branch \`${branch}\` (pending change — included in this task's single PR). See the PRD tab + Changes.`
+      : `📝 ${agentLabel} drafted the PRD (saved to the PRD tab).`,
+  });
+  return prd;
+}
 
-  // Land PRD.md as a pending change on the ticket's git branch — the SAME branch
-  // the agent's code commits to. No PR is opened here; the single run PR (at
-  // finalize) covers PRD.md + all files.
-  const committed = await commitPrdAsPendingChange(db, gitSecret(env), tenantId, taskId, taskRow.title, prd, agentLabel);
+/**
+ * Land a PRD body change as a pending change on the ticket branch: record the
+ * attributed PRD.md file change, commit it to the SAME branch the agent's code
+ * commits to (single run PR covers it), surface the branch on the ticket, and
+ * notify the execution stream. The single PRD-commit path — shared by the
+ * first-draft ({@link ensureTaskPrd}) and per-run directive ({@link recordPrdDirective})
+ * write-backs so commit/record/notify is never duplicated. Best-effort throughout.
+ */
+async function landPrdChange(
+  env: Env,
+  db: Db,
+  args: {
+    executionId: number;
+    tenantId: number;
+    taskId: number;
+    taskTitle: string;
+    prd: string;
+    agentLabel: string;
+    isUpdate: boolean;
+    message: (branch: string | null) => string;
+  },
+): Promise<void> {
+  const fileChange = args.isUpdate ? 'modified' : 'created';
+  await recordTaskFileChange(env, args.tenantId, args.taskId, args.executionId, 'PRD.md', fileChange, args.agentLabel);
+
+  const committed = await commitPrdAsPendingChange(db, gitSecret(env), args.tenantId, args.taskId, args.taskTitle, args.prd, args.agentLabel);
   if (committed.ok) {
-    // Surface the branch on the ticket (Details shows the branch as a link). The
-    // PR URL is set later by the finalize once the single PR is opened.
     await db.update(tasks)
       .set({ gitBranch: committed.branch, updatedAt: new Date() })
-      .where(eq(tasks.id, taskId))
+      .where(eq(tasks.id, args.taskId))
       .catch(() => { /* best-effort */ });
   }
 
-  notifyExecutionSubscribers(executionId, {
-    type: 'file_change', executionId, path: 'PRD.md', change: fileChange, ts: new Date().toISOString(),
+  notifyExecutionSubscribers(args.executionId, {
+    type: 'file_change', executionId: args.executionId, path: 'PRD.md', change: fileChange, ts: new Date().toISOString(),
   });
-  notifyExecutionSubscribers(executionId, {
-    type: 'message', executionId, role: 'assistant',
-    text: committed.ok
-      ? `📝 ${agentLabel} drafted the PRD and committed it to branch \`${committed.branch}\` (pending change — included in this task's single PR). See the PRD tab + Changes.`
-      : `📝 ${agentLabel} drafted the PRD (saved to the PRD tab). No git branch created: ${committed.reason}.`,
+  notifyExecutionSubscribers(args.executionId, {
+    type: 'message', executionId: args.executionId, role: 'assistant',
+    text: args.message(committed.ok ? committed.branch : null),
     ts: new Date().toISOString(),
   });
+}
 
-  return prd;
+/**
+ * Per-run PRD write-back: record a user directive (a steer to a running run, or a
+ * follow-up that starts a new run) as a dated, signed revision on the task's PRD,
+ * then land it on the ticket branch. This is what makes the PRD "update per run"
+ * instead of being frozen at first draft. Best-effort — never blocks the steer/run.
+ */
+async function recordPrdDirective(
+  env: Env,
+  db: Db,
+  args: { executionId: number; tenantId: number; projectId: number; taskId: number; taskTitle: string; agentLabel: string; directive: string },
+): Promise<void> {
+  const revised = await appendTaskPrdRevision(db, {
+    taskId: args.taskId, tenantId: args.tenantId, projectId: args.projectId,
+    agentLabel: args.agentLabel, directive: args.directive, executionId: args.executionId,
+    isoTimestamp: new Date().toISOString(),
+  });
+  if (!revised) return;
+  await landPrdChange(env, db, {
+    executionId: args.executionId, tenantId: args.tenantId, taskId: args.taskId, taskTitle: args.taskTitle,
+    prd: revised.prd, agentLabel: args.agentLabel, isUpdate: true,
+    message: (branch) => branch
+      ? `📝 ${args.agentLabel} recorded your direction in the PRD and committed the revision to branch \`${branch}\`. See the PRD tab + Changes.`
+      : `📝 ${args.agentLabel} recorded your direction as a PRD revision (saved to the PRD tab).`,
+  });
 }
 
 /**
@@ -889,7 +939,23 @@ async function handleContainerOp(
   }
 
   if (op === 'llm') {
-    const messages = Array.isArray(args.messages) ? (args.messages as unknown as ChatMessage[]) : ([] as ChatMessage[]);
+    const messages = Array.isArray(args.messages) ? (args.messages as unknown as Array<Record<string, unknown>>) : ([] as Array<Record<string, unknown>>);
+    // Mid-run steering for the long-lived container: drain user follow-ups posted
+    // since the last step and INJECT them into this turn's messages server-side, so
+    // the steer reaches the model immediately — even on a container image that
+    // predates steering support (no redeploy required). They are also returned in
+    // `steering` so a steering-aware container persists them into its own loop state
+    // for subsequent turns; the injection here is deduped by text so that does not
+    // double them. Each steer is drained exactly once (consumed_at stamped).
+    const steering = await pullPendingSteering(db, executionId);
+    if (steering.length > 0) {
+      const present = new Set(messages.filter((m) => m.role === 'user' && typeof m.content === 'string').map((m) => m.content as string));
+      for (const steer of steering) {
+        if (!present.has(steer)) messages.push({ role: 'user', content: steer });
+        await recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName: 'steer.applied', category: 'message', detail: { text: steer }, result: steer.slice(0, 280) });
+        notifyExecutionSubscribers(executionId, { type: 'message', executionId, role: 'user', text: steer, ts: new Date().toISOString() });
+      }
+    }
     const tGen0 = Date.now();
     // Route through the tenant's plan pool/key (not the fixed free pool) and apply
     // the shared cloud model rule: explicit pick = hard pin, else the plan's best
@@ -897,7 +963,7 @@ async function handleContainerOp(
     // the caller's explicit `model`; the default lands on a strong coding model.
     const pick = pickCloudModel(model, ctx.effectivePlan, ctx.premiumOverride);
     const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride).complete({
-      messages, tools: CONTAINER_AGENT_TOOLS, tool_choice: 'auto',
+      messages: messages as unknown as ChatMessage[], tools: CONTAINER_AGENT_TOOLS, tool_choice: 'auto',
       ...(pick.model ? { model: pick.model, ...(pick.strict ? { modelStrict: true } : {}) } : {}),
       useCase: 'task_execution',
     });
@@ -924,7 +990,7 @@ async function handleContainerOp(
       await recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName: 'agent.message', category: 'message', detail: { content }, result: content.slice(0, 280) });
       notifyExecutionSubscribers(executionId, { type: 'message', executionId, role: 'assistant', text: content, ts: new Date().toISOString() });
     }
-    return { status: 200, body: { content, toolCalls, cancelled: await isExecutionCancelled(db, executionId) } };
+    return { status: 200, body: { content, toolCalls, steering, cancelled: await isExecutionCancelled(db, executionId) } };
   }
 
   if (op === 'write') {
@@ -1096,6 +1162,24 @@ export async function runCloudToolLoop(
   for (; step < MAX_CLOUD_TOOL_STEPS && !finished && (step - startStep) < maxThisCall; step++) {
     // Between-step guard: stop before issuing the next (paid) call if cancelled.
     if (cancelled || abortController.signal.aborted || await isCancelled()) { cancelled = true; break; }
+
+    // Mid-run steering: drain any user follow-ups posted to this execution since the
+    // previous step and splice them in as user turns BEFORE the next paid call, so a
+    // cloud agent (V1 / V2-durable / V2-container fallback) actually changes course
+    // mid-run instead of the message being a no-op. Each steer is drained once
+    // (consumed_at is stamped by pullPendingSteering).
+    const steers = await pullPendingSteering(db, executionId);
+    for (const steer of steers) {
+      messages.push({ role: 'user', content: steer });
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef, executionId,
+        toolName: 'steer.applied', category: 'message',
+        detail: { step, text: steer },
+        result: steer.slice(0, 280),
+      });
+      notifyExecutionSubscribers(executionId, { type: 'message', executionId, role: 'user', text: steer, ts: new Date().toISOString() });
+    }
+
     const tGen0 = Date.now();
     let result: Awaited<ReturnType<typeof proxy.complete>>;
     try {
@@ -1396,6 +1480,11 @@ export async function finalizeCloudRun(
   },
 ): Promise<{ ok: boolean; output: string }> {
   const { tenantId, cloudAgentRef, executionId, taskRow, agentLabel, repoCtx, writtenPaths, finalOutput, cancelled } = args;
+  // The run is settling — release any steer that arrived after the loop's last step
+  // so it can't dangle unconsumed (the stopped loop will never read it). The single
+  // terminal chokepoint for every cloud surface (Worker loop, DO-finished tick, and
+  // the container's finalize op all route through here).
+  await releasePendingSteers(db, executionId);
   let prOpened = false;
   let merged = false;
   let mergeNote = '';
@@ -1547,6 +1636,12 @@ export async function prepareCloudRun(
   // payload — surface it prominently so the agent fixes the REAL failing build.
   const remediation = parseRemediation(payload);
 
+  // A "Send" on a TERMINAL run starts a NEW run carrying the user's message as a
+  // follow-up directive. Surface it as the HEADLINE instruction so the run treats
+  // the message as the goal — building on the prior run's committed work and the
+  // (now PRD-recorded) directive, not redoing the task from scratch.
+  const followUp = parseFollowUp(payload);
+
   // Show the agent the repo it's about to edit BEFORE it spends an LLM call, so a
   // wrong/empty binding is caught up-front instead of after a conceptual non-answer
   // (the exec #54 failure: the agent never saw that only `agent-runtime` was bound).
@@ -1568,6 +1663,9 @@ export async function prepareCloudRun(
   const userContent = [
     remediation
       ? `## Build failure to fix (attempt ${remediation.attempt}/${remediation.maxAttempts})\n\nA previous change for this task was merged but the build then FAILED. Fix the cause below — do not re-do unrelated work.\n\n${remediation.buildError}${remediation.runUrl ? `\n\nCI run: ${remediation.runUrl}` : ''}`
+      : null,
+    followUp
+      ? `## Follow-up directive (act on this first)\n\nThe user reviewed the previous run${followUp.priorExecutionId != null ? ` (execution #${followUp.priorExecutionId})` : ''} and sent this new direction. Treat it as the primary goal for THIS run, building on the work already committed to the task's branch (see the prior-files list below) rather than starting over:\n\n${followUp.directive}`
       : null,
     prd ? `## Product Requirements Document (PRD)\n\n${prd}` : null,
     governance || null,
@@ -1726,6 +1824,49 @@ function parseRepoId(payload: string | undefined): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+interface FollowUpContext { directive: string; priorExecutionId: number | null }
+
+/**
+ * Parse a follow-up directive off a re-run's payload. A "Send" on a TERMINAL run
+ * starts a NEW execution carrying `{ followUp: { directive, priorExecutionId } }`;
+ * prepareCloudRun surfaces the directive as the headline instruction so the new
+ * run treats the user's message as the goal (on top of the task + evolved PRD).
+ */
+export function parseFollowUp(payload: string | undefined): FollowUpContext | null {
+  if (!payload) return null;
+  try {
+    const f = (JSON.parse(payload) as { followUp?: { directive?: unknown; priorExecutionId?: unknown } }).followUp;
+    const directive = typeof f?.directive === 'string' ? f.directive.trim() : '';
+    if (!directive) return null;
+    const prior = typeof f?.priorExecutionId === 'number' && Number.isFinite(f.priorExecutionId) ? f.priorExecutionId : null;
+    return { directive, priorExecutionId: prior };
+  } catch {
+    return null;
+  }
+}
+
+/** Terminal = the run has settled and has no live session to steer. A "Send" to a
+ *  terminal run therefore starts a NEW run instead of being a silent no-op. */
+export function isTerminalExecutionStatus(status: string | null | undefined): boolean {
+  return status === ExecutionStatus.COMPLETED || status === ExecutionStatus.FAILED || status === ExecutionStatus.CANCELLED;
+}
+
+/**
+ * Build the payload for a follow-up run started from a terminal run's "Send": keep
+ * the prior run's agent/model/repo pin so the re-run executes AS the same agent,
+ * drop any stale one-shot blocks (a prior remediation/follow-up), and attach the
+ * new directive. The directive becomes the headline instruction in prepareCloudRun.
+ */
+export function buildFollowUpPayload(priorPayload: string | null | undefined, followUp: { directive: string; priorExecutionId: number }): string {
+  let obj: Record<string, unknown> = {};
+  if (priorPayload) {
+    try { obj = JSON.parse(priorPayload) as Record<string, unknown>; } catch { obj = {}; }
+  }
+  delete obj.remediation; // a re-run is not the prior run's auto-fix attempt
+  obj.followUp = { directive: followUp.directive, priorExecutionId: followUp.priorExecutionId };
+  return JSON.stringify(obj);
 }
 
 interface RemediationContext { attempt: number; maxAttempts: number; buildError: string; runUrl: string | null }
@@ -2627,12 +2768,17 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       .orderBy(desc(toolAuditEvents.ts))
       .limit(500);
 
+    // The durable steering/chat thread (0109) — so a steer survives a reload and
+    // the Output tab can render the real conversation, not just optimistic echoes.
+    const messages = await listExecutionMessages(db, id);
+
     return c.json({
       execution: plain,
       trace: {
         source: isCloudRun ? 'cloud-telemetry' : 'runtime-fallback',
         usageSnapshots: usage,
         toolEvents,
+        messages,
       },
     });
   });
@@ -2806,6 +2952,9 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const execution = await runtimeService.cancel(id, c.get('userId'));
     const plain = execution.toPlain() as { agentHostId?: number | null };
 
+    // Terminal now — drop any pending steer so it can't dangle unconsumed.
+    await releasePendingSteers(db, id);
+
     if (plain.agentHostId != null) {
       const stub = c.env.AGENT_HOST_RELAY?.get(
         c.env.AGENT_HOST_RELAY.idFromName(String(plain.agentHostId)),
@@ -2833,6 +2982,17 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // subscribers immediately. For self-hosted runs it is also relayed to the
   // assigned agentHost (which feeds it into the live agent session as the next
   // turn). Cloud completions are one-shot today — see gap register for resume.
+  // "Send" on an execution's Output tab. Behaviour depends on whether the run is
+  // live or settled:
+  //   • RUNNING / queued → STEER it: persist the directive as a pending user turn
+  //     (the cloud agent loop — V1 / V2-durable / V2-container — drains it on its
+  //     next step; a self-hosted host also gets it relayed) and record it as a PRD
+  //     revision so the spec evolves with the run.
+  //   • TERMINAL (completed/failed/cancelled) → there is no live session to steer,
+  //     so START A NEW run seeded with the directive as the headline instruction
+  //     (built on the prior run's committed work + the evolved PRD), and return the
+  //     new execution id so the UI can follow it. This replaces the old silent
+  //     no-op, which only ever forwarded to a live host and dropped everything else.
   router.post('/executions/:id/messages', async (c) => {
     const id = Number(c.req.param('id'));
     const body = await c.req.json<{ text?: string }>().catch(() => ({} as { text?: string }));
@@ -2841,31 +3001,73 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
     const execution = await runtimeService.getExecution(id).catch(() => null);
     if (!execution) return c.json({ error: 'Execution not found' }, 404);
-    const plain = execution.toPlain() as { tenantId?: number; agentHostId?: number | null };
-    if (plain.tenantId != null && plain.tenantId !== c.get('tenantId')) {
+    const plain = execution.toPlain() as { tenantId?: number; agentHostId?: number | null; status?: string; taskId?: number; payload?: string | null; cloudAgentRef?: string | null };
+    const tenantId = c.get('tenantId');
+    if (plain.tenantId != null && plain.tenantId !== tenantId) {
       return c.json({ error: 'Execution not found' }, 404);
     }
 
-    if (plain.agentHostId != null) {
-      const stub = c.env.AGENT_HOST_RELAY?.get(
-        c.env.AGENT_HOST_RELAY.idFromName(String(plain.agentHostId)),
-      );
-      await stub?.fetch('https://relay.internal/execution-message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ executionId: id, text }),
-      }).catch(() => { /* best effort; subscribers still see the message */ });
+    // Task essentials for PRD write-back and (on a terminal run) the re-run dispatch.
+    const [taskRow] = plain.taskId != null
+      ? await db
+          .select({ id: tasks.id, title: tasks.title, description: tasks.description, assignedAgentHostId: tasks.assignedAgentHostId, assignedAgentRef: tasks.assignedAgentRef, priority: tasks.priority, projectId: tasks.projectId })
+          .from(tasks).innerJoin(projects, eq(projects.id, tasks.projectId))
+          .where(and(eq(tasks.id, plain.taskId), eq(projects.tenantId, tenantId))).limit(1)
+      : [undefined];
+
+    // Label the PRD revision / attribution with the agent that ran THIS execution.
+    const directiveAgentRef = plain.cloudAgentRef ?? parseCloudAgentRef(plain.payload ?? undefined) ?? taskRow?.assignedAgentRef ?? undefined;
+    const agentLabel = (await resolveCloudAgent(c.env as Env, tenantId, directiveAgentRef)).label ?? 'BuilderForce Agent';
+
+    if (!isTerminalExecutionStatus(plain.status)) {
+      // ── Steer the live run ──────────────────────────────────────────────────
+      await enqueueExecutionMessage(db, { executionId: id, tenantId, role: 'user', text });
+
+      if (plain.agentHostId != null) {
+        const stub = c.env.AGENT_HOST_RELAY?.get(c.env.AGENT_HOST_RELAY.idFromName(String(plain.agentHostId)));
+        await stub?.fetch('https://relay.internal/execution-message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ executionId: id, text }),
+        }).catch(() => { /* best effort; the loop still drains the persisted steer */ });
+      }
+
+      notifyExecutionSubscribers(id, { type: 'message', executionId: id, role: 'user', text, ts: new Date().toISOString() });
+
+      if (taskRow) {
+        c.executionCtx.waitUntil(recordPrdDirective(c.env as Env, db, {
+          executionId: id, tenantId, projectId: taskRow.projectId, taskId: taskRow.id, taskTitle: taskRow.title, agentLabel, directive: text,
+        }));
+      }
+      return c.json({ ok: true, steered: true });
     }
 
-    notifyExecutionSubscribers(id, {
-      type: 'message',
-      executionId: id,
-      role: 'user',
-      text,
-      ts: new Date().toISOString(),
+    // ── Terminal run → start a NEW run carrying the directive ─────────────────
+    if (!taskRow) return c.json({ error: 'Task no longer exists' }, 409);
+
+    const gate = await evaluateExecutionApprovalGate(db, tenantId, c.get('userId'), taskRow, plain.agentHostId ?? null);
+    if (!gate.allowed) {
+      return c.json({ status: 'awaiting_approval', approvalId: gate.approvalId, taskId: taskRow.id, reason: gate.reason }, 202);
+    }
+
+    const followUpPayload = buildFollowUpPayload(plain.payload, { directive: text, priorExecutionId: id });
+    const newExecution = await runtimeService.submit({
+      taskId: taskRow.id,
+      agentHostId: plain.agentHostId ?? undefined,
+      tenantId,
+      submittedBy: c.get('userId'),
+      payload: followUpPayload,
     });
 
-    return c.json({ ok: true });
+    // Echo the directive on the new run's thread (display-only — it is already the
+    // run's headline instruction, so it must NOT be re-drained as a steer).
+    await enqueueExecutionMessage(db, { executionId: newExecution.id, tenantId, role: 'user', text, pending: false });
+    c.executionCtx.waitUntil(recordPrdDirective(c.env as Env, db, {
+      executionId: newExecution.id, tenantId, projectId: taskRow.projectId, taskId: taskRow.id, taskTitle: taskRow.title, agentLabel, directive: text,
+    }));
+
+    const dispatch = await dispatchAndQueue(c, runtimeService, db, newExecution as SubmittedExecution, taskRow as ExecutionTaskRow, followUpPayload);
+    return c.json({ ok: true, rerun: { executionId: newExecution.id, dispatch } });
   });
 
   // Agent callback: update execution state (running / completed / failed)
@@ -2878,6 +3080,12 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       codeChanges?:  number;
     }>();
     const execution = await runtimeService.update(id, body);
+
+    // On a terminal transition (this is the self-hosted host callback path), drop
+    // any pending steer so it can't dangle unconsumed after the run stops.
+    if (body.status === ExecutionStatus.COMPLETED || body.status === ExecutionStatus.FAILED || body.status === ExecutionStatus.CANCELLED) {
+      await releasePendingSteers(db, id);
+    }
 
     notifyExecutionSubscribers(execution.id, {
       type: (body.status === ExecutionStatus.COMPLETED || body.status === ExecutionStatus.FAILED || body.status === ExecutionStatus.CANCELLED)

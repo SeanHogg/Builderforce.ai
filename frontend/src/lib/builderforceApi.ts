@@ -931,12 +931,21 @@ export interface TaskFileContent {
   baseTruncated?: boolean;
 }
 
+/** One persisted turn of an execution's steering/chat thread (migration 0109). */
+export interface ExecutionMessage {
+  role: 'user' | 'assistant';
+  text: string;
+  ts: string;
+}
+
 export interface ExecutionTrace {
   execution: Execution;
   trace: {
     source: string;
     usageSnapshots: Array<{ id: number; ts: string; inputTokens: number; outputTokens: number; contextTokens: number }>;
     toolEvents: ExecutionTraceToolEvent[];
+    /** Durable steering/chat thread — persisted user steers + assistant replies. */
+    messages?: ExecutionMessage[];
   };
 }
 
@@ -1018,12 +1027,15 @@ export const runtimeApi = {
     request<Execution>(`/api/runtime/executions/${id}/cancel`, { method: 'POST' }),
 
   /**
-   * Send a follow-up direction to a running/queued execution. The executing
-   * agent (self-hosted or cloud) receives it as an additional instruction so the
-   * user can steer the work mid-run. Emits a `message` event on the stream.
+   * Send a direction to an execution from the Output tab. If the run is still
+   * live, the executing agent (self-hosted or cloud) receives it as an additional
+   * instruction and steers mid-run (`steered: true`). If the run has already
+   * settled, this starts a NEW run seeded with the message as its directive and
+   * returns the new execution id (`rerun.executionId`) so the UI can follow it.
+   * Either way the directive is recorded as a PRD revision server-side.
    */
-  postMessage: (id: number, text: string): Promise<{ ok: true }> =>
-    request<{ ok: true }>(`/api/runtime/executions/${id}/messages`, {
+  postMessage: (id: number, text: string): Promise<{ ok: true; steered?: boolean; rerun?: { executionId: number } }> =>
+    request<{ ok: true; steered?: boolean; rerun?: { executionId: number } }>(`/api/runtime/executions/${id}/messages`, {
       method: 'POST',
       body: JSON.stringify({ text }),
     }),
