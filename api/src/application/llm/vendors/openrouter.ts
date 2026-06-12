@@ -20,51 +20,10 @@ import { sanitizeExtraBodyForVendor } from '../jsonSchemaSanitize';
 import { applyPromptCaching } from '../promptCaching';
 
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
-const EMBEDDINGS_ENDPOINT = 'https://openrouter.ai/api/v1/embeddings';
 
-/**
- * Default embedding model. NVIDIA's free Nemotron embed model is competitive
- * with OpenAI's small for English-only use cases, and is the model BurnRateOS
- * already calibrated against. Caller can override per-call via `body.model`.
- */
-export const DEFAULT_EMBEDDING_MODEL = 'nvidia/llama-nemotron-embed-vl-1b-v2:free';
-
-export interface EmbeddingsCallParams {
-  apiKey: string;
-  model?: string;
-  input: string | string[];
-  /** Caller-supplied opaque pass-through (e.g. `dimensions`). */
-  extraBody?: Record<string, unknown>;
-}
-
-export interface EmbeddingsCallResult {
-  status: number;
-  body: unknown;
-}
-
-/**
- * Call OpenRouter's OpenAI-compatible /embeddings. Single vendor for now —
- * if a second embeddings vendor lands, lift this into a vendor-module shape
- * mirroring `executeChatCompletion` and add a registry entry.
- */
-export async function callOpenRouterEmbeddings(params: EmbeddingsCallParams): Promise<EmbeddingsCallResult> {
-  const body: Record<string, unknown> = {
-    model: params.model ?? DEFAULT_EMBEDDING_MODEL,
-    input: params.input,
-    ...(params.extraBody ?? {}),
-  };
-  const res = await fetch(EMBEDDINGS_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${params.apiKey}`,
-      'Content-Type': 'application/json',
-      ...HEADERS,
-    },
-    body: JSON.stringify(body),
-  });
-  const json = await res.json().catch(() => ({}));
-  return { status: res.status, body: json };
-}
+// Embeddings live in their own multi-vendor surface (`../embeddingVendors/`)
+// with OpenRouter→Voyage failover — see `openRouterEmbeddingModule`. This chat
+// module is chat-completions only.
 
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
   // ── FREE tier — drive builderforceLLM (free plan) and prefix the Pro fallback chain

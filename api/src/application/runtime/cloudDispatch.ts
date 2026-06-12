@@ -111,6 +111,31 @@ export function parseRepoId(payload: string | undefined): string | undefined {
   }
 }
 
+/**
+ * Stamp a one-time "the orphan reaper re-queued this run on the durable executor"
+ * flag into the execution payload. The reaper reads {@link wasReaperRequeued} on
+ * the NEXT sweep: a run already carrying the flag is failed (not re-dispatched
+ * again), so a stuck run gets at most one durable retry — never an infinite loop.
+ */
+export function markReaperRequeued(payload: string | null | undefined): string {
+  let obj: Record<string, unknown> = {};
+  if (payload) {
+    try { obj = JSON.parse(payload) as Record<string, unknown>; } catch { obj = {}; }
+  }
+  obj.reaperRequeued = true;
+  return JSON.stringify(obj);
+}
+
+/** True if a run has already been re-queued once by the reaper (see {@link markReaperRequeued}). */
+export function wasReaperRequeued(payload: string | null | undefined): boolean {
+  if (!payload) return false;
+  try {
+    return (JSON.parse(payload) as { reaperRequeued?: unknown }).reaperRequeued === true;
+  } catch {
+    return false;
+  }
+}
+
 export interface FollowUpContext { directive: string; priorExecutionId: number | null }
 
 /**

@@ -88,7 +88,7 @@ BuilderForce Agents 在 CLI 输出中使用龙虾调色板。
 - `error`（#E23D2D）：错误、失败。
 - `muted`（#8B7F77）：弱化、元数据。
 
-调色板权威来源：`src/terminal/palette.ts`（又名"lobster seam"）。
+调色板权威来源：`src/terminal/palette.ts`。
 
 ## 命令树
 

@@ -2,6 +2,7 @@ import { IAgentHostRepository } from '../../domain/agentHost/IAgentHostRepositor
 import type { AgentHost, AgentHostStatus } from '../../domain/agentHost/AgentHost';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { asAgentHostId, asTenantId } from '../../domain/shared/types';
+import type { Env } from '../../env';
 
 export type AgentHostFilterStatus = 'online' | 'offline' | null;
 
@@ -36,11 +37,16 @@ export class AgentHostService {
     return this.agentHostRepo.verifyApiKey(asAgentHostId(agentHostId), apiKey);
   }
 
-  async setStatus(agentHostId: number, tenantId: number, status: AgentHostStatus): Promise<AgentHost | null> {
-    return this.agentHostRepo.updateStatus(asAgentHostId(agentHostId), asTenantId(tenantId), status);
+  /**
+   * Transition an agentHost's lifecycle status. `env` is threaded through to the
+   * repository so the `clk_*` auth cache invalidation lives WITH the mutation —
+   * callers cannot leave a stale "active" entry serving a deactivated key.
+   */
+  async setStatus(agentHostId: number, tenantId: number, status: AgentHostStatus, env: Env): Promise<AgentHost | null> {
+    return this.agentHostRepo.updateStatus(asAgentHostId(agentHostId), asTenantId(tenantId), status, env);
   }
 
-  async deactivate(agentHostId: number, tenantId: number): Promise<AgentHost | null> {
-    return this.setStatus(agentHostId, tenantId, 'inactive');
+  async deactivate(agentHostId: number, tenantId: number, env: Env): Promise<AgentHost | null> {
+    return this.setStatus(agentHostId, tenantId, 'inactive', env);
   }
 }

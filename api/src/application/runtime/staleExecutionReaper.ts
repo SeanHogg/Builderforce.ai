@@ -21,6 +21,7 @@
 import { neon } from '@neondatabase/serverless';
 import type { Env } from '../../env';
 import { CLOUD_ORPHAN_REASON } from './orphanReasons';
+import { markReaperRequeued, wasReaperRequeued } from './cloudDispatch';
 
 /** A self-hosted host run executing longer than this is treated as hung. */
 export const RUNNING_DEADLINE_MS = 30 * 60_000; // 30 min
@@ -34,6 +35,9 @@ export const QUEUED_DEADLINE_MS = 15 * 60_000; // 15 min
 export interface ReapResult {
   failedRunning: number;
   failedQueued: number;
+  /** Orphaned cloud runs re-queued ONCE on the durable executor (CloudRunnerDO)
+   *  instead of being failed — self-healing for a run that died before completing. */
+  requeuedCloud: number;
 }
 
 export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise<ReapResult> {
@@ -58,20 +62,51 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
   `) as ReapedRow[];
 
   // Hung CLOUD runs: the serverless background task was stopped at the ~30s wall
-  // before writing a terminal status. Fast-fail at 90s (vs 30 min) with the
-  // actionable "use a durable runtime" reason — even for runs nobody has viewed
-  // (the read-path repair only fires on view).
-  const cloudRunning = (await sql`
-    UPDATE executions
-       SET status = 'failed',
-           error_message = ${CLOUD_ORPHAN_REASON},
-           completed_at = now(),
-           updated_at = now()
-     WHERE status = 'running'
-       AND agent_host_id IS NULL
-       AND COALESCE(updated_at, created_at) < ${cloudRunningCutoff}
-    RETURNING id, tenant_id, agent_host_id, payload, error_message
-  `) as ReapedRow[];
+  // (or a container that booted then died) before writing a terminal status.
+  // Before failing one at the 90s deadline, try to SELF-HEAL it: re-queue it ONCE
+  // on the durable executor (CloudRunnerDO), which survives long multi-step runs.
+  // Pull the candidates first (with task context the DO `/start` needs) so we can
+  // decide per-row whether to re-dispatch or fail — see requeueCloudRun.
+  const cloudCandidates = (await sql`
+    SELECT e.id, e.tenant_id, e.agent_host_id, e.payload, e.error_message,
+           t.id AS task_id, t.title AS task_title, t.description AS task_description,
+           t.project_id AS project_id, e.cloud_agent_ref AS cloud_agent_ref,
+           (SELECT count(*) FROM pull_requests pr
+              WHERE pr.task_id = t.id AND pr.status <> 'merged' AND pr.status <> 'closed') AS open_pr_count
+      FROM executions e
+      JOIN tasks t ON t.id = e.task_id
+     WHERE e.status = 'running'
+       AND e.agent_host_id IS NULL
+       AND COALESCE(e.updated_at, e.created_at) < ${cloudRunningCutoff}
+  `) as CloudCandidateRow[];
+
+  const cloudRunning: ReapedRow[] = [];
+  let requeuedCloud = 0;
+  for (const row of cloudCandidates) {
+    // Re-dispatch ONCE, idempotently. Skip (and fail) a run that has already been
+    // re-queued by a prior sweep, has an open PR / written paths a re-run could
+    // double, or when no durable runner is bound to retry on.
+    const eligible =
+      !!env.CLOUD_RUNNER &&
+      !wasReaperRequeued(row.payload) &&
+      Number(row.open_pr_count) === 0;
+
+    if (eligible && (await requeueCloudRun(env, sql, row))) {
+      requeuedCloud += 1;
+      continue;
+    }
+
+    const [failed] = (await sql`
+      UPDATE executions
+         SET status = 'failed',
+             error_message = ${CLOUD_ORPHAN_REASON},
+             completed_at = now(),
+             updated_at = now()
+       WHERE id = ${row.id} AND status = 'running'
+      RETURNING id, tenant_id, agent_host_id, payload, error_message
+    `) as ReapedRow[];
+    if (failed) cloudRunning.push(failed);
+  }
 
   // Dropped queue: submitted/pending but no agent ever took it.
   const queued = (await sql`
@@ -103,7 +138,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
     }
   }));
 
-  return { failedRunning: running.length + cloudRunning.length, failedQueued: queued.length };
+  return { failedRunning: running.length + cloudRunning.length, failedQueued: queued.length, requeuedCloud };
 }
 
 interface ReapedRow {
@@ -112,6 +147,78 @@ interface ReapedRow {
   agent_host_id: number | null;
   payload: string | null;
   error_message: string | null;
+}
+
+/** A stale cloud run + the task context the durable executor needs to resume it. */
+interface CloudCandidateRow extends ReapedRow {
+  task_id: number;
+  task_title: string;
+  task_description: string | null;
+  project_id: number;
+  cloud_agent_ref: string | null;
+  open_pr_count: number | string;
+}
+
+type SqlTag = ReturnType<typeof neon<false, false>>;
+
+/**
+ * Re-queue an orphaned cloud run on the durable executor (CloudRunnerDO) exactly
+ * once. We DON'T pass `artifacts`: the DO's prepareCloudRun re-reads the repo, so
+ * the retry reconciles against whatever the dead run already wrote instead of
+ * blindly re-creating it. The `reaperRequeued` flag is persisted to the payload
+ * BEFORE kickoff so even a crash mid-dispatch can't cause a second retry. Returns
+ * true only when the DO accepted the run (it flips the row back to `running`);
+ * any failure returns false so the caller fails the run with CLOUD_ORPHAN_REASON.
+ */
+async function requeueCloudRun(env: Env, sql: SqlTag, row: CloudCandidateRow): Promise<boolean> {
+  const cloudRunner = env.CLOUD_RUNNER;
+  if (!cloudRunner) return false;
+
+  const requeuedPayload = markReaperRequeued(row.payload);
+  // Persist the one-retry flag first — its absence is the only thing that makes a
+  // run eligible, so writing it up-front is what guarantees "at most one retry".
+  await sql`
+    UPDATE executions SET payload = ${requeuedPayload}, updated_at = now()
+     WHERE id = ${row.id} AND status = 'running'
+  `;
+
+  const agentLabel = row.cloud_agent_ref ? `Cloud agent ${row.cloud_agent_ref}` : 'BuilderForce Agent';
+  try {
+    const stub = cloudRunner.get(cloudRunner.idFromName(`exec:${row.id}`));
+    const res = await stub.fetch('https://cloud-runner/start', {
+      method: 'POST',
+      body: JSON.stringify({
+        executionId: row.id,
+        tenantId: row.tenant_id,
+        projectId: row.project_id,
+        taskId: row.task_id,
+        taskTitle: row.task_title,
+        taskDescription: row.task_description,
+        cloudAgentRef: row.cloud_agent_ref ?? undefined,
+        agentLabel,
+        payload: requeuedPayload,
+      }),
+    });
+    if (!res.ok) return false;
+  } catch {
+    return false;
+  }
+
+  // Surface the self-heal on the Observability timeline so the gap (a run that
+  // looked dead) is explained rather than silently resurrected.
+  try {
+    await sql`
+      INSERT INTO tool_audit_events
+        (tenant_id, agent_host_id, cloud_agent_ref, execution_id, session_key, tool_name, category, result, ts)
+      VALUES
+        (${row.tenant_id}, NULL, ${row.cloud_agent_ref}, ${row.id}, ${'exec:' + row.id},
+         'runtime.requeue', 'planning',
+         ${'Orphaned cloud run re-queued once on the durable executor (CloudRunnerDO) to run to completion.'}, now())
+    `;
+  } catch {
+    /* telemetry is best-effort */
+  }
+  return true;
 }
 
 /** Cloud-agent ref pinned in the execution payload, if any (cloud runs have no

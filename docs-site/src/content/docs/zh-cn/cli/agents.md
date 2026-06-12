@@ -58,7 +58,7 @@ builderforce agents set-identity --workspace ~/.builderforce/workspace --from-id
 显式覆盖字段：
 
 ```bash
-builderforce agents set-identity --agent main --name "BuilderForce Agents" --emoji "🦞" --avatar avatars/builderforce.png
+builderforce agents set-identity --agent main --name "BuilderForce Agents" --emoji "🤖" --avatar avatars/builderforce.png
 ```
 
 配置示例：
@@ -71,8 +71,8 @@ builderforce agents set-identity --agent main --name "BuilderForce Agents" --emo
         id: "main",
         identity: {
           name: "BuilderForce Agents",
-          theme: "space lobster",
-          emoji: "🦞",
+          theme: "helpful assistant",
+          emoji: "🤖",
           avatar: "avatars/builderforce.png",
         },
       },

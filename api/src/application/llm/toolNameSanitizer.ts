@@ -87,6 +87,141 @@ export function sanitizeRequestToolNames(body: Record<string, unknown>): Record<
   return out;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Streaming restore — vendor SSE chunks carry tool-call function names in
+// `choices[*].delta.tool_calls[*].function.name`, and the name can arrive in
+// fragments across deltas (the sanitized form `governance__DOT__snapshot` may
+// even split mid-sentinel). The non-streaming `restoreResponseToolNames` can't
+// see this because it only runs on a fully-assembled JSON body. This buffers
+// the accumulated name per (choice index, tool-call index) and re-emits only
+// the newly-revealed restored tail on each delta, so the stream stays
+// incremental while the caller still sees their dotted namespace.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface ToolCallDelta {
+  index?: number;
+  function?: { name?: string; arguments?: string; [k: string]: unknown };
+  [k: string]: unknown;
+}
+
+/**
+ * Length of the longest suffix of `s` that is a *proper* prefix of a sentinel
+ * (could still grow into a `.` or an escaped sentinel as more bytes arrive).
+ * A complete sentinel is NOT unsafe — it restores deterministically — so we
+ * only hold back genuinely incomplete trailing sentinels.
+ */
+function unsafeSuffixLen(s: string): number {
+  // Longest sentinel governs how far back we must look.
+  const max = Math.min(s.length, ESCAPE_SENTINEL.length - 1);
+  for (let len = max; len > 0; len--) {
+    const suffix = s.slice(s.length - len);
+    if (DOT_SENTINEL.startsWith(suffix) && suffix !== DOT_SENTINEL) return len;
+    if (ESCAPE_SENTINEL.startsWith(suffix) && suffix !== ESCAPE_SENTINEL) return len;
+  }
+  return 0;
+}
+
+interface StreamChoiceDelta {
+  index?: number;
+  delta?: { tool_calls?: ToolCallDelta[]; [k: string]: unknown };
+  [k: string]: unknown;
+}
+
+/**
+ * Stateful restorer for streamed tool-call name deltas. One instance per stream.
+ *
+ * For each tool call we track the raw (sanitized) name accumulated so far and
+ * how much of the *restored* name we've already emitted. On every delta we
+ * restore the accumulated raw name up to the last unambiguous boundary (holding
+ * back any trailing partial sentinel) and emit only the newly-revealed tail, so
+ * a sentinel split across two fragments still restores correctly and the caller
+ * receives exactly the new restored characters.
+ */
+export class StreamingToolNameRestorer {
+  // key = `${choiceIndex}:${toolCallIndex}`
+  private readonly rawSoFar = new Map<string, string>();
+  private readonly emittedLen = new Map<string, number>();
+
+  /** Mutate one parsed SSE chunk in place, restoring any tool-call name fragments. */
+  restoreChunk(chunk: Record<string, unknown>): void {
+    const choices = chunk.choices as StreamChoiceDelta[] | undefined;
+    if (!Array.isArray(choices)) return;
+    for (let ci = 0; ci < choices.length; ci++) {
+      const choice = choices[ci];
+      const choiceIdx = typeof choice?.index === 'number' ? choice.index : ci;
+      const toolCalls = choice?.delta?.tool_calls;
+      if (!Array.isArray(toolCalls)) continue;
+      for (let ti = 0; ti < toolCalls.length; ti++) {
+        const tc = toolCalls[ti];
+        const fn = tc?.function;
+        if (!fn || typeof fn.name !== 'string') continue;
+        const tcIdx = typeof tc.index === 'number' ? tc.index : ti;
+        const key = `${choiceIdx}:${tcIdx}`;
+
+        const raw = (this.rawSoFar.get(key) ?? '') + fn.name;
+        this.rawSoFar.set(key, raw);
+
+        // Only the portion of `raw` that can't grow into a different restoration
+        // is safe to commit. A trailing run that is a proper prefix of a sentinel
+        // (`__DOT__` or `__DOT_ESC__`) might still become a dot once more bytes
+        // arrive, so hold it back until the next fragment resolves it.
+        const committed = restoreToolName(raw.slice(0, raw.length - unsafeSuffixLen(raw)));
+        const already = this.emittedLen.get(key) ?? 0;
+        fn.name = committed.length > already ? committed.slice(already) : '';
+        this.emittedLen.set(key, Math.max(already, committed.length));
+      }
+    }
+  }
+}
+
+/**
+ * Wrap a vendor SSE stream so dotted tool-call names are restored on the fly.
+ *
+ * Buffers across chunk boundaries (an SSE `data:` line can be split between two
+ * network chunks) and rewrites each `data: {json}` event via a single
+ * `StreamingToolNameRestorer`. Non-data lines (`event:`, blank, `data: [DONE]`)
+ * and unparseable payloads pass through untouched.
+ */
+export function restoreStreamToolNames(source: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  const restorer = new StreamingToolNameRestorer();
+  let pending = '';
+
+  const rewriteLine = (line: string): string => {
+    // SSE data lines look like `data: {json}` (allow a missing space too).
+    const m = /^data:\s?(.*)$/.exec(line);
+    if (!m) return line;
+    const payload = m[1]!;
+    if (payload === '[DONE]' || payload.length === 0) return line;
+    let parsed: Record<string, unknown>;
+    try { parsed = JSON.parse(payload) as Record<string, unknown>; }
+    catch { return line; } // not JSON (e.g. a comment) — leave as-is
+    restorer.restoreChunk(parsed);
+    return `data: ${JSON.stringify(parsed)}`;
+  };
+
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      pending += decoder.decode(chunk, { stream: true });
+      // Emit only complete lines; keep the trailing partial line buffered.
+      const nl = pending.lastIndexOf('\n');
+      if (nl === -1) return;
+      const ready = pending.slice(0, nl + 1);
+      pending = pending.slice(nl + 1);
+      const out = ready.split('\n').map((l) => (l.endsWith('\r') ? rewriteLine(l.slice(0, -1)) + '\r' : rewriteLine(l))).join('\n');
+      controller.enqueue(encoder.encode(out));
+    },
+    flush(controller) {
+      const rest = pending + decoder.decode();
+      if (rest.length > 0) controller.enqueue(encoder.encode(rewriteLine(rest)));
+    },
+  });
+
+  source.pipeTo(writable).catch(() => { /* stream may be cancelled by client */ });
+  return readable;
+}
+
 /** Restore tool names in a vendor response so the caller sees their original dots. */
 export function restoreResponseToolNames(raw: unknown): unknown {
   if (typeof raw !== 'object' || raw === null) return raw;

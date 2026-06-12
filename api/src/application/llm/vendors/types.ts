@@ -308,6 +308,17 @@ export const AUTH_STATUSES: ReadonlySet<number> = new Set<number>([401, 403]);
 export const DEFAULT_VENDOR_CALL_TIMEOUT_MS = 25_000;
 
 /**
+ * Hard ceiling on any per-call timeout override. A caller can opt a single long
+ * call into a larger inner budget via `body._builderforce.vendorTimeoutMs`
+ * (see `resolveVendorTimeoutOverride` in LlmProxyService) regardless of plan —
+ * but never beyond this clamp. Pinned to the premium routing budget so a
+ * non-premium tenant's one-off long call can reach the same 60s extended budget
+ * the premium path already uses, without letting an arbitrary value hold a
+ * Worker isolate (and its subrequest budget) open indefinitely.
+ */
+export const MAX_VENDOR_CALL_TIMEOUT_MS = 60_000;
+
+/**
  * Wrap a vendor fetch in a per-call timeout. On timeout, abort the underlying
  * request AND throw a `VendorRetryableError` so the dispatcher advances. On
  * any other network error, surface as a retryable error too — dispatcher

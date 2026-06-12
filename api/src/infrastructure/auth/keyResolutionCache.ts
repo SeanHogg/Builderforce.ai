@@ -5,10 +5,18 @@
  * Worker). After the first call for any given key, every subsequent call
  * for the next year is a cache hit.
  *
- * Cache key format:  `auth:<keyType>:<sha256(rawKey)>`
+ * Cache key format:  `auth:<keyType>:<sha256(rawKey)>` for `bfk`/`clk`;
+ *                    `auth:jwt:<sha256(tenantId:userId)>` for the JWT path.
  * Cached value:      JSON-encoded ResolvedKey envelope, or `{revoked: true}`
  *                    tombstone written by mutation handlers to invalidate
  *                    a still-cached entry.
+ *
+ * Two TTL regimes: `bfk`/`clk` keys use the 365-day TTL and rely on explicit
+ * `invalidateKeyCache` calls from every auth-affecting mutation. The `jwt`
+ * membership path uses a short TTL (`JWT_TTL_SECONDS`) and self-heals — there
+ * is no single tenant_members mutation hook, so membership/role/superadmin
+ * changes propagate within that window. `invalidateJwtMembershipCache` is an
+ * optional fast-path for callers that want instant propagation.
  *
  * **TTL is intentionally long (365 days) because every mutation that
  * affects auth resolution explicitly calls `invalidateKeyCache`** —
@@ -33,6 +41,15 @@ import type { Env } from '../../env';
 const TTL_SECONDS = 365 * 24 * 60 * 60;
 /** Tombstone TTL — long enough that any in-flight cached entry is dead, then auto-cleans. */
 const TOMBSTONE_TTL_SECONDS = 60 * 60;
+/**
+ * Short TTL for the JWT membership path. Unlike `bfk_*`/`clk_*` keys (whose every
+ * auth-affecting mutation calls `invalidateKeyCache`), tenant_members rows are
+ * mutated from many scattered sites (TenantRepository.save replace-all,
+ * admin role-change / demote / remove). There is no single membership-change
+ * hook to invalidate from, so this path self-heals via a short TTL instead:
+ * a removed/demoted member keeps cached access for at most this window.
+ */
+const JWT_TTL_SECONDS = 60;
 
 /** What the loader returns; gateway auth uses this to populate TenantAccess. */
 export type ResolvedKey =
@@ -46,13 +63,16 @@ export type ResolvedKey =
  */
 export async function resolveKeyCached(
   env: Env,
-  keyType: 'bfk' | 'clk',
+  keyType: 'bfk' | 'clk' | 'jwt',
   hash: string,
   loader: () => Promise<ResolvedKey>,
 ): Promise<ResolvedKey> {
   const kv = env.AUTH_CACHE_KV;
   if (!kv) return loader();
 
+  // JWT membership self-heals via a short TTL (no single invalidation hook);
+  // key paths use the long TTL backed by explicit invalidation.
+  const ttl = keyType === 'jwt' ? JWT_TTL_SECONDS : TTL_SECONDS;
   const cacheKey = `auth:${keyType}:${hash}`;
   try {
     const cached = await kv.get(cacheKey, 'json') as ResolvedKey | { revoked: true } | null;
@@ -61,7 +81,7 @@ export async function resolveKeyCached(
       // mid-TTL. Treat as a miss and re-load (the loader will return a
       // not-found / revoked envelope from the DB).
       if ('revoked' in cached) return loader().then(async (fresh) => {
-        await writeCache(kv, cacheKey, fresh).catch(() => undefined);
+        await writeCache(kv, cacheKey, fresh, ttl).catch(() => undefined);
         return fresh;
       });
       return cached as ResolvedKey;
@@ -71,7 +91,7 @@ export async function resolveKeyCached(
   }
 
   const fresh = await loader();
-  await writeCache(kv, cacheKey, fresh).catch(() => undefined);
+  await writeCache(kv, cacheKey, fresh, ttl).catch(() => undefined);
   return fresh;
 }
 
@@ -83,7 +103,7 @@ export async function resolveKeyCached(
  * re-loads from the DB (which will then see the `revoked_at` timestamp and
  * cache the correct "rejected" state).
  */
-export async function invalidateKeyCache(env: Env, keyType: 'bfk' | 'clk', hash: string): Promise<void> {
+export async function invalidateKeyCache(env: Env, keyType: 'bfk' | 'clk' | 'jwt', hash: string): Promise<void> {
   const kv = env.AUTH_CACHE_KV;
   if (!kv) return;
   const cacheKey = `auth:${keyType}:${hash}`;
@@ -94,6 +114,40 @@ export async function invalidateKeyCache(env: Env, keyType: 'bfk' | 'clk', hash:
   }
 }
 
-async function writeCache(kv: KVNamespace, key: string, value: ResolvedKey): Promise<void> {
-  await kv.put(key, JSON.stringify(value), { expirationTtl: TTL_SECONDS });
+async function writeCache(kv: KVNamespace, key: string, value: ResolvedKey, ttlSeconds: number): Promise<void> {
+  await kv.put(key, JSON.stringify(value), { expirationTtl: ttlSeconds });
+}
+
+/**
+ * Invalidate an agentHost (`clk_*` / `bfa_*`) key's auth cache entry.
+ *
+ * AgentHost keys are always cached under the `'clk'` keyType, and every agentHost
+ * mutation has the same null-hash guard (a row may carry a NULL `apiKeyHash`).
+ * This is the single shared seam so the keyType + guard never drift across the
+ * repo/service/route call sites that change an agentHost's auth-affecting state
+ * (status, daily limit, deletion). No-ops when the hash is absent.
+ */
+export async function invalidateAgentHostKeyCache(env: Env, apiKeyHash: string | null | undefined): Promise<void> {
+  if (!apiKeyHash) return;
+  await invalidateKeyCache(env, 'clk', apiKeyHash);
+}
+
+/**
+ * Cache key for a JWT membership resolution: `auth:jwt:<sha256(tenantId:userId)>`.
+ * Shared seam so the hashing scheme can't drift between the resolver and any
+ * future invalidation call site. The cache value is keyed on tenant+user (not
+ * the raw token) so every JWT the user holds for that tenant shares one entry.
+ */
+export function jwtMembershipHash(tenantId: number, userId: string): string {
+  return `${tenantId}:${userId}`;
+}
+
+/**
+ * Invalidate the cached JWT membership resolution for a (tenant, user) pair.
+ * The JWT path self-heals via a short TTL, so calling this is an *optional*
+ * fast-path: wire it into a membership mutation when you want the change to
+ * take effect immediately instead of after `JWT_TTL_SECONDS`. Safe to no-op.
+ */
+export async function invalidateJwtMembershipCache(env: Env, tenantId: number, userId: string): Promise<void> {
+  await invalidateKeyCache(env, 'jwt', jwtMembershipHash(tenantId, userId));
 }

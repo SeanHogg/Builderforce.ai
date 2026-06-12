@@ -188,7 +188,7 @@ export function LlmTracesPanel() {
       <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 1fr' : '1fr', gap: 16 }}>
         {/* List */}
         {viewMode === 'table' ? (
-        <div style={{ border: '1px solid #1b2436', borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ border: '1px solid #1b2436', borderRadius: 10, overflowX: 'auto', overflowY: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
             <thead>
               <tr style={{ background: '#0a0f1a', color: muted, textAlign: 'left' }}>
@@ -317,7 +317,8 @@ export function LlmTracesPanel() {
 
                 <h4 style={{ margin: '16px 0 6px', fontSize: 13, color: muted }}>Attempts (every model tried, every exception)</h4>
                 {Array.isArray(selected.attempts) && selected.attempts.length > 0 ? (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 480 }}>
                     <thead>
                       <tr style={{ color: muted, textAlign: 'left' }}>
                         <th style={{ padding: '4px 6px' }}>Model</th>
@@ -341,6 +342,7 @@ export function LlmTracesPanel() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 ) : (
                   <div style={{ color: muted, fontSize: 12 }}>No failed attempts — first model answered.</div>
                 )}

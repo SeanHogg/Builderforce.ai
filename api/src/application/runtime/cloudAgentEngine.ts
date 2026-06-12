@@ -19,7 +19,7 @@ import { recordPullRequestRow, markPullRequestMergedById } from '../repos/record
 import { readRepoFile, listRepoFiles, searchRepoCode, listBranchDiff } from '../repos/readRepoContents';
 import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
 import { scanWrittenForPlaceholders } from '../repos/scanForPlaceholders';
-import { CODING_BACKSTOP_MODELS, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
+import { CODING_BACKSTOP_MODELS, CODING_MODEL_POOL, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
 import { recordUsageRow } from '../llm/usageLedger';
 import { ensureTaskPrdRecord, appendTaskPrdRevision } from '../prd/taskPrd';
@@ -366,6 +366,45 @@ export async function recordCloudToolEvent(
   } catch { /* telemetry is best-effort — never break the run */ }
 }
 
+/** Set form of CODING_MODEL_POOL for O(1) membership on the hot per-turn path. */
+const CODING_MODEL_POOL_SET: ReadonlySet<string> = new Set(CODING_MODEL_POOL);
+
+/**
+ * True when a CLOUD CODING turn was served by a model that is NOT a curated coding
+ * model (i.e. it fell through the CODING_MODEL_POOL → CODING_BACKSTOP_MODELS tail,
+ * landing on a generalist like the gemini guaranteed backstop). That degradation
+ * is invisible in usage rows, so it's the signal a coding run silently ran on a
+ * non-coder. `default` / empty means the gateway never reported a resolved model —
+ * not a known degradation, so it is not flagged. Pure — unit-testable in isolation.
+ */
+export function isCodingModelDegraded(resolvedModel: string | undefined): boolean {
+  if (!resolvedModel || resolvedModel === 'default') return false;
+  return !CODING_MODEL_POOL_SET.has(resolvedModel);
+}
+
+/**
+ * Emit a structured `coding_model_degraded` telemetry event when a cloud coding
+ * turn was served by a non-coder model (see {@link isCodingModelDegraded}). Rides
+ * the SAME timeline channel as the run's llm.complete events ({@link recordCloudToolEvent})
+ * so it surfaces on the Observability timeline — no separate channel. No-op when the
+ * model is a curated coder. Best-effort — never breaks the run.
+ */
+async function emitCodingModelDegraded(
+  db: Db,
+  args: { tenantId: number; cloudAgentRef?: string; executionId: number; resolvedModel: string | undefined; requestedModel: string | undefined },
+): Promise<void> {
+  if (!isCodingModelDegraded(args.resolvedModel)) return;
+  await recordCloudToolEvent(db, {
+    tenantId: args.tenantId,
+    cloudAgentRef: args.cloudAgentRef,
+    executionId: args.executionId,
+    toolName: 'coding_model_degraded',
+    category: 'llm',
+    detail: { resolvedModel: args.resolvedModel, requestedModel: args.requestedModel ?? null, executionId: args.executionId },
+    result: `coding run served by non-coder model '${args.resolvedModel}'${args.requestedModel ? ` (requested '${args.requestedModel}')` : ''}`,
+  });
+}
+
 /**
  * Record cloud-agent token usage for the run. Writes to BOTH ledgers so the two
  * views reconcile (previously cloud usage only hit usage_snapshots and was
@@ -567,6 +606,7 @@ export async function handleContainerOp(
     const content = typeof choice?.content === 'string' ? choice.content : '';
     const toolCalls = Array.isArray(choice?.tool_calls) ? choice.tool_calls : [];
     await recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName: 'llm.complete', category: 'llm', detail: { model: resolvedModel, traceId: result.traceId ?? null, toolCalls: toolCalls.length }, result: `${toolCalls.length} tool call(s)${content ? ` · ${content.length} chars` : ''}`, durationMs: Date.now() - tGen0 });
+    await emitCodingModelDegraded(db, { tenantId, cloudAgentRef, executionId, resolvedModel, requestedModel: pick.model ?? model });
     if (content) {
       await recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName: 'agent.message', category: 'message', detail: { content }, result: content.slice(0, 280) });
       notifyExecutionSubscribers(executionId, { type: 'message', executionId, role: 'assistant', text: content, ts: new Date().toISOString() });
@@ -598,7 +638,8 @@ export async function handleContainerOp(
     const cancelled = args.cancelled === true || (await isExecutionCancelled(db, executionId));
     const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
     const repoCtx = repo.ok ? repo.ctx : null;
-    const fin = await finalizeCloudRun(env, db, { tenantId, cloudAgentRef, executionId, taskRow, agentLabel, repoCtx, writtenPaths, finalOutput, cancelled });
+    const repoMiss = repo.ok ? '' : repo.reason;
+    const fin = await finalizeCloudRun(env, db, { tenantId, cloudAgentRef, executionId, taskRow, agentLabel, repoCtx, repoMiss, writtenPaths, finalOutput, cancelled });
     if (!cancelled) {
       await runtimeService.update(executionId, fin.ok ? { status: ExecutionStatus.COMPLETED, result: fin.output } : { status: ExecutionStatus.FAILED, errorMessage: fin.output }).catch(() => { /* terminal already */ });
       const updated = await runtimeService.getExecution(executionId).catch(() => null);
@@ -632,6 +673,16 @@ export interface CloudLoopState {
   /** The tenant's LLM routing, resolved on the first tick. Persisted so later DO
    *  ticks reuse it (which pool / vendor key) without re-querying the plan. */
   routing?: CloudRouting;
+  /** The ticket's repo context, resolved on the first tick. Persisted so every DO
+   *  tick — including the finalize tick — uses the SAME repo/branch/credential. A
+   *  later tick re-resolving could transiently miss (DB blip / a credential edited
+   *  mid-run) and finalize would then skip the PR even though earlier ticks already
+   *  committed files. Reusing the first resolution removes that window and avoids
+   *  re-decrypting the git credential on every alarm tick. `null` = no repo bound. */
+  repoCtx?: TicketRepoContext | null;
+  /** Why repo resolution missed on the first tick (empty when it resolved). Persisted
+   *  alongside `repoCtx` so the finalize tick can report the same reason. */
+  repoMiss?: string;
 }
 export interface CloudLoopOpts {
   /** Resume from this persisted state instead of starting fresh. */
@@ -668,9 +719,23 @@ export async function runCloudToolLoop(
   projectId: number,
   opts?: CloudLoopOpts,
 ): Promise<CloudLoopResult> {
-  const repoResolved = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskRow.id);
-  const repoCtx: TicketRepoContext | null = repoResolved.ok ? repoResolved.ctx : null;
-  const repoMiss = repoResolved.ok ? '' : repoResolved.reason;
+  // Resolve the ticket repo ONCE per run. On the durable (DO) surface, the first
+  // tick resolves it and every later tick reuses the persisted context — so the
+  // finalize tick can always open the PR for files earlier ticks committed (a
+  // re-resolution there could transiently miss and silently drop the PR), and we
+  // don't re-decrypt the git credential on every alarm tick. `resume` without a
+  // `repoCtx` key means the field predates this state (older in-flight run) — fall
+  // back to resolving. The Worker surface never resumes, so it always resolves.
+  let repoCtx: TicketRepoContext | null;
+  let repoMiss: string;
+  if (opts?.resume && 'repoCtx' in opts.resume) {
+    repoCtx = opts.resume.repoCtx ?? null;
+    repoMiss = opts.resume.repoMiss ?? '';
+  } else {
+    const repoResolved = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskRow.id);
+    repoCtx = repoResolved.ok ? repoResolved.ctx : null;
+    repoMiss = repoResolved.ok ? '' : repoResolved.reason;
+  }
   const writtenPaths = new Set<string>(opts?.resume?.writtenPaths ?? []);
 
   // The PRD (committed to the ticket branch during prep) is part of this task's
@@ -820,6 +885,13 @@ export async function runCloudToolLoop(
       result: `${toolCalls.length} tool call(s)${content ? ` · ${content.length} chars` : ''}`,
       durationMs: genMs,
     });
+
+    // Degradation signal: a coding run served by a non-coder model (the coding
+    // cascade fell through CODING_MODEL_POOL onto a CODING_BACKSTOP_MODELS generalist).
+    // Invisible in usage rows, so emit it as its own timeline event. The requested
+    // model is the run's seed/pin (`pick.model`), not `activeModel` (which may have
+    // just locked onto the gateway-resolved id above).
+    await emitCodingModelDegraded(db, { tenantId, cloudAgentRef, executionId, resolvedModel, requestedModel: pick.model });
 
     // The agent's natural-language turns are part of "what the agent did" — record
     // each as its own event so the Logs/Timeline show the actual message text, not
@@ -1025,13 +1097,13 @@ export async function runCloudToolLoop(
       output: '',
       cancelled,
       finished: false,
-      state: { messages, writtenPaths: [...writtenPaths], step, pinnedModel: activeModel, routing },
+      state: { messages, writtenPaths: [...writtenPaths], step, pinnedModel: activeModel, routing, repoCtx, repoMiss },
     };
   }
 
   const fin = await finalizeCloudRun(env, db, {
     tenantId, cloudAgentRef, executionId, taskRow, agentLabel,
-    repoCtx, writtenPaths, finalOutput, cancelled,
+    repoCtx, repoMiss, writtenPaths, finalOutput, cancelled,
   });
   return { ok: fin.ok, output: fin.output, cancelled, finished: true };
 }
@@ -1055,12 +1127,14 @@ export async function finalizeCloudRun(
     taskRow: { id: number; title: string };
     agentLabel: string;
     repoCtx: TicketRepoContext | null;
+    /** Why repo resolution failed (empty when it succeeded) — surfaced when no PR opens. */
+    repoMiss?: string;
     writtenPaths: Set<string>;
     finalOutput: string;
     cancelled: boolean;
   },
 ): Promise<{ ok: boolean; output: string }> {
-  const { tenantId, cloudAgentRef, executionId, taskRow, agentLabel, repoCtx, writtenPaths, finalOutput, cancelled } = args;
+  const { tenantId, cloudAgentRef, executionId, taskRow, agentLabel, repoCtx, repoMiss, writtenPaths, finalOutput, cancelled } = args;
   // The run is settling — release any steer that arrived after the loop's last step
   // so it can't dangle unconsumed (the stopped loop will never read it). The single
   // terminal chokepoint for every cloud surface (Worker loop, DO-finished tick, and
@@ -1069,6 +1143,9 @@ export async function finalizeCloudRun(
   let prOpened = false;
   let merged = false;
   let mergeNote = '';
+  // When files were produced but no PR ends up open, capture WHY so the run's
+  // summary / timeline explains it instead of silently showing no Pull Request tab.
+  let noPrReason = '';
   if (repoCtx && writtenPaths.size > 0 && !cancelled) {
     const pr = await createPullRequest({
       provider: repoCtx.provider, host: repoCtx.host, owner: repoCtx.owner, repo: repoCtx.repo,
@@ -1077,6 +1154,7 @@ export async function finalizeCloudRun(
       body: `Changes for task #${taskRow.id}, by ${agentLabel}. Files: ${[...writtenPaths].join(', ')}.\n\n> ⚠ **Not verified in-agent.** This serverless executor has no shell and ran no build, type-check, lint, or tests. CI on this PR is the source of truth — do not merge on the agent's summary alone.`,
     }).catch(() => ({ ok: false as const, code: 'provider_error' as const, reason: 'pr failed' }));
     prOpened = pr.ok;
+    if (!pr.ok) noPrReason = pr.reason;
 
     const autoMerge = cloudAutoMergeEnabled(env);
 
@@ -1138,12 +1216,29 @@ export async function finalizeCloudRun(
         result: m.ok ? `merged${m.merged ? '' : ' (already up to date)'}${m.sha ? ` · ${m.sha.slice(0, 7)}` : ''}` : `failed: ${m.reason}`.slice(0, 300),
       });
     }
+  } else if (!repoCtx && writtenPaths.size > 0 && !cancelled) {
+    // The agent produced changes but there is no repo to open a PR against —
+    // record why (no linked repo / unusable credential) so it's visible in the
+    // Tools timeline + summary, not swallowed into an empty Pull Request tab.
+    noPrReason = repoMiss || 'no repository linked to this project';
+  }
+
+  // No PR opened despite changes — make the reason explicit in the timeline so a
+  // human knows what to fix (link a repo / fix the credential / inspect the error).
+  const noPrNote = noPrReason && !cancelled ? ` — no PR opened: ${noPrReason}` : '';
+  if (noPrNote) {
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef, executionId,
+      toolName: 'pr_skipped', category: 'tool',
+      detail: { writtenFiles: writtenPaths.size, reason: noPrReason },
+      result: `No PR opened: ${noPrReason}`.slice(0, 300),
+    });
   }
 
   const output =
     finalOutput ||
     (writtenPaths.size > 0
-      ? `Committed ${writtenPaths.size} file(s) to \`${repoCtx?.branch}\`${prOpened ? ', opened a PR' : ''}${mergeNote}.`
+      ? `Committed ${writtenPaths.size} file(s)${repoCtx?.branch ? ` to \`${repoCtx.branch}\`` : ''}${prOpened ? ', opened a PR' : ''}${mergeNote}${noPrNote}.`
       : cancelled ? 'Run cancelled before any output was produced.' : '(no output produced)');
   // Only a FAILED auto-merge breaks the "ship it" contract. Approval-gated runs end
   // with the PR open by design, so an unmerged PR there is success, not failure.

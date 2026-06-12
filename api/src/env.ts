@@ -55,6 +55,19 @@ export interface Env {
    *  here so image-gen callers always see a successful response.
    *  Set via `wrangler secret put FLUX_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   FLUX_API_KEY?: string;
+
+  // ---------------------------------------------------------------------------
+  // Embeddings (`POST /v1/embeddings`)
+  // ---------------------------------------------------------------------------
+
+  /** Voyage AI API key — embeddings failover. After the primary OpenRouter
+   *  embeddings attempts fail (endpoint outage, model removed, rate limit), the
+   *  proxy falls through to Voyage (`voyage-3-lite`) so vector workflows keep
+   *  working during a single-vendor outage. Optional — when unset, Voyage is
+   *  silently skipped in the embeddings cascade.
+   *  Set via `wrangler secret put VOYAGE_API_KEY` (or api/.env + `npm run secrets:from-env`). */
+  VOYAGE_API_KEY?: string;
+
   /** R2 bucket for file uploads. */
   UPLOADS?: R2Bucket;
 

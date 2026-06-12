@@ -51,7 +51,7 @@ builderforce agents set-identity --workspace ~/.builderforce/workspace --from-id
 Override fields explicitly:
 
 ```bash
-builderforce agents set-identity --agent main --name "BuilderForce Agents" --emoji "🦞" --avatar avatars/builderforce.png
+builderforce agents set-identity --agent main --name "BuilderForce Agents" --emoji "🤖" --avatar avatars/builderforce.png
 ```
 
 Config sample:
@@ -64,8 +64,8 @@ Config sample:
         id: "main",
         identity: {
           name: "BuilderForce Agents",
-          theme: "space lobster",
-          emoji: "🦞",
+          theme: "helpful assistant",
+          emoji: "🤖",
           avatar: "avatars/builderforce.png",
         },
       },
