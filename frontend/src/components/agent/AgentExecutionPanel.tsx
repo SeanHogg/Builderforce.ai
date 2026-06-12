@@ -135,6 +135,39 @@ function execCloudAgentRef(payload: unknown): string | undefined {
   }
 }
 
+/** Display name of the agent that ran a SPECIFIC execution — a self-hosted host,
+ *  a named cloud agent, or the gateway-default bucket. Read from the execution's
+ *  OWN fields (`agentHostId` / `cloudAgentRef`, stamped at dispatch), so it always
+ *  reflects who actually ran THAT run — never the task's current assignment, which
+ *  a later run overwrites. Shared by the execution header and the chip tooltips. */
+function executionAgentName(
+  e: { agentHostId?: number | null; cloudAgentRef?: string | null; payload?: unknown } | null | undefined,
+  agentHosts: AgentHost[],
+  cloudAgentNames: Map<string, string>,
+): string {
+  const hostId = e?.agentHostId;
+  if (hostId != null) return agentHosts.find((h) => h.id === hostId)?.name ?? `Agent ${hostId}`;
+  const ref = e?.cloudAgentRef ?? execCloudAgentRef(e?.payload);
+  if (!ref) return 'BuilderForce Cloud (default)';
+  return cloudAgentNames.get(ref) ?? 'Cloud agent';
+}
+
+/** The cloud-agent TYPE a run actually dispatched as (e.g. "V2 Cloud Agent
+ *  (Node/Container)"), read from the run's own `runtime.dispatch` telemetry — the
+ *  authoritative per-run engine, independent of the agent's current V1/V2 config.
+ *  This is why reopening a run no longer "reverts to V1": the type comes from what
+ *  the run recorded, not from re-reading the agent's (possibly since-changed) engine. */
+function runDispatchType(toolEvents: ExecutionTraceToolEvent[]): string | undefined {
+  const ev = toolEvents.find((e) => e.toolName === 'runtime.dispatch');
+  if (!ev?.args) return undefined;
+  try {
+    const d = JSON.parse(ev.args) as { agentType?: unknown };
+    return typeof d.agentType === 'string' && d.agentType.trim() ? d.agentType.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task: Task; agentHosts: AgentHost[]; onTaskChanged?: () => void }) {
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -321,6 +354,17 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
     return { cloudAgentRef: ref, cloudAgentName: name };
   }, [selected, agentHosts, task.assignedAgentRef, cloudAgentNames]);
 
+  // Per-run agent identity for the selected execution's header: the name of the
+  // agent that ACTUALLY ran it (from its own stamped fields) plus the authoritative
+  // engine type it dispatched as (from its own telemetry). Both are scoped to the
+  // run, so reopening an older execution shows what ran it — not the task's current
+  // (possibly since-changed V1↔V2) assignment.
+  const runAgentName = useMemo(
+    () => (selected ? executionAgentName(selected, agentHosts, cloudAgentNames) : ''),
+    [selected, agentHosts, cloudAgentNames],
+  );
+  const runAgentType = useMemo(() => runDispatchType(toolEvents), [toolEvents]);
+
   // Auto-scroll output to the newest content as it streams.
   const outputRef = useRef<HTMLDivElement>(null);
   useEffect(() => { outputRef.current?.scrollTo({ top: outputRef.current.scrollHeight }); }, [thread]);
@@ -444,6 +488,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                 onSelect={() => setSelectedId(e.id)}
                 onRerun={() => rerun(e)}
                 rerunning={rerunningId === e.id}
+                agentName={executionAgentName(e, agentHosts, cloudAgentNames)}
               />
             );
           })}
@@ -456,9 +501,20 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
       {/* Selected execution */}
       {selected && (
         <div style={card}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 600, fontSize: 13 }}>Execution #{selected.id}</span>
             <span style={{ fontSize: 12, fontWeight: 600, color: STATUS_COLOR[status ?? ''] ?? 'var(--text-muted)' }}>{status}</span>
+            {runAgentName && (
+              <span
+                title="Agent that ran this execution"
+                style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', padding: '2px 8px', borderRadius: 6, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)' }}
+              >
+                {runAgentName}
+                {runAgentType && !runAgentName.includes(runAgentType) && (
+                  <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}> · ran as {runAgentType}</span>
+                )}
+              </span>
+            )}
             {isRunning && (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)' }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: stream.connected ? 'var(--success, #16a34a)' : 'var(--text-muted)' }} />
