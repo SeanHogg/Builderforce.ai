@@ -12,7 +12,7 @@
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveDefaultRepoForTask } from './resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
-import { commitFileToRepo, type CommitFileResult } from './commitFileToRepo';
+import { commitFileToRepo, deleteFileFromRepo, type CommitFileResult, type DeleteFileResult } from './commitFileToRepo';
 
 /**
  * The single ticket branch a run's changes land on. The PRD, every agent-written
@@ -98,6 +98,24 @@ export function commitAgentFile(
     base: ctx.base,
     path,
     content,
+    message,
+  });
+}
+
+/** Remove one file from the ticket branch (clean up a dead/stub file). */
+export function deleteAgentFile(
+  ctx: TicketRepoContext,
+  path: string,
+  message: string,
+): Promise<DeleteFileResult> {
+  return deleteFileFromRepo({
+    provider: ctx.provider,
+    host: ctx.host,
+    owner: ctx.owner,
+    repo: ctx.repo,
+    token: ctx.token,
+    branch: ctx.branch,
+    path,
     message,
   });
 }
