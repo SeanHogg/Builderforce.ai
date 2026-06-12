@@ -558,7 +558,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
           )}
 
           {subTab === 'changes' && (
-            <div style={{ minHeight: 80 }}>
+            <div style={{ minHeight: 80, maxHeight: 360, overflow: 'auto' }}>
               {openChange ? (
                 /* Detail: the selected file's diff in a read-only Monaco editor. */
                 <div>
@@ -604,7 +604,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
           )}
 
           {subTab === 'tools' && (
-            <div style={{ minHeight: 80 }}>
+            <div style={{ minHeight: 80, maxHeight: 360, overflow: 'auto' }}>
               {toolEvents.length === 0 ? (
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 8 }}>No tool calls recorded.</div>
               ) : (
