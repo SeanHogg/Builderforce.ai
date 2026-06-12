@@ -13,7 +13,11 @@ import { scanWrittenForPlaceholders } from '../../application/repos/scanForPlace
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
-import { resolveCloudSurface } from '../../application/runtime/cloudDispatch';
+import {
+  resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
+  isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, parseFollowUp, buildFollowUpPayload,
+  parseRemediation, withDefaultModel,
+} from '../../application/runtime/cloudDispatch';
 import { mintContainerRunToken, verifyContainerRunToken } from '../../application/runtime/containerRunToken';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
@@ -23,6 +27,11 @@ import { resolveTenantPlan } from './llmRoutes';
 import { recordUsageRow } from '../../application/llm/usageLedger';
 import { ensureTaskPrdRecord, appendTaskPrdRevision } from '../../application/prd/taskPrd';
 import { enqueueExecutionMessage, pullPendingSteering, listExecutionMessages, releasePendingSteers } from '../../application/runtime/executionSteering';
+import { subscribeExecution, unsubscribeExecution, notifyExecutionSubscribers } from '../../application/runtime/executionEvents';
+import {
+  CLOUD_AGENT_TOOLS, CONTAINER_AGENT_TOOLS, MAX_CLOUD_TOOL_STEPS, MAX_PLACEHOLDER_FINISH_BLOCKS,
+  CONTAINER_MAX_STEPS, assertsUnrunVerification, type RawToolCall,
+} from '../../application/runtime/cloudAgentTools';
 import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
@@ -98,60 +107,6 @@ type ExecutionTelemetryBody = {
   compactionCount?: number;
   ts?: string;
 };
-
-type ExecutionSubscriberEvent =
-  | {
-      type: 'status_change' | 'done';
-      executionId: number;
-      status: string;
-      execution: unknown;
-      ts: string;
-    }
-  | {
-      /** A user direction sent to a running execution, or an assistant text delta. */
-      type: 'message';
-      executionId: number;
-      role: 'user' | 'assistant';
-      text: string;
-      ts: string;
-    }
-  | {
-      /** A file the agent created / modified / deleted during the run. */
-      type: 'file_change';
-      executionId: number;
-      path: string;
-      change: 'created' | 'modified' | 'deleted';
-      ts: string;
-    };
-
-const executionSubscribers = new Map<number, Set<WebSocket>>();
-
-function subscribeExecution(executionId: number, socket: WebSocket): void {
-  const set = executionSubscribers.get(executionId) ?? new Set<WebSocket>();
-  set.add(socket);
-  executionSubscribers.set(executionId, set);
-}
-
-function unsubscribeExecution(executionId: number, socket: WebSocket): void {
-  const set = executionSubscribers.get(executionId);
-  if (!set) return;
-  set.delete(socket);
-  if (set.size === 0) executionSubscribers.delete(executionId);
-}
-
-function notifyExecutionSubscribers(executionId: number, event: ExecutionSubscriberEvent): void {
-  const set = executionSubscribers.get(executionId);
-  if (!set || set.size === 0) return;
-
-  const payload = JSON.stringify(event);
-  for (const socket of set) {
-    try {
-      socket.send(payload);
-    } catch {
-      // ignore broken sockets; close handlers clean up subscriptions.
-    }
-  }
-}
 
 function parseOptionalNumber(value: string | undefined | null): number | null {
   if (!value) return null;
@@ -653,184 +608,6 @@ async function recordCloudUsage(
  *  cloud agent) — so their telemetry is still attributable to a chip on the
  *  Observability timeline. Shared with the frontend via the cloud-agents list. */
 const DEFAULT_CLOUD_REF = '__default__';
-
-/** True when a finish summary claims a build / type-check / lint / test passed —
- *  which the serverless cloud executor cannot have run (it has no shell). Used to
- *  block a fabricated "checks pass" claim once and force an honest summary. Kept
- *  deliberately narrow (a check noun AND a success verb) to avoid false positives
- *  on legitimate descriptions of the work. */
-export function assertsUnrunVerification(summary: string): boolean {
-  const s = summary.toLowerCase();
-  const check = /(type[\s-]?check|typecheck|typescript|\btsc\b|lint|eslint|\btest(s|ing|ed)?\b|\bbuild(s|ing)?\b|compil)/;
-  const pass = /(pass(es|ed|ing)?|succeed(s|ed)?|success|green|no\s+errors?|error[\s-]?free|will\s+now\s+pass|are\s+resolved|is\s+resolved)/;
-  return check.test(s) && pass.test(s);
-}
-
-/** Shape of one tool call in an OpenAI-compatible completion response. */
-interface RawToolCall { id?: string; type?: string; function?: { name?: string; arguments?: string } }
-
-/**
- * Tools the cloud (Worker) agent loop can actually execute. The Worker has no
- * filesystem/shell, so the toolset is provider-API-backed: `write_file` lands a
- * file on the ticket branch as a pending change; `finish` ends the run. Both V1
- * and V2 cloud runs use this same loop so they genuinely *execute tools* (not a
- * single completion) and every call is recorded to the Observability timeline.
- */
-const CLOUD_AGENT_TOOLS = [
-  {
-    type: 'function',
-    function: {
-      name: 'list_files',
-      description: 'List repo files (recursively) on the ticket branch so you can discover the existing codebase before editing. Optionally pass a subdirectory to scope the listing.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'Optional repo-relative subdirectory to scope to, e.g. "src/components".' },
-        },
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'search_code',
-      description: 'Search the ENTIRE repo for a string/symbol in one call (indexed code search) — use this FIRST to find where something is referenced instead of reading files one by one. Returns matching file paths with line fragments. 0 results means the term does not appear in the indexed codebase (so "remove all references to X" with 0 results means there is nothing to remove — say so, do not invent a change). Recently-pushed code may lag the index; confirm a specific file with read_file. Then read_file the matches you intend to edit.',
-      parameters: {
-        type: 'object',
-        properties: {
-          query: { type: 'string', description: 'Exact text or symbol to find, e.g. a model id, function name, import path, or config key.' },
-        },
-        required: ['query'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'read_file',
-      description: 'Read the FULL current contents of a repo file on the ticket branch. Always read a file before editing it so you preserve existing code and only change what is needed.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'Repo-relative path, e.g. "src/feature.ts".' },
-        },
-        required: ['path'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'write_file',
-      description: 'Create or update a file on the ticket branch as a reviewable pending change (a PR is opened/updated for the run). Use once per deliverable file. Provide the FULL file content.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'Repo-relative path, e.g. "src/feature.ts".' },
-          content: { type: 'string', description: 'Complete file content (no placeholders).' },
-          summary: { type: 'string', description: 'One-line description of the change.' },
-        },
-        required: ['path', 'content'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'delete_file',
-      description: 'Remove a file from the ticket branch so it does NOT ship in the pull request. Use this to clean up dead code: a stub/placeholder, an unreferenced file, or a file a PRIOR pass on this branch created that should not be part of the final change. The "Files already on this branch" list in your context shows what a prior pass left — reconcile against it. Verify the file is genuinely unused (search_code for its exports) before deleting. Deleting a file not on the branch is a no-op (reported back), not an error.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'Repo-relative path to remove, e.g. "src/utils/email.ts".' },
-          reason: { type: 'string', description: 'One-line why this file should not ship (e.g. "stub superseded by existing email infra").' },
-        },
-        required: ['path'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'run_checks',
-      description: 'Statically validate the files you have written: it parses your committed JSON and YAML config files in-place and reports any syntax errors to fix BEFORE finishing. IMPORTANT: this serverless executor has NO shell, so it does NOT run the build, project-wide type-check, lint, or tests — those run in CI on the pull request your changes open (the source of truth). Call this after writing config files. Never claim the build/type-check/lint/tests passed — you cannot run those here; only the JSON/YAML syntax check is real.',
-      parameters: { type: 'object', properties: {} },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'finish',
-      description: 'Call ONLY when the task is fully complete — every deliverable file written with real, working content (no stubs/placeholders) and every task/PRD requirement implemented. Your changes open a pull request for human review, so a partial scaffold is not "done". Provide a concise summary of what was delivered. Do NOT assert that a build/type-check/lint/test passed — you cannot run those here (CI on the PR verifies).',
-      parameters: {
-        type: 'object',
-        properties: { summary: { type: 'string', description: 'What was delivered.' } },
-        required: ['summary'],
-      },
-    },
-  },
-] as const;
-
-// Read→edit→write workflows on a multi-file task need many turns: explore the
-// repo, read several files, then write each change — 10 was too few (a real run
-// burned all 10 just exploring and shipped a PRD-only PR). The durable (DO)
-// surface runs ONE step per alarm tick and heartbeats `executions.updated_at`
-// every tick, so the orphan reaper measures liveness from the heartbeat, not the
-// total step count — a long, healthy run never trips it. 30 gives room to finish
-// real edits (the long-lived Container surface allows 40).
-const MAX_CLOUD_TOOL_STEPS = 30;
-
-// Anti-stub finish gate: how many times a single synchronous loop invocation will
-// block a finish that still ships placeholder/stub code before letting the PR open
-// anyway (human-reviewed, annotated unverified). The durable surface resets this
-// per tick, so there it is effectively block-until-clean, bounded by the step cap.
-const MAX_PLACEHOLDER_FINISH_BLOCKS = 2;
-
-// The Container surface is a long-lived process (not a per-tick DO), and its
-// real-shell build/verify loop legitimately needs more turns than the durable
-// surface. The container heartbeats `executions.updated_at` on every LLM step so a
-// healthy long run never trips the orphan reaper.
-const CONTAINER_MAX_STEPS = 40;
-
-/**
- * Toolset for the long-lived Container executor (the `container` runtime surface).
- * Same file tools as the durable loop, but `run_checks` (a no-op confessing "no
- * shell") is replaced by a REAL `run_command` — the Container's whole reason to
- * exist. list_files/read_file run against the container's local clone; write_file
- * mirrors to the ticket branch via the container-op endpoint; run_command runs in
- * the container's shell. The container drives this loop in its own process and
- * sends each assistant turn to the `llm` op (which calls the gateway with THIS
- * toolset), so the schema lives in one place.
- */
-/** Pick a CLOUD_AGENT_TOOLS entry by name — name-based (not index) so adding a
- *  tool to the durable set can't silently re-map the container's toolset. */
-const cloudTool = (name: string) => {
-  const t = CLOUD_AGENT_TOOLS.find((x) => x.function.name === name);
-  if (!t) throw new Error(`cloud tool '${name}' not found`);
-  return t;
-};
-const CONTAINER_AGENT_TOOLS = [
-  cloudTool('list_files'),
-  // No search_code here: the container has a real shell, so it greps via
-  // run_command natively (and only the Worker handler implements search_code).
-  cloudTool('read_file'),
-  cloudTool('write_file'),
-  {
-    type: 'function',
-    function: {
-      name: 'run_command',
-      description: 'Run a shell command in the checked-out repository (real shell). Use it to install dependencies and run the build, type-check, lint, and tests. Returns combined stdout/stderr and the exit code. Verify your changes this way BEFORE calling finish.',
-      parameters: {
-        type: 'object',
-        properties: {
-          command: { type: 'string', description: 'The shell command to run, e.g. "npm install" or "npm test".' },
-        },
-        required: ['command'],
-      },
-    },
-  },
-  cloudTool('finish'),
-] as const;
 
 /** A cloud run's LLM routing — which model pool / vendor key its tenant's plan
  *  unlocks. Resolved once per run and reused, never recomputed per turn. */
@@ -1798,96 +1575,6 @@ type SubmittedExecution = { id: number; status: string; toPlain(): unknown };
  * One indexed lookup per execution-submit (not a hot read path), so it is not
  * cached. Never throws — defaults to 'builderforce-v1' on any failure.
  */
-function parseCloudAgentRef(payload: string | undefined): string | undefined {
-  if (!payload) return undefined;
-  try {
-    const p = JSON.parse(payload) as { cloudAgentRef?: unknown };
-    return typeof p.cloudAgentRef === 'string' && p.cloudAgentRef.trim() ? p.cloudAgentRef.trim() : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Run-time repo selection off the payload. Returns:
- *   • a trimmed repo id  — pin this run to that repo,
- *   • ''                 — explicitly clear the pin (Auto-resolve),
- *   • undefined          — key absent, leave the existing pin untouched.
- * The tri-state lets "Auto" un-pin without clobbering a pin set by a prior run.
- */
-function parseRepoId(payload: string | undefined): string | undefined {
-  if (!payload) return undefined;
-  try {
-    const p = JSON.parse(payload) as { repoId?: unknown };
-    if (!('repoId' in p)) return undefined;
-    return typeof p.repoId === 'string' ? p.repoId.trim() : '';
-  } catch {
-    return undefined;
-  }
-}
-
-interface FollowUpContext { directive: string; priorExecutionId: number | null }
-
-/**
- * Parse a follow-up directive off a re-run's payload. A "Send" on a TERMINAL run
- * starts a NEW execution carrying `{ followUp: { directive, priorExecutionId } }`;
- * prepareCloudRun surfaces the directive as the headline instruction so the new
- * run treats the user's message as the goal (on top of the task + evolved PRD).
- */
-export function parseFollowUp(payload: string | undefined): FollowUpContext | null {
-  if (!payload) return null;
-  try {
-    const f = (JSON.parse(payload) as { followUp?: { directive?: unknown; priorExecutionId?: unknown } }).followUp;
-    const directive = typeof f?.directive === 'string' ? f.directive.trim() : '';
-    if (!directive) return null;
-    const prior = typeof f?.priorExecutionId === 'number' && Number.isFinite(f.priorExecutionId) ? f.priorExecutionId : null;
-    return { directive, priorExecutionId: prior };
-  } catch {
-    return null;
-  }
-}
-
-/** Terminal = the run has settled and has no live session to steer. A "Send" to a
- *  terminal run therefore starts a NEW run instead of being a silent no-op. */
-export function isTerminalExecutionStatus(status: string | null | undefined): boolean {
-  return status === ExecutionStatus.COMPLETED || status === ExecutionStatus.FAILED || status === ExecutionStatus.CANCELLED;
-}
-
-/**
- * Build the payload for a follow-up run started from a terminal run's "Send": keep
- * the prior run's agent/model/repo pin so the re-run executes AS the same agent,
- * drop any stale one-shot blocks (a prior remediation/follow-up), and attach the
- * new directive. The directive becomes the headline instruction in prepareCloudRun.
- */
-export function buildFollowUpPayload(priorPayload: string | null | undefined, followUp: { directive: string; priorExecutionId: number }): string {
-  let obj: Record<string, unknown> = {};
-  if (priorPayload) {
-    try { obj = JSON.parse(priorPayload) as Record<string, unknown>; } catch { obj = {}; }
-  }
-  delete obj.remediation; // a re-run is not the prior run's auto-fix attempt
-  obj.followUp = { directive: followUp.directive, priorExecutionId: followUp.priorExecutionId };
-  return JSON.stringify(obj);
-}
-
-interface RemediationContext { attempt: number; maxAttempts: number; buildError: string; runUrl: string | null }
-
-/** Parse the post-merge build-failure remediation block off an auto-fix run's payload. */
-function parseRemediation(payload: string | undefined): RemediationContext | null {
-  if (!payload) return null;
-  try {
-    const r = (JSON.parse(payload) as { remediation?: Record<string, unknown> }).remediation;
-    if (!r || r.kind !== 'build_failure' || typeof r.buildError !== 'string') return null;
-    return {
-      attempt: typeof r.attempt === 'number' ? r.attempt : 1,
-      maxAttempts: typeof r.maxAttempts === 'number' ? r.maxAttempts : 2,
-      buildError: r.buildError,
-      runUrl: typeof r.runUrl === 'string' ? r.runUrl : null,
-    };
-  } catch {
-    return null;
-  }
-}
-
 interface ResolvedCloudAgent {
   engine: string;
   label?: string;
@@ -1921,33 +1608,6 @@ async function resolveCloudAgent(
   } catch {
     return DEFAULT;
   }
-}
-
-/**
- * Human-readable name for a cloud agent's type — the canonical taxonomy. Used in
- * dispatch telemetry so the timeline says exactly which of the three cloud agent
- * types (and surface) actually ran, not a bare engine string.
- */
-function cloudAgentTypeLabel(engine: string, surface: string): string {
-  if (engine !== 'builderforce-v2') return 'V1 Cloud Agent';
-  return surface === 'container' ? 'V2 Cloud Agent (Node/Container)' : 'V2 Cloud Agent (Durable Object)';
-}
-
-/**
- * Ensure the execution payload carries a model: an explicitly-pinned model wins,
- * otherwise fall back to the agent's own `base_model` so a V2 cloud run executes
- * AS the agent's model rather than the v1 gateway default. Returns the payload
- * unchanged when there is nothing to add (no fallback, or it can't be parsed).
- */
-function withDefaultModel(payload: string | undefined, baseModel: string | undefined): string | undefined {
-  if (!baseModel) return payload;
-  let obj: Record<string, unknown> = {};
-  if (payload) {
-    try { obj = JSON.parse(payload) as Record<string, unknown>; } catch { return payload; }
-  }
-  if (typeof obj.model === 'string' && obj.model.trim()) return payload;
-  obj.model = baseModel;
-  return JSON.stringify(obj);
 }
 
 /**
@@ -2009,24 +1669,6 @@ export async function dispatchCloudRunForTask(
   });
   await startDispatchedExecution(env, db, runtimeService, waitUntil, params.tenantId, execution as SubmittedExecution, taskRow as ExecutionTaskRow, params.payload);
   return execution.id;
-}
-
-/**
- * Probe a Cloudflare Container's `/health` before committing a run to it. The
- * container DO's `/run` handler acks `202` *immediately* and drives the agent loop
- * asynchronously, so a 202 does NOT prove the container actually booted and will
- * execute — an undeployed/unbootable image accepts the request and then silently
- * dies, leaving the run to be orphan-reaped (~30s) with no fallback. Probing
- * `/health` (bounded, never throws) gives a real liveness signal so the caller can
- * fall back to the durable executor instead. Returns false on any error/timeout/non-200.
- */
-export async function probeContainerHealth(stub: { fetch: (input: string, init?: RequestInit) => Promise<Response> }): Promise<boolean> {
-  try {
-    const res = await stub.fetch('https://agent-container/health', { signal: AbortSignal.timeout(8000) });
-    return res.ok;
-  } catch {
-    return false;
-  }
 }
 
 /** The post-submit dispatch core, free of any request context. */
@@ -2145,36 +1787,15 @@ async function startDispatchedExecution(
     // binding — runs on the durable executor (CloudRunnerDO). A V2 run carries its
     // OWN model so it is never silently executed/attributed as the v1 gateway default.
     const wantsContainer = isV2 && surface === 'container';
-    const hasContainer = wantsContainer && !!env.AGENT_CONTAINER;
-    const executor: 'container' | 'durable' = hasContainer ? 'container' : 'durable';
-    // Only note a degradation when the Container surface was wanted but no binding
-    // exists; a bound-but-failed container records its own fallback note below.
-    const containerFallback = wantsContainer && !hasContainer;
+    const hasContainerBinding = wantsContainer && !!env.AGENT_CONTAINER;
+    const hasCloudRunner = !!env.CLOUD_RUNNER;
     const effectivePayload = withDefaultModel(payload, agent.baseModel);
-
-    // Up-front diagnostics: record exactly which cloud agent type is dispatching,
-    // on which surface, with which model, so the timeline shows the routing
-    // decision (not just the eventual llm.complete calls).
-    await recordCloudToolEvent(db, {
-      tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
-      toolName: 'runtime.dispatch', category: 'planning',
-      detail: { agentType: typeLabel, engine: agent.engine, surface, model: agent.baseModel ?? 'gateway-default', executor },
-      result: `Dispatching ${typeLabel} to the ${executor} cloud executor (model: ${agent.baseModel ?? 'gateway default'}).`,
-    });
 
     const runWorkerFallback = async () => {
       await runCloudExecution(env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, effectivePayload, artifacts);
       await notifyDone();
     };
     const startDurable = async () => {
-      if (containerFallback) {
-        await recordCloudToolEvent(db, {
-          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
-          toolName: 'runtime.fallback', category: 'planning',
-          detail: { requestedSurface: 'container', ranOn: 'durable' },
-          result: `${typeLabel}: no long-lived Cloudflare Container is online yet — running on the durable (serverless) cloud executor instead. The run still executes fully in the cloud.`,
-        });
-      }
       const cloudRunner = env.CLOUD_RUNNER;
       if (!cloudRunner) {
         await recordCloudToolEvent(db, {
@@ -2222,28 +1843,10 @@ async function startDispatchedExecution(
     // tokened clone URL for its local workspace, and POST /run. The container drives
     // the loop in its own process and calls back into /internal/container-op. Any
     // failure to reach the container degrades to the durable executor.
-    const startContainer = async () => {
-      const agentNs = env.AGENT_CONTAINER;
-      if (!agentNs) { await startDurable(); return; }
-      const stub = agentNs.get(agentNs.idFromName(`exec:${execution.id}`));
-
-      // Liveness gate: the container DO acks `/run` 202 even when the underlying
-      // container image is not deployed / cannot boot, after which the run silently
-      // dies and is orphan-reaped (the exact failure the user hit: a follow-up run
-      // dispatched to the container, prepped, then timed out at ~30s with no llm
-      // steps). Probe `/health` first; if the container isn't actually live, fall
-      // back to the durable executor (CloudRunnerDO), which survives long runs.
-      if (!(await probeContainerHealth(stub))) {
-        await recordCloudToolEvent(db, {
-          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
-          toolName: 'runtime.fallback', category: 'planning',
-          detail: { reason: 'container /health unreachable', ranOn: 'durable' },
-          result: `${typeLabel}: the Cloudflare Container is not live (health probe failed) — running on the durable cloud executor instead, which executes the run to completion.`,
-        });
-        await startDurable();
-        return;
-      }
-
+    // Container executor — the caller (orchestrate) has already proved the container
+    // is live via chooseCloudExecutor's health gate, so this just starts the run.
+    // Any kickoff failure still degrades to the durable executor.
+    const startContainer = async (stub: { fetch: (input: string, init?: RequestInit) => Promise<Response> }) => {
       try {
         const { systemPrompt, userContent } = await prepareCloudRun(
           env, db, execution.id, taskRow, tenantId, taskRow.projectId,
@@ -2288,7 +1891,40 @@ async function startDispatchedExecution(
       }
     };
 
-    waitUntil(hasContainer ? startContainer() : startDurable());
+    // Decide the executor INSIDE waitUntil: the container health probe is async and
+    // must not block the submit response. The decision, the why-not-container note,
+    // and the dispatch telemetry all reflect where the run ACTUALLY lands — not a
+    // 202 that masks a dead container.
+    const orchestrate = async () => {
+      const stub = hasContainerBinding && env.AGENT_CONTAINER
+        ? env.AGENT_CONTAINER.get(env.AGENT_CONTAINER.idFromName(`exec:${execution.id}`))
+        : null;
+      const containerHealthy = stub ? await probeContainerHealth(stub) : false;
+      const executor = chooseCloudExecutor({ wantsContainer, hasContainerBinding, containerHealthy, hasCloudRunner });
+
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+        toolName: 'runtime.dispatch', category: 'planning',
+        detail: { agentType: typeLabel, engine: agent.engine, surface, model: agent.baseModel ?? 'gateway-default', executor },
+        result: `Dispatching ${typeLabel} to the ${executor} cloud executor (model: ${agent.baseModel ?? 'gateway default'}).`,
+      });
+
+      // Explain a container→durable/worker downgrade so the timeline shows WHY.
+      if (wantsContainer && executor !== 'container') {
+        const why = !hasContainerBinding ? 'no long-lived Cloudflare Container is bound' : 'the Cloudflare Container is not live (health probe failed)';
+        await recordCloudToolEvent(db, {
+          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+          toolName: 'runtime.fallback', category: 'planning',
+          detail: { requestedSurface: 'container', ranOn: executor, reason: !hasContainerBinding ? 'no AGENT_CONTAINER binding' : 'container /health unreachable' },
+          result: `${typeLabel}: ${why} — running on the ${executor} cloud executor instead, which executes the run to completion.`,
+        });
+      }
+
+      if (executor === 'container' && stub) await startContainer(stub);
+      else if (executor === 'durable') await startDurable();
+      else await runWorkerFallback();
+    };
+    waitUntil(orchestrate());
   }
 
   // Announce the queued/dispatched execution immediately.

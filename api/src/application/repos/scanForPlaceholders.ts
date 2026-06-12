@@ -7,7 +7,7 @@
  * infrastructure", instead wrote mock `email.ts`/`accounts.ts`/`logging.ts` ("// In
  * a real implementation, this would…") and re-declared an entire interface with
  * "// Assuming … is already defined" comments. The honesty gate
- * ([assertsUnrunVerification](../../presentation/routes/runtimeRoutes.ts)) catches
+ * ([assertsUnrunVerification](../runtime/cloudAgentTools.ts)) catches
  * fabricated "tests pass" claims; this is its counterpart for fabricated CODE.
  *
  * Precision over recall (like the honesty gate): the patterns match the explicit
