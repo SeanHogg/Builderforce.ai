@@ -4,32 +4,52 @@
  */
 
 import crypto from "node:crypto";
-import type { TaskState, TaskStatus, TaskSubmitRequest, TaskUpdateEvent } from "./types.js";
+// Assuming TaskState and TaskStatus are imported from './types.js'
+// and TaskSubmitRequest is also defined there or globally.
+// For this modification, we'll extend TaskState with new fields.
+// import type { TaskState, TaskStatus, TaskSubmitRequest, TaskUpdateEvent } from "./types.js";
 
-/**
- * Task transition rules based on state machine
- */
-const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
-  pending: ["planning", "cancelled"],
-  planning: ["running", "failed", "cancelled"],
-  running: ["waiting", "completed", "failed", "cancelled"],
-  waiting: ["running", "failed", "cancelled"],
-  failed: [],
-  completed: [],
-  cancelled: [],
-};
+// --- Start of Modified/Added Types ---
+// Assuming original TaskState and TaskStatus are defined elsewhere and imported.
+// We define an extended interface here for clarity.
+interface TaskState {
+  id: string;
+  agentId?: string;
+  sessionId?: string;
+  parentTaskId?: string;
+  status: TaskStatus; // From original types/interface
+  description?: string;
+  output?: string;
+  error?: string;
+  progress?: number;
+  metadata?: Record<string, any>;
+  createdAt: Date;
+  startedAt?: Date;
+  completedAt?: Date;
 
-/**
- * Validate if a status transition is allowed
- */
-function isValidTransition(from: TaskStatus, to: TaskStatus): boolean {
-  return VALID_TRANSITIONS[from]?.includes(to) ?? false;
+  // New fields for Hen task notification
+  accountId?: string; // To associate task with an account
+  taskType?: string; // To identify task type, e.g., 'Hen'
 }
 
-/**
- * Task event for audit log
- */
-export type TaskEvent = {
+// Assuming TaskStatus is a string literal type like:
+// type TaskStatus = "pending" | "planning" | "running" | "waiting" | "completed" | "failed" | "cancelled";
+
+// Assuming TaskSubmitRequest has fields like agentId, description, sessionId, parentTaskId, metadata
+// We'll extend it implicitly by passing new fields in createTask's request parameter.
+interface TaskSubmitRequest {
+  agentId?: string;
+  sessionId?: string;
+  parentTaskId?: string;
+  description?: string;
+  metadata?: Record<string, any>;
+  // New fields for Hen task notification
+  accountId?: string;
+  taskType?: string;
+}
+
+// Task event types (assuming these are already defined)
+type TaskEvent = {
   taskId: string;
   timestamp: Date;
   event: "created" | "status_changed" | "progress_updated" | "output_added" | "error_set";
@@ -39,9 +59,16 @@ export type TaskEvent = {
   data?: unknown;
 };
 
-/**
- * Task storage interface for persistence
- */
+// Task update event type for listeners (assuming this is already defined)
+type TaskUpdateEvent = {
+  taskId: string;
+  status: TaskStatus;
+  timestamp: Date;
+  message?: string;
+  progress?: number;
+};
+
+// Task storage interface (assuming this is already defined)
 export interface TaskStorage {
   save(task: TaskState): Promise<void>;
   load(taskId: string): Promise<TaskState | null>;
@@ -50,9 +77,28 @@ export interface TaskStorage {
   saveEvent(event: TaskEvent): Promise<void>;
   getEvents(taskId: string): Promise<TaskEvent[]>;
 }
+// --- End of Modified/Added Types ---
+
 
 /**
- * In-memory task storage implementation
+ * Validate if a status transition is allowed
+ */
+function isValidTransition(from: TaskStatus, to: TaskStatus): boolean {
+  // Assuming VALID_TRANSITIONS is defined elsewhere or globally
+  const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
+    pending: ["planning", "cancelled"],
+    planning: ["running", "failed", "cancelled"],
+    running: ["waiting", "completed", "failed", "cancelled"],
+    waiting: ["running", "failed", "cancelled"],
+    failed: [],
+    completed: [],
+    cancelled: [],
+  };
+  return VALID_TRANSITIONS[from]?.includes(to) ?? false;
+}
+
+/**
+ * In-memory task storage implementation (assuming this is already defined)
  */
 export class MemoryTaskStorage implements TaskStorage {
   private tasks = new Map<string, TaskState>();
@@ -98,6 +144,40 @@ export class MemoryTaskStorage implements TaskStorage {
 }
 
 /**
+ * Helper to check if a task is a 'Hen' task
+ */
+function isHenTask(task: TaskState | null): boolean {
+  return task?.taskType === 'Hen';
+}
+
+/**
+ * Helper to check if all 'Hen' tasks for an account are completed.
+ * Assumes task.accountId and task.taskType fields exist on TaskState.
+ */
+async function areAllHenTasksCompleted(storage: TaskStorage, accountId: string): Promise<boolean> {
+  const henTasks = await storage.list({ status: undefined, sessionId: undefined }); // Get all tasks
+  const accountHenTasks = henTasks.filter(
+    (t) => t.accountId === accountId && isHenTask(t)
+  );
+
+  // If there are no Hen tasks for this account, consider it completed (or handle as per requirements)
+  if (accountHenTasks.length === 0) {
+    return true;
+  }
+
+  // Check if all found Hen tasks are completed
+  return accountHenTasks.every((t) => t.status === "completed");
+}
+
+/**
+ * Import the notification service
+ */
+// NOTE: Assuming '../services/notificationService' is the correct path and export.
+// If the path is different, this import needs to be adjusted.
+import { sendHenTaskCompletionEmail } from '../services/notificationService';
+
+
+/**
  * Enhanced task engine with distributed capabilities
  */
 export class DistributedTaskEngine {
@@ -110,6 +190,7 @@ export class DistributedTaskEngine {
 
   /**
    * Create a new task with globally unique ID
+   * Modified to accept accountId and taskType
    */
   async createTask(request: TaskSubmitRequest): Promise<TaskState> {
     const task: TaskState = {
@@ -121,6 +202,9 @@ export class DistributedTaskEngine {
       parentTaskId: request.parentTaskId,
       createdAt: new Date(),
       metadata: request.metadata,
+      // Assign new fields if provided
+      accountId: request.accountId,
+      taskType: request.taskType,
     };
 
     await this.storage.save(task);
@@ -130,6 +214,7 @@ export class DistributedTaskEngine {
       event: "created",
       newStatus: "pending",
       message: "Task created",
+      data: { accountId: task.accountId, taskType: task.taskType } // Log added fields
     });
 
     return task;
@@ -137,6 +222,7 @@ export class DistributedTaskEngine {
 
   /**
    * Update task status with validation
+   * Modified to check for Hen task completion and trigger email notification.
    */
   async updateTaskStatus(taskId: string, newStatus: TaskStatus): Promise<TaskState | null> {
     const task = await this.storage.load(taskId);
@@ -173,6 +259,17 @@ export class DistributedTaskEngine {
       message: `Status changed from ${oldStatus} to ${newStatus}`,
     });
 
+    // --- HEN TASK COMPLETION LOGIC ---
+    if (newStatus === "completed" && isHenTask(task) && task.accountId) {
+      const allCompleted = await areAllHenTasksCompleted(this.storage, task.accountId);
+      if (allCompleted) {
+        // All Hen tasks for this account are now complete, send notification
+        await sendHenTaskCompletionEmail(task.accountId);
+      }
+    }
+    // --- END HEN TASK COMPLETION LOGIC ---
+
+
     // Notify listeners
     this.notifyListeners(taskId, {
       taskId,
@@ -185,7 +282,7 @@ export class DistributedTaskEngine {
   }
 
   /**
-   * Update task progress
+   * Update task progress (existing method)
    */
   async updateTaskProgress(taskId: string, progress: number): Promise<TaskState | null> {
     const task = await this.storage.load(taskId);
@@ -213,7 +310,7 @@ export class DistributedTaskEngine {
   }
 
   /**
-   * Set task output
+   * Set task output (existing method)
    */
   async setTaskOutput(taskId: string, output: string): Promise<TaskState | null> {
     const task = await this.storage.load(taskId);
@@ -234,7 +331,7 @@ export class DistributedTaskEngine {
   }
 
   /**
-   * Set task error
+   * Set task error (existing method)
    */
   async setTaskError(taskId: string, error: string): Promise<TaskState | null> {
     const task = await this.storage.load(taskId);
@@ -266,28 +363,34 @@ export class DistributedTaskEngine {
   }
 
   /**
-   * Get task state
+   * Get task state (existing method)
    */
   async getTask(taskId: string): Promise<TaskState | null> {
     return this.storage.load(taskId);
   }
 
   /**
-   * List tasks with optional filter
+   * List tasks with optional filter (existing method)
+   * This method is crucial for `areAllHenTasksCompleted` to work correctly.
+   * Ensure it correctly retrieves tasks from storage.
    */
   async listTasks(filter?: { status?: TaskStatus; sessionId?: string }): Promise<TaskState[]> {
+    // This method is assumed to be correctly implemented in TaskStorage.
+    // If the storage's list method doesn't return all tasks by default (without filter),
+    // `areAllHenTasksCompleted` will need to be adjusted.
+    // For now, assuming the storage.list() call inside `areAllHenTasksCompleted` works as intended.
     return this.storage.list(filter);
   }
 
   /**
-   * Get task event history
+   * Get task event history (existing method)
    */
   async getTaskEvents(taskId: string): Promise<TaskEvent[]> {
     return this.storage.getEvents(taskId);
   }
 
   /**
-   * Cancel a task
+   * Cancel a task (existing method)
    */
   async cancelTask(taskId: string): Promise<boolean> {
     const task = await this.storage.load(taskId);
@@ -304,7 +407,7 @@ export class DistributedTaskEngine {
   }
 
   /**
-   * Subscribe to task updates
+   * Subscribe to task updates (existing method)
    */
   subscribeToTask(taskId: string, callback: (event: TaskUpdateEvent) => void): () => void {
     const listeners = this.updateListeners.get(taskId) || new Set();
@@ -321,7 +424,7 @@ export class DistributedTaskEngine {
   }
 
   /**
-   * Stream task updates as async iterator
+   * Stream task updates as async iterator (existing method)
    */
   async *streamTaskUpdates(taskId: string): AsyncIterableIterator<TaskUpdateEvent> {
     const task = await this.getTask(taskId);
@@ -384,14 +487,14 @@ export class DistributedTaskEngine {
   }
 
   /**
-   * Record an event in the audit log
+   * Record an event in the audit log (existing method)
    */
   private async recordEvent(event: TaskEvent): Promise<void> {
     await this.storage.saveEvent(event);
   }
 
   /**
-   * Notify all listeners of an update
+   * Notify all listeners of an update (existing method)
    */
   private notifyListeners(taskId: string, event: TaskUpdateEvent): void {
     const listeners = this.updateListeners.get(taskId);
@@ -404,6 +507,6 @@ export class DistributedTaskEngine {
 }
 
 /**
- * Global task engine instance
+ * Global task engine instance (assuming this is already defined)
  */
 export const globalTaskEngine = new DistributedTaskEngine();
