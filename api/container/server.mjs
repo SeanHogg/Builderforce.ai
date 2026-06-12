@@ -141,10 +141,19 @@ async function runLoop(spec) {
       if (turn.cancelled) { cancelled = true; break; }
       const content = typeof turn.content === 'string' ? turn.content : '';
       const toolCalls = Array.isArray(turn.toolCalls) ? turn.toolCalls : [];
+      // Mid-run steering: user follow-ups posted to this run since the last step.
+      // Splicing them in as user turns lets the user redirect the work mid-run.
+      const steering = Array.isArray(turn.steering) ? turn.steering.filter((s) => typeof s === 'string' && s.trim()) : [];
       if (content) finalOutput = content;
-      if (toolCalls.length === 0) break; // model produced a final answer
+      // A bare final answer normally ends the run — but if the user just steered,
+      // keep going so the new direction is acted on instead of being dropped.
+      if (toolCalls.length === 0 && steering.length === 0) break;
 
-      messages.push({ role: 'assistant', content, tool_calls: toolCalls });
+      if (toolCalls.length > 0) {
+        messages.push({ role: 'assistant', content, tool_calls: toolCalls });
+      } else if (content) {
+        messages.push({ role: 'assistant', content });
+      }
       let finished = false;
       for (const tc of toolCalls) {
         const name = tc.function?.name ?? 'unknown';
@@ -160,6 +169,9 @@ async function runLoop(spec) {
         }
         messages.push({ role: 'tool', tool_call_id: tc.id ?? '', content: JSON.stringify(result) });
       }
+      // Apply steers AFTER this turn's tool results so the agent reacts to them next
+      // step. A steer also overrides a finish in the same turn: the user added work.
+      for (const steer of steering) { messages.push({ role: 'user', content: steer }); finished = false; }
       if (finished) break;
     }
   } catch (e) {

@@ -813,6 +813,23 @@ export const executions = pgTable('executions', {
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 });
 
+/**
+ * Durable per-execution chat/steering thread (migration 0109). A user "Send" on
+ * the execution Output tab persists here so steering survives a reload and reaches
+ * cloud runs (the WS echo is cross-isolate-lossy). `role='user'` rows with a null
+ * `consumedAt` are PENDING steers the cloud agent loop drains on its next step;
+ * `consumedAt` is stamped once ingested so a steer is delivered exactly once.
+ */
+export const executionMessages = pgTable('execution_messages', {
+  id:          serial('id').primaryKey(),
+  executionId: integer('execution_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id),
+  role:        varchar('role', { length: 16 }).notNull(),
+  text:        text('text').notNull(),
+  consumedAt:  timestamp('consumed_at'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+});
+
 export const auditEvents = pgTable('audit_events', {
   id:           serial('id').primaryKey(),
   tenantId:     integer('tenant_id').references(() => tenants.id),

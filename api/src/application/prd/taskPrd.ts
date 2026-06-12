@@ -50,6 +50,22 @@ export function buildPrdWithAttribution(prdBody: string, agentLabel: string, tas
   return `> **PRD** — drafted by ${agentLabel} · task #${taskId}\n> _Each agent that updates this PRD signs its change below._\n\n${prdBody}`;
 }
 
+/**
+ * Append a signed revision block to a PRD body — the "Each agent that updates this
+ * PRD signs its change below" contract, made real. `isoTimestamp` is passed in
+ * (callers stamp `new Date().toISOString()`) so this stays a pure, testable string
+ * builder. The new directive lands as its own dated, attributed section so the PRD
+ * evolves per run instead of being frozen at first draft.
+ */
+export function appendPrdRevision(
+  currentPrd: string,
+  args: { agentLabel: string; directive: string; executionId?: number | null; isoTimestamp: string },
+): string {
+  const ref = args.executionId != null ? ` · execution #${args.executionId}` : '';
+  const block = `### Update — ${args.agentLabel} · ${args.isoTimestamp}${ref}\n\n${args.directive.trim()}`;
+  return `${currentPrd.trimEnd()}\n\n---\n\n${block}`;
+}
+
 /** Resolve the task's canonical PRD: the primary link, else the most recent. Null if none. */
 export async function findTaskPrimarySpec(
   db: Db,
@@ -134,4 +150,51 @@ export async function ensureTaskPrdRecord(
 
   await linkSpecToTask(db, { taskId: args.taskId, specId, tenantId: args.tenantId, isPrimary: true });
   return { specId, prd, status: existing?.id ? 'updated' : 'created' };
+}
+
+export interface AppendPrdRevisionResult { specId: string; prd: string }
+
+/**
+ * Append a signed directive revision to a task's PRD and persist it — closing the
+ * "PRD is never updated per run" gap. A steer or follow-up directive becomes a
+ * dated, attributed section on the task's primary PRD, so the spec evolves with the
+ * work instead of being frozen at first draft. Creates a PRD shell if the task has
+ * none yet (a directive before any draft still gets recorded). Never throws —
+ * returns null only if persistence is impossible. Pure string assembly lives in
+ * {@link appendPrdRevision}; this owns the DB read/write.
+ */
+export async function appendTaskPrdRevision(
+  db: Db,
+  args: {
+    taskId: number;
+    tenantId: number;
+    projectId: number;
+    agentLabel: string;
+    directive: string;
+    executionId?: number | null;
+    isoTimestamp: string;
+  },
+): Promise<AppendPrdRevisionResult | null> {
+  const directive = args.directive.trim();
+  if (!directive) return null;
+  const existing = await findTaskPrimarySpec(db, args.taskId);
+  const base = existing?.prd?.trim()
+    ? existing.prd.trim()
+    : buildPrdWithAttribution('_(PRD drafted from a follow-up directive — see the revisions below.)_', args.agentLabel, args.taskId);
+  const prd = appendPrdRevision(base, { agentLabel: args.agentLabel, directive, executionId: args.executionId ?? null, isoTimestamp: args.isoTimestamp });
+
+  const specId = existing?.id ?? crypto.randomUUID();
+  const now = new Date();
+  try {
+    await db
+      .insert(specs)
+      .values({ id: specId, tenantId: args.tenantId, projectId: args.projectId, goal: 'Task PRD', status: 'draft', prd, createdAt: now, updatedAt: now })
+      .onConflictDoUpdate({ target: [specs.id], set: { prd, updatedAt: now } });
+  } catch {
+    return null;
+  }
+  if (!existing?.id) {
+    await linkSpecToTask(db, { taskId: args.taskId, specId, tenantId: args.tenantId, isPrimary: true });
+  }
+  return { specId, prd };
 }

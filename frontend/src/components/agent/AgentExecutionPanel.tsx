@@ -27,8 +27,10 @@ import { PullRequestPanel } from './PullRequestPanel';
 /**
  * Live execution view for a task. Queued runs stream their status, output
  * (rendered as markdown in a fixed-height scroll region), file changes, and tool
- * calls in real time; a chatbox lets the user steer a running agent mid-run.
- * Reused by both the project and task "Agent / Capabilities" surfaces.
+ * calls in real time. The Output chatbox steers a RUNNING agent mid-run, and on a
+ * SETTLED run it starts a NEW run seeded with the message as its directive (the
+ * directive is also recorded as a PRD revision server-side, so the spec evolves
+ * with each run). Reused by both the project and task "Agent / Capabilities" surfaces.
  */
 
 interface AgentResult {
@@ -262,23 +264,35 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
       .sort((a, b) => a.ts.localeCompare(b.ts)), // endpoint returns newest-first
     [toolEvents],
   );
+  // Durable steering/chat thread (persisted server-side). The source of truth for
+  // user steers across a reload — the WS echo is cross-isolate-lossy, so without
+  // this a sent direction vanished on refresh.
+  const persistedMessages = trace?.trace.messages ?? [];
   const thread = useMemo(() => {
-    // Drop optimistic echoes the stream has since delivered (match by text).
-    const echoed = new Set(stream.messages.filter((m) => m.role === 'user').map((m) => m.text));
+    const persistedUserTexts = new Set(persistedMessages.filter((m) => m.role === 'user').map((m) => m.text));
+    const streamUserTexts = new Set(stream.messages.filter((m) => m.role === 'user').map((m) => m.text));
+    // Optimistic echoes the stream/persistence haven't reflected yet (match by text).
     const optimistic = sentMessages
-      .filter((t) => !echoed.has(t))
+      .filter((t) => !streamUserTexts.has(t) && !persistedUserTexts.has(t))
       .map((text) => ({ role: 'user' as const, text, ts: '' }));
 
-    // Host runs stream turns live and in order — use them verbatim. Cloud runs
-    // (no live assistant) rebuild assistant turns from persisted telemetry, then
-    // close with the final summary if it isn't already the last narrated turn.
-    if (hasLiveAssistant) return [...stream.messages, ...optimistic];
+    if (hasLiveAssistant) {
+      // Host runs stream turns live and in order — use them verbatim, plus any
+      // persisted user steer the live stream didn't carry (cross-isolate gap).
+      const streamTexts = new Set(stream.messages.map((m) => m.text));
+      const persistedExtra = persistedMessages.filter((m) => m.role === 'user' && !streamTexts.has(m.text));
+      return [...stream.messages, ...persistedExtra, ...optimistic];
+    }
+    // Cloud runs (no live assistant): rebuild assistant turns from telemetry and
+    // interleave the persisted user steers by timestamp, then close with the final
+    // summary if it isn't already the last narrated turn.
+    const persistedUser = persistedMessages.filter((m) => m.role === 'user');
+    const merged = [...tracedAssistant, ...persistedUser].sort((a, b) => (a.ts || '').localeCompare(b.ts || ''));
     const tail = historicalText && tracedAssistant.every((a) => a.text.trim() !== historicalText.trim())
       ? [{ role: 'assistant' as const, text: historicalText, ts: '' }]
       : [];
-    const userTurns = stream.messages.filter((m) => m.role === 'user');
-    return [...tracedAssistant, ...tail, ...userTurns, ...optimistic];
-  }, [historicalText, hasLiveAssistant, tracedAssistant, stream.messages, sentMessages]);
+    return [...merged, ...tail, ...optimistic];
+  }, [persistedMessages, historicalText, hasLiveAssistant, tracedAssistant, stream.messages, sentMessages]);
 
   // Files: streamed changes win; fall back to result/tool-derived for past runs.
   const files = useMemo(() => {
@@ -390,21 +404,31 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
     const text = draft.trim();
     if (!text || selectedId == null || sending) return;
     setSending(true);
-    // Render the direction immediately — we can't wait on the stream's echo,
-    // which is unreliable cross-isolate. Rolled back below if the post fails.
-    setSentMessages((prev) => [...prev, text]);
     setDraft('');
+    // Steering a LIVE run: render the direction immediately — we can't wait on the
+    // stream's echo, which is unreliable cross-isolate. (A follow-up to a terminal
+    // run spawns a NEW run, so we don't echo onto the old one — we switch to the new
+    // execution once it's created.) Rolled back below if the post fails.
+    if (isRunning) setSentMessages((prev) => [...prev, text]);
     try {
-      await runtimeApi.postMessage(selectedId, text);
+      const res = await runtimeApi.postMessage(selectedId, text);
+      if (res.rerun?.executionId) {
+        // Terminal run → a new run was started with this directive. Follow it.
+        await loadExecutions(true);
+        setSelectedId(res.rerun.executionId);
+        onTaskChanged?.();
+      }
     } catch {
-      // Roll back the optimistic echo and restore the draft for retry.
-      setSentMessages((prev) => {
-        const i = prev.lastIndexOf(text);
-        if (i < 0) return prev;
-        const next = [...prev];
-        next.splice(i, 1);
-        return next;
-      });
+      // Roll back the optimistic echo (if any) and restore the draft for retry.
+      if (isRunning) {
+        setSentMessages((prev) => {
+          const i = prev.lastIndexOf(text);
+          if (i < 0) return prev;
+          const next = [...prev];
+          next.splice(i, 1);
+          return next;
+        });
+      }
       setDraft(text);
     } finally { setSending(false); }
   };
@@ -586,7 +610,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void send(); } }}
-                  placeholder={isRunning ? 'Send the agent a new direction… (⌘/Ctrl+Enter)' : 'The agent is no longer running.'}
+                  placeholder={isRunning ? 'Send the agent a new direction… (⌘/Ctrl+Enter)' : 'Send a follow-up to start a new run with this directive… (⌘/Ctrl+Enter)'}
                   rows={2}
                   style={{ flex: 1, resize: 'vertical', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: 'inherit' }}
                 />
@@ -595,8 +619,9 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   onClick={send}
                   disabled={!draft.trim() || sending || selectedId == null}
                   style={{ alignSelf: 'flex-end', padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', background: !draft.trim() || sending ? 'var(--bg-elevated)' : 'var(--coral-bright)', color: !draft.trim() || sending ? 'var(--text-muted)' : '#fff', cursor: !draft.trim() || sending ? 'default' : 'pointer' }}
+                  title={isRunning ? 'Steer the running agent with this direction' : 'Start a new run using this message as the directive'}
                 >
-                  {sending ? 'Sending…' : 'Send'}
+                  {sending ? (isRunning ? 'Sending…' : 'Starting…') : isRunning ? 'Send' : 'Start run'}
                 </button>
               </div>
 

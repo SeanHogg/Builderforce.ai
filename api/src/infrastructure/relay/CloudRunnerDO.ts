@@ -16,6 +16,7 @@ import { eq } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../database/connection';
 import { executions } from '../database/schema';
 import { prepareCloudRun, runCloudToolLoop, type CloudLoopState } from '../../presentation/routes/runtimeRoutes';
+import { releasePendingSteers } from '../../application/runtime/executionSteering';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env } from '../../env';
 
@@ -90,7 +91,7 @@ export class CloudRunnerDO implements DurableObject {
     // Cross-tick cancel: the /cancel endpoint flipped the row to CANCELLED from
     // another isolate. The row is already terminal — just stop and clean up.
     if (await this.isCancelled(cursor.executionId)) {
-      await this.cleanup();
+      await this.cleanup(cursor.executionId);
       return;
     }
     // Heartbeat: prove the run is alive so the orphan reaper doesn't reap an
@@ -125,7 +126,7 @@ export class CloudRunnerDO implements DurableObject {
         { resume: cursor.loop, maxSteps: 1, deferFinalize: true },
       );
 
-      if (result.cancelled) { await this.cleanup(); return; }
+      if (result.cancelled) { await this.cleanup(cursor.executionId); return; }
 
       if (!result.finished) {
         cursor.loop = result.state;
@@ -140,7 +141,7 @@ export class CloudRunnerDO implements DurableObject {
           : { status: 'failed', errorMessage: result.output, completedAt: new Date(), updatedAt: new Date() })
         .where(eq(executions.id, cursor.executionId))
         .catch(() => { /* best-effort */ });
-      await this.cleanup();
+      await this.cleanup(cursor.executionId);
     } catch (err) {
       // Don't clobber a cancellation; otherwise fail the run so it isn't stuck.
       if (!(await this.isCancelled(cursor.executionId))) {
@@ -149,7 +150,7 @@ export class CloudRunnerDO implements DurableObject {
           .where(eq(executions.id, cursor.executionId))
           .catch(() => { /* best-effort */ });
       }
-      await this.cleanup();
+      await this.cleanup(cursor.executionId);
     }
   }
 
@@ -171,7 +172,11 @@ export class CloudRunnerDO implements DurableObject {
     await this.state.storage.setAlarm(Date.now());
   }
 
-  private async cleanup(): Promise<void> {
+  private async cleanup(executionId?: number): Promise<void> {
+    // Terminal — drop any steer that arrived after the loop's last tick so it can't
+    // dangle unconsumed. Covers the DO error/cancel paths that bypass finalizeCloudRun
+    // (the finished path already released inside it); releasePendingSteers is idempotent.
+    if (executionId != null) await releasePendingSteers(this.db, executionId);
     await this.state.storage.delete(CURSOR_KEY);
     await this.state.storage.deleteAlarm();
   }
