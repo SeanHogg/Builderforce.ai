@@ -2011,6 +2011,24 @@ export async function dispatchCloudRunForTask(
   return execution.id;
 }
 
+/**
+ * Probe a Cloudflare Container's `/health` before committing a run to it. The
+ * container DO's `/run` handler acks `202` *immediately* and drives the agent loop
+ * asynchronously, so a 202 does NOT prove the container actually booted and will
+ * execute — an undeployed/unbootable image accepts the request and then silently
+ * dies, leaving the run to be orphan-reaped (~30s) with no fallback. Probing
+ * `/health` (bounded, never throws) gives a real liveness signal so the caller can
+ * fall back to the durable executor instead. Returns false on any error/timeout/non-200.
+ */
+export async function probeContainerHealth(stub: { fetch: (input: string, init?: RequestInit) => Promise<Response> }): Promise<boolean> {
+  try {
+    const res = await stub.fetch('https://agent-container/health', { signal: AbortSignal.timeout(8000) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** The post-submit dispatch core, free of any request context. */
 async function startDispatchedExecution(
   env: Env,
@@ -2207,6 +2225,25 @@ async function startDispatchedExecution(
     const startContainer = async () => {
       const agentNs = env.AGENT_CONTAINER;
       if (!agentNs) { await startDurable(); return; }
+      const stub = agentNs.get(agentNs.idFromName(`exec:${execution.id}`));
+
+      // Liveness gate: the container DO acks `/run` 202 even when the underlying
+      // container image is not deployed / cannot boot, after which the run silently
+      // dies and is orphan-reaped (the exact failure the user hit: a follow-up run
+      // dispatched to the container, prepped, then timed out at ~30s with no llm
+      // steps). Probe `/health` first; if the container isn't actually live, fall
+      // back to the durable executor (CloudRunnerDO), which survives long runs.
+      if (!(await probeContainerHealth(stub))) {
+        await recordCloudToolEvent(db, {
+          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+          toolName: 'runtime.fallback', category: 'planning',
+          detail: { reason: 'container /health unreachable', ranOn: 'durable' },
+          result: `${typeLabel}: the Cloudflare Container is not live (health probe failed) — running on the durable cloud executor instead, which executes the run to completion.`,
+        });
+        await startDurable();
+        return;
+      }
+
       try {
         const { systemPrompt, userContent } = await prepareCloudRun(
           env, db, execution.id, taskRow, tenantId, taskRow.projectId,
@@ -2219,7 +2256,6 @@ async function startDispatchedExecution(
           ? { cloneUrl: `https://x-access-token:${repo.ctx.token}@${repo.ctx.host}/${repo.ctx.owner}/${repo.ctx.repo}.git`, baseBranch: repo.ctx.base }
           : null;
         const internalBaseUrl = env.INTERNAL_API_BASE_URL ?? 'https://api.builderforce.ai';
-        const stub = agentNs.get(agentNs.idFromName(`exec:${execution.id}`));
         const res = await stub.fetch('https://agent-container/run', {
           method: 'POST',
           body: JSON.stringify({
