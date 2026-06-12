@@ -1218,37 +1218,41 @@ html[data-theme='light'] .nebula {
 }
 
 /* Admin data tables (same shell style) */
-.admin-page .table-wrap {
+/* Table chrome is shared, not admin-only: any page using .table-wrap /
+   .data-table (e.g. the Workforce → Approvals tab) gets the same scrollable,
+   styled table. overflow-x:auto is what lets wide tables scroll left/right
+   instead of clipping on mobile. */
+.table-wrap {
   overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
 }
 
-.admin-page .data-table {
+.data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
 }
 
-.admin-page .data-table th,
-.admin-page .data-table td {
+.data-table th,
+.data-table td {
   padding: 10px 12px;
   text-align: left;
   border-bottom: 1px solid var(--border);
 }
 
-.admin-page .data-table thead tr {
+.data-table thead tr {
   border-bottom: 2px solid var(--border);
   background: var(--bg-muted);
 }
 
-.admin-page .data-table tbody tr:last-child td {
+.data-table tbody tr:last-child td {
   border-bottom: none;
 }
 
-.admin-page .text-muted,
-.admin-page .data-table .text-muted {
+.text-muted,
+.data-table .text-muted {
   color: var(--text-muted);
 }
 
@@ -1706,8 +1710,20 @@ html[data-theme='light'] .nebula {
   .topbar-hamburger:hover { background: var(--bg-hover); }
   .topbar-auth-cta { display: none; }
 
-  /* The docked rail column collapses to zero — the sidebar becomes a drawer. */
-  :root { --shell-nav-width: 0px; }
+  /* The docked rail column collapses to zero — the sidebar becomes a drawer.
+     BOTH width vars must zero out: the shell keeps the `nav-collapsed` class on
+     mobile when the user's desktop preference is "collapsed", and that variant
+     reads --shell-nav-width-collapsed. Leaving it at 52px left a dead rail
+     column (the "wide left gap") on mobile. The off-canvas drawer doesn't use
+     the grid column at all, so both go to 0 and content runs full width. */
+  :root {
+    --shell-nav-width: 0px;
+    --shell-nav-width-collapsed: 0px;
+    /* Docked slide-out panels (Projects, IDE settings) anchor their bottom to
+       --footer-height. On mobile the global footer is replaced by the fixed
+       bottom nav, so point this at the bottom-nav height to keep panels clear. */
+    --footer-height: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
 
   .nav {
     position: fixed;
@@ -1761,6 +1777,22 @@ html[data-theme='light'] .nebula {
   .nav-item { padding: 10px 12px; justify-content: flex-start; gap: 10px; }
   .nav-item-label { display: inline; }
 
+  /* The drawer is ALWAYS full (labels + section headers), even when the user's
+     desktop preference is the collapsed icon rail. The <nav> still carries the
+     `.collapsed` class on mobile, so undo every collapsed-rail rule here at
+     matching specificity — otherwise the drawer renders as a bare icon strip. */
+  .nav.collapsed { padding: 0; }
+  .nav.collapsed .nav-section { margin-bottom: 16px; }
+  .nav.collapsed .nav-section-label {
+    opacity: 1;
+    pointer-events: auto;
+    height: auto;
+    margin: 0 0 6px;
+    padding: 0 10px;
+  }
+  .nav.collapsed .nav-item { padding: 10px 12px; justify-content: flex-start; gap: 10px; }
+  .nav.collapsed .nav-item-label { display: inline; }
+
   /* Hide the desktop collapse chevron in the drawer — the X closes it */
   .nav-collapse-toggle { display: none; }
 
@@ -1802,6 +1834,19 @@ html[data-theme='light'] .nebula {
 
   .bs-shell { grid-template-columns: 1fr; height: auto; min-height: 0; }
   .bs-sidebar { max-height: 200px; border-right: none; border-bottom: 1px solid var(--border); }
+
+  /* Slide-out drawers go full-width on mobile so they don't leave a thin sliver
+     of the page showing through on the left (the inline `width: min(…, 96vw)`
+     needs !important to be overridden). Matches the Brain drawer's behavior. */
+  .slide-panel-drawer,
+  .project-panel-drawer,
+  .projects-panel-drawer {
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border-left: none !important;
+  }
 
   .brand-name { font-size: 14px; }
 }

@@ -117,7 +117,10 @@ function NavSection({ items, collapsed, pathname, onNavigate }: NavSectionWiring
             style={{ textAlign: 'left' }}
           >
             <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{item.icon}</span>
-            {!collapsed && <span className="nav-item-label" style={{ marginLeft: '12px' }}>{item.label}</span>}
+            {/* Always in the DOM so CSS owns visibility: hidden on the collapsed
+                desktop rail (.nav.collapsed .nav-item-label), shown in the
+                mobile drawer regardless of the desktop collapse preference. */}
+            <span className="nav-item-label">{item.label}</span>
           </Link>
         );
       })}
@@ -224,7 +227,7 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
               <div className="nav-section" style={{ marginBottom: 0 }}>
                 <Link href="/login" className="nav-item" onClick={onMobileClose}>
                   <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>🔑</span>
-                  {!collapsed && <span className="nav-item-label">Sign In</span>}
+                  <span className="nav-item-label">Sign In</span>
                 </Link>
                 <Link
                   href="/register"
@@ -237,7 +240,7 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
                   }}
                 >
                   <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>🚀</span>
-                  {!collapsed && <span className="nav-item-label">Get Started</span>}
+                  <span className="nav-item-label">Get Started</span>
                 </Link>
               </div>
             )}

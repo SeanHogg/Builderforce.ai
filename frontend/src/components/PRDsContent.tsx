@@ -7,6 +7,7 @@ import { ChatMessageContent } from './ChatMessageContent';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { PrdCreateModal } from './prd/PrdCreateModal';
+import { tableWrapStyle, tableStyle } from './dataTableStyles';
 
 export interface PRDsContentProps {
   projectId: number;
@@ -230,8 +231,8 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
           ))}
         </div>
       ) : (
-        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+        <div style={tableWrapStyle}>
+          <table style={tableStyle}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
                 <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Goal</th>

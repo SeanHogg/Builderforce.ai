@@ -826,6 +826,14 @@ export function TaskMgmtContent({
             gridTemplateColumns: `repeat(${boardColumns.length}, minmax(200px, 1fr))`,
             gap: 12,
             minHeight: 200,
+            // Swipe/scroll horizontally when the columns can't all fit (mobile,
+            // or just a lot of lanes). minmax(200px,1fr) keeps each column wide
+            // enough to read; the grid overflows this box and scrolls instead of
+            // squashing or being clipped by the content column's overflow:hidden.
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            scrollSnapType: 'x proximity',
+            paddingBottom: 4,
           }}
         >
           {boardColumns.map((column) => {
@@ -844,6 +852,7 @@ export function TaskMgmtContent({
                   display: 'flex',
                   flexDirection: 'column',
                   minHeight: 120,
+                  scrollSnapAlign: 'start',
                 }}
               >
                 <div style={{ marginBottom: 8 }}>
