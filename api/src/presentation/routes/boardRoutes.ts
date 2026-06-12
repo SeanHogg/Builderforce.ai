@@ -146,37 +146,32 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const segmentId = body.segmentId ?? c.get('segmentId') ?? null;
     const seedLanes = body.seedDefaultLanes !== false;
 
-    // Board + its default swimlanes are created atomically. Previously these
-    // were two separate (HTTP) statements, so a failure after the board insert
-    // but before the lane seed left a permanently-empty board: the kanban still
-    // rendered its hardcoded default columns, but the config panel reported
-    // "No swimlanes yet". A transaction makes the board-with-lanes invariant
-    // hold on creation. Default lanes mirror the kanban's task statuses so the
-    // config panel shows the same lanes the user already sees on the board.
-    const row = await db.transaction(async (tx) => {
-      const [created] = await tx
-        .insert(boards)
-        .values({
-          tenantId,
-          segmentId,
-          projectId: body.projectId,
-          name: body.name.trim(),
-          // Autonomy is implicit (driven by lane agents + gate); no board toggle.
-          autonomous: true,
-          maxConcurrentTickets: body.maxConcurrentTickets ?? 5,
-          needsAttentionLane: body.needsAttentionLane ?? 'needs-attention',
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning();
+    // Board + its default swimlanes are created separately due to the neon-http driver's lack of transaction support.
+    // If the swimlane insert fails after the board insert, the board will exist without default lanes.
+    // The `ensure-defaults` endpoint can be used to heal such boards.
+    const [created] = await db
+      .insert(boards)
+      .values({
+        tenantId,
+        segmentId,
+        projectId: body.projectId,
+        name: body.name.trim(),
+        // Autonomy is implicit (driven by lane agents + gate); no board toggle.
+        autonomous: true,
+        maxConcurrentTickets: body.maxConcurrentTickets ?? 5,
+        needsAttentionLane: body.needsAttentionLane ?? 'needs-attention',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    
+    if(created && seedLanes) {
+      // Relying on the unique constraint (tenantId, boardId, key) to make this idempotent.
+      await db.insert(swimlanes).values(buildDefaultLaneRows(tenantId, segmentId, created.id, now))
+        .onConflictDoNothing();
+    }
 
-      if (created && seedLanes) {
-        await tx.insert(swimlanes).values(buildDefaultLaneRows(tenantId, segmentId, created.id, now));
-      }
-      return created;
-    });
-
-    return c.json(row, 201);
+    return c.json(created, 201);
   });
 
   router.get('/', async (c) => {
