@@ -15,6 +15,7 @@ import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { WorkflowDagView } from './WorkflowDagView';
 import { ViewToggle, type ViewMode } from './ViewToggle';
+import { tableWrapStyle, tableStyle } from './dataTableStyles';
 
 interface WorkflowsContentProps {
   projectId?: number | null;
@@ -490,8 +491,8 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
           ))}
         </div>
       ) : (
-        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+        <div style={tableWrapStyle}>
+          <table style={tableStyle}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
                 {['Name', 'Project', 'Agent', 'Runs', 'Updated', 'Actions'].map((h) => (

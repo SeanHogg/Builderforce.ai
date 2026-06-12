@@ -6,6 +6,7 @@ import type { Project } from '@/lib/types';
 import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { ArchitectureAnalysisButton } from './ArchitectureAnalysisButton';
+import { tableWrapStyle, tableStyle } from './dataTableStyles';
 
 export interface ProjectTableProps {
   projects: Project[];
@@ -56,8 +57,8 @@ export function ProjectTable({
   const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
 
   return (
-    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+    <div style={tableWrapStyle}>
+      <table style={tableStyle}>
         <thead>
           <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
             <th style={headStyle}>Name</th>
