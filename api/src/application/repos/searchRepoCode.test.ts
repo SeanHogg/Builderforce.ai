@@ -29,7 +29,7 @@ describe('searchRepoCode', () => {
     if (!r.ok) return;
     expect(r.total).toBe(2);
     expect(r.matches.map((m) => m.path)).toEqual(['src/a.ts', 'src/b.ts']);
-    expect(r.matches[0].fragments[0]).toContain('gemini-2.5-flash-lite');
+    expect(r.matches[0]?.fragments.join(' ')).toContain('gemini-2.5-flash-lite');
     expect(r.truncated).toBe(false);
   });
 

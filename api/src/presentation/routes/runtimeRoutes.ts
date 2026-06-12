@@ -8,6 +8,7 @@ import { createPullRequest } from '../../application/repos/createPullRequest';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled } from '../../application/repos/mergeBranchToBase';
 import { recordPullRequestRow, markPullRequestMergedById } from '../../application/repos/recordPullRequestRow';
 import { readRepoFile, listRepoFiles, searchRepoCode } from '../../application/repos/readRepoContents';
+import { verifyWrittenFiles } from '../../application/repos/verifyWrittenFiles';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
@@ -609,7 +610,7 @@ const CLOUD_AGENT_TOOLS = [
     type: 'function',
     function: {
       name: 'run_checks',
-      description: 'Request the build / type-check / lint / test suite for your changes. IMPORTANT: this serverless executor has NO shell — it cannot run them itself. The checks run in CI on the pull request your changes open, and that CI is the source of truth. Call this to confirm that fact; then write correct code. Never claim a check passed locally — you cannot run one here.',
+      description: 'Statically validate the files you have written: it parses your committed JSON and YAML config files in-place and reports any syntax errors to fix BEFORE finishing. IMPORTANT: this serverless executor has NO shell, so it does NOT run the build, project-wide type-check, lint, or tests — those run in CI on the pull request your changes open (the source of truth). Call this after writing config files. Never claim the build/type-check/lint/tests passed — you cannot run those here; only the JSON/YAML syntax check is real.',
       parameters: { type: 'object', properties: {} },
     },
   },
@@ -1130,14 +1131,31 @@ export async function runCloudToolLoop(
           }
         }
       } else if (name === 'run_checks') {
-        // No shell here — verification is deferred to CI on the PR. Answer
-        // honestly so the agent stops inventing run_code/run_command and never
-        // reports a local check as passing.
-        toolResult = {
-          ok: true,
-          ran: false,
-          note: 'This serverless executor cannot run builds, type-checks, lint, or tests — it has no shell. Your changes open a pull request and the project CI runs them there; that CI is the source of truth. Do not state that any check passed. Write correct code and call finish with an honest summary.',
-        };
+        // Real (if scoped) verification: statically validate the config files we
+        // CAN parse in-Worker (JSON/YAML) so broken config is caught BEFORE the PR.
+        // Build / project-wide type-check / lint / tests still need a shell, so
+        // those remain CI's job — be honest about that so the agent doesn't claim
+        // they passed.
+        if (!repoCtx) {
+          toolResult = { ok: true, ran: false, note: `No repository is bound (${repoMiss}) — nothing to validate here; return the deliverable in your finish summary.` };
+        } else if (writtenPaths.size === 0) {
+          toolResult = { ok: true, ran: false, note: 'No files written yet — write your changes first, then call run_checks to statically validate config files.' };
+        } else {
+          const v = await verifyWrittenFiles({ ...repoCtx, ref: readRef }, writtenPaths);
+          toolResult = v.ok
+            ? {
+                ok: true, ran: true, kind: 'static-validation',
+                checked: v.checked, skipped: v.skipped,
+                note: `Static syntax validation PASSED for ${v.checked.length} JSON/YAML config file(s)`
+                  + `${v.skipped.length ? ` (${v.skipped.length} non-config file(s) can't be parsed without a shell)` : ''}. `
+                  + 'This executor has NO shell, so it did NOT run the build, project-wide type-check, lint, or tests — CI on the pull request verifies those. Do not claim those passed; ensure your code is correct.',
+              }
+            : {
+                ok: false, ran: true, kind: 'static-validation',
+                errors: v.errors,
+                note: `Static validation FAILED on ${v.errors.length} file(s) — fix the parse error(s) below with write_file, then call run_checks again.`,
+              };
+        }
       } else if (name === 'finish') {
         const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : '';
         if (summary && !finishBlockedOnce && assertsUnrunVerification(summary)) {
