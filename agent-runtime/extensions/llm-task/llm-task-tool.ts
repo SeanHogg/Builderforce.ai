@@ -1,32 +1,75 @@
-import { notifyHenTaskCompletion } from './hen-task-completion-notifier';
+import { type LLMTask } from "@builderforce/llm-agent";
+import { type TaskCompletionEvent, type TaskUpdateEvent } from "../src/types/task"; // Assuming these types exist
+import { HenTaskCompletionNotifier, HenTaskCompletionNotifierSchema } from "./hen-task-completion-notifier";
+import { Logger } from "../src/utils/logging"; // Assuming Logger utility exists
+import { type NotificationService } from "../src/services/notificationService"; // Assuming NotificationService exists
+import { type AccountService } from "../src/services/accountService"; // Assuming AccountService exists
 
-const PLATFORM_NAME = 'Your App Name'; // Replace with your actual platform name
+const logger = new Logger("LLMTaskTool");
 
-// This function simulates the check for Hen task completion.
-// In a real-world application, this would query a task management system
-// to determine if all 'Hen tasks' for a given account are marked as 'Complete'.
-const checkHenTaskCompletion = async (accountId: string): Promise<boolean> => {
-    console.log(`Checking Hen task completion for account: ${accountId}`);
-    // Simulate a scenario where tasks are complete for a specific account
-    // In a real application, this would involve complex logic to check task statuses.
-    const simulatedCompletion = Math.random() > 0.8; // Simulate completion about 20% of the time
-    if (simulatedCompletion) {
-        console.log(`All Hen tasks are complete for account: ${accountId}`);
-        return true;
-    }
-    console.log(`Some Hen tasks are still pending for account: ${accountId}`);
-    return false;
-};
+// Define the configuration schema for the Hen Task Completion Notifier tool
+export const HenTaskCompletionNotifierToolConfigSchema = HenTaskCompletionNotifierSchema.extend({
+	// Potentially add tool-specific configurations here if needed
+});
 
-// This function would be called periodically or triggered by task completion events.
-export const processAccountTaskStatus = async (accountId: string): Promise<void> => {
-    const allTasksComplete = await checkHenTaskCompletion(accountId);
+type LLMTaskExtensionConfig = z.infer<typeof HenTaskCompletionNotifierToolConfigSchema>;
 
-    if (allTasksComplete) {
-        await notifyHenTaskCompletion(accountId, PLATFORM_NAME);
-    }
-};
+/**
+ * LLM Task Tool Extension
+ * Provides task-related functionalities like completion notification.
+ */
+export class LLMTaskTool {
+	private config: LLMTaskExtensionConfig;
+	private notificationService: NotificationService;
+	private accountService: AccountService;
+	private henTaskCompletionNotifier?: HenTaskCompletionNotifier;
 
-// Example of how this might be used in a larger system (e.g., a background job or event listener)
-// const exampleAccountId = 'account-123';
-// processAccountTaskStatus(exampleAccountId);
+	constructor(config: LLMTaskExtensionConfig, notificationService: NotificationService, accountService: AccountService) {
+		this.config = HenTaskCompletionNotifierToolConfigSchema.parse(config);
+		this.notificationService = notificationService;
+		this.accountService = accountService;
+		this.initializeNotifier();
+	}
+
+	private initializeNotifier(): void {
+		this.henTaskCompletionNotifier = new HenTaskCompletionNotifier(
+			this.config,
+			this.notificationService,
+			this.accountService
+		);
+		logger.info("HenTaskCompletionNotifier initialized.");
+	}
+
+	/**
+	 * Registers the tool's event handlers.
+	 * @param {LLMTask} llmTask - The LLMTask instance to register handlers with.
+	 */
+	public register(llmTask: LLMTask): void {
+		logger.info("Registering event handlers for LLMTaskTool...");
+
+		// Register handler for task completion events
+		llmTask.onTaskComplete(async (event: TaskCompletionEvent) => {
+			logger.debug("LLMTaskTool received TaskCompletionEvent:", event);
+			if (this.henTaskCompletionNotifier) {
+				try {
+					await this.henTaskCompletionNotifier.handleTaskCompletion(event);
+				} catch (err) {
+					logger.error("Error in HenTaskCompletionNotifier during task completion:", err);
+				}
+			} else {
+				logger.warn("HenTaskCompletionNotifier not initialized. Cannot handle task completion.");
+			}
+		});
+
+		// Optional: Register handler for task update events if needed for more complex logic
+		// llmTask.onTaskUpdate(async (event: TaskUpdateEvent) => {
+		//     logger.debug("LLMTaskTool received TaskUpdateEvent:", event);
+		//     // Add logic here if task updates need to trigger notifications or other actions
+		// });
+
+		logger.info("Event handlers registered successfully.");
+	}
+}
+
+// Export the configuration schema for potential external use or validation
+export { HenTaskCompletionNotifierToolConfigSchema };
