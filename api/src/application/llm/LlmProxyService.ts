@@ -98,6 +98,16 @@ export const CODING_MODEL_POOL: readonly string[] = [
   'qwen/qwen3.7-plus',                         // agentic coder + vision, $0.40/$1.60
   'deepseek/deepseek-v4-flash',               // fast cheap coder, $0.10/$0.20
   // FREE — strong agentic coders on the OpenRouter free key (the cloud default).
+  // Standardized lead: MiniMax M2.7 is the top free SWE-bench agentic coder, so it
+  // sits first here and becomes CODING_DEFAULT_MODEL (the first FREE pool entry).
+  // Sourced from NVIDIA NIM (`minimaxai/minimax-m2.7`), where M2.7 is FREE — on
+  // OpenRouter it's a PAID slug, so NIM is the only free home. This needs
+  // NVIDIA_API_KEY bound on the gateway; if it's unbound the NIM default no-key-
+  // skips at dispatch and the run fails over to the OpenRouter `:free` tail below,
+  // so M2.5:free sits immediately after as the always-reachable failover.
+  'minimaxai/minimax-m2.7',                   // SWE-bench-leading free coder (NVIDIA NIM) — standardized default
+  'minimax/minimax-m2.5:free',                // prior-gen MiniMax (OpenRouter free) — always-reachable failover
+  'z-ai/glm-5.1',                             // strong agentic coder (NVIDIA NIM, free)
   'nex-agi/nex-n2-pro:free',                  // agentic MoE (Qwen3.5 arch), tool use
   'nvidia/nemotron-3-ultra-550b-a55b:free',   // Programming #6, 1M context
   'openrouter/owl-alpha',                     // agentic, Claude Code-compatible
