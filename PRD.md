@@ -1,43 +1,44 @@
-> **PRD** — drafted by Coder Agent (V2) (Durable) · task #63
+> **PRD** — drafted by Coder Agent (V2) (Durable) · task #68
 > _Each agent that updates this PRD signs its change below._
 
-# WIP: Cloud Agent Concurrency Issue
+# Product Requirements Document: Resolve "No transactions support in neon-http driver" Error
 
 ## Problem & Goal
 
-**Problem:** When a user attempts to run multiple cloud agents simultaneously, subsequent agents enter a "pending" state and do not execute if another agent is already running. This prevents users from leveraging the parallel processing capabilities of cloud agents.
+**Problem:**
+The `POST /api/boards` endpoint on `https://api.builderforce.ai` is failing with a `500 Internal Server Error` and the specific message: `{"error":"No transactions support in neon-http driver"}`. This indicates that the backend logic for creating a board is attempting to use database transactions, which are not supported by the currently configured `neon-http` database driver. This prevents users from creating new boards and impacts core application functionality.
 
-**Goal:** Enable multiple cloud agents to run concurrently.
+**Goal:**
+To resolve the `500 Internal Server Error` on the `POST /api/boards` endpoint, enabling successful creation of new boards. This requires adjusting the backend implementation to either avoid the use of database transactions where they are not supported by `neon-http`, or refactoring the data operations to achieve necessary atomicity and data consistency through alternative patterns compatible with the driver's capabilities.
 
 ## Target Users / ICP Roles
 
-This issue affects all users of the cloud agent functionality. Specific roles include:
-
-*   Data Scientists
-*   ML Engineers
-*   DevOps Engineers
-*   Any user requiring parallel execution of cloud-based tasks.
+*   **Engineering Team (Backend Developers, DevOps Engineers):** Directly responsible for implementing and deploying the fix.
+*   **Product Managers / Stakeholders:** Rely on the `/api/boards` endpoint's functionality for user workflows and product features.
+*   **End-Users of builderforce.ai:** Indirectly impacted, as they cannot create new boards until this is resolved.
 
 ## Scope
 
-This PRD addresses the root cause of the cloud agent concurrency limitation, ensuring that multiple instances of cloud agents can be initiated and run in parallel.
+This task specifically scopes the investigation and resolution of the `500 Internal Server Error` (`{"error":"No transactions support in neon-http driver"}`) originating from the `POST /api/boards` endpoint.
 
 ## Functional Requirements
 
-1.  **Concurrent Agent Execution:** The system must allow for multiple cloud agents to be initiated and run simultaneously without blocking subsequent agent executions.
-2.  **Resource Management (Implied):** The underlying infrastructure must be capable of handling the concurrent execution of multiple agents, implying that resource allocation mechanisms should be reviewed and potentially adjusted.
-3.  **Status Reporting:** The system should accurately reflect the running status of all concurrently executing agents.
+*   **FR1:** The `POST /api/boards` endpoint MUST successfully create a new board entry in the database.
+*   **FR2:** The `POST /api/boards` endpoint MUST return an appropriate success status code (e.g., `201 Created` or `200 OK`) upon successful board creation.
+*   **FR3:** The backend logic for `POST /api/boards` MUST cease attempting to initiate or utilize database transactions that are unsupported by the `neon-http` driver.
+*   **FR4:** If multiple, interdependent database operations are required for board creation (e.g., creating the board record and associated default components), data consistency MUST be maintained through alternative mechanisms (e.g., idempotent operations, compensating actions, or careful sequencing) that do not rely on explicit database transactions within the `neon-http` driver.
 
 ## Acceptance Criteria
 
-*   **AC1:** A user can successfully initiate and run two or more cloud agents at the same time.
-*   **AC2:** All initiated cloud agents are in a "running" state (or their expected active state) and are executing their tasks.
-*   **AC3:** No initiated cloud agent enters a "pending" state due to another agent already running.
-*   **AC4:** The UI accurately displays the status of all concurrently running agents.
+*   **AC1:** A `POST` request to `https://api.builderforce.ai/api/boards` with a valid board creation payload results in a `2xx` HTTP status code.
+*   **AC2:** No `500 Internal Server Error` with the message `{"error":"No transactions support in neon-http driver"}` is returned when calling `POST /api/boards`.
+*   **AC3:** A new board entity is successfully created and persisted in the database, verifiable via direct database query or subsequent `GET /api/boards` requests.
+*   **AC4:** Any associated data (e.g., default columns, initial cards) required for a newly created board is also correctly created and linked, ensuring the board is functional immediately after creation.
+*   **AC5:** Automated tests (unit, integration) covering the `POST /api/boards` functionality pass without error and confirm correct behavior.
 
 ## Out of Scope
 
-*   Agent performance optimization (beyond enabling concurrency).
-*   Introduction of new agent types or functionalities.
-*   Changes to agent resource quotas or limits, unless directly necessitated by enabling concurrency and specifically documented.
-*   User interface redesign related to agent management.
+*   Replacement of the `neon-http` driver with another database driver that supports transactions (unless investigation reveals it is the *only* viable solution, and then, only with explicit architectural approval).
+*   Implementing transaction support for other API endpoints not currently exhibiting this specific error.
+*   Broader refactoring of the entire data access layer beyond what is strictly necessary to resolve this specific `POST /api/boards` issue.
+*   Addressing other unrelated `500 Internal Server Errors` or performance issues on other endpoints.
