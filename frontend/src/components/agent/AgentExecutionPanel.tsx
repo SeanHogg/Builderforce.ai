@@ -558,7 +558,10 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
           )}
 
           {subTab === 'changes' && (
-            <div style={{ minHeight: 80, maxHeight: 360, overflow: 'auto' }}>
+            // List view scrolls within a capped pane (like Output); the open file
+            // diff renders at its natural height — FileChangeViewer owns its own
+            // scroll, so capping it here would nest a 420px editor in a 360px box.
+            <div style={openChange ? { minHeight: 80 } : { minHeight: 80, maxHeight: 360, overflow: 'auto' }}>
               {openChange ? (
                 /* Detail: the selected file's diff in a read-only Monaco editor. */
                 <div>
