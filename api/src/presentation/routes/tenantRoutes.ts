@@ -2,8 +2,9 @@ import { Hono } from 'hono';
 import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { TenantService } from '../../application/tenant/TenantService';
 import { TenantRole, TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
@@ -34,6 +35,16 @@ async function assertTenantMember(db: Db, tenantId: number, userId: string): Pro
     .limit(1);
 
   return Boolean(row);
+}
+
+/**
+ * Drop the cached human assignee list for a tenant. Called from every membership
+ * add/remove path so GET /api/tasks/assignees re-loads immediately instead of
+ * serving a stale roster until the KV TTL expires (~5 min). Keep the key in sync
+ * with the producer in taskRoutes.ts (`task-assignees:tenant:<id>`).
+ */
+async function invalidateTaskAssignees(env: Env, tenantId: number): Promise<void> {
+  await invalidateCached(env, `task-assignees:tenant:${tenantId}`);
 }
 
 export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<HonoEnv> {
@@ -520,6 +531,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     if (limitErr) return c.json(limitErr, 402);
 
     const tenant = await tenantService.addMember(id, actorUserId, body.newUserId, body.role);
+    await invalidateTaskAssignees(c.env as Env, id);
     return c.json(tenant.toPlain());
   });
 
@@ -553,6 +565,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
 
     const actorUserId = c.get('userId') as string;
     const tenant = await tenantService.addMember(id, actorUserId, found.id, role);
+    await invalidateTaskAssignees(c.env as Env, id);
     return c.json({ ok: true, tenant: tenant.toPlain(), addedUser: { id: found.id, email: found.email } });
   });
 
@@ -562,6 +575,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const targetUserId = c.req.param('userId');
     const actorUserId  = c.get('userId') as string;
     const tenant = await tenantService.removeMember(id, actorUserId, targetUserId);
+    await invalidateTaskAssignees(c.env as Env, id);
     return c.json(tenant.toPlain());
   });
 

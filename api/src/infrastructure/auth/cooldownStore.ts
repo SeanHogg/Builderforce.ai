@@ -27,14 +27,67 @@ export interface CooldownEnv {
   AUTH_CACHE_KV?: KVNamespace;
 }
 
-export type CooldownClass = 'transient' | 'auth' | 'embedded';
+export type CooldownClass = 'transient' | 'auth' | 'embedded' | 'request_error';
 
-/** Per-classification TTL. Transient errors recover fast; auth errors are sticky. */
-const TTL_SECONDS: Record<CooldownClass, number> = {
+/** Per-classification TTL. Transient errors recover fast; auth errors are sticky.
+ *  `request_error` is special — it writes NO cooldown at all (TTL 0), so it never
+ *  appears in this table's hot path; see `recordFailure`'s early return. */
+const TTL_SECONDS: Record<Exclude<CooldownClass, 'request_error'>, number> = {
   transient: 5 * 60,        // 5 min — 5xx / 408 / 429 / network / vendor timeout
   auth:      30 * 60,       // 30 min — 401 / 403 (usually missing/expired key)
   embedded:  5 * 60,        // 5 min — 200 OK with embedded { error: ... }
 };
+
+/**
+ * Early-recovery ("half-open") trial — gap [1235].
+ *
+ * The full TTL above keeps a model benched even when the vendor blip lasted
+ * only a few seconds, so a 1-minute outage costs ~5 minutes of unnecessary
+ * skipping. We can't run a true background HEAD probe in-isolate without
+ * spending an unbounded number of KV/network subrequests (the same ceiling
+ * `COOLDOWN_PREFETCH_LIMIT` guards). Instead, each cooldown carries a
+ * `trialAfter` epoch-ms — a short fraction of the full TTL — after which the
+ * read path stops reporting the model as cooled, letting the dispatcher send
+ * exactly ONE live request as the probe:
+ *
+ *   - probe succeeds → no `recordFailure`, so nothing re-cools; the stale KV
+ *     entry simply lives out its TTL while being ignored. Model is back.
+ *   - probe fails    → `recordFailure` writes a fresh cooldown (new TTL + new
+ *     `trialAfter`), so the half-open window re-opens later, not immediately.
+ *
+ * Cost: ZERO extra KV subrequests — `trialAfter` rides inside the value the
+ * read already fetches, and the trial is just the dispatch the cascade was
+ * going to make anyway. The only trade-off is that under concurrent load more
+ * than one in-flight request may trial the same model in the half-open window
+ * (each is one request, never a fan-out); that's the same one-request-lag
+ * trade-off already accepted for `COOLDOWN_PREFETCH_LIMIT`.
+ *
+ * `trialAfter` is capped so even the 30-min auth cooldown gets a probe within
+ * a couple of minutes — a rotated key shouldn't wait half an hour to be
+ * noticed — while staying long enough that a genuinely-down vendor isn't
+ * hammered every request.
+ */
+const TRIAL_AFTER_FRACTION = 0.25;   // probe after a quarter of the TTL …
+const TRIAL_AFTER_MAX_SEC  = 90;     // … but never wait longer than 90s.
+
+/** Epoch-ms at which a cooldown opens its single half-open trial window. */
+function trialAfterFor(now: number, ttlSec: number): number {
+  const delaySec = Math.min(ttlSec * TRIAL_AFTER_FRACTION, TRIAL_AFTER_MAX_SEC);
+  return now + delaySec * 1000;
+}
+
+/**
+ * A stored cooldown is still "active" (skip the model) only until its
+ * `trialAfter` instant. Past that — but before `until` — the model is
+ * half-open and the read path reports it as eligible so the cascade can probe
+ * it. A legacy entry with no `trialAfter` (number absent) falls back to the
+ * pre-[1235] behavior: cooled for the whole `until` window.
+ */
+function isStillActive(now: number, until: number, trialAfter?: number): boolean {
+  if (now >= until) return false;                 // full TTL elapsed
+  if (typeof trialAfter === 'number') return now < trialAfter;
+  return true;                                    // legacy: no trial window
+}
 
 /**
  * Vendor-level cooldown — fires when one upstream key looks broken across
@@ -55,9 +108,21 @@ const VENDOR_COOLDOWN_TTL_SEC: Record<'transient' | 'auth', number> = {
   auth:      30 * 60,       // 30 min — bad key won't recover without rotation
 };
 
-/** Classify an HTTP status into a cooldown bucket. Single source of truth. */
+/**
+ * Classify an HTTP status into a cooldown bucket. Single source of truth.
+ *
+ *   - `auth` (401/403): bad/expired key — sticky per-model AND vendor cooldown.
+ *   - `embedded`: 200 OK with an embedded error body — model-specific.
+ *   - `request_error` (400/422): caller-side schema / validation bug. The model
+ *     and vendor are fine — the *request* is malformed — so this writes NEITHER
+ *     model nor vendor cooldown. Cooling them would (a) wrongly bench a healthy
+ *     model and (b) trip vendor cooldown for what is the caller's own bad
+ *     payload, starving every other tenant on that vendor for a schema typo.
+ *   - `transient` (5xx/408/429/network): everything else — short per-model cool.
+ */
 export function classifyFailure(status: number, hint?: string): CooldownClass {
   if (status === 401 || status === 403) return 'auth';
+  if (status === 400 || status === 422) return 'request_error';
   if (hint && hint.startsWith('embedded:')) return 'embedded';
   return 'transient';
 }
@@ -73,11 +138,21 @@ const vendorFailuresKey = (vendor: VendorId) => `vendor_failures:${vendor}`;
 // absent in tests within the same import.
 // ---------------------------------------------------------------------------
 
+/** Raw cooldown record as stored. `until` is the full-TTL expiry epoch-ms (0 if
+ *  unknown/legacy); `trialAfter` is the half-open probe instant ([1235]), absent
+ *  on legacy entries. */
+interface CooldownRecord {
+  until: number;
+  trialAfter?: number;
+}
+
 interface CooldownBackend {
-  /** Returns expiry epoch-ms; 0 if cooled with unknown expiry; undefined if not cooled. */
-  read(vendor: VendorId, model: string): Promise<number | undefined>;
-  /** Persists `until` epoch-ms with a `ttlSec` lifetime. Errors are absorbed. */
-  write(vendor: VendorId, model: string, until: number, ttlSec: number, status: number, cls: CooldownClass): Promise<void>;
+  /** Returns the stored record (full `until` + optional `trialAfter`), or
+   *  undefined if not cooled at all. Does NOT apply half-open eligibility —
+   *  callers (`read`-gating vs `status`-display) decide via `isStillActive`. */
+  read(vendor: VendorId, model: string): Promise<CooldownRecord | undefined>;
+  /** Persists `until` epoch-ms + `trialAfter` with a `ttlSec` lifetime. Errors are absorbed. */
+  write(vendor: VendorId, model: string, until: number, trialAfter: number, ttlSec: number, status: number, cls: CooldownClass): Promise<void>;
 
   /** Returns vendor cooldown expiry epoch-ms; undefined if not cooled. */
   readVendor(vendor: VendorId): Promise<number | undefined>;
@@ -89,20 +164,20 @@ interface CooldownBackend {
   writeVendorFailures(vendor: VendorId, ring: number[]): Promise<void>;
 }
 
-const memMap            = new Map<string, number>();
+const memMap            = new Map<string, CooldownRecord>();
 const memVendorCooldown = new Map<VendorId, number>();
 const memVendorRing     = new Map<VendorId, number[]>();
 
 const memBackend: CooldownBackend = {
   async read(vendor, model) {
     const k = cacheKey(vendor, model);
-    const until = memMap.get(k);
-    if (!until) return undefined;
-    if (Date.now() >= until) { memMap.delete(k); return undefined; }
-    return until;
+    const rec = memMap.get(k);
+    if (!rec) return undefined;
+    if (Date.now() >= rec.until) { memMap.delete(k); return undefined; }
+    return rec;
   },
-  async write(vendor, model, until) {
-    memMap.set(cacheKey(vendor, model), until);
+  async write(vendor, model, until, trialAfter) {
+    memMap.set(cacheKey(vendor, model), { until, trialAfter });
   },
   async readVendor(vendor) {
     const until = memVendorCooldown.get(vendor);
@@ -128,14 +203,16 @@ function kvBackend(kv: KVNamespace): CooldownBackend {
       const v = await kv.get(cacheKey(vendor, model)).catch(() => null);
       if (v == null) return undefined;
       try {
-        const parsed = JSON.parse(v) as { until?: unknown };
-        return typeof parsed?.until === 'number' ? parsed.until : 0;
-      } catch { return 0; /* malformed value — still cooled, expiry unknown */ }
+        const parsed = JSON.parse(v) as { until?: unknown; trialAfter?: unknown };
+        const until = typeof parsed?.until === 'number' ? parsed.until : 0;
+        const trialAfter = typeof parsed?.trialAfter === 'number' ? parsed.trialAfter : undefined;
+        return { until, trialAfter };
+      } catch { return { until: 0 }; /* malformed value — still cooled, expiry unknown */ }
     },
-    async write(vendor, model, until, ttlSec, status, cls) {
+    async write(vendor, model, until, trialAfter, ttlSec, status, cls) {
       await kv.put(
         cacheKey(vendor, model),
-        JSON.stringify({ cls, status, until }),
+        JSON.stringify({ cls, status, until, trialAfter }),
         { expirationTtl: ttlSec },
       ).catch((err) => {
         console.warn(`[cooldown] kv.put failed for ${vendor}/${model}: ${err}`);
@@ -195,29 +272,41 @@ const backendFor = (env: CooldownEnv): CooldownBackend =>
  * not on cooldown are absent from the map. `0` is used when the entry exists
  * in KV but the stored value lacks an `until` field (legacy shape) — caller
  * should treat that as "cooled, expiry unknown".
+ *
+ * `mode` selects how the half-open trial window ([1235]) is reported:
+ *   - `'gate'` (default): a model past its `trialAfter` is treated as eligible
+ *     and OMITTED from the map, so the cascade probes it with one live request.
+ *   - `'display'`: the full `until` is returned regardless of `trialAfter`, so
+ *     the admin/status surface can still show the original countdown while the
+ *     model is half-open.
  */
 export async function loadCooldownExpiries(
   env: CooldownEnv,
   candidates: ReadonlyArray<{ vendor: VendorId; model: string }>,
+  mode: 'gate' | 'display' = 'gate',
 ): Promise<Map<string, number>> {
   const backend = backendFor(env);
+  const now = Date.now();
   const out = new Map<string, number>();
   await Promise.all(candidates.map(async ({ vendor, model }) => {
-    const until = await backend.read(vendor, model);
-    if (until !== undefined) out.set(`${vendor}/${model}`, until);
+    const rec = await backend.read(vendor, model);
+    if (rec === undefined) return;
+    if (mode === 'gate' && !isStillActive(now, rec.until, rec.trialAfter)) return;
+    out.set(`${vendor}/${model}`, rec.until);
   }));
   return out;
 }
 
 /**
  * Set view of `loadCooldownExpiries` — for callers that only need to filter
- * the candidate chain and don't care about expiry timestamps.
+ * the candidate chain and don't care about expiry timestamps. Always uses the
+ * `'gate'` mode so half-open models are reported as eligible for a trial.
  */
 export async function loadCooldowns(
   env: CooldownEnv,
   candidates: ReadonlyArray<{ vendor: VendorId; model: string }>,
 ): Promise<Set<string>> {
-  const map = await loadCooldownExpiries(env, candidates);
+  const map = await loadCooldownExpiries(env, candidates, 'gate');
   return new Set(map.keys());
 }
 
@@ -240,17 +329,33 @@ export async function recordFailure(
   hint?: string,
 ): Promise<void> {
   const cls = classifyFailure(status, hint);
+
+  // Request-validation failures (400/422) are the caller's bug, not the model's
+  // or vendor's. Record NOTHING — cooling a healthy model would bench it for the
+  // next caller, and tripping vendor cooldown would starve every other tenant on
+  // that upstream for one malformed payload. The cascade surfaces these as a
+  // fatal 4xx instead (see LlmProxyService.exhaustedResponse).
+  if (cls === 'request_error') {
+    console.warn(
+      `[cooldown] ${vendor}/${model} request_error status=${status} — NOT cooled (caller-side validation)` +
+      (hint ? ` hint="${hint.slice(0, 120)}"` : ''),
+    );
+    return;
+  }
+
   const ttl = TTL_SECONDS[cls];
-  const until = Date.now() + ttl * 1000;
+  const now = Date.now();
+  const until = now + ttl * 1000;
+  const trialAfter = trialAfterFor(now, ttl);
 
   console.warn(
-    `[cooldown] ${vendor}/${model} cooled for ${ttl}s — class=${cls} status=${status}` +
+    `[cooldown] ${vendor}/${model} cooled for ${ttl}s (half-open trial after ${Math.round((trialAfter - now) / 1000)}s) — class=${cls} status=${status}` +
     (hint ? ` hint="${hint.slice(0, 120)}"` : ''),
   );
 
   const backend = backendFor(env);
   await Promise.all([
-    backend.write(vendor, model, until, ttl, status, cls),
+    backend.write(vendor, model, until, trialAfter, ttl, status, cls),
     maybeTripVendorCooldown(backend, vendor, cls, status),
   ]);
 }
@@ -267,7 +372,9 @@ async function maybeTripVendorCooldown(
   cls: CooldownClass,
   status: number,
 ): Promise<void> {
-  if (cls === 'embedded') return;
+  // `embedded` is model-specific; `request_error` is caller-side and never even
+  // reaches here (recordFailure returns first). Neither propagates to the vendor.
+  if (cls === 'embedded' || cls === 'request_error') return;
 
   if (cls === 'auth') {
     const ttl   = VENDOR_COOLDOWN_TTL_SEC.auth;

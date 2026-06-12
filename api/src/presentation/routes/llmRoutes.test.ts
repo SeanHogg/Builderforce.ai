@@ -23,7 +23,7 @@ vi.mock('../../infrastructure/database/connection', () => ({ buildDatabase: mock
 
 // Imports must follow the vi.mock calls above so the mocks are in place.
 const { requireTenantAccess } = await import('./llmRoutes');
-const { sanitizeToolName, restoreToolName, sanitizeRequestToolNames, restoreResponseToolNames } =
+const { sanitizeToolName, restoreToolName, sanitizeRequestToolNames, restoreResponseToolNames, StreamingToolNameRestorer } =
   await import('../../application/llm/toolNameSanitizer');
 
 // ---------------------------------------------------------------------------
@@ -79,6 +79,78 @@ describe('toolNameSanitizer', () => {
     };
     const restored = restoreResponseToolNames(raw) as typeof raw;
     expect(restored.choices[0]!.message.tool_calls[0]!.function.name).toBe('governance.snapshot');
+  });
+
+  describe('StreamingToolNameRestorer', () => {
+    type Delta = {
+      choices: Array<{
+        index?: number;
+        delta: { tool_calls?: Array<{ index: number; function?: { name?: string; arguments?: string } }> };
+      }>;
+    };
+    // Feed the restorer a sequence of name fragments and reassemble the emitted tail.
+    const drive = (fragments: string[]): string => {
+      const r = new StreamingToolNameRestorer();
+      let out = '';
+      for (const frag of fragments) {
+        const chunk: Delta = {
+          choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { name: frag } }] } }],
+        };
+        r.restoreChunk(chunk as unknown as Record<string, unknown>);
+        out += chunk.choices[0]!.delta.tool_calls![0]!.function!.name ?? '';
+      }
+      return out;
+    };
+
+    it('restores a name delivered in a single delta', () => {
+      expect(drive([sanitizeToolName('governance.snapshot')])).toBe('governance.snapshot');
+    });
+
+    it('restores a name fragmented across multiple deltas', () => {
+      // 'agile.kanban.list' → 'agile__DOT__kanban__DOT__list', split mid-token.
+      const sanitized = sanitizeToolName('agile.kanban.list');
+      const fragments = [
+        sanitized.slice(0, 4),
+        sanitized.slice(4, 9),
+        sanitized.slice(9, 18),
+        sanitized.slice(18),
+      ];
+      expect(drive(fragments)).toBe('agile.kanban.list');
+    });
+
+    it('restores when a sentinel is split across the fragment boundary', () => {
+      const sanitized = sanitizeToolName('a.b'); // a__DOT__b
+      const cut = sanitized.indexOf('__DOT__') + 3; // split inside the sentinel
+      expect(drive([sanitized.slice(0, cut), sanitized.slice(cut)])).toBe('a.b');
+    });
+
+    it('tracks two concurrent tool calls by index independently', () => {
+      const r = new StreamingToolNameRestorer();
+      const chunk = {
+        choices: [{
+          index: 0,
+          delta: {
+            tool_calls: [
+              { index: 0, function: { name: sanitizeToolName('governance.snapshot') } },
+              { index: 1, function: { name: sanitizeToolName('agile.kanban.list') } },
+            ],
+          },
+        }],
+      };
+      r.restoreChunk(chunk as unknown as Record<string, unknown>);
+      const tcs = chunk.choices[0]!.delta.tool_calls!;
+      expect(tcs[0]!.function.name).toBe('governance.snapshot');
+      expect(tcs[1]!.function.name).toBe('agile.kanban.list');
+    });
+
+    it('leaves argument-only deltas (no name) untouched', () => {
+      const r = new StreamingToolNameRestorer();
+      const chunk = {
+        choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: '{"x":1}' } }] } }],
+      };
+      r.restoreChunk(chunk as unknown as Record<string, unknown>);
+      expect(chunk.choices[0]!.delta.tool_calls![0]!.function).toEqual({ arguments: '{"x":1}' });
+    });
   });
 });
 
@@ -299,6 +371,56 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
 
     expect(res.status).not.toBe(403);
     expect(res.status).toBe(503); // missing OPENROUTER_API_KEY_PRO
+  });
+
+  it('gates the public `strict: true` alias the same as `modelStrict`', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    const db = mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'free', billingStatus: 'none', tokenDailyLimitOverride: null },
+    });
+    mocks.buildDatabase.mockReturnValue(db);
+
+    // Public alias `strict: true` (no `modelStrict`) — free tenant still rejected.
+    const req = new Request('http://test.local/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_strict', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model:    'cerebras/llama-3.3-70b',
+        strict:   true,
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+    });
+    const app = buildApp();
+    const res = await app.request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    expect(res.status).toBe(403);
+    const body = await res.json() as { code?: string };
+    expect(body.code).toBe('strict_pin_not_allowed');
+  });
+
+  it('honours `?strict=true` query param for the entitlement gate', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    const db = mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'free', billingStatus: 'none', tokenDailyLimitOverride: null },
+    });
+    mocks.buildDatabase.mockReturnValue(db);
+
+    const req = new Request('http://test.local/v1/chat/completions?strict=true', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_strict', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model:    'cerebras/llama-3.3-70b',
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+    });
+    const app = buildApp();
+    const res = await app.request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    expect(res.status).toBe(403);
+    const body = await res.json() as { code?: string };
+    expect(body.code).toBe('strict_pin_not_allowed');
   });
 });
 

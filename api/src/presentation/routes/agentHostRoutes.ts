@@ -32,7 +32,7 @@ import {
   platformPersonas,
 } from '../../infrastructure/database/schema';
 import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
-import { invalidateKeyCache } from '../../infrastructure/auth/keyResolutionCache';
+import { invalidateAgentHostKeyCache } from '../../infrastructure/auth/keyResolutionCache';
 import { verifyJwt } from '../../infrastructure/auth/JwtService';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { SwimlaneCoordinator } from '../../application/swimlane/SwimlaneCoordinator';
@@ -415,7 +415,8 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       .where(and(eq(agentHosts.id, id), eq(agentHosts.tenantId, tenantId)))
       .returning({ apiKeyHash: agentHosts.apiKeyHash });
     // Cache lives 365 days; explicit invalidation is what makes deletion take effect.
-    if (deleted) await invalidateKeyCache(c.env, 'clk', deleted.apiKeyHash);
+    // (Raw delete — not routed through the repo/service, so it invalidates here.)
+    if (deleted) await invalidateAgentHostKeyCache(c.env, deleted.apiKeyHash);
     return c.body(null, 204);
   });
 
@@ -429,18 +430,17 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       return c.json({ error: 'status must be one of: active, inactive, suspended' }, 400);
     }
 
-    const updated = await agentHostService.setStatus(agentHostId, tenantId, body.status);
+    // setStatus self-invalidates the long-TTL clk_* auth cache at the mutation,
+    // so the deactivated key stops working immediately without a route-level call.
+    const updated = await agentHostService.setStatus(agentHostId, tenantId, body.status, c.env);
     if (!updated) return c.json({ error: 'AgentHost not found' }, 404);
 
-    // Non-active agentHosts should not appear as connected, and the long-TTL auth
-    // cache must be invalidated so the deactivated key stops working immediately.
+    // Non-active agentHosts should not appear as connected.
     if (body.status !== 'active') {
-      const [row] = await db
+      await db
         .update(agentHosts)
         .set({ connectedAt: null })
-        .where(and(eq(agentHosts.id, agentHostId), eq(agentHosts.tenantId, tenantId)))
-        .returning({ apiKeyHash: agentHosts.apiKeyHash });
-      if (row) await invalidateKeyCache(c.env, 'clk', row.apiKeyHash);
+        .where(and(eq(agentHosts.id, agentHostId), eq(agentHosts.tenantId, tenantId)));
     }
 
     return c.json({
@@ -487,7 +487,8 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
 
     // tokenDailyLimit is part of the cached value — invalidate so the new cap
     // takes effect on the very next request rather than waiting for TTL.
-    await invalidateKeyCache(c.env, 'clk', updated.apiKeyHash);
+    // (Raw update — not routed through the repo/service, so it invalidates here.)
+    await invalidateAgentHostKeyCache(c.env, updated.apiKeyHash);
 
     return c.json({ agentHostId: updated.id, tokenDailyLimit: updated.tokenDailyLimit });
   });
@@ -564,8 +565,9 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       return c.json({ error: 'Node not found' }, 404);
     }
 
-    await agentHostService.deactivate(agentHostId, tenantId);
-    const [row] = await db
+    // deactivate() self-invalidates the long-TTL clk_* auth cache at the mutation.
+    await agentHostService.deactivate(agentHostId, tenantId, c.env);
+    await db
       .update(agentHosts)
       .set({
         connectedAt: null,
@@ -575,12 +577,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
           eq(agentHosts.id, agentHostId),
           eq(agentHosts.tenantId, tenantId),
         ),
-      )
-      .returning({ apiKeyHash: agentHosts.apiKeyHash });
-
-    // Deactivating bypasses the route-level invalidation the other agentHost
-    // mutations do, so the long-TTL clk_* auth cache would keep serving "active".
-    if (row) await invalidateKeyCache(c.env, 'clk', row.apiKeyHash);
+      );
 
     return c.body(null, 204);
   });

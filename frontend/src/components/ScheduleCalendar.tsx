@@ -96,8 +96,11 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
       </div>
 
       <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
-          {WEEKDAYS.map((wd) => (
+        {/* Scroll the 7-column grid horizontally on narrow viewports instead of
+            squishing each day below a usable width and clipping its pills. */}
+        <div style={{ overflowX: 'auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(96px, 1fr))', minWidth: 672 }}>
+            {WEEKDAYS.map((wd) => (
             <div key={wd} style={{ padding: '8px 10px', fontSize: '0.72rem', fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--text-muted)', borderBottom: '1px solid var(--border-subtle)' }}>
               {wd}
             </div>
@@ -173,6 +176,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
               </div>
             );
           })}
+          </div>
         </div>
       </div>
 

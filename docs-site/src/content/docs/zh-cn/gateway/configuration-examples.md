@@ -38,7 +38,7 @@ x-i18n:
   identity: {
     name: "BuilderForce Agents",
     theme: "helpful assistant",
-    emoji: "🦞",
+    emoji: "🤖",
   },
   agent: {
     workspace: "~/.builderforce/workspace",

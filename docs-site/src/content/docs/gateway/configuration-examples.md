@@ -31,7 +31,7 @@ Save to `~/.builderforce/builderforce.json` and you can DM the bot from that num
   identity: {
     name: "BuilderForce Agents",
     theme: "helpful assistant",
-    emoji: "🦞",
+    emoji: "🤖",
   },
   agent: {
     workspace: "~/.builderforce/workspace",

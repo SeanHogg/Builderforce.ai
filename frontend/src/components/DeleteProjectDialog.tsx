@@ -34,6 +34,7 @@ type TaskDisposition = 'move' | 'delete';
  */
 export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProjectDialogProps) {
   const [openTaskIds, setOpenTaskIds] = useState<number[]>([]);
+  const [archivedCount, setArchivedCount] = useState(0);
   const [destinations, setDestinations] = useState<Project[]>([]);
   const [disposition, setDisposition] = useState<TaskDisposition>('move');
   const [moveTargetId, setMoveTargetId] = useState<string>('');
@@ -48,6 +49,7 @@ export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProj
     setError(null);
     setDisposition('move');
     setMoveTargetId('');
+    setArchivedCount(0);
     (async () => {
       try {
         const [tasks, projects] = await Promise.all([
@@ -58,6 +60,9 @@ export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProj
         const open = tasks.filter((t) => !t.archived);
         const others = projects.filter((p) => p.id !== project.id);
         setOpenTaskIds(open.map((t) => t.id));
+        // Archived tasks are NOT offered a move — the cascade delete takes them with
+        // the project. Surface the count so the loss is explicit (gap [1244]).
+        setArchivedCount(tasks.length - open.length);
         setDestinations(others);
         // No other board to move to → only deletion is possible.
         setDisposition(others.length === 0 ? 'delete' : 'move');
@@ -174,6 +179,12 @@ export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProj
             </label>
           </div>
         ) : null}
+
+        {!loading && archivedCount > 0 && (
+          <p style={{ marginTop: 16, fontSize: 13, color: 'var(--warning-text, var(--error-text))' }}>
+            {archivedCount} archived task{archivedCount !== 1 ? 's' : ''} will be permanently deleted.
+          </p>
+        )}
 
         {error && (
           <p style={{ marginTop: 12, fontSize: 13, color: 'var(--error-text)' }}>{error}</p>

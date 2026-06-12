@@ -336,27 +336,34 @@ for await (const chunk of stream) {
 
 ## Strict model pinning (eval / reproducibility)
 
-The gateway treats `model` as a hint and may substitute on cooldown / vendor failure. When you need *strict* pinning (e.g. running an evaluation against one specific model), detect substitution and reject:
+By default the gateway treats `model` as a hint and may substitute on cooldown / vendor failure (the actual model is echoed back as `_builderforce.resolvedModel`). When you need *strict* pinning (e.g. running an evaluation against one specific model), set **`strict: true`** on the request — or pass **`?strict=true`** as a query param. The gateway then dispatches **only** the named model: **no cascade, no failover, no paid backstop substitution.** If that model is on cooldown or its vendor key isn't configured, the call returns **`503 model_unavailable`** instead of silently swapping to another model.
 
 ```ts
-async function strictPin(params: ChatCompletionCreateParams) {
-  const res = await client.chat.completions.create(params);
-  if (params.model && res._builderforce?.resolvedModel !== params.model) {
-    throw new Error(
-      `Strict pin failed: requested ${params.model}, gateway resolved ${res._builderforce?.resolvedModel}`,
-    );
-  }
-  return res;
-}
-
-// Use in eval runs where reproducibility trumps availability.
-const baseline = await strictPin({
-  model: 'openrouter/anthropic/claude-3-haiku',
+// Reproducible eval run — pin one model, reject (503) rather than substitute.
+const baseline = await client.chat.completions.create({
+  model: 'anthropic/claude-sonnet-4.6',
+  strict: true,
   messages: evalPrompt,
+  metadata: { feature: 'model-eval', runId },
 });
+// `baseline._builderforce.resolvedModel` is guaranteed === the requested model.
 ```
 
-This is a thin client-side gate. A gateway-side `strict: true` flag (on the request) would let the gateway 503 instead of substituting; logged as a follow-up in the project Gap Register.
+On an unavailable model the error envelope carries the reason so you can branch:
+
+```ts
+try {
+  await client.chat.completions.create({ model, strict: true, messages });
+} catch (err) {
+  if (err instanceof BuilderforceApiError && err.code === 'model_unavailable') {
+    // err.details.reason ∈ { 'cooldown' | 'vendor_key_unconfigured' }
+    // The pinned model is temporarily unavailable — retry later or pick another.
+  }
+  throw err;
+}
+```
+
+**Entitlement:** strict pinning requires a paid plan (Pro/Teams) or a superadmin-issued daily-limit override — a free tenant gets `403 strict_pin_not_allowed`, since one misbehaving pinned model could drain a free daily budget on retries. The gateway-internal `modelStrict` flag (set by cloud coding agents) is the same mechanism; `strict` is the public alias.
 
 ## Idempotent cron jobs
 

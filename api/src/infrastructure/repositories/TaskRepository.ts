@@ -120,40 +120,42 @@ export class TaskRepository implements ITaskRepository {
 
   async dequeueNextReady(projectIds: ProjectId[]): Promise<Task | null> {
     if (projectIds.length === 0) return null;
-    return await this.db.transaction(async (tx) => {
-      // Select one ready task from the allowed projects, ordering by priority,
-      // due date (earliest first), then creation time.
-      const [row] = await tx
-        .select()
-        .from(tasksTable)
-        .where(
-          and(
-            inArray(tasksTable.projectId, projectIds),
-            eq(tasksTable.status, TaskStatus.READY),
-          ),
-        )
-        .orderBy(
-          // custom priority ordering: urgent>high>medium>low
-          // using raw SQL expression for the CASE
-          sql`CASE ${tasksTable.priority}
-                      WHEN 'urgent' THEN 4
-                      WHEN 'high' THEN 3
-                      WHEN 'medium' THEN 2
-                      ELSE 1
-                    END DESC`,
-          sql`${tasksTable.dueDate} ASC NULLS LAST`,
-          asc(tasksTable.createdAt),
-        )
-        .limit(1);
-      if (!row) return null;
-      // update status to in_progress and return updated row
-      const [updated] = await tx
-        .update(tasksTable)
-        .set({ status: TaskStatus.IN_PROGRESS })
-        .where(eq(tasksTable.id, row.id))
-        .returning();
-      return updated ? toDomain(updated) : toDomain(row);
-    });
+    // Atomically claim the next ready task in a SINGLE statement. The Neon HTTP
+    // driver has no transaction support, so the old select-then-update inside a
+    // tx threw "No transactions support in neon-http driver". An UPDATE whose
+    // WHERE targets a `FOR UPDATE SKIP LOCKED` subquery does the select+claim in
+    // one autocommit statement — and is strictly safer than the old tx: concurrent
+    // dequeues skip each other's locked row instead of racing for the same one.
+    const next = this.db
+      .select({ id: tasksTable.id })
+      .from(tasksTable)
+      .where(
+        and(
+          inArray(tasksTable.projectId, projectIds),
+          eq(tasksTable.status, TaskStatus.READY),
+        ),
+      )
+      .orderBy(
+        // custom priority ordering: urgent>high>medium>low
+        // using raw SQL expression for the CASE
+        sql`CASE ${tasksTable.priority}
+                    WHEN 'urgent' THEN 4
+                    WHEN 'high' THEN 3
+                    WHEN 'medium' THEN 2
+                    ELSE 1
+                  END DESC`,
+        sql`${tasksTable.dueDate} ASC NULLS LAST`,
+        asc(tasksTable.createdAt),
+      )
+      .limit(1)
+      .for('update', { skipLocked: true });
+
+    const [updated] = await this.db
+      .update(tasksTable)
+      .set({ status: TaskStatus.IN_PROGRESS, updatedAt: new Date() })
+      .where(inArray(tasksTable.id, next))
+      .returning();
+    return updated ? toDomain(updated) : null;
   }
 }
 

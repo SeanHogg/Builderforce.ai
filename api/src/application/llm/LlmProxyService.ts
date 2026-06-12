@@ -26,18 +26,21 @@ import {
   catalogEntry,
   dispatchVendor,
   dispatchVendorStream,
+  kindForStatus,
   modelsByTier,
   tierForModel,
   vendorForModel,
   vendorKeyBound,
+  MAX_VENDOR_CALL_TIMEOUT_MS,
   WorkerSubrequestExhaustedError,
   RequestAbortedError,
+  VendorFatalError,
   type DispatchAttempt,
   type VendorEnv,
   type VendorId,
 } from './vendors';
 import { composeFreeCappedCascade, buildCooldownPredicate } from './cascadeComposer';
-import { sanitizeRequestToolNames, restoreResponseToolNames } from './toolNameSanitizer';
+import { sanitizeRequestToolNames, restoreResponseToolNames, restoreStreamToolNames } from './toolNameSanitizer';
 import {
   loadCooldownExpiries,
   loadCooldowns,
@@ -133,6 +136,50 @@ export const CODING_DEFAULT_MODEL: string =
  */
 export function isKnownModel(model: string | undefined): boolean {
   return typeof model === 'string' && model.trim().length > 0 && catalogEntry(model.trim()) !== null;
+}
+
+/**
+ * Canonical strict-pin resolver — the single source of truth for "did this
+ * request ask to hard-pin its model?" Both the request body (`modelStrict`
+ * — the gateway-internal flag cloud coding agents set, OR `strict` — the
+ * public SDK alias) and an optional `?strict=true` query param feed in here.
+ *
+ * Strict pin only applies when a non-empty `model` is also present; without a
+ * named model there's nothing to pin, so it's a no-op (the gateway routes
+ * by shape as usual). Callers normalize via this helper so the entitlement
+ * gate, `complete()`'s dispatch branch, and the trace logger never diverge on
+ * what counts as strict.
+ */
+export function resolveStrictPin(
+  body: { model?: unknown; modelStrict?: unknown; strict?: unknown },
+  queryStrict?: boolean,
+): boolean {
+  const hasModel = typeof body.model === 'string' && body.model.length > 0;
+  if (!hasModel) return false;
+  return body.modelStrict === true || body.strict === true || queryStrict === true;
+}
+
+/**
+ * Per-request inner-timeout override — lets a NON-premium tenant opt a single
+ * long call into the extended vendor budget without flipping plans or premium
+ * routing. Carried as `body._builderforce.vendorTimeoutMs` (the gateway-internal
+ * passthrough envelope, stripped before vendor dispatch).
+ *
+ * Returns the requested value clamped to `(0, MAX_VENDOR_CALL_TIMEOUT_MS]`, or
+ * `undefined` when absent / non-positive / non-numeric — in which case the
+ * caller falls back to the proxy's configured `vendorCallTimeoutMs` (plan
+ * default). The clamp keeps a one-off override from holding a Worker isolate
+ * open longer than the premium path's own ceiling.
+ */
+export function resolveVendorTimeoutOverride(
+  body: Record<string, unknown>,
+): number | undefined {
+  const envelope = body['_builderforce'];
+  if (!envelope || typeof envelope !== 'object') return undefined;
+  const raw = (envelope as Record<string, unknown>).vendorTimeoutMs;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return Math.min(Math.floor(n), MAX_VENDOR_CALL_TIMEOUT_MS);
 }
 
 /**
@@ -279,8 +326,14 @@ export interface ChatCompletionRequest {
   model?: string;
   /** When true (and `model` is set), dispatch ONLY `model` — no cascade, no
    *  failover. Used by cloud coding agents to honour an explicit user/agent model
-   *  selection for the whole run instead of silently swapping models per turn. */
+   *  selection for the whole run instead of silently swapping models per turn.
+   *  `strict` (below) is the public SDK alias for the same behaviour. */
   modelStrict?: boolean;
+  /** Public SDK alias for `modelStrict`. Eval / reproducibility callers set
+   *  `strict: true` (or pass `?strict=true`) so the gateway pins the named
+   *  `model` with NO substitution — an unavailable model 503s rather than
+   *  silently swapping. Normalized onto `modelStrict` by `resolveStrictPin`. */
+  strict?: boolean;
   messages: ChatMessage[];
   temperature?: number;
   max_tokens?: number;
@@ -345,7 +398,7 @@ export interface ProxyResult {
   /** The model chain the gateway actually walked for this request. */
   candidateChain?: string[];
   /** success | cascade_exhausted | all_cooldown | subrequest_exhausted |
-   *  strict_unavailable | schema_nonconforming. */
+   *  strict_unavailable | schema_nonconforming | request_error. */
   outcome?: string;
   /** Rolled-up failure class across attempts — rate_limit | timeout | auth |
    *  server_error | mixed | none. */
@@ -451,9 +504,10 @@ export class LlmProxyService {
     const startedAt = Date.now();
     const tid = traceId ?? newTraceId();
     const callerModel = (body as { model?: unknown }).model;
-    const wantsStrict = (body as { modelStrict?: unknown }).modelStrict === true
-                     && typeof callerModel === 'string'
-                     && callerModel.length > 0;
+    // `modelStrict` OR the public `strict` alias → single-model hard pin. Both
+    // funnel through `resolveStrictPin` (which also enforces the "model present"
+    // precondition) so the service can't disagree with the route's gate.
+    const wantsStrict = resolveStrictPin(body as { model?: unknown; modelStrict?: unknown; strict?: unknown });
 
     // Strict-pin path: single-model dispatch, no chain, no failover. Cooldown
     // and missing-vendor-key are the only pre-flight gates; if either fails
@@ -525,6 +579,13 @@ export class LlmProxyService {
 
     const primary = await this.dispatch(candidates, body, requestHeaders, { signal });
     if (primary.response.status < 400) {
+      return this.finalize(primary, tid, startedAt, candidates);
+    }
+
+    // Every candidate rejected the request as malformed (400/422). The backstop
+    // would 400 too — it's the caller's payload, not the model — so skip it and
+    // surface the fatal 4xx straight away with its schema diagnostic intact.
+    if (primary.outcome === 'request_error') {
       return this.finalize(primary, tid, startedAt, candidates);
     }
 
@@ -720,7 +781,16 @@ export class LlmProxyService {
     const sanitizedBody = sanitizeRequestToolNames(body as unknown as Record<string, unknown>) as unknown as ChatCompletionRequest;
     const messages = sanitizedBody.messages as unknown as Array<Record<string, unknown>>;
     const extraBody = stripStandardFields(sanitizedBody);
-    const effectiveTimeoutMs = overrides?.timeoutMs ?? this.vendorCallTimeoutMs;
+    // Timeout precedence: an explicit dispatch override (e.g. the paid backstop
+    // forcing the premium budget) wins; otherwise a per-request caller override
+    // (`_builderforce.vendorTimeoutMs`, clamped) lets even a free-plan one-off
+    // long call escape the short plan default; otherwise the proxy's configured
+    // plan default. Reuses the existing `overrides.timeoutMs` plumbing — no
+    // parallel path.
+    const effectiveTimeoutMs =
+      overrides?.timeoutMs
+      ?? resolveVendorTimeoutOverride(sanitizedBody as unknown as Record<string, unknown>)
+      ?? this.vendorCallTimeoutMs;
     const vendorEnv = overrides?.vendorEnv ?? this.vendorEnv();
     const callParams = {
       messages,
@@ -782,6 +852,15 @@ export class LlmProxyService {
         // Caller cancelled — propagate so complete() stops immediately instead of
         // firing the paid backstop and spending more tokens on a cancelled run.
         if (err instanceof RequestAbortedError) throw err;
+        // Fatal bad-payload (400/422) short-circuits the cascade in the vendor
+        // dispatcher (failover can't fix a malformed request). Surface it as a
+        // FATAL 4xx carrying the upstream diagnostic — NOT a 429 — and write no
+        // cooldown (recordFailure no-ops request_error anyway). Mirrors the
+        // all-request-error branch in exhaustedResponse for the cascaded case.
+        if (err instanceof VendorFatalError && isRequestErrorStatus(err.status)) {
+          const att = fatalErrorAttempt(err, chain);
+          return this.requestErrorResponse([att], att.model, att.vendor, attemptsToFailovers([att]), schemaRetries);
+        }
         const errAttempts = err instanceof CascadeExhaustedError ? err.attempts : [];
         await this.applyCooldowns(errAttempts);
         return this.exhaustedResponse(candidates, schemaRetries, err, errAttempts);
@@ -876,6 +955,18 @@ export class LlmProxyService {
     const resolvedVendor: VendorId = attempts && attempts.length > 0
       ? attempts[attempts.length - 1]!.vendor
       : vendorForModel(resolvedModel);
+
+    // All-request-error short-circuit: when EVERY dispatched attempt failed with
+    // a 400/422 (caller-side schema / validation bug), the cascade isn't
+    // "exhausted" in the rate-limit sense — no amount of failover or backstop
+    // will fix a malformed request. Surface a FATAL 4xx carrying the upstream's
+    // own diagnostic so the caller can fix their payload, instead of a generic
+    // 429 that invites a doomed retry loop. Mirrors the no-cooldown decision in
+    // cooldownStore.classifyFailure('request_error').
+    if (attempts && attempts.length > 0 && attempts.every((a) => isRequestErrorStatus(a.status))) {
+      return this.requestErrorResponse(attempts, resolvedModel, resolvedVendor, failovers, schemaRetries);
+    }
+
     // Failover breakdown lives under `error.details.failovers` — OpenAI-style
     // envelope so the SDK's existing `details` accessor on BuilderforceApiError
     // picks it up without a parser change. Top-level `vendor` + `model` give
@@ -904,6 +995,53 @@ export class LlmProxyService {
       failovers,
       outcome: 'cascade_exhausted',
       attempts: attempts ? [...attempts] : [],
+      ...(schemaRetries > 0 ? { schemaRetries } : {}),
+    };
+  }
+
+  /**
+   * Build the FATAL request-error envelope — used when every dispatched
+   * candidate failed with a 400/422 (caller-side schema / validation bug).
+   *
+   * Surfaces the upstream's status verbatim (400 or 422) and its diagnostic
+   * message so the caller gets an actionable "your request is malformed"
+   * signal instead of a 429 cascade-exhausted (which implies "retry later" and
+   * invites a doomed loop on a request that can never succeed). No cooldown was
+   * written for these attempts — see `cooldownStore.classifyFailure`.
+   */
+  private requestErrorResponse(
+    attempts: ReadonlyArray<DispatchAttempt>,
+    resolvedModel: string,
+    resolvedVendor: VendorId,
+    failovers: FailoverEvent[],
+    schemaRetries: number,
+  ): ProxyResult {
+    // Echo the *last* attempt's status (400 vs 422 are both caller-fixable) and
+    // its error text — that's the model the gateway gave up on, and its body
+    // carries the most specific validation diagnostic.
+    const last   = attempts[attempts.length - 1]!;
+    const status = isRequestErrorStatus(last.status) ? last.status : 400;
+    const body = JSON.stringify({
+      error: {
+        message: last.error || 'Request rejected by every candidate model as malformed (400/422).',
+        code: status,
+        type: 'invalid_request_error',
+        vendor: resolvedVendor,
+        model: resolvedModel,
+        details: { failovers },
+      },
+    });
+    return {
+      response: new Response(body, {
+        status,
+        headers: { 'content-type': 'application/json' },
+      }),
+      resolvedModel,
+      resolvedVendor,
+      retries: attempts.length,
+      failovers,
+      outcome: 'request_error',
+      attempts: [...attempts],
       ...(schemaRetries > 0 ? { schemaRetries } : {}),
     };
   }
@@ -963,8 +1101,20 @@ export class LlmProxyService {
         ...callParams,
       });
       this.applyCooldowns(result.attempts);
+      // Restore dotted tool names in the streamed SSE deltas — symmetric to the
+      // non-streaming `restoreResponseToolNames` in successJsonResult. Names can
+      // arrive in fragments, so a stateful restorer buffers per tool-call index.
+      const restoredBody = result.response.body
+        ? restoreStreamToolNames(result.response.body)
+        : result.response.body;
+      const response = restoredBody && restoredBody !== result.response.body
+        ? new Response(restoredBody, {
+            status: result.response.status,
+            headers: result.response.headers,
+          })
+        : result.response;
       return {
-        response: result.response,
+        response,
         resolvedModel: result.modelUsed,
         resolvedVendor: result.vendorUsed,
         retries: result.attempts.length,
@@ -977,6 +1127,12 @@ export class LlmProxyService {
         return this.subrequestExhaustedResponse(candidates, 0, err);
       }
       if (err instanceof RequestAbortedError) throw err;
+      // Fatal bad-payload (400/422) — surface as a fatal 4xx, not a 429. See the
+      // non-streaming dispatchJson branch for rationale.
+      if (err instanceof VendorFatalError && isRequestErrorStatus(err.status)) {
+        const att = fatalErrorAttempt(err, candidates);
+        return this.requestErrorResponse([att], att.model, att.vendor, attemptsToFailovers([att]), 0);
+      }
       const errAttempts = err instanceof CascadeExhaustedError ? err.attempts : [];
       await this.applyCooldowns(errAttempts);
       return this.exhaustedResponse(candidates, 0, err, errAttempts);
@@ -1003,6 +1159,27 @@ export class LlmProxyService {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** A request-validation status (400/422) — caller-side schema bug. Mirrors the
+ *  `request_error` branch in `cooldownStore.classifyFailure`: these write no
+ *  cooldown and, when they're the ONLY failure across the cascade, surface as a
+ *  fatal 4xx rather than a 429. Single source of truth for the gateway's
+ *  "caller's fault, not the model's" status set. */
+export function isRequestErrorStatus(status: number): boolean {
+  return status === 400 || status === 422;
+}
+
+/** Synthesize the single `DispatchAttempt` for a `VendorFatalError` (400/422) that
+ *  short-circuited the cascade in the vendor dispatcher before it could be recorded
+ *  as an attempt. `VendorFatalError` carries the status + message + vendor but NOT
+ *  the model id, so the failing model is recovered as the first chain entry owned by
+ *  that vendor (earlier entries may have been no-key-skipped) — falling back to the
+ *  chain head when none matches. */
+function fatalErrorAttempt(err: VendorFatalError, chain: readonly string[]): DispatchAttempt {
+  const model = chain.find((m) => vendorForModel(m) === err.vendorId) ?? chain[0] ?? '';
+  const vendor = vendorForModel(model);
+  return { model, vendor, status: err.status, error: err.message, durationMs: 0, kind: kindForStatus(err.status, err.message) };
+}
 
 function attemptsToFailovers(attempts: DispatchAttempt[]): FailoverEvent[] {
   return attempts.map((a) => ({
@@ -1365,6 +1542,8 @@ const STANDARD_BODY_FIELDS: ReadonlySet<string> = new Set([
   'useCase',     // opaque telemetry slug; persisted to llm_usage_log.use_case, echoed back
   'metadata',    // free-form trace-back kv; persisted to llm_usage_log.metadata, echoed back
   'modelStrict', // strict-pin flag — gateway-only; controls failover behaviour
+  'strict',      // public SDK alias for modelStrict — gateway-only; stripped here
+  '_builderforce', // gateway-internal passthrough envelope (per-call vendorTimeoutMs override); consumed in dispatch(), never sent upstream
   // OpenAI-compatible pass-throughs (`tools`, `tool_choice`, `response_format`)
   // travel via the `extraBody` catch-all and reach the vendor verbatim.
 ]);

@@ -4,7 +4,9 @@ import { AgentHost, AgentHostStatus } from '../../domain/agentHost/AgentHost';
 import { asAgentHostId, asTenantId, AgentHostId, TenantId } from '../../domain/shared/types';
 import { agentHosts } from '../database/schema';
 import type { Db } from '../database/connection';
+import type { Env } from '../../env';
 import { verifySecret } from '../auth/HashService';
+import { invalidateAgentHostKeyCache } from '../auth/keyResolutionCache';
 
 export class AgentHostRepository implements IAgentHostRepository {
   constructor(private readonly db: Db) {}
@@ -46,7 +48,7 @@ export class AgentHostRepository implements IAgentHostRepository {
     return valid ? this.toDomain(row) : null;
   }
 
-  async updateStatus(id: AgentHostId, tenantId: TenantId, status: AgentHostStatus): Promise<AgentHost | null> {
+  async updateStatus(id: AgentHostId, tenantId: TenantId, status: AgentHostStatus, env: Env): Promise<AgentHost | null> {
     const [row] = await this.db
       .update(agentHosts)
       .set({
@@ -54,7 +56,11 @@ export class AgentHostRepository implements IAgentHostRepository {
       })
       .where(and(eq(agentHosts.id, id), eq(agentHosts.tenantId, tenantId)))
       .returning();
-    return row ? this.toDomain(row) : null;
+    if (!row) return null;
+    // Self-invalidate the long-TTL auth cache so a deactivated/suspended key
+    // stops resolving immediately, instead of relying on every caller to remember.
+    await invalidateAgentHostKeyCache(env, row.apiKeyHash ?? null);
+    return this.toDomain(row);
   }
 
   private toDomain(row: any): AgentHost {

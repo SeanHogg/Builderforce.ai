@@ -15,6 +15,7 @@ import {
   productNameForPlan,
   modelPoolForPlan,
   codingModelsForPlan,
+  resolveStrictPin,
   FREE_MODEL_POOL,
   PRO_MODEL_POOL,
   type ChatCompletionRequest,
@@ -22,7 +23,12 @@ import {
 } from '../../application/llm/LlmProxyService';
 import { logTrace } from '../../application/llm/traceLogger';
 import { recordUsageRow, type UsageAttribution } from '../../application/llm/usageLedger';
-import { callOpenRouterEmbeddings, pickUsage } from '../../application/llm/vendors';
+import { pickUsage } from '../../application/llm/vendors';
+import {
+  dispatchEmbeddingVendor,
+  EmbeddingCascadeExhaustedError,
+} from '../../application/llm/embeddingVendors';
+import { VendorFatalError } from '../../application/llm/vendors/types';
 import { getCatalogCached } from '../../application/llm/modelCatalog';
 import {
   imageProxyForPlan,
@@ -51,7 +57,7 @@ import {
   pipeOpenAiSseToAnthropic,
   type AnthropicMessagesRequest,
 } from '../../application/llm/anthropicMessagesBridge';
-import { resolveKeyCached } from '../../infrastructure/auth/keyResolutionCache';
+import { resolveKeyCached, jwtMembershipHash } from '../../infrastructure/auth/keyResolutionCache';
 import type { FailoverEvent } from '../../application/llm/LlmProxyService';
 import { verifyJwt, signJwt } from '../../infrastructure/auth/JwtService';
 import { hashSecret } from '../../infrastructure/auth/HashService';
@@ -735,22 +741,31 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const idempotencyKey = c.req.header('Idempotency-Key') ?? null;
 
     // ── Strict-pin entitlement gate ─────────────────────────────────────────
-    // Free tenants can't request modelStrict — a single misbehaving model
-    // would otherwise drain their daily budget with retries. Paid plans,
-    // superadmin-issued daily-limit overrides, and superadmin callers bypass.
-    const wantsStrict = bodyAny.modelStrict === true
-                     && typeof bodyAny.model === 'string'
-                     && (bodyAny.model as string).length > 0;
+    // Strict pin = dispatch ONLY the named `model`, NO substitution; an
+    // unavailable model 503s instead of silently swapping (eval / reproducibility
+    // runs). Accepts the public `strict: true` body flag, the `?strict=true`
+    // query param, or the gateway-internal `modelStrict` cloud agents set — all
+    // resolved by `resolveStrictPin`, then normalized onto `body.modelStrict` so
+    // the proxy dispatch + trace logger see one canonical flag.
+    //
+    // Free tenants can't strict-pin — a single misbehaving model would otherwise
+    // drain their daily budget with retries. Paid plans, superadmin-issued
+    // daily-limit overrides, and superadmin callers bypass.
+    const queryStrict = c.req.query('strict') === 'true';
+    const wantsStrict = resolveStrictPin(bodyAny, queryStrict);
     if (wantsStrict) {
       const strictAllowed = access.isSuperadmin
                          || access.effectivePlan !== 'free'
                          || access.tokenDailyLimitOverride !== null;
       if (!strictAllowed) {
         return c.json({
-          error: 'modelStrict requires a paid plan (Pro/Teams) or a superadmin-issued daily-limit override.',
+          error: 'Strict model pinning requires a paid plan (Pro/Teams) or a superadmin-issued daily-limit override.',
           code: 'strict_pin_not_allowed',
         }, 403);
       }
+      // Canonicalize: downstream (LlmProxyService.complete dispatch branch,
+      // traceLogger) keys off `modelStrict`, so set it once here.
+      body.modelStrict = true;
     }
 
     // ── Daily token usage + limit checks ────────────────────────────────────
@@ -1261,11 +1276,16 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return respondToAccessError(c, err);
     }
 
-    const apiKey = access.effectivePlan === 'free'
+    // Per-plan OpenRouter key (primary vendor) + Voyage failover key. The
+    // embeddings cascade tries OpenRouter first, then falls over to Voyage if
+    // OpenRouter's endpoint is down — so a single-vendor outage no longer fails
+    // every vector workflow. Both vendors are optional; the cascade skips any
+    // vendor without a key, and only 503s if NEITHER is configured.
+    const openRouterKey = access.effectivePlan === 'free'
       ? c.env.OPENROUTER_API_KEY
       : (c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY);
-    if (!apiKey) {
-      return c.json({ error: 'Embeddings vendor not configured (missing OPENROUTER_API_KEY)' }, 503);
+    if (!openRouterKey && !c.env.VOYAGE_API_KEY) {
+      return c.json({ error: 'Embeddings vendor not configured (missing OPENROUTER_API_KEY and VOYAGE_API_KEY)' }, 503);
     }
 
     const body = await c.req.json<{
@@ -1281,14 +1301,40 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     // Strip gateway-only fields before forwarding to the vendor.
     const { metadata, model, input, ...extraBody } = body;
-    const result = await callOpenRouterEmbeddings({ apiKey, model, input, extraBody });
+    const envelope = (raw: Record<string, unknown>) => ({
+      ...raw,
+      _builderforce: {
+        product: productNameForPlan(access.effectivePlan, access.premiumOverride),
+        effectivePlan: access.effectivePlan,
+        ...(access.premiumOverride ? { premium: true } : {}),
+      },
+    });
 
-    return c.json(
-      typeof result.body === 'object' && result.body !== null
-        ? { ...(result.body as Record<string, unknown>), _builderforce: { product: productNameForPlan(access.effectivePlan, access.premiumOverride), effectivePlan: access.effectivePlan, ...(access.premiumOverride ? { premium: true } : {}) } }
-        : result.body,
-      result.status as 200,
-    );
+    try {
+      const result = await dispatchEmbeddingVendor({
+        env: { OPENROUTER_API_KEY: openRouterKey, VOYAGE_API_KEY: c.env.VOYAGE_API_KEY },
+        model,
+        input,
+        extraBody,
+      });
+      // Forward the upstream's untouched OpenAI-shaped body so caller-side
+      // fields survive; annotate which vendor actually resolved for diagnostics.
+      const out: Record<string, unknown> = result.raw && typeof result.raw === 'object'
+        ? { ...(result.raw as Record<string, unknown>) }
+        : { object: result.object, data: result.data, model: result.model, ...(result.usage ? { usage: result.usage } : {}) };
+      out._vendor = result.vendorUsed;
+      return c.json(envelope(out), 200);
+    } catch (err) {
+      // 400 bad payload — failover won't help, surface as-is.
+      if (err instanceof VendorFatalError) {
+        return c.json(envelope({ error: err.message }), err.status as 400);
+      }
+      // Every vendor failed (outage on all configured providers).
+      if (err instanceof EmbeddingCascadeExhaustedError) {
+        return c.json(envelope({ error: err.message, attempts: err.attempts }), 502);
+      }
+      throw err;
+    }
   });
 
   // -----------------------------------------------------------------------

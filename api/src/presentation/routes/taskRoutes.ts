@@ -99,9 +99,9 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
   // so the assignee picker can offer "humans AND agents are one team". Registered
   // before `/:id` so the static path isn't captured as a task id.
   //
-  // Cached read-through (tenant membership changes rarely). It is NOT invalidated on
-  // member add/remove — those mutations live in the tenant/admin routes — so staleness
-  // is bounded by the KV TTL (5 min), which is acceptable for an assignee dropdown.
+  // Cached read-through (tenant membership changes rarely). Invalidated on member
+  // add/remove via invalidateTaskAssignees() in tenantRoutes.ts so a new teammate
+  // appears immediately; the KV TTL (5 min) is just the backstop.
   router.get('/assignees', async (c) => {
     const tenantId = c.get('tenantId');
     const members = await getOrSetCached(

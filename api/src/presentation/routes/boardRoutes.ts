@@ -146,37 +146,41 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const segmentId = body.segmentId ?? c.get('segmentId') ?? null;
     const seedLanes = body.seedDefaultLanes !== false;
 
-    // Board + its default swimlanes are created atomically. Previously these
-    // were two separate (HTTP) statements, so a failure after the board insert
-    // but before the lane seed left a permanently-empty board: the kanban still
-    // rendered its hardcoded default columns, but the config panel reported
-    // "No swimlanes yet". A transaction makes the board-with-lanes invariant
-    // hold on creation. Default lanes mirror the kanban's task statuses so the
-    // config panel shows the same lanes the user already sees on the board.
-    const row = await db.transaction(async (tx) => {
-      const [created] = await tx
-        .insert(boards)
-        .values({
-          tenantId,
-          segmentId,
-          projectId: body.projectId,
-          name: body.name.trim(),
-          // Autonomy is implicit (driven by lane agents + gate); no board toggle.
-          autonomous: true,
-          maxConcurrentTickets: body.maxConcurrentTickets ?? 5,
-          needsAttentionLane: body.needsAttentionLane ?? 'needs-attention',
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning();
+    // Board + its default swimlanes must be created together: a failure after the
+    // board insert but before the lane seed leaves a permanently-empty board (the
+    // kanban renders its hardcoded default columns, but the config panel reports
+    // "No swimlanes yet"). The Neon HTTP driver has no transaction support, so we
+    // enforce the board-with-lanes invariant with a compensating delete: if the
+    // lane seed fails, roll the board back so we never leave the half-created state.
+    // Default lanes mirror the kanban's task statuses so the config panel shows the
+    // same lanes the user already sees on the board.
+    const [created] = await db
+      .insert(boards)
+      .values({
+        tenantId,
+        segmentId,
+        projectId: body.projectId,
+        name: body.name.trim(),
+        // Autonomy is implicit (driven by lane agents + gate); no board toggle.
+        autonomous: true,
+        maxConcurrentTickets: body.maxConcurrentTickets ?? 5,
+        needsAttentionLane: body.needsAttentionLane ?? 'needs-attention',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
 
-      if (created && seedLanes) {
-        await tx.insert(swimlanes).values(buildDefaultLaneRows(tenantId, segmentId, created.id, now));
+    if (created && seedLanes) {
+      try {
+        await db.insert(swimlanes).values(buildDefaultLaneRows(tenantId, segmentId, created.id, now));
+      } catch (e) {
+        // Lane seed failed — roll the board back so no empty board lingers.
+        await db.delete(boards).where(eq(boards.id, created.id)).catch(() => { /* best-effort */ });
+        throw e;
       }
-      return created;
-    });
+    }
 
-    return c.json(row, 201);
+    return c.json(created, 201);
   });
 
   router.get('/', async (c) => {
