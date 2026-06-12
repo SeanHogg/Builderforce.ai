@@ -26,7 +26,7 @@ export interface CommitFileInput {
 }
 
 export type CommitFileResult =
-  | { ok: true; branch: string; commitUrl: string | null }
+  | { ok: true; branch: string; commitUrl: string | null; existed: boolean }
   | { ok: false; code: 'unsupported' | 'provider_error'; reason: string };
 
 /** UTF-8-safe base64 (Workers `btoa` is latin1-only). */
@@ -73,6 +73,9 @@ export async function commitFileToRepo(input: CommitFileInput): Promise<CommitFi
   }
 
   // 3. Existing file sha on the branch (so a re-commit updates rather than 422s).
+  // The branch forks from base, so a present sha also means the path already
+  // existed in the repo — the authoritative created-vs-modified signal callers
+  // use to label the change (don't trust a caller-supplied "isNew" hint).
   const existing = await fetch(`${repoBase}/contents/${encodeURIComponent(input.path)}?ref=${encodeURIComponent(input.branch)}`, { headers });
   const existingSha = existing.ok
     ? ((await existing.json().catch(() => null)) as { sha?: string } | null)?.sha
@@ -94,5 +97,68 @@ export async function commitFileToRepo(input: CommitFileInput): Promise<CommitFi
     return { ok: false, code: 'provider_error', reason: `commit ${put.status}: ${t.slice(0, 200)}` };
   }
   const commitUrl = ((await put.json().catch(() => null)) as { commit?: { html_url?: string } } | null)?.commit?.html_url ?? null;
+  return { ok: true, branch: input.branch, commitUrl, existed: Boolean(existingSha) };
+}
+
+export interface DeleteFileInput {
+  provider: string;
+  host: string | null;
+  owner: string;
+  repo: string;
+  token: string;
+  /** Branch to delete the file from. */
+  branch: string;
+  /** Repo-relative path to remove, e.g. "src/utils/email.ts". */
+  path: string;
+  message: string;
+}
+
+export type DeleteFileResult =
+  | { ok: true; branch: string; commitUrl: string | null }
+  | { ok: false; code: 'unsupported' | 'not_found' | 'provider_error'; reason: string };
+
+/**
+ * Remove a single file from the ticket branch via the provider REST API — the
+ * deletion counterpart to {@link commitFileToRepo}. Used so the cloud agent can
+ * clean up dead/stub files a prior pass left on the branch (so they don't ship in
+ * the PR), not just append. GitHub-only; never throws. A missing file returns a
+ * typed `not_found` so the loop can tell the model "nothing to delete" instead of
+ * surfacing it as an error.
+ */
+export async function deleteFileFromRepo(input: DeleteFileInput): Promise<DeleteFileResult> {
+  if (input.provider !== 'github') {
+    return { ok: false, code: 'unsupported', reason: `delete not implemented for provider '${input.provider}'` };
+  }
+  const apiBase = buildGitApiBaseUrl(input.provider, input.host);
+  const repoBase = `${apiBase}/repos/${input.owner}/${input.repo}`;
+  const headers = {
+    Authorization: `Bearer ${input.token}`,
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'BuilderForce-PRD/1.0',
+    'Content-Type': 'application/json',
+  };
+
+  // GitHub's delete-contents API needs the file's current blob sha on the branch.
+  const existing = await fetch(`${repoBase}/contents/${encodeURIComponent(input.path)}?ref=${encodeURIComponent(input.branch)}`, { headers });
+  if (existing.status === 404) {
+    return { ok: false, code: 'not_found', reason: `file not on branch ${input.branch}: ${input.path}` };
+  }
+  if (!existing.ok) {
+    const t = await existing.text().catch(() => '');
+    return { ok: false, code: 'provider_error', reason: `lookup ${existing.status}: ${t.slice(0, 200)}` };
+  }
+  const existingSha = ((await existing.json().catch(() => null)) as { sha?: string } | null)?.sha;
+  if (!existingSha) return { ok: false, code: 'provider_error', reason: 'existing file has no sha' };
+
+  const del = await fetch(`${repoBase}/contents/${encodeURIComponent(input.path)}`, {
+    method: 'DELETE',
+    headers,
+    body: JSON.stringify({ message: input.message, sha: existingSha, branch: input.branch }),
+  });
+  if (!del.ok) {
+    const t = await del.text().catch(() => '');
+    return { ok: false, code: 'provider_error', reason: `delete ${del.status}: ${t.slice(0, 200)}` };
+  }
+  const commitUrl = ((await del.json().catch(() => null)) as { commit?: { html_url?: string } } | null)?.commit?.html_url ?? null;
   return { ok: true, branch: input.branch, commitUrl };
 }

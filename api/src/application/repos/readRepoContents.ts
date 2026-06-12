@@ -119,6 +119,42 @@ export async function searchRepoCode(
   return { ok: true, matches, total, truncated: total > matches.length };
 }
 
+export type BranchDiffEntry = { path: string; status: 'added' | 'modified' | 'removed' | 'renamed' | string };
+export type BranchDiffResult =
+  | { ok: true; files: BranchDiffEntry[]; truncated: boolean }
+  | { ok: false; reason: string };
+
+/** Cap on the diff listing so a sprawling branch can't blow the context/budget. */
+const MAX_DIFF_ENTRIES = 100;
+
+/**
+ * List the files a ticket branch has changed relative to its base, via GitHub's
+ * compare API (`base...branch`). This is what makes a *re-run* aware of what a
+ * PRIOR pass already committed: the agent loop can then reconcile (and delete
+ * dead/stub files) instead of blindly appending. A missing branch (first run, no
+ * commits yet) returns an empty list, not an error. `ctx.ref` is unused here (the
+ * range is explicit). Never throws.
+ */
+export async function listBranchDiff(ctx: RepoReadContext, base: string, branch: string): Promise<BranchDiffResult> {
+  if (ctx.provider !== 'github') return { ok: false, reason: `compare not implemented for provider '${ctx.provider}'` };
+  if (base.trim() === branch.trim()) return { ok: true, files: [], truncated: false };
+  const apiBase = buildGitApiBaseUrl(ctx.provider, ctx.host);
+  const range = `${encodeURIComponent(base)}...${encodeURIComponent(branch)}`;
+  const url = `${apiBase}/repos/${ctx.owner}/${ctx.repo}/compare/${range}`;
+  const res = await fetch(url, { headers: ghHeaders(ctx.token) }).catch(() => null);
+  if (!res) return { ok: false, reason: 'compare request failed (network)' };
+  // 404 = the branch doesn't exist yet (no prior commits) — a clean first run.
+  if (res.status === 404) return { ok: true, files: [], truncated: false };
+  if (!res.ok) { const t = await res.text().catch(() => ''); return { ok: false, reason: `GitHub ${res.status}: ${t.slice(0, 160)}` }; }
+  const json = (await res.json().catch(() => null)) as { files?: Array<{ filename?: string; status?: string }> } | null;
+  let files = (json?.files ?? [])
+    .filter((f) => typeof f.filename === 'string')
+    .map((f) => ({ path: f.filename as string, status: (f.status ?? 'modified') as BranchDiffEntry['status'] }));
+  const truncated = files.length > MAX_DIFF_ENTRIES;
+  if (truncated) files = files.slice(0, MAX_DIFF_ENTRIES);
+  return { ok: true, files, truncated };
+}
+
 export async function listRepoFiles(ctx: RepoReadContext, subPath?: string): Promise<ListFilesResult> {
   if (ctx.provider !== 'github') return { ok: false, reason: `list not implemented for provider '${ctx.provider}'` };
   const apiBase = buildGitApiBaseUrl(ctx.provider, ctx.host);

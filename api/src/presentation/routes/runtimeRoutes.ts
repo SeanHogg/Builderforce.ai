@@ -3,11 +3,11 @@ import type { Context } from 'hono';
 import { neon } from '@neondatabase/serverless';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { commitPrdAsPendingChange } from '../../application/repos/commitPrdToRepo';
-import { resolveTicketRepoContext, commitAgentFile, type TicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
+import { resolveTicketRepoContext, commitAgentFile, deleteAgentFile, type TicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
 import { createPullRequest } from '../../application/repos/createPullRequest';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled } from '../../application/repos/mergeBranchToBase';
 import { recordPullRequestRow, markPullRequestMergedById } from '../../application/repos/recordPullRequestRow';
-import { readRepoFile, listRepoFiles, searchRepoCode } from '../../application/repos/readRepoContents';
+import { readRepoFile, listRepoFiles, searchRepoCode, listBranchDiff } from '../../application/repos/readRepoContents';
 import { verifyWrittenFiles } from '../../application/repos/verifyWrittenFiles';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
@@ -386,6 +386,33 @@ function gitSecret(env: Env): string {
 }
 
 /**
+ * What a PRIOR pass already committed to this task's branch (relative to base),
+ * so a re-run is aware of it and can reconcile/clean up rather than blindly append.
+ * Best-effort: no repo bound, an unreachable provider, or a clean first run all
+ * yield `[]` (never throws — context prep must not fail on this).
+ */
+async function loadPriorBranchChanges(
+  db: Db,
+  secret: string,
+  tenantId: number,
+  taskId: number,
+): Promise<Array<{ path: string; status: string }>> {
+  try {
+    const resolved = await resolveTicketRepoContext(db, secret, tenantId, taskId);
+    if (!resolved.ok) return [];
+    const { ctx } = resolved;
+    const diff = await listBranchDiff(
+      { provider: ctx.provider, host: ctx.host, owner: ctx.owner, repo: ctx.repo, token: ctx.token, ref: ctx.branch },
+      ctx.base,
+      ctx.branch,
+    );
+    return diff.ok ? diff.files : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Task-scoped PRD. Each TASK has its own PRD (via the `task_specs` link), drafted
  * with an attribution header naming the authoring agent (downstream agents append
  * their own attributed updates). The PRD is:
@@ -603,6 +630,21 @@ const CLOUD_AGENT_TOOLS = [
           summary: { type: 'string', description: 'One-line description of the change.' },
         },
         required: ['path', 'content'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'delete_file',
+      description: 'Remove a file from the ticket branch so it does NOT ship in the pull request. Use this to clean up dead code: a stub/placeholder, an unreferenced file, or a file a PRIOR pass on this branch created that should not be part of the final change. The "Files already on this branch" list in your context shows what a prior pass left — reconcile against it. Verify the file is genuinely unused (search_code for its exports) before deleting. Deleting a file not on the branch is a no-op (reported back), not an error.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Repo-relative path to remove, e.g. "src/utils/email.ts".' },
+          reason: { type: 'string', description: 'One-line why this file should not ship (e.g. "stub superseded by existing email infra").' },
+        },
+        required: ['path'],
       },
     },
   },
@@ -837,8 +879,11 @@ async function handleContainerOp(
     if (!repo.ok) return { status: 200, body: { ok: false, error: `no repo bound to this task (${repo.reason}); include the file contents in your final summary instead` } };
     const commit = await commitAgentFile(repo.ctx, path, content, `${isNew ? 'Add' : 'Update'} ${path} — task #${taskId} (${agentLabel})`);
     if (!commit.ok) return { status: 200, body: { ok: false, error: commit.reason } };
-    await recordTaskFileChange(env, tenantId, taskId, executionId, path, isNew ? 'created' : 'modified', agentLabel);
-    notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: isNew ? 'created' : 'modified', ts: new Date().toISOString() });
+    // Label from whether the path actually existed in the repo (commit.existed),
+    // not the caller's `isNew` hint — that defaults to true and mislabels edits as "created".
+    const change = commit.existed ? 'modified' : 'created';
+    await recordTaskFileChange(env, tenantId, taskId, executionId, path, change, agentLabel);
+    notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change, ts: new Date().toISOString() });
     await recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName: 'write_file', category: 'tool', detail: { path, summary: args.summary }, result: `committed to ${repo.ctx.branch}` });
     return { status: 200, body: { ok: true, branch: repo.ctx.branch, commitUrl: commit.commitUrl } };
   }
@@ -1119,15 +1164,41 @@ export async function runCloudToolLoop(
         } else if (!repoCtx) {
           toolResult = { ok: false, error: `no repo bound to this task (${repoMiss}); include the file contents in your final summary instead` };
         } else {
-          const isNew = !writtenPaths.has(path);
-          const commit = await commitAgentFile(repoCtx, path, fileContent, `${isNew ? 'Add' : 'Update'} ${path} — task #${taskRow.id} (${agentLabel})`);
+          const firstWriteThisRun = !writtenPaths.has(path);
+          const commit = await commitAgentFile(repoCtx, path, fileContent, `${firstWriteThisRun ? 'Add' : 'Update'} ${path} — task #${taskRow.id} (${agentLabel})`);
           if (commit.ok) {
             writtenPaths.add(path);
-            await recordTaskFileChange(env, tenantId, taskRow.id, executionId, path, isNew ? 'created' : 'modified', agentLabel);
-            notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: isNew ? 'created' : 'modified', ts: new Date().toISOString() });
+            // created vs modified comes from whether the path pre-existed in the repo
+            // (commit.existed), not first-write-this-run — a pre-existing file edited
+            // for the first time this run is a modification, not a creation.
+            const change = commit.existed ? 'modified' : 'created';
+            await recordTaskFileChange(env, tenantId, taskRow.id, executionId, path, change, agentLabel);
+            notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change, ts: new Date().toISOString() });
             toolResult = { ok: true, branch: repoCtx.branch, commitUrl: commit.commitUrl };
           } else {
             toolResult = { ok: false, error: commit.reason };
+          }
+        }
+      } else if (name === 'delete_file') {
+        const path = typeof parsed.path === 'string' ? parsed.path : '';
+        if (!path) {
+          toolResult = { ok: false, error: 'path is required' };
+        } else if (!repoCtx) {
+          toolResult = { ok: false, error: `no repo bound to this task (${repoMiss})` };
+        } else {
+          const reason = typeof parsed.reason === 'string' && parsed.reason.trim() ? ` — ${parsed.reason.trim()}` : '';
+          const del = await deleteAgentFile(repoCtx, path, `Remove ${path} — task #${taskRow.id} (${agentLabel})${reason}`);
+          if (del.ok) {
+            writtenPaths.delete(path);
+            await recordTaskFileChange(env, tenantId, taskRow.id, executionId, path, 'deleted', agentLabel);
+            notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: 'deleted', ts: new Date().toISOString() });
+            toolResult = { ok: true, branch: repoCtx.branch, commitUrl: del.commitUrl };
+          } else if (del.code === 'not_found') {
+            // Not on the branch — nothing to remove. Report as a benign no-op so the
+            // model doesn't treat it as a failure and retry.
+            toolResult = { ok: true, deleted: false, note: `'${path}' is not on the branch, so there is nothing to delete.` };
+          } else {
+            toolResult = { ok: false, error: del.reason };
           }
         }
       } else if (name === 'run_checks') {
@@ -1172,7 +1243,7 @@ export async function runCloudToolLoop(
           toolResult = { ok: true };
         }
       } else {
-        toolResult = { ok: false, error: `unknown tool '${name}'. Available tools: search_code, list_files, read_file, write_file, run_checks, finish. This executor has no shell and cannot run code, builds, or tests — do not claim a check passed; CI on the PR verifies.` };
+        toolResult = { ok: false, error: `unknown tool '${name}'. Available tools: search_code, list_files, read_file, write_file, delete_file, run_checks, finish. This executor has no shell and cannot run code, builds, or tests — do not claim a check passed; CI on the PR verifies.` };
       }
 
       await recordCloudToolEvent(db, {
@@ -1353,16 +1424,21 @@ export async function prepareCloudRun(
   opts?: { shell?: boolean },
 ): Promise<{ systemPrompt: string; userContent: string }> {
   const tPrep0 = Date.now();
-  const [prd, governance, capabilities] = await Promise.all([
+  const [prd, governance, capabilities, priorChanges] = await Promise.all([
     ensureTaskPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model),
     loadGovernanceContext(db, tenantId, projectId),
     loadCapabilityContext(env, db, artifacts),
+    // Load what a PRIOR pass already committed to this task's branch so a re-run
+    // reconciles against it (and can delete dead/stub files) instead of appending
+    // blindly. Best-effort: a clean first run / no repo yields an empty list.
+    loadPriorBranchChanges(db, gitSecret(env), tenantId, taskRow.id),
   ]);
   await recordCloudToolEvent(db, {
     tenantId, cloudAgentRef, executionId,
     toolName: 'context.prepare', category: 'planning',
-    detail: { steps: ['prd', 'governance'] },
-    result: `${prd ? 'PRD ready' : 'no PRD'} · ${governance ? 'governance loaded' : 'no governance'}`,
+    detail: { steps: ['prd', 'governance', 'diff'], priorFiles: priorChanges.length },
+    result: `${prd ? 'PRD ready' : 'no PRD'} · ${governance ? 'governance loaded' : 'no governance'}`
+      + ` · ${priorChanges.length ? `${priorChanges.length} prior file(s) on branch` : 'clean branch'}`,
     durationMs: Date.now() - tPrep0,
   });
 
@@ -1383,12 +1459,20 @@ export async function prepareCloudRun(
   // payload — surface it prominently so the agent fixes the REAL failing build.
   const remediation = parseRemediation(payload);
 
+  const priorChangesBlock = priorChanges.length
+    ? `## Files already on this branch from prior passes\n\n`
+      + `A previous run already committed these files to this task's branch. They are part of the OPEN pull request. `
+      + `Reconcile against this list: update what's still needed, and **delete any that are dead code** — stubs, placeholders, unreferenced files, or anything that should not ship in this PR — with the delete_file tool. Do not leave orphaned files just because a prior pass created them.\n\n`
+      + priorChanges.map((c) => `- \`${c.path}\` (${c.status})`).join('\n')
+    : null;
+
   const userContent = [
     remediation
       ? `## Build failure to fix (attempt ${remediation.attempt}/${remediation.maxAttempts})\n\nA previous change for this task was merged but the build then FAILED. Fix the cause below — do not re-do unrelated work.\n\n${remediation.buildError}${remediation.runUrl ? `\n\nCI run: ${remediation.runUrl}` : ''}`
       : null,
     prd ? `## Product Requirements Document (PRD)\n\n${prd}` : null,
     governance || null,
+    priorChangesBlock,
     `## Your Task\n\n${taskRow.title}\n\n${taskRow.description ?? ''}`.trim(),
   ].filter(Boolean).join('\n\n---\n\n');
 
@@ -1405,6 +1489,7 @@ export async function prepareCloudRun(
     'then write_file with the FULL updated content (no bracketed placeholders) for each deliverable file. ' +
     'If search_code returns 0 matches for the thing a task says to change/remove, that means it is not in the codebase — say so in your summary instead of inventing an unrelated edit. ' +
     'Do NOT call finish while any deliverable file is still a stub/placeholder or any requirement in the task/PRD is unimplemented — keep listing, reading and writing files until the task is genuinely complete. ' +
+    'Reconcile the branch against the task, do not just append: if a file already on this branch (see "Files already on this branch") is dead code — a stub, an unreferenced file, or something that should not ship in this PR — remove it with delete_file (confirm it is unused via search_code first). The PR should contain only the files the task genuinely needs. ' +
     'When you finish, your committed changes are opened as a PULL REQUEST for human review (a person approves the merge in-product); they are NOT auto-deployed — so the PR must contain the COMPLETE, working change, not a partial scaffold. Call finish with a summary only once everything the task requires has been written. ' +
     shellLine + ' ' +
     'If no repository is bound, return the complete deliverable in your final summary instead. Make explicit, reasonable assumptions where specifics are unknown.',
