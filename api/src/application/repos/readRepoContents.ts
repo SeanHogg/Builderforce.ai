@@ -32,6 +32,10 @@ export type ListFilesResult =
   | { ok: true; paths: string[]; truncated: boolean }
   | { ok: false; reason: string };
 
+export type SearchCodeResult =
+  | { ok: true; matches: Array<{ path: string; fragments: string[] }>; total: number; truncated: boolean }
+  | { ok: false; reason: string };
+
 function ghHeaders(token: string) {
   return {
     Authorization: `Bearer ${token}`,
@@ -66,6 +70,53 @@ export async function readRepoFile(ctx: RepoReadContext, path: string): Promise<
   const truncated = content.length > MAX_FILE_CHARS;
   if (truncated) content = content.slice(0, MAX_FILE_CHARS);
   return { ok: true, path, content, truncated };
+}
+
+/**
+ * Search the repo for a literal string/symbol across ALL files in ONE request via
+ * GitHub's indexed code search — the cloud agent's missing "grep". Without this
+ * the (shell-less) Worker loop has to read files one-by-one to find a reference,
+ * which burns the step budget and leads to band-aid edits when it can't confirm.
+ *
+ * Scope caveat (surfaced to the model in the tool description): code search hits
+ * GitHub's index of the repo's DEFAULT branch, so very-recently-pushed code may
+ * lag and 0 results means "not in the indexed codebase" — confirm a specific file
+ * with read_file when in doubt. `ctx.ref` is accepted for signature parity but
+ * unused (the index isn't branch-scoped). Never throws.
+ */
+export async function searchRepoCode(
+  ctx: RepoReadContext,
+  query: string,
+  opts?: { maxResults?: number },
+): Promise<SearchCodeResult> {
+  if (ctx.provider !== 'github') return { ok: false, reason: `search not implemented for provider '${ctx.provider}'` };
+  if (!query.trim()) return { ok: false, reason: 'query is required' };
+  const apiBase = buildGitApiBaseUrl(ctx.provider, ctx.host);
+  const perPage = Math.min(Math.max(opts?.maxResults ?? 30, 1), 50);
+  // Quote the term so GitHub matches the literal token sequence, scoped to the repo.
+  const q = `${JSON.stringify(query)} repo:${ctx.owner}/${ctx.repo}`;
+  const url = `${apiBase}/search/code?q=${encodeURIComponent(q)}&per_page=${perPage}`;
+  const res = await fetch(url, {
+    headers: { ...ghHeaders(ctx.token), Accept: 'application/vnd.github.text-match+json' },
+  }).catch(() => null);
+  if (!res) return { ok: false, reason: 'search request failed (network)' };
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    return { ok: false, reason: `GitHub ${res.status}: ${t.slice(0, 160)}` };
+  }
+  const json = (await res.json().catch(() => null)) as {
+    total_count?: number;
+    items?: Array<{ path?: string; text_matches?: Array<{ fragment?: string }> }>;
+  } | null;
+  const items = json?.items ?? [];
+  const matches = items
+    .map((it) => ({
+      path: it.path ?? '',
+      fragments: (it.text_matches ?? []).map((m) => (m.fragment ?? '').trim()).filter(Boolean).slice(0, 3),
+    }))
+    .filter((m) => m.path);
+  const total = json?.total_count ?? matches.length;
+  return { ok: true, matches, total, truncated: total > matches.length };
 }
 
 export async function listRepoFiles(ctx: RepoReadContext, subPath?: string): Promise<ListFilesResult> {

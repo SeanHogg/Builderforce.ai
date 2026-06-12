@@ -7,7 +7,7 @@ import { resolveTicketRepoContext, commitAgentFile, type TicketRepoContext } fro
 import { createPullRequest } from '../../application/repos/createPullRequest';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled } from '../../application/repos/mergeBranchToBase';
 import { recordPullRequestRow, markPullRequestMergedById } from '../../application/repos/recordPullRequestRow';
-import { readRepoFile, listRepoFiles } from '../../application/repos/readRepoContents';
+import { readRepoFile, listRepoFiles, searchRepoCode } from '../../application/repos/readRepoContents';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
@@ -564,6 +564,20 @@ const CLOUD_AGENT_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'search_code',
+      description: 'Search the ENTIRE repo for a string/symbol in one call (indexed code search) — use this FIRST to find where something is referenced instead of reading files one by one. Returns matching file paths with line fragments. 0 results means the term does not appear in the indexed codebase (so "remove all references to X" with 0 results means there is nothing to remove — say so, do not invent a change). Recently-pushed code may lag the index; confirm a specific file with read_file. Then read_file the matches you intend to edit.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Exact text or symbol to find, e.g. a model id, function name, import path, or config key.' },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'read_file',
       description: 'Read the FULL current contents of a repo file on the ticket branch. Always read a file before editing it so you preserve existing code and only change what is needed.',
       parameters: {
@@ -638,10 +652,19 @@ const CONTAINER_MAX_STEPS = 40;
  * sends each assistant turn to the `llm` op (which calls the gateway with THIS
  * toolset), so the schema lives in one place.
  */
+/** Pick a CLOUD_AGENT_TOOLS entry by name — name-based (not index) so adding a
+ *  tool to the durable set can't silently re-map the container's toolset. */
+const cloudTool = (name: string) => {
+  const t = CLOUD_AGENT_TOOLS.find((x) => x.function.name === name);
+  if (!t) throw new Error(`cloud tool '${name}' not found`);
+  return t;
+};
 const CONTAINER_AGENT_TOOLS = [
-  CLOUD_AGENT_TOOLS[0], // list_files
-  CLOUD_AGENT_TOOLS[1], // read_file
-  CLOUD_AGENT_TOOLS[2], // write_file
+  cloudTool('list_files'),
+  // No search_code here: the container has a real shell, so it greps via
+  // run_command natively (and only the Worker handler implements search_code).
+  cloudTool('read_file'),
+  cloudTool('write_file'),
   {
     type: 'function',
     function: {
@@ -656,7 +679,7 @@ const CONTAINER_AGENT_TOOLS = [
       },
     },
   },
-  CLOUD_AGENT_TOOLS[4], // finish
+  cloudTool('finish'),
 ] as const;
 
 /** A cloud run's LLM routing — which model pool / vendor key its tenant's plan
@@ -1064,6 +1087,19 @@ export async function runCloudToolLoop(
           const ls = await listRepoFiles({ ...repoCtx, ref: readRef }, sub);
           toolResult = ls.ok ? { ok: true, ref: readRef, paths: ls.paths, truncated: ls.truncated } : { ok: false, error: ls.reason };
         }
+      } else if (name === 'search_code') {
+        const query = typeof parsed.query === 'string' ? parsed.query : '';
+        if (!query.trim()) {
+          toolResult = { ok: false, error: 'query is required' };
+        } else if (!repoCtx) {
+          toolResult = { ok: false, error: `no repo bound to this task (${repoMiss})` };
+        } else {
+          const sr = await searchRepoCode({ ...repoCtx, ref: readRef }, query, { maxResults: 30 });
+          toolResult = sr.ok
+            ? { ok: true, query, total: sr.total, truncated: sr.truncated, matches: sr.matches,
+                ...(sr.total === 0 ? { note: 'No matches in the indexed codebase — the term is not referenced. If the task was to remove/replace it, there is nothing to change; say so instead of inventing an edit.' } : {}) }
+            : { ok: false, error: sr.reason };
+        }
       } else if (name === 'read_file') {
         const path = typeof parsed.path === 'string' ? parsed.path : '';
         if (!path) {
@@ -1118,7 +1154,7 @@ export async function runCloudToolLoop(
           toolResult = { ok: true };
         }
       } else {
-        toolResult = { ok: false, error: `unknown tool '${name}'. Available tools: list_files, read_file, write_file, run_checks, finish. This executor has no shell and cannot run code, builds, or tests — do not claim a check passed; CI on the PR verifies.` };
+        toolResult = { ok: false, error: `unknown tool '${name}'. Available tools: search_code, list_files, read_file, write_file, run_checks, finish. This executor has no shell and cannot run code, builds, or tests — do not claim a check passed; CI on the PR verifies.` };
       }
 
       await recordCloudToolEvent(db, {
@@ -1346,8 +1382,10 @@ export async function prepareCloudRun(
     : 'You CANNOT run builds, type-checks, lint, or tests here — this executor has no shell. Those run in CI on the pull request your changes open, and that CI is the source of truth. There is NO run_code/run_command tool; if you want to acknowledge verification, call run_checks. NEVER state that a check passed, succeeded, is clean, or is resolved — you cannot run one. Write correct, complete code and finish with an honest summary.';
   const systemPrompt = [
     'You are a BuilderForce agent executing a project task against a real repository. Follow the PRD, architecture spec, and project rules exactly. ' +
-    'Workflow: call list_files to discover the codebase, read_file to read any file you intend to change (preserve existing code — only change what the task needs), ' +
+    'Workflow: use search_code FIRST to locate where a symbol/string/feature lives across the whole repo (one call) — do NOT read files one by one to find references; ' +
+    'use list_files to understand structure, read_file to read any file you intend to change (preserve existing code — only change what the task needs), ' +
     'then write_file with the FULL updated content (no bracketed placeholders) for each deliverable file. ' +
+    'If search_code returns 0 matches for the thing a task says to change/remove, that means it is not in the codebase — say so in your summary instead of inventing an unrelated edit. ' +
     'Do NOT call finish while any deliverable file is still a stub/placeholder or any requirement in the task/PRD is unimplemented — keep listing, reading and writing files until the task is genuinely complete. ' +
     'When you finish, your committed changes are opened as a PULL REQUEST for human review (a person approves the merge in-product); they are NOT auto-deployed — so the PR must contain the COMPLETE, working change, not a partial scaffold. Call finish with a summary only once everything the task requires has been written. ' +
     shellLine + ' ' +
