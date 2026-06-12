@@ -49,6 +49,12 @@ export interface ObservabilityContentProps {
   /** When set, scope cloud telemetry to a single execution (precise per-run
    *  Logs/Timeline, robust to later agent re-assignment). */
   executionId?: number;
+  /** Optional "Materials & Context" section (task + PRD) injected into the
+   *  copy-triage report by the embedding panel — telemetry alone isn't reviewable. */
+  reportMaterials?: string;
+  /** Optional async builder for the "Code Changes (transaction)" section — the
+   *  actual file diffs the run produced. Awaited when the user copies the report. */
+  reportTransaction?: () => Promise<string>;
 }
 
 /** Both self-hosted hosts and cloud agents are agents — one unified directory. */
@@ -157,6 +163,8 @@ export function ObservabilityContent({
   cloudAgentName: propCloudAgentName,
   embedded = false,
   executionId: propExecutionId,
+  reportMaterials,
+  reportTransaction,
 }: ObservabilityContentProps) {
   // Scoped mode pins the directory to a single agent (a host OR a cloud agent)
   // instead of showing the full, selectable directory.
@@ -458,7 +466,7 @@ export function ObservabilityContent({
   // run — selected agents, every telemetry event (full args/results), the derived
   // logs, and an errors-first summary — so it can be dropped straight into a bug
   // report. Built from the same data the Logs/Timeline render, so it stays in sync.
-  const buildTriageReport = (): string => {
+  const buildTriageReport = (extraSections: string[] = []): string => {
     const cap = (s: unknown, n = 2000): string => {
       const str = typeof s === 'string' ? s : JSON.stringify(s ?? '');
       return str.length > n ? str.slice(0, n) + `… (+${str.length - n} chars)` : str;
@@ -476,6 +484,13 @@ export function ObservabilityContent({
     lines.push(`Agents:    ${selectedKeys.map((k) => `${nameForKey(k)} [${agentByKey.get(k)?.kind ?? '?'}]`).join(', ') || '—'}`);
     if (hasHostSelection) lines.push(`Host link: ${connState}`);
     lines.push(`Events: ${flatEvents.length} · Errors: ${errors.length} · Log lines: ${mergedLogs.length}`);
+
+    // Materials & Context + Code Changes (transaction) injected by the panel — put
+    // them up top so a reviewer reads the goal and the actual diffs before the
+    // raw telemetry that produced them.
+    for (const section of extraSections) {
+      if (section && section.trim()) lines.push('', section.trim());
+    }
 
     if (errors.length) {
       lines.push('', `--- Errors (${errors.length}) ---`);
@@ -499,7 +514,13 @@ export function ObservabilityContent({
 
   const copyTriage = async () => {
     try {
-      await navigator.clipboard.writeText(buildTriageReport());
+      const extras: string[] = [];
+      if (reportMaterials) extras.push(reportMaterials);
+      if (reportTransaction) {
+        try { const tx = await reportTransaction(); if (tx) extras.push(tx); }
+        catch { /* a diff fetch failed — copy the rest rather than nothing */ }
+      }
+      await navigator.clipboard.writeText(buildTriageReport(extras));
       setCopyState('copied');
     } catch {
       setCopyState('error');
@@ -642,10 +663,12 @@ export function ObservabilityContent({
               <button
                 type="button"
                 onClick={copyTriage}
-                title="Copy a full triage report (agents, telemetry, errors, logs) to the clipboard"
+                title={reportTransaction
+                  ? 'Copy a full report — materials/PRD, the code changes (diffs), telemetry, errors, and logs — to the clipboard'
+                  : 'Copy a full triage report (agents, telemetry, errors, logs) to the clipboard'}
                 style={copyState === 'error' ? { ...smallBtn, color: 'var(--red, #ef4444)', borderColor: 'var(--red, #ef4444)' } : smallBtn}
               >
-                {copyState === 'copied' ? 'Copied ✓' : copyState === 'error' ? 'Copy failed' : 'Copy triage info'}
+                {copyState === 'copied' ? 'Copied ✓' : copyState === 'error' ? 'Copy failed' : reportTransaction ? 'Copy report (+diffs)' : 'Copy triage info'}
               </button>
             </div>
           )}

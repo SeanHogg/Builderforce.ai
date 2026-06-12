@@ -37,6 +37,8 @@ describe('AgentExecutionPanel — steering echo', () => {
     vi.spyOn(builderforceApi.runtimeApi, 'taskCost').mockResolvedValue({ estimatedCostUsd: 0, totalTokens: 0, requests: 0 });
     // Logs/Timeline tabs resolve cloud-agent names from this list on mount.
     vi.spyOn(builderforceApi.cloudAgents, 'list').mockResolvedValue([]);
+    // PRD (materials for the copy-triage report) is fetched on mount.
+    vi.spyOn(builderforceApi.taskSpecsApi, 'list').mockResolvedValue([]);
     vi.spyOn(builderforceApi.runtimeApi, 'trace').mockResolvedValue({
       execution: RUNNING_EXECUTION,
       trace: { source: 'test', usageSnapshots: [], toolEvents: [] },

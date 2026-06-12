@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   runtimeApi,
   cloudAgents as cloudAgentsApi,
+  taskSpecsApi,
   isAwaitingApprovalExecution,
   type Task,
   type AgentHost,
@@ -13,6 +14,7 @@ import {
   type ExecutionTraceToolEvent,
   type TaskFileChange,
 } from '@/lib/builderforceApi';
+import { unifiedDiff } from '@/lib/unifiedDiff';
 import { RunAgentControl } from '../task/RunAgentControl';
 import { ChatMessageContent } from '../ChatMessageContent';
 import { EXECUTION_STATUS_COLOR as STATUS_COLOR } from '../board/AgentChip';
@@ -254,6 +256,49 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   }, [result, toolEvents, stream.fileChanges]);
 
   const isRunning = status != null && RUNNING.has(status);
+
+  // PRD (materials) for this task — fed into the copy-triage report so a shared
+  // log carries the GOAL, not just telemetry.
+  const [prd, setPrd] = useState<string | null>(null);
+  useEffect(() => {
+    taskSpecsApi.list(task.id)
+      .then((specs) => {
+        const s = specs.find((x) => x.isPrimary && x.prd) ?? specs.find((x) => x.prd) ?? null;
+        setPrd(s?.prd ?? null);
+      })
+      .catch(() => setPrd(null));
+  }, [task.id]);
+
+  // "Materials & Context" section for the copy-triage report: the task + its PRD.
+  const reportMaterials = useMemo(() => {
+    const lines = ['--- Materials & Context ---', `Task #${task.id}: ${task.title}`];
+    if (task.description?.trim()) lines.push('', 'Description:', task.description.trim());
+    if (prd?.trim()) lines.push('', 'PRD:', prd.trim());
+    return lines.join('\n');
+  }, [task.id, task.title, task.description, prd]);
+
+  // "Code Changes (transaction)" section: the actual diffs THIS run produced, so a
+  // shared log is reviewable as a patch. Fetched lazily (only when the user copies)
+  // so the panel stays light — each file's base/current comes from the same API the
+  // Monaco diff viewer uses.
+  const buildTransaction = useCallback(async (): Promise<string> => {
+    const scoped = taskChanges.filter((c) => c.executionId === selectedId);
+    const list: Array<{ path: string; change: ExecutionFileChange['change'] }> =
+      scoped.length > 0
+        ? scoped.map((c) => ({ path: c.path, change: c.change }))
+        : files.map((f) => ({ path: f.path, change: f.change }));
+    if (list.length === 0) return '';
+    const diffs = await Promise.all(list.map(async (f) => {
+      try {
+        const content = await runtimeApi.taskFileContent(task.id, f.path);
+        if (!content.bound) return `### ${f.change.toUpperCase()} ${f.path}\n(no repo bound — content unavailable)`;
+        return unifiedDiff(f.path, f.change, content.base, content.current);
+      } catch {
+        return `### ${f.path}\n(failed to load diff)`;
+      }
+    }));
+    return `--- Code Changes (transaction · ${list.length} file${list.length === 1 ? '' : 's'}) ---\n\n${diffs.join('\n\n')}`;
+  }, [taskChanges, files, selectedId, task.id]);
 
   // Scope the Logs/Timeline tabs to the agent that ACTUALLY executed the selected
   // run: a self-hosted host (execution.agentHostId) or, for cloud runs, the
@@ -578,11 +623,13 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
               that executed this run (host or cloud). Same component the
               Observability page renders, so there's one source of truth. */}
           {subTab === 'logs' && selectedId != null && (
-            <ObservabilityContent embedded initialView="logs" executionId={selectedId} {...obsScopeProps} />
+            <ObservabilityContent embedded initialView="logs" executionId={selectedId} {...obsScopeProps}
+              reportMaterials={reportMaterials} reportTransaction={buildTransaction} />
           )}
 
           {subTab === 'timeline' && selectedId != null && (
-            <ObservabilityContent embedded initialView="timeline" executionId={selectedId} {...obsScopeProps} />
+            <ObservabilityContent embedded initialView="timeline" executionId={selectedId} {...obsScopeProps}
+              reportMaterials={reportMaterials} reportTransaction={buildTransaction} />
           )}
 
           {/* In-product PR review + Approve & Merge (replaces the old external
