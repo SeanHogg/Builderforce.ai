@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { parseFollowUp, buildFollowUpPayload, isTerminalExecutionStatus } from './runtimeRoutes';
+import { parseFollowUp, buildFollowUpPayload, isTerminalExecutionStatus, probeContainerHealth } from './runtimeRoutes';
+
+describe('probeContainerHealth', () => {
+  it('returns true when /health responds ok', async () => {
+    const stub = { fetch: async () => new Response('{"ok":true}', { status: 200 }) };
+    expect(await probeContainerHealth(stub)).toBe(true);
+  });
+  it('returns false on a non-200 (container up but unhealthy)', async () => {
+    const stub = { fetch: async () => new Response('nope', { status: 503 }) };
+    expect(await probeContainerHealth(stub)).toBe(false);
+  });
+  it('returns false when the probe throws/times out (container not live)', async () => {
+    const stub = { fetch: async () => { throw new Error('container failed to start'); } };
+    expect(await probeContainerHealth(stub)).toBe(false);
+  });
+});
 
 describe('isTerminalExecutionStatus', () => {
   it('treats completed/failed/cancelled as terminal', () => {
