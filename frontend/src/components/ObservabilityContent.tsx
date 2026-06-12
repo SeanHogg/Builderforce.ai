@@ -750,7 +750,7 @@ export function ObservabilityContent({
                   {timelineViewMode === 'list' ? 'Gantt' : 'List'}
                 </button>
               </div>
-              <div style={{ background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 24, minHeight: 240, overflow: 'auto' }}>
+              <div style={{ background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 24, minHeight: 240, maxHeight: 480, overflow: 'auto' }}>
                 {diagError ? (
                   <div style={{ color: 'var(--red, #ef4444)', fontSize: 13 }}>{diagError}</div>
                 ) : diagLoading && tracks.length === 0 ? (
@@ -863,6 +863,7 @@ const logPaneStyle: React.CSSProperties = {
   borderRadius: 8,
   padding: 12,
   minHeight: 280,
+  maxHeight: 480,
   fontFamily: 'var(--font-mono)',
   fontSize: 12,
   color: 'var(--text-muted)',
