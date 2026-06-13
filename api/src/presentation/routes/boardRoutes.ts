@@ -362,6 +362,10 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       // New model: pick a registry agent; runtime/target/model are resolved from it.
       agentKind?: AgentKind;
       agentRef?: string;
+      // Optional overrides applied on top of the resolved registry agent: a
+      // display `name` for this lane's slot and a `role` (e.g. QA, Reviewer) the
+      // SwimlaneCoordinator dispatches under. Blank = keep the agent's defaults.
+      name?: string;
       // Legacy model: explicit free-text role + runtime/target (back-compat).
       role?: string;
       runtime?: string;
@@ -394,8 +398,10 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         resolved = {
           agentKind: body.agentKind,
           agentRef: body.agentRef,
-          name: r.name,
-          role: r.role,
+          // Per-lane overrides win over the registry defaults so the same agent
+          // can be pinned to a lane under a custom name/role (e.g. "QA").
+          name: body.name?.trim() || r.name,
+          role: body.role?.trim() || r.role,
           runtime: r.runtime,
           target: r.target,
           model: r.model,

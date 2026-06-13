@@ -2,7 +2,7 @@
 
 import { Select } from '@/components/Select';
 
-import { useState, useEffect, useCallback, useMemo, type CSSProperties } from 'react';
+import { useState, useEffect, useCallback, useMemo, Fragment, type CSSProperties } from 'react';
 import Link from 'next/link';
 import {
   tasksApi,
@@ -202,6 +202,9 @@ export function TaskMgmtContent({
   const [error, setError] = useState<string | null>(null);
   const [approvalGate, setApprovalGate] = useState<{ approvalId: string; taskId: number; reason: string } | null>(null);
   const [view, setView] = useState<TaskView>('board');
+  // Standup mode: pivot the board so rows = teammates/agents and columns = stages,
+  // surfacing each person's in-flight work at a glance. Board-view only, session-only.
+  const [groupByAssignee, setGroupByAssignee] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterProject, setFilterProject] = useState<string>(projectId != null ? String(projectId) : '');
   const [filterPriority, setFilterPriority] = useState<string>('');
@@ -374,6 +377,25 @@ export function TaskMgmtContent({
   // Label for a task's status: prefer its column's name, else a humanized label.
   const columnLabel = (status: string) =>
     boardColumns.find((c) => c.status === status)?.label ?? taskStatusLabel(status);
+
+  // Standup pivot: group the (filtered) tasks by assignee so each teammate/agent
+  // is a row and the board columns become the stage cells. A task with no
+  // assignee collapses into one "Unassigned" row (sorted last). Built from the
+  // same `filtered` set as the board so search/status/priority filters carry over.
+  const assigneeRows = useMemo(() => {
+    const rows = new Map<string, { key: string; name: string; tasks: Task[] }>();
+    for (const t of filtered) {
+      const key = assigneeSelectValue(t.assignedAgentHostId, t.assignedAgentRef, t.assignedUserId);
+      const row = rows.get(key);
+      if (row) row.tasks.push(t);
+      else rows.set(key, { key, name: taskAssigneeName(t), tasks: [t] });
+    }
+    return Array.from(rows.values()).sort((a, b) => {
+      // Keep "Unassigned" (empty key) at the bottom; otherwise alphabetical.
+      if (a.key === '' !== (b.key === '')) return a.key === '' ? 1 : -1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [filtered, taskAssigneeName]);
 
   // Latest execution per task → which agent is actively running (or last ran) it.
   const latestExecByTask = useMemo(() => {
@@ -615,6 +637,105 @@ export function TaskMgmtContent({
     border: 'none',
   };
 
+  // One draggable task card, shared by the status board and the standup pivot so
+  // both render an identical card (inline status editor, priority/PR/exec chips).
+  const renderTaskCard = (task: Task) => {
+    const exec = latestExecByTask.get(task.id);
+    return (
+      <div
+        key={task.id}
+        draggable
+        onDragStart={() => setDragTaskId(String(task.id))}
+        onClick={() => openTask(task)}
+        style={{ ...cardStyle, padding: 12, cursor: 'grab', position: 'relative' }}
+      >
+        <div style={{ position: 'absolute', top: 8, right: 8 }}>
+          {editingStatusId === task.id ? (
+            <Select
+              value={task.status}
+              onChange={(e) => {
+                e.stopPropagation();
+                patchStatus(task.id, e.target.value);
+                setEditingStatusId(null);
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {statusChoices.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </Select>
+          ) : (
+            <span
+              className={taskStatusBadgeClass(task.status)}
+              style={{
+                fontSize: 10,
+                padding: '2px 8px',
+                borderRadius: 4,
+                textTransform: 'capitalize',
+                cursor: 'pointer',
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingStatusId(task.id);
+              }}
+            >
+              {columnLabel(task.status)}
+            </span>
+          )}
+        </div>
+        <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--text-primary)' }}>
+          {task.title}
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            marginTop: 6,
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            flexWrap: 'wrap',
+          }}
+        >
+          <span style={{ fontFamily: 'var(--font-mono)' }}>{task.key}</span>
+          <span
+            className={PRIORITY_CLASS[task.priority]}
+            style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, textTransform: 'capitalize' }}
+          >
+            {task.priority}
+          </span>
+          {exec ? (
+            <AgentChip
+              label={execAgentLabel(exec)}
+              status={exec.status}
+              title={`${execAgentLabel(exec)} — execution #${exec.id} · ${exec.status}. Click to open the Agent tab.`}
+              onClick={(e) => {
+                e.stopPropagation();
+                openTask(task, 'agent');
+              }}
+            />
+          ) : (task.assignedAgentHostId || task.assignedAgentRef || task.assignedUserId) ? (
+            <span>{taskAssigneeName(task)}</span>
+          ) : null}
+          {task.githubPrUrl && (
+            <a
+              href={task.githubPrUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              style={{ color: 'var(--text-muted)', textDecoration: 'none', fontWeight: 600 }}
+            >
+              PR#{task.githubPrNumber ?? '—'}
+            </a>
+          )}
+          {task.dueDate && <span style={{ marginLeft: 'auto' }}>{formatDate(task.dueDate)}</span>}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {error && (
@@ -676,6 +797,18 @@ export function TaskMgmtContent({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <ViewToggle value={view} onChange={setView} board table calendar gantt />
+            {view === 'board' && (
+              // Standup pivot toggle — board-view only. Off = group by stage
+              // (columns), On = group by assignee (rows). Session-only state.
+              <ViewToggle
+                value={groupByAssignee ? 'people' : 'stage'}
+                onChange={(m) => setGroupByAssignee(m === 'people')}
+                options={[
+                  { value: 'stage', label: 'By stage' },
+                  { value: 'people', label: 'By assignee' },
+                ]}
+              />
+            )}
             <button type="button" onClick={openCreate} style={buttonPrimary}>
               New task
             </button>
@@ -818,6 +951,77 @@ export function TaskMgmtContent({
 
       {loading ? (
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
+      ) : view === 'board' && groupByAssignee ? (
+        // Standup pivot: one row per teammate/agent, board columns as stage cells.
+        // Tasks stay draggable across stages (same renderTaskCard + drop targets).
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 4 }}>
+          {assigneeRows.length === 0 ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No tasks found</div>
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `minmax(140px, 200px) repeat(${boardColumns.length}, minmax(180px, 1fr))`,
+                gap: 8,
+                minWidth: 'min-content',
+              }}
+            >
+              {/* Header row: empty corner + one cell per stage. */}
+              <div />
+              {boardColumns.map((column) => (
+                <div
+                  key={column.id}
+                  style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', padding: '0 4px 4px' }}
+                >
+                  {column.label}
+                </div>
+              ))}
+              {assigneeRows.map((row) => (
+                <Fragment key={row.key || 'unassigned'}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: 'var(--text-primary)',
+                      padding: '8px 4px',
+                      borderTop: '1px solid var(--border-subtle)',
+                    }}
+                  >
+                    {row.name}
+                    <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>
+                      {row.tasks.length}
+                    </span>
+                  </div>
+                  {boardColumns.map((column) => {
+                    const cellTasks = row.tasks.filter((t) => t.status === column.status);
+                    return (
+                      <div
+                        key={column.id}
+                        onDragOver={onDragOver}
+                        onDrop={(e) => onDrop(e, column.status)}
+                        style={{
+                          background: 'var(--bg-deep)',
+                          border: '1px dashed var(--border-subtle)',
+                          borderRadius: 10,
+                          padding: 8,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 8,
+                          minHeight: 56,
+                          borderTop: '1px solid var(--border-subtle)',
+                        }}
+                      >
+                        {cellTasks.map((task) => renderTaskCard(task))}
+                      </div>
+                    );
+                  })}
+                </Fragment>
+              ))}
+            </div>
+          )}
+        </div>
       ) : view === 'board' ? (
         <div
           className="task-kanban"
@@ -891,114 +1095,7 @@ export function TaskMgmtContent({
                   )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-                  {tasksForStatus.map((task) => {
-                    const exec = latestExecByTask.get(task.id);
-                    return (
-                    <div
-                      key={task.id}
-                      draggable
-                      onDragStart={() => setDragTaskId(String(task.id))}
-                      onClick={() => openTask(task)}
-                      style={{
-                        ...cardStyle,
-                        padding: 12,
-                        cursor: 'grab',
-                        position: 'relative',
-                      }}
-                    >
-                      <div style={{ position: 'absolute', top: 8, right: 8 }}>
-                        {editingStatusId === task.id ? (
-                          <Select
-                            value={task.status}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              patchStatus(task.id, e.target.value);
-                              setEditingStatusId(null);
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {statusChoices.map((s) => (
-                              <option key={s.value} value={s.value}>
-                                {s.label}
-                              </option>
-                            ))}
-                          </Select>
-                        ) : (
-                          <span
-                            className={taskStatusBadgeClass(task.status)}
-                            style={{
-                              fontSize: 10,
-                              padding: '2px 8px',
-                              borderRadius: 4,
-                              textTransform: 'capitalize',
-                              cursor: 'pointer',
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingStatusId(task.id);
-                            }}
-                          >
-                            {columnLabel(task.status)}
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--text-primary)' }}>
-                        {task.title}
-                      </div>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          marginTop: 6,
-                          fontSize: 11,
-                          color: 'var(--text-muted)',
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        <span style={{ fontFamily: 'var(--font-mono)' }}>{task.key}</span>
-                        <span
-                          className={PRIORITY_CLASS[task.priority]}
-                          style={{
-                            fontSize: 10,
-                            padding: '2px 6px',
-                            borderRadius: 4,
-                            textTransform: 'capitalize',
-                          }}
-                        >
-                          {task.priority}
-                        </span>
-                        {exec ? (
-                          <AgentChip
-                            label={execAgentLabel(exec)}
-                            status={exec.status}
-                            title={`${execAgentLabel(exec)} — execution #${exec.id} · ${exec.status}. Click to open the Agent tab.`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openTask(task, 'agent');
-                            }}
-                          />
-                        ) : (task.assignedAgentHostId || task.assignedAgentRef || task.assignedUserId) ? (
-                          <span>{taskAssigneeName(task)}</span>
-                        ) : null}
-                        {task.githubPrUrl && (
-                          <a
-                            href={task.githubPrUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ color: 'var(--text-muted)', textDecoration: 'none', fontWeight: 600 }}
-                          >
-                            PR#{task.githubPrNumber ?? '—'}
-                          </a>
-                        )}
-                        {task.dueDate && (
-                          <span style={{ marginLeft: 'auto' }}>{formatDate(task.dueDate)}</span>
-                        )}
-                      </div>
-                    </div>
-                    );
-                  })}
+                  {tasksForStatus.map((task) => renderTaskCard(task))}
                   {!compact && (
                     <button
                       type="button"
