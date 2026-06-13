@@ -83,8 +83,8 @@ export async function resolveCopilotApiToken(params: {
   env?: NodeJS.ProcessEnv;
   fetchImpl?: typeof fetch;
   cachePath?: string;
-  loadJsonFileImpl?: (path: string) => unknown;
-  saveJsonFileImpl?: (path: string, value: CachedCopilotToken) => void;
+  loadJsonFileImpl?: (path: string) => unknown | Promise<unknown>;
+  saveJsonFileImpl?: (path: string, value: CachedCopilotToken) => void | Promise<void>;
 }): Promise<{
   token: string;
   expiresAt: number;
@@ -95,7 +95,9 @@ export async function resolveCopilotApiToken(params: {
   const cachePath = params.cachePath?.trim() || resolveCopilotTokenCachePath(env);
   const loadJsonFileFn = params.loadJsonFileImpl ?? loadJsonFile;
   const saveJsonFileFn = params.saveJsonFileImpl ?? saveJsonFile;
-  const cached = loadJsonFileFn(cachePath) as CachedCopilotToken | undefined;
+  // The default impl is the async loadJsonFile, so await it (await also unwraps a
+  // synchronous test mock — keeping load consistently async across both paths).
+  const cached = (await loadJsonFileFn(cachePath)) as CachedCopilotToken | undefined;
   if (cached && typeof cached.token === "string" && typeof cached.expiresAt === "number") {
     if (isTokenUsable(cached)) {
       return {
@@ -126,7 +128,7 @@ export async function resolveCopilotApiToken(params: {
     expiresAt: json.expiresAt,
     updatedAt: Date.now(),
   };
-  saveJsonFileFn(cachePath, payload);
+  await saveJsonFileFn(cachePath, payload);
 
   return {
     token: payload.token,

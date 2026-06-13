@@ -181,8 +181,8 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     return c.json(result);
   });
 
-  // POST /agentHost-sessions/:id/summarize — summarize a agentHost chat session into brain memory
-  router.post('/agentHost-sessions/:id/summarize', async (c) => {
+  // POST /agent-host-sessions/:id/summarize — summarize an agentHost chat session into brain memory
+  router.post('/agent-host-sessions/:id/summarize', async (c) => {
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid session id' }, 400);
 

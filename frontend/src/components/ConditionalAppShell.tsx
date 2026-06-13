@@ -20,34 +20,27 @@ const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/'];
 // Marketing + public-browse routes. These render in PublicShell (auth-aware
 // sidebar) for EVERYONE: logged-out visitors get the marketing nav + product
 // map, signed-in users get the app nav — but the page stays publicly viewable.
-const PUBLIC_SHELL_PREFIXES = ['/product', '/blog', '/agents', '/pricing', '/marketplace', '/prompts', '/models'];
+// This is a DENY-LIST against the app shell: every route NOT listed here (nor
+// no-chrome / footer-only) defaults to the authenticated app shell, so a new
+// authed page gets correct chrome without being added to a list [1557]. Keep
+// this list current as marketing/public routes are added.
+const PUBLIC_SHELL_PREFIXES = ['/product', '/blog', '/agents', '/pricing', '/compare', '/marketplace', '/prompts', '/models'];
 
-// Authenticated app routes — gated behind OnboardingGate inside AppShell.
-const APP_SHELL_EXACT = ['/dashboard', '/ide', '/training', '/tenants'];
-const APP_SHELL_PREFIXES = [
-  '/ide', '/projects', '/tasks', '/workflows', '/agent-worker',
-  '/workforce', '/contributors', '/brainstorm', '/content-manager',
-  '/skills', '/personas', '/security', '/settings', '/admin',
-  '/debug', '/logs', '/timeline',
-];
+export type ShellKind = 'none' | 'footer' | 'public' | 'app';
 
-function isProjectIdPage(pathname: string): boolean {
-  return /^\/projects\/[^/]+$/.test(pathname);
-}
-
-function isNoChrome(pathname: string): boolean {
-  return NO_CHROME_PREFIXES.some((p) => pathname.startsWith(p));
-}
-
-function isPublicShellPath(pathname: string): boolean {
-  if (pathname === '/') return true;
-  return PUBLIC_SHELL_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-}
-
-function isAppShellPath(pathname: string): boolean {
-  if (isProjectIdPage(pathname)) return true;
-  if (APP_SHELL_EXACT.includes(pathname)) return true;
-  return APP_SHELL_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+/**
+ * Classify the shell chrome for a path. Pure + exported for unit testing.
+ * Order matters: no-chrome → footer-only → public-marketing → (default) app.
+ * The app shell is the DEFAULT (deny-list model): anything not explicitly
+ * no-chrome, footer-only, or public-marketing is treated as an authenticated
+ * app route, so new pages get the right chrome by default [1557].
+ */
+export function classifyShell(pathname: string): ShellKind {
+  if (NO_CHROME_PREFIXES.some((p) => pathname.startsWith(p))) return 'none';
+  if (FOOTER_ONLY_PATHS.includes(pathname)) return 'footer';
+  if (pathname === '/') return 'public';
+  if (PUBLIC_SHELL_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return 'public';
+  return 'app';
 }
 
 /** Footer-only chrome for the auth screens (login/register). */
@@ -70,35 +63,30 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
   const pathname = usePathname() || '';
   const { isAuthenticated } = useAuth();
 
-  if (isNoChrome(pathname)) return <>{children}</>;
-  if (FOOTER_ONLY_PATHS.includes(pathname)) return <FooterOnlyShell>{children}</FooterOnlyShell>;
+  const kind = classifyShell(pathname);
+  if (kind === 'none') return <>{children}</>;
+  if (kind === 'footer') return <FooterOnlyShell>{children}</FooterOnlyShell>;
 
   // Marketing + public browse → auth-aware PublicShell (renders for logged-out
   // visitors; the app's OnboardingGate would otherwise blank the page pre-auth).
-  if (isPublicShellPath(pathname)) return <PublicShell>{children}</PublicShell>;
+  if (kind === 'public') return <PublicShell>{children}</PublicShell>;
 
-  // Authenticated app routes.
-  if (isAppShellPath(pathname)) {
-    // Logged out → render a per-route marketing teaser + login/CTA instead of a
-    // blank gate or redirect, so no authed deep link is ever a dead end. The
-    // real page never mounts (so its own auth-redirect won't fire).
-    if (!isAuthenticated) {
-      return (
-        <PublicShell>
-          <RouteMarketing pathname={pathname} />
-        </PublicShell>
-      );
-    }
-    // Signed in → AppShell behind the onboarding/terms gate.
+  // Default: authenticated app route. Logged out → a per-route marketing teaser
+  // + login/CTA instead of a blank gate or redirect, so no authed deep link is
+  // ever a dead end (the real page never mounts, so its own auth-redirect won't
+  // fire). Signed in → AppShell behind the onboarding/terms gate.
+  if (!isAuthenticated) {
     return (
-      <OnboardingGate renderShell={(gated) => <AppShell>{gated}</AppShell>}>
-        {children}
-      </OnboardingGate>
+      <PublicShell>
+        <RouteMarketing pathname={pathname} />
+      </PublicShell>
     );
   }
-
-  // Default: any other route still gets the public chrome so the menu is present.
-  return <PublicShell>{children}</PublicShell>;
+  return (
+    <OnboardingGate renderShell={(gated) => <AppShell>{gated}</AppShell>}>
+      {children}
+    </OnboardingGate>
+  );
 }
 
 export default function ConditionalAppShell({ children }: { children: React.ReactNode }) {

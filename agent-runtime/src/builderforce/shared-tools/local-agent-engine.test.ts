@@ -25,7 +25,7 @@ function call(name: string, args: Record<string, unknown>): RawToolCall {
   return { id: `c-${name}`, type: "function", function: { name, arguments: JSON.stringify(args) } };
 }
 
-describe("LocalAgentEngine (pi-free)", () => {
+describe("LocalAgentEngine (framework-free)", () => {
   it("runs a write_file → finish loop through the shared registry + Node provider", async () => {
     const registry = buildCoreToolRegistry();
     const provider = buildNodeCapabilityProvider(workspace);
