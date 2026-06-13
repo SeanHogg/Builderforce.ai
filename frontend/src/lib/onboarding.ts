@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { AUTH_API_URL, checkUnauthorizedAndRedirect } from './auth';
+import { AUTH_API_URL, checkUnauthorizedAndRedirect, getMyTenants } from './auth';
 
 export interface ActiveTermsDoc {
   documentType: 'terms';
@@ -87,7 +87,7 @@ export async function acceptActiveTerms(
  * should consume `phase` here so all gates evolve together.
  */
 export function useOnboardingState(): OnboardingState {
-  const { webToken, tenantToken } = useAuth();
+  const { webToken, tenantToken, selectTenant } = useAuth();
 
   const [terms, setTerms] = useState<ActiveTermsDoc | null>(null);
   const [needsTerms, setNeedsTerms] = useState<boolean | null>(null);
@@ -118,7 +118,22 @@ export function useOnboardingState(): OnboardingState {
     if (!webToken || !terms) throw new Error('Cannot accept terms before loading');
     await acceptActiveTerms(webToken, terms.version);
     setNeedsTerms(false);
-  }, [webToken, terms]);
+    // After a terms bump, a returning SINGLE-workspace user would otherwise be
+    // bounced through the tenant picker: both /my-tenants and /tenant-token are
+    // terms-gated, so the callback's auto-select returned null. Now that terms
+    // are accepted both are ungated — auto-select the lone workspace so the user
+    // lands straight on /dashboard. Guarded: any failure falls through to the
+    // normal pending-tenant picker, so this can't regress the multi-workspace
+    // or error paths. [1837]
+    if (!tenantToken) {
+      try {
+        const tenants = await getMyTenants(webToken);
+        if (tenants.length === 1 && tenants[0]) await selectTenant(tenants[0]);
+      } catch {
+        /* fall through to the tenant picker (pending-tenant phase) */
+      }
+    }
+  }, [webToken, terms, tenantToken, selectTenant]);
 
   let phase: OnboardingPhase;
   if (!webToken) {
