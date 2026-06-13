@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { and, desc, eq } from 'drizzle-orm';
 import { TaskService } from '../../application/task/TaskService';
-import { TaskPriority, AgentType, TaskStatus } from '../../domain/shared/types';
+import { TaskPriority, AgentType, TaskStatus, TaskType } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { auditEvents, projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
@@ -178,6 +178,8 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
       assignedAgentHostId?: number | null;
       assignedAgentRef?: string | null;
       assignedUserId?: string | null;
+      taskType?: TaskType;
+      parentTaskId?: number | null;
       startDate?: string | null;
       dueDate?: string | null;
       persona?: string | null;
@@ -194,6 +196,9 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
       description?: string | null;
       status?: string;
       priority?: TaskPriority;
+      taskType?: TaskType;
+      parentTaskId?: number | null;
+      sprintId?: string | null;
       assignedAgentType?: AgentType | null;
       assignedAgentHostId?: number | null;
       assignedAgentRef?: string | null;

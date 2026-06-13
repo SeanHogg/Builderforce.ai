@@ -10,6 +10,7 @@ import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { mountTrackers, type TrackerOpts } from './segmentTrackerRoutes';
 import { createPokerRoutes, createRetroRoutes } from './pokerRetroRoutes';
+import { createCeremonyRoutes } from './ceremonyRoutes';
 import {
   sprints, teamVelocity, capacityPlanning, costCalculations, featureScores,
 } from '../../infrastructure/database/schema';
@@ -31,5 +32,7 @@ export function createAgileRoutes(db: Db): Hono<HonoEnv> {
   // Nested session models (not flat trackers).
   router.route('/poker', createPokerRoutes(db));
   router.route('/retros', createRetroRoutes(db));
+  // Live standup/planning round-table room (WebSocket transport).
+  router.route('/ceremonies', createCeremonyRoutes(db));
   return router;
 }

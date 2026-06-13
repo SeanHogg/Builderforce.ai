@@ -125,6 +125,7 @@ import { emulationMiddleware } from './presentation/middleware/emulationMiddlewa
 // Durable Objects (must be re-exported so the Workers runtime can instantiate them)
 export { AgentHostRelayDO } from './infrastructure/relay/AgentHostRelayDO';
 export { SessionRoomDO } from './infrastructure/relay/SessionRoomDO';
+export { CeremonyRoomDO } from './infrastructure/relay/CeremonyRoomDO';
 export { AnalysisRunnerDO } from './infrastructure/relay/AnalysisRunnerDO';
 export { CloudRunnerDO } from './infrastructure/relay/CloudRunnerDO';
 export { AgentContainerDO } from './infrastructure/relay/AgentContainerDO';

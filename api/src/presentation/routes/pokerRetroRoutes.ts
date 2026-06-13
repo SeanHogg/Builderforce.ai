@@ -16,13 +16,7 @@ import {
 } from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-
-/** Push a `changed` frame to everyone watching a room, so clients re-fetch (no polling). */
-async function broadcastRoom(ns: DurableObjectNamespace | undefined, room: string): Promise<void> {
-  if (!ns) return;
-  try { await ns.get(ns.idFromName(room)).fetch('https://session-room/broadcast', { method: 'POST' }); }
-  catch { /* best-effort; the surface still works without live push */ }
-}
+import { broadcastRoom } from '../../infrastructure/relay/broadcastRoom';
 
 /** Resolve a story's parent session (to know which room to broadcast to). */
 async function sessionIdForStory(db: Db, storyId: string, tenantId: number, segmentId: string): Promise<string | null> {

@@ -755,6 +755,10 @@ export const tasks = pgTable('tasks', {
    *  resolveRepoForTask) — lets a run target a specific repo instead of the
    *  project default. Sticky so run/finalize/CI/PRD all use the same repo. */
   explicitRepoId:    uuid('explicit_repo_id').references(() => projectRepositories.id, { onDelete: 'set null' }),
+  /** Sprint this task is scheduled into (null = unscheduled/backlog). ON DELETE
+   *  SET NULL so deleting a sprint un-schedules its tasks rather than deleting the
+   *  work. See migration 0115. sprints.id is a UUID. */
+  sprintId:          uuid('sprint_id').references((): AnyPgColumn => sprints.id, { onDelete: 'set null' }),
   startDate:         timestamp('start_date'),
   dueDate:           timestamp('due_date'),
   persona:           varchar('persona', { length: 50 }),

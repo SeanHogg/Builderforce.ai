@@ -30,6 +30,10 @@ name = "SESSION_ROOM"
 class_name = "SessionRoomDO"
 
 [[durable_objects.bindings]]
+name = "CEREMONY_ROOM"
+class_name = "CeremonyRoomDO"
+
+[[durable_objects.bindings]]
 name = "ANALYSIS_RUNNER"
 class_name = "AnalysisRunnerDO"
 
@@ -97,6 +101,13 @@ tag = "v6"
 # surface — a long-lived Node process with a real shell). Container-control DOs are
 # SQLite-backed.
 new_sqlite_classes = ["AgentContainerDO"]
+
+[[migrations]]
+tag = "v7"
+# CeremonyRoomDO is the live standup/planning round-table relay (presence + cursor +
+# `changed` fan-out, keyed `ceremony:<projectId>`). Memory-only like SessionRoomDO,
+# but free-plan Durable Objects must still be SQLite-backed.
+new_sqlite_classes = ["CeremonyRoomDO"]
 
 # Cron triggers — see scheduled() in src/index.ts
 #   "0 9 * * *"   09:00 UTC daily: probe every LLM vendor; email superadmins on status change.

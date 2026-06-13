@@ -82,6 +82,14 @@ export interface Env {
    *    [[durable_objects.bindings]] name = "SESSION_ROOM" class_name = "SessionRoomDO" */
   SESSION_ROOM?: DurableObjectNamespace;
 
+  /** Durable Object namespace for the live standup/planning "ceremony" round-table.
+   *  One instance per room (`ceremony:<projectId>`); relays presence, cursor and
+   *  `changed` frames between connected clients (peer-to-peer multiplayer).
+   *  Optional: when unset the ceremony surface still works (no live multiplayer).
+   *  Bind in wrangler.toml:
+   *    [[durable_objects.bindings]] name = "CEREMONY_ROOM" class_name = "CeremonyRoomDO" */
+  CEREMONY_ROOM?: DurableObjectNamespace;
+
   /** Durable Object namespace for the Architect / Digital-Transformation
    *  repo-analysis pipeline. One instance per analysis run (`idFromName(runId)`),
    *  advancing one stage per alarm() tick. Optional: when unset, the

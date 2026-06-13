@@ -73,6 +73,7 @@ export class TaskRepository implements ITaskRepository {
         assignedUserId:    plain.assignedUserId ?? undefined,
         gitBranch:         plain.gitBranch ?? undefined,
         explicitRepoId:    plain.explicitRepoId ?? undefined,
+        sprintId:          plain.sprintId ?? undefined,
         githubIssueNumber: plain.githubIssueNumber ?? undefined,
         githubIssueUrl:    plain.githubIssueUrl ?? undefined,
         githubPrUrl:       plain.githubPrUrl ?? undefined,
@@ -113,6 +114,8 @@ export class TaskRepository implements ITaskRepository {
         gitBranch:         plain.gitBranch ?? undefined,
         // Authoritative (real null) so un-pinning the repo via the domain clears it.
         explicitRepoId:    plain.explicitRepoId ?? null,
+        // Authoritative (real null) so un-scheduling (drag out of a sprint) clears it.
+        sprintId:          plain.sprintId ?? null,
         githubIssueNumber: plain.githubIssueNumber ?? undefined,
         githubIssueUrl:    plain.githubIssueUrl ?? undefined,
         githubPrUrl:       plain.githubPrUrl ?? undefined,
@@ -197,6 +200,7 @@ function toDomain(row: Row): Task {
     assignedUserId:    row.assignedUserId ?? null,
     gitBranch:         row.gitBranch ?? null,
     explicitRepoId:    row.explicitRepoId ?? null,
+    sprintId:          row.sprintId ?? null,
     githubIssueNumber: row.githubIssueNumber ?? null,
     githubIssueUrl:    row.githubIssueUrl ?? null,
     githubPrUrl:       row.githubPrUrl ?? null,
