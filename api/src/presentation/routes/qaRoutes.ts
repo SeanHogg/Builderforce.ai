@@ -59,6 +59,7 @@ import {
   toSlug,
 } from '../../application/qa/qaTypes';
 import { decryptSecretFromStorage, encryptSecretForStorage } from '../../infrastructure/auth/MfaService';
+import { writeAdminAudit } from '../../infrastructure/audit/adminAudit';
 import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -282,7 +283,7 @@ export function createQaRoutes(db: Db): Hono<HonoEnv> {
     }
 
     const steps = parseSteps(flow.steps);
-    const gen = await new QaGeneratorService(c.env).generate({
+    const gen = await new QaGeneratorService(c.env, c.get('tenantId') as number).generate({
       name: flow.name, slug: flow.slug, description: flow.description, startRoute: flow.startRoute, steps,
       persona: credential ? { label: credential.label, role: credential.role } : (flow.personaRole ? { role: flow.personaRole } : null),
     });
@@ -576,6 +577,7 @@ export function createQaRoutes(db: Db): Hono<HonoEnv> {
   // credentials into the login form.
   router.get('/credentials/:id/secret', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
+    const userId   = c.get('userId') as string | undefined;
     const [cred] = await db
       .select()
       .from(qaCredentials)
@@ -588,6 +590,13 @@ export function createQaRoutes(db: Db): Hono<HonoEnv> {
     } catch {
       return c.json({ error: 'Credential secret could not be decrypted' }, 500);
     }
+    // This endpoint returns a decrypted plaintext site password — the most
+    // sensitive read in the system. Record who fetched which credential [1553].
+    await writeAdminAudit(db, 'QA_CREDENTIAL_SECRET_VIEWED', userId ?? null, {
+      tenantId,
+      metadata:  { credentialId: cred.id },
+      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+    });
     return c.json({
       id: cred.id,
       username: cred.username,

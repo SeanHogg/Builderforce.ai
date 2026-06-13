@@ -26,6 +26,15 @@ import {
   type ImageVendorId,
 } from './imageVendors';
 import { composeFreeCappedCascade } from './cascadeComposer';
+import { loadCooldowns, recordFailure } from '../../infrastructure/auth/cooldownStore';
+import type { VendorId } from './vendors';
+
+/** Namespace image cooldown keys as `image:<vendor>` in the shared cooldown
+ *  store so they never collide with chat-vendor cooldowns [1438]. The store
+ *  treats `vendor` purely as a key string; the cast bridges the chat-typed API. */
+const imageCooldownVendor = (v: ImageVendorId): VendorId => `image:${v}` as VendorId;
+/** The `${vendor}/${model}` key shape `loadCooldowns` returns, image-namespaced. */
+const imageCooldownKey = (m: string): string => `${imageCooldownVendor(vendorForImageModel(m))}/${m}`;
 
 // ---------------------------------------------------------------------------
 // Pool composition — derived from the image vendor catalog
@@ -105,6 +114,10 @@ export interface ImageProxyEnv extends ImageVendorEnv {
  *  `composeFreeCappedCascade`, mirrors `chatRequestCursor` in LlmProxyService. */
 const imageRequestCursor: { value: number } = { value: 0 };
 
+/** Test-only: reset the round-robin free-slice cursor so each test is
+ *  deterministic regardless of how many generate() calls preceded it. */
+export function _resetImageCursor(): void { imageRequestCursor.value = 0; }
+
 export interface ImageProxyOptions {
   modelPool?: readonly string[];
   productName?: ImageProductName;
@@ -128,7 +141,14 @@ export class ImageProxyService {
       ? [callerModel, ...this.modelPool.filter((m) => m !== callerModel)]
       : this.modelPool;
 
-    const candidates = this.buildCandidateChain(seed);
+    // Skip models cooled by a recent failure (same per-model/per-vendor cooldown
+    // chat uses), so a rate-limited Together model isn't re-fired every request
+    // and waste 1–2s before falling through [1438].
+    const cooled = await loadCooldowns(
+      this.env,
+      seed.map((m) => ({ vendor: imageCooldownVendor(vendorForImageModel(m)), model: m })),
+    );
+    const candidates = this.buildCandidateChain(seed, cooled);
     if (candidates.length === 0) {
       return this.exhaustedResult(seed, new Error('No image vendor keys are bound. Configure TOGETHER_API_KEY and/or FLUX_API_KEY.'), []);
     }
@@ -144,6 +164,9 @@ export class ImageProxyService {
         // Strip standard fields so the rest becomes vendor-specific passthrough.
         extraBody: stripStandardFields(body),
       });
+      // Record any pre-success failures so the cooled model is skipped next time
+      // (fire-and-forget — never delay a successful response).
+      void this.recordImageFailures(result.attempts);
       return {
         body: { created: result.created, model: result.model, data: result.data },
         resolvedModel: result.modelUsed,
@@ -153,17 +176,27 @@ export class ImageProxyService {
       };
     } catch (err) {
       const errAttempts = err instanceof ImageCascadeExhaustedError ? err.attempts : [];
+      // Await on the exhausted path so the next request immediately sees the
+      // cooldowns (mirrors chat's applyCooldowns-before-surfacing-429).
+      await this.recordImageFailures(errAttempts);
       return this.exhaustedResult(candidates, err, errAttempts);
     }
   }
 
+  /** Persist per-model/per-vendor cooldowns for failed image attempts. */
+  private async recordImageFailures(attempts: ReadonlyArray<ImageDispatchAttempt>): Promise<void> {
+    await Promise.all(
+      attempts.map((a) => recordFailure(this.env, imageCooldownVendor(a.vendor), a.model, a.status)),
+    );
+  }
+
   /**
    * Apply the 2-free-then-premium cap via the shared cascade composer.
-   * Image surface has no cooldown store yet (see Gap Register), so the only
-   * "unavailable" condition today is "vendor key not bound" — a missing
-   * `TOGETHER_API_KEY` skips Together's models without burning an attempt.
+   * A model is "unavailable" when its vendor key is unbound OR it's currently
+   * cooled by a recent failure [1438] (`cooled` holds image-namespaced
+   * `${vendor}/${model}` keys from `loadCooldowns`).
    */
-  private buildCandidateChain(seed: readonly string[]): string[] {
+  private buildCandidateChain(seed: readonly string[], cooled: ReadonlySet<string> = new Set()): string[] {
     const env = this.imageVendorEnv();
     const keyBound = (m: string) => imageVendorKeyBound(env, vendorForImageModel(m));
     return composeFreeCappedCascade({
@@ -171,7 +204,7 @@ export class ImageProxyService {
       premiumFallback: PREMIUM_IMAGE_FALLBACK_MODELS,
       freeBudget: FREE_IMAGE_ATTEMPT_BUDGET,
       tierOf: tierForImageModel,
-      isUnavailable: (m) => !keyBound(m),
+      isUnavailable: (m) => !keyBound(m) || cooled.has(imageCooldownKey(m)),
       cursor: imageRequestCursor,
     });
   }

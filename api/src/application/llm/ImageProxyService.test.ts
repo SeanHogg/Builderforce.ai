@@ -6,6 +6,15 @@ import {
   imageProxyForPlan,
   type ImageProxyEnv,
 } from './ImageProxyService';
+import { _resetMemoryCooldowns, recordFailure } from '../../infrastructure/auth/cooldownStore';
+import { FREE_IMAGE_MODEL_POOL, _resetImageCursor } from './ImageProxyService';
+import type { VendorId } from './vendors';
+
+// The image cascade now consults/writes the shared cooldown store [1438]; with
+// no AUTH_CACHE_KV in tests it uses the module-global in-memory backend, so reset
+// it between tests to keep cases isolated (a prior cascade's failures must not
+// leave models cooled for the next test).
+beforeEach(() => { _resetMemoryCooldowns(); _resetImageCursor(); });
 
 // ---------------------------------------------------------------------------
 // ImageProxyService — exercises the 2-free-then-premium cascade end-to-end.
@@ -112,6 +121,23 @@ describe('ImageProxyService.generate — cascade', () => {
     // FREE_IMAGE_ATTEMPT_BUDGET = 2 Together attempts → retries === 2 failovers recorded
     expect(result.retries).toBe(2);
     expect(result.failovers.map((f) => f.vendor)).toEqual(['together', 'together']);
+  });
+
+  it('skips models cooled by a recent failure and falls through to premium [1438]', async () => {
+    // Pre-cool every free (Together) model in the shared store, as a prior
+    // request's 429s would. The next request must NOT re-fire them.
+    for (const m of FREE_IMAGE_MODEL_POOL) {
+      await recordFailure(env, 'image:together' as unknown as VendorId, m, 429);
+    }
+    const requests: string[] = [];
+    installFetchRouter({
+      [TOGETHER_ENDPOINT]: () => { requests.push(TOGETHER_ENDPOINT); return new Response(JSON.stringify({ data: [{ url: 't' }] }), { status: 200 }); },
+      [FLUXAPI_ENDPOINT]:  () => new Response(JSON.stringify({ data: { url: 'https://flux/r.jpg' } }), { status: 200 }),
+    });
+    const proxy = new ImageProxyService(env);
+    const result = await proxy.generate({ prompt: 'a duck' });
+    expect(requests).toEqual([]);                  // cooled Together models skipped — no RTT wasted
+    expect(result.resolvedVendor).toBe('fluxapi'); // fell through to the premium fallback
   });
 
   it('skips Together entirely when TOGETHER_API_KEY is unbound', async () => {

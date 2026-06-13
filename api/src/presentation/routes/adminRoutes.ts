@@ -14,6 +14,7 @@ import { and, desc, eq, gt, ilike, inArray, isNull, sql } from 'drizzle-orm';
 import type { Env, HonoEnv } from '../../env';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
+import { writeAdminAudit, type AdminAuditOpts } from '../../infrastructure/audit/adminAudit';
 import {
   authTokens,
   authUserSessions,
@@ -53,12 +54,13 @@ import {
   adminPoolProxy,
   FREE_MODEL_POOL,
   PRO_PAID_MODEL_POOL,
+  PREMIUM_FALLBACK_MODELS,
   type ProductName,
   type ProxyEnv,
 } from '../../application/llm/LlmProxyService';
 import { getAllVendorIds, vendorForModel, type VendorId } from '../../application/llm/vendors';
 import { llmFailoverLog, llmHealthProbes, llmTraces } from '../../infrastructure/database/schema';
-import { probeVendor, type VendorProbeResult } from '../../application/llm/vendorHealthProbe';
+import { probeVendor, tryAcquireProbeSlot, type VendorProbeResult } from '../../application/llm/vendorHealthProbe';
 import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
 import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
 import {
@@ -1415,9 +1417,13 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     // LLM model pool — include both Free + Pro pools. Per-model availability
     // (cooldown / vendor-key / vendor-cooldown) is resolved inside the proxy
     // service so this call doesn't need to know which vendor owns each model.
-    const [freeModelPool, proModelPool] = await Promise.all([
-      poolStatus(c.env, FREE_MODEL_POOL,     'builderforceLLM'),
-      poolStatus(c.env, PRO_PAID_MODEL_POOL, 'builderforceLLMPro'),
+    // The premium-fallback tail is appended to EVERY chain (Free included) as the
+    // always-on backstop, but it isn't part of the Free/Pro pools — surface it as
+    // its own row so superadmins can see its cooldown/key-bound state too [1430].
+    const [freeModelPool, proModelPool, premiumFallbackPool] = await Promise.all([
+      poolStatus(c.env, FREE_MODEL_POOL,            'builderforceLLM'),
+      poolStatus(c.env, PRO_PAID_MODEL_POOL,        'builderforceLLMPro'),
+      poolStatus(c.env, PREMIUM_FALLBACK_MODELS,    'builderforceLLMPro'),
     ]);
 
     const modelPool = [...freeModelPool, ...proModelPool];
@@ -1431,6 +1437,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         models: modelPool,
         free:   freeModelPool,
         pro:    proModelPool,
+        premiumFallback: premiumFallbackPool,
       },
       timestamp:    new Date().toISOString(),
     });
@@ -1657,6 +1664,14 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .limit(1);
     if (!row) return c.json({ error: 'Trace not found' }, 404);
 
+    // Reading a single trace exposes the FULL captured request/response bodies
+    // (which may contain end-user PII). Record who viewed which trace [1300].
+    await writeAudit(db, 'LLM_TRACE_VIEWED', c.get('userId') as string, {
+      tenantId:  row.tenantId ?? null,
+      metadata:  { traceId },
+      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+    });
+
     const parse = (v: string | null): unknown => {
       if (v == null) return null;
       try { return JSON.parse(v); } catch { return v; }
@@ -1687,6 +1702,17 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const allowed = new Set(getAllVendorIds() as string[]);
     if (!allowed.has(vendorParam)) {
       return c.json({ error: `Unknown vendor: ${vendorParam}` }, 400);
+    }
+    // Rate-limit the manual button: each probe fans out N upstream calls, so a
+    // repeated click can burn free-tier quota. At most one manual probe per
+    // vendor per minute (the daily cron is unaffected). [1424]
+    const slot = tryAcquireProbeSlot(vendorParam, Date.now());
+    if (!slot.ok) {
+      const retryAfterSeconds = Math.ceil(slot.retryAfterMs / 1000);
+      return c.json(
+        { error: `Health probe for '${vendorParam}' ran recently — retry in ${retryAfterSeconds}s`, retryAfterSeconds },
+        429,
+      );
     }
     const result = await probeVendor(c.env, vendorParam as VendorId);
     await persistProbe(buildDatabase(c.env), result, 'manual');
@@ -1939,27 +1965,14 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // IMPERSONATION SYSTEM  (PRD §4.2)
   // ===========================================================================
 
-  // Helper: write an audit log entry
-  async function writeAudit(
+  // Helper: write an audit log entry. Thin wrapper over the shared
+  // `writeAdminAudit` so every admin route uses one insert path.
+  const writeAudit = (
     db: Db,
     event: string,
     actorId: string,
-    opts: {
-      targetUserId?: string | null;
-      tenantId?: number | null;
-      metadata?: Record<string, unknown>;
-      ipAddress?: string | null;
-    } = {},
-  ) {
-    await db.insert(adminAuditLog).values({
-      event,
-      actorId,
-      targetUserId: opts.targetUserId ?? null,
-      tenantId:     opts.tenantId ?? null,
-      metadata:     JSON.stringify(opts.metadata ?? {}),
-      ipAddress:    opts.ipAddress ?? null,
-    });
-  }
+    opts: AdminAuditOpts = {},
+  ) => writeAdminAudit(db, event, actorId, opts);
 
   // -------------------------------------------------------------------------
   // POST /api/admin/impersonation/start

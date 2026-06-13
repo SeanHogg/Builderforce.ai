@@ -352,6 +352,10 @@ export const llmUsageLog = pgTable('llm_usage_log', {
    *  (incl. cache tiers), in millicents (1/100000 USD) — see migration 0097.
    *  The dashboard sums this instead of re-pricing tokens at read time. */
   costUsdMillicents: integer('cost_usd_millicents').notNull().default(0),
+  /** The `llm_traces.trace_id` for this call (migration 0125), so a superadmin
+   *  can pivot from a usage/billing row to its full diagnostic trace [1299].
+   *  Null for usage rows written without a trace (e.g. BYO-key passthrough). */
+  traceId:          varchar('trace_id', { length: 48 }),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -1853,7 +1857,14 @@ export const contributors = pgTable('contributors', {
   isActive:      boolean('is_active').notNull().default(true),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+  // One agent contributor per (tenant, agent host) — lets POST /sync-agents
+  // `onConflictDoUpdate` instead of racing select-then-insert [1557]. Partial so
+  // it constrains only agent rows; human contributors aren't agent-host-keyed.
+  uniqueIndex('uq_contributors_tenant_agent_host')
+    .on(t.tenantId, t.agentHostId)
+    .where(sql`${t.kind} = 'agent'`),
+]);
 
 /**
  * Cross-platform identity reconciliation.

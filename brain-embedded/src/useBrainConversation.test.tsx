@@ -154,4 +154,37 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     expect(persistence.sendMessages).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(hook.current.error).toMatch(/kept calling tools/i));
   });
+
+  it('captures a thrown tool error: feeds it back, records it, and surfaces it in the triage report', async () => {
+    mockStream
+      .mockResolvedValueOnce(result({ text: 'trying', toolCalls: [{ id: 'c1', name: 'do_thing', args: '{}' }], finishReason: 'tool_calls' }))
+      .mockResolvedValueOnce(result({ text: 'recovered' }));
+    const runTool = vi.fn(async () => { throw new Error('no repo bound'); });
+
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 7, toolSpecs: [TOOL], runTool }),
+      { wrapper },
+    );
+
+    await act(async () => { await hook.current.send('go'); });
+
+    // The throw is fed back as a recoverable tool result (loop continues, not aborts).
+    expect(mockStream).toHaveBeenCalledTimes(2);
+    const secondCallMessages = mockStream.mock.calls[1][0].messages;
+    const toolMsg = secondCallMessages.find((m) => m.role === 'tool');
+    expect(toolMsg?.content).toContain('"ok":false');
+    expect(toolMsg?.content).toContain('no repo bound');
+    await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toEqual(['go', 'recovered']));
+
+    // The execution is captured: the report counts the error and names the tool.
+    expect(hook.current.hasTrace).toBe(true);
+    const report = hook.current.buildTriageReport('Brain (default)');
+    expect(report).toContain('=== BuilderForce Brain Triage ===');
+    expect(report).toContain('--- Errors (1) ---');
+    expect(report).toContain('do_thing');
+    expect(report).toContain('no repo bound');
+    // LLM steps + intermediate assistant message are in the trace too.
+    expect(report).toContain('llm.complete');
+    expect(report).toContain('agent.message');
+  });
 });

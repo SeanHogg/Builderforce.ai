@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { adminApi, type LegalDocument } from '@/lib/adminApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
+import { unwrapLegalMarkdown } from '@/lib/utils';
 
 export interface LegalEditorContext {
   docType: 'terms' | 'privacy';
@@ -76,7 +77,10 @@ export function LegalEditorDrawer({ context, onClose, onPublished }: LegalEditor
       const payload = {
         version: version.trim(),
         title: title.trim() || label,
-        content: content.trim(),
+        // Normalize on WRITE so the stored value is clean for every consumer
+        // (API/exports/Copy), not just the render path. Idempotent — already-
+        // clean prose passes through unchanged [1328].
+        content: unwrapLegalMarkdown(content).trim(),
       };
       if (mode === 'edit') {
         await adminApi.amendLegal(context.docType, payload);

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
+import { contrastText } from '@/lib/contrastText';
 import {
   artifactAssignments,
   marketplaceStats,
@@ -186,7 +187,7 @@ export default function PersonasPage() {
       'agentlink-assigned': { label: 'Assigned', color: '#ec4899' },
     };
     const m = map[source] ?? { label: source, color: 'var(--muted)' };
-    return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: m.color, color: '#fff', textTransform: 'uppercase' }}>{m.label}</span>;
+    return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: m.color, color: contrastText(m.color), textTransform: 'uppercase' }}>{m.label}</span>;
   };
 
   return (

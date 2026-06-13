@@ -81,6 +81,7 @@ export class ProjectRepository implements IProjectRepository {
     const [updated] = await this.db
       .update(projectsTable)
       .set({
+        key:             plain.key,
         name:            plain.name,
         description:     plain.description ?? undefined,
         template:        plain.template ?? undefined,

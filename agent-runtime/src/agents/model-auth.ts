@@ -142,7 +142,7 @@ export async function resolveApiKeyForProvider(params: {
   agentDir?: string;
 }): Promise<ResolvedProviderAuth> {
   const { provider, cfg, profileId, preferredProfile } = params;
-  const store = params.store ?? ensureAuthProfileStore(params.agentDir);
+  const store = params.store ?? (await ensureAuthProfileStore(params.agentDir));
 
   if (profileId) {
     const resolved = await resolveApiKeyForProfile({
@@ -339,11 +339,11 @@ export function resolveEnvApiKey(provider: string): EnvApiKeyResult | null {
   return pick(envVar);
 }
 
-export function resolveModelAuthMode(
+export async function resolveModelAuthMode(
   provider?: string,
   cfg?: BuilderForceAgentsConfig,
   store?: AuthProfileStore,
-): ModelAuthMode | undefined {
+): Promise<ModelAuthMode | undefined> {
   const resolved = provider?.trim();
   if (!resolved) {
     return undefined;
@@ -354,7 +354,7 @@ export function resolveModelAuthMode(
     return "aws-sdk";
   }
 
-  const authStore = store ?? ensureAuthProfileStore();
+  const authStore = store ?? (await ensureAuthProfileStore());
   const profiles = listProfilesForProvider(authStore, resolved);
   if (profiles.length > 0) {
     const modes = new Set(

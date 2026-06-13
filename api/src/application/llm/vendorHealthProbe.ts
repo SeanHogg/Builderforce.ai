@@ -47,6 +47,34 @@ const PROBE_MESSAGES: Array<Record<string, unknown>> = [
   { role: 'user', content: 'ping' },
 ];
 
+/**
+ * In-memory per-vendor cooldown for the MANUAL probe button. Each manual probe
+ * fans out N upstream calls (N = the vendor's catalog size), so a superadmin
+ * clicking repeatedly can burn meaningful free-tier quota. The scheduled() cron
+ * is naturally rate-limited by its schedule and does NOT use this. Pure +
+ * testable: the caller passes `nowMs`, and the min interval is configurable.
+ */
+const MANUAL_PROBE_MIN_INTERVAL_MS = 60_000; // at most one manual probe per vendor per minute
+const lastManualProbeAt = new Map<string, number>();
+
+export function tryAcquireProbeSlot(
+  vendor: string,
+  nowMs: number,
+  minIntervalMs: number = MANUAL_PROBE_MIN_INTERVAL_MS,
+): { ok: true } | { ok: false; retryAfterMs: number } {
+  const last = lastManualProbeAt.get(vendor);
+  if (last !== undefined && nowMs - last < minIntervalMs) {
+    return { ok: false, retryAfterMs: minIntervalMs - (nowMs - last) };
+  }
+  lastManualProbeAt.set(vendor, nowMs);
+  return { ok: true };
+}
+
+/** Test-only: clear the manual-probe cooldown state between cases. */
+export function _resetProbeCooldowns(): void {
+  lastManualProbeAt.clear();
+}
+
 /** One probe call against a single vendor+model. */
 async function probeModel(
   env: VendorEnv,

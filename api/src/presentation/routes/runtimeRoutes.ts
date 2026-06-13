@@ -5,7 +5,7 @@ import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaul
 import { resolveTicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
 import { readRepoFile } from '../../application/repos/readRepoContents';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import {
   resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
@@ -1135,10 +1135,19 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // a worse trade than an indexed SELECT DISTINCT over a tiny per-tenant keyspace.
   router.get('/cloud-agents', async (c) => {
     const tenantId = c.get('tenantId');
+    // Only refs ACTIVE in the last 30 days — without this window a long-lived
+    // busy tenant accrues an ever-growing chip list of every ref ever seen [1311].
+    // (Still uncached by design: a debug surface that must reflect a run instantly,
+    //  and caching would force a KV version-bump on the hot per-tool-call insert.)
+    const activeSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const rows = await db
       .selectDistinct({ ref: toolAuditEvents.cloudAgentRef })
       .from(toolAuditEvents)
-      .where(and(eq(toolAuditEvents.tenantId, tenantId), isNull(toolAuditEvents.agentHostId)));
+      .where(and(
+        eq(toolAuditEvents.tenantId, tenantId),
+        isNull(toolAuditEvents.agentHostId),
+        gte(toolAuditEvents.ts, activeSince),
+      ));
 
     const namedRefs = rows.map((r) => r.ref).filter((r): r is string => !!r);
     const hasDefault = rows.some((r) => r.ref == null);

@@ -59,7 +59,7 @@ export async function readDescendantSubagentFallbackReply(params: {
   sessionKey: string;
   runStartedAt: number;
 }): Promise<string | undefined> {
-  const descendants = listDescendantRunsForRequester(params.sessionKey)
+  const descendants = (await listDescendantRunsForRequester(params.sessionKey))
     .filter(
       (entry) =>
         typeof entry.endedAt === "number" &&
@@ -114,7 +114,7 @@ export async function waitForDescendantSubagentSummary(params: {
   let sawActiveDescendants = params.observedActiveDescendants === true;
   let drainedAtMs: number | undefined;
   while (Date.now() < deadline) {
-    const activeDescendants = countActiveDescendantRuns(params.sessionKey);
+    const activeDescendants = await countActiveDescendantRuns(params.sessionKey);
     if (activeDescendants > 0) {
       sawActiveDescendants = true;
       drainedAtMs = undefined;

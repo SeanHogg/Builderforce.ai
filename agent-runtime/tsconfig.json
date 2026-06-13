@@ -20,7 +20,9 @@
     "paths": {
       "@seanhogg/builderforce-agents/plugin-sdk": ["./src/plugin-sdk/index.ts"],
       "@seanhogg/builderforce-agents/plugin-sdk/*": ["./src/plugin-sdk/*.ts"],
-      "@seanhogg/builderforce-agents/plugin-sdk/account-id": ["./src/plugin-sdk/account-id.ts"]
+      "@seanhogg/builderforce-agents/plugin-sdk/account-id": ["./src/plugin-sdk/account-id.ts"],
+      "@builderforce/agent-tools": ["../packages/agent-tools/src/index.ts"],
+      "@builderforce/agent-tools/*": ["../packages/agent-tools/src/*"]
     }
   },
   "include": ["src/**/*", "ui/**/*", "extensions/**/*"],

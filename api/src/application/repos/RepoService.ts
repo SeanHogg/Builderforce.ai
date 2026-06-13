@@ -70,6 +70,9 @@ export class RepoService {
   }
 
   /** Associate a new repo with a project. */
+  /** Insert a repo binding. Returns the new row, or `null` when it duplicates an
+   *  existing `(project_id, provider, owner, repo)` (migration 0067 UNIQUE) — the
+   *  route maps null to a friendly 409 instead of surfacing a raw DB error [1397]. */
   async addRepo(input: AddRepoInput, tenantId: number) {
     const now = new Date();
     const [row] = await this.db
@@ -90,8 +93,9 @@ export class RepoService {
         createdAt: now,
         updatedAt: now,
       })
+      .onConflictDoNothing()
       .returning();
-    return row;
+    return row ?? null;
   }
 
   /**

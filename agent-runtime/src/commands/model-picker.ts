@@ -43,7 +43,7 @@ type PromptModelAllowlistResult = { models?: string[] };
 function hasAuthForProvider(
   provider: string,
   cfg: BuilderForceAgentsConfig,
-  store: ReturnType<typeof ensureAuthProfileStore>,
+  store: Awaited<ReturnType<typeof ensureAuthProfileStore>>,
 ) {
   if (listProfilesForProvider(store, provider).length > 0) {
     return true;
@@ -57,11 +57,11 @@ function hasAuthForProvider(
   return false;
 }
 
-function createProviderAuthChecker(params: {
+async function createProviderAuthChecker(params: {
   cfg: BuilderForceAgentsConfig;
   agentDir?: string;
-}): (provider: string) => boolean {
-  const authStore = ensureAuthProfileStore(params.agentDir, {
+}): Promise<(provider: string) => boolean> {
+  const authStore = await ensureAuthProfileStore(params.agentDir, {
     allowKeychainPrompt: false,
   });
   const authCache = new Map<string, boolean>();
@@ -265,7 +265,7 @@ export async function promptDefaultModel(
   }
 
   const agentDir = params.agentDir;
-  const hasAuth = createProviderAuthChecker({ cfg, agentDir });
+  const hasAuth = await createProviderAuthChecker({ cfg, agentDir });
 
   const options: WizardSelectOption[] = [];
   if (allowKeep) {
@@ -401,7 +401,7 @@ export async function promptModelAllowlist(params: {
     cfg,
     defaultProvider: DEFAULT_PROVIDER,
   });
-  const hasAuth = createProviderAuthChecker({ cfg, agentDir: params.agentDir });
+  const hasAuth = await createProviderAuthChecker({ cfg, agentDir: params.agentDir });
 
   const options: WizardSelectOption[] = [];
   const seen = new Set<string>();

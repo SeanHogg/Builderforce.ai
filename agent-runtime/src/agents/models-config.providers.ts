@@ -298,7 +298,7 @@ function resolveAwsSdkApiKeyVarName(): string {
 
 function resolveApiKeyFromProfiles(params: {
   provider: string;
-  store: ReturnType<typeof ensureAuthProfileStore>;
+  store: Awaited<ReturnType<typeof ensureAuthProfileStore>>;
 }): string | undefined {
   const ids = listProfilesForProvider(params.store, params.provider);
   for (const id of ids) {
@@ -339,15 +339,15 @@ function normalizeGoogleProvider(provider: ProviderConfig): ProviderConfig {
   return mutated ? { ...provider, models } : provider;
 }
 
-export function normalizeProviders(params: {
+export async function normalizeProviders(params: {
   providers: ModelsConfig["providers"];
   agentDir: string;
-}): ModelsConfig["providers"] {
+}): Promise<ModelsConfig["providers"]> {
   const { providers } = params;
   if (!providers) {
     return providers;
   }
-  const authStore = ensureAuthProfileStore(params.agentDir, {
+  const authStore = await ensureAuthProfileStore(params.agentDir, {
     allowKeychainPrompt: false,
   });
   let mutated = false;
@@ -752,7 +752,7 @@ export async function resolveImplicitProviders(params: {
   explicitProviders?: Record<string, ProviderConfig> | null;
 }): Promise<ModelsConfig["providers"]> {
   const providers: Record<string, ProviderConfig> = {};
-  const authStore = ensureAuthProfileStore(params.agentDir, {
+  const authStore = await ensureAuthProfileStore(params.agentDir, {
     allowKeychainPrompt: false,
   });
 
@@ -923,7 +923,7 @@ export async function resolveImplicitCopilotProvider(params: {
   env?: NodeJS.ProcessEnv;
 }): Promise<ProviderConfig | null> {
   const env = params.env ?? process.env;
-  const authStore = ensureAuthProfileStore(params.agentDir, {
+  const authStore = await ensureAuthProfileStore(params.agentDir, {
     allowKeychainPrompt: false,
   });
   const hasProfile = listProfilesForProvider(authStore, "github-copilot").length > 0;

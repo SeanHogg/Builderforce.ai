@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   verifyJwt:  vi.fn(),
   signJwt:    vi.fn(),
   buildDatabase: vi.fn(),
+  llmProxyForPlan: vi.fn(),
 }));
 
 vi.mock('../../infrastructure/auth/HashService', () => ({
@@ -20,6 +21,12 @@ vi.mock('../../infrastructure/auth/JwtService', () => ({
   signJwt: mocks.signJwt,
 }));
 vi.mock('../../infrastructure/database/connection', () => ({ buildDatabase: mocks.buildDatabase }));
+// Partial mock — keep every real LlmProxyService export (ChatCompletionRequest,
+// reorderPoolByShape, modelPoolForPlan, …) and override only the network call.
+vi.mock('../../application/llm/LlmProxyService', async (orig) => ({
+  ...(await orig<typeof import('../../application/llm/LlmProxyService')>()),
+  llmProxyForPlan: mocks.llmProxyForPlan,
+}));
 
 // Imports must follow the vi.mock calls above so the mocks are in place.
 const { requireTenantAccess } = await import('./llmRoutes');
@@ -210,8 +217,31 @@ function mockDb(opts: {
       }),
     }),
   }));
+  // Usage/trace writes (logUsage/logTrace) run inside ctx.waitUntil but their
+  // promise argument is built eagerly, so `.insert(...).values(...)` must exist.
+  const insert = vi.fn(() => ({
+    values: () => ({
+      catch:     (_h: unknown) => Promise.resolve(),
+      then:      (r: (v: unknown) => unknown) => Promise.resolve(r(undefined)),
+      returning: () => Promise.resolve([]),
+    }),
+  }));
 
-  return { select, update } as unknown;
+  return { select, update, insert } as unknown;
+}
+
+/** Minimal in-memory KVNamespace for the idempotency-replay cache [1232]. */
+function makeKvMock() {
+  const store = new Map<string, string>();
+  return {
+    store,
+    get: async (k: string, fmt?: string) => {
+      const v = store.get(k);
+      if (v == null) return null;
+      return fmt === 'json' ? JSON.parse(v) : v;
+    },
+    put: async (k: string, v: string) => { store.set(k, v); },
+  };
 }
 
 function mockContext(token: string, db: unknown): Context<HonoEnv> {
@@ -421,6 +451,110 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
     expect(res.status).toBe(403);
     const body = await res.json() as { code?: string };
     expect(body.code).toBe('strict_pin_not_allowed');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Server-side / caller-side boundary [1300]: the response envelope echoes the
+// trace id (so a consumer can quote it for a superadmin lookup) but must NEVER
+// serialize the builder-side per-attempt detail (attempts[].error, requestBody,
+// responseBody) — those live only in the llm_traces row.
+// ---------------------------------------------------------------------------
+describe('POST /v1/chat/completions trace-id leak boundary [1300]', () => {
+  beforeEach(() => {
+    mocks.hashSecret.mockReset();
+    mocks.buildDatabase.mockReset();
+    mocks.llmProxyForPlan.mockReset();
+  });
+
+  it('echoes the trace id but does NOT leak attempts/requestBody/responseBody', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'pro', billingStatus: 'active', tokenDailyLimitOverride: null },
+      usageRow:  { used: 0 },
+    }));
+    // Proxy returns a success — but with rich SERVER-SIDE diagnostics (attempts
+    // carrying raw upstream error text). The route must keep all of it off the wire.
+    mocks.llmProxyForPlan.mockReturnValue({
+      complete: async () => ({
+        response: new Response(
+          JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' } }] }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+        resolvedModel: 'cerebras/llama-3.3-70b',
+        resolvedVendor: 'cerebras',
+        retries: 0,
+        failovers: [],
+        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        attempts: [{ model: 'x', vendor: 'cerebras', status: 500, error: 'RAW_UPSTREAM_SECRET_PAYLOAD', durationMs: 1 }],
+      }),
+    });
+
+    const req = new Request('http://test.local/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_trace', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'cerebras/llama-3.3-70b', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    const env = { ...(baseEnv as Record<string, unknown>), OPENROUTER_API_KEY: 'x' };
+    const res = await buildApp().request(req, {}, env, fakeExecutionCtx);
+
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    const body = JSON.parse(text) as { _builderforce?: { traceId?: string } };
+
+    // (a) trace id IS surfaced to the caller in the response envelope
+    //     (non-streaming carries it in `_builderforce.traceId`; the streaming
+    //     path additionally sets the `x-builderforce-trace-id` header).
+    expect(body._builderforce?.traceId).toBeTruthy();
+    // (b) builder-side detail is NOT serialized back
+    expect(text).not.toContain('attempts');
+    expect(text).not.toContain('requestBody');
+    expect(text).not.toContain('responseBody');
+    expect(text).not.toContain('RAW_UPSTREAM_SECRET_PAYLOAD');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Idempotency-Key REPLAY [1232]: a repeated key with a cached original body
+// replays it (200 + replay header) and must NOT re-dispatch to the proxy.
+// ---------------------------------------------------------------------------
+describe('POST /v1/chat/completions idempotency replay [1232]', () => {
+  beforeEach(() => {
+    mocks.hashSecret.mockReset();
+    mocks.buildDatabase.mockReset();
+    mocks.llmProxyForPlan.mockReset();
+  });
+
+  it('replays the cached body and does NOT call the proxy on a repeated key', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'pro', billingStatus: 'active', tokenDailyLimitOverride: null },
+      usageRow:  { used: 0 },
+    }));
+    // If replay short-circuits correctly, the proxy is never invoked.
+    mocks.llmProxyForPlan.mockReturnValue({
+      complete: async () => { throw new Error('proxy must NOT be called on idempotent replay'); },
+    });
+    const kv = makeKvMock();
+    await kv.put('idem:1:abc', JSON.stringify({
+      status: 200,
+      body: { choices: [{ message: { role: 'assistant', content: 'cached' } }], _builderforce: { traceId: 'llm-original' } },
+    }));
+
+    const req = new Request('http://test.local/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_idem', 'Content-Type': 'application/json', 'Idempotency-Key': 'abc' },
+      body: JSON.stringify({ model: 'cerebras/llama-3.3-70b', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    const env = { ...(baseEnv as Record<string, unknown>), OPENROUTER_API_KEY: 'x', AUTH_CACHE_KV: kv };
+    const res = await buildApp().request(req, {}, env, fakeExecutionCtx);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('x-builderforce-idempotent-replay')).toBe('true');
+    const body = await res.json() as { _builderforce?: { traceId?: string }; choices?: unknown };
+    expect(body._builderforce?.traceId).toBe('llm-original'); // the ORIGINAL response, replayed
   });
 });
 

@@ -13,6 +13,8 @@
  */
 
 import { ideProxy } from '../llm/LlmProxyService';
+import { recordProxyUsage } from '../llm/usageLedger';
+import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { QaStep } from './qaTypes';
 
@@ -103,7 +105,7 @@ export function fallbackSpec(input: GenerateInput): string {
 }
 
 export class QaGeneratorService {
-  constructor(private readonly env: Env) {}
+  constructor(private readonly env: Env, private readonly tenantId?: number) {}
 
   async generate(input: GenerateInput): Promise<GenerateResult> {
     // No LLM key configured → deterministic spec, no model.
@@ -135,6 +137,16 @@ export class QaGeneratorService {
         response_format: { type: 'json_object' },
         useCase: 'qa_test_generation',
       });
+
+      // Record this background generation in the usage ledger [1310] (best-effort,
+      // no-ops without a tenantId or usage). Was previously invisible to billing.
+      if (this.tenantId != null) {
+        void recordProxyUsage(buildDatabase(this.env), this.env, {
+          tenantId: this.tenantId,
+          useCase: 'qa_test_generation',
+          result,
+        });
+      }
 
       if (result.response.status >= 400) {
         return { spec: fallbackSpec(input), steps: input.steps, model: result.resolvedModel ?? null };

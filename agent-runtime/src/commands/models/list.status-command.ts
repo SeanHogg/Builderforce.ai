@@ -117,7 +117,7 @@ export async function modelsStatusCommand(
   );
   const allowed = Object.keys(cfg.agents?.defaults?.models ?? {});
 
-  const store = ensureAuthProfileStore(agentDir);
+  const store = await ensureAuthProfileStore(agentDir);
   const modelsPath = path.join(agentDir, "models.json");
 
   const providersFromStore = new Set(

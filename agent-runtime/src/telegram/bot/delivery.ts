@@ -350,7 +350,7 @@ export async function resolveMedia(
       const saved = await downloadAndSaveTelegramFile(file.file_path, fetchImpl);
 
       // Check sticker cache for existing description
-      const cached = sticker.file_unique_id ? getCachedSticker(sticker.file_unique_id) : null;
+      const cached = sticker.file_unique_id ? await getCachedSticker(sticker.file_unique_id) : null;
       if (cached) {
         logVerbose(`telegram: sticker cache hit for ${sticker.file_unique_id}`);
         const fileId = sticker.file_id ?? cached.fileId;

@@ -405,7 +405,7 @@ export function resolveModelSelectionFromDirective(params: {
 
   let profileOverride: string | undefined;
   if (modelSelection && params.directives.rawModelProfile) {
-    const profileResolved = resolveProfileOverride({
+    const profileResolved = await resolveProfileOverride({
       rawProfile: params.directives.rawModelProfile,
       provider: modelSelection.provider,
       cfg: params.cfg,

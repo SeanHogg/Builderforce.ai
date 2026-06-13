@@ -25,7 +25,7 @@ export async function modelsListCommand(
   ensureFlagCompatibility(opts);
   const { loadConfig } = await import("../../config/config.js");
   const cfg = loadConfig();
-  const authStore = ensureAuthProfileStore();
+  const authStore = await ensureAuthProfileStore();
   const providerFilter = (() => {
     const raw = opts.provider?.trim();
     if (!raw) {

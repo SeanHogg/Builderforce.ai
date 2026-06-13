@@ -137,14 +137,14 @@ function selectProbeModel(params: {
   return null;
 }
 
-function buildProbeTargets(params: {
+async function buildProbeTargets(params: {
   cfg: BuilderForceAgentsConfig;
   providers: string[];
   modelCandidates: string[];
   options: AuthProbeOptions;
 }): Promise<{ targets: AuthProbeTarget[]; results: AuthProbeResult[] }> {
   const { cfg, providers, modelCandidates, options } = params;
-  const store = ensureAuthProfileStore();
+  const store = await ensureAuthProfileStore();
   const providerFilter = options.provider?.trim();
   const providerFilterKey = providerFilter ? normalizeProviderId(providerFilter) : null;
   const profileFilter = new Set((options.profileIds ?? []).map((id) => id.trim()).filter(Boolean));

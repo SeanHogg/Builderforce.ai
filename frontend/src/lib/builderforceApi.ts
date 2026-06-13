@@ -794,6 +794,9 @@ export interface Task {
   dueDate: string | null;
   persona: string | null;
   archived: boolean;
+  /** Count of linked PRDs (task_specs) — drives the board card's PRD indicator
+   *  [1266]. Best-effort from GET /api/tasks; 0/absent where unknown. */
+  specCount?: number;
   createdAt: string;
   updatedAt: string;
 }

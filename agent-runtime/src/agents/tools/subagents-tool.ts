@@ -258,7 +258,7 @@ async function killSubagentRun(params: {
       store[childSessionKey] = current;
     });
   }
-  const marked = markSubagentRunTerminated({
+  const marked = await markSubagentRunTerminated({
     runId: params.entry.runId,
     childSessionKey,
     reason: "killed",

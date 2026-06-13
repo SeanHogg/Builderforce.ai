@@ -524,7 +524,7 @@ export async function runReplyAgent(params: {
       (sessionKey ? activeSessionStore?.[sessionKey]?.responseUsage : undefined);
     const responseUsageMode = resolveResponseUsageMode(responseUsageRaw);
     if (responseUsageMode !== "off" && hasNonzeroUsage(usage)) {
-      const authMode = resolveModelAuthMode(providerUsed, cfg);
+      const authMode = await resolveModelAuthMode(providerUsed, cfg);
       const showCost = authMode === "api-key";
       const costConfig = showCost
         ? resolveModelCostConfig({

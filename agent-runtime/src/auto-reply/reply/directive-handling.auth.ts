@@ -25,7 +25,7 @@ export const resolveAuthLabel = async (
   mode: ModelAuthDetailMode = "compact",
 ): Promise<{ label: string; source: string }> => {
   const formatPath = (value: string) => shortenHomePath(value);
-  const store = ensureAuthProfileStore(agentDir, {
+  const store = await ensureAuthProfileStore(agentDir, {
     allowKeychainPrompt: false,
   });
   const order = resolveAuthProfileOrder({ cfg, store, provider });
@@ -185,17 +185,17 @@ export const formatAuthLabel = (auth: { label: string; source: string }) => {
   return `${auth.label} (${auth.source})`;
 };
 
-export const resolveProfileOverride = (params: {
+export const resolveProfileOverride = async (params: {
   rawProfile?: string;
   provider: string;
   cfg: BuilderForceAgentsConfig;
   agentDir?: string;
-}): { profileId?: string; error?: string } => {
+}): Promise<{ profileId?: string; error?: string }> => {
   const raw = params.rawProfile?.trim();
   if (!raw) {
     return {};
   }
-  const store = ensureAuthProfileStore(params.agentDir, {
+  const store = await ensureAuthProfileStore(params.agentDir, {
     allowKeychainPrompt: false,
   });
   const profile = store.profiles[raw];

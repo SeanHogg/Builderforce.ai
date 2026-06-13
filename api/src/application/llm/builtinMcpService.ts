@@ -14,13 +14,14 @@
  * domains are tracked in the README Consolidated Gap Register.
  */
 
+import { and, eq, desc } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { ProjectService } from '../project/ProjectService';
 import { TaskService } from '../task/TaskService';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
-import { buildProjectKey } from '../project/projectKey';
 import { ProjectStatus, TaskPriority } from '../../domain/shared/types';
+import { workflows, specs, promptLibraryEntries, approvalRules, agents, boards, cronJobs } from '../../infrastructure/database/schema';
 import type { McpToolEntry } from './mcpExtensionService';
 
 /** Sentinel extensionId the gateway routes to this in-process catalog. */
@@ -65,17 +66,18 @@ const CATALOG: BuiltinTool[] = [
     tool: 'projects.create', mutates: true,
     description: 'Create a new project. modality: designer (app builder) | video | llm.',
     parameters: obj({ name: S, description: S, template: S, modality: { type: 'string', enum: ['designer', 'video', 'llm'] } }, ['name']),
-    run: (ctx, a) => {
+    run: async (ctx, a) => {
       const name = str(a.name).trim();
       if (!name) throw new Error('name is required');
-      return ctx.projects.createProject({
+      const p = await ctx.projects.createProject({
         tenantId: ctx.tenantId,
-        key: buildProjectKey(ctx.tenantId, name),
+        key: await ctx.projects.buildUniqueKey(ctx.tenantId, name),
         name,
         description: a.description != null ? str(a.description) : null,
         template: a.template != null ? str(a.template) : null,
         modality: a.modality != null ? str(a.modality) : null,
-      }).then((p) => p.toPlain());
+      });
+      return p.toPlain();
     },
   },
   {
@@ -125,6 +127,67 @@ const CATALOG: BuiltinTool[] = [
   },
   { tool: 'tasks.delete', mutates: true, description: 'Delete a task.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { await getTenantTask(ctx, num(a.id)); await ctx.tasks.deleteTask(num(a.id)); return { deleted: num(a.id) }; } },
   { tool: 'tasks.move', mutates: true, description: 'Move a task to another project board (re-keys it).', parameters: obj({ id: N, projectId: N }, ['id', 'projectId']), run: (ctx, a) => ctx.tasks.moveTask(num(a.id), num(a.projectId), ctx.tenantId).then((t) => t.toPlain()) },
+
+  // ---- Workflows (read) — tenant-scoped direct queries [1296] ----
+  { tool: 'workflows.list', mutates: false, description: 'List workflows in the workspace.', parameters: obj({}), run: (ctx) => ctx.db.select().from(workflows).where(eq(workflows.tenantId, ctx.tenantId)).orderBy(desc(workflows.updatedAt)).limit(200) },
+  { tool: 'workflows.get', mutates: false, description: 'Get one workflow by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => (await ctx.db.select().from(workflows).where(and(eq(workflows.id, str(a.id)), eq(workflows.tenantId, ctx.tenantId))).limit(1))[0] ?? null },
+
+  // ---- Specs / PRDs (read) ----
+  { tool: 'specs.list', mutates: false, description: 'List specs / PRDs, optionally filtered by project.', parameters: obj({ projectId: N }), run: (ctx, a) => ctx.db.select().from(specs).where(a.projectId != null ? and(eq(specs.tenantId, ctx.tenantId), eq(specs.projectId, num(a.projectId))) : eq(specs.tenantId, ctx.tenantId)).orderBy(desc(specs.updatedAt)).limit(200) },
+  { tool: 'specs.get', mutates: false, description: 'Get one spec / PRD by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => (await ctx.db.select().from(specs).where(and(eq(specs.id, str(a.id)), eq(specs.tenantId, ctx.tenantId))).limit(1))[0] ?? null },
+  {
+    tool: 'specs.create', mutates: true,
+    description: 'Create a spec / PRD. goal is required; optionally attach to a project and include the PRD body.',
+    parameters: obj({ goal: S, projectId: N, prd: S }, ['goal']),
+    run: async (ctx, a) => {
+      const goal = str(a.goal).trim();
+      if (!goal) throw new Error('goal is required');
+      if (a.projectId != null) await ctx.projects.getProject(num(a.projectId), ctx.tenantId); // tenant-ownership guard (no cross-tenant attach)
+      const [row] = await ctx.db.insert(specs).values({
+        id: crypto.randomUUID(),
+        tenantId: ctx.tenantId,
+        goal,
+        projectId: a.projectId != null ? num(a.projectId) : null,
+        prd: a.prd != null ? str(a.prd) : null,
+      }).returning();
+      return row;
+    },
+  },
+  { tool: 'specs.delete', mutates: true, description: 'Delete a spec / PRD by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const rows = await ctx.db.delete(specs).where(and(eq(specs.id, str(a.id)), eq(specs.tenantId, ctx.tenantId))).returning({ id: specs.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
+
+  // ---- Prompt library (read) ----
+  { tool: 'prompts.list', mutates: false, description: 'List prompt-library entries in the workspace.', parameters: obj({}), run: (ctx) => ctx.db.select().from(promptLibraryEntries).where(eq(promptLibraryEntries.tenantId, ctx.tenantId)).orderBy(desc(promptLibraryEntries.updatedAt)).limit(200) },
+
+  // ---- Approval rules (CRUD — simple single-table domain, segment_id auto-filled by the 0056 trigger) ----
+  { tool: 'approvals.list', mutates: false, description: 'List the workspace approval rules.', parameters: obj({}), run: (ctx) => ctx.db.select().from(approvalRules).where(eq(approvalRules.tenantId, ctx.tenantId)).limit(200) },
+  {
+    tool: 'approvals.create', mutates: true,
+    description: 'Create an approval rule. Auto-approve when estimated cost / files-changed are at or below the given caps; null = ignore that cap.',
+    parameters: obj({ name: S, actionType: S, maxEstimatedCost: N, maxFilesChanged: N, isEnabled: B }, ['name']),
+    run: async (ctx, a) => {
+      const name = str(a.name).trim();
+      if (!name) throw new Error('name is required');
+      const [row] = await ctx.db.insert(approvalRules).values({
+        tenantId: ctx.tenantId,
+        name,
+        actionType: a.actionType != null ? str(a.actionType) : null,
+        maxEstimatedCost: a.maxEstimatedCost != null ? num(a.maxEstimatedCost) : null,
+        maxFilesChanged: a.maxFilesChanged != null ? num(a.maxFilesChanged) : null,
+        ...(typeof a.isEnabled === 'boolean' ? { isEnabled: a.isEnabled } : {}),
+      }).returning();
+      return row;
+    },
+  },
+  { tool: 'approvals.delete', mutates: true, description: 'Delete an approval rule by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const rows = await ctx.db.delete(approvalRules).where(and(eq(approvalRules.id, str(a.id)), eq(approvalRules.tenantId, ctx.tenantId))).returning({ id: approvalRules.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
+
+  // ---- Registered agents (read) ----
+  { tool: 'agents.list', mutates: false, description: 'List registered agents in the workspace.', parameters: obj({}), run: (ctx) => ctx.db.select().from(agents).where(eq(agents.tenantId, ctx.tenantId)).limit(200) },
+
+  // ---- Boards (read) ----
+  { tool: 'boards.list', mutates: false, description: 'List project boards in the workspace.', parameters: obj({}), run: (ctx) => ctx.db.select().from(boards).where(eq(boards.tenantId, ctx.tenantId)).limit(200) },
+
+  // ---- Cron jobs (read) ----
+  { tool: 'cron.list', mutates: false, description: 'List scheduled cron jobs in the workspace.', parameters: obj({}), run: (ctx) => ctx.db.select().from(cronJobs).where(eq(cronJobs.tenantId, ctx.tenantId)).limit(200) },
 ];
 
 /** Load a task and assert it belongs to the caller's tenant (services that take

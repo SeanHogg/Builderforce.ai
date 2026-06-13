@@ -95,17 +95,24 @@ export async function linkSpecToTask(
   params: { taskId: number; specId: string; tenantId: number; isPrimary?: boolean },
 ): Promise<void> {
   const { taskId, specId, tenantId, isPrimary = false } = params;
+  const upsert = db
+    .insert(taskSpecs)
+    .values({ taskId, specId, tenantId, isPrimary })
+    .onConflictDoUpdate({ target: [taskSpecs.taskId, taskSpecs.specId], set: { isPrimary } });
   try {
     if (isPrimary) {
-      await db
+      // Atomic demote-then-upsert in ONE transaction (db.batch — the neon-http
+      // driver's transaction primitive) so a racing concurrent set-primary
+      // can't slip between the two writes and silently lose its primary intent
+      // to the partial-unique `uq_task_specs_primary` index [1278].
+      const demote = db
         .update(taskSpecs)
         .set({ isPrimary: false })
         .where(and(eq(taskSpecs.taskId, taskId), eq(taskSpecs.isPrimary, true)));
+      await db.batch([demote, upsert]);
+    } else {
+      await upsert;
     }
-    await db
-      .insert(taskSpecs)
-      .values({ taskId, specId, tenantId, isPrimary })
-      .onConflictDoUpdate({ target: [taskSpecs.taskId, taskSpecs.specId], set: { isPrimary } });
   } catch { /* best-effort */ }
 }
 

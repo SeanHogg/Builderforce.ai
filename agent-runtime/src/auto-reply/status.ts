@@ -327,7 +327,7 @@ const formatVoiceModeLine = (
   return `🔊 Voice: ${autoMode} · provider=${provider} · limit=${maxLength} · summary=${summarize}`;
 };
 
-export function buildStatusMessage(args: StatusArgs): string {
+export async function buildStatusMessage(args: StatusArgs): Promise<string> {
   const now = args.now ?? Date.now();
   const entry = args.sessionEntry;
   const resolved = resolveConfiguredModelRef({
@@ -440,7 +440,7 @@ export function buildStatusMessage(args: StatusArgs): string {
   ];
   const activationLine = activationParts.filter(Boolean).join(" · ");
 
-  const authMode = resolveModelAuthMode(provider, args.config);
+  const authMode = await resolveModelAuthMode(provider, args.config);
   const authLabelValue =
     args.modelAuth ?? (authMode && authMode !== "unknown" ? authMode : undefined);
   const showCost = authLabelValue === "api-key" || authLabelValue === "mixed";

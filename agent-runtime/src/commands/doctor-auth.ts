@@ -21,7 +21,7 @@ export async function maybeRepairAnthropicOAuthProfileId(
   cfg: BuilderForceAgentsConfig,
   prompter: DoctorPrompter,
 ): Promise<BuilderForceAgentsConfig> {
-  const store = ensureAuthProfileStore();
+  const store = await ensureAuthProfileStore();
   const repair = repairOAuthProfileIdMismatch({
     cfg,
     store,
@@ -113,7 +113,7 @@ export async function maybeRemoveDeprecatedCliAuthProfiles(
   cfg: BuilderForceAgentsConfig,
   prompter: DoctorPrompter,
 ): Promise<BuilderForceAgentsConfig> {
-  const store = ensureAuthProfileStore(undefined, { allowKeychainPrompt: false });
+  const store = await ensureAuthProfileStore(undefined, { allowKeychainPrompt: false });
   const deprecated = new Set<string>();
   if (store.profiles[CLAUDE_CLI_PROFILE_ID] || cfg.auth?.profiles?.[CLAUDE_CLI_PROFILE_ID]) {
     deprecated.add(CLAUDE_CLI_PROFILE_ID);
@@ -232,7 +232,7 @@ export async function noteAuthProfileHealth(params: {
   prompter: DoctorPrompter;
   allowKeychainPrompt: boolean;
 }): Promise<void> {
-  const store = ensureAuthProfileStore(undefined, {
+  const store = await ensureAuthProfileStore(undefined, {
     allowKeychainPrompt: params.allowKeychainPrompt,
   });
   const unusable = (() => {
@@ -307,7 +307,7 @@ export async function noteAuthProfileHealth(params: {
       note(errors.join("\n"), "OAuth refresh errors");
     }
     summary = buildAuthHealthSummary({
-      store: ensureAuthProfileStore(undefined, {
+      store: await ensureAuthProfileStore(undefined, {
         allowKeychainPrompt: false,
       }),
       cfg: params.cfg,

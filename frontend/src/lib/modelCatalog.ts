@@ -55,6 +55,11 @@ export interface ModelRecord {
   badge?: string;
   /** CTA destination for Builderforce records. */
   ctaHref?: string;
+  /** True when the Free/Pro cascade actually routes this id (vs an upstream id
+   *  we list but don't serve) — drives the "Routable" chip + filter [1305]. */
+  routable?: boolean;
+  /** Which pool routes it when routable: 'free' | 'pro'. */
+  pool?: 'free' | 'pro';
 }
 
 /** Shape returned by `GET /llm/v1/catalog` (see api modelCatalog.ts). */
@@ -71,6 +76,8 @@ interface CatalogModel {
   supportedParameters?: string[];
   created?: number;
   tier: 'FREE' | 'STANDARD';
+  routable?: boolean;
+  pool?: 'free' | 'pro';
 }
 
 // ---------------------------------------------------------------------------

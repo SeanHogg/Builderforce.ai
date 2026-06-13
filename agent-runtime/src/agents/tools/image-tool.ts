@@ -60,11 +60,11 @@ function resolveDefaultModelRef(cfg?: BuilderForceAgentsConfig): {
   return { provider: DEFAULT_PROVIDER, model: DEFAULT_MODEL };
 }
 
-function hasAuthForProvider(params: { provider: string; agentDir: string }): boolean {
+async function hasAuthForProvider(params: { provider: string; agentDir: string }): Promise<boolean> {
   if (resolveEnvApiKey(params.provider)?.apiKey) {
     return true;
   }
-  const store = ensureAuthProfileStore(params.agentDir, {
+  const store = await ensureAuthProfileStore(params.agentDir, {
     allowKeychainPrompt: false,
   });
   return listProfilesForProvider(store, params.provider).length > 0;
@@ -78,10 +78,10 @@ function hasAuthForProvider(params: { provider: string; agentDir: string }): boo
  *   - same provider (best effort)
  *   - fall back to OpenAI/Anthropic when available
  */
-export function resolveImageModelConfigForTool(params: {
+export async function resolveImageModelConfigForTool(params: {
   cfg?: BuilderForceAgentsConfig;
   agentDir: string;
-}): ImageModelConfig | null {
+}): Promise<ImageModelConfig | null> {
   // Note: We intentionally do NOT gate based on primarySupportsImages here.
   // Even when the primary model supports images, we keep the tool available
   // because images are auto-injected into prompts (see attempt.ts detectAndLoadPromptImages).
@@ -92,11 +92,11 @@ export function resolveImageModelConfigForTool(params: {
   }
 
   const primary = resolveDefaultModelRef(params.cfg);
-  const openaiOk = hasAuthForProvider({
+  const openaiOk = await hasAuthForProvider({
     provider: "openai",
     agentDir: params.agentDir,
   });
-  const anthropicOk = hasAuthForProvider({
+  const anthropicOk = await hasAuthForProvider({
     provider: "anthropic",
     agentDir: params.agentDir,
   });
@@ -117,7 +117,7 @@ export function resolveImageModelConfigForTool(params: {
     cfg: params.cfg,
     provider: primary.provider,
   });
-  const providerOk = hasAuthForProvider({
+  const providerOk = await hasAuthForProvider({
     provider: primary.provider,
     agentDir: params.agentDir,
   });
@@ -347,7 +347,7 @@ export function createImageTool(options?: {
     }
     return null;
   }
-  const imageModelConfig = resolveImageModelConfigForTool({
+  const imageModelConfig = await resolveImageModelConfigForTool({
     cfg: options?.config,
     agentDir,
   });

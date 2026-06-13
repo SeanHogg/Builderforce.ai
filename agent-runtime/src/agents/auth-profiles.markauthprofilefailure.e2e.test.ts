@@ -8,7 +8,7 @@ import {
   markAuthProfileFailure,
 } from "./auth-profiles.js";
 
-type AuthProfileStore = ReturnType<typeof ensureAuthProfileStore>;
+type AuthProfileStore = Awaited<ReturnType<typeof ensureAuthProfileStore>>;
 
 async function withAuthProfileStore(
   fn: (ctx: { agentDir: string; store: AuthProfileStore }) => Promise<void>,

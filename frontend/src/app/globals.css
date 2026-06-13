@@ -1147,6 +1147,16 @@ html[data-theme='light'] .nebula {
   flex-direction: column;
 }
 
+/* On phones the fixed .mobile-bottom-nav (56px + safe-area) would overlap the
+   bottom of a full-bleed IDE/project page, whose padding is 0 above. Reserve
+   exactly that clearance so the child fills the area ABOVE the bottom bar. */
+@media (max-width: 767px) {
+  .content:has(.ide-full-height),
+  .content:has(.app-full-height) {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 /* Page title / sub (Settings, Security, Admin, etc.) */
 .page-title {
   font-size: 1.5rem;

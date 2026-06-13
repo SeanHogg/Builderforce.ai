@@ -397,7 +397,7 @@ export async function runOnboardingWizard(
   if (shouldReuseExistingAuth) {
     await prompter.note("Keeping existing model/auth configuration.", "Model/auth provider");
   } else {
-    const authStore = ensureAuthProfileStore(undefined, {
+    const authStore = await ensureAuthProfileStore(undefined, {
       allowKeychainPrompt: false,
     });
     const authChoiceFromPrompt = opts.authChoice === undefined;

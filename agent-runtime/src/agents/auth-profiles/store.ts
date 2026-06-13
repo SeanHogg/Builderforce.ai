@@ -27,7 +27,7 @@ export async function updateAuthProfileStoreWithLock(params: {
 
   try {
     return await withFileLock(authPath, AUTH_STORE_LOCK_OPTIONS, async () => {
-      const store = ensureAuthProfileStore(params.agentDir);
+      const store = await ensureAuthProfileStore(params.agentDir);
       const shouldSave = params.updater(store);
       if (shouldSave) {
         saveAuthProfileStore(store, params.agentDir);
@@ -158,9 +158,9 @@ function mergeAuthProfileStores(
   };
 }
 
-function mergeOAuthFileIntoStore(store: AuthProfileStore): boolean {
+async function mergeOAuthFileIntoStore(store: AuthProfileStore): Promise<boolean> {
   const oauthPath = resolveOAuthPath();
-  const oauthRaw = loadJsonFile(oauthPath);
+  const oauthRaw = await loadJsonFile(oauthPath);
   if (!oauthRaw || typeof oauthRaw !== "object") {
     return false;
   }
@@ -220,20 +220,20 @@ function applyLegacyStore(store: AuthProfileStore, legacy: LegacyAuthStore): voi
   }
 }
 
-export function loadAuthProfileStore(): AuthProfileStore {
+export async function loadAuthProfileStore(): Promise<AuthProfileStore> {
   const authPath = resolveAuthStorePath();
-  const raw = loadJsonFile(authPath);
+  const raw = await loadJsonFile(authPath);
   const asStore = coerceAuthStore(raw);
   if (asStore) {
     // Sync from external CLI tools on every load
-    const synced = syncExternalCliCredentials(asStore);
+    const synced = await syncExternalCliCredentials(asStore);
     if (synced) {
-      saveJsonFile(authPath, asStore);
+      await saveJsonFile(authPath, asStore);
     }
     return asStore;
   }
 
-  const legacyRaw = loadJsonFile(resolveLegacyAuthStorePath());
+  const legacyRaw = await loadJsonFile(resolveLegacyAuthStorePath());
   const legacy = coerceLegacyStore(legacyRaw);
   if (legacy) {
     const store: AuthProfileStore = {
@@ -241,27 +241,27 @@ export function loadAuthProfileStore(): AuthProfileStore {
       profiles: {},
     };
     applyLegacyStore(store, legacy);
-    syncExternalCliCredentials(store);
+    await syncExternalCliCredentials(store);
     return store;
   }
 
   const store: AuthProfileStore = { version: AUTH_STORE_VERSION, profiles: {} };
-  syncExternalCliCredentials(store);
+  await syncExternalCliCredentials(store);
   return store;
 }
 
-function loadAuthProfileStoreForAgent(
+async function loadAuthProfileStoreForAgent(
   agentDir?: string,
   _options?: { allowKeychainPrompt?: boolean },
-): AuthProfileStore {
+): Promise<AuthProfileStore> {
   const authPath = resolveAuthStorePath(agentDir);
-  const raw = loadJsonFile(authPath);
+  const raw = await loadJsonFile(authPath);
   const asStore = coerceAuthStore(raw);
   if (asStore) {
     // Sync from external CLI tools on every load
-    const synced = syncExternalCliCredentials(asStore);
+    const synced = await syncExternalCliCredentials(asStore);
     if (synced) {
-      saveJsonFile(authPath, asStore);
+      await saveJsonFile(authPath, asStore);
     }
     return asStore;
   }
@@ -269,17 +269,17 @@ function loadAuthProfileStoreForAgent(
   // Fallback: inherit auth-profiles from main agent if subagent has none
   if (agentDir) {
     const mainAuthPath = resolveAuthStorePath(); // without agentDir = main
-    const mainRaw = loadJsonFile(mainAuthPath);
+    const mainRaw = await loadJsonFile(mainAuthPath);
     const mainStore = coerceAuthStore(mainRaw);
     if (mainStore && Object.keys(mainStore.profiles).length > 0) {
       // Clone main store to subagent directory for auth inheritance
-      saveJsonFile(authPath, mainStore);
+      await saveJsonFile(authPath, mainStore);
       log.info("inherited auth-profiles from main agent", { agentDir });
       return mainStore;
     }
   }
 
-  const legacyRaw = loadJsonFile(resolveLegacyAuthStorePath(agentDir));
+  const legacyRaw = await loadJsonFile(resolveLegacyAuthStorePath(agentDir));
   const legacy = coerceLegacyStore(legacyRaw);
   const store: AuthProfileStore = {
     version: AUTH_STORE_VERSION,
@@ -289,11 +289,11 @@ function loadAuthProfileStoreForAgent(
     applyLegacyStore(store, legacy);
   }
 
-  const mergedOAuth = mergeOAuthFileIntoStore(store);
-  const syncedCli = syncExternalCliCredentials(store);
+  const mergedOAuth = await mergeOAuthFileIntoStore(store);
+  const syncedCli = await syncExternalCliCredentials(store);
   const shouldWrite = legacy !== null || mergedOAuth || syncedCli;
   if (shouldWrite) {
-    saveJsonFile(authPath, store);
+    await saveJsonFile(authPath, store);
   }
 
   // PR #368: legacy auth.json could get re-migrated from other agent dirs,
@@ -316,18 +316,18 @@ function loadAuthProfileStoreForAgent(
   return store;
 }
 
-export function ensureAuthProfileStore(
+export async function ensureAuthProfileStore(
   agentDir?: string,
   options?: { allowKeychainPrompt?: boolean },
-): AuthProfileStore {
-  const store = loadAuthProfileStoreForAgent(agentDir, options);
+): Promise<AuthProfileStore> {
+  const store = await loadAuthProfileStoreForAgent(agentDir, options);
   const authPath = resolveAuthStorePath(agentDir);
   const mainAuthPath = resolveAuthStorePath();
   if (!agentDir || authPath === mainAuthPath) {
     return store;
   }
 
-  const mainStore = loadAuthProfileStoreForAgent(undefined, options);
+  const mainStore = await loadAuthProfileStoreForAgent(undefined, options);
   const merged = mergeAuthProfileStores(mainStore, store);
 
   return merged;

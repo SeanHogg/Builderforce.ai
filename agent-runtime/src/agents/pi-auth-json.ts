@@ -115,7 +115,7 @@ export async function ensurePiAuthJsonFromAuthProfiles(agentDir: string): Promis
   wrote: boolean;
   authPath: string;
 }> {
-  const store = ensureAuthProfileStore(agentDir, { allowKeychainPrompt: false });
+  const store = await ensureAuthProfileStore(agentDir, { allowKeychainPrompt: false });
   const authPath = path.join(agentDir, "auth.json");
 
   // Group profiles by provider, taking the first valid profile for each

@@ -9,7 +9,9 @@ import {
   projects,
 } from '../../infrastructure/database/schema';
 import { ideProxy } from '../llm/LlmProxyService';
+import { recordProxyUsage } from '../llm/usageLedger';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
 
 const BRAIN_ORIGIN = 'brainstorm';
 
@@ -120,6 +122,14 @@ export class BrainService {
   // single-vendor on purpose.
   private buildLlmService(apiKey: string) {
     return ideProxy({ OPENROUTER_API_KEY: apiKey });
+  }
+
+  /** Record a Brain summarization call in the usage ledger [1310] (best-effort,
+   *  fire-and-forget; no-ops without usage). These non-streaming background calls
+   *  were previously invisible to billing. The apiKey-only env is enough for the
+   *  usage row; pricing lookup is best-effort. */
+  private recordUsage(apiKey: string, tenantId: number, useCase: string, result: Parameters<typeof recordProxyUsage>[2]['result']): void {
+    void recordProxyUsage(this.db, { OPENROUTER_API_KEY: apiKey } as Env, { tenantId, useCase, result });
   }
 
   // -----------------------------------------------------------------------
@@ -383,6 +393,7 @@ export class BrainService {
       temperature: 0.2,
       max_tokens: 800,
     });
+    this.recordUsage(apiKey, tenantId, 'brain_summary', result);
 
     const response = result.response as { choices?: Array<{ message?: { content?: string } }> } | undefined;
     const summary = response?.choices?.[0]?.message?.content?.trim() ?? '';
@@ -488,6 +499,7 @@ export class BrainService {
       temperature: 0.2,
       max_tokens: 1200,
     });
+    this.recordUsage(apiKey, tenantId, 'brain_project_memory', result);
 
     const response = result.response as { choices?: Array<{ message?: { content?: string } }> } | undefined;
     const consolidatedSummary = response?.choices?.[0]?.message?.content?.trim() ?? '';
@@ -554,6 +566,7 @@ export class BrainService {
       temperature: 0.2,
       max_tokens: 800,
     });
+    this.recordUsage(apiKey, tenantId, 'brain_summary', result);
 
     const response = result.response as { choices?: Array<{ message?: { content?: string } }> } | undefined;
     const summary = response?.choices?.[0]?.message?.content?.trim() ?? '';

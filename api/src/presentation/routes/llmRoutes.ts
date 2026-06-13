@@ -21,8 +21,8 @@ import {
   type ChatCompletionRequest,
   type LlmUsage,
 } from '../../application/llm/LlmProxyService';
-import { logTrace } from '../../application/llm/traceLogger';
-import { recordUsageRow, type UsageAttribution } from '../../application/llm/usageLedger';
+import { logTrace, backfillTraceUsage } from '../../application/llm/traceLogger';
+import { recordUsageRow, type UsageAttribution, type RecordUsageRow } from '../../application/llm/usageLedger';
 import { pickUsage } from '../../application/llm/vendors';
 import {
   dispatchEmbeddingVendor,
@@ -103,38 +103,20 @@ function logFailovers(
  *  `llmProduct` accepts any product label — chat (`builderforceLLM*`) or
  *  image (`builderforceImage*`) — since the DB column is `varchar(32)` and
  *  this function is the single insert site shared by both surfaces. */
+/** KV key for an idempotency-replay cache entry [1232] — tenant-scoped so keys
+ *  never collide across tenants. Value: `{ status, body }` of the original 2xx. */
+const idempotencyCacheKey = (tenantId: number, key: string): string => `idem:${tenantId}:${key}`;
+
+// Fire-and-forget usage write. Takes the RecordUsageRow object directly (named
+// fields) — was 14 positional params, refactored to an options object so adding
+// fields like `traceId` [1299] can't silently misalign a call site (tsc checks
+// each named field). The hot logging path stays inside ctx.waitUntil.
 function logUsage(
   env: HonoEnv['Bindings'],
   ctx: ExecutionContext,
-  tenantId: number,
-  userId: string | null,
-  llmProduct: string,
-  model: string,
-  retries: number,
-  streamed: boolean,
-  usage: LlmUsage,
-  metadata: Record<string, unknown> | null,
-  idempotencyKey: string | null,
-  useCase: string | null,
-  tenantApiKeyId: string | null,
-  attribution: UsageAttribution | null = null,
+  row: RecordUsageRow,
 ): void {
-  ctx.waitUntil(
-    recordUsageRow(buildDatabase(env), env as Env, {
-      tenantId,
-      userId,
-      llmProduct,
-      model,
-      retries,
-      streamed,
-      usage,
-      metadata,
-      idempotencyKey,
-      useCase,
-      tenantApiKeyId,
-      attribution,
-    }),
-  );
+  ctx.waitUntil(recordUsageRow(buildDatabase(env), env as Env, row));
 }
 
 /**
@@ -558,13 +540,19 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           | null;
         if (upstream.ok && json?.usage) {
           const u = json.usage;
-          logUsage(c.env, c.executionCtx, access.tenantId, access.userId, product, model, 0, false, {
-            promptTokens: u.input_tokens ?? 0,
-            completionTokens: u.output_tokens ?? 0,
-            totalTokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
-            cacheReadTokens: u.cache_read_input_tokens ?? 0,
-            cacheCreationTokens: u.cache_creation_input_tokens ?? 0,
-          }, { engine: 'builderforce-v2' }, idempotencyKey, 'v2_agent', access.tenantApiKeyId, { agentHostId: access.agentHostId });
+          logUsage(c.env, c.executionCtx, {
+            tenantId: access.tenantId, userId: access.userId, llmProduct: product, model,
+            retries: 0, streamed: false,
+            usage: {
+              promptTokens: u.input_tokens ?? 0,
+              completionTokens: u.output_tokens ?? 0,
+              totalTokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
+              cacheReadTokens: u.cache_read_input_tokens ?? 0,
+              cacheCreationTokens: u.cache_creation_input_tokens ?? 0,
+            },
+            metadata: { engine: 'builderforce-v2' }, idempotencyKey, useCase: 'v2_agent',
+            tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId },
+          });
         }
         return new Response(JSON.stringify(json ?? { error: 'upstream_error' }), {
           status: upstream.status,
@@ -577,11 +565,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       c.executionCtx.waitUntil((async () => {
         try {
           const text = await new Response(toMeter).text();
-          logUsage(
-            c.env, c.executionCtx, access.tenantId, access.userId, product, model, 0, true,
-            parseAnthropicSseUsage(text), { engine: 'builderforce-v2' }, idempotencyKey, 'v2_agent', access.tenantApiKeyId,
-            { agentHostId: access.agentHostId },
-          );
+          logUsage(c.env, c.executionCtx, {
+            tenantId: access.tenantId, userId: access.userId, llmProduct: product, model,
+            retries: 0, streamed: true, usage: parseAnthropicSseUsage(text),
+            metadata: { engine: 'builderforce-v2' }, idempotencyKey, useCase: 'v2_agent',
+            tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId },
+          });
         } catch { /* metering is best-effort */ }
       })());
       return new Response(toClient, {
@@ -605,11 +594,13 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     if (streamed && result.response.body) {
       const encoder = createAnthropicStreamEncoder({ messageId, model: result.resolvedModel });
       const stream = pipeOpenAiSseToAnthropic(result.response.body, encoder, (usage) => {
-        logUsage(
-          c.env, c.executionCtx, access.tenantId, access.userId, product, result.resolvedModel, result.retries, true,
-          usage, { engine: 'builderforce-v2', resolvedModel: result.resolvedModel }, idempotencyKey, 'v2_agent', access.tenantApiKeyId,
-          { agentHostId: access.agentHostId },
-        );
+        logUsage(c.env, c.executionCtx, {
+          tenantId: access.tenantId, userId: access.userId, llmProduct: product, model: result.resolvedModel,
+          retries: result.retries, streamed: true, usage,
+          metadata: { engine: 'builderforce-v2', resolvedModel: result.resolvedModel }, idempotencyKey,
+          useCase: 'v2_agent', tenantApiKeyId: access.tenantApiKeyId,
+          attribution: { agentHostId: access.agentHostId }, traceId,
+        });
       });
       return new Response(stream, {
         status: 200,
@@ -618,12 +609,14 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
 
     const openaiJson = await result.response.json().catch(() => null) as Record<string, unknown> | null;
-    logUsage(
-      c.env, c.executionCtx, access.tenantId, access.userId, product, result.resolvedModel, result.retries, false,
-      result.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-      { engine: 'builderforce-v2', resolvedModel: result.resolvedModel }, idempotencyKey, 'v2_agent', access.tenantApiKeyId,
-      { agentHostId: access.agentHostId },
-    );
+    logUsage(c.env, c.executionCtx, {
+      tenantId: access.tenantId, userId: access.userId, llmProduct: product, model: result.resolvedModel,
+      retries: result.retries, streamed: false,
+      usage: result.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      metadata: { engine: 'builderforce-v2', resolvedModel: result.resolvedModel }, idempotencyKey,
+      useCase: 'v2_agent', tenantApiKeyId: access.tenantApiKeyId,
+      attribution: { agentHostId: access.agentHostId }, traceId,
+    });
     return new Response(JSON.stringify(openAiToAnthropicMessage(openaiJson, result.resolvedModel, messageId)), {
       status: result.response.status,
       headers: { 'content-type': 'application/json', 'x-builderforce-model': result.resolvedModel },
@@ -689,7 +682,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
     const db = buildDatabase(c.env);
     // First-party platform tools (in-process) + the tenant's external MCP servers.
-    const tools = [...listBuiltinTools(), ...await listToolsForTenant(db, access.tenantId, c.env.JWT_SECRET)];
+    const tools = [...listBuiltinTools(), ...await listToolsForTenant(db, access.tenantId, c.env.JWT_SECRET, fetch, c.env as Env)];
     return c.json({ tools });
   });
 
@@ -850,13 +843,24 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       }
     }
 
-    // ── Idempotency-Key replay guard (10-min window) ────────────────────────
-    // MVP: detect that this exact (tenant, key) was already used recently and
-    // refuse to re-dispatch. Returns 409 with the original request id so the
-    // caller can no-op their retry without double-charging. Does NOT cache
-    // and replay the response body — that requires Cloudflare KV (separate
-    // wrangler.toml change; see Gap Register).
+    // ── Idempotency-Key replay (10-min window) ──────────────────────────────
+    // First choice: REPLAY the cached original response body (200) so a cron
+    // retry gets the original answer transparently [1232]. Fallback (no cached
+    // body — e.g. the original was streamed, or is still in-flight, or KV is
+    // unbound): the DB no-op guard returns 409 so the retry can't double-charge.
     if (idempotencyKey) {
+      const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
+      if (kv) {
+        try {
+          const cached = await kv.get(idempotencyCacheKey(access.tenantId, idempotencyKey), 'json') as
+            | { status: number; body: unknown } | null;
+          if (cached) {
+            return c.json(cached.body as Record<string, unknown>, (cached.status as 200), {
+              'x-builderforce-idempotent-replay': 'true',
+            });
+          }
+        } catch { /* KV miss/error → fall through to the no-op guard */ }
+      }
       const tenMinAgo = new Date(Date.now() - 10 * 60_000);
       const db = buildDatabase(c.env);
       const [prior] = await db
@@ -957,12 +961,16 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       // Wrap the stream to capture usage from the final SSE chunk
       const instrumentedStream = wrapStreamForUsage(
         result.response.body,
-        (usage) => logUsage(
-          c.env, c.executionCtx, access.tenantId, access.userId, llmProduct,
-          result.resolvedModel, result.retries, true, usage,
-          callerMetadata, idempotencyKey, callerUseCase, access.tenantApiKeyId,
-          { agentHostId: access.agentHostId },
-        ),
+        (usage) => {
+          logUsage(c.env, c.executionCtx, {
+            tenantId: access.tenantId, userId: access.userId, llmProduct,
+            model: result.resolvedModel, retries: result.retries, streamed: true, usage,
+            metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
+            tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId }, traceId,
+          });
+          // Back-fill the streamed trace row (logged above with 0 tokens) [1298].
+          backfillTraceUsage(c.env, c.executionCtx, traceId, usage);
+        },
       );
 
       return new Response(instrumentedStream, {
@@ -976,22 +984,13 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     // Log any failovers, then log usage
     logFailovers(c.env, c.executionCtx, result.failovers);
-    logUsage(
-      c.env,
-      c.executionCtx,
-      access.tenantId,
-      access.userId,
-      llmProduct,
-      result.resolvedModel,
-      result.retries,
-      false,
-      result.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-      callerMetadata,
-      idempotencyKey,
-      callerUseCase,
-      access.tenantApiKeyId,
-      { agentHostId: access.agentHostId },
-    );
+    logUsage(c.env, c.executionCtx, {
+      tenantId: access.tenantId, userId: access.userId, llmProduct,
+      model: result.resolvedModel, retries: result.retries, streamed: false,
+      usage: result.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
+      tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId }, traceId,
+    });
 
     // Surface the trace id inside the error envelope too, so a consumer hitting
     // a failure can quote `error.details.correlationId` straight back for a
@@ -1016,38 +1015,53 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       responseBody: upstream, errorMessage: traceErrorMessage,
     });
 
-    return c.json(
-      {
-        ...upstream,
-        _builderforce: {
-          traceId,
-          resolvedModel:  result.resolvedModel,
-          resolvedVendor: result.resolvedVendor,
-          retries:        result.retries,
-          // Per-attempt breakdown (model + vendor + code) when the cascade
-          // retried before this success. Empty when the first model answered.
-          // Lets callers see which vendor recovered the request and detect
-          // single-vendor concentration patterns over time.
-          ...(result.failovers.length > 0 ? { failovers: result.failovers } : {}),
-          pool:          modelPoolForPlan(access.effectivePlan, access.premiumOverride).length,
-          product:       llmProduct,
-          effectivePlan: access.effectivePlan,
-          ...(access.premiumOverride ? { premium: true } : {}),
-          ...(result.schemaRetries != null ? { schemaRetries: result.schemaRetries } : {}),
-          ...(callerUseCase     ? { useCase:    callerUseCase  } : {}),
-          ...(callerMetadata    ? { metadata:   callerMetadata as Record<string, string> } : {}),
-          ...(c.req.header('x-request-id') ? { requestId: c.req.header('x-request-id') } : {}),
-          ...(planDailyLimit > 0 ? {
-            dailyTokens: {
-              used:      usageToday,
-              limit:     planDailyLimit,
-              remaining: Math.max(planDailyLimit - usageToday, 0),
-            },
-          } : {}),
-        },
+    const responseEnvelope = {
+      ...upstream,
+      _builderforce: {
+        traceId,
+        resolvedModel:  result.resolvedModel,
+        resolvedVendor: result.resolvedVendor,
+        retries:        result.retries,
+        // Per-attempt breakdown (model + vendor + code) when the cascade
+        // retried before this success. Empty when the first model answered.
+        // Lets callers see which vendor recovered the request and detect
+        // single-vendor concentration patterns over time.
+        ...(result.failovers.length > 0 ? { failovers: result.failovers } : {}),
+        pool:          modelPoolForPlan(access.effectivePlan, access.premiumOverride).length,
+        product:       llmProduct,
+        effectivePlan: access.effectivePlan,
+        ...(access.premiumOverride ? { premium: true } : {}),
+        ...(result.schemaRetries != null ? { schemaRetries: result.schemaRetries } : {}),
+        ...(callerUseCase     ? { useCase:    callerUseCase  } : {}),
+        ...(callerMetadata    ? { metadata:   callerMetadata as Record<string, string> } : {}),
+        ...(c.req.header('x-request-id') ? { requestId: c.req.header('x-request-id') } : {}),
+        ...(planDailyLimit > 0 ? {
+          dailyTokens: {
+            used:      usageToday,
+            limit:     planDailyLimit,
+            remaining: Math.max(planDailyLimit - usageToday, 0),
+          },
+        } : {}),
       },
-      result.response.status as 200,
-    );
+    };
+    const responseStatus = result.response.status as 200;
+    // Cache the successful body so a retry with the same Idempotency-Key REPLAYS
+    // it (200) rather than getting a 409 [1232] — transparent cron retries.
+    // Non-streaming 2xx only; 10-min TTL matches the replay-guard window.
+    // Fire-and-forget — never delays the response; KV-absent → the 409 guard.
+    if (idempotencyKey && responseStatus < 300) {
+      const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
+      if (kv) {
+        c.executionCtx.waitUntil(
+          kv.put(
+            idempotencyCacheKey(access.tenantId, idempotencyKey),
+            JSON.stringify({ status: responseStatus, body: responseEnvelope }),
+            { expirationTtl: 600 },
+          ).catch(() => { /* cache write is best-effort */ }),
+        );
+      }
+    }
+    return c.json(responseEnvelope, responseStatus);
   });
 
   // -----------------------------------------------------------------------
@@ -1397,22 +1411,13 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     // Log usage (always, even on cascade-exhausted runs so failure rates are visible).
     logFailovers(c.env, c.executionCtx, result.failovers);
-    logUsage(
-      c.env,
-      c.executionCtx,
-      access.tenantId,
-      access.userId,
-      productName,
-      result.resolvedModel,
-      result.retries,
-      false,
-      { promptTokens: 0, completionTokens: 0, totalTokens: billedTokens },
-      callerMetadata,
-      idempotencyKey,
-      callerUseCase,
-      access.tenantApiKeyId,
-      { agentHostId: access.agentHostId },
-    );
+    logUsage(c.env, c.executionCtx, {
+      tenantId: access.tenantId, userId: access.userId, llmProduct: productName,
+      model: result.resolvedModel, retries: result.retries, streamed: false,
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: billedTokens },
+      metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
+      tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId },
+    });
 
     if (cascadeExhausted) {
       // All vendors failed — surface a 429 with the failover breakdown so callers

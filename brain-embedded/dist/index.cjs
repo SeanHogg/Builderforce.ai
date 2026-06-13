@@ -23,6 +23,8 @@ __export(src_exports, {
   BrainActionsProvider: () => BrainActionsProvider,
   BrainContextProvider: () => BrainContextProvider,
   BrainProvider: () => BrainProvider,
+  buildBrainTriageReport: () => buildBrainTriageReport,
+  isFailedToolResult: () => isFailedToolResult,
   prepareImageDataUrl: () => prepareImageDataUrl,
   savePendingPrompt: () => savePendingPrompt,
   streamChatCompletion: () => streamChatCompletion,
@@ -518,6 +520,62 @@ function useBrainChats(options = {}) {
 
 // src/useBrainConversation.ts
 var import_react6 = require("react");
+
+// src/brainTriage.ts
+function isFailedToolResult(result) {
+  if (result == null) return false;
+  if (typeof result === "object") {
+    const r = result;
+    if (r.ok === false) return true;
+    if (typeof r.error === "string" && r.error) return true;
+  }
+  const s = (typeof result === "string" ? result : JSON.stringify(result)).toLowerCase();
+  return s.includes('"ok":false') || /\b(error|failed|exception)\b/.test(s);
+}
+function cap(s, n = 2e3) {
+  const str = typeof s === "string" ? s : JSON.stringify(s ?? "");
+  return str.length > n ? str.slice(0, n) + `\u2026 (+${str.length - n} chars)` : str;
+}
+function buildBrainTriageReport(opts) {
+  const { capturedAt, events, messages = [], chatId, chatTitle, agentLabel, error } = opts;
+  const errors = events.filter((e) => e.isError || e.category === "error");
+  const lines = [];
+  lines.push("=== BuilderForce Brain Triage ===");
+  lines.push(`Captured:  ${capturedAt}`);
+  if (chatId != null) lines.push(`Chat:      #${chatId}${chatTitle ? ` \u2014 ${chatTitle}` : ""}`);
+  lines.push(`Brain:     ${agentLabel || "Brain (default)"}`);
+  lines.push(`Steps: ${events.length} \xB7 Errors: ${errors.length} \xB7 Messages: ${messages.length}`);
+  if (error) lines.push(`Last error: ${error}`);
+  if (errors.length) {
+    lines.push("", `--- Errors (${errors.length}) ---`);
+    for (const ev of errors) {
+      lines.push(`[${ev.ts}] ${ev.label} (${ev.category}) \u2014 ${cap(ev.result ?? ev.args ?? "")}`);
+    }
+  }
+  lines.push("", `--- Execution trace (${events.length}) ---`);
+  for (const ev of events) {
+    lines.push(
+      `[${ev.ts}] ${ev.label} (${ev.category})${ev.durationMs != null ? ` \xB7 ${ev.durationMs}ms` : ""}${ev.isError ? " \xB7 ERROR" : ""}`
+    );
+    if (ev.args !== void 0) lines.push(`    args:   ${cap(ev.args)}`);
+    if (ev.result !== void 0) lines.push(`    result: ${cap(ev.result)}`);
+  }
+  lines.push("", `--- Logs (${events.length}) ---`);
+  for (const ev of events) {
+    const level = ev.isError || ev.category === "error" ? "ERROR" : "INFO";
+    const summary = ev.result !== void 0 ? cap(ev.result, 300) : cap(ev.args, 300);
+    lines.push(`[${ev.ts}] ${level.padEnd(5)} ${ev.label}${summary ? ` \u2014 ${summary}` : ""}`);
+  }
+  if (messages.length) {
+    lines.push("", `--- Conversation (${messages.length}) ---`);
+    for (const m of messages) {
+      lines.push(`[${m.createdAt ?? ""}] ${m.role.toUpperCase()}: ${cap(m.content, 1500)}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+// src/useBrainConversation.ts
 var MAX_TOOL_ITERATIONS = 5;
 var HISTORY_WINDOW = 80;
 function parseArgs(raw) {
@@ -557,6 +615,14 @@ function useBrainConversation(options) {
   const [uploading, setUploading] = (0, import_react6.useState)(false);
   const autoRepliedChatIdRef = (0, import_react6.useRef)(null);
   const transcriptRef = (0, import_react6.useRef)(/* @__PURE__ */ new Map());
+  const traceRef = (0, import_react6.useRef)(/* @__PURE__ */ new Map());
+  const [traceVersion, setTraceVersion] = (0, import_react6.useState)(0);
+  const pushTrace = (0, import_react6.useCallback)((id, ev) => {
+    const list = traceRef.current.get(id) ?? [];
+    list.push(ev);
+    traceRef.current.set(id, list);
+    setTraceVersion((v) => v + 1);
+  }, []);
   (0, import_react6.useEffect)(() => {
     let cancelled = false;
     if (chatId == null) {
@@ -615,10 +681,42 @@ ${extraSystem}` : base;
           { role: "system", content: resolvedSystemPrompt },
           ...windowed(convo)
         ];
-        const result = await stream(
-          { messages: working, tools, tool_choice: tools ? "auto" : void 0, model },
-          { onTextDelta: (d) => setStreamingText((s) => s + d) }
-        );
+        const llmStart = Date.now();
+        let result;
+        try {
+          result = await stream(
+            { messages: working, tools, tool_choice: tools ? "auto" : void 0, model },
+            { onTextDelta: (d) => setStreamingText((s) => s + d) }
+          );
+        } catch (e) {
+          pushTrace(id, {
+            ts: (/* @__PURE__ */ new Date()).toISOString(),
+            category: "error",
+            label: "llm.complete",
+            durationMs: Date.now() - llmStart,
+            args: { model: model ?? "default", step: iter },
+            result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+            isError: true
+          });
+          throw e;
+        }
+        pushTrace(id, {
+          ts: (/* @__PURE__ */ new Date()).toISOString(),
+          category: "llm",
+          label: "llm.complete",
+          durationMs: Date.now() - llmStart,
+          args: { model: model ?? "default", step: iter, toolCalls: result.toolCalls.length },
+          result: `${result.toolCalls.length} tool call(s) \xB7 ${result.text.length} chars \xB7 finish: ${result.finishReason ?? "\u2014"}`
+        });
+        if (result.text.trim()) {
+          pushTrace(id, {
+            ts: (/* @__PURE__ */ new Date()).toISOString(),
+            category: "message",
+            label: "agent.message",
+            args: { step: iter },
+            result: result.text
+          });
+        }
         if (result.toolCalls.length > 0 && runTool) {
           convo.push({
             role: "assistant",
@@ -633,10 +731,44 @@ ${extraSystem}` : base;
             const args = parseArgs(tc.args);
             if (confirmTool && !await confirmTool({ name: tc.name, args })) {
               convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify({ cancelled: true, reason: "User declined this action." }) });
+              pushTrace(id, {
+                ts: (/* @__PURE__ */ new Date()).toISOString(),
+                category: "tool",
+                label: tc.name,
+                args,
+                result: { cancelled: true, reason: "User declined this action." }
+              });
               continue;
             }
-            const out = await runTool(tc.name, args);
+            const toolStart = Date.now();
+            let out;
+            try {
+              out = await runTool(tc.name, args);
+            } catch (e) {
+              const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+              out = { ok: false, error: message };
+              convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(out) });
+              pushTrace(id, {
+                ts: (/* @__PURE__ */ new Date()).toISOString(),
+                category: "tool",
+                label: tc.name,
+                durationMs: Date.now() - toolStart,
+                args,
+                result: out,
+                isError: true
+              });
+              continue;
+            }
             convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(out ?? null) });
+            pushTrace(id, {
+              ts: (/* @__PURE__ */ new Date()).toISOString(),
+              category: "tool",
+              label: tc.name,
+              durationMs: Date.now() - toolStart,
+              args,
+              result: out ?? null,
+              isError: isFailedToolResult(out)
+            });
           }
           setStreamingText("");
           continue;
@@ -650,9 +782,17 @@ ${extraSystem}` : base;
         return;
       }
       setStreamingText("");
-      setError("The assistant kept calling tools without finishing. Try rephrasing.");
+      const exhausted = "The assistant kept calling tools without finishing. Try rephrasing.";
+      pushTrace(id, {
+        ts: (/* @__PURE__ */ new Date()).toISOString(),
+        category: "error",
+        label: "agent.loop",
+        result: `Loop exhausted after ${MAX_TOOL_ITERATIONS} tool iterations`,
+        isError: true
+      });
+      setError(exhausted);
     },
-    [persistence, stream, resolvedSystemPrompt, toolSpecs, runTool, confirmTool, onActivity, model]
+    [persistence, stream, resolvedSystemPrompt, toolSpecs, runTool, confirmTool, onActivity, model, pushTrace]
   );
   const send = (0, import_react6.useCallback)(
     async (text) => {
@@ -759,6 +899,20 @@ ${refs}`;
   const removeAttachment = (0, import_react6.useCallback)((key) => {
     setPendingAttachments((prev) => prev.filter((a) => a.key !== key));
   }, []);
+  const activeTrace = chatId != null ? traceRef.current.get(chatId) ?? [] : [];
+  const hasTrace = activeTrace.length > 0;
+  void traceVersion;
+  const buildTriageReport = (0, import_react6.useCallback)(
+    (agentLabel) => buildBrainTriageReport({
+      capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      events: chatId != null ? traceRef.current.get(chatId) ?? [] : [],
+      messages,
+      chatId,
+      agentLabel,
+      error
+    }),
+    [chatId, messages, error]
+  );
   return {
     messages,
     loadingMessages,
@@ -774,7 +928,9 @@ ${refs}`;
     submitFeedback,
     attach,
     removeAttachment,
-    setError
+    setError,
+    hasTrace,
+    buildTriageReport
   };
 }
 
@@ -804,6 +960,8 @@ function takePendingPrompt() {
   BrainActionsProvider,
   BrainContextProvider,
   BrainProvider,
+  buildBrainTriageReport,
+  isFailedToolResult,
   prepareImageDataUrl,
   savePendingPrompt,
   streamChatCompletion,

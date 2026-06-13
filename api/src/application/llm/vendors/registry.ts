@@ -14,6 +14,7 @@ import { ollamaModule } from './ollama';
 import { openRouterModule } from './openrouter';
 import {
   VendorRetryableError,
+  VendorFatalError,
   WorkerSubrequestExhaustedError,
   RequestAbortedError,
   isEmptyChatResponse,
@@ -321,7 +322,20 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
         );
         continue;
       }
-      throw err; // VendorFatalError (or anything else) — bubble up
+      // Request-error (400/422) VendorFatalError: the payload is bad for THIS
+      // vendor, but vendors differ on schema dialects — one may reject a tool/
+      // json-schema another accepts. Advance the cascade instead of bubbling out
+      // [1488]; if EVERY candidate request-errors, CascadeExhaustedError carries
+      // these attempts and the proxy's exhaustedResponse surfaces a real 4xx (not
+      // a misleading 429). recordFailure no-ops request_error, so no model cools.
+      if (err instanceof VendorFatalError && (err.status === 400 || err.status === 422)) {
+        attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message) });
+        console.warn(
+          `[vendors] ${cfg.logTag}${vendorId}/${model} returned ${err.status} (request error); trying next vendor (${attempts.length}/${modelChain.length})`,
+        );
+        continue;
+      }
+      throw err; // other VendorFatalError (or anything else) — bubble up
     }
   }
 
