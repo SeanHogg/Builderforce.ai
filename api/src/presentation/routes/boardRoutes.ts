@@ -55,7 +55,7 @@ import {
   AssignedAgentNotFoundError,
   type AgentKind,
 } from '../../application/swimlane/resolveAssignedAgent';
-import { DEFAULT_SWIMLANES } from '../../application/swimlane/defaultSwimlanes';
+import { buildDefaultLaneRows, findOrCreateBoard } from '../../application/swimlane/findOrCreateBoard';
 import {
   AgentHostStageDispatcher,
   type AgentHostRelayNamespace,
@@ -82,34 +82,6 @@ interface LaneWriteBody {
   actionTarget?: string;    // lane key (move_ticket) | workflow id (run_workflow)
   successPolicy?: string;   // 'all' | 'any' | 'n_of_m'
   successThreshold?: number;
-}
-
-/**
- * Build the insert rows for a board's default status-mirroring swimlanes.
- * Shared by the create route (seed on first creation) and the ensure-defaults
- * heal route (re-seed a board that ended up with none) so the two paths can
- * never drift apart.
- */
-function buildDefaultLaneRows(
-  tenantId: number,
-  segmentId: string | null,
-  boardId: string,
-  now: Date,
-) {
-  return DEFAULT_SWIMLANES.map((l) => ({
-    tenantId,
-    segmentId,
-    boardId,
-    key: l.key,
-    name: l.name,
-    position: l.position,
-    isTerminal: l.isTerminal,
-    gate: l.gate,
-    executionMode: 'sequential',
-    failurePolicy: 'needs_attention',
-    createdAt: now,
-    updatedAt: now,
-  }));
 }
 
 export function createBoardRoutes(db: Db): Hono<HonoEnv> {
@@ -142,45 +114,23 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     if (!body.projectId) return c.json({ error: 'projectId is required' }, 400);
 
-    const now = new Date();
-    const segmentId = body.segmentId ?? c.get('segmentId') ?? null;
-    const seedLanes = body.seedDefaultLanes !== false;
+    // One board per project (UNIQUE(project_id), migration 0111): find-or-create
+    // rather than blindly inserting, so a repeat create returns the existing board
+    // instead of failing the constraint or accruing a duplicate. The shared
+    // findOrCreateBoard service seeds the default status-mirroring lanes on first
+    // creation (lanes mirror the kanban's task statuses) and is reused by every
+    // create entry point so the paths can never drift apart.
+    const { board, created } = await findOrCreateBoard(db, {
+      tenantId,
+      projectId: body.projectId,
+      name: body.name,
+      segmentId: body.segmentId ?? c.get('segmentId') ?? null,
+      maxConcurrentTickets: body.maxConcurrentTickets,
+      needsAttentionLane: body.needsAttentionLane,
+      seedDefaultLanes: body.seedDefaultLanes,
+    });
 
-    // Board + its default swimlanes must be created together: a failure after the
-    // board insert but before the lane seed leaves a permanently-empty board (the
-    // kanban renders its hardcoded default columns, but the config panel reports
-    // "No swimlanes yet"). The Neon HTTP driver has no transaction support, so we
-    // enforce the board-with-lanes invariant with a compensating delete: if the
-    // lane seed fails, roll the board back so we never leave the half-created state.
-    // Default lanes mirror the kanban's task statuses so the config panel shows the
-    // same lanes the user already sees on the board.
-    const [created] = await db
-      .insert(boards)
-      .values({
-        tenantId,
-        segmentId,
-        projectId: body.projectId,
-        name: body.name.trim(),
-        // Autonomy is implicit (driven by lane agents + gate); no board toggle.
-        autonomous: true,
-        maxConcurrentTickets: body.maxConcurrentTickets ?? 5,
-        needsAttentionLane: body.needsAttentionLane ?? 'needs-attention',
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-
-    if (created && seedLanes) {
-      try {
-        await db.insert(swimlanes).values(buildDefaultLaneRows(tenantId, segmentId, created.id, now));
-      } catch (e) {
-        // Lane seed failed — roll the board back so no empty board lingers.
-        await db.delete(boards).where(eq(boards.id, created.id)).catch(() => { /* best-effort */ });
-        throw e;
-      }
-    }
-
-    return c.json(created, 201);
+    return c.json(board, created ? 201 : 200);
   });
 
   router.get('/', async (c) => {

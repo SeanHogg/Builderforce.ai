@@ -46,6 +46,16 @@ export enum TaskPriority {
   URGENT  = 'urgent',
 }
 
+/**
+ * Task type — the fixed automation dimension (distinct from the free-form board
+ * `status` lane key). An EPIC is a planning container that decomposes into child
+ * TASKs which link back to it via `parentTaskId`. See migration 0112.
+ */
+export enum TaskType {
+  TASK = 'task',
+  EPIC = 'epic',
+}
+
 export enum AgentType {
   CLAUDE = 'claude',
   OPENAI = 'openai',

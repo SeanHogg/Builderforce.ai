@@ -10,10 +10,12 @@ import {
   primaryKey,
   serial,
   varchar,
+  smallint,
   real,
   unique,
   uniqueIndex,
   index,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -46,6 +48,13 @@ export const taskPriorityEnum = pgEnum('task_priority', [
 
 export const agentTypeEnum = pgEnum('agent_type', [
   'claude', 'openai', 'ollama', 'http',
+]);
+
+// Task type is a fixed, automation-driven dimension (unlike the free-form
+// per-board `status` lane key): a plain `task`, or an `epic` that decomposes
+// into child tasks (parent_task_id) — see migration 0112.
+export const taskTypeEnum = pgEnum('task_type', [
+  'task', 'epic',
 ]);
 
 export const tenantStatusEnum = pgEnum('tenant_status', [
@@ -702,6 +711,13 @@ export const tasks = pgTable('tasks', {
   description:       text('description'),
   status:            varchar('status', { length: 64 }).notNull().default('backlog'),
   priority:          taskPriorityEnum('priority').notNull().default('medium'),
+  /** Fixed type dimension: 'task' (default) or 'epic'. An Epic decomposes into
+   *  child tasks that link back via {@link parentTaskId}. See migration 0112. */
+  taskType:          taskTypeEnum('task_type').notNull().default('task'),
+  /** Self-FK to the parent Epic (null for top-level tasks). ON DELETE SET NULL
+   *  so deleting an Epic orphans its children rather than cascade-deleting them.
+   *  Typed `AnyPgColumn` to break drizzle's self-reference inference cycle. */
+  parentTaskId:      integer('parent_task_id').references((): AnyPgColumn => tasks.id, { onDelete: 'set null' }),
   assignedAgentType: agentTypeEnum('assigned_agent_type'),
   githubIssueNumber: integer('github_issue_number'),
   githubIssueUrl:    varchar('github_issue_url', { length: 500 }),
@@ -979,6 +995,28 @@ export const agentPurchases = pgTable('agent_purchases', {
 }, (t) => [
   uniqueIndex('uq_agent_purchases').on(t.tenantId, t.agentId),
   index('idx_agent_purchases_agent').on(t.agentId),
+]);
+
+/**
+ * Buyer feedback on a hired marketplace agent (migration 0111). One row per hire
+ * (`purchase_id` is unique → re-submitting overwrites), so an owner sees how the
+ * tenants who hired the agent rate it. `agentId` is denormalized off the purchase
+ * for the owner-side perf rollup join (which scopes by agent, not by purchase) and
+ * references the raw-SQL `ide_agents.id` (no FK, mirrors `agentPurchases`). Feeds
+ * the owner-only performance surface alongside the live `executions` telemetry
+ * rollup (success rate / runs / latency per hired tenant).
+ */
+export const agentFeedback = pgTable('agent_feedback', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  purchaseId: uuid('purchase_id').notNull().references(() => agentPurchases.id, { onDelete: 'cascade' }),
+  agentId:    varchar('agent_id', { length: 64 }).notNull(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  rating:     smallint('rating').notNull(), // 1..5 (CHECK enforced in 0111)
+  comment:    text('comment'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_agent_feedback_purchase').on(t.purchaseId),
+  index('idx_agent_feedback_agent').on(t.agentId, t.createdAt),
 ]);
 
 /**
@@ -2656,7 +2694,10 @@ export const boards = pgTable('boards', {
   id:                   uuid('id').primaryKey().defaultRandom(),
   tenantId:             integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:            uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:            integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  // One board per project (UNIQUE(project_id), migration 0111). Enforced in code
+  // via findOrCreateBoard so both create entry points converge on the existing
+  // board rather than tripping this constraint.
+  projectId:            integer('project_id').notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
   name:                 varchar('name', { length: 255 }).notNull(),
   /** @deprecated Inert since migration 0084 — autonomy is now driven by lane
    *  agents + action rules (lane.gate 'auto' vs 'human'), not a board toggle.

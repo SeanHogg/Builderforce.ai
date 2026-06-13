@@ -373,25 +373,38 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
   // membership check was already paying for).
   let dbIsSuperadmin = false;
   if (!isServiceToken) {
-    const db = buildDatabase(c.env);
-    const [membership] = await db
-      .select({
-        userId: tenantMembers.userId,
-        isSuperadmin: users.isSuperadmin,
-      })
-      .from(tenantMembers)
-      .innerJoin(users, eq(users.id, tenantMembers.userId))
-      .where(and(
-        eq(tenantMembers.tenantId, payload.tid),
-        eq(tenantMembers.userId, payload.sub),
-        eq(tenantMembers.isActive, true),
-      ))
-      .limit(1);
+    // KV-cached membership resolution (~1ms hit vs ~30-80ms Neon round-trip).
+    // Keyed on tenant+user (not the raw token) so every JWT the user holds for
+    // this tenant shares one entry. Short TTL — see `JWT_TTL_SECONDS` — because
+    // tenant_members has no single mutation hook; a removed/demoted member
+    // keeps cached access for at most that window. Falls through to DB when
+    // AUTH_CACHE_KV is unbound.
+    const resolved = await resolveKeyCached(
+      c.env,
+      'jwt',
+      jwtMembershipHash(payload.tid, payload.sub),
+      async () => {
+        const db = buildDatabase(c.env);
+        const [membership] = await db
+          .select({
+            userId: tenantMembers.userId,
+            isSuperadmin: users.isSuperadmin,
+          })
+          .from(tenantMembers)
+          .innerJoin(users, eq(users.id, tenantMembers.userId))
+          .where(and(
+            eq(tenantMembers.tenantId, payload.tid),
+            eq(tenantMembers.userId, payload.sub),
+            eq(tenantMembers.isActive, true),
+          ))
+          .limit(1);
+        if (!membership) return { ok: false, reason: 'User is not an active member of this tenant' };
+        return { ok: true, payload: { isSuperadmin: membership.isSuperadmin === true } };
+      },
+    );
 
-    if (!membership) {
-      throw new Error('User is not an active member of this tenant');
-    }
-    dbIsSuperadmin = membership.isSuperadmin === true;
+    if (!resolved.ok) throw new Error(resolved.reason);
+    dbIsSuperadmin = (resolved.payload as { isSuperadmin: boolean }).isSuperadmin === true;
   }
 
   return {
