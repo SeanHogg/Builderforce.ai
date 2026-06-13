@@ -44,11 +44,11 @@ import { dispatchResultToRemoteAgentNode, type RemoteDispatchOptions } from "./r
 import { setRelayHook } from "./workflow-telemetry.js";
 import { buildSteeringInjection } from "./relay-steering.js";
 import { runClaudeAgentSdkV2, type V2RunnerSinks } from "../agents/claude-agent-sdk-runner.js";
-import { buildCoreToolRegistry } from "@builderforce/agent-tools";
 import {
   LocalAgentEngine,
   createGatewayComplete,
   buildNodeCapabilityProvider,
+  buildNodeToolRegistry,
 } from "../builderforce/shared-tools/index.js";
 import type { AgentEngine, EngineDispatch } from "./agent-engine.js";
 import { buildAssignedCapabilityAppend } from "../agents/assigned-capabilities.js";
@@ -499,7 +499,7 @@ export class BuilderforceRelayService implements IRelayService {
     if (payload.executionId != null) this.v2Aborts.set(payload.executionId, abortController);
 
     const provider = buildNodeCapabilityProvider(cwd);
-    const registry = buildCoreToolRegistry();
+    const registry = buildNodeToolRegistry();
     const complete = createGatewayComplete({
       // The gateway's OpenAI-compatible endpoint lives under /llm (parity with the
       // V2 path's Anthropic-Messages base); createGatewayComplete appends /v1/chat/completions.
@@ -509,6 +509,7 @@ export class BuilderforceRelayService implements IRelayService {
     const engine = new LocalAgentEngine({
       registry,
       provider,
+      workspaceRoot: cwd,
       complete,
       sinks: {
         onAssistantText: (text) => {

@@ -54,6 +54,9 @@ export interface LocalEngineDeps {
   registry: ToolRegistry;
   provider: CapabilityProvider;
   complete: LlmComplete;
+  /** Absolute path of the checked-out working tree. Threaded into the {@link ToolContext}
+   *  so Node-native tools (git/rg over the repo) have a path to operate on. */
+  workspaceRoot?: string;
   /** Max tool-loop iterations (default 40 — parity with the long-lived surfaces). */
   maxSteps?: number;
   sinks?: LocalEngineSinks;
@@ -69,7 +72,7 @@ export class LocalAgentEngine implements AgentEngine {
     const { registry, provider, complete, sinks } = this.deps;
     const maxSteps = this.deps.maxSteps ?? DEFAULT_MAX_STEPS;
     const tools = registry.schemasFor(provider);
-    const ctx: ToolContext = { caps: provider, signal: input.signal };
+    const ctx: ToolContext = { caps: provider, signal: input.signal, workspaceRoot: this.deps.workspaceRoot };
     const messages: Array<Record<string, unknown>> = [
       { role: "system", content: input.systemPrompt },
       { role: "user", content: input.userContent },
