@@ -46,6 +46,30 @@ describe("github-copilot token", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it("awaits an async loader (production loadJsonFile is async) and honors the cache", async () => {
+    const now = Date.now();
+    // The real default loadJsonFile is async — a loader that returns a Promise must
+    // be awaited, not read synchronously, or the cache is silently never honored.
+    loadJsonFile.mockResolvedValue({
+      token: "cached;proxy-ep=proxy.example.com;",
+      expiresAt: now + 60 * 60 * 1000,
+      updatedAt: now,
+    });
+
+    const fetchImpl = vi.fn();
+    const res = await resolveCopilotApiToken({
+      githubToken: "gh",
+      cachePath,
+      loadJsonFileImpl: loadJsonFile,
+      saveJsonFileImpl: saveJsonFile,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(res.token).toBe("cached;proxy-ep=proxy.example.com;");
+    expect(String(res.source)).toContain("cache:");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("fetches and stores token when cache is missing", async () => {
     loadJsonFile.mockReturnValue(undefined);
 

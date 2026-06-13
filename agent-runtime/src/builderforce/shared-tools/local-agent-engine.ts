@@ -30,7 +30,7 @@ export interface RawToolCall {
   function?: { name?: string; arguments?: string };
 }
 
-/** The pi-free LLM client the engine calls each turn. Returns the assistant turn's
+/** The framework-free LLM client the engine calls each turn. Returns the assistant turn's
  *  text + any tool calls. Inject a `fetch`-backed gateway client in production, a mock
  *  in tests — the engine never imports a model SDK. */
 export type LlmComplete = (
@@ -130,8 +130,8 @@ export class LocalAgentEngine implements AgentEngine {
 }
 
 /**
- * A pi-free {@link LlmComplete} backed by the gateway's OpenAI-compatible
- * `/v1/chat/completions` endpoint over `fetch` — the replacement for `pi-ai`'s model
+ * A framework-free {@link LlmComplete} backed by the gateway's OpenAI-compatible
+ * `/v1/chat/completions` endpoint over `fetch` — the native model
  * client in the local engine. Kept tiny and dependency-free.
  */
 export function createGatewayComplete(opts: { baseUrl: string; apiKey: string }): LlmComplete {

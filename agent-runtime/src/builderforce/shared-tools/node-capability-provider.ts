@@ -3,7 +3,7 @@
  * SHARED, capability-gated tool registry (`@builderforce/agent-tools`). It is the
  * Node counterpart to the cloud Worker's provider — same tool definitions, different
  * concretion (Dependency Inversion). Wiring this is the foundation for the planned
- * V2 `local` surface (On-Prem runs the V2 loop instead of the legacy pi loop); today
+ * V2 `local` surface (On-Prem runs the V2 loop instead of the legacy on-prem loop); today
  * it already lets any shared/"cloud" tool execute on-prem against a real workspace.
  */
 
@@ -29,7 +29,7 @@ const execAsync = promisify(exec);
 
 /** Every capability a Node workspace can physically back. No `static-check` (it has
  *  a real shell, so it runs the actual build/tests); `human` is wired separately
- *  (the pi loop has its own ask-human), so it is omitted here by default. */
+ *  (the legacy on-prem loop has its own ask-human), so it is omitted here by default. */
 export const NODE_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   "repo.read", "repo.search", "repo.write", "repo.edit", "repo.delete", "shell", "process", "web",
 ]);
