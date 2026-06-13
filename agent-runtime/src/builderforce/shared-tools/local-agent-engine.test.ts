@@ -1,8 +1,8 @@
 /**
- * Proves the pi-FREE {@link LocalAgentEngine} drives the shared {@link ToolRegistry}
+ * Proves the {@link LocalAgentEngine} drives the shared {@link ToolRegistry}
  * end-to-end on Node: a mocked LLM client issues a write_file tool call then finish,
- * and the engine dispatches them through the shared contract + Node provider — no
- * `@mariozechner/pi-*` anywhere in the path.
+ * and the engine dispatches them through the shared contract + Node provider — with
+ * no third-party agent framework anywhere in the path.
  */
 
 import fs from "node:fs/promises";

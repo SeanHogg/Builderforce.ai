@@ -111,7 +111,7 @@ export async function handleDirectiveOnly(
     return modelInfo;
   }
 
-  const modelResolution = resolveModelSelectionFromDirective({
+  const modelResolution = await resolveModelSelectionFromDirective({
     directives,
     cfg: params.cfg,
     agentDir,

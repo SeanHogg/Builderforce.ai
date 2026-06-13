@@ -8,6 +8,7 @@ import {
   type FrameToHostMessage,
 } from '@seanhogg/builderforce-embedded';
 import { setEmbedAuth } from '../auth';
+import { isTrustedHostOrigin } from './embedTrust';
 
 /**
  * The iframe (BuilderForce) half of the embed protocol — the mirror of
@@ -70,8 +71,11 @@ export function useEmbedFrame(): EmbedFrameState {
   // Inbound host → frame messages + the initial ready handshake.
   useEffect(() => {
     const allow = allowedHostOrigins();
+    const isProduction = process.env.NODE_ENV === 'production';
     const onMessage = (event: MessageEvent) => {
-      if (allow.length > 0 && !allow.includes(event.origin)) return; // trust boundary
+      // Trust boundary: allowlisted origins only; with no allowlist, default-closed
+      // in prod (mirrors the frame-ancestors CSP), open in dev. [1462]
+      if (!isTrustedHostOrigin(event.origin, allow, isProduction)) return;
       const msg = event.data;
       if (!isHostToFrameMessage(msg)) return;
       if (msg.type === 'auth') {

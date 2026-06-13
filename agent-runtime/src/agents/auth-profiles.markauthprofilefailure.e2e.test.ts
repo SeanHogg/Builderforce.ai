@@ -30,7 +30,7 @@ async function withAuthProfileStore(
       }),
     );
 
-    const store = ensureAuthProfileStore(agentDir);
+    const store = await ensureAuthProfileStore(agentDir);
     await fn({ agentDir, store });
   } finally {
     fs.rmSync(agentDir, { recursive: true, force: true });
@@ -109,7 +109,7 @@ describe("markAuthProfileFailure", () => {
         }),
       );
 
-      const store = ensureAuthProfileStore(agentDir);
+      const store = await ensureAuthProfileStore(agentDir);
       await markAuthProfileFailure({
         store,
         profileId: "anthropic:default",

@@ -66,6 +66,8 @@ export interface AdminHealth {
     models: LlmModelStatus[];
     free: LlmModelStatus[];
     pro: LlmModelStatus[];
+    /** Always-on premium-fallback tail appended to every chain [1430]. */
+    premiumFallback?: LlmModelStatus[];
   };
   timestamp: string;
 }

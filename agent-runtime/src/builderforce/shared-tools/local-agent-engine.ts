@@ -1,18 +1,16 @@
 /**
- * LocalAgentEngine — the pi-FREE on-prem execution engine.
+ * LocalAgentEngine — the on-prem execution engine.
  *
  * It implements the shared {@link AgentEngine} seam and drives the shared
  * {@link ToolRegistry} directly: a plain tool loop (model → tool calls → dispatch →
- * repeat) with ZERO dependency on `@mariozechner/pi-*`. It mirrors the cloud
+ * repeat) with NO third-party agent framework. It mirrors the cloud
  * `runCloudToolLoop` pattern (same registry, same `control` signals for finish /
  * ask_human) so on-prem and cloud share ONE engine contract and ONE tool contract —
  * only the injected {@link CapabilityProvider} and the LLM client differ.
  *
- * This is the engine the On-Prem (V2 `local`) surface runs once it stops driving the
- * legacy pi loop; standing it up is the first concrete step of removing pi (the loop
- * is the heart of `pi-agent-core`). The LLM client is INJECTED ({@link LlmComplete})
- * so it is unit-testable with a mock and, in production, points at the gateway's
- * OpenAI-compatible endpoint over `fetch` — no `pi-ai`.
+ * This is the engine the On-Prem (V2 `local`) surface runs. The LLM client is
+ * INJECTED ({@link LlmComplete}) so it is unit-testable with a mock and, in
+ * production, points at the gateway's OpenAI-compatible endpoint over `fetch`.
  */
 
 import type {

@@ -114,7 +114,7 @@ describe("getApiKeyForModel", () => {
         api: "openai-codex-responses",
       } as Model<Api>;
 
-      const store = ensureAuthProfileStore(process.env.BUILDERFORCE_AGENTS_AGENT_DIR, {
+      const store = await ensureAuthProfileStore(process.env.BUILDERFORCE_AGENTS_AGENT_DIR, {
         allowKeychainPrompt: false,
       });
       const apiKey = await getApiKeyForModel({

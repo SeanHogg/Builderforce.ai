@@ -213,7 +213,7 @@ describe("subagent registry persistence", () => {
     };
     const registryPath = await writePersistedRegistry(persisted);
 
-    const runs = loadSubagentRegistryFromDisk();
+    const runs = await loadSubagentRegistryFromDisk();
     const entry = runs.get("run-legacy");
     expect(entry?.cleanupHandled).toBe(true);
     expect(entry?.cleanupCompletedAt).toBe(9);

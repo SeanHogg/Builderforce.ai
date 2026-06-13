@@ -347,13 +347,9 @@ export function createImageTool(options?: {
     }
     return null;
   }
-  const imageModelConfig = await resolveImageModelConfigForTool({
-    cfg: options?.config,
-    agentDir,
-  });
-  if (!imageModelConfig) {
-    return null;
-  }
+  // The effective image-model config depends on async auth resolution, so it is
+  // resolved lazily inside `execute` (below) — the factory MUST stay synchronous
+  // because it runs inside the synchronous tool-assembly path.
 
   // If model has native vision, images in the prompt are auto-injected
   // so this tool is only needed when image wasn't provided in the prompt
@@ -544,6 +540,18 @@ export function createImageTool(options?: {
             ? { rewrittenFrom: resolvedPathInfo.rewrittenFrom }
             : {}),
         });
+      }
+
+      // MARK: - Resolve the image-model config (async auth check) at call time.
+      const imageModelConfig = await resolveImageModelConfigForTool({
+        cfg: options?.config,
+        agentDir,
+      });
+      if (!imageModelConfig) {
+        return {
+          content: [{ type: "text", text: "No image-capable model is configured or authenticated." }],
+          details: { error: "no_image_model" },
+        };
       }
 
       // MARK: - Run image prompt with all loaded images
