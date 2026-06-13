@@ -49,8 +49,10 @@ export interface ObservabilityContentProps {
   /** When set, scope cloud telemetry to a single execution (precise per-run
    *  Logs/Timeline, robust to later agent re-assignment). */
   executionId?: number;
-  /** Optional "Materials & Context" section (task + PRD) injected into the
-   *  copy-triage report by the embedding panel — telemetry alone isn't reviewable. */
+  /** Optional leading prose injected into the copy-triage report by the embedding
+   *  panel — "Review Context" (PR URL, branch, outcome, the model(s) that actually
+   *  ran) followed by "Materials & Context" (task + PRD). Telemetry alone isn't
+   *  reviewable; this is what points a reviewer at the real code and the real model. */
   reportMaterials?: string;
   /** Optional async builder for the "Code Changes (transaction)" section — the
    *  actual file diffs the run produced. Awaited when the user copies the report. */

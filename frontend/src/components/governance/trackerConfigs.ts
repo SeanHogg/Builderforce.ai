@@ -182,19 +182,9 @@ export const TRACKER_CONFIGS: Record<string, TrackerSurfaceProps> = {
       { key: 'notes', label: 'Notes', type: 'textarea', inList: false },
     ],
   },
-  roadmap: {
-    title: 'Roadmap',
-    apiBase: '/api/product/roadmap',
-    fields: [
-      { key: 'title', label: 'Item', required: true },
-      { key: 'horizon', label: 'Horizon', type: 'select', options: ['now', 'next', 'later'] },
-      { key: 'status', label: 'Status', type: 'select', options: ['planned', 'in_progress', 'shipped', 'cancelled'] },
-      { key: 'theme', label: 'Theme' },
-      { key: 'priority', label: 'Priority', type: 'select', options: ['low', 'medium', 'high', 'critical'] },
-      { key: 'targetDate', label: 'Target', type: 'date' },
-      { key: 'notes', label: 'Notes', type: 'textarea' },
-    ],
-  },
+  // 'roadmap' is no longer a generic TrackerSurface — the /embed/roadmap surface
+  // and /projects?tab=pm render the bespoke PM visualizers (RoadmapTimeline owns
+  // roadmap CRUD). See components/pm/.
   'release-planning': {
     title: 'Release Planning',
     apiBase: '/api/product/release-planning',

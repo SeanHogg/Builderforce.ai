@@ -5,6 +5,8 @@ import type { Task } from '@/lib/builderforceApi';
 import { InitialAvatar } from '@/components/workforce/WorkforceCard';
 import MascotIcon from '@/components/MascotIcon';
 import { CeremonyTaskCard } from './CeremonyTaskCard';
+import { PowerMeter } from './PowerMeter';
+import { BriefcaseBadge } from './BriefcaseBadge';
 import { DRAG_TASK, type CeremonyMember } from './types';
 
 const KIND_LABEL: Record<CeremonyMember['kind'], string> = {
@@ -15,27 +17,44 @@ const KIND_LABEL: Record<CeremonyMember['kind'], string> = {
 
 /**
  * One seat at the round table. Drop a task here to assign it to this member.
- * In standup mode the seat shows the member's in-flight tickets; the presence
- * ring lights when that member is live in the room.
+ * A power meter (load vs capacity) sits above the avatar → opens the scorecard;
+ * a briefcase below shows assigned-work count → opens the assigned-items panel.
+ * The presence ring lights when the member is live; the seat pulses on their turn.
  */
 export function CeremonySeat({
   member,
-  tasks,
+  stackTasks,
+  assignedTasks,
+  activeLoad,
+  cap,
   present,
+  isCurrentTurn,
   showStack,
   onDropTask,
   onOpen,
+  onOpenScorecard,
+  onOpenAssigned,
 }: {
   member: CeremonyMember;
-  tasks: Task[];
+  /** Tasks shown in the standup stack under the avatar. */
+  stackTasks: Task[];
+  /** All tasks owned by this member (briefcase + assigned panel). */
+  assignedTasks: Task[];
+  /** Active-work count for the power meter. */
+  activeLoad: number;
+  /** Capacity baseline for the power meter. */
+  cap: number;
   present: boolean;
-  /** Standup: render the member's in-flight task stack under the avatar. */
+  isCurrentTurn: boolean;
   showStack: boolean;
   onDropTask: (taskId: number) => void;
   onOpen: (task: Task) => void;
+  onOpenScorecard: () => void;
+  onOpenAssigned: () => void;
 }) {
   const [over, setOver] = useState(false);
   const isHuman = member.kind === 'human';
+  const ringColor = isCurrentTurn ? 'var(--coral-bright)' : present ? 'var(--cyan-bright)' : 'var(--border-subtle)';
 
   return (
     <div
@@ -51,7 +70,7 @@ export function CeremonySeat({
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: 6,
+        gap: 4,
         width: 140,
         padding: 8,
         borderRadius: 12,
@@ -60,6 +79,7 @@ export function CeremonySeat({
         transition: 'background 0.12s, border-color 0.12s',
       }}
     >
+      <PowerMeter load={activeLoad} cap={cap} onClick={onOpenScorecard} />
       <div
         style={{
           position: 'relative',
@@ -70,34 +90,15 @@ export function CeremonySeat({
           alignItems: 'center',
           justifyContent: 'center',
           background: 'var(--bg-elevated)',
-          border: `2px solid ${present ? 'var(--cyan-bright)' : 'var(--border-subtle)'}`,
-          boxShadow: present ? '0 0 12px var(--cyan-glow)' : 'none',
+          border: `2px solid ${ringColor}`,
+          boxShadow: isCurrentTurn
+            ? '0 0 16px var(--shadow-coral-mid)'
+            : present ? '0 0 12px var(--cyan-glow)' : 'none',
+          ...(isCurrentTurn ? { animation: 'agentPulse 1.4s ease-in-out infinite' } : {}),
         }}
-        title={present ? `${member.name} — live` : member.name}
+        title={isCurrentTurn ? `${member.name} — speaking` : present ? `${member.name} — live` : member.name}
       >
         {isHuman ? <InitialAvatar label={member.name} /> : <MascotIcon size={28} />}
-        {tasks.length > 0 && (
-          <span
-            style={{
-              position: 'absolute',
-              top: -4,
-              right: -4,
-              minWidth: 18,
-              height: 18,
-              padding: '0 5px',
-              borderRadius: 9,
-              background: 'var(--coral-bright)',
-              color: '#fff',
-              fontSize: 10,
-              fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            {tasks.length}
-          </span>
-        )}
       </div>
       <div style={{ textAlign: 'center' }}>
         <div
@@ -115,14 +116,15 @@ export function CeremonySeat({
         </div>
         <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{KIND_LABEL[member.kind]}</div>
       </div>
-      {showStack && tasks.length > 0 && (
+      <BriefcaseBadge tasks={assignedTasks} onClick={onOpenAssigned} />
+      {showStack && stackTasks.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, width: '100%' }}>
-          {tasks.slice(0, 4).map((t) => (
+          {stackTasks.slice(0, 4).map((t) => (
             <CeremonyTaskCard key={t.id} task={t} onOpen={onOpen} compact />
           ))}
-          {tasks.length > 4 && (
+          {stackTasks.length > 4 && (
             <div style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'center' }}>
-              +{tasks.length - 4} more
+              +{stackTasks.length - 4} more
             </div>
           )}
         </div>

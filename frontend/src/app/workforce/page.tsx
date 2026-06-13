@@ -9,13 +9,14 @@ import { ContributorsView } from '@/components/contributors/ContributorsView';
 import { ChatsView } from '@/components/chats/ChatsView';
 import { HumanRequestsView } from '@/components/humanRequests/HumanRequestsView';
 import { ObservabilityContent } from '@/components/ObservabilityContent';
+import { WorkforceMetricsContent } from '@/components/workforce/WorkforceMetricsContent';
 import { LlmUsageContent } from '@/components/LlmUsageContent';
 import { QaContent } from '@/components/QaContent';
 import { ActiveRunsPanel } from '@/components/ActiveRunsPanel';
 import { Tabs } from '@/components/Tabs';
 import PageContainer from '@/components/PageContainer';
 
-type WorkforceTab = 'workforce' | 'teams' | 'chats' | 'approvals' | 'contributors' | 'logs' | 'llm' | 'qa';
+type WorkforceTab = 'workforce' | 'teams' | 'performance' | 'chats' | 'approvals' | 'contributors' | 'logs' | 'llm' | 'qa';
 
 const TABS: ReadonlyArray<{ id: WorkforceTab; label: string; sub: string }> = [
   {
@@ -27,6 +28,11 @@ const TABS: ReadonlyArray<{ id: WorkforceTab; label: string; sub: string }> = [
     id: 'teams',
     label: 'Teams',
     sub: 'Group your workforce — agents and humans — into teams, and attach a team to the projects it works on.',
+  },
+  {
+    id: 'performance',
+    label: 'Performance',
+    sub: 'Effectiveness & engagement scorecards for every member — human and agent — plus DORA metrics. Click a member to set their capability & availability profile (what the sprint planner uses to assign work).',
   },
   {
     id: 'chats',
@@ -89,6 +95,8 @@ function WorkforcePageInner() {
 
       {tab === 'teams' ? (
         <TeamsView />
+      ) : tab === 'performance' ? (
+        <WorkforceMetricsContent />
       ) : tab === 'chats' ? (
         <ChatsView />
       ) : tab === 'approvals' ? (

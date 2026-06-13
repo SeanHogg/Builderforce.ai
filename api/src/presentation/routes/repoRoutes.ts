@@ -30,6 +30,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { RepoService, type AgentHostDispatcher } from '../../application/repos/RepoService';
 import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
+import { importRepoContents } from '../../application/repos/importRepoContents';
 import { githubStatusMessage } from '../../application/integrations/githubTestError';
 import { mergePullRequest, normalizeMergeMethod } from '../../application/repos/mergePullRequest';
 import { markPullRequestMergedById } from '../../application/repos/recordPullRequestRow';
@@ -294,6 +295,33 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       resolved.repo.repo,
       resolved.token,
     );
+    return c.json(result);
+  });
+
+  // GET /api/repos/repositories/:id/contents?ref=<branch> — read the repo's
+  // files (server-side with the decrypted token) so the in-browser IDE can
+  // hydrate its editable workspace from the connected repo. The token never
+  // leaves the server; the client persists the returned manifest through its
+  // normal saveFile path (which targets the correct storage backend).
+  router.get('/repositories/:id/contents', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
+    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+
+    const resolved = await resolveRepoCredential(db, secret, tenantId, id);
+    if (isResolveError(resolved)) return c.json({ error: resolved.error }, resolved.status);
+
+    const ref = (c.req.query('ref') || resolved.repo.defaultBranch || 'main').trim();
+    const result = await importRepoContents({
+      provider: resolved.repo.provider,
+      host: resolved.repo.host,
+      owner: resolved.repo.owner,
+      repo: resolved.repo.repo,
+      token: resolved.token,
+      ref,
+    });
+    if (!result.ok) return c.json({ error: result.error ?? 'Failed to read repository' }, 502);
     return c.json(result);
   });
 

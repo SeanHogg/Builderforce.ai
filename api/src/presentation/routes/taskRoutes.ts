@@ -5,13 +5,15 @@ import { TaskPriority, AgentType, TaskStatus, TaskType } from '../../domain/shar
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { auditEvents, projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import { addDependency, deleteDependency, listProjectDependencies } from '../../application/task/taskDependencies';
 import { invalidateCompletedByAssignee } from './reportRoutes';
 import { AuditEventType } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
 import { ensureTaskPrdRecord, linkSpecToTask } from '../../application/prd/taskPrd';
+import { recordStatusTransition } from '../../application/task/taskLifecycle';
 
 /** Minimal shape of the agentHost relay Durable Object namespace binding. */
 type RelayNamespace = {
@@ -87,6 +89,21 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
+  // Bump the project's epic-tree cache version so the next /:id/tree read reloads.
+  // Any task write (create/update/decompose/move/delete) can reshape a tree, so
+  // every mutation calls this. Best-effort — a stale tree self-heals on the KV TTL.
+  const bumpTreeVersion = (env: Env, projectId: number | null | undefined): Promise<void> =>
+    projectId == null
+      ? Promise.resolve()
+      : bumpCacheVersion(env, `task-tree-version:project:${projectId}`).catch(() => {});
+
+  // Parse a positive-int ?project= param, else undefined.
+  const parseProjectId = (raw: string | undefined): number | undefined => {
+    if (raw == null) return undefined;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  };
+
   // GET /api/tasks?project_id=1
   router.get('/', async (c) => {
     const projectIdParam = c.req.query('project_id');
@@ -128,6 +145,39 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
     return c.json({ members });
   });
 
+  // ── Task dependency edges (DAG; migration 0121) ───────────────────────────
+  // Static/two-segment dependency paths are registered before `/:id` so they are
+  // not captured as a task id.
+
+  // GET /api/tasks/dependencies?project=<id> — all precedence edges in a project.
+  // Cached via a per-project version token (the edge keyspace is unbounded), bumped
+  // on every add/delete below.
+  router.get('/dependencies', async (c) => {
+    const tenantId = c.get('tenantId');
+    const projectId = parseProjectId(c.req.query('project'));
+    if (projectId === undefined) return c.json({ error: 'project is required' }, 400);
+    const [proj] = await db.select({ id: projects.id }).from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId))).limit(1);
+    if (!proj) return c.json({ error: 'project not found' }, 404);
+    const env = c.env as Env;
+    const ver = await getCacheVersion(env, `task-deps-version:project:${projectId}`);
+    const dependencies = await getOrSetCached(
+      env,
+      `task-deps:project:${projectId}:v:${ver}`,
+      () => listProjectDependencies(db, projectId),
+    );
+    return c.json({ dependencies });
+  });
+
+  // DELETE /api/tasks/dependencies/:edgeId — remove one precedence edge.
+  router.delete('/dependencies/:edgeId', async (c) => {
+    const edgeId = Number(c.req.param('edgeId'));
+    const row = await deleteDependency(db, c.get('tenantId'), edgeId);
+    if (!row) return c.json({ error: 'not found' }, 404);
+    await bumpCacheVersion(c.env as Env, `task-deps-version:project:${row.projectId}`).catch(() => {});
+    return c.body(null, 204);
+  });
+
   // GET /api/tasks/:id
   router.get('/:id', async (c) => {
     const id = Number(c.req.param('id'));
@@ -140,8 +190,37 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
   // planning container), so the board can render the breakdown under the Epic.
   router.get('/:id/tree', async (c) => {
     const id = Number(c.req.param('id'));
-    const { epic, children } = await taskService.getEpicTree(id);
-    return c.json({ epic: epic.toPlain(), children: children.map(t => t.toPlain()) });
+    const env = c.env as Env;
+    // Cheap PK read of the project so the cache key/version resolve without
+    // loading the whole tree on a hit; the full tree is built only on a miss.
+    const [row] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, id)).limit(1);
+    if (!row) return c.json({ error: 'not found' }, 404);
+    const ver = await getCacheVersion(env, `task-tree-version:project:${row.projectId}`);
+    const payload = await getOrSetCached(
+      env,
+      `task-tree:project:${row.projectId}:epic:${id}:v:${ver}`,
+      async () => {
+        const { epic, children } = await taskService.getEpicTree(id);
+        return { epic: epic.toPlain(), children: children.map((t) => t.toPlain()) };
+      },
+    );
+    return c.json(payload);
+  });
+
+  // POST /api/tasks/:id/dependencies — add a precedence edge where `:id` is the
+  // SUCCESSOR (it depends on / is blocked by `predecessorTaskId`). Rejects cycles
+  // and cross-project edges at write time (see taskDependencies.addDependency).
+  router.post('/:id/dependencies', async (c) => {
+    const successorTaskId = Number(c.req.param('id'));
+    const body = await c.req.json<{ predecessorTaskId?: number }>();
+    const predecessorTaskId = Number(body.predecessorTaskId);
+    if (!Number.isFinite(predecessorTaskId) || predecessorTaskId <= 0) {
+      return c.json({ error: 'predecessorTaskId is required' }, 400);
+    }
+    const result = await addDependency(db, c.get('tenantId'), successorTaskId, predecessorTaskId);
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    await bumpCacheVersion(c.env as Env, `task-deps-version:project:${result.edge.projectId}`).catch(() => {});
+    return c.json(result.edge, 201);
   });
 
   // POST /api/tasks/:id/decompose — explicitly turn a task into an Epic and fan
@@ -164,6 +243,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
     }
     const epic = await taskService.decomposeEpic(id, body.children);
     const children = (await taskService.getEpicTree(id)).children;
+    await bumpTreeVersion(c.env as Env, epic.toPlain().projectId);
     return c.json({ epic: epic.toPlain(), children: children.map(t => t.toPlain()) }, 201);
   });
 
@@ -185,6 +265,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
       persona?: string | null;
     }>();
     const task = await taskService.createTask(body, c.get('tenantId'));
+    await bumpTreeVersion(c.env as Env, task.toPlain().projectId);
     return c.json(task.toPlain(), 201);
   });
 
@@ -210,13 +291,39 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
       persona?: string | null;
       archived?: boolean;
     }>();
+    // Capture the pre-update status so a status change can be recorded as a lane
+    // transition (the metrics keystone, migration 0117). Cheap PK read; only when
+    // the PATCH actually carries a status.
+    const prevStatus = body.status !== undefined
+      ? (await db.select({ status: tasks.status, projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, id)).limit(1))[0]
+      : undefined;
+
     const task = await taskService.updateTask(id, body);
+    // A PATCH can change parent/sprint/title/status — any of which reshapes a tree.
+    await bumpTreeVersion(c.env as Env, task.toPlain().projectId);
 
     // Any status write can change which tasks fall in the completed-by-assignee
     // window (moved into OR out of a done-class lane), so bust that rollup's
     // per-tenant cache token. Best-effort — a stale rollup self-heals on the KV TTL.
     if (body.status !== undefined) {
       await invalidateCompletedByAssignee(c.env as Env, c.get('tenantId')).catch(() => {});
+      // ROI time metrics (completed count, cycle time, throughput) move with status.
+      await bumpCacheVersion(c.env as Env, `roi-version:tenant:${c.get('tenantId')}`).catch(() => {});
+    }
+
+    // Record the lane move + fold it into the task's lifecycle counters
+    // (redo/reopen/completed_at). Best-effort, off the request path.
+    if (prevStatus && body.status !== undefined && body.status !== prevStatus.status) {
+      c.executionCtx.waitUntil(
+        recordStatusTransition(c.env as Env, db, {
+          tenantId:    c.get('tenantId'),
+          projectId:   prevStatus.projectId,
+          taskId:      id,
+          fromStatus:  prevStatus.status,
+          toStatus:    body.status,
+          actorUserId: (c as any).get('userId') ?? null,
+        }).catch(() => {}),
+      );
     }
 
     // On transition to Done, finalize the ticket → commit + PR (host relay or
@@ -255,7 +362,11 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
   router.post('/:id/move', async (c) => {
     const id = Number(c.req.param('id'));
     const body = await c.req.json<{ projectId: number }>();
+    // The task leaves one project's tree and joins another's — bump both.
+    const [before] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, id)).limit(1);
     const task = await taskService.moveTask(id, body.projectId, c.get('tenantId'));
+    await bumpTreeVersion(c.env as Env, before?.projectId);
+    await bumpTreeVersion(c.env as Env, body.projectId);
 
     try {
       await db.insert(auditEvents).values({
@@ -276,7 +387,9 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
   // DELETE /api/tasks/:id
   router.delete('/:id', async (c) => {
     const id = Number(c.req.param('id'));
+    const [before] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, id)).limit(1);
     await taskService.deleteTask(id);
+    await bumpTreeVersion(c.env as Env, before?.projectId);
     return c.body(null, 204);
   });
 
@@ -367,6 +480,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
   router.post('/next', async (c) => {
     const task = await taskService.dequeueNextReady(c.get('tenantId'));
     if (task) {
+      const plain = task.toPlain();
       // record that the task was claimed
       try {
         await db.insert(auditEvents).values({
@@ -380,6 +494,18 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
       } catch {
         // ignore errors
       }
+      // dequeue moved the ticket ready → in_progress without a PATCH; record the
+      // lane transition so pickup-latency / cycle metrics see the claim.
+      c.executionCtx.waitUntil(
+        recordStatusTransition(c.env as Env, db, {
+          tenantId: c.get('tenantId'),
+          projectId: plain.projectId,
+          taskId: plain.id,
+          fromStatus: TaskStatus.READY,
+          toStatus: TaskStatus.IN_PROGRESS,
+          actorUserId: null,
+        }).catch(() => {}),
+      );
     }
     return c.json({ task: task ? task.toPlain() : null });
   });

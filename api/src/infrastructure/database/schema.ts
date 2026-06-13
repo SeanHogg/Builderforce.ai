@@ -11,7 +11,9 @@ import {
   serial,
   varchar,
   smallint,
+  bigint,
   real,
+  jsonb,
   unique,
   uniqueIndex,
   index,
@@ -126,6 +128,10 @@ export const privacyRequestStatusEnum = pgEnum('privacy_request_status', [
 
 export const executionStatusEnum = pgEnum('execution_status', [
   'pending', 'submitted', 'running', 'completed', 'failed', 'cancelled',
+  // Non-terminal: a cloud run that called ask_human and is waiting on a person
+  // (migration 0120). Not spending, not terminal — resumes once the question is
+  // answered. The reaper's running/pending/submitted sweeps deliberately skip it.
+  'paused',
 ]);
 
 export const auditEventTypeEnum = pgEnum('audit_event_type', [
@@ -721,6 +727,31 @@ export const projects = pgTable('projects', {
   updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 });
 
+/**
+ * Subdomain hosting for IDE (Designer) projects — a published app served at
+ * {subdomain}.apps.builderforce.ai. One row per project (project_id unique);
+ * re-publishing overwrites the R2 assets and bumps `versionToken` (the cache-bust
+ * token the subdomain→site lookup is keyed by). See migration 0121.
+ */
+export const projectSites = pgTable('project_sites', {
+  id:            serial('id').primaryKey(),
+  projectId:     integer('project_id').notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  subdomain:     varchar('subdomain', { length: 63 }).notNull().unique(),
+  /** 'static' (R2-served built assets) | 'container' (V2 container web-serving, later phase). */
+  mode:          varchar('mode', { length: 16 }).notNull().default('static'),
+  status:        varchar('status', { length: 16 }).notNull().default('active'),
+  r2Prefix:      text('r2_prefix').notNull(),
+  versionToken:  varchar('version_token', { length: 32 }).notNull(),
+  indexDocument: varchar('index_document', { length: 128 }).notNull().default('index.html'),
+  customDomain:  varchar('custom_domain', { length: 255 }),
+  assetCount:    integer('asset_count').notNull().default(0),
+  totalBytes:    bigint('total_bytes', { mode: 'number' }).notNull().default(0),
+  publishedAt:   timestamp('published_at'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+});
+
 export const tasks = pgTable('tasks', {
   id:                serial('id').primaryKey(),
   projectId:         integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
@@ -767,8 +798,154 @@ export const tasks = pgTable('tasks', {
   // PRD/spec link moved to the task_specs junction (0098): a task references 1..N
   // project PRDs (one optional primary) — see `taskSpecs` below.
   archived:          boolean('archived').notNull().default(false),
+  /** Lifecycle metrics (migration 0117). completedAt is the REAL timestamp the
+   *  task entered a done-class lane (replaces the updatedAt proxy); null once it
+   *  leaves. lastWorkedAt is the latest "work stopped" signal (baseline for
+   *  idle-after-done). redoCount/reopenCount are denormalized backward-move
+   *  counters bumped by the status-transition emit so board reads never aggregate
+   *  the task_status_transitions log. */
+  completedAt:       timestamp('completed_at'),
+  lastWorkedAt:      timestamp('last_worked_at'),
+  redoCount:         integer('redo_count').notNull().default(0),
+  reopenCount:       integer('reopen_count').notNull().default(0),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Workforce member profiles + lifecycle metrics (migrations 0116–0118)
+// ---------------------------------------------------------------------------
+
+/** Which workforce sub-population a member_ref points at — shared by team_members
+ *  (0114), member_profiles, and member_metrics_period. Declared here (ahead of the
+ *  Workforce Teams section) so all consumers can reference it. */
+export const teamMemberKindEnum = pgEnum('team_member_kind', [
+  'human', 'cloud_agent', 'host_agent',
+]);
+
+export const memberExperienceLevelEnum = pgEnum('member_experience_level', [
+  'junior', 'mid', 'senior', 'staff', 'principal',
+]);
+export const memberAvailabilityStatusEnum = pgEnum('member_availability_status', [
+  'available', 'busy', 'focus', 'ooo', 'on_call',
+]);
+export const memberProfileSyncSourceEnum = pgEnum('member_profile_sync_source', [
+  'manual', 'google_calendar',
+]);
+
+/**
+ * Capability & availability profile for one workforce member — human OR agent —
+ * keyed by the polymorphic (memberKind, memberRef) identity (users.id /
+ * ide_agents.id / agent_hosts.id), the same shape as {@link teamMembers}. Feeds
+ * the AI sprint planner (who/what/when). Schedule fields are human-centric;
+ * capacity/skills apply to both populations. `syncSource` is the Calendar-ready
+ * seam — 'manual' today, overlay Google Calendar busy/pto later without a
+ * migration. See migration 0116. JSON-shaped columns are typed loosely here
+ * (jsonb) and validated at the route boundary.
+ */
+export const memberProfiles = pgTable('member_profiles', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  memberKind:   teamMemberKindEnum('member_kind').notNull(),
+  memberRef:    varchar('member_ref', { length: 64 }).notNull(),
+  timezone:     varchar('timezone', { length: 64 }),
+  workHours:    jsonb('work_hours'),
+  pto:          jsonb('pto'),
+  responseSlaHours:      real('response_sla_hours'),
+  weeklyCapacityHours:   real('weekly_capacity_hours'),
+  dailyCapacityPoints:   real('daily_capacity_points'),
+  maxConcurrentWip:      integer('max_concurrent_wip'),
+  rampFactor:   real('ramp_factor').notNull().default(1.0),
+  experienceLevel:       memberExperienceLevelEnum('experience_level'),
+  skills:       jsonb('skills'),
+  focusAreas:   jsonb('focus_areas'),
+  preferredTaskTypes:    jsonb('preferred_task_types'),
+  availabilityStatus:    memberAvailabilityStatusEnum('availability_status').notNull().default('available'),
+  availabilityUntil:     timestamp('availability_until'),
+  lastActiveAt: timestamp('last_active_at'),
+  costRateUsdCents:      integer('cost_rate_usd_cents'),
+  syncSource:   memberProfileSyncSourceEnum('sync_source').notNull().default('manual'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_member_profile').on(t.tenantId, t.memberKind, t.memberRef),
+]);
+
+/**
+ * Append-only ticket-lifecycle event log — one row per status (lane) move. The
+ * keystone for redo / idle-after-done / time-in-status / DORA cycle+lead time.
+ * Emitted from PATCH /api/tasks/:id. `isBackward` (move to a lower-ordinal
+ * swimlane) is the redo signal; `actorKind`/`actorRef` record who moved it. See
+ * migration 0117.
+ */
+export const taskStatusTransitions = pgTable('task_status_transitions', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:   integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  taskId:      integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  fromStatus:  varchar('from_status', { length: 64 }),
+  toStatus:    varchar('to_status', { length: 64 }).notNull(),
+  actorKind:   varchar('actor_kind', { length: 16 }).notNull().default('system'),
+  actorRef:    varchar('actor_ref', { length: 64 }),
+  isBackward:  boolean('is_backward'),
+  occurredAt:  timestamp('occurred_at').notNull().defaultNow(),
+});
+
+/**
+ * Effectiveness/engagement scorecard per member per period (humans AND agents).
+ * engagement_* columns are the human-specific board-behaviour dimensions; the
+ * throughput/redo/reopen/cycle columns apply to everyone. Parallels
+ * {@link teamVelocity} at member grain. See migration 0118.
+ */
+export const memberMetricsPeriod = pgTable('member_metrics_period', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  memberKind:   teamMemberKindEnum('member_kind').notNull(),
+  memberRef:    varchar('member_ref', { length: 64 }).notNull(),
+  memberName:   varchar('member_name', { length: 255 }).notNull(),
+  periodStart:  timestamp('period_start').notNull(),
+  periodEnd:    timestamp('period_end').notNull(),
+  assignedCount:  integer('assigned_count').notNull().default(0),
+  completedCount: integer('completed_count').notNull().default(0),
+  redoCount:      integer('redo_count').notNull().default(0),
+  reopenCount:    integer('reopen_count').notNull().default(0),
+  avgCycleTimeHours:       real('avg_cycle_time_hours'),
+  avgPickupLatencyHours:   real('avg_pickup_latency_hours'),
+  avgIdleAfterDoneHours:   real('avg_idle_after_done_hours'),
+  boardHygieneScore:       real('board_hygiene_score'),
+  engagementScore:         real('engagement_score'),
+  effectivenessScore:      real('effectiveness_score'),
+  computedAt:   timestamp('computed_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_member_metrics_period').on(t.tenantId, t.memberKind, t.memberRef, t.periodStart, t.periodEnd),
+]);
+
+export const deploymentStatusEnum = pgEnum('deployment_status', [
+  'success', 'failed', 'rolled_back',
+]);
+
+/**
+ * Deploy/restore stream — the DORA signal that activity_events (commits/PRs)
+ * lacks: deployment frequency, change-failure-rate (is_failure), and MTTR
+ * (restored_at − deployed_at). Optionally tied to the task it shipped for
+ * lead-time bridging. See migration 0118.
+ */
+export const deploymentEvents = pgTable('deployment_events', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  taskId:       integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  environment:  varchar('environment', { length: 64 }).notNull().default('production'),
+  status:       deploymentStatusEnum('status').notNull().default('success'),
+  isFailure:    boolean('is_failure').notNull().default(false),
+  externalRef:  varchar('external_ref', { length: 255 }),
+  deployedAt:   timestamp('deployed_at').notNull().defaultNow(),
+  restoredAt:   timestamp('restored_at'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
 });
 
 export const agents = pgTable('agents', {
@@ -1397,6 +1574,11 @@ export const approvals = pgTable('approvals', {
   actionType:  varchar('action_type', { length: 255 }).notNull(),
   description: text('description').notNull(),
   metadata:    text('metadata'),
+  // Cloud-run scope (migration 0120). Cloud agents have no agent_host_id; a
+  // question they raise carries the execution it paused so the answer resumes
+  // that exact run. Null for self-hosted approvals (those route via agent_host_id).
+  executionId:   integer('execution_id'),
+  cloudAgentRef: varchar('cloud_agent_ref', { length: 64 }),
   status:      approvalStatusEnum('status').notNull().default('pending'),
   reviewedBy:  varchar('reviewed_by', { length: 36 }),
   reviewNote:  text('review_note'),
@@ -1582,6 +1764,7 @@ export const magicLinkTokens = pgTable('magic_link_tokens', {
 
 export const integrationProviderEnum = pgEnum('integration_provider', [
   'github', 'gitlab', 'bitbucket', 'jira', 'confluence', 'freshservice', 'rally', 'freshworks',
+  'google_calendar',
 ]);
 
 export const integrationSyncStatusEnum = pgEnum('integration_sync_status', [
@@ -1787,10 +1970,8 @@ export const devTeamMembers = pgTable('dev_team_members', {
 // like a task assignee — a human (users.id), a cloud agent (ide_agents.id), or a
 // remote host (agent_hosts.id). See migration 0114.
 // ---------------------------------------------------------------------------
-
-export const teamMemberKindEnum = pgEnum('team_member_kind', [
-  'human', 'cloud_agent', 'host_agent',
-]);
+// teamMemberKindEnum is declared earlier (near member_profiles) so the lifecycle
+// metrics tables that share the polymorphic member identity can reference it.
 
 export const teams = pgTable('teams', {
   id:          serial('id').primaryKey(),
@@ -2281,6 +2462,8 @@ export const roadmapItems = pgTable('roadmap_items', {
   id:         uuid('id').primaryKey().defaultRandom(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  // Nullable project scope (0121): NULL = portfolio/segment-level, non-null = one project.
+  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   title:      varchar('title', { length: 255 }).notNull(),
   horizon:    varchar('horizon', { length: 10 }).notNull().default('now'),
   status:     varchar('status', { length: 20 }).notNull().default('planned'),
@@ -2435,6 +2618,8 @@ export const featureScores = pgTable('feature_scores', {
   id:         uuid('id').primaryKey().defaultRandom(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  // Nullable project scope (0121): NULL = portfolio/segment-level, non-null = one project.
+  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   name:       varchar('name', { length: 255 }).notNull(),
   reach:      real('reach'),
   impact:     real('impact'),
@@ -2445,6 +2630,64 @@ export const featureScores = pgTable('feature_scores', {
   notes:      text('notes'),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Task dependency edges (migration 0121). First-class blocks/blocked-by edges
+// between tasks — the backbone of the dependency-map visualizer and roadmap
+// sequencing. predecessor must finish before successor can start. Acyclicity is
+// enforced at write time in the route (see application/task/taskDependencies.ts);
+// the DB only stops self-loops + duplicate edges.
+// ---------------------------------------------------------------------------
+
+export const taskDependencies = pgTable('task_dependencies', {
+  id:                serial('id').primaryKey(),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  // Nullable in Drizzle (omitted on insert); the set_default_segment_id() trigger
+  // fills it and migration 0121 enforces NOT NULL at the DB — same as task_status_transitions.
+  segmentId:         uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:         integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  predecessorTaskId: integer('predecessor_task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  successorTaskId:    integer('successor_task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  depType:           varchar('dep_type', { length: 16 }).notNull().default('finish_to_start'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Ceremony sessions (standup / planning round-table; migration 0119). One row per
+// officially-started, timed ceremony; participants carry turn order + speaking time.
+// ---------------------------------------------------------------------------
+
+export const ceremonySessions = pgTable('ceremony_sessions', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  kind:           varchar('kind', { length: 16 }).notNull(),                       // 'standup' | 'planning'
+  status:         varchar('status', { length: 16 }).notNull().default('active'),   // 'active' | 'completed'
+  facilitatorId:  varchar('facilitator_id', { length: 64 }),
+  turnMode:       varchar('turn_mode', { length: 16 }).notNull().default('facilitator'),
+  turnSeconds:    integer('turn_seconds').notNull().default(90),
+  currentTurn:    integer('current_turn'),                                         // index into participants.turnOrder
+  turnStartedAt:  timestamp('turn_started_at'),
+  startedAt:      timestamp('started_at').notNull().defaultNow(),
+  endedAt:        timestamp('ended_at'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const ceremonyParticipants = pgTable('ceremony_participants', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  sessionId:   uuid('session_id').notNull().references(() => ceremonySessions.id, { onDelete: 'cascade' }),
+  memberKind:  varchar('member_kind', { length: 16 }).notNull(),                   // 'human' | 'cloud_agent' | 'host_agent'
+  memberRef:   varchar('member_ref', { length: 64 }).notNull(),
+  memberName:  varchar('member_name', { length: 255 }).notNull(),
+  turnOrder:   integer('turn_order').notNull().default(0),
+  durationMs:  integer('duration_ms').notNull().default(0),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
@@ -2776,6 +3019,11 @@ export const boards = pgTable('boards', {
   autonomous:           boolean('autonomous').notNull().default(true),
   maxConcurrentTickets: integer('max_concurrent_tickets').notNull().default(5),
   needsAttentionLane:   varchar('needs_attention_lane', { length: 120 }).notNull().default('needs-attention'),
+  /** Standup turn-timer behaviour for this board's ceremonies (migration 0119):
+   *  'facilitator' = manual Next advances the speaker; 'timeboxed' = each speaker
+   *  gets `standupTurnSeconds` then auto-advances. Snapshotted onto a session at start. */
+  standupTurnMode:      varchar('standup_turn_mode', { length: 16 }).notNull().default('facilitator'),
+  standupTurnSeconds:   integer('standup_turn_seconds').notNull().default(90),
   createdAt:            timestamp('created_at').notNull().defaultNow(),
   updatedAt:            timestamp('updated_at').notNull().defaultNow(),
 });

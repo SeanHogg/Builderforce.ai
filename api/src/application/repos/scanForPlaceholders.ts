@@ -65,6 +65,11 @@ const STUB_PATTERNS: Array<{ label: string; re: RegExp }> = [
   // Hard-coded reserved-example data / obvious secret placeholders standing in for
   // a real value or lookup.
   { label: 'placeholder example/secret literal', re: /@example\.(?:com|org|net)\b|['"`][^'"`]{0,40}(?:your[-_ ]?(?:api[-_ ]?key|token|secret)|xxxx+)[^'"`]{0,40}['"`]/i },
+  // An unresolved git merge-conflict marker — a committed conflict is unambiguously
+  // broken code (won't parse/compile). The start marker `<<<<<<< <ref>` is
+  // zero-false-positive: seven `<` at line start followed by whitespace never
+  // occurs in finished source.
+  { label: 'unresolved merge-conflict marker', re: /^<{7}[ \t].*$[\s\S]*?^>{7}[ \t]/m },
 ];
 
 /** Return the distinct stub-marker labels present in a file's content. */

@@ -18,11 +18,11 @@ import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 const TRACKERS: Array<{ path: string; table: unknown; opts: TrackerOpts }> = [
-  { path: '/sprints', table: sprints, opts: { fields: ['name', 'goal', 'startDate', 'endDate', 'capacity', 'status', 'runwayBudget', 'actualBurn', 'notes'], required: ['name'], emit: { field: 'status', value: 'completed', event: 'sprint.completed' } } },
+  { path: '/sprints', table: sprints, opts: { fields: ['name', 'goal', 'startDate', 'endDate', 'capacity', 'status', 'runwayBudget', 'actualBurn', 'notes'], required: ['name'], emit: { field: 'status', value: 'completed', event: 'sprint.completed' }, bumpVersionKeys: (t) => [`roi-version:tenant:${t}`] } },
   { path: '/velocity', table: teamVelocity, opts: { fields: ['period', 'teamId', 'periodStart', 'periodEnd', 'committedPoints', 'completedPoints', 'velocityScore', 'trend', 'notes'], required: ['period'] } },
   { path: '/capacity', table: capacityPlanning, opts: { fields: ['planningPeriod', 'teamId', 'totalCapacity', 'allocatedCapacity', 'availableCapacity', 'utilizationRate', 'teamSize', 'notes'], required: ['planningPeriod'] } },
-  { path: '/cost', table: costCalculations, opts: { fields: ['label', 'calculationType', 'laborCost', 'overheadCost', 'toolingCost', 'infrastructureCost', 'totalCost', 'runwayImpactDays', 'notes'], required: ['label'] } },
-  { path: '/feature-scoring', table: featureScores, opts: { fields: ['name', 'reach', 'impact', 'confidence', 'effort', 'score', 'status', 'notes'], required: ['name'] } },
+  { path: '/cost', table: costCalculations, opts: { fields: ['label', 'calculationType', 'laborCost', 'overheadCost', 'toolingCost', 'infrastructureCost', 'totalCost', 'runwayImpactDays', 'notes'], required: ['label'], bumpVersionKeys: (t) => [`roi-version:tenant:${t}`] } },
+  { path: '/feature-scoring', table: featureScores, opts: { fields: ['name', 'reach', 'impact', 'confidence', 'effort', 'score', 'status', 'notes'], required: ['name'], projectScoped: true, cacheNs: 'rice' } },
 ];
 
 export function createAgileRoutes(db: Db): Hono<HonoEnv> {

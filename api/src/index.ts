@@ -30,18 +30,22 @@ import { AuthService }     from './application/auth/AuthService';
 import { AgentService }    from './application/agent/AgentService';
 import { RuntimeService }  from './application/runtime/RuntimeService';
 import { recordRunFailureEvent } from './application/runtime/recordRunFailureEvent';
+import { syncExecutionTaskLifecycle } from './application/task/taskLifecycle';
+import { recommendTopAssignee } from './application/metrics/assigneeRecommender';
 import { AuditService }    from './application/audit/AuditService';
 import { AgentHostService }     from './application/agentHost/AgentHostService';
 
 // Routes
 import { createProjectRoutes }     from './presentation/routes/projectRoutes';
 import { createTaskRoutes }        from './presentation/routes/taskRoutes';
+import { createMemberRoutes }      from './presentation/routes/memberRoutes';
 import { createTenantRoutes }      from './presentation/routes/tenantRoutes';
 import { createSegmentRoutes }     from './presentation/routes/segmentRoutes';
 import { createEmbedRoutes }       from './presentation/routes/embedRoutes';
 import { createGovernanceRoutes }  from './presentation/routes/governanceRoutes';
 import { createProductRoutes }     from './presentation/routes/productRoutes';
 import { createAgileRoutes }       from './presentation/routes/agileRoutes';
+import { createRoiRoutes }         from './presentation/routes/roiRoutes';
 import { createSeamRoutes }        from './presentation/routes/seamRoutes';
 import { createBiRoutes }          from './presentation/routes/biRoutes';
 import { createTenantApiKeyRoutes } from './presentation/routes/tenantApiKeyRoutes';
@@ -81,6 +85,8 @@ import { createReportRoutes }       from './presentation/routes/reportRoutes';
 import { createAnalyticsRoutes }    from './presentation/routes/analyticsRoutes';
 import { createPromptLibraryRoutes } from './presentation/routes/promptLibraryRoutes';
 import { createBrainRoutes }       from './presentation/routes/brainRoutes';
+import { createBrainFilesRoutes }  from './presentation/routes/brainFilesRoutes';
+import { createSitesRoutes, tryServeHostedSite } from './presentation/routes/sitesRoutes';
 import { createIdeRoutes }         from './presentation/routes/ideRoutes';
 import { createIdeAiRoutes }       from './presentation/routes/ideAiRoutes';
 import { BrainService }            from './application/brain/BrainService';
@@ -155,12 +161,14 @@ function buildApp(env: Env): Hono<HonoEnv> {
 
   // --- Application ---
   const projectService  = new ProjectService(projectRepo);
-  const taskService     = new TaskService(taskRepo, projectRepo);
+  const taskService     = new TaskService(taskRepo, projectRepo, undefined,
+    (projectId) => recommendTopAssignee(env, db, projectId));
   const tenantService   = new TenantService(tenantRepo, paymentProvider);
   const authService     = new AuthService(userRepo, tenantRepo, auditRepo, env.JWT_SECRET);
   const agentService    = new AgentService(agentRepo, skillRepo, auditRepo);
   const runtimeService  = new RuntimeService(executionRepo, taskRepo, agentRepo, auditRepo,
-    (e) => recordRunFailureEvent(db, e));
+    (e) => recordRunFailureEvent(db, e),
+    (info) => syncExecutionTaskLifecycle(env, db, info));
   const auditService    = new AuditService(auditRepo);
   const agentHostService     = new AgentHostService(agentHostRepo);
   const brainService    = new BrainService(db);
@@ -169,6 +177,17 @@ function buildApp(env: Env): Hono<HonoEnv> {
   const app = new Hono<HonoEnv>();
 
   app.use('*', corsMiddleware);
+
+  // Published-site hosting: a request whose Host is a `<sub>.apps.builderforce.ai`
+  // hosting subdomain (delivered by the worker's wildcard route) is served
+  // straight from R2 as a public website — it never touches the API routers or
+  // auth. Non-hosting hosts (api.builderforce.ai) fall through to next().
+  app.use('*', async (c, next) => {
+    const res = await tryServeHostedSite(c.env, c.req.header('host'), c.req.path);
+    if (res) return res;
+    return next();
+  });
+
   // Rate limiting applied after auth middleware resolves tenantId
   app.use('/api/*', rateLimitMiddleware as Parameters<typeof app.use>[1]);
   // Emulation token interception — runs before authMiddleware in each router.
@@ -234,6 +253,16 @@ function buildApp(env: Env): Hono<HonoEnv> {
   // Public workforce registry (browse published agents without login)
   app.route('/api/workforce', createWorkforceRoutes());
 
+  // Signed vision attachments — public, but each object is gated by a short-lived
+  // HMAC (?exp&sig minted at /api/brain/uploads/sign). Lets an upstream LLM
+  // provider fetch an oversize image without the tenant JWT. No JWT here.
+  app.route('/api/brain-files', createBrainFilesRoutes());
+
+  // Published IDE (Designer) sites — public static hosting from R2. Served at
+  // <sub>.apps.builderforce.ai once the wildcard route is wired; the path form
+  // /api/sites/<sub>/... works today. No JWT (these are public websites).
+  app.route('/api/sites', createSitesRoutes());
+
   // Public Developer API (Bearer <developer_api_key> for read-only; tenant JWT for key management)
   app.route('/api/v1', createPublicApiRoutes(db));
 
@@ -274,12 +303,14 @@ function buildApp(env: Env): Hono<HonoEnv> {
   // Protected endpoints (JWT injected by authMiddleware inside each router)
   app.route('/api/projects', createProjectRoutes(projectService, db));
   app.route('/api/tasks',    createTaskRoutes(taskService, db));
+  app.route('/api/members',  createMemberRoutes(db));
   app.route('/api/tenants',  createTenantRoutes(tenantService, db));
   app.route('/api/segments', createSegmentRoutes(db));
   app.route('/api/embed',    createEmbedRoutes(db));
   app.route('/api/governance', createGovernanceRoutes(db));
   app.route('/api/product',  createProductRoutes(db));
   app.route('/api/agile',    createAgileRoutes(db));
+  app.route('/api/roi',      createRoiRoutes(db));
   app.route('/api/bi',       createBiRoutes(db));
   // Cross-domain (channel-3) seams — server-to-server, scoped tenant API keys.
   app.route('/v1',           createSeamRoutes(db));

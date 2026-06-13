@@ -493,12 +493,19 @@ function TeamsTab({ projectId }: { projectId: number }) {
 function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) {
   const [maxConcurrent, setMaxConcurrent] = useState(board.maxConcurrentTickets);
   const [name, setName] = useState(board.name);
+  const [turnMode, setTurnMode] = useState<'facilitator' | 'timeboxed'>(board.standupTurnMode ?? 'facilitator');
+  const [turnSeconds, setTurnSeconds] = useState(board.standupTurnSeconds ?? 90);
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
     setSaving(true);
     try {
-      await boardsApi.update(board.id, { name: name.trim() || board.name, maxConcurrentTickets: maxConcurrent });
+      await boardsApi.update(board.id, {
+        name: name.trim() || board.name,
+        maxConcurrentTickets: maxConcurrent,
+        standupTurnMode: turnMode,
+        standupTurnSeconds: turnSeconds,
+      });
       onSaved();
     } finally { setSaving(false); }
   };
@@ -515,6 +522,29 @@ function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) 
         Max concurrent tickets
         <input type="number" min={1} style={{ ...inputStyle, width: 120, marginTop: 4 }} value={maxConcurrent} onChange={(e) => setMaxConcurrent(Number(e.target.value))} />
       </label>
+
+      {/* Standup turn timer — drives the ceremony round-table's "who's next". */}
+      <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Standup turn timer</div>
+        <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'block' }}>
+          Mode
+          <select
+            style={{ ...inputStyle, width: '100%', marginTop: 4 }}
+            value={turnMode}
+            onChange={(e) => setTurnMode(e.target.value as 'facilitator' | 'timeboxed')}
+          >
+            <option value="facilitator">Facilitator advances (manual “Next”)</option>
+            <option value="timeboxed">Timeboxed (auto-advance per speaker)</option>
+          </select>
+        </label>
+        {turnMode === 'timeboxed' && (
+          <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'block', marginTop: 10 }}>
+            Seconds per person
+            <input type="number" min={10} step={5} style={{ ...inputStyle, width: 120, marginTop: 4 }} value={turnSeconds} onChange={(e) => setTurnSeconds(Number(e.target.value))} />
+          </label>
+        )}
+      </div>
+
       <div>
         <button type="button" style={btnPrimary} disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save settings'}</button>
       </div>

@@ -44,7 +44,9 @@ export async function getOrSetCached<T>(
   if (hit && hit.expiresAt > now) return hit.value as T;
   if (hit) l1.delete(key);
 
-  const kv = env.AUTH_CACHE_KV;
+  // env may be absent (unit tests, non-Worker callers); the helper's contract is
+  // "no KV → fall through to the loader", so guard env itself, not just the binding.
+  const kv = env?.AUTH_CACHE_KV;
   const l1Ttl = opts?.l1TtlMs ?? L1_TTL_MS;
 
   if (kv) {
@@ -73,11 +75,29 @@ export async function getOrSetCached<T>(
   return fresh;
 }
 
+/**
+ * Read (or lazily mint) an opaque version token for `versionKey`. Fold the token
+ * into data-cache keys (`...:v:${token}`) when the keyspace is unbounded or one
+ * write fans out to many dependent keys (e.g. every epic-tree in a project) —
+ * bumping the token orphans them all at once instead of enumerating each key.
+ */
+export async function getCacheVersion(env: Env, versionKey: string): Promise<string> {
+  return getOrSetCached(env, `ver:${versionKey}`, async () => crypto.randomUUID(), {
+    kvTtlSeconds: 86_400,
+  });
+}
+
+/** Bump a version token: the next getCacheVersion mints a fresh one, orphaning
+ *  every data key that embedded the previous token (they age out via TTL). */
+export async function bumpCacheVersion(env: Env, versionKey: string): Promise<void> {
+  await invalidateCached(env, `ver:${versionKey}`);
+}
+
 /** Invalidate both cache layers for `key`. Call from every mutation that
  *  changes the cached data so the next read re-loads. */
 export async function invalidateCached(env: Env, key: string): Promise<void> {
   l1.delete(key);
-  const kv = env.AUTH_CACHE_KV;
+  const kv = env?.AUTH_CACHE_KV;
   if (kv) {
     try {
       await kv.delete(kvKey(key));

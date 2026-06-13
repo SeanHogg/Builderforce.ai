@@ -1,7 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { tasksApi, sprintsApi, type Task, type Sprint } from '@/lib/builderforceApi';
+import {
+  tasksApi, sprintsApi, runtimeApi, ceremonySessionsApi, membersApi,
+  type Task, type Sprint, type Execution, type CeremonySession, type CeremonySessionDetail, type CeremonyParticipant, type MemberProfile,
+} from '@/lib/builderforceApi';
 import { listTeamsByProject, getTeam, listWorkforceDirectory } from '@/lib/teams';
 import { useAuth } from '@/lib/AuthContext';
 import { useCeremonyRoom, type CeremonyRoomFrame } from '@/lib/ceremonyRoom';
@@ -10,9 +13,19 @@ import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { CeremonySeat } from './CeremonySeat';
 import { BacklogRail } from './BacklogRail';
 import { EpicRail } from './EpicRail';
+import { StandupControls } from './StandupControls';
+import { ScorecardPanel } from './ScorecardPanel';
+import { AssignedWorkPanel } from './AssignedWorkPanel';
 import { DRAG_TASK, memberAssigneePatch, memberKey, taskBelongsToMember, type CeremonyMember } from './types';
 
 export type CeremonyMode = 'standup' | 'planning';
+
+/** Active-work statuses that count toward a member's load (power meter). */
+const ACTIVE_STATUSES = new Set(['in_progress', 'in_review', 'ready']);
+/** Default per-member WIP cap when no member profile sets one. */
+const DEFAULT_CAP = 8;
+/** Execution statuses that mean a run is already in-flight or done (skip re-dispatch). */
+const LIVE_OR_DONE = new Set(['pending', 'submitted', 'running', 'completed']);
 
 /** Resolve the round-table seats: the project's attached team(s), else the whole workforce. */
 async function loadProjectMembers(projectId: number): Promise<CeremonyMember[]> {
@@ -67,18 +80,34 @@ export function CeremonyStage({
   const [error, setError] = useState<string | null>(null);
   const [drawerTask, setDrawerTask] = useState<Task | null>(null);
   const [cursors, setCursors] = useState<Record<string, PeerCursor>>({});
+  // Tracked-session state (start/turn/complete + per-person timing).
+  const [session, setSession] = useState<CeremonySession | null>(null);
+  const [participants, setParticipants] = useState<CeremonyParticipant[]>([]);
+  const [sessionBusy, setSessionBusy] = useState(false);
+  const [executions, setExecutions] = useState<Execution[]>([]);
+  const [profiles, setProfiles] = useState<MemberProfile[]>([]);
+  // Slide-out targets (scorecard / assigned work) for a clicked seat.
+  const [scorecardMember, setScorecardMember] = useState<CeremonyMember | null>(null);
+  const [assignedMember, setAssignedMember] = useState<CeremonyMember | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [tasksData, sprintsData, memberData] = await Promise.all([
+      const [tasksData, sprintsData, memberData, sessionData, execData, profileData] = await Promise.all([
         tasksApi.list(projectId),
         sprintsApi.list().catch(() => [] as Sprint[]),
         loadProjectMembers(projectId),
+        ceremonySessionsApi.active(projectId, mode).catch((): CeremonySessionDetail => ({ session: null })),
+        runtimeApi.listRecent().catch(() => [] as Execution[]),
+        membersApi.profiles().then((r) => r.profiles).catch(() => [] as MemberProfile[]),
       ]);
       setTasks(tasksData);
       setSprints(sprintsData);
       setMembers(memberData);
+      setSession(sessionData.session ?? null);
+      setParticipants(sessionData.participants ?? []);
+      setExecutions(execData);
+      setProfiles(profileData);
       setActiveSprintId((prev) =>
         prev || sprintsData.find((s) => s.status === 'active')?.id || sprintsData[0]?.id || '',
       );
@@ -87,7 +116,7 @@ export function CeremonyStage({
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, mode]);
 
   useEffect(() => { reload(); }, [reload]);
 
@@ -143,13 +172,42 @@ export function CeremonyStage({
     [tasks],
   );
 
+  const ownedByMember = useCallback((m: CeremonyMember) => tasks.filter((t) => taskBelongsToMember(t, m)), [tasks]);
   const tasksForMember = useCallback(
     (m: CeremonyMember) => {
-      const owned = tasks.filter((t) => taskBelongsToMember(t, m));
+      const owned = ownedByMember(m);
       return mode === 'standup' ? owned.filter((t) => IN_FLIGHT.has(t.status)) : owned;
     },
-    [tasks, mode],
+    [ownedByMember, mode],
   );
+
+  // Capacity per member (real maxConcurrentWip from the member profile, else default).
+  const capByKey = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of profiles) m.set(memberKey({ kind: p.memberKind, ref: p.memberRef }), p.maxConcurrentWip ?? DEFAULT_CAP);
+    return m;
+  }, [profiles]);
+
+  // The seat whose turn it is (standup): participant at session.currentTurn → memberKey.
+  const currentSpeakerKey = useMemo(() => {
+    if (session?.currentTurn == null) return null;
+    const p = participants.find((x) => x.turnOrder === session.currentTurn);
+    return p ? memberKey({ kind: p.memberKind, ref: p.memberRef }) : null;
+  }, [session?.currentTurn, participants]);
+
+  // Latest execution per task → dedupe auto-dispatch on Complete.
+  const latestExecByTask = useMemo(() => {
+    const m = new Map<number, Execution>();
+    for (const e of executions) {
+      const prev = m.get(e.taskId);
+      const ec = e.createdAt ? new Date(e.createdAt).getTime() : 0;
+      const pc = prev?.createdAt ? new Date(prev.createdAt).getTime() : -1;
+      if (!prev || ec >= pc) m.set(e.taskId, e);
+    }
+    return m;
+  }, [executions]);
+
+  const isFacilitator = !session || session.facilitatorId === (user?.id ?? '');
 
   // --- mutations (all broadcast `changed` so peers re-fetch) ----------------
   const mutate = useCallback(
@@ -202,6 +260,66 @@ export function CeremonyStage({
     }
   }, []);
 
+  // --- session lifecycle (start / advance turn / complete) -----------------
+  const applySession = useCallback((d: { session: CeremonySession | null; participants?: CeremonyParticipant[] }) => {
+    setSession(d.session ?? null);
+    setParticipants(d.participants ?? []);
+    send({ type: 'changed' });
+  }, [send]);
+
+  const startSession = useCallback(async () => {
+    setSessionBusy(true);
+    try {
+      const parts = members.map((m) => ({ kind: m.kind, ref: m.ref, name: m.name }));
+      applySession(await ceremonySessionsApi.start(projectId, mode, parts));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not start session');
+    } finally {
+      setSessionBusy(false);
+    }
+  }, [members, projectId, mode, applySession]);
+
+  const advanceTurn = useCallback(async (nextTurn: number) => {
+    if (!session) return;
+    setSessionBusy(true);
+    try {
+      applySession(await ceremonySessionsApi.advanceTurn(session.id, nextTurn));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not advance turn');
+    } finally {
+      setSessionBusy(false);
+    }
+  }, [session, applySession]);
+
+  // On Complete: end the session, then auto-dispatch agent-assigned work (mirrors
+  // the board's lane auto-run). Humans keep their assignments; agents start running.
+  const completeSession = useCallback(async () => {
+    if (!session) return;
+    setSessionBusy(true);
+    try {
+      applySession(await ceremonySessionsApi.complete(session.id));
+      const agentTasks = tasks.filter((t) => {
+        if (t.assignedAgentHostId == null && !t.assignedAgentRef) return false;
+        if (t.status === 'done') return false;
+        const last = latestExecByTask.get(t.id);
+        return !(last && LIVE_OR_DONE.has(last.status));
+      });
+      await Promise.all(agentTasks.map((t) =>
+        runtimeApi.submitExecution({
+          taskId: t.id,
+          agentHostId: t.assignedAgentHostId ?? undefined,
+          payload: t.assignedAgentRef ? JSON.stringify({ cloudAgentRef: t.assignedAgentRef }) : undefined,
+        }).catch(() => null),
+      ));
+      send({ type: 'changed' });
+      reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not complete session');
+    } finally {
+      setSessionBusy(false);
+    }
+  }, [session, tasks, latestExecByTask, applySession, send, reload]);
+
   // --- cursor broadcast (throttled) ----------------------------------------
   const lastCursor = useRef(0);
   const onTableMouseMove = useCallback(
@@ -245,7 +363,19 @@ export function CeremonyStage({
             )}
           </span>
         </div>
-        {onClose && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {members.length > 0 && (
+            <StandupControls
+              session={session}
+              participants={participants}
+              isFacilitator={isFacilitator}
+              busy={sessionBusy}
+              onStart={startSession}
+              onNext={advanceTurn}
+              onComplete={completeSession}
+            />
+          )}
+          {onClose && (
           <button
             type="button"
             onClick={onClose}
@@ -262,7 +392,8 @@ export function CeremonyStage({
           >
             Close
           </button>
-        )}
+          )}
+        </div>
       </div>
 
       {error && (
@@ -389,15 +520,23 @@ export function CeremonyStage({
                 const angle = (2 * Math.PI * i) / Math.max(members.length, 1) - Math.PI / 2;
                 const x = 50 + 42 * Math.cos(angle);
                 const y = 50 + 40 * Math.sin(angle);
+                const k = memberKey(m);
+                const owned = ownedByMember(m);
                 return (
-                  <div key={memberKey(m)} style={{ position: 'absolute', left: `${x}%`, top: `${y}%`, transform: 'translate(-50%, -50%)' }}>
+                  <div key={k} style={{ position: 'absolute', left: `${x}%`, top: `${y}%`, transform: 'translate(-50%, -50%)' }}>
                     <CeremonySeat
                       member={m}
-                      tasks={tasksForMember(m)}
-                      present={presentKeys.has(memberKey(m))}
+                      stackTasks={tasksForMember(m)}
+                      assignedTasks={owned}
+                      activeLoad={owned.filter((t) => ACTIVE_STATUSES.has(t.status)).length}
+                      cap={capByKey.get(k) ?? DEFAULT_CAP}
+                      present={presentKeys.has(k)}
+                      isCurrentTurn={currentSpeakerKey === k}
                       showStack={mode === 'standup'}
                       onDropTask={(id) => assignToMember(id, m)}
                       onOpen={setDrawerTask}
+                      onOpenScorecard={() => setScorecardMember(m)}
+                      onOpenAssigned={() => setAssignedMember(m)}
                     />
                   </div>
                 );
@@ -454,6 +593,22 @@ export function CeremonyStage({
               Open on the board →
             </a>
           </div>
+        )}
+      </SlideOutPanel>
+
+      {/* Scorecard (agile stats) for a clicked seat — power meter "expanded". */}
+      <SlideOutPanel open={!!scorecardMember} onClose={() => setScorecardMember(null)} title={scorecardMember ? `Scorecard · ${scorecardMember.name}` : ''}>
+        {scorecardMember && <ScorecardPanel member={scorecardMember} />}
+      </SlideOutPanel>
+
+      {/* Assigned work (briefcase) for a clicked seat. */}
+      <SlideOutPanel open={!!assignedMember} onClose={() => setAssignedMember(null)} title={assignedMember ? `Assigned · ${assignedMember.name}` : ''}>
+        {assignedMember && (
+          <AssignedWorkPanel
+            member={assignedMember}
+            tasks={ownedByMember(assignedMember)}
+            onOpenTask={(t) => { setAssignedMember(null); setDrawerTask(t); }}
+          />
         )}
       </SlideOutPanel>
     </div>

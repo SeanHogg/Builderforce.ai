@@ -167,6 +167,72 @@ export async function deleteFile(
 }
 
 // ---------------------------------------------------------------------------
+// IDE: Subdomain hosting (publish a Designer build to <sub>.apps.builderforce.ai)
+// ---------------------------------------------------------------------------
+
+export interface SiteInfo {
+  subdomain: string;
+  mode: string;
+  status: string;
+  versionToken: string;
+  assetCount: number;
+  totalBytes: number;
+  publishedAt: string | null;
+  url: string;
+  pathUrl: string;
+}
+
+export interface SitePublishResult {
+  subdomain: string;
+  versionToken: string;
+  assetCount: number;
+  totalBytes: number;
+  url: string;
+  pathUrl: string;
+}
+
+/** Current published-site record for a project (or null if never published). */
+export async function fetchSite(projectId: number | string): Promise<SiteInfo | null> {
+  const res = await apiRequest<{ site: SiteInfo | null }>(`${IDE}/projects/${projectId}/site`);
+  return res?.site ?? null;
+}
+
+/**
+ * Publish a built static site. `assets` are the files under the build's `dist/`
+ * root (path is dist-relative). Sent as multipart/form-data — one part per file,
+ * the part name being the relative path — plus an optional `subdomain` field.
+ * Always targets the auth API (the publish endpoint lives in ideRoutes).
+ */
+export async function publishSite(
+  projectId: number | string,
+  assets: Array<{ path: string; data: Uint8Array }>,
+  subdomain?: string,
+): Promise<SitePublishResult> {
+  const form = new FormData();
+  if (subdomain) form.append('subdomain', subdomain);
+  for (const { path, data } of assets) {
+    form.append(path, new Blob([data as BlobPart]), path);
+  }
+  // FormData sets its own multipart Content-Type (with boundary) — don't override.
+  const authHeaders = getAuthHeaders();
+  const hadToken = !!authHeaders.Authorization;
+  const headers = { ...authHeaders } as Record<string, string>;
+  delete headers['Content-Type'];
+  const res = await fetch(`${getApiBaseUrl()}${IDE}/projects/${projectId}/publish`, {
+    method: 'POST',
+    headers,
+    body: form,
+  });
+  checkUnauthorizedAndRedirect(res, hadToken);
+  if (res.status === 402) throw await planLimitErrorFromResponse(res);
+  if (!res.ok) {
+    const msg = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(msg.error || res.statusText || `Publish failed (${res.status})`);
+  }
+  return res.json() as Promise<SitePublishResult>;
+}
+
+// ---------------------------------------------------------------------------
 // IDE: AI chat (streaming)
 // ---------------------------------------------------------------------------
 

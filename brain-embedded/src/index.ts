@@ -21,11 +21,18 @@ export type {
   BrainTransport,
   BrainToolSpec,
   ChatCompletionMessage,
+  ContentPart,
+  TextContentPart,
+  ImageUrlContentPart,
   StreamHandlers,
   StreamChatOptions,
   StreamChatResult,
   AssembledToolCall,
 } from './streamChatCompletion';
+
+// Client-side image prep for vision messages (downscale → inline data URL)
+export { prepareImageDataUrl } from './imagePrep';
+export type { PreparedImage } from './imagePrep';
 
 // MCP-style client action registry (the extension contract)
 export {

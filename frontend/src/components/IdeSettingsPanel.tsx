@@ -12,9 +12,11 @@ export interface IdeSettingsPanelProps {
   open: boolean;
   onClose: () => void;
   projectId: number;
+  /** Called after a repo is imported, so the IDE can refresh its file tree. */
+  onImported?: () => void;
 }
 
-export function IdeSettingsPanel({ open, onClose, projectId }: IdeSettingsPanelProps) {
+export function IdeSettingsPanel({ open, onClose, projectId, onImported }: IdeSettingsPanelProps) {
   if (!open) return null;
 
   return (
@@ -87,7 +89,7 @@ export function IdeSettingsPanel({ open, onClose, projectId }: IdeSettingsPanelP
           <div style={{ fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 10 }}>
             Source control
           </div>
-          <SourceControlContent projectId={projectId} />
+          <SourceControlContent projectId={projectId} onImported={onImported} />
         </div>
       </div>
     </>

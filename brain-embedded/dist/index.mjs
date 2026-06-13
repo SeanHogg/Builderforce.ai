@@ -128,6 +128,54 @@ function useBrainConfig() {
   return ctx;
 }
 
+// src/imagePrep.ts
+var MAX_EDGE = 1568;
+var MAX_DATA_URL_BYTES = 35e5;
+var QUALITY_STEPS = [0.85, 0.7, 0.55, 0.4];
+function isRasterImage(type) {
+  return /^image\/(png|jpeg|jpg|gif|webp|bmp)$/i.test(type);
+}
+function loadImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not decode image"));
+    };
+    img.src = url;
+  });
+}
+function dataUrlBytes(dataUrl) {
+  const comma = dataUrl.indexOf(",");
+  const b64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+  return Math.floor(b64.length * 3 / 4);
+}
+async function prepareImageDataUrl(file) {
+  if (typeof document === "undefined" || !isRasterImage(file.type)) return null;
+  const img = await loadImage(file);
+  const scale = Math.min(1, MAX_EDGE / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0, w, h);
+  for (const q of QUALITY_STEPS) {
+    const dataUrl = canvas.toDataURL("image/jpeg", q);
+    if (dataUrlBytes(dataUrl) <= MAX_DATA_URL_BYTES) return { dataUrl };
+  }
+  return { tooLarge: true };
+}
+
 // src/BrainActionsContext.tsx
 import { createContext as createContext2, useCallback, useContext as useContext2, useEffect, useMemo as useMemo2, useRef, useState } from "react";
 import { jsx as jsx2 } from "react/jsx-runtime";
@@ -583,18 +631,28 @@ ${extraSystem}` : base;
       setPendingAttachments([]);
       setSending(true);
       setError("");
-      let content = trimmed;
+      let displayContent = trimmed;
       if (attachments.length > 0) {
         const refs = attachments.map((a) => `[Attached: ${a.name}](${persistence.uploadUrl(a.key)})`).join("\n");
-        content = `${trimmed}
+        displayContent = `${trimmed}
 
 ${refs}`;
       }
       const metadata = attachments.length > 0 ? JSON.stringify({ attachments }) : void 0;
+      const imageAtts = attachments.filter((a) => a.imageUrl);
+      let modelContent = displayContent;
+      if (imageAtts.length > 0) {
+        const nonImageRefs = attachments.filter((a) => !a.imageUrl).map((a) => `[Attached: ${a.name}](${persistence.uploadUrl(a.key)})`).join("\n");
+        const text2 = [trimmed, nonImageRefs].filter(Boolean).join("\n\n");
+        modelContent = [
+          { type: "text", text: text2 },
+          ...imageAtts.map((a) => ({ type: "image_url", image_url: { url: a.imageUrl } }))
+        ];
+      }
       try {
-        const [userMsg] = await persistence.sendMessages(id, [{ role: "user", content, metadata }]);
+        const [userMsg] = await persistence.sendMessages(id, [{ role: "user", content: displayContent, metadata }]);
         setMessages((prev) => [...prev, userMsg]);
-        startUserTurn(id, messages, content);
+        startUserTurn(id, messages, modelContent);
         await runAgentLoop(id);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Send failed");
@@ -641,7 +699,17 @@ ${refs}`;
     setUploading(true);
     try {
       const result = await persistence.upload(file);
-      setPendingAttachments((prev) => [...prev, { key: result.key, name: result.name, type: result.type }]);
+      const attachment = { key: result.key, name: result.name, type: result.type };
+      try {
+        const prepared = await prepareImageDataUrl(file);
+        if (prepared?.dataUrl) {
+          attachment.imageUrl = prepared.dataUrl;
+        } else if (prepared?.tooLarge && persistence.signedUploadUrl) {
+          attachment.imageUrl = await persistence.signedUploadUrl(result.key);
+        }
+      } catch {
+      }
+      setPendingAttachments((prev) => [...prev, attachment]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -695,6 +763,7 @@ export {
   BrainActionsProvider,
   BrainContextProvider,
   BrainProvider,
+  prepareImageDataUrl,
   savePendingPrompt,
   streamChatCompletion,
   takePendingPrompt,

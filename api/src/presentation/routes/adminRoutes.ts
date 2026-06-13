@@ -11,7 +11,7 @@
  */
 import { Hono } from 'hono';
 import { and, desc, eq, gt, ilike, inArray, isNull, sql } from 'drizzle-orm';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import {
@@ -60,6 +60,7 @@ import { getAllVendorIds, vendorForModel, type VendorId } from '../../applicatio
 import { llmFailoverLog, llmHealthProbes, llmTraces } from '../../infrastructure/database/schema';
 import { probeVendor, type VendorProbeResult } from '../../application/llm/vendorHealthProbe';
 import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
+import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
 import {
   mintTenantApiKey,
   listTenantApiKeys,
@@ -1303,6 +1304,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const next = value === undefined ? null : value;
 
     const db = buildDatabase(c.env);
+    const [before] = await db.select({ prev: tenants.tokenDailyLimitOverride }).from(tenants).where(eq(tenants.id, tenantId));
     const [updated] = await db
       .update(tenants)
       .set({ tokenDailyLimitOverride: next, updatedAt: new Date() })
@@ -1310,6 +1312,13 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .returning({ id: tenants.id, tokenDailyLimitOverride: tenants.tokenDailyLimitOverride });
 
     if (!updated) return c.json({ error: 'Tenant not found' }, 404);
+
+    // Forensic trail: who flipped a tenant's token cap, from what to what, and when.
+    await writeAudit(db, 'TOKEN_LIMIT_OVERRIDE_CHANGED', c.get('userId') as string, {
+      tenantId,
+      metadata: { from: before?.prev ?? null, to: updated.tokenDailyLimitOverride },
+      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+    }).catch(() => {});
 
     return c.json({ id: updated.id, tokenDailyLimitOverride: updated.tokenDailyLimitOverride });
   });
@@ -1330,6 +1339,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     }
 
     const db = buildDatabase(c.env);
+    const [before] = await db.select({ prev: tenants.premiumOverride }).from(tenants).where(eq(tenants.id, tenantId));
     const [updated] = await db
       .update(tenants)
       .set({ premiumOverride: body.premiumOverride, updatedAt: new Date() })
@@ -1337,6 +1347,13 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .returning({ id: tenants.id, premiumOverride: tenants.premiumOverride });
 
     if (!updated) return c.json({ error: 'Tenant not found' }, 404);
+
+    // Forensic trail: who flipped a tenant to/from premium routing, and when.
+    await writeAudit(db, 'PREMIUM_OVERRIDE_CHANGED', c.get('userId') as string, {
+      tenantId,
+      metadata: { from: before?.prev ?? null, to: updated.premiumOverride },
+      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+    }).catch(() => {});
 
     return c.json({ id: updated.id, premiumOverride: updated.premiumOverride });
   });
@@ -2666,6 +2683,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const [row] = await db.select({ id: tenantMembers.id }).from(tenantMembers).where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId))).limit(1);
     if (!row) return c.json({ error: 'Member not found in tenant' }, 404);
     await db.update(tenantMembers).set({ role: body.role as 'viewer' | 'developer' | 'manager' | 'owner' }).where(eq(tenantMembers.id, row.id));
+    // Bust the gateway's JWT→membership cache so the new role takes effect at once
+    // (otherwise a demote keeps elevated gateway access until the 60s TTL lapses).
+    await invalidateJwtMembershipCache(c.env as Env, tenantId, userId).catch(() => {});
     await writeAudit(db, 'USER_PERSONA_CHANGED', actorId, {
       targetUserId: userId,
       tenantId,

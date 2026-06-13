@@ -18,7 +18,7 @@
  */
 
 import { Hono } from 'hono';
-import { and, desc, eq, gte, lte, lt, isNull, notExists, inArray } from 'drizzle-orm';
+import { and, desc, eq, gte, lte, lt, isNull, notExists, inArray, sql } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   activityEvents,
@@ -510,19 +510,22 @@ export function groupCompletedByAssignee(rows: CompletedTaskRow[]): AssigneeRoll
 
 /**
  * Tasks that moved into a done-class lane within the last `days`, grouped by
- * assignee (human or agent). There is no explicit "completed_at" column, so we
- * proxy it with `updatedAt` of a done-class task — Task.update() bumps updatedAt
- * on every status transition, so a task currently in `done` was moved there at
- * `updatedAt`. Tenant-scoped by joining projects (tasks carry no tenant_id).
+ * assignee (human or agent). Completion time is the dedicated `tasks.completed_at`
+ * (set on the first done-class transition by recordStatusTransition, migration
+ * 0117), so later edits to a finished ticket no longer shift the window. Legacy
+ * rows predating 0117 have a null `completed_at`, so we COALESCE to `updatedAt`
+ * as the backfill proxy. Tenant-scoped by joining projects (tasks carry no tenant_id).
  */
 async function generateCompletedByAssigneeReport(db: Db, tenantId: number, days: number) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  // Authoritative completion instant with a legacy fallback.
+  const completedAtExpr = sql<Date>`COALESCE(${tasks.completedAt}, ${tasks.updatedAt})`;
 
   const rows = await db
     .select({
       taskId:              tasks.id,
       status:              tasks.status,
-      completedAt:         tasks.updatedAt,
+      completedAt:         completedAtExpr,
       assignedUserId:      tasks.assignedUserId,
       assignedUserName:    users.displayName,
       assignedAgentHostId: tasks.assignedAgentHostId,
@@ -537,7 +540,7 @@ async function generateCompletedByAssigneeReport(db: Db, tenantId: number, days:
       eq(projects.tenantId, tenantId),
       eq(tasks.archived, false),
       inArray(tasks.status, DONE_CLASS_STATUSES as string[]),
-      gte(tasks.updatedAt, since),
+      gte(completedAtExpr, since),
     ));
 
   const assignees = groupCompletedByAssignee(rows as CompletedTaskRow[]);

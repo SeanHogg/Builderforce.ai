@@ -40,6 +40,13 @@ export interface BrainPersistenceAdapter {
   setMessageFeedback(messageId: number, feedback: 'up' | 'down' | null): Promise<unknown>;
   upload(file: File): Promise<{ key: string; name: string; type: string }>;
   uploadUrl(key: string): string;
+  /**
+   * Mint a short-lived, signature-authenticated public URL for an uploaded
+   * object so an upstream LLM provider can fetch it without the tenant token.
+   * Used for the rare image too large to inline as a data URL. Optional: when
+   * absent, the conversation falls back to the (auth-scoped) text link.
+   */
+  signedUploadUrl?(key: string): Promise<string>;
 }
 
 export interface BrainConfig {

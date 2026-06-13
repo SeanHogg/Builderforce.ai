@@ -16,6 +16,14 @@ import {
   templateLooksUnseeded,
   type SeedableProject,
 } from '../../application/project/projectTemplate';
+import {
+  SITES_PREFIX,
+  HOSTING_APEX,
+  normalizeSubdomain,
+  newVersionToken,
+  invalidateSite,
+  contentTypeFor,
+} from '../../application/ide/siteHosting';
 
 function generateId(): string {
   return crypto.randomUUID();
@@ -145,6 +153,126 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const key = `${IDE_PREFIX}projects/${String(projectId)}/${path}`;
     await bucket.delete(key);
     return c.json({ success: true });
+  });
+
+  // ---------- Site hosting (publish a Designer project to a subdomain) ----------
+
+  // GET /projects/:projectId/site — current published-site record (or null).
+  router.get('/projects/:projectId/site', async (c) => {
+    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    const [row] = await getSql(c)`
+      SELECT subdomain, mode, status, version_token, asset_count, total_bytes, published_at
+      FROM project_sites WHERE project_id = ${projectId} LIMIT 1`;
+    if (!row) return c.json({ site: null });
+    return c.json({
+      site: {
+        subdomain: row.subdomain,
+        mode: row.mode,
+        status: row.status,
+        versionToken: row.version_token,
+        assetCount: row.asset_count,
+        totalBytes: row.total_bytes,
+        publishedAt: row.published_at,
+        url: `https://${row.subdomain}.${HOSTING_APEX}`,
+        pathUrl: `/api/sites/${row.subdomain}/`,
+      },
+    });
+  });
+
+  // POST /projects/:projectId/publish — deploy built static assets to a subdomain.
+  // Body: multipart/form-data — optional `subdomain` field + one file part per
+  // asset, the part NAME being the dist-relative path (e.g. `assets/app.4f3a.js`).
+  router.post('/projects/:projectId/publish', async (c) => {
+    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    const bucket = r2(c);
+    if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+
+    const tenantId = c.get('tenantId') as number;
+    const [proj] = await getSql(c)`SELECT tenant_id, name FROM projects WHERE id = ${projectId} LIMIT 1`;
+    if (!proj) return c.json({ error: 'Project not found' }, 404);
+    if (Number(proj.tenant_id) !== tenantId) return c.json({ error: 'Forbidden' }, 403);
+
+    const form = await c.req.formData();
+
+    // Resolve the target subdomain: explicit field, else the existing site's, else
+    // a slug of the project name.
+    const [current] = await getSql(c)`
+      SELECT subdomain FROM project_sites WHERE project_id = ${projectId} LIMIT 1`;
+    const requested = (form.get('subdomain') as string | null)?.trim()
+      || (current?.subdomain as string | undefined)
+      || String(proj.name ?? `app-${projectId}`);
+    const subdomain = normalizeSubdomain(requested);
+    if (!subdomain) {
+      return c.json({ error: 'Invalid or reserved subdomain. Use lowercase letters, numbers and hyphens.' }, 400);
+    }
+
+    // Global uniqueness — a subdomain can't be claimed by another project.
+    const [owner] = await getSql(c)`
+      SELECT project_id FROM project_sites WHERE subdomain = ${subdomain} LIMIT 1`;
+    if (owner && Number(owner.project_id) !== projectId) {
+      return c.json({ error: `Subdomain "${subdomain}" is taken.` }, 409);
+    }
+
+    // Collect the asset parts (everything except the `subdomain` field).
+    const assets: Array<{ path: string; file: File }> = [];
+    for (const [name, value] of form.entries()) {
+      if (name === 'subdomain' || typeof value === 'string') continue;
+      const path = name.replace(/^\/+/, '').replace(/^dist\//, '');
+      if (path) assets.push({ path, file: value });
+    }
+    if (assets.length === 0) {
+      return c.json({ error: 'No assets uploaded. Build the project first.' }, 400);
+    }
+
+    const newPrefix = `${SITES_PREFIX}${subdomain}/`;
+    // Clear any prior contents under this subdomain (stale files from a previous
+    // build, or a different project that just released the name) before writing.
+    for (const obj of (await bucket.list({ prefix: newPrefix })).objects ?? []) {
+      await bucket.delete(obj.key!);
+    }
+    // If this project previously published under a DIFFERENT subdomain, retire it.
+    const oldSub = current?.subdomain as string | undefined;
+    if (oldSub && oldSub !== subdomain) {
+      const oldPrefix = `${SITES_PREFIX}${oldSub}/`;
+      for (const obj of (await bucket.list({ prefix: oldPrefix })).objects ?? []) {
+        await bucket.delete(obj.key!);
+      }
+      await invalidateSite(c.env, oldSub);
+    }
+
+    let totalBytes = 0;
+    for (const { path, file } of assets) {
+      totalBytes += file.size;
+      await bucket.put(newPrefix + path, file.stream(), {
+        httpMetadata: { contentType: contentTypeFor(path) },
+      });
+    }
+
+    const versionToken = newVersionToken();
+    await getSql(c)`
+      INSERT INTO project_sites
+        (project_id, tenant_id, subdomain, mode, status, r2_prefix, version_token, asset_count, total_bytes, published_at)
+      VALUES
+        (${projectId}, ${tenantId}, ${subdomain}, 'static', 'active', ${newPrefix}, ${versionToken}, ${assets.length}, ${totalBytes}, NOW())
+      ON CONFLICT (project_id) DO UPDATE SET
+        subdomain = EXCLUDED.subdomain,
+        r2_prefix = EXCLUDED.r2_prefix,
+        version_token = EXCLUDED.version_token,
+        status = 'active',
+        asset_count = EXCLUDED.asset_count,
+        total_bytes = EXCLUDED.total_bytes,
+        published_at = NOW(),
+        updated_at = NOW()`;
+    await invalidateSite(c.env, subdomain);
+
+    return c.json({
+      subdomain,
+      versionToken,
+      assetCount: assets.length,
+      totalBytes,
+      url: `https://${subdomain}.${HOSTING_APEX}`,
+      pathUrl: `/api/sites/${subdomain}/`,
+    }, 201);
   });
 
   // ---------- Datasets (project_id = API project id, integer) ----------

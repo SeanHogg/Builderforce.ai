@@ -29,6 +29,13 @@ interface ChatInputAttachment {
     key: string;
     name: string;
     type: string;
+    /**
+     * Model-visible image source for vision turns — a `data:` URL (inlined small
+     * images) or a short-lived signed public URL (large images). Present only for
+     * raster images; when set, the attachment becomes an `image_url` content part
+     * the vision model can actually see, instead of a plain text link.
+     */
+    imageUrl?: string;
 }
 /**
  * Modality is a free-form string in the core (e.g. 'designer' | 'video' | 'llm').
@@ -75,10 +82,36 @@ interface BrainToolSpec {
         parameters: Record<string, unknown>;
     };
 }
+/** A plain-text content part (OpenAI multimodal `content[]` shape). */
+interface TextContentPart {
+    type: 'text';
+    text: string;
+}
+/**
+ * An image content part. `url` is either a `data:` URI (inlined, the common
+ * case after client-side downscaling) or a short-lived signed public URL the
+ * upstream provider can fetch. The gateway's shape router detects these and
+ * floats a vision-capable model to the head of the cascade.
+ */
+interface ImageUrlContentPart {
+    type: 'image_url';
+    image_url: {
+        url: string;
+        detail?: 'low' | 'high' | 'auto';
+    };
+}
+type ContentPart = TextContentPart | ImageUrlContentPart;
 /** A message in the working array — supports assistant tool-call turns and tool results. */
 interface ChatCompletionMessage {
     role: 'system' | 'user' | 'assistant' | 'tool';
-    content: string;
+    /**
+     * Plain string for the overwhelming majority of turns. A `ContentPart[]` is
+     * used only when a user turn carries images (vision): the gateway forwards
+     * the array untouched and routes to a vision model. Persistence stays
+     * text-only — the rich array lives in the in-memory transcript so the model
+     * keeps seeing the image on later turns.
+     */
+    content: string | ContentPart[];
     /** Present on an assistant turn that requested tools. */
     tool_calls?: Array<{
         id: string;
@@ -168,6 +201,13 @@ interface BrainPersistenceAdapter {
         type: string;
     }>;
     uploadUrl(key: string): string;
+    /**
+     * Mint a short-lived, signature-authenticated public URL for an uploaded
+     * object so an upstream LLM provider can fetch it without the tenant token.
+     * Used for the rare image too large to inline as a data URL. Optional: when
+     * absent, the conversation falls back to the (auth-scoped) text link.
+     */
+    signedUploadUrl?(key: string): Promise<string>;
 }
 interface BrainConfig {
     /** Auth + endpoint for the streaming gateway. */
@@ -191,6 +231,36 @@ declare function BrainProvider({ config, children, }: {
 }): react_jsx_runtime.JSX.Element;
 /** Consume the resolved brain runtime. Throws if no BrainProvider is mounted. */
 declare function useBrainConfig(): BrainRuntime;
+
+/**
+ * Client-side image preparation for vision messages.
+ *
+ * Turns a user-picked / pasted image File into a `data:` URL the gateway can
+ * inline straight into an `image_url` content part — downscaled and recompressed
+ * so the request payload (and the provider's per-image budget) stays sane.
+ *
+ * Why downscale at all: frontier vision models cap the long edge around ~1568px
+ * (anything larger is downsampled server-side anyway) and reject images past a
+ * few MB of base64. Shrinking here keeps virtually every real screenshot/photo
+ * inside the inline budget, so the rare oversize case is the ONLY one that needs
+ * the signed-URL fallback (see useBrainConversation.attach).
+ *
+ * Browser-only (uses canvas). Returns null when run without a DOM (SSR) or for
+ * a non-raster type (e.g. SVG/PDF) — callers fall back to the text-link path.
+ */
+interface PreparedImage {
+    /** Inline `data:` URL when the recompressed image fits the budget. */
+    dataUrl?: string;
+    /** True when even the most-compressed encode exceeded the inline budget —
+     *  the caller should upload the original and mint a signed URL instead. */
+    tooLarge?: boolean;
+}
+/**
+ * Prepare an image for an inline vision content part. Resolves with a `dataUrl`
+ * when it fits the inline budget, `{ tooLarge: true }` when it doesn't even
+ * after max compression, or `null` for non-raster / non-DOM inputs.
+ */
+declare function prepareImageDataUrl(file: File): Promise<PreparedImage | null>;
 
 /** A capability a consumer exposes to the Brain (the MCP extension unit). */
 interface BrainAction<A = unknown, R = unknown> {
@@ -367,4 +437,4 @@ declare function savePendingPrompt(text: string): void;
 /** Read and clear the saved prompt. Returns null when none is stored or on SSR. */
 declare function takePendingPrompt(): string | null;
 
-export { type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTransport, type ChatCompletionMessage, type ChatInputAttachment, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, savePendingPrompt, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions };
+export { type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTransport, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type ImageUrlContentPart, type PreparedImage, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, prepareImageDataUrl, savePendingPrompt, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions };

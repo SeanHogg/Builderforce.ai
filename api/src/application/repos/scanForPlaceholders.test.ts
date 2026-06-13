@@ -46,6 +46,8 @@ describe('detectPlaceholderMarkers', () => {
       .toContain('placeholder example/secret literal');
     expect(detectPlaceholderMarkers('const key = "your-api-key";'))
       .toContain('placeholder example/secret literal');
+    expect(detectPlaceholderMarkers('const a = 1;\n<<<<<<< HEAD\nconst b = 2;\n=======\nconst b = 3;\n>>>>>>> feature'))
+      .toContain('unresolved merge-conflict marker');
   });
 
   it('does not flag ordinary finished code (no false positives)', () => {
