@@ -15,16 +15,28 @@ import {
   deleteAgent,
   unhireAgent,
 } from '@/lib/api';
+import {
+  listTenantMembers,
+  removeTenantMember,
+  listInvitations,
+  revokeInvitation,
+  type TenantMember,
+  type PendingInvitation,
+} from '@/lib/auth';
 import type { PublishedAgent } from '@/lib/types';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { FleetMeshContent } from '@/components/FleetMeshContent';
 import { UpgradeModal } from '@/components/UpgradeModal';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { InviteTeamMembers } from '@/components/InviteTeamMembers';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import { CloudAgentSlideOutPanel, type CloudAgentPanelTab } from './CloudAgentSlideOutPanel';
 import { ConfiguredQuickstartPopover } from './ConfiguredQuickstartPopover';
 import { AgentCard } from './AgentCard';
+import { MemberCard, PendingInviteCard } from './MemberCard';
 import { AgentOwnerActions } from './AgentOwnerActions';
 import { AgentTypePill } from '@/components/AgentTypePill';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -44,12 +56,15 @@ import {
 } from './CloudAgentFormFields';
 
 /**
- * Workforce → unified agent directory. Lists the tenant's cloud agents AND its
- * registered remote agentHosts in a single grid; a "Type" pill on each card
- * designates which is which. The "Add agent" dialog covers creation for both
- * (a Cloud/Remote toggle). Managing an existing cloud agent — edit, capabilities
- * (skills/personas), pricing — happens in a right-side slide-out panel, matching
- * the remote agentHost panel.
+ * Workforce → the unified directory of everyone in the workspace: human members,
+ * pending invites, the tenant's cloud agents, hired marketplace agents, and
+ * registered remote agentHosts — all in one mixed grid where a type pill
+ * (Human / Pending / Agent / Remote) designates each card. Humans and agents are
+ * one workforce, so they share the same card shell.
+ *
+ * Two add actions live in the header: "Invite" (a person, by email) and the
+ * "Add agent" split button (Cloud agent or remote registration). Managing a
+ * cloud agent — edit, capabilities, pricing — happens in a right-side slide-out.
  */
 
 type AgentKind = 'cloud' | 'host';
@@ -57,6 +72,8 @@ type AgentKind = 'cloud' | 'host';
 // "Add agent" split button: primary action + caret that opens the configured quickstart.
 const splitMain: React.CSSProperties = { padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderTopLeftRadius: 8, borderBottomLeftRadius: 8, cursor: 'pointer' };
 const splitCaret: React.CSSProperties = { padding: '8px 10px', fontSize: 11, fontWeight: 700, background: 'var(--accent)', color: '#fff', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.25)', borderTopRightRadius: 8, borderBottomRightRadius: 8, cursor: 'pointer', lineHeight: 1 };
+// "Invite" (a person) — secondary to the coral "+ Agent" split button.
+const inviteBtn: React.CSSProperties = { padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap' };
 
 // Host (remote agentHost) card chrome — cloud/purchased agents render via <AgentCard>.
 const cardStyle: React.CSSProperties = {
@@ -84,6 +101,15 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   const [loadingCloud, setLoadingCloud] = useState(true);
   // Agents acquired from the marketplace (distinct from the tenant's own).
   const [purchasedAgents, setPurchasedAgents] = useState<PublishedAgent[]>([]);
+
+  // --- People: human members + pending invites -----------------------------
+  const [members, setMembers] = useState<TenantMember[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<PendingInvitation[]>([]);
+  const [loadingPeople, setLoadingPeople] = useState(true);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<TenantMember | null>(null);
+  const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null);
 
   const [error, setError] = useState('');
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
@@ -127,7 +153,27 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     return listPurchasedAgents().then(setPurchasedAgents).catch(() => setPurchasedAgents([]));
   }, []);
 
-  useEffect(() => { loadHosts(); loadCloud(); loadPurchased(); }, [loadHosts, loadCloud, loadPurchased]);
+  // People (members + pending invites) require the tenant token; both share one
+  // loading flag since they render in the same section of the grid.
+  const loadPeople = useCallback(async () => {
+    if (!tenant || !tenantToken) { setLoadingPeople(false); return; }
+    setLoadingPeople(true);
+    try {
+      const [memberList, inviteList] = await Promise.all([
+        listTenantMembers(tenantToken, String(tenant.id)),
+        listInvitations(tenantToken, String(tenant.id)).catch(() => [] as PendingInvitation[]),
+      ]);
+      setMembers(memberList);
+      setPendingInvites(inviteList);
+    } catch (e) {
+      if (isPlanLimitError(e)) setPlanError(e);
+      else setError(e instanceof Error ? e.message : 'Failed to load members');
+    } finally {
+      setLoadingPeople(false);
+    }
+  }, [tenant, tenantToken]);
+
+  useEffect(() => { loadHosts(); loadCloud(); loadPurchased(); loadPeople(); }, [loadHosts, loadCloud, loadPurchased, loadPeople]);
 
   useEffect(() => {
     if (tenantId == null) return;
@@ -239,6 +285,35 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     }
   };
 
+  // --- People actions ------------------------------------------------------
+  const handleRemoveMember = async (member: TenantMember) => {
+    if (!tenant || !tenantToken) return;
+    setRemovingMemberId(member.id);
+    try {
+      await removeTenantMember(tenantToken, String(tenant.id), member.id);
+      setMembers((prev) => prev.filter((m) => m.id !== member.id));
+    } catch (e) {
+      if (isPlanLimitError(e)) setPlanError(e);
+      else setError(e instanceof Error ? e.message : 'Failed to remove member');
+    } finally {
+      setRemovingMemberId(null);
+      setConfirmRemove(null);
+    }
+  };
+
+  const handleRevokeInvite = async (invite: PendingInvitation) => {
+    if (!tenant || !tenantToken) return;
+    setRevokingInviteId(invite.id);
+    try {
+      await revokeInvitation(tenantToken, String(tenant.id), invite.id);
+      setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to revoke invitation');
+    } finally {
+      setRevokingInviteId(null);
+    }
+  };
+
   // A tenant can no longer hire its own agent (the API rejects it), but guard the
   // render too: never show an owned agent in the "purchased" list, or it appears
   // twice and the duplicate renders owner actions instead of Unhire. Match on both
@@ -248,15 +323,19 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     (a) => !ownedIds.has(a.id) && !isAgentOwner(a, tenant?.id),
   );
 
-  const loading = loadingHosts || loadingCloud;
-  const isEmpty = hosts.length === 0 && cloudAgents.length === 0 && visiblePurchased.length === 0;
+  const loading = loadingHosts || loadingCloud || loadingPeople;
+  const isEmpty = hosts.length === 0 && cloudAgents.length === 0 && visiblePurchased.length === 0
+    && members.length === 0 && pendingInvites.length === 0;
 
   return (
     <section>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-strong)', margin: 0 }}>Agents</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-strong)', margin: 0 }}>Workforce</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {!loading && !isEmpty && <ViewToggle value={viewMode} onChange={setViewMode} />}
+        {tenant && tenantToken && (
+          <button type="button" onClick={() => setInviteOpen(true)} style={inviteBtn}>Invite</button>
+        )}
         <div style={{ position: 'relative', display: 'inline-flex' }}>
           <button type="button" onClick={() => openCreate('cloud')} style={splitMain}>+ Agent</button>
           <button
@@ -281,8 +360,8 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
         </div>
       </div>
       <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
-        Your cloud agents and registered remote agents (self-hosted BuilderForce Agents instances) in one place.
-        Publish a cloud agent to the marketplace to earn revenue.
+        Your people and agents in one workforce — human teammates, pending invites, cloud agents, and
+        registered remote agents (self-hosted BuilderForce Agents instances). Publish a cloud agent to the marketplace to earn revenue.
       </p>
 
       {error && !dialogOpen && (
@@ -290,18 +369,41 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       )}
 
       {loading ? (
-        <div style={{ color: 'var(--muted)', fontSize: 13, padding: 24 }}>Loading agents…</div>
+        <div style={{ color: 'var(--muted)', fontSize: 13, padding: 24 }}>Loading workforce…</div>
       ) : isEmpty ? (
         <div className="empty-state" style={{ padding: 48 }}>
           <div className="empty-state-icon">📁</div>
-          <div className="empty-state-title">No agents yet</div>
-          <div className="empty-state-sub">Create a cloud agent or register a remote (self-hosted) agent to start building your workforce.</div>
-          <button type="button" onClick={() => openCreate('cloud')} style={{ ...btnPrimary, marginTop: 14, padding: '10px 18px', fontSize: 14, borderRadius: 10 }}>
-            Add agent
-          </button>
+          <div className="empty-state-title">No one here yet</div>
+          <div className="empty-state-sub">Invite a teammate, or create a cloud agent / register a remote (self-hosted) agent to start building your workforce.</div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+            <button type="button" onClick={() => setInviteOpen(true)} style={{ ...inviteBtn, padding: '10px 18px', fontSize: 14, borderRadius: 10 }}>
+              Invite a teammate
+            </button>
+            <button type="button" onClick={() => openCreate('cloud')} style={{ ...btnPrimary, padding: '10px 18px', fontSize: 14, borderRadius: 10 }}>
+              Add agent
+            </button>
+          </div>
         </div>
       ) : viewMode === 'card' ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+          {/* People first — human members, then pending invites */}
+          {members.map((m) => (
+            <MemberCard
+              key={`member-${m.id}`}
+              member={m}
+              onRemove={setConfirmRemove}
+              removing={removingMemberId === m.id}
+            />
+          ))}
+          {pendingInvites.map((inv) => (
+            <PendingInviteCard
+              key={`invite-${inv.id}`}
+              invite={inv}
+              onRevoke={handleRevokeInvite}
+              revoking={revokingInviteId === inv.id}
+            />
+          ))}
+
           {/* Remote agentHosts */}
           {hosts.map((host) => {
             const connected = !!host.online;
@@ -359,8 +461,8 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
           ))}
         </div>
       ) : (
-        /* List (table) view — the same three collections as the card grid,
-           flattened into one shared-chrome table. */
+        /* List (table) view — every collection (people + agents) flattened into
+           one shared-chrome table. */
         <div style={tableWrapStyle}>
           <table style={tableStyle}>
             <thead>
@@ -374,6 +476,38 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
               </tr>
             </thead>
             <tbody>
+              {/* People — human members */}
+              {members.map((m) => (
+                <tr key={`member-${m.id}`} style={trStyle}>
+                  <td style={tdStyle}>{m.displayName ?? m.username ?? m.email}</td>
+                  <td style={tdStyle}><AgentTypePill kind="human" /></td>
+                  <td style={tdMutedStyle}>{m.email}</td>
+                  <td style={tdMutedStyle}>—</td>
+                  <td style={tdMutedStyle}>—</td>
+                  <td style={tdStyle}>
+                    <button type="button" style={btnSubtle} disabled={removingMemberId === m.id} onClick={() => setConfirmRemove(m)}>
+                      {removingMemberId === m.id ? 'Removing…' : 'Remove'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+
+              {/* People — pending invites */}
+              {pendingInvites.map((inv) => (
+                <tr key={`invite-${inv.id}`} style={trStyle}>
+                  <td style={tdStyle}>{inv.email}</td>
+                  <td style={tdStyle}><AgentTypePill kind="pending" /></td>
+                  <td style={tdMutedStyle}>Invited as {inv.role}</td>
+                  <td style={tdMutedStyle}>—</td>
+                  <td style={tdMutedStyle}>—</td>
+                  <td style={tdStyle}>
+                    <button type="button" style={btnSubtle} disabled={revokingInviteId === inv.id} onClick={() => handleRevokeInvite(inv)}>
+                      {revokingInviteId === inv.id ? 'Revoking…' : 'Revoke'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+
               {/* Remote agentHosts */}
               {hosts.map((host) => {
                 const connected = !!host.online;
@@ -448,6 +582,33 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
           <FleetMeshContent agentHosts={hosts} />
         </div>
       )}
+
+      {/* Invite a teammate slide-out */}
+      {tenant && tenantToken && (
+        <SlideOutPanel open={inviteOpen} onClose={() => setInviteOpen(false)} title="Invite a teammate">
+          <div style={{ padding: 20 }}>
+            <InviteTeamMembers
+              tenantId={String(tenant.id)}
+              tenantToken={tenantToken}
+              onInvited={() => { void loadPeople(); }}
+              onPlanLimit={(err) => setPlanError(err)}
+            />
+          </div>
+        </SlideOutPanel>
+      )}
+
+      {/* Confirm removing a human member */}
+      <ConfirmDialog
+        open={!!confirmRemove}
+        message={
+          confirmRemove
+            ? `Remove ${confirmRemove.displayName ?? confirmRemove.email} from this workspace? They will lose access immediately.`
+            : ''
+        }
+        confirmLabel="Remove"
+        onCancel={() => setConfirmRemove(null)}
+        onConfirm={() => { if (confirmRemove) void handleRemoveMember(confirmRemove); }}
+      />
 
       {/* Remote agentHost slide-out */}
       {selectedHost && (

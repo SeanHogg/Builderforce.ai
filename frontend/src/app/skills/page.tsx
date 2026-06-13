@@ -191,10 +191,10 @@ export default function SkillsPage() {
     <PageContainer width="readable">
       <div className="page-header" style={{ marginBottom: 24 }}>
         <div>
-          <h1 className="page-title" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-strong)', margin: 0 }}>Skills</h1>
-          <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>Extend your workforce with marketplace skills</p>
+          <h1 className="page-title" style={{ margin: 0 }}>Skills</h1>
+          <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>Extend your workforce with marketplace skills</p>
         </div>
-        <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>+ Create Skill</button>
+        <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>+ New skill</button>
       </div>
 
       {error && <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 8 }}>{error}</div>}
@@ -227,7 +227,7 @@ export default function SkillsPage() {
             <div className="empty-state-icon">🛠️</div>
             <div className="empty-state-title">No custom skills yet</div>
             <div className="empty-state-sub">Create your own skill and share it in the marketplace</div>
-            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setCreateOpen(true)}>Create Skill</button>
+            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setCreateOpen(true)}>New skill</button>
           </div>
         ) : viewMode === 'card' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
@@ -294,7 +294,7 @@ export default function SkillsPage() {
       ) : (
         <>
           <div style={{ marginBottom: 16 }}>
-            <input type="text" className="input" style={{ maxWidth: 300 }} placeholder="Search skills…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input type="search" className="input" style={{ maxWidth: 320 }} placeholder="Search skills…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           {marketplaceItems.length === 0 ? (
             <div className="empty-state"><div className="empty-state-title">No skills found</div></div>
@@ -385,7 +385,7 @@ export default function SkillsPage() {
         <div className="modal-overlay" onClick={() => setCreateOpen(false)}>
           <div className="card" style={{ maxWidth: 480, width: '100%', padding: 24 }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div className="modal-title">Create Skill</div>
+              <div className="modal-title">New skill</div>
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => setCreateOpen(false)}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

@@ -234,10 +234,10 @@ export default function ContentManagerPage() {
   return (
     <PageContainer style={{ padding: '24px 24px 48px' }}>
       {/* Page header: title + description on left, "New content" on right when My Content tab */}
-      <div className="page-header" style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
+      <div className="page-header" style={{ marginBottom: 24 }}>
         <div>
-          <h1 className="page-title" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-strong)', margin: 0 }}>Content Manager</h1>
-          <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
+          <h1 className="page-title" style={{ margin: 0 }}>Content Manager</h1>
+          <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
             Manage reusable markdown content blocks with A/B variants and audience targeting.
           </p>
         </div>
@@ -252,14 +252,14 @@ export default function ContentManagerPage() {
       <div style={{ display: 'flex', gap: 4, marginBottom: 24, alignItems: 'center' }}>
         <button
           type="button"
-          className={`btn btn-sm ${contentTab === 'my-content' ? 'btn-primary' : 'btn-secondary'}`}
+          className={`btn ${contentTab === 'my-content' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setContentTab('my-content')}
         >
           My Content ({blocks.length})
         </button>
         <button
           type="button"
-          className={`btn btn-sm ${contentTab === 'marketplace' ? 'btn-primary' : 'btn-secondary'}`}
+          className={`btn ${contentTab === 'marketplace' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setContentTab('marketplace')}
         >
           Marketplace ({marketplaceCount})
@@ -279,7 +279,7 @@ export default function ContentManagerPage() {
               placeholder="Search..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ width: '100%', maxWidth: 480, padding: '8px 12px', borderRadius: 8 }}
+              style={{ maxWidth: 320 }}
               aria-label="Search content"
             />
           </div>
@@ -341,7 +341,7 @@ export default function ContentManagerPage() {
                 Create pages, templates, and snippets to manage your content centrally
               </div>
               <button type="button" className="btn btn-primary" onClick={openCreate}>
-                Create content
+                New content
               </button>
             </div>
           ) : viewMode === 'card' ? (
@@ -442,7 +442,7 @@ export default function ContentManagerPage() {
               placeholder="Search..."
               value={marketplaceSearch}
               onChange={(e) => setMarketplaceSearch(e.target.value)}
-              style={{ width: '100%', maxWidth: 480, padding: '8px 12px', borderRadius: 8 }}
+              style={{ maxWidth: 320 }}
               aria-label="Search marketplace content"
             />
           </div>

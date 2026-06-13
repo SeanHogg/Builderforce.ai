@@ -76,6 +76,7 @@ import { createRepoAnalysisRoutes } from './presentation/routes/repoAnalysisRout
 import { createIntegrationRoutes }  from './presentation/routes/integrationRoutes';
 import { createContributorRoutes }  from './presentation/routes/contributorRoutes';
 import { createDevTeamRoutes }      from './presentation/routes/devTeamRoutes';
+import { createTeamRoutes }         from './presentation/routes/teamRoutes';
 import { createReportRoutes }       from './presentation/routes/reportRoutes';
 import { createAnalyticsRoutes }    from './presentation/routes/analyticsRoutes';
 import { createPromptLibraryRoutes } from './presentation/routes/promptLibraryRoutes';
@@ -309,7 +310,12 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/cost-forecast',   createCostForecastRoutes(db));
   app.route('/api/dashboard',       createDashboardRoutes(db));
   app.route('/api/brain',     createBrainRoutes(brainService, db));
+  // Order matters: the team-memory mesh lives at the static /api/teams/memory and
+  // MUST be registered before the Workforce Teams CRUD, whose GET /:id would
+  // otherwise match "memory" as an id and shadow it (Hono runs the first-
+  // registered matching handler — verified, static is NOT auto-prioritized).
   app.route('/api/teams/memory', createTeamMemoryRoutes(db));
+  app.route('/api/teams',        createTeamRoutes(db));
   app.route('/api/ide',       createIdeRoutes());
   app.route('/api/ai',        createIdeAiRoutes(projectService));
   app.route('/api/studio',    createStudioRoutes());

@@ -4,8 +4,8 @@ import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { WorkforceAgents } from '@/components/workforce/WorkforceAgents';
+import { TeamsView } from '@/components/teams/TeamsView';
 import { ContributorsView } from '@/components/contributors/ContributorsView';
-import { MembersView } from '@/components/members/MembersView';
 import { ChatsView } from '@/components/chats/ChatsView';
 import { HumanRequestsView } from '@/components/humanRequests/HumanRequestsView';
 import { ObservabilityContent } from '@/components/ObservabilityContent';
@@ -15,13 +15,18 @@ import { ActiveRunsPanel } from '@/components/ActiveRunsPanel';
 import { Tabs } from '@/components/Tabs';
 import PageContainer from '@/components/PageContainer';
 
-type WorkforceTab = 'workforce' | 'chats' | 'approvals' | 'contributors' | 'members' | 'logs' | 'llm' | 'qa';
+type WorkforceTab = 'workforce' | 'teams' | 'chats' | 'approvals' | 'contributors' | 'logs' | 'llm' | 'qa';
 
 const TABS: ReadonlyArray<{ id: WorkforceTab; label: string; sub: string }> = [
   {
     id: 'workforce',
     label: 'Workforce',
-    sub: 'Create cloud agents, register remote agents, and connect them to your workspace. Publish agents to the marketplace to earn revenue.',
+    sub: 'Your people and agents in one place — invite teammates, create cloud agents, and register remote agents. Publish agents to the marketplace to earn revenue.',
+  },
+  {
+    id: 'teams',
+    label: 'Teams',
+    sub: 'Group your workforce — agents and humans — into teams, and attach a team to the projects it works on.',
   },
   {
     id: 'chats',
@@ -37,11 +42,6 @@ const TABS: ReadonlyArray<{ id: WorkforceTab; label: string; sub: string }> = [
     id: 'contributors',
     label: 'Contributors',
     sub: 'See who — human and agent — is contributing across your workspace, and how.',
-  },
-  {
-    id: 'members',
-    label: 'Members',
-    sub: 'Invite teammates and manage who has access to your workspace.',
   },
   {
     id: 'logs',
@@ -79,20 +79,22 @@ function WorkforcePageInner() {
   return (
     <PageContainer>
       <div className="page-header" style={{ marginBottom: 16 }}>
-        <h1 className="page-title" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-strong)', margin: 0 }}>Workforce</h1>
-        <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>{active.sub}</p>
+        <div>
+          <h1 className="page-title" style={{ margin: 0 }}>Workforce</h1>
+          <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>{active.sub}</p>
+        </div>
       </div>
 
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
 
-      {tab === 'chats' ? (
+      {tab === 'teams' ? (
+        <TeamsView />
+      ) : tab === 'chats' ? (
         <ChatsView />
       ) : tab === 'approvals' ? (
         <HumanRequestsView />
       ) : tab === 'contributors' ? (
         <ContributorsView />
-      ) : tab === 'members' ? (
-        <MembersView />
       ) : tab === 'logs' ? (
         <>
           {/* Live fleet view — what's running right now (self-hides when idle). */}

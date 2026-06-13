@@ -4,9 +4,9 @@ import type { PublishedAgent } from '@/lib/types';
 import { formatAgentPrice } from '@/lib/agentPresentation';
 import { isAgentOwner } from '@/lib/agentPermissions';
 import { useAuth } from '@/lib/AuthContext';
-import { AgentTypePill } from '@/components/AgentTypePill';
 import { StatusBadge } from '@/components/StatusBadge';
 import { SkillTags } from '@/components/SkillTags';
+import { WorkforceCard } from './WorkforceCard';
 import { RUNTIME_LABELS } from './CloudAgentFormFields';
 import { AgentOwnerActions } from './AgentOwnerActions';
 import type { CloudAgentPanelTab } from './CloudAgentSlideOutPanel';
@@ -31,10 +31,6 @@ import type { CloudAgentPanelTab } from './CloudAgentSlideOutPanel';
  * Hire/Unhire branch itself lives only here. On the /workforce purchased list it
  * is always true; on the marketplace it is membership in the purchased set.
  */
-
-const cardStyle: React.CSSProperties = {
-  padding: 16, display: 'flex', flexDirection: 'column', gap: 12, position: 'relative', overflow: 'hidden',
-};
 
 const runtimePillStyle: React.CSSProperties = { padding: '2px 8px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--accent)' };
 const pricePillStyle: React.CSSProperties = { padding: '2px 8px', borderRadius: 6, background: 'var(--bg-elevated)', color: 'var(--text-strong)' };
@@ -71,58 +67,50 @@ export function AgentCard({
   const subtitle = agent.title && agent.title !== agent.name ? agent.title : 'Workforce agent';
 
   return (
-    <div className="card" style={cardStyle}>
-      {/* Header: avatar + name/title, type pill + (owner) status */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          <span style={{ fontSize: 24 }}>👤</span>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-strong)' }}>{agent.name}</div>
-            <div style={{ fontSize: 11, color: 'var(--muted)' }}>{subtitle}</div>
+    <WorkforceCard
+      avatar={<span style={{ fontSize: 24 }}>🤖</span>}
+      name={agent.name}
+      subtitle={subtitle}
+      pill={{ kind: owner ? 'cloud' : 'marketplace', label: 'Agent' }}
+      badges={owner ? <StatusBadge variant={agent.published ? 'published' : 'draft'} /> : undefined}
+      body={
+        <>
+          {agent.bio && <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, flex: 1 }}>{agent.bio}</div>}
+          <SkillTags skills={agent.skills} max={5} />
+          {/* Runtime + price pills — pricing is shown on every card. */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 11 }}>
+            <span style={runtimePillStyle}>
+              {RUNTIME_LABELS[agent.runtime_support ?? 'cloud']}
+              {owner && agent.runtime_support === 'both' && agent.preferred_runtime ? ` · prefers ${agent.preferred_runtime}` : ''}
+            </span>
+            <span style={pricePillStyle}>{formatAgentPrice(agent)}</span>
           </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <AgentTypePill kind={owner ? 'cloud' : 'marketplace'} label="Agent" />
-          {owner && <StatusBadge variant={agent.published ? 'published' : 'draft'} />}
-        </div>
-      </div>
-
-      {agent.bio && <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, flex: 1 }}>{agent.bio}</div>}
-
-      <SkillTags skills={agent.skills} max={5} />
-
-      {/* Runtime + price pills — pricing is shown on every card. */}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 11 }}>
-        <span style={runtimePillStyle}>
-          {RUNTIME_LABELS[agent.runtime_support ?? 'cloud']}
-          {owner && agent.runtime_support === 'both' && agent.preferred_runtime ? ` · prefers ${agent.preferred_runtime}` : ''}
-        </span>
-        <span style={pricePillStyle}>{formatAgentPrice(agent)}</span>
-      </div>
-
-      {/* Footer: hire count + the action row (owner manage / hire / unhire). */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-            {agent.hire_count != null ? `Hired ${agent.hire_count}×` : null}
-            {/* "In use" (active holders) is an owner-only signal — never shown to
-                non-owners, who can't see how/whether others are using it. */}
-            {owner && agent.active_hires != null ? ` · ${agent.active_hires} in use` : null}
+        </>
+      }
+      footer={
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+              {agent.hire_count != null ? `Hired ${agent.hire_count}×` : null}
+              {/* "In use" (active holders) is an owner-only signal — never shown to
+                  non-owners, who can't see how/whether others are using it. */}
+              {owner && agent.active_hires != null ? ` · ${agent.active_hires} in use` : null}
+            </div>
+            {!owner && (hired ? (
+              <button type="button" className="btn btn-secondary btn-sm" disabled={unhiring} onClick={() => onUnhire?.(agent.id)}>
+                {unhiring ? 'Unhiring…' : 'Unhire'}
+              </button>
+            ) : (
+              <button type="button" className="btn btn-primary btn-sm" disabled={hiring} onClick={() => onHire?.(agent.id)}>
+                {hiring ? 'Hiring…' : 'Hire'}
+              </button>
+            ))}
           </div>
-          {!owner && (hired ? (
-            <button type="button" className="btn btn-secondary btn-sm" disabled={unhiring} onClick={() => onUnhire?.(agent.id)}>
-              {unhiring ? 'Unhiring…' : 'Unhire'}
-            </button>
-          ) : (
-            <button type="button" className="btn btn-primary btn-sm" disabled={hiring} onClick={() => onHire?.(agent.id)}>
-              {hiring ? 'Hiring…' : 'Hire'}
-            </button>
-          ))}
-        </div>
-        {owner && (
-          <AgentOwnerActions agent={agent} onOpenPanel={onOpenPanel} onUnpublish={onUnpublish} onDelete={onDelete} />
-        )}
-      </div>
-    </div>
+          {owner && (
+            <AgentOwnerActions agent={agent} onOpenPanel={onOpenPanel} onUnpublish={onUnpublish} onDelete={onDelete} />
+          )}
+        </>
+      }
+    />
   );
 }

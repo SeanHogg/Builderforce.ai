@@ -9,6 +9,8 @@ import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import { MODALITIES, getModality, DEFAULT_MODALITY, type ProjectModality } from '@/lib/modality';
 import type { Project } from '@/lib/types';
 import { ProjectCard } from '@/components/ProjectCard';
+import { ProjectTable } from '@/components/ProjectTable';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { UpgradeModal } from '@/components/UpgradeModal';
 
 /**
@@ -37,6 +39,7 @@ export default function IDEDashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
 
   // New-project modal state
   const [createType, setCreateType] = useState<ProjectModality | null>(null);
@@ -65,6 +68,15 @@ export default function IDEDashboardPage() {
   const openProject = (p: Project) => {
     persistLastProjectId(String(p.id));
     router.push(`/ide/${p.publicId ?? p.id}`);
+  };
+
+  const handleDelete = async (proj: Project) => {
+    try {
+      await deleteProject(proj.id);
+      setProjects((prev) => prev.filter((x) => x.id !== proj.id));
+    } catch {
+      alert('Failed to delete project');
+    }
   };
 
   const submitCreate = async (e: React.FormEvent) => {
@@ -205,21 +217,24 @@ export default function IDEDashboardPage() {
             <h2 style={{ fontSize: '1rem', fontWeight: 600, margin: 0, color: 'var(--text-secondary)' }}>
               Your IDE projects
             </h2>
-            {/* Type filter */}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <FilterChip label="All" active={!typeParam} onClick={() => clearFilter('type')} />
-              {MODALITIES.map((m) => (
-                <FilterChip
-                  key={m.id}
-                  label={`${m.icon} ${m.label}`}
-                  active={typeParam === m.id}
-                  onClick={() => {
-                    const next = new URLSearchParams(searchParams.toString());
-                    next.set('type', m.id);
-                    router.replace(`/ide/dashboard?${next.toString()}`);
-                  }}
-                />
-              ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              {/* Type filter */}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <FilterChip label="All" active={!typeParam} onClick={() => clearFilter('type')} />
+                {MODALITIES.map((m) => (
+                  <FilterChip
+                    key={m.id}
+                    label={`${m.icon} ${m.label}`}
+                    active={typeParam === m.id}
+                    onClick={() => {
+                      const next = new URLSearchParams(searchParams.toString());
+                      next.set('type', m.id);
+                      router.replace(`/ide/dashboard?${next.toString()}`);
+                    }}
+                  />
+                ))}
+              </div>
+              <ViewToggle value={viewMode} onChange={setViewMode} />
             </div>
           </div>
 
@@ -279,24 +294,21 @@ export default function IDEDashboardPage() {
                   {modality.label}
                   <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· {items.length}</span>
                 </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-                  {items.map((p) => (
-                    <ProjectCard
-                      key={p.id}
-                      project={p}
-                      onCardClick={openProject}
-                      onOpenIde={openProject}
-                      onDelete={async (proj) => {
-                        try {
-                          await deleteProject(proj.id);
-                          setProjects((prev) => prev.filter((x) => x.id !== proj.id));
-                        } catch {
-                          alert('Failed to delete project');
-                        }
-                      }}
-                    />
-                  ))}
-                </div>
+                {viewMode === 'card' ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                    {items.map((p) => (
+                      <ProjectCard
+                        key={p.id}
+                        project={p}
+                        onCardClick={openProject}
+                        onOpenIde={openProject}
+                        onDelete={handleDelete}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <ProjectTable projects={items} onOpenIde={openProject} onDelete={handleDelete} />
+                )}
               </div>
             ))
           )}
