@@ -20,6 +20,14 @@ import {
 } from '@/lib/builderforceApi';
 import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
+import {
+  assigneeSelectValue,
+  parseAssigneeSelectValue,
+  assigneeName,
+  type AssigneePatch,
+  type CloudAgentTarget,
+  type TeamMember,
+} from '@/lib/taskAssignee';
 import { BoardConfigPanel } from './board/BoardConfigPanel';
 import { AgentChip } from './board/AgentChip';
 import { useBoardConfig } from './board/useBoardConfig';
@@ -31,6 +39,7 @@ import { TaskPrdTab } from './task/TaskPrdTab';
 import { RunTaskButton } from './task/RunTaskButton';
 import { ChatMessageContent } from './ChatMessageContent';
 import { ViewToggle } from './ViewToggle';
+import { CeremonyStage, type CeremonyMode } from './ceremony/CeremonyStage';
 import { ScheduleCalendar } from './ScheduleCalendar';
 import { ScheduleGantt } from './ScheduleGantt';
 import {
@@ -70,54 +79,6 @@ export interface TaskMgmtContentProps {
 function formatDate(d?: string | null): string {
   if (!d) return '';
   return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-/** A cloud agent (ide_agents) that a task can be assigned to. */
-type CloudAgentTarget = { ref: string; name: string };
-/** A human teammate (users.id) that a task can be assigned to. */
-type TeamMember = { id: string; name: string };
-
-// Humans and agents are one team: a task is owned by EXACTLY ONE of a self-hosted
-// agent host (numeric id), a cloud agent (string ref), or a human teammate
-// (users.id) — never more than one. The three id spaces are disjoint, so we encode
-// the choice into a single <select> value (`h:<id>` / `c:<ref>` / `u:<userId>` /
-// '' = none) and decode it back into the mutually-exclusive fields on change.
-// Centralizing this here keeps the create dialog, the drawer editor, and the name
-// resolver in sync — and decoding always emits ALL THREE fields so picking one
-// clears the others (the write path persists the nulls).
-function assigneeSelectValue(hostId?: number | null, ref?: string | null, userId?: string | null): string {
-  if (hostId != null) return `h:${hostId}`;
-  if (ref) return `c:${ref}`;
-  if (userId) return `u:${userId}`;
-  return '';
-}
-
-type AssigneePatch = {
-  assignedAgentHostId: number | null;
-  assignedAgentRef: string | null;
-  assignedUserId: string | null;
-};
-
-function parseAssigneeSelectValue(v: string): AssigneePatch {
-  if (v.startsWith('h:')) return { assignedAgentHostId: Number(v.slice(2)), assignedAgentRef: null, assignedUserId: null };
-  if (v.startsWith('c:')) return { assignedAgentHostId: null, assignedAgentRef: v.slice(2), assignedUserId: null };
-  if (v.startsWith('u:')) return { assignedAgentHostId: null, assignedAgentRef: null, assignedUserId: v.slice(2) };
-  return { assignedAgentHostId: null, assignedAgentRef: null, assignedUserId: null };
-}
-
-/** Display name for whichever assignee a task carries (host, cloud agent, or human). */
-function assigneeName(
-  hostId: number | null | undefined,
-  ref: string | null | undefined,
-  userId: string | null | undefined,
-  hosts: AgentHost[],
-  cloudAgents: CloudAgentTarget[],
-  members: TeamMember[],
-): string {
-  if (hostId != null) return hosts.find((h) => h.id === hostId)?.name ?? String(hostId);
-  if (ref) return cloudAgents.find((a) => a.ref === ref)?.name ?? ref;
-  if (userId) return members.find((m) => m.id === userId)?.name ?? userId;
-  return 'Unassigned';
 }
 
 /**
@@ -222,6 +183,8 @@ export function TaskMgmtContent({
   const [bulkStatus, setBulkStatus] = useState<string>('');
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
   const [boardConfigOpen, setBoardConfigOpen] = useState(false);
+  // Live ceremony overlay (standup/planning round-table) for the selected board.
+  const [ceremony, setCeremony] = useState<CeremonyMode | null>(null);
   const [prdOpen, setPrdOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'details' | 'agent' | 'prd'>('details');
   // Inline per-field editing in the task drawer. Only one field is editable at a
@@ -812,6 +775,19 @@ export function TaskMgmtContent({
             <button type="button" onClick={openCreate} style={buttonPrimary}>
               New task
             </button>
+            {effectiveProjectId != null && (
+              // Launch the live round-table ceremony as a full-screen overlay over
+              // this board. Standup reviews in-flight work; Planning drags backlog
+              // onto seats / Epics / a sprint.
+              <>
+                <button type="button" onClick={() => setCeremony('standup')} style={buttonTertiary}>
+                  Start standup
+                </button>
+                <button type="button" onClick={() => setCeremony('planning')} style={buttonTertiary}>
+                  Start planning
+                </button>
+              </>
+            )}
             {(() => {
               // Both the PRD and the board-config controls are board-scoped: they
               // act on the single selected project, so they share one enabled gate.
@@ -2047,6 +2023,40 @@ export function TaskMgmtContent({
         >
           <TaskPrdTab projectId={effectiveProjectId} />
         </SlideOutPanel>
+      )}
+
+      {effectiveProjectId != null && ceremony && (
+        // Full-screen ceremony overlay over the board. On close we reload tasks so
+        // any drag-assign / group / schedule done at the table shows on the board.
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          style={{ position: 'fixed', inset: 0, zIndex: 10000, padding: 24 }}
+        >
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              maxWidth: 1400,
+              margin: '0 auto',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 16,
+              padding: 16,
+              display: 'flex',
+              flexDirection: 'column',
+              minHeight: 0,
+            }}
+          >
+            <CeremonyStage
+              projectId={effectiveProjectId}
+              mode={ceremony}
+              onModeChange={setCeremony}
+              onClose={() => { setCeremony(null); load(); }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

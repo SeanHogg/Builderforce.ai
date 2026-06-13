@@ -37,6 +37,7 @@ const mainNav: NavItem[] = [
 const meshNav: NavItem[] = [
   // Chats and Approvals are consolidated into /workforce as tabs.
   { href: '/workforce', label: 'Workforce', icon: <MascotIcon size={20} /> },
+  { href: '/ceremonies', label: 'Ceremonies', icon: '🎯' },
 ];
 
 const extensionsNav: NavItem[] = [

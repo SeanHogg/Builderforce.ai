@@ -759,6 +759,12 @@ export interface Task {
   /** Free-form lane key (board column). The canonical defaults are {@link TaskStatus}. */
   status: string;
   priority: TaskPriority;
+  /** Fixed type dimension: a plain task or an Epic (planning container with children). */
+  taskType: 'task' | 'epic';
+  /** Parent Epic's id (null for top-level tasks). Set when grouped under an Epic. */
+  parentTaskId: number | null;
+  /** sprints.id this task is scheduled into, or null when unscheduled (backlog). */
+  sprintId: string | null;
   assignedAgentType: string | null;
   assignedAgentHostId: number | null;
   /** ide_agents.id of the cloud agent working this ticket (agents are assignees). */
@@ -806,6 +812,10 @@ export const tasksApi = {
     assignedAgentRef?: string | null;
     /** Human assignee (users.id). Mutually exclusive with the agent assignees. */
     assignedUserId?: string | null;
+    /** Create as an Epic (planning container) rather than a plain task. */
+    taskType?: 'task' | 'epic';
+    /** Create already nested under an Epic. */
+    parentTaskId?: number | null;
     dueDate?: string | null;
   }): Promise<Task> =>
     request<Task>('/api/tasks', {
@@ -825,6 +835,12 @@ export const tasksApi = {
       assignedAgentRef: string | null;
       /** Human assignee (users.id). Mutually exclusive with the agent assignees. */
       assignedUserId: string | null;
+      /** Reclassify between a plain task and an Epic. */
+      taskType: 'task' | 'epic';
+      /** Re-parent under an Epic (planning "drag into Epic"), or null to detach. */
+      parentTaskId: number | null;
+      /** Schedule into / out of a sprint (planning "drag onto sprint"). null = unscheduled. */
+      sprintId: string | null;
       dueDate: string | null;
       archived: boolean;
     }>
@@ -836,6 +852,27 @@ export const tasksApi = {
 
   delete: (id: number): Promise<void> =>
     request<void>(`/api/tasks/${id}`, { method: 'DELETE' }),
+
+  /** An Epic and its direct child tasks (the planning tree). */
+  tree: (id: number): Promise<{ epic: Task; children: Task[] }> =>
+    request<{ epic: Task; children: Task[] }>(`/api/tasks/${id}/tree`),
+
+  /** Turn a task into an Epic and fan the given children out as child tasks. */
+  decompose: (
+    id: number,
+    children: Array<{
+      title: string;
+      description?: string | null;
+      priority?: TaskPriority;
+      assignedUserId?: string | null;
+      assignedAgentHostId?: number | null;
+      assignedAgentRef?: string | null;
+    }>,
+  ): Promise<{ epic: Task; children: Task[] }> =>
+    request<{ epic: Task; children: Task[] }>(`/api/tasks/${id}/decompose`, {
+      method: 'POST',
+      body: JSON.stringify({ children }),
+    }),
 
   /** Team members (humans) a task can be assigned to — the human half of the
    *  unified assignee picker (agents come from the run-targets / agent-host APIs). */
@@ -2063,6 +2100,34 @@ export function segmentTrackerClient(apiBase: string) {
     remove: (id: string) => request<{ deleted: string }>(`${apiBase}/${id}`, { method: 'DELETE' }),
   };
 }
+
+// Sprints (agile tracker; /api/agile/sprints). A planning ceremony creates/uses a
+// sprint and schedules tasks into it via tasksApi.update({ sprintId }).
+export interface Sprint {
+  id: string;
+  name: string;
+  goal: string | null;
+  status: 'planning' | 'active' | 'completed' | 'archived';
+  startDate: string | null;
+  endDate: string | null;
+  capacity: number | null;
+}
+
+const sprintTracker = segmentTrackerClient('/api/agile/sprints');
+export const sprintsApi = {
+  list: () => sprintTracker.list() as unknown as Promise<Sprint[]>,
+  create: (body: {
+    name: string;
+    goal?: string;
+    status?: Sprint['status'];
+    startDate?: string;
+    endDate?: string;
+    capacity?: number;
+  }) => sprintTracker.create(body) as unknown as Promise<Sprint>,
+  update: (id: string, body: Partial<Omit<Sprint, 'id'>>) =>
+    sprintTracker.update(id, body) as unknown as Promise<Sprint>,
+  remove: (id: string) => sprintTracker.remove(id),
+};
 
 // Planning Poker + Retrospectives (nested session models; /api/agile/*).
 export interface PokerSession { id: string; name: string; votingSystem: string; status: string; }

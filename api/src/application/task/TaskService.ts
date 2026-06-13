@@ -21,6 +21,10 @@ export interface CreateTaskDto {
   assignedAgentRef?: string | null;
   /** Human assignee (users.id). Mutually exclusive with the agent assignees. */
   assignedUserId?: string | null;
+  /** 'task' | 'epic' at creation (default 'task'). */
+  taskType?: TaskType;
+  /** Parent Epic's id — set when creating a child of an Epic. */
+  parentTaskId?: number | null;
   startDate?: string | null;
   dueDate?: string | null;
   persona?: string | null;
@@ -34,6 +38,10 @@ export interface UpdateTaskDto {
   priority?: TaskPriority;
   /** 'task' | 'epic'. Reclassifying to epic is normally done via decomposeEpic. */
   taskType?: TaskType;
+  /** Re-parent under an Epic (planning "drag into Epic"), or null to detach. */
+  parentTaskId?: number | null;
+  /** Schedule into / out of a sprint (planning "drag onto sprint"). null = unscheduled. */
+  sprintId?: string | null;
   assignedAgentType?: AgentType | null;
   assignedAgentHostId?: number | null;
   /** Cloud agent (ide_agents.id) assigned to this task. Mutually exclusive with host. */
@@ -103,6 +111,8 @@ export class TaskService {
       assignedAgentHostId: dto.assignedAgentHostId != null ? asAgentHostId(dto.assignedAgentHostId) : null,
       assignedAgentRef: dto.assignedAgentRef ?? null,
       assignedUserId: dto.assignedUserId ?? null,
+      taskType: dto.taskType,
+      parentTaskId: dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null,
       startDate: dto.startDate ? new Date(dto.startDate) : null,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
       persona: dto.persona ?? null,
@@ -126,6 +136,9 @@ export class TaskService {
       ...dto,
       assignedAgentHostId: dto.assignedAgentHostId !== undefined
         ? (dto.assignedAgentHostId != null ? asAgentHostId(dto.assignedAgentHostId) : null)
+        : undefined,
+      parentTaskId: dto.parentTaskId !== undefined
+        ? (dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null)
         : undefined,
       startDate: dto.startDate !== undefined ? (dto.startDate ? new Date(dto.startDate) : null) : undefined,
       dueDate: dto.dueDate !== undefined ? (dto.dueDate ? new Date(dto.dueDate) : null) : undefined,
