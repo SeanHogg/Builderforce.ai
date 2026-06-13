@@ -984,6 +984,9 @@ export default function AdminPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     <ModelPoolBadges label="Free models"    keyPrefix="free" models={health.llm.free ?? health.llm.models} />
                     <ModelPoolBadges label="Premium models" keyPrefix="pro"  models={health.llm.pro  ?? []} />
+                    {(health.llm.premiumFallback?.length ?? 0) > 0 && (
+                      <ModelPoolBadges label="Premium fallback (always-on backstop)" keyPrefix="fallback" models={health.llm.premiumFallback ?? []} />
+                    )}
                   </div>
                 </div>
 

@@ -78,7 +78,7 @@ async function resolveTokenSource(): Promise<TokenSource> {
     }
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "builderforce-setup-token-"));
     const profileId = `anthropic:setup-token-live-${randomUUID()}`;
-    const store = ensureAuthProfileStore(tempDir, {
+    const store = await ensureAuthProfileStore(tempDir, {
       allowKeychainPrompt: false,
     });
     store.profiles[profileId] = {
@@ -97,7 +97,7 @@ async function resolveTokenSource(): Promise<TokenSource> {
   }
 
   const agentDir = resolveBuilderForceAgentsAgentDir();
-  const store = ensureAuthProfileStore(agentDir, {
+  const store = await ensureAuthProfileStore(agentDir, {
     allowKeychainPrompt: false,
   });
 

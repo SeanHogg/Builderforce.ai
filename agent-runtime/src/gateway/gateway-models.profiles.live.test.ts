@@ -426,15 +426,15 @@ function buildLiveGatewayConfig(params: {
   };
 }
 
-function sanitizeAuthConfig(params: {
+async function sanitizeAuthConfig(params: {
   cfg: BuilderForceAgentsConfig;
   agentDir: string;
-}): BuilderForceAgentsConfig["auth"] | undefined {
+}): Promise<BuilderForceAgentsConfig["auth"] | undefined> {
   const auth = params.cfg.auth;
   if (!auth) {
     return auth;
   }
-  const store = ensureAuthProfileStore(params.agentDir, {
+  const store = await ensureAuthProfileStore(params.agentDir, {
     allowKeychainPrompt: false,
   });
 
@@ -518,7 +518,7 @@ async function runGatewayModelSuite(params: GatewayModelSuiteParams) {
   const agentId = "dev";
 
   const hostAgentDir = resolveBuilderForceAgentsAgentDir();
-  const hostStore = ensureAuthProfileStore(hostAgentDir, {
+  const hostStore = await ensureAuthProfileStore(hostAgentDir, {
     allowKeychainPrompt: false,
   });
   const sanitizedStore: AuthProfileStore = {
@@ -551,7 +551,7 @@ async function runGatewayModelSuite(params: GatewayModelSuiteParams) {
   const agentDir = resolveBuilderForceAgentsAgentDir();
   const sanitizedCfg: BuilderForceAgentsConfig = {
     ...params.cfg,
-    auth: sanitizeAuthConfig({ cfg: params.cfg, agentDir }),
+    auth: await sanitizeAuthConfig({ cfg: params.cfg, agentDir }),
   };
   const nextCfg = buildLiveGatewayConfig({
     cfg: sanitizedCfg,
@@ -1021,7 +1021,7 @@ describeLive("gateway live (dev agent, profile keys)", () => {
       await ensureBuilderForceAgentsModelsJson(cfg);
 
       const agentDir = resolveBuilderForceAgentsAgentDir();
-      const authStore = ensureAuthProfileStore(agentDir, {
+      const authStore = await ensureAuthProfileStore(agentDir, {
         allowKeychainPrompt: false,
       });
       const authStorage = discoverAuthStorage(agentDir);

@@ -147,7 +147,7 @@ describe("cli credentials", () => {
 
     const { writeClaudeCliCredentials } = await import("./cli-credentials.js");
 
-    const ok = writeClaudeCliCredentials(
+    const ok = await writeClaudeCliCredentials(
       {
         access: "new-access",
         refresh: "new-refresh",
@@ -191,13 +191,13 @@ describe("cli credentials", () => {
 
     const { readClaudeCliCredentialsCached } = await import("./cli-credentials.js");
 
-    const first = readClaudeCliCredentialsCached({
+    const first = await readClaudeCliCredentialsCached({
       allowKeychainPrompt: true,
       ttlMs: 15 * 60 * 1000,
       platform: "darwin",
       execSync: execSyncMock,
     });
-    const second = readClaudeCliCredentialsCached({
+    const second = await readClaudeCliCredentialsCached({
       allowKeychainPrompt: false,
       ttlMs: 15 * 60 * 1000,
       platform: "darwin",
@@ -224,7 +224,7 @@ describe("cli credentials", () => {
 
     const { readClaudeCliCredentialsCached } = await import("./cli-credentials.js");
 
-    const first = readClaudeCliCredentialsCached({
+    const first = await readClaudeCliCredentialsCached({
       allowKeychainPrompt: true,
       ttlMs: 15 * 60 * 1000,
       platform: "darwin",
@@ -233,7 +233,7 @@ describe("cli credentials", () => {
 
     vi.advanceTimersByTime(15 * 60 * 1000 + 1);
 
-    const second = readClaudeCliCredentialsCached({
+    const second = await readClaudeCliCredentialsCached({
       allowKeychainPrompt: true,
       ttlMs: 15 * 60 * 1000,
       platform: "darwin",
@@ -265,7 +265,7 @@ describe("cli credentials", () => {
     });
 
     const { readCodexCliCredentials } = await import("./cli-credentials.js");
-    const creds = readCodexCliCredentials({ platform: "darwin", execSync: execSyncMock });
+    const creds = await readCodexCliCredentials({ platform: "darwin", execSync: execSyncMock });
 
     expect(creds).toMatchObject({
       access: "keychain-access",
@@ -295,7 +295,7 @@ describe("cli credentials", () => {
     );
 
     const { readCodexCliCredentials } = await import("./cli-credentials.js");
-    const creds = readCodexCliCredentials({ execSync: execSyncMock });
+    const creds = await readCodexCliCredentials({ execSync: execSyncMock });
 
     expect(creds).toMatchObject({
       access: "file-access",

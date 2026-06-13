@@ -69,7 +69,7 @@ describe("auth-profiles (chutes)", () => {
     });
     vi.stubGlobal("fetch", fetchSpy);
 
-    const loaded = ensureAuthProfileStore();
+    const loaded = await ensureAuthProfileStore();
     const resolved = await resolveApiKeyForProfile({
       store: loaded,
       profileId: "chutes:default",

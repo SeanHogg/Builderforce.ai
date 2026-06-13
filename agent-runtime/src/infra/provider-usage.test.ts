@@ -254,7 +254,7 @@ describe("provider usage loading", () => {
           )}\n`,
           "utf8",
         );
-        const store = ensureAuthProfileStore(agentDir, {
+        const store = await ensureAuthProfileStore(agentDir, {
           allowKeychainPrompt: false,
         });
         expect(listProfilesForProvider(store, "anthropic")).toContain("anthropic:default");

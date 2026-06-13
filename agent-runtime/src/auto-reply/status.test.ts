@@ -22,13 +22,13 @@ vi.mock("../plugins/commands.js", () => ({
   listPluginCommands,
 }));
 
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks();
 });
 
 describe("buildStatusMessage", () => {
-  it("summarizes agent readiness and context usage", () => {
-    const text = buildStatusMessage({
+  it("summarizes agent readiness and context usage", async () => {
+    const text = await buildStatusMessage({
       config: {
         models: {
           providers: {
@@ -90,8 +90,8 @@ describe("buildStatusMessage", () => {
     expect(normalized).toContain("Queue: collect");
   });
 
-  it("uses per-agent sandbox config when config and session key are provided", () => {
-    const text = buildStatusMessage({
+  it("uses per-agent sandbox config when config and session key are provided", async () => {
+    const text = await buildStatusMessage({
       config: {
         agents: {
           list: [
@@ -109,8 +109,8 @@ describe("buildStatusMessage", () => {
     expect(normalizeTestText(text)).toContain("Runtime: docker/all");
   });
 
-  it("shows verbose/elevated labels only when enabled", () => {
-    const text = buildStatusMessage({
+  it("shows verbose/elevated labels only when enabled", async () => {
+    const text = await buildStatusMessage({
       agent: { model: "anthropic/claude-opus-4-5" },
       sessionEntry: { sessionId: "v1", updatedAt: 0 },
       sessionKey: "agent:main:main",
@@ -125,8 +125,8 @@ describe("buildStatusMessage", () => {
     expect(text).toContain("elevated");
   });
 
-  it("includes media understanding decisions when present", () => {
-    const text = buildStatusMessage({
+  it("includes media understanding decisions when present", async () => {
+    const text = await buildStatusMessage({
       agent: { model: "anthropic/claude-opus-4-5" },
       sessionEntry: { sessionId: "media", updatedAt: 0 },
       sessionKey: "agent:main:main",
@@ -158,8 +158,8 @@ describe("buildStatusMessage", () => {
     expect(normalized).toContain("Media: image ok (openai/gpt-5.2) · audio skipped (maxBytes)");
   });
 
-  it("omits media line when all decisions are none", () => {
-    const text = buildStatusMessage({
+  it("omits media line when all decisions are none", async () => {
+    const text = await buildStatusMessage({
       agent: { model: "anthropic/claude-opus-4-5" },
       sessionEntry: { sessionId: "media-none", updatedAt: 0 },
       sessionKey: "agent:main:main",
@@ -174,8 +174,8 @@ describe("buildStatusMessage", () => {
     expect(normalizeTestText(text)).not.toContain("Media:");
   });
 
-  it("does not show elevated label when session explicitly disables it", () => {
-    const text = buildStatusMessage({
+  it("does not show elevated label when session explicitly disables it", async () => {
+    const text = await buildStatusMessage({
       agent: { model: "anthropic/claude-opus-4-5", elevatedDefault: "on" },
       sessionEntry: { sessionId: "v1", updatedAt: 0, elevatedLevel: "off" },
       sessionKey: "agent:main:main",
@@ -190,8 +190,8 @@ describe("buildStatusMessage", () => {
     expect(optionsLine).not.toContain("elevated");
   });
 
-  it("prefers model overrides over last-run model", () => {
-    const text = buildStatusMessage({
+  it("prefers model overrides over last-run model", async () => {
+    const text = await buildStatusMessage({
       agent: {
         model: "anthropic/claude-opus-4-5",
         contextTokens: 32_000,
@@ -214,8 +214,8 @@ describe("buildStatusMessage", () => {
     expect(normalizeTestText(text)).toContain("Model: openai/gpt-4.1-mini");
   });
 
-  it("keeps provider prefix from configured model", () => {
-    const text = buildStatusMessage({
+  it("keeps provider prefix from configured model", async () => {
+    const text = await buildStatusMessage({
       agent: {
         model: "google-antigravity/claude-sonnet-4-5",
       },
@@ -227,8 +227,8 @@ describe("buildStatusMessage", () => {
     expect(normalizeTestText(text)).toContain("Model: google-antigravity/claude-sonnet-4-5");
   });
 
-  it("handles missing agent config gracefully", () => {
-    const text = buildStatusMessage({
+  it("handles missing agent config gracefully", async () => {
+    const text = await buildStatusMessage({
       agent: {},
       sessionScope: "per-sender",
       queue: { mode: "collect", depth: 0 },
@@ -241,8 +241,8 @@ describe("buildStatusMessage", () => {
     expect(normalized).toContain("Queue: collect");
   });
 
-  it("includes group activation for group sessions", () => {
-    const text = buildStatusMessage({
+  it("includes group activation for group sessions", async () => {
+    const text = await buildStatusMessage({
       agent: {},
       sessionEntry: {
         sessionId: "g1",
@@ -259,8 +259,8 @@ describe("buildStatusMessage", () => {
     expect(text).toContain("Activation: always");
   });
 
-  it("shows queue details when overridden", () => {
-    const text = buildStatusMessage({
+  it("shows queue details when overridden", async () => {
+    const text = await buildStatusMessage({
       agent: {},
       sessionEntry: { sessionId: "q1", updatedAt: 0 },
       sessionKey: "agent:main:main",
@@ -279,8 +279,8 @@ describe("buildStatusMessage", () => {
     expect(text).toContain("Queue: collect (depth 3 · debounce 2s · cap 5 · drop old)");
   });
 
-  it("inserts usage summary beneath context line", () => {
-    const text = buildStatusMessage({
+  it("inserts usage summary beneath context line", async () => {
+    const text = await buildStatusMessage({
       agent: { model: "anthropic/claude-opus-4-5", contextTokens: 32_000 },
       sessionEntry: { sessionId: "u1", updatedAt: 0, totalTokens: 1000 },
       sessionKey: "agent:main:main",
@@ -296,8 +296,8 @@ describe("buildStatusMessage", () => {
     expect(lines[contextIndex + 1]).toContain("Usage: Claude 80% left (5h)");
   });
 
-  it("hides cost when not using an API key", () => {
-    const text = buildStatusMessage({
+  it("hides cost when not using an API key", async () => {
+    const text = await buildStatusMessage({
       config: {
         models: {
           providers: {
@@ -384,8 +384,8 @@ describe("buildStatusMessage", () => {
     });
   }
 
-  function buildTranscriptStatusText(params: { sessionId: string; sessionKey: string }) {
-    return buildStatusMessage({
+  async function buildTranscriptStatusText(params: { sessionId: string; sessionKey: string }) {
+    return await buildStatusMessage({
       agent: {
         model: "anthropic/claude-opus-4-5",
         contextTokens: 32_000,
@@ -414,7 +414,7 @@ describe("buildStatusMessage", () => {
           sessionId,
         });
 
-        const text = buildTranscriptStatusText({
+        const text = await buildTranscriptStatusText({
           sessionId,
           sessionKey: "agent:main:main",
         });
@@ -435,7 +435,7 @@ describe("buildStatusMessage", () => {
           sessionId,
         });
 
-        const text = buildTranscriptStatusText({
+        const text = await buildTranscriptStatusText({
           sessionId,
           sessionKey: "agent:worker1:telegram:12345",
         });
@@ -463,7 +463,7 @@ describe("buildStatusMessage", () => {
           },
         });
 
-        const text = buildStatusMessage({
+        const text = await buildStatusMessage({
           agent: {
             model: "anthropic/claude-opus-4-5",
             contextTokens: 32_000,
@@ -490,7 +490,7 @@ describe("buildStatusMessage", () => {
 });
 
 describe("buildCommandsMessage", () => {
-  it("lists commands with aliases and hints", () => {
+  it("lists commands with aliases and hints", async () => {
     const text = buildCommandsMessage({
       commands: { config: false, debug: false },
     } as unknown as BuilderForceAgentsConfig);
@@ -504,7 +504,7 @@ describe("buildCommandsMessage", () => {
     expect(text).not.toContain("/debug");
   });
 
-  it("includes skill commands when provided", () => {
+  it("includes skill commands when provided", async () => {
     const text = buildCommandsMessage(
       {
         commands: { config: false, debug: false },
@@ -522,7 +522,7 @@ describe("buildCommandsMessage", () => {
 });
 
 describe("buildHelpMessage", () => {
-  it("hides config/debug when disabled", () => {
+  it("hides config/debug when disabled", async () => {
     const text = buildHelpMessage({
       commands: { config: false, debug: false },
     } as unknown as BuilderForceAgentsConfig);
@@ -534,7 +534,7 @@ describe("buildHelpMessage", () => {
 });
 
 describe("buildCommandsMessagePaginated", () => {
-  it("formats telegram output with pages", () => {
+  it("formats telegram output with pages", async () => {
     const result = buildCommandsMessagePaginated(
       {
         commands: { config: false, debug: false },
@@ -547,7 +547,7 @@ describe("buildCommandsMessagePaginated", () => {
     expect(result.text).toContain("/stop - Stop the current run.");
   });
 
-  it("includes plugin commands in the paginated list", () => {
+  it("includes plugin commands in the paginated list", async () => {
     listPluginCommands.mockReturnValue([
       { name: "plugin_cmd", description: "Plugin command", pluginId: "demo-plugin" },
     ]);

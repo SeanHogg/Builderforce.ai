@@ -133,7 +133,7 @@ async function expectApiKeyProfile(params: {
   metadata?: Record<string, string>;
 }): Promise<void> {
   const { ensureAuthProfileStore } = await import("../agents/auth-profiles.js");
-  const store = ensureAuthProfileStore();
+  const store = await ensureAuthProfileStore();
   const profile = store.profiles[params.profileId];
   expect(profile?.type).toBe("api_key");
   if (profile?.type === "api_key") {
@@ -265,7 +265,7 @@ describe("onboard (non-interactive): provider auth", () => {
       expect(cfg.auth?.profiles?.["anthropic:default"]?.mode).toBe("token");
 
       const { ensureAuthProfileStore } = await import("../agents/auth-profiles.js");
-      const store = ensureAuthProfileStore();
+      const store = await ensureAuthProfileStore();
       const profile = store.profiles["anthropic:default"];
       expect(profile?.type).toBe("token");
       if (profile?.type === "token") {
@@ -467,7 +467,7 @@ describe("onboard (non-interactive): provider auth", () => {
       "builderforce-onboard-custom-provider-profile-fallback-",
       async ({ configPath, runtime }) => {
         const { upsertAuthProfile } = await import("../agents/auth-profiles.js");
-        upsertAuthProfile({
+        await upsertAuthProfile({
           profileId: `${CUSTOM_LOCAL_PROVIDER_ID}:default`,
           credential: {
             type: "api_key",

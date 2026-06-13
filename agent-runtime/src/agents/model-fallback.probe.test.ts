@@ -41,7 +41,7 @@ describe("runWithModelFallback – probe logic", () => {
   let realDateNow: () => number;
   const NOW = 1_700_000_000_000;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     realDateNow = Date.now;
     Date.now = vi.fn(() => NOW);
 
@@ -53,7 +53,7 @@ describe("runWithModelFallback – probe logic", () => {
       version: 1,
       profiles: {},
     };
-    mockedEnsureAuthProfileStore.mockReturnValue(fakeStore);
+    mockedEnsureAuthProfileStore.mockResolvedValue(fakeStore);
 
     // Default: resolveAuthProfileOrder returns profiles only for "openai" provider
     mockedResolveAuthProfileOrder.mockImplementation(({ provider }: { provider: string }) => {
@@ -74,7 +74,7 @@ describe("runWithModelFallback – probe logic", () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     Date.now = realDateNow;
     vi.restoreAllMocks();
   });

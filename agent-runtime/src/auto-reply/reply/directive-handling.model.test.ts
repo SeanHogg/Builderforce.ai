@@ -63,11 +63,11 @@ describe("/model chat UX", () => {
     expect(reply?.text).toContain("Switch: /model <provider/model>");
   });
 
-  it("auto-applies closest match for typos", () => {
+  it("auto-applies closest match for typos", async () => {
     const directives = parseInlineDirectives("/model anthropic/claud-opus-4-5");
     const cfg = { commands: { text: true } } as unknown as BuilderForceAgentsConfig;
 
-    const resolved = resolveModelSelectionFromDirective({
+    const resolved = await resolveModelSelectionFromDirective({
       directives,
       cfg,
       agentDir: "/tmp/agent",

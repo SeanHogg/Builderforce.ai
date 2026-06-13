@@ -37,12 +37,17 @@ export function FloatingBrain() {
   // visitor ever signs in, breaking the landing→auth→replay handoff.
   useEffect(() => {
     if (!hasTenant) return;
+    // On /brainstorm the docked Brain renders null (the page IS the Brain), so
+    // it must NOT consume the one-shot pending prompt here — `takePendingPrompt`
+    // clears storage, which would silently eat the prompt before the page can
+    // replay it. The brainstorm page consumes it instead. [1509]
+    if (pathname?.startsWith('/brainstorm')) return;
     const p = takePendingPrompt();
     if (p) {
       setInitialPrompt(p);
       setOpen(true);
     }
-  }, [hasTenant, setOpen]);
+  }, [hasTenant, setOpen, pathname]);
 
   // On the full Brain Storm page the docked Brain is redundant; on the auth
   // pages a "sign in to use Brain" CTA would be redundant with the form itself.
