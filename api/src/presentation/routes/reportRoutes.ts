@@ -6,6 +6,7 @@
  * GET  /api/reports/standup          Daily standup report (MANAGER+)
  * GET  /api/reports/code-review      Code review report (MANAGER+)
  * GET  /api/reports/executive        Executive summary report (MANAGER+)
+ * GET  /api/reports/completed-by-assignee  Tasks completed per assignee over a window (MANAGER+)
  *
  * GET  /api/reports/schedules        List report schedules (MANAGER+)
  * POST /api/reports/schedules        Create schedule (MANAGER+)
@@ -17,7 +18,7 @@
  */
 
 import { Hono } from 'hono';
-import { and, desc, eq, gte, lte, lt, isNull, notExists } from 'drizzle-orm';
+import { and, desc, eq, gte, lte, lt, isNull, notExists, inArray } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   activityEvents,
@@ -27,9 +28,14 @@ import {
   devTeamMembers,
   reportSchedules,
   reportSubscriptions,
+  tasks,
+  projects,
+  users,
+  agentHosts,
 } from '../../infrastructure/database/schema';
-import { TenantRole } from '../../domain/shared/types';
-import type { HonoEnv } from '../../env';
+import { TenantRole, TaskStatus } from '../../domain/shared/types';
+import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 // ---------------------------------------------------------------------------
@@ -374,6 +380,181 @@ async function generateInactiveContributorsReport(db: Db, tenantId: number, inac
 }
 
 // ---------------------------------------------------------------------------
+// Completed-by-assignee rollup (gap [1253])
+// ---------------------------------------------------------------------------
+
+/**
+ * Lane keys that count a task as "completed". A board lane is free-form text
+ * (tasks.status is a varchar), but `done` is the canonical terminal lane the
+ * domain transitions to (Task.markDone → TaskStatus.DONE). Kept as a set so a
+ * tenant that adds e.g. a `released` lane can be folded in later without
+ * touching the grouping logic.
+ */
+export const DONE_CLASS_STATUSES: readonly string[] = [TaskStatus.DONE];
+
+/** Window (days) clamp — guards against unbounded scans / silly query params. */
+const COMPLETED_WINDOW_MIN_DAYS = 1;
+const COMPLETED_WINDOW_MAX_DAYS = 365;
+
+/**
+ * The window keyspace is unbounded (any `days` in [1,365]), so per the cache
+ * convention we fold a per-tenant *version token* into the key instead of trying
+ * to delete every window on write. A task status write bumps the token (see
+ * {@link invalidateCompletedByAssignee}); every window-keyed entry then ages out
+ * naturally on the next read. The token itself is a cheap, separately-cached
+ * counter.
+ */
+function versionTokenKey(tenantId: number): string {
+  return `report-completed-by-assignee:ver:tenant:${tenantId}`;
+}
+
+/** Cache key for the completed-by-assignee rollup (per tenant + version + window). */
+export function completedByAssigneeCacheKey(tenantId: number, version: number, days: number): string {
+  return `report-completed-by-assignee:tenant:${tenantId}:v:${version}:days:${days}`;
+}
+
+/** Current version token for a tenant's completed-by-assignee cache (defaults to 0). */
+async function readCompletedByAssigneeVersion(env: Env, tenantId: number): Promise<number> {
+  return getOrSetCached(env, versionTokenKey(tenantId), async () => 0, { kvTtlSeconds: 86_400 });
+}
+
+/**
+ * Bump the per-tenant version token so every window-keyed rollup entry ages out.
+ * Call from the task status-write path. Cheap: one KV write of a small integer.
+ */
+export async function invalidateCompletedByAssignee(env: Env, tenantId: number): Promise<void> {
+  const key = versionTokenKey(tenantId);
+  const current = await readCompletedByAssigneeVersion(env, tenantId);
+  await invalidateCached(env, key);
+  // Re-seed the token at current+1 so the next read computes a fresh window key.
+  await getOrSetCached(env, key, async () => current + 1, { kvTtlSeconds: 86_400 });
+}
+
+/** One task row as it feeds the grouping (the columns the rollup needs). */
+export interface CompletedTaskRow {
+  taskId:              number;
+  status:              string;
+  completedAt:         Date;
+  assignedUserId:      string | null;
+  assignedUserName:    string | null;
+  assignedAgentHostId: number | null;
+  assignedHostName:    string | null;
+  assignedAgentRef:    string | null;
+}
+
+export interface AssigneeRollup {
+  assigneeKind: 'human' | 'agent_host' | 'cloud_agent' | 'unassigned';
+  assigneeId:   string;
+  assigneeName: string;
+  completed:    number;
+  lastCompletedAt: string;
+}
+
+/**
+ * Pure grouping: collapse completed task rows into one bucket per assignee
+ * (a human OR an agent — host or cloud — are first-class peers on the board, so
+ * each is its own row). Exported for unit testing without a DB.
+ *
+ * Assignee identity precedence mirrors the data model's "exactly one owner"
+ * invariant: human > agent host > cloud agent. A row with none falls into a
+ * single `unassigned` bucket.
+ */
+export function groupCompletedByAssignee(rows: CompletedTaskRow[]): AssigneeRollup[] {
+  const byKey = new Map<string, AssigneeRollup>();
+
+  for (const row of rows) {
+    let kind: AssigneeRollup['assigneeKind'];
+    let id: string;
+    let name: string;
+
+    if (row.assignedUserId) {
+      kind = 'human';
+      id = `user:${row.assignedUserId}`;
+      name = row.assignedUserName || row.assignedUserId;
+    } else if (row.assignedAgentHostId != null) {
+      kind = 'agent_host';
+      id = `host:${row.assignedAgentHostId}`;
+      name = row.assignedHostName || `Agent host #${row.assignedAgentHostId}`;
+    } else if (row.assignedAgentRef) {
+      kind = 'cloud_agent';
+      id = `agent:${row.assignedAgentRef}`;
+      name = row.assignedAgentRef;
+    } else {
+      kind = 'unassigned';
+      id = 'unassigned';
+      name = 'Unassigned';
+    }
+
+    const prev = byKey.get(id);
+    if (prev) {
+      prev.completed += 1;
+      if (row.completedAt.getTime() > new Date(prev.lastCompletedAt).getTime()) {
+        prev.lastCompletedAt = row.completedAt.toISOString();
+      }
+    } else {
+      byKey.set(id, {
+        assigneeKind: kind,
+        assigneeId:   id,
+        assigneeName: name,
+        completed:    1,
+        lastCompletedAt: row.completedAt.toISOString(),
+      });
+    }
+  }
+
+  // Busiest assignee first; stable name tiebreak.
+  return Array.from(byKey.values()).sort(
+    (a, b) => b.completed - a.completed || a.assigneeName.localeCompare(b.assigneeName),
+  );
+}
+
+/**
+ * Tasks that moved into a done-class lane within the last `days`, grouped by
+ * assignee (human or agent). There is no explicit "completed_at" column, so we
+ * proxy it with `updatedAt` of a done-class task — Task.update() bumps updatedAt
+ * on every status transition, so a task currently in `done` was moved there at
+ * `updatedAt`. Tenant-scoped by joining projects (tasks carry no tenant_id).
+ */
+async function generateCompletedByAssigneeReport(db: Db, tenantId: number, days: number) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  const rows = await db
+    .select({
+      taskId:              tasks.id,
+      status:              tasks.status,
+      completedAt:         tasks.updatedAt,
+      assignedUserId:      tasks.assignedUserId,
+      assignedUserName:    users.displayName,
+      assignedAgentHostId: tasks.assignedAgentHostId,
+      assignedHostName:    agentHosts.name,
+      assignedAgentRef:    tasks.assignedAgentRef,
+    })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .leftJoin(users, eq(users.id, tasks.assignedUserId))
+    .leftJoin(agentHosts, eq(agentHosts.id, tasks.assignedAgentHostId))
+    .where(and(
+      eq(projects.tenantId, tenantId),
+      eq(tasks.archived, false),
+      inArray(tasks.status, DONE_CLASS_STATUSES as string[]),
+      gte(tasks.updatedAt, since),
+    ));
+
+  const assignees = groupCompletedByAssignee(rows as CompletedTaskRow[]);
+  const totalCompleted = rows.length;
+
+  return {
+    reportType:   'completed_by_assignee',
+    windowDays:   days,
+    since:        since.toISOString(),
+    generatedAt:  new Date().toISOString(),
+    totalCompleted,
+    assigneeCount: assignees.length,
+    assignees,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
 
@@ -402,6 +583,28 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
     const to   = c.req.query('to')   ? new Date(c.req.query('to')!)   : new Date();
     const from = c.req.query('from') ? new Date(c.req.query('from')!) : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
     return c.json(await generateExecutiveReport(db, tenantId, from, to));
+  });
+
+  // ── GET /api/reports/completed-by-assignee ───────────────────────────────
+  // Weekly-oversight rollup: tasks moved into a done-class lane in the last N
+  // days, grouped by assignee (human OR agent). Cached read-through keyed on
+  // (tenant, window) — invalidated on any task status write via
+  // invalidateCompletedByAssignee() in taskRoutes.ts; the KV TTL is the backstop.
+  router.get('/completed-by-assignee', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const raw = c.req.query('days') ? parseInt(c.req.query('days')!, 10) : 7;
+    const days = Math.min(
+      COMPLETED_WINDOW_MAX_DAYS,
+      Math.max(COMPLETED_WINDOW_MIN_DAYS, Number.isFinite(raw) ? raw : 7),
+    );
+    const env = c.env as Env;
+    const version = await readCompletedByAssigneeVersion(env, tenantId);
+    const report = await getOrSetCached(
+      env,
+      completedByAssigneeCacheKey(tenantId, version, days),
+      () => generateCompletedByAssigneeReport(db, tenantId, days),
+    );
+    return c.json(report);
   });
 
   // ── GET /api/reports/team-comparison ─────────────────────────────────────

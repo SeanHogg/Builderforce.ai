@@ -292,6 +292,8 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
   // agent already carries its runtime/host/model defaults, so the form is just
   // "which agent" + an optional model override.
   const [agentSel, setAgentSel] = useState(''); // 'kind:ref'
+  const [name, setName] = useState('');
+  const [role, setRole] = useState('');
   const [model, setModel] = useState('');
   const [available, setAvailable] = useState<PoolAgent[]>([]);
   const [adding, setAdding] = useState(false);
@@ -311,10 +313,12 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
     await boardsApi.agents.create(board.id, lane.id, {
       agentKind,
       agentRef,
+      name: name.trim() || null,
+      role: role.trim() || null,
       model: model.trim() || null,
       position: agents.length,
     });
-    setAgentSel(''); setModel(''); setAdding(false); reload();
+    setAgentSel(''); setName(''); setRole(''); setModel(''); setAdding(false); reload();
   };
   const remove = async (id: string) => { await boardsApi.agents.remove(board.id, lane.id, id); reload(); };
 
@@ -325,6 +329,9 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
       {agents.map((a) => (
         <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '4px 0' }}>
           <span style={{ fontWeight: 600 }}>{a.name ?? a.role}</span>
+          <span className="badge-blue" style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, textTransform: 'capitalize' }} title="Role this agent runs under in this lane">
+            {a.role}
+          </span>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
             {a.runtime}
             {a.model ? ` · ${a.model}` : ' · default LLM'}
@@ -342,9 +349,11 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
                 <option key={`${a.kind}:${a.ref}`} value={`${a.kind}:${a.ref}`}>{a.name}</option>
               ))}
             </Select>
+            <input style={{ ...inputStyle, width: 140 }} placeholder="name (blank = agent's)" value={name} onChange={(e) => setName(e.target.value)} title="Display name for this lane slot" />
+            <input style={{ ...inputStyle, width: 120 }} placeholder="role (e.g. QA)" value={role} onChange={(e) => setRole(e.target.value)} title="Role this agent runs under in this lane" />
             <input style={{ ...inputStyle, width: 160 }} placeholder="model (blank = default)" value={model} onChange={(e) => setModel(e.target.value)} />
             <button type="button" style={btnPrimary} onClick={add} disabled={!agentSel}>Add</button>
-            <button type="button" style={btnSubtle} onClick={() => { setAdding(false); setAgentSel(''); setModel(''); }}>Cancel</button>
+            <button type="button" style={btnSubtle} onClick={() => { setAdding(false); setAgentSel(''); setName(''); setRole(''); setModel(''); }}>Cancel</button>
           </div>
           {available.length === 0 && (
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>

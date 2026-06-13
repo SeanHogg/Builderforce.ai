@@ -2559,7 +2559,7 @@ export const boardsApi = {
   agents: {
     list: (boardId: string, laneId: string): Promise<SwimlaneAgent[]> =>
       request<{ assignments: SwimlaneAgent[] }>(`/api/boards/${boardId}/swimlanes/${laneId}/agents`).then((r) => r.assignments ?? []),
-    create: (boardId: string, laneId: string, body: { agentKind: 'workforce' | 'registered'; agentRef: string; model?: string | null; position?: number }): Promise<SwimlaneAgent> =>
+    create: (boardId: string, laneId: string, body: { agentKind: 'workforce' | 'registered'; agentRef: string; name?: string | null; role?: string | null; model?: string | null; position?: number }): Promise<SwimlaneAgent> =>
       request(`/api/boards/${boardId}/swimlanes/${laneId}/agents`, { method: 'POST', body: JSON.stringify(body) }),
     remove: (boardId: string, laneId: string, id: string): Promise<void> =>
       request<void>(`/api/boards/${boardId}/swimlanes/${laneId}/agents/${id}`, { method: 'DELETE' }),

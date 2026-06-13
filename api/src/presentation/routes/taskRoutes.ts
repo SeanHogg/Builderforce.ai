@@ -6,6 +6,7 @@ import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { auditEvents, projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { invalidateCompletedByAssignee } from './reportRoutes';
 import { AuditEventType } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
@@ -205,6 +206,13 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
       archived?: boolean;
     }>();
     const task = await taskService.updateTask(id, body);
+
+    // Any status write can change which tasks fall in the completed-by-assignee
+    // window (moved into OR out of a done-class lane), so bust that rollup's
+    // per-tenant cache token. Best-effort — a stale rollup self-heals on the KV TTL.
+    if (body.status !== undefined) {
+      await invalidateCompletedByAssignee(c.env as Env, c.get('tenantId')).catch(() => {});
+    }
 
     // On transition to Done, finalize the ticket → commit + PR (host relay or
     // cloud server-side; see dispatchTaskFinalize).
