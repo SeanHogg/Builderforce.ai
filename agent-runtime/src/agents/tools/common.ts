@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import type { ToolContentBlock } from "@builderforce/agent-tools";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { detectMime } from "../../media/mime.js";
 import type { ImageSanitizationLimits } from "../image-sanitization.js";
@@ -239,6 +240,46 @@ export async function nativeToolData(
   } catch (err) {
     return { error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+/** Map a legacy `AgentToolResult.content` array to the shared {@link ToolContentBlock}s
+ *  the native engine surfaces — text passes through; image blocks become `media`. */
+function mapContentBlocks(content: AgentToolResult<unknown>["content"] | undefined): ToolContentBlock[] {
+  if (!Array.isArray(content)) return [];
+  const out: ToolContentBlock[] = [];
+  for (const block of content) {
+    if (!block || typeof block !== "object") continue;
+    const b = block as unknown as Record<string, unknown>;
+    if (b.type === "text" && typeof b.text === "string") {
+      out.push({ type: "text", text: b.text });
+    } else if (b.type === "image" && typeof b.data === "string") {
+      out.push({
+        type: "media",
+        mediaType: "image",
+        base64: b.data,
+        mimeType: typeof b.mimeType === "string" ? b.mimeType : undefined,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Throw-safe bridge for native MEDIA tools: returns both the model-readable `data`
+ * (from `.details`) AND the rich `content` blocks (images/MEDIA tokens) mapped to the
+ * shared {@link ToolContentBlock} shape, so a media tool runs under the one contract.
+ */
+export async function nativeToolResult(
+  run: () => Promise<AgentToolResult<unknown>>,
+): Promise<{ data: Record<string, unknown>; content?: ToolContentBlock[] }> {
+  let result: AgentToolResult<unknown>;
+  try {
+    result = await run();
+  } catch (err) {
+    return { data: { error: err instanceof Error ? err.message : String(err) } };
+  }
+  const content = mapContentBlocks(result.content);
+  return content.length ? { data: detailsData(result), content } : { data: detailsData(result) };
 }
 
 export async function imageResult(params: {

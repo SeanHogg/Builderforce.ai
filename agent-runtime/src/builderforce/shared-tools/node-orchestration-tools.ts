@@ -29,6 +29,7 @@ import {
   type WorkflowStep,
 } from "../orchestrator.js";
 import { loadProjectContext, saveSessionHandoff } from "../project-context.js";
+import { buildGithubIssueWorkflowToolDef } from "../tools/github-issue-workflow-tool.js";
 
 /** Per-run orchestration context (channel/session routing for spawned subagents) +
  *  optional ticket linkage. Injected at registry-build time on surfaces that have it;
@@ -359,4 +360,5 @@ export const NODE_ORCHESTRATION_TOOLS: readonly ToolDefinition[] = [
   agentFleetTool,
   workflowStatusTool,
   saveSessionHandoffTool,
+  buildGithubIssueWorkflowToolDef(),
 ];

@@ -44,6 +44,11 @@ import { buildSessionStatusToolDef } from "../../agents/tools/session-status-too
 import { buildSubagentsToolDef } from "../../agents/tools/subagents-tool.js";
 import { buildNodesToolDef } from "../../agents/tools/nodes-tool.js";
 import { buildCronToolDef } from "../../agents/tools/cron-tool.js";
+import { buildTtsToolDef } from "../../agents/tools/tts-tool.js";
+import { buildCanvasToolDef } from "../../agents/tools/canvas-tool.js";
+import { buildImageToolDef } from "../../agents/tools/image-tool.js";
+import { buildMessageToolDef } from "../../agents/tools/message-tool.js";
+import { buildBrowserToolDef } from "../../agents/tools/browser-tool.js";
 import type { GatewayMessageChannel } from "../../utils/message-channel.js";
 
 /** The per-run dependency bag a Node service tool may close over. Extensible: new
@@ -63,6 +68,10 @@ export interface NodeServiceToolDeps {
   agentGroupChannel?: string | null;
   agentGroupSpace?: string | null;
   sandboxed?: boolean;
+  /** Used by the image tool (vision) — it is omitted unless an agentDir is present. */
+  agentDir?: string;
+  workspaceDir?: string;
+  modelHasVision?: boolean;
 }
 
 // ── memory_search / memory_get ────────────────────────────────────────────────────
@@ -439,7 +448,22 @@ export function buildNodeServiceTools(deps: NodeServiceToolDeps): ToolDefinition
     buildSubagentsToolDef({ agentSessionKey: deps.agentSessionKey }),
     buildNodesToolDef({ agentSessionKey: deps.agentSessionKey, config: deps.config }),
     buildCronToolDef({ agentSessionKey: deps.agentSessionKey }),
+    buildTtsToolDef({ config: deps.config, agentChannel: deps.agentChannel }),
+    buildCanvasToolDef({ config: deps.config }),
+    buildMessageToolDef({
+      config: deps.config,
+      agentSessionKey: deps.agentSessionKey,
+      agentAccountId: deps.agentAccountId,
+    }),
+    buildBrowserToolDef({}),
   ];
+  const imageTool = buildImageToolDef({
+    config: deps.config,
+    agentDir: deps.agentDir,
+    workspaceDir: deps.workspaceDir,
+    modelHasVision: deps.modelHasVision,
+  });
+  if (imageTool) tools.push(imageTool);
   const memoryCtx = resolveMemoryToolContext(deps);
   if (memoryCtx) {
     tools.push(memorySearchToolDef(memoryCtx), memoryGetToolDef(memoryCtx));

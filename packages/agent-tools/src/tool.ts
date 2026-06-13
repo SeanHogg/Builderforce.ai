@@ -55,7 +55,19 @@ export interface ToolResult {
   data: Record<string, unknown>;
   /** Optional control signal for the engine to interpret after this call. */
   control?: ToolControl;
+  /** Optional rich output blocks (generated/fetched media + extra text) for tools that
+   *  produce more than JSON — e.g. image/tts/canvas/browser-snapshot. The engine
+   *  surfaces these to its host (channel delivery, transcript) ALONGSIDE `data`; a
+   *  surface that cannot render media simply ignores them. Keeps `data` the
+   *  model-readable JSON while letting media tools live under the one contract. */
+  content?: ToolContentBlock[];
 }
+
+/** A rich output block a tool can emit via {@link ToolResult.content}. Runtime-agnostic:
+ *  `media` carries a path/uri or inline base64 the host resolves; `text` is extra prose. */
+export type ToolContentBlock =
+  | { type: "text"; text: string }
+  | { type: "media"; mediaType: "image" | "audio" | "video"; path?: string; uri?: string; base64?: string; mimeType?: string; hint?: string };
 
 export type ToolControl =
   | { kind: "finish"; summary: string }

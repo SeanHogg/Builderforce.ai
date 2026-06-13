@@ -22,8 +22,9 @@ import { normalizeMessageChannel } from "../../utils/message-channel.js";
 import { resolveSessionAgentId } from "../agent-scope.js";
 import { listChannelSupportedActions } from "../channel-tools.js";
 import { channelTargetSchema, channelTargetsSchema, stringEnum } from "../schema/typebox.js";
-import type { AnyAgentTool } from "./common.js";
-import { jsonResult, readNumberParam, readStringParam } from "./common.js";
+import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
+import type { AgentToolResult, AnyAgentTool } from "./common.js";
+import { jsonResult, nativeToolResult, readNumberParam, readStringParam } from "./common.js";
 import { resolveGatewayOptions } from "./gateway.js";
 
 const AllMessageActions = CHANNEL_MESSAGE_ACTION_NAMES;
@@ -557,7 +558,14 @@ function buildMessageToolDescription(options?: {
   return `${baseDescription} Supports actions: send, delete, react, poll, pin, threads, and more.`;
 }
 
-export function createMessageTool(options?: MessageToolOptions): AnyAgentTool {
+/** Resolve the dynamic schema + description + resolved account for the message tool;
+ *  shared by the pi wrapper and the native ToolDefinition. */
+function messageToolSetup(options?: MessageToolOptions): {
+  agentAccountId: string | undefined;
+  // biome-ignore lint/suspicious/noExplicitAny: dynamic TypeBox schema shape
+  schema: any;
+  description: string;
+} {
   const agentAccountId = resolveAgentAccountId(options?.agentAccountId);
   const schema = options?.config
     ? buildMessageToolSchema({
@@ -571,13 +579,17 @@ export function createMessageTool(options?: MessageToolOptions): AnyAgentTool {
     currentChannel: options?.currentChannelProvider,
     currentChannelId: options?.currentChannelId,
   });
+  return { agentAccountId, schema, description };
+}
 
-  return {
-    label: "Message",
-    name: "message",
-    description,
-    parameters: schema,
-    execute: async (_toolCallId, args, signal) => {
+/** Shared implementation — pi wrapper + native ToolDefinition both delegate here (DRY). */
+export async function runMessage(
+  options: MessageToolOptions | undefined,
+  agentAccountId: string | undefined,
+  args: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<AgentToolResult<unknown>> {
+  {
       // Check if already aborted before doing any work
       if (signal?.aborted) {
         const err = new Error("Message send aborted");
@@ -671,6 +683,32 @@ export function createMessageTool(options?: MessageToolOptions): AnyAgentTool {
         return toolResult;
       }
       return jsonResult(result.payload);
-    },
+  }
+}
+
+export function createMessageTool(options?: MessageToolOptions): AnyAgentTool {
+  const { agentAccountId, schema, description } = messageToolSetup(options);
+  return {
+    label: "Message",
+    name: "message",
+    description,
+    parameters: schema,
+    execute: async (_toolCallId, args, signal) =>
+      runMessage(options, agentAccountId, args as Record<string, unknown>, signal),
   };
+}
+
+/** Native shared {@link ToolDefinition} (cap `message`) — reuses the dynamic schema and the
+ *  shared `runMessage` body; media replies ride {@link ToolResult.content}. */
+export function buildMessageToolDef(options?: MessageToolOptions): ToolDefinition {
+  const { agentAccountId, schema, description } = messageToolSetup(options);
+  return defineTool({
+    name: "message",
+    description,
+    parameters: schema as unknown as ToolDefinition["schema"]["function"]["parameters"],
+    requires: ["message"],
+    async execute(args, ctx): Promise<ToolResult> {
+      return nativeToolResult(() => runMessage(options, agentAccountId, args, ctx.signal));
+    },
+  });
 }

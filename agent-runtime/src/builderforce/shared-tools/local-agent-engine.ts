@@ -22,6 +22,7 @@ import type {
   ToolRegistry,
   ToolSchema,
 } from "@builderforce/agent-tools";
+import { nativeComplete, type LlmMessage, type LlmToolSchema } from "../model/native-llm.js";
 
 /** One tool call in an OpenAI-compatible completion (mirrors the cloud `RawToolCall`). */
 export interface RawToolCall {
@@ -48,6 +49,9 @@ export interface LocalEngineSinks {
   onAssistantText?: (text: string) => void;
   onToolUse?: (name: string, toolCallId: string, args: Record<string, unknown>) => void;
   onToolResult?: (name: string, toolCallId: string, result: Record<string, unknown>) => void;
+  /** Rich output blocks (media/extra text) a tool emitted — surfaced so the host can
+   *  deliver them (channel attachment, transcript). Ignored by surfaces without media. */
+  onToolContent?: (name: string, toolCallId: string, content: import("@builderforce/agent-tools").ToolContentBlock[]) => void;
 }
 
 export interface LocalEngineDeps {
@@ -107,6 +111,7 @@ export class LocalAgentEngine implements AgentEngine {
         const result = await registry.dispatch(name, args, ctx);
         const toolResult: Record<string, unknown> = result.data;
         sinks?.onToolResult?.(name, toolCallId, toolResult);
+        if (result.content?.length) sinks?.onToolContent?.(name, toolCallId, result.content);
 
         if (result.control?.kind === "finish") {
           if (result.control.summary) finalOutput = result.control.summary;
@@ -134,34 +139,18 @@ export class LocalAgentEngine implements AgentEngine {
 
 /**
  * A framework-free {@link LlmComplete} backed by the gateway's OpenAI-compatible
- * `/v1/chat/completions` endpoint over `fetch` — the native model
- * client in the local engine. Kept tiny and dependency-free.
+ * `/v1/chat/completions` endpoint — delegates to the native model client
+ * ({@link nativeComplete}), the pi-ai replacement (cutover stage 2). One model client,
+ * no third-party SDK.
  */
 export function createGatewayComplete(opts: { baseUrl: string; apiKey: string }): LlmComplete {
-  const endpoint = `${opts.baseUrl.replace(/\/$/, "")}/v1/chat/completions`;
+  const client = { baseUrl: opts.baseUrl, apiKey: opts.apiKey };
   return async (req, signal) => {
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${opts.apiKey}` },
-      body: JSON.stringify({
-        ...(req.model ? { model: req.model } : {}),
-        messages: req.messages,
-        tools: req.tools,
-        tool_choice: "auto",
-      }),
+    const result = await nativeComplete(
+      client,
+      { messages: req.messages as LlmMessage[], tools: req.tools as LlmToolSchema[] | undefined, model: req.model },
       signal,
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`gateway ${res.status}: ${body.slice(0, 300)}`);
-    }
-    const json = (await res.json().catch(() => null)) as
-      | { choices?: Array<{ message?: { content?: unknown; tool_calls?: unknown } }> }
-      | null;
-    const choice = json?.choices?.[0]?.message;
-    return {
-      content: typeof choice?.content === "string" ? choice.content : "",
-      toolCalls: Array.isArray(choice?.tool_calls) ? (choice.tool_calls as RawToolCall[]) : [],
-    };
+    );
+    return { content: result.content, toolCalls: result.toolCalls as RawToolCall[] };
   };
 }

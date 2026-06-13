@@ -42,6 +42,11 @@ const SECRET_KEYS = [
   'GOOGLE_API_KEY',
   'TOGETHER_API_KEY',
   'FLUX_API_KEY',
+  // Web Push (deploy notifications) — see api/scripts/gen-vapid-keys.mjs
+  'VAPID_PUBLIC_KEY',
+  'VAPID_PRIVATE_KEY',
+  'VAPID_SUBJECT',
+  'DEPLOY_NOTIFY_SECRET',
 ];
 
 for (const key of SECRET_KEYS) {

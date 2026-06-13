@@ -26,7 +26,8 @@ import { applyBrowserProxyPaths, persistBrowserProxyFiles } from "../../browser/
 import { loadConfig } from "../../config/config.js";
 import { wrapExternalContent } from "../../security/external-content.js";
 import { BrowserToolSchema } from "./browser-tool.schema.js";
-import { type AnyAgentTool, imageResultFromFile, jsonResult, readStringParam } from "./common.js";
+import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
+import { type AgentToolResult, type AnyAgentTool, imageResultFromFile, jsonResult, nativeToolResult, readStringParam } from "./common.js";
 import { callGatewayTool } from "./gateway.js";
 import { listNodes, resolveNodeIdFromList, type NodeListNode } from "./nodes-utils.js";
 
@@ -218,30 +219,35 @@ function resolveBrowserBaseUrl(params: {
   return undefined;
 }
 
-export function createBrowserTool(opts?: {
+export interface BrowserDeps {
   sandboxBridgeUrl?: string;
   allowHostControl?: boolean;
-}): AnyAgentTool {
+}
+
+function browserToolDescription(opts?: BrowserDeps): string {
   const targetDefault = opts?.sandboxBridgeUrl ? "sandbox" : "host";
   const hostHint =
     opts?.allowHostControl === false ? "Host target blocked by policy." : "Host target allowed.";
-  return {
-    label: "Browser",
-    name: "browser",
-    description: [
-      "Control the browser via BuilderForceAgents's browser control server (status/start/stop/profiles/tabs/open/snapshot/screenshot/actions).",
-      'Profiles: use profile="chrome" for Chrome extension relay takeover (your existing Chrome tabs). Use profile="builderforce" for the isolated builderforce-managed browser.',
-      'If the user mentions the Chrome extension / Browser Relay / toolbar button / “attach tab”, ALWAYS use profile="chrome" (do not ask which profile).',
-      'When a node-hosted browser proxy is available, the tool may auto-route to it. Pin a node with node=<id|name> or target="node".',
-      "Chrome extension relay needs an attached tab: user must click the BuilderForceAgents Browser Relay toolbar icon on the tab (badge ON). If no tab is connected, ask them to attach it.",
-      "When using refs from snapshot (e.g. e12), keep the same tab: prefer passing targetId from the snapshot response into subsequent actions (act/click/type/etc).",
-      'For stable, self-resolving refs across calls, use snapshot with refs="aria" (Playwright aria-ref ids). Default refs="role" are role+name-based.',
-      "Use snapshot+act for UI automation. Avoid act:wait by default; use only in exceptional cases when no reliable UI state exists.",
-      `target selects browser location (sandbox|host|node). Default: ${targetDefault}.`,
-      hostHint,
-    ].join(" "),
-    parameters: BrowserToolSchema,
-    execute: async (_toolCallId, args) => {
+  return [
+    "Control the browser via BuilderForceAgents's browser control server (status/start/stop/profiles/tabs/open/snapshot/screenshot/actions).",
+    'Profiles: use profile="chrome" for Chrome extension relay takeover (your existing Chrome tabs). Use profile="builderforce" for the isolated builderforce-managed browser.',
+    'If the user mentions the Chrome extension / Browser Relay / toolbar button / “attach tab”, ALWAYS use profile="chrome" (do not ask which profile).',
+    'When a node-hosted browser proxy is available, the tool may auto-route to it. Pin a node with node=<id|name> or target="node".',
+    "Chrome extension relay needs an attached tab: user must click the BuilderForceAgents Browser Relay toolbar icon on the tab (badge ON). If no tab is connected, ask them to attach it.",
+    "When using refs from snapshot (e.g. e12), keep the same tab: prefer passing targetId from the snapshot response into subsequent actions (act/click/type/etc).",
+    'For stable, self-resolving refs across calls, use snapshot with refs="aria" (Playwright aria-ref ids). Default refs="role" are role+name-based.',
+    "Use snapshot+act for UI automation. Avoid act:wait by default; use only in exceptional cases when no reliable UI state exists.",
+    `target selects browser location (sandbox|host|node). Default: ${targetDefault}.`,
+    hostHint,
+  ].join(" ");
+}
+
+/** Shared implementation — pi wrapper + native ToolDefinition both delegate here (DRY). */
+export async function runBrowser(
+  opts: BrowserDeps | undefined,
+  args: Record<string, unknown>,
+): Promise<AgentToolResult<unknown>> {
+  {
       const params = args as Record<string, unknown>;
       const action = readStringParam(params, "action", { required: true });
       const profile = readStringParam(params, "profile");
@@ -823,6 +829,29 @@ export function createBrowserTool(opts?: {
         default:
           throw new Error(`Unknown action: ${action}`);
       }
-    },
+  }
+}
+
+export function createBrowserTool(opts?: BrowserDeps): AnyAgentTool {
+  return {
+    label: "Browser",
+    name: "browser",
+    description: browserToolDescription(opts),
+    parameters: BrowserToolSchema,
+    execute: async (_toolCallId, args) => runBrowser(opts, args as Record<string, unknown>),
   };
+}
+
+/** Native shared {@link ToolDefinition} (cap `process`) — reuses the schema and the shared
+ *  `runBrowser` body; snapshots/screenshots ride {@link ToolResult.content}. */
+export function buildBrowserToolDef(opts?: BrowserDeps): ToolDefinition {
+  return defineTool({
+    name: "browser",
+    description: browserToolDescription(opts),
+    parameters: BrowserToolSchema as unknown as ToolDefinition["schema"]["function"]["parameters"],
+    requires: ["process"],
+    async execute(args): Promise<ToolResult> {
+      return nativeToolResult(() => runBrowser(opts, args));
+    },
+  });
 }

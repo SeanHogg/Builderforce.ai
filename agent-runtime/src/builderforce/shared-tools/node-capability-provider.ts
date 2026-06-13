@@ -34,7 +34,7 @@ const execAsync = promisify(exec);
  *  Node singletons (the workflow orchestrator, the project session/knowledge store)
  *  directly — no provider service object is needed, only the capability gate. */
 export const NODE_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
-  "repo.read", "repo.search", "repo.write", "repo.edit", "repo.delete", "shell", "process", "web", "orchestrate", "memory", "message",
+  "repo.read", "repo.search", "repo.write", "repo.edit", "repo.delete", "shell", "process", "web", "orchestrate", "memory", "message", "media",
 ]);
 
 const MAX_WEB_BYTES = 256 * 1024;

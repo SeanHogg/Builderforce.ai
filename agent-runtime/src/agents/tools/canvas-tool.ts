@@ -7,7 +7,8 @@ import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import { imageMimeFromFormat } from "../../media/mime.js";
 import { resolveImageSanitizationLimits } from "../image-sanitization.js";
 import { optionalStringEnum, stringEnum } from "../schema/typebox.js";
-import { type AnyAgentTool, imageResult, jsonResult, readStringParam } from "./common.js";
+import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
+import { type AgentToolResult, type AnyAgentTool, imageResult, jsonResult, nativeToolResult, readStringParam } from "./common.js";
 import { callGatewayTool, readGatewayCallOptions } from "./gateway.js";
 import { resolveNodeId } from "./nodes-utils.js";
 
@@ -50,15 +51,17 @@ const CanvasToolSchema = Type.Object({
   jsonlPath: Type.Optional(Type.String()),
 });
 
-export function createCanvasTool(options?: { config?: BuilderForceAgentsConfig }): AnyAgentTool {
+export interface CanvasDeps {
+  config?: BuilderForceAgentsConfig;
+}
+
+/** Shared implementation — pi wrapper + native ToolDefinition both delegate here (DRY). */
+export async function runCanvas(
+  options: CanvasDeps | undefined,
+  args: Record<string, unknown>,
+): Promise<AgentToolResult<unknown>> {
   const imageSanitization = resolveImageSanitizationLimits(options?.config);
-  return {
-    label: "Canvas",
-    name: "canvas",
-    description:
-      "Control node canvases (present/hide/navigate/eval/snapshot/A2UI). Use snapshot to capture the rendered UI.",
-    parameters: CanvasToolSchema,
-    execute: async (_toolCallId, args) => {
+  {
       const params = args as Record<string, unknown>;
       const action = readStringParam(params, "action", { required: true });
       const gatewayOpts = readGatewayCallOptions(params);
@@ -183,6 +186,31 @@ export function createCanvasTool(options?: { config?: BuilderForceAgentsConfig }
         default:
           throw new Error(`Unknown action: ${action}`);
       }
-    },
+  }
+}
+
+export function createCanvasTool(options?: CanvasDeps): AnyAgentTool {
+  return {
+    label: "Canvas",
+    name: "canvas",
+    description:
+      "Control node canvases (present/hide/navigate/eval/snapshot/A2UI). Use snapshot to capture the rendered UI.",
+    parameters: CanvasToolSchema,
+    execute: async (_toolCallId, args) => runCanvas(options, args as Record<string, unknown>),
   };
+}
+
+/** Native shared {@link ToolDefinition} (cap `media`) — reuses the TypeBox schema and the
+ *  shared `runCanvas` body; snapshot images ride {@link ToolResult.content}. */
+export function buildCanvasToolDef(options?: CanvasDeps): ToolDefinition {
+  return defineTool({
+    name: "canvas",
+    description:
+      "Control node canvases (present/hide/navigate/eval/snapshot/A2UI). Use snapshot to capture the rendered UI.",
+    parameters: CanvasToolSchema as unknown as ToolDefinition["schema"]["function"]["parameters"],
+    requires: ["media"],
+    async execute(args): Promise<ToolResult> {
+      return nativeToolResult(() => runCanvas(options, args));
+    },
+  });
 }

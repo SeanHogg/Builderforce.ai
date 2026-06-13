@@ -14,7 +14,9 @@ import { ensureBuilderForceAgentsModelsJson } from "../models-config.js";
 import { discoverAuthStorage, discoverModels } from "../pi-model-discovery.js";
 import type { SandboxFsBridge } from "../sandbox/fs-bridge.js";
 import { normalizeWorkspaceDir } from "../workspace-dir.js";
-import type { AnyAgentTool } from "./common.js";
+import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
+import type { AgentToolResult, AnyAgentTool } from "./common.js";
+import { nativeToolData } from "./common.js";
 import {
   coerceImageAssistantText,
   coerceImageModelConfig,
@@ -331,14 +333,24 @@ async function runImagePrompt(params: {
   };
 }
 
-export function createImageTool(options?: {
+export interface ImageDeps {
   config?: BuilderForceAgentsConfig;
   agentDir?: string;
   workspaceDir?: string;
   sandbox?: ImageSandboxConfig;
   /** If true, the model has native vision capability and images in the prompt are auto-injected */
   modelHasVision?: boolean;
-}): AnyAgentTool | null {
+}
+
+interface ImageToolDescriptor {
+  agentDir: string;
+  description: string;
+  localRoots: readonly string[];
+}
+
+/** Resolve whether the image tool is enabled for these deps (parity with the legacy
+ *  factory's `null`/throw), plus the description + local roots the body needs. */
+function imageToolDescriptor(options?: ImageDeps): ImageToolDescriptor | null {
   const agentDir = options?.agentDir?.trim();
   if (!agentDir) {
     const explicit = coerceImageModelConfig(options?.config);
@@ -347,16 +359,11 @@ export function createImageTool(options?: {
     }
     return null;
   }
-  // The effective image-model config depends on async auth resolution, so it is
-  // resolved lazily inside `execute` (below) — the factory MUST stay synchronous
-  // because it runs inside the synchronous tool-assembly path.
-
   // If model has native vision, images in the prompt are auto-injected
   // so this tool is only needed when image wasn't provided in the prompt
   const description = options?.modelHasVision
     ? "Analyze one or more images with a vision model. Use image for a single path/URL, or images for multiple (up to 20). Only use this tool when images were NOT already provided in the user's message. Images mentioned in the prompt are automatically visible to you."
     : "Analyze one or more images with the configured image model (agents.defaults.imageModel). Use image for a single path/URL, or images for multiple (up to 20). Provide a prompt describing what to analyze.";
-
   const localRoots = (() => {
     const roots = getDefaultLocalRoots();
     const workspaceDir = normalizeWorkspaceDir(options?.workspaceDir);
@@ -365,24 +372,33 @@ export function createImageTool(options?: {
     }
     return Array.from(new Set([...roots, workspaceDir]));
   })();
+  return { agentDir, description, localRoots };
+}
 
-  return {
-    label: "Image",
-    name: "image",
-    description,
-    parameters: Type.Object({
-      prompt: Type.Optional(Type.String()),
-      image: Type.Optional(Type.String({ description: "Single image path or URL." })),
-      images: Type.Optional(
-        Type.Array(Type.String(), {
-          description: "Multiple image paths or URLs (up to maxImages, default 20).",
-        }),
-      ),
-      model: Type.Optional(Type.String()),
-      maxBytesMb: Type.Optional(Type.Number()),
-      maxImages: Type.Optional(Type.Number()),
+const ImageToolSchema = Type.Object({
+  prompt: Type.Optional(Type.String()),
+  image: Type.Optional(Type.String({ description: "Single image path or URL." })),
+  images: Type.Optional(
+    Type.Array(Type.String(), {
+      description: "Multiple image paths or URLs (up to maxImages, default 20).",
     }),
-    execute: async (_toolCallId, args) => {
+  ),
+  model: Type.Optional(Type.String()),
+  maxBytesMb: Type.Optional(Type.Number()),
+  maxImages: Type.Optional(Type.Number()),
+});
+
+/** Shared implementation — pi wrapper + native ToolDefinition both delegate here (DRY).
+ *  The effective image-model config depends on async auth resolution, so it is resolved
+ *  lazily inside the body (below). */
+export async function runImage(
+  options: ImageDeps | undefined,
+  descriptor: ImageToolDescriptor,
+  args: Record<string, unknown>,
+): Promise<AgentToolResult<unknown>> {
+  const { agentDir, localRoots } = descriptor;
+  {
+    {
       const record = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
 
       // MARK: - Normalize image + images input and dedupe while preserving order
@@ -587,6 +603,34 @@ export function createImageTool(options?: {
           attempts: result.attempts,
         },
       };
-    },
+    }
+  }
+}
+
+export function createImageTool(options?: ImageDeps): AnyAgentTool | null {
+  const descriptor = imageToolDescriptor(options);
+  if (!descriptor) return null;
+  return {
+    label: "Image",
+    name: "image",
+    description: descriptor.description,
+    parameters: ImageToolSchema,
+    execute: async (_toolCallId, args) => runImage(options, descriptor, args as Record<string, unknown>),
   };
+}
+
+/** Native shared {@link ToolDefinition} (cap `media`) — reuses the TypeBox schema and the
+ *  shared `runImage` body; returns text analysis as `data`. Null when image is not enabled. */
+export function buildImageToolDef(options?: ImageDeps): ToolDefinition | null {
+  const descriptor = imageToolDescriptor(options);
+  if (!descriptor) return null;
+  return defineTool({
+    name: "image",
+    description: descriptor.description,
+    parameters: ImageToolSchema as unknown as ToolDefinition["schema"]["function"]["parameters"],
+    requires: ["media"],
+    async execute(args): Promise<ToolResult> {
+      return { data: await nativeToolData(() => runImage(options, descriptor, args)) };
+    },
+  });
 }
