@@ -146,6 +146,34 @@ export interface Context {
   tools?: Tool[];
 }
 
+export interface OpenRouterRouting {
+  only?: string[];
+  order?: string[];
+}
+export interface VercelGatewayRouting {
+  only?: string[];
+  order?: string[];
+}
+
+/** OpenAI-completions compatibility overrides (faithful to pi-ai 0.54). */
+export interface OpenAICompletionsCompat {
+  supportsStore?: boolean;
+  supportsDeveloperRole?: boolean;
+  supportsReasoningEffort?: boolean;
+  supportsUsageInStreaming?: boolean;
+  maxTokensField?: "max_completion_tokens" | "max_tokens";
+  requiresToolResultName?: boolean;
+  requiresAssistantAfterToolResult?: boolean;
+  requiresThinkingAsText?: boolean;
+  requiresMistralToolIds?: boolean;
+  thinkingFormat?: "openai" | "zai" | "qwen";
+  openRouterRouting?: OpenRouterRouting;
+  vercelGatewayRouting?: VercelGatewayRouting;
+  supportsStrictMode?: boolean;
+}
+// biome-ignore lint/suspicious/noEmptyInterface: faithful to pi-ai's empty OpenAIResponsesCompat
+export interface OpenAIResponsesCompat {}
+
 export interface Model<TApi extends Api = Api> {
   id: string;
   name: string;
@@ -163,9 +191,13 @@ export interface Model<TApi extends Api = Api> {
   contextWindow: number;
   maxTokens: number;
   headers?: Record<string, string>;
-  /** Compatibility overrides for OpenAI-compatible APIs. Loosely typed here; the
-   *  gateway owns provider-specific compat in the native runtime. */
-  compat?: unknown;
+  /** Compatibility overrides for OpenAI-compatible APIs (conditional on `api`, faithful
+   *  to pi-ai so a native Model is assignable to pi-ai's during the cutover transition). */
+  compat?: TApi extends "openai-completions"
+    ? OpenAICompletionsCompat
+    : TApi extends "openai-responses"
+      ? OpenAIResponsesCompat
+      : never;
 }
 
 export type OAuthCredentials = {

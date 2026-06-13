@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { OAuthCredentials } from "@mariozechner/pi-ai";
+import type { OAuthCredentials } from "../builderforce/model/types.js";
 import { afterEach, describe, expect, it } from "vitest";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import {

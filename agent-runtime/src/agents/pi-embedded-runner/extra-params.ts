@@ -1,5 +1,5 @@
 import type { StreamFn } from "@mariozechner/pi-agent-core";
-import type { SimpleStreamOptions } from "@mariozechner/pi-ai";
+import type { SimpleStreamOptions } from "../../builderforce/model/types.js";
 import { streamSimple } from "@mariozechner/pi-ai";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import { log } from "./logger.js";

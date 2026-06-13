@@ -1,4 +1,4 @@
-import type { AssistantMessage, Model, ToolResultMessage } from "@mariozechner/pi-ai";
+import type { AssistantMessage, Model, ToolResultMessage } from "../builderforce/model/types.js";
 import { streamOpenAIResponses } from "@mariozechner/pi-ai";
 import { Type } from "@sinclair/typebox";
 import { describe, expect, it } from "vitest";

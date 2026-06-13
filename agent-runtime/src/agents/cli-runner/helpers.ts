@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
-import type { ImageContent } from "@mariozechner/pi-ai";
+import type { ImageContent } from "../../builderforce/model/types.js";
 import type { ThinkLevel } from "../../auto-reply/thinking.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import type { CliBackendConfig } from "../../config/types.js";

@@ -1,4 +1,4 @@
-import type { Model } from "@mariozechner/pi-ai/dist/types.js";
+import type { Model } from "../builderforce/model/types.js";
 import { expect } from "vitest";
 
 export const asRecord = (value: unknown): Record<string, unknown> => {

@@ -1,4 +1,4 @@
-import type { OAuthCredentials } from "@mariozechner/pi-ai";
+import type { OAuthCredentials } from "../builderforce/model/types.js";
 import { formatCliCommand } from "../cli/command-format.js";
 
 const QWEN_OAUTH_BASE_URL = "https://chat.qwen.ai";
