@@ -12,7 +12,7 @@
  */
 
 import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "../model/agent-types.js";
 import { Type } from "@sinclair/typebox";
 import { jsonResult, nativeToolData } from "../../agents/tools/common.js";
 import { runExec } from "../../process/exec.js";

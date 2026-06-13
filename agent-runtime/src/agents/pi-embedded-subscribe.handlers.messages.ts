@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentEvent, AgentMessage } from "../builderforce/model/agent-types.js";
 import { parseReplyDirectives } from "../auto-reply/reply/reply-directives.js";
 import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { emitAgentEvent } from "../infra/agent-events.js";

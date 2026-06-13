@@ -134,6 +134,25 @@ export interface ToolResultMessage<TDetails = any> {
 
 export type Message = UserMessage | AssistantMessage | ToolResultMessage;
 
+/**
+ * Incremental events emitted while an assistant message streams (faithful to pi-ai 0.54).
+ * Carried by the native agent-loop `AgentEvent` (`agent-types.ts`) and the streaming
+ * event stream; structurally identical to pi-ai's so the swap is a pure import-path change.
+ */
+export type AssistantMessageEvent =
+  | { type: "start"; partial: AssistantMessage }
+  | { type: "text_start"; contentIndex: number; partial: AssistantMessage }
+  | { type: "text_delta"; contentIndex: number; delta: string; partial: AssistantMessage }
+  | { type: "text_end"; contentIndex: number; content: string; partial: AssistantMessage }
+  | { type: "thinking_start"; contentIndex: number; partial: AssistantMessage }
+  | { type: "thinking_delta"; contentIndex: number; delta: string; partial: AssistantMessage }
+  | { type: "thinking_end"; contentIndex: number; content: string; partial: AssistantMessage }
+  | { type: "toolcall_start"; contentIndex: number; partial: AssistantMessage }
+  | { type: "toolcall_delta"; contentIndex: number; delta: string; partial: AssistantMessage }
+  | { type: "toolcall_end"; contentIndex: number; toolCall: ToolCall; partial: AssistantMessage }
+  | { type: "done"; reason: Extract<StopReason, "stop" | "length" | "toolUse">; message: AssistantMessage }
+  | { type: "error"; reason: Extract<StopReason, "aborted" | "error">; error: AssistantMessage };
+
 export interface Tool<TParameters extends TSchema = TSchema> {
   name: string;
   description: string;

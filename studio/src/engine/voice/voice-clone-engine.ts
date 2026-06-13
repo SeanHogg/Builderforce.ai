@@ -77,6 +77,10 @@ export class VoiceCloneEngine {
     options.signal?.throwIfAborted();
 
     const { samples } = this.codec.decode(codec);
+    // The reference vocoder's absolute scale tracks raw mel energy and routinely
+    // exceeds [-1, 1]; peak-normalise at the engine boundary so the PCM contract
+    // holds (callers / encodeWav assume [-1, 1] and would otherwise clamp-distort).
+    peakNormalize(samples, 0.95);
     const durationMs = Math.round((samples.length / this.sampleRate) * 1000);
 
     return {
@@ -96,4 +100,17 @@ export class VoiceCloneEngine {
     const probed = await probeDevice('auto');
     return probed?.kind ?? 'cpu';
   }
+}
+
+/** Scale a signal in place so its peak magnitude equals `target` (no-op for
+ *  silence). Keeps synthesized PCM inside the [-1, 1] contract. */
+function peakNormalize(samples: Float32Array, target: number): void {
+  let peak = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const a = Math.abs(samples[i]);
+    if (a > peak) peak = a;
+  }
+  if (peak <= 0) return;
+  const gain = target / peak;
+  for (let i = 0; i < samples.length; i++) samples[i] *= gain;
 }

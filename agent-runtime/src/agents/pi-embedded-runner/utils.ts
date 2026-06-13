@@ -1,4 +1,4 @@
-import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
+import type { ThinkingLevel } from "../../builderforce/model/agent-types.js";
 import type { ReasoningLevel, ThinkLevel } from "../../auto-reply/thinking.js";
 
 export function mapThinkingLevel(level?: ThinkLevel): ThinkingLevel {

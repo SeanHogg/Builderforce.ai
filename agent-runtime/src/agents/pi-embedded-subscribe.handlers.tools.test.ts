@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@mariozechner/pi-agent-core";
+import type { AgentEvent } from "../builderforce/model/agent-types.js";
 import { describe, expect, it, vi } from "vitest";
 import type { MessagingToolSend } from "./pi-embedded-messaging.js";
 import {

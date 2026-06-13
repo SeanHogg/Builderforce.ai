@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "../../builderforce/model/agent-types.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import { truncateUtf16Safe } from "../../utils.js";
 import type { WorkspaceBootstrapFile } from "../workspace.js";

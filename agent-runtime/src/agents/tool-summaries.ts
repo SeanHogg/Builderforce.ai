@@ -1,4 +1,4 @@
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool } from "../builderforce/model/agent-types.js";
 
 export function buildToolSummaryMap(tools: AgentTool[]): Record<string, string> {
   const summaries: Record<string, string> = {};

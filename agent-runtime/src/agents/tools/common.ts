@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import type { ToolContentBlock } from "@builderforce/agent-tools";
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "../../builderforce/model/agent-types.js";
 import { detectMime } from "../../media/mime.js";
 import type { ImageSanitizationLimits } from "../image-sanitization.js";
 import { sanitizeToolResultImages } from "../tool-images.js";

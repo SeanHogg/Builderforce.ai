@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "../../../builderforce/model/agent-types.js";
 import type { Api, AssistantMessage, Model } from "../../../builderforce/model/types.js";
 import type { ThinkLevel } from "../../../auto-reply/thinking.js";
 import type { SessionSystemPromptReport } from "../../../config/sessions/types.js";

@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import type { AgentMessage, AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentMessage, AgentTool } from "../../builderforce/model/agent-types.js";
 import type { SessionManager } from "@mariozechner/pi-coding-agent";
 import type { TSchema } from "@sinclair/typebox";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";

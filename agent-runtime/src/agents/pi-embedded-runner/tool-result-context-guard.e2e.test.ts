@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "../../builderforce/model/agent-types.js";
 import { describe, expect, it } from "vitest";
 import {
   CONTEXT_LIMIT_TRUNCATION_NOTICE,

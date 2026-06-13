@@ -1,0 +1,70 @@
+{
+  "name": "@seanhogg/builderforce-voice",
+  "version": "0.1.0",
+  "description": "Voice-cloning + LLM-narration client for Builderforce.ai Studio. One resolveNarrationEngine() seam routes text→speech through an on-device SSM clone engine (WebGPU, $0) or the metered gateway synthesize endpoint, with an honest named-voice fallback. Consumed by hired.video Studio.",
+  "license": "MIT",
+  "author": "Sean Hogg",
+  "homepage": "https://github.com/SeanHogg/Builderforce.ai/tree/main/voice#readme",
+  "bugs": {
+    "url": "https://github.com/SeanHogg/Builderforce.ai/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SeanHogg/Builderforce.ai.git",
+    "directory": "voice"
+  },
+  "keywords": [
+    "builderforce",
+    "voice-cloning",
+    "tts",
+    "text-to-speech",
+    "narration",
+    "ssm",
+    "webgpu",
+    "speaker-embedding",
+    "in-browser",
+    "sdk",
+    "typescript"
+  ],
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup --config tsup.config.ts",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "@seanhogg/builderforce-studio": ">=0.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@seanhogg/builderforce-studio": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.2",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.3"
+  }
+}

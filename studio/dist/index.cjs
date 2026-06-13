@@ -32,24 +32,38 @@ var src_exports = {};
 __export(src_exports, {
   CAMERA_MOVES: () => CAMERA_MOVES,
   MODEL_REGISTRY: () => MODEL_REGISTRY,
+  NeuralCodec: () => NeuralCodec,
+  SSMAcousticModel: () => SSMAcousticModel,
+  SSMVoiceProvider: () => SSMVoiceProvider,
+  TEXT_VOCAB_SIZE: () => TEXT_VOCAB_SIZE,
   VideoEngine: () => VideoEngine,
+  VoiceCloneEngine: () => VoiceCloneEngine,
   buildInterpolatedSequence: () => buildInterpolatedSequence,
   cameraMoveToMotion: () => cameraMoveToMotion,
   composeShotPrompt: () => composeShotPrompt,
   configureOnnxRuntime: () => configureOnnxRuntime,
+  cosineSimilarity: () => cosineSimilarity,
   directorPass: () => directorPass,
+  encodeSpeaker: () => encodeSpeaker,
+  encodeWav: () => encodeWav,
+  encodeWavBlob: () => encodeWavBlob,
   estimateBlockMotion: () => estimateBlockMotion,
   hasWebGPUSupport: () => hasWebGPUSupport,
   interpolateFrames: () => interpolateFrames,
   luma: () => luma,
+  melSpectrogram: () => melSpectrogram,
+  melToWaveform: () => melToWaveform,
   normaliseShotBudget: () => normaliseShotBudget,
   planKeyframeIndices: () => planKeyframeIndices,
   planScene: () => planScene,
   probeDevice: () => probeDevice,
+  resolveVoiceProvider: () => resolveVoiceProvider,
   shotPlannerPass: () => shotPlannerPass,
   slerp: () => slerp,
   storyboardFrameCount: () => storyboardFrameCount,
-  validateFrame: () => validateFrame
+  tokenizeText: () => tokenizeText,
+  validateFrame: () => validateFrame,
+  verifySpeaker: () => verifySpeaker
 });
 module.exports = __toCommonJS(src_exports);
 
@@ -2354,27 +2368,769 @@ function trimTimesteps(defaults, steps) {
   }
   return out;
 }
+
+// src/engine/voice/audio-frames.ts
+var DEFAULT_SAMPLE_RATE = 24e3;
+var DEFAULT_FRAME_LENGTH = 1024;
+var DEFAULT_HOP_LENGTH = 256;
+var DEFAULT_NUM_MELS = 80;
+function defaultMelConfig(overrides = {}) {
+  return {
+    sampleRate: overrides.sampleRate ?? DEFAULT_SAMPLE_RATE,
+    frameLength: overrides.frameLength ?? DEFAULT_FRAME_LENGTH,
+    hopLength: overrides.hopLength ?? DEFAULT_HOP_LENGTH,
+    numMels: overrides.numMels ?? DEFAULT_NUM_MELS
+  };
+}
+var hannCache = /* @__PURE__ */ new Map();
+function hannWindow(n) {
+  const cached = hannCache.get(n);
+  if (cached) return cached;
+  const w = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    w[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / n);
+  }
+  hannCache.set(n, w);
+  return w;
+}
+function frameSignal(signal, frameLength, hopLength) {
+  if (signal.length === 0) return [];
+  const frames = [];
+  for (let start = 0; start < signal.length; start += hopLength) {
+    const frame = new Float32Array(frameLength);
+    const end = Math.min(start + frameLength, signal.length);
+    frame.set(signal.subarray(start, end));
+    frames.push(frame);
+    if (end >= signal.length) break;
+  }
+  return frames;
+}
+function fftInPlace(re, im) {
+  const n = re.length;
+  if (n <= 1) return;
+  if ((n & n - 1) !== 0) {
+    throw new Error(`fftInPlace: length ${n} is not a power of two`);
+  }
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      const tr = re[i];
+      re[i] = re[j];
+      re[j] = tr;
+      const ti = im[i];
+      im[i] = im[j];
+      im[j] = ti;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wRe = Math.cos(ang);
+    const wIm = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let curRe = 1;
+      let curIm = 0;
+      for (let k = 0; k < len >> 1; k++) {
+        const aRe = re[i + k];
+        const aIm = im[i + k];
+        const bRe = re[i + k + (len >> 1)] * curRe - im[i + k + (len >> 1)] * curIm;
+        const bIm = re[i + k + (len >> 1)] * curIm + im[i + k + (len >> 1)] * curRe;
+        re[i + k] = aRe + bRe;
+        im[i + k] = aIm + bIm;
+        re[i + k + (len >> 1)] = aRe - bRe;
+        im[i + k + (len >> 1)] = aIm - bIm;
+        const nextRe = curRe * wRe - curIm * wIm;
+        curIm = curRe * wIm + curIm * wRe;
+        curRe = nextRe;
+      }
+    }
+  }
+}
+function ifftInPlace(re, im) {
+  const n = re.length;
+  for (let i = 0; i < n; i++) im[i] = -im[i];
+  fftInPlace(re, im);
+  const inv = 1 / n;
+  for (let i = 0; i < n; i++) {
+    re[i] *= inv;
+    im[i] = -im[i] * inv;
+  }
+}
+function magnitudeSpectrum(frame) {
+  const n = frame.length;
+  const re = new Float32Array(frame);
+  const im = new Float32Array(n);
+  fftInPlace(re, im);
+  const bins = n / 2 + 1;
+  const mag = new Float32Array(bins);
+  for (let b = 0; b < bins; b++) {
+    mag[b] = Math.hypot(re[b], im[b]);
+  }
+  return mag;
+}
+var hzToMel = (hz) => 2595 * Math.log10(1 + hz / 700);
+var melToHz = (mel) => 700 * (10 ** (mel / 2595) - 1);
+var filterbankCache = /* @__PURE__ */ new Map();
+function melFilterbank(config) {
+  const key = `${config.sampleRate}:${config.frameLength}:${config.numMels}`;
+  const cached = filterbankCache.get(key);
+  if (cached) return cached;
+  const bins = config.frameLength / 2 + 1;
+  const melMin = hzToMel(0);
+  const melMax = hzToMel(config.sampleRate / 2);
+  const points = new Float32Array(config.numMels + 2);
+  for (let i = 0; i < points.length; i++) {
+    const mel = melMin + (melMax - melMin) * i / (config.numMels + 1);
+    points[i] = melToHz(mel) / (config.sampleRate / 2) * (bins - 1);
+  }
+  const filters = [];
+  for (let m = 1; m <= config.numMels; m++) {
+    const row = new Float32Array(bins);
+    const left = points[m - 1];
+    const center = points[m];
+    const right = points[m + 1];
+    for (let b = 0; b < bins; b++) {
+      let w = 0;
+      if (b >= left && b <= center && center > left) w = (b - left) / (center - left);
+      else if (b > center && b <= right && right > center) w = (right - b) / (right - center);
+      row[b] = w;
+    }
+    filters.push(row);
+  }
+  filterbankCache.set(key, filters);
+  return filters;
+}
+var LOG_FLOOR = 1e-5;
+function melSpectrogram(pcm, overrides = {}) {
+  const config = defaultMelConfig(overrides);
+  const window = hannWindow(config.frameLength);
+  const filters = melFilterbank(config);
+  const frames = frameSignal(pcm, config.frameLength, config.hopLength);
+  const melFrames = frames.map((frame) => {
+    const windowed = new Float32Array(config.frameLength);
+    for (let i = 0; i < config.frameLength; i++) windowed[i] = frame[i] * window[i];
+    const mag = magnitudeSpectrum(windowed);
+    const mel = new Float32Array(config.numMels);
+    for (let m = 0; m < config.numMels; m++) {
+      const row = filters[m];
+      let energy = 0;
+      for (let b = 0; b < row.length; b++) energy += row[b] * mag[b];
+      mel[m] = Math.log(Math.max(energy, LOG_FLOOR));
+    }
+    return mel;
+  });
+  return {
+    frames: melFrames,
+    numMels: config.numMels,
+    hopLength: config.hopLength,
+    frameLength: config.frameLength,
+    sampleRate: config.sampleRate
+  };
+}
+function melToWaveform(mel) {
+  const { frames, hopLength, frameLength, numMels, sampleRate } = mel;
+  if (frames.length === 0) return new Float32Array(0);
+  const filters = melFilterbank({ sampleRate, frameLength, hopLength, numMels });
+  const window = hannWindow(frameLength);
+  const bins = frameLength / 2 + 1;
+  const binWeight = new Float32Array(bins);
+  for (let m = 0; m < numMels; m++) {
+    const row = filters[m];
+    for (let b = 0; b < bins; b++) binWeight[b] += row[b];
+  }
+  const outLength = (frames.length - 1) * hopLength + frameLength;
+  const out = new Float32Array(outLength);
+  const norm = new Float32Array(outLength);
+  for (let f = 0; f < frames.length; f++) {
+    const melVec = frames[f];
+    const mag = new Float32Array(bins);
+    for (let m = 0; m < numMels; m++) {
+      const energy = Math.exp(melVec[m]);
+      const row = filters[m];
+      for (let b = 0; b < bins; b++) mag[b] += row[b] * energy;
+    }
+    for (let b = 0; b < bins; b++) {
+      if (binWeight[b] > 0) mag[b] /= binWeight[b];
+    }
+    const re = new Float32Array(frameLength);
+    const im = new Float32Array(frameLength);
+    for (let b = 0; b < bins; b++) {
+      re[b] = mag[b];
+      if (b > 0 && b < bins - 1) re[frameLength - b] = mag[b];
+    }
+    ifftInPlace(re, im);
+    const base = f * hopLength;
+    for (let i = 0; i < frameLength; i++) {
+      out[base + i] += re[i] * window[i];
+      norm[base + i] += window[i] * window[i];
+    }
+  }
+  for (let i = 0; i < outLength; i++) {
+    if (norm[i] > 1e-8) out[i] /= norm[i];
+  }
+  return out;
+}
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = a + 1831565813 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function l2Normalize(v) {
+  let norm = 0;
+  for (let i = 0; i < v.length; i++) norm += v[i] * v[i];
+  norm = Math.sqrt(norm) || 1;
+  for (let i = 0; i < v.length; i++) v[i] /= norm;
+  return v;
+}
+function cosineSimilarity(a, b) {
+  if (a.length !== b.length) {
+    throw new Error(`cosineSimilarity: length mismatch (${a.length} vs ${b.length})`);
+  }
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  const denom = Math.sqrt(na) * Math.sqrt(nb);
+  return denom > 0 ? dot / denom : 0;
+}
+
+// src/engine/voice/speaker-encoder.ts
+var DEFAULT_EMBEDDING_DIM = 256;
+function encodeSpeaker(reference, options = {}) {
+  const embeddingDim = options.embeddingDim ?? DEFAULT_EMBEDDING_DIM;
+  const sampleRate = options.sampleRate ?? reference.sampleRate;
+  const numMels = options.numMels;
+  const mel = melSpectrogram(reference.samples, { sampleRate, ...numMels ? { numMels } : {} });
+  if (mel.frames.length === 0) {
+    return { data: new Array(embeddingDim).fill(0), dim: embeddingDim, sampleRate };
+  }
+  const m = mel.numMels;
+  const mean = new Float32Array(m);
+  for (const frame of mel.frames) {
+    for (let i = 0; i < m; i++) mean[i] += frame[i];
+  }
+  for (let i = 0; i < m; i++) mean[i] /= mel.frames.length;
+  const std = new Float32Array(m);
+  for (const frame of mel.frames) {
+    for (let i = 0; i < m; i++) {
+      const d = frame[i] - mean[i];
+      std[i] += d * d;
+    }
+  }
+  for (let i = 0; i < m; i++) std[i] = Math.sqrt(std[i] / mel.frames.length);
+  const stats = new Float32Array(2 * m);
+  stats.set(mean, 0);
+  stats.set(std, m);
+  const projected = projectStats(stats, embeddingDim);
+  l2Normalize(projected);
+  return { data: Array.from(projected), dim: embeddingDim, sampleRate };
+}
+var projectionCache = /* @__PURE__ */ new Map();
+function projectStats(stats, outDim) {
+  const inDim = stats.length;
+  const key = `${inDim}:${outDim}`;
+  let signs = projectionCache.get(key);
+  if (!signs) {
+    signs = new Int8Array(inDim * outDim);
+    const rand = mulberry32((2654435769 ^ Math.imul(inDim, 2654435761) ^ outDim) >>> 0);
+    for (let i = 0; i < signs.length; i++) signs[i] = rand() < 0.5 ? -1 : 1;
+    projectionCache.set(key, signs);
+  }
+  const out = new Float32Array(outDim);
+  const scale = 1 / Math.sqrt(inDim);
+  for (let o = 0; o < outDim; o++) {
+    let sum = 0;
+    const base = o * inDim;
+    for (let i = 0; i < inDim; i++) sum += signs[base + i] * stats[i];
+    out[o] = sum * scale;
+  }
+  return out;
+}
+function verifySpeaker(a, b, threshold = 0.75) {
+  const similarity = cosineSimilarity(a.data, b.data);
+  return { same: similarity >= threshold, similarity };
+}
+
+// src/engine/voice/neural-codec.ts
+var DEFAULT_NUM_QUANTIZERS = 4;
+var DEFAULT_CODEBOOK_SIZE = 256;
+var NeuralCodec = class {
+  config;
+  numQuantizers;
+  codebookSize;
+  /** `[quantizer][entry] = mel-dim centroid`. */
+  codebooks;
+  constructor(options = {}) {
+    this.config = defaultMelConfig({
+      ...options.sampleRate ? { sampleRate: options.sampleRate } : {},
+      ...options.numMels ? { numMels: options.numMels } : {},
+      ...options.frameLength ? { frameLength: options.frameLength } : {},
+      ...options.hopLength ? { hopLength: options.hopLength } : {}
+    });
+    this.numQuantizers = options.numQuantizers ?? DEFAULT_NUM_QUANTIZERS;
+    this.codebookSize = options.codebookSize ?? DEFAULT_CODEBOOK_SIZE;
+    this.codebooks = options.codebooks ?? buildSeededCodebooks(this.numQuantizers, this.codebookSize, this.config.numMels);
+    if (this.codebooks.length !== this.numQuantizers) {
+      throw new Error(
+        `NeuralCodec: ${this.codebooks.length} codebooks for ${this.numQuantizers} quantizers`
+      );
+    }
+  }
+  get quantizers() {
+    return this.numQuantizers;
+  }
+  get vocabSize() {
+    return this.codebookSize;
+  }
+  get sampleRate() {
+    return this.config.sampleRate;
+  }
+  /** PCM ▶ discrete tokens. */
+  encode(audio) {
+    const mel = melSpectrogram(audio.samples, this.config);
+    return this.encodeMel(mel);
+  }
+  /** log-mel spectrogram ▶ discrete tokens. The acoustic model and the analysis
+   *  path share this so quantisation lives in one place. */
+  encodeMel(mel) {
+    const tokens = mel.frames.map((frame) => {
+      const residual = new Float32Array(frame);
+      const ids = [];
+      for (let q = 0; q < this.numQuantizers; q++) {
+        const id = nearestCentroid(this.codebooks[q], residual);
+        ids.push(id);
+        const centroid = this.codebooks[q][id];
+        for (let i = 0; i < residual.length; i++) residual[i] -= centroid[i];
+      }
+      return ids;
+    });
+    return {
+      tokens,
+      numFrames: tokens.length,
+      numQuantizers: this.numQuantizers,
+      codebookSize: this.codebookSize,
+      hopLength: this.config.hopLength,
+      frameLength: this.config.frameLength,
+      sampleRate: this.config.sampleRate
+    };
+  }
+  /** Discrete tokens ▶ reconstructed log-mel spectrogram (sum of chosen
+   *  centroids per frame). */
+  decodeMel(codec) {
+    const frames = codec.tokens.map((ids) => {
+      const mel = new Float32Array(this.config.numMels);
+      for (let q = 0; q < ids.length && q < this.numQuantizers; q++) {
+        const centroid = this.codebooks[q][ids[q]];
+        for (let i = 0; i < mel.length; i++) mel[i] += centroid[i];
+      }
+      return mel;
+    });
+    return {
+      frames,
+      numMels: this.config.numMels,
+      hopLength: codec.hopLength,
+      frameLength: codec.frameLength,
+      sampleRate: codec.sampleRate
+    };
+  }
+  /** Discrete tokens ▶ PCM waveform (mel reconstruction → shared vocoder). */
+  decode(codec) {
+    const mel = this.decodeMel(codec);
+    const samples = melToWaveform(mel);
+    return { samples, sampleRate: codec.sampleRate };
+  }
+};
+function nearestCentroid(codebook, vec) {
+  let best = 0;
+  let bestScore = -Infinity;
+  for (let i = 0; i < codebook.length; i++) {
+    const score = cosineSimilarity(codebook[i], vec);
+    if (score > bestScore) {
+      bestScore = score;
+      best = i;
+    }
+  }
+  return best;
+}
+function buildSeededCodebooks(numQuantizers, codebookSize, melDim) {
+  const books = [];
+  for (let q = 0; q < numQuantizers; q++) {
+    const rand = mulberry32((49374 ^ Math.imul(q + 1, 2246822519)) >>> 0);
+    const scale = 0.5 ** q;
+    const book = [];
+    for (let e = 0; e < codebookSize; e++) {
+      const centroid = new Float32Array(melDim);
+      for (let i = 0; i < melDim; i++) centroid[i] = (rand() * 2 - 1) * scale;
+      book.push(centroid);
+    }
+    books.push(book);
+  }
+  return books;
+}
+
+// src/engine/voice/text-tokenizer.ts
+var ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789 .,!?'-";
+var CHAR_TO_ID = /* @__PURE__ */ new Map();
+for (let i = 0; i < ALPHABET.length; i++) CHAR_TO_ID.set(ALPHABET[i], i + 1);
+var TEXT_VOCAB_SIZE = ALPHABET.length + 1;
+function tokenizeText(text) {
+  const normalized = text.toLowerCase().replace(/\s+/g, " ").trim();
+  const tokens = [];
+  for (const ch of normalized) tokens.push(CHAR_TO_ID.get(ch) ?? 0);
+  const words = [];
+  let cursor = 0;
+  for (const word of normalized.split(" ")) {
+    if (word.length === 0) continue;
+    const startChar = normalized.indexOf(word, cursor);
+    const endChar = startChar + word.length;
+    words.push({ word, startChar, endChar });
+    cursor = endChar;
+  }
+  return { tokens, words };
+}
+
+// src/engine/voice/ssm-acoustic-model.ts
+var DEFAULTS = {
+  sampleRate: 24e3,
+  numMels: 80,
+  hopLength: 256,
+  frameLength: 1024,
+  numQuantizers: 4,
+  codebookSize: 256,
+  charsPerSecond: 14,
+  hiddenDim: 256
+};
+var SSMAcousticModel = class {
+  cfg;
+  /** Hashed character-embedding table [vocab][hiddenDim]. */
+  charEmbed;
+  /** Speaker-embedding → hidden projection (sign matrix), built lazily per
+   *  speaker-dim so a mismatched embedding can't silently mis-multiply. */
+  speakerProj = null;
+  /** Per-quantizer output projection: hidden → codebookSize logits. */
+  outProj;
+  /** SSM per-channel decay (diagonal A), stable in [0.5, 0.99). */
+  decay;
+  constructor(options = {}) {
+    this.cfg = {
+      sampleRate: options.sampleRate ?? DEFAULTS.sampleRate,
+      numMels: options.numMels ?? DEFAULTS.numMels,
+      hopLength: options.hopLength ?? DEFAULTS.hopLength,
+      frameLength: options.frameLength ?? DEFAULTS.frameLength,
+      numQuantizers: options.numQuantizers ?? DEFAULTS.numQuantizers,
+      codebookSize: options.codebookSize ?? DEFAULTS.codebookSize,
+      charsPerSecond: options.charsPerSecond ?? DEFAULTS.charsPerSecond,
+      hiddenDim: options.hiddenDim ?? DEFAULTS.hiddenDim
+    };
+    const h = this.cfg.hiddenDim;
+    const embedRand = mulberry32(2021);
+    this.charEmbed = [];
+    for (let t = 0; t < TEXT_VOCAB_SIZE; t++) {
+      const vec = new Float32Array(h);
+      for (let i = 0; i < h; i++) {
+        vec[i] = Math.sin((t + 1) * (i + 1) * 0.07 + embedRand() * 6.283);
+      }
+      this.charEmbed.push(vec);
+    }
+    this.outProj = [];
+    for (let q = 0; q < this.cfg.numQuantizers; q++) {
+      const signs = new Int8Array(h * this.cfg.codebookSize);
+      const rand = mulberry32(23 + Math.imul(q, 40503) >>> 0);
+      for (let i = 0; i < signs.length; i++) signs[i] = rand() < 0.5 ? -1 : 1;
+      this.outProj.push(signs);
+    }
+    this.decay = new Float32Array(h);
+    const decayRand = mulberry32(912551);
+    for (let i = 0; i < h; i++) this.decay[i] = 0.5 + decayRand() * 0.49;
+  }
+  /**
+   * Generate codec tokens for `text` in the voice described by `speaker`.
+   * `speed` (>0, default 1) scales the predicted duration: 1.5 ≈ 50 % faster.
+   */
+  generate(text, speaker, speed = 1) {
+    const h = this.cfg.hiddenDim;
+    const charCount = Math.max(1, text.tokens.length);
+    const seconds = charCount / (this.cfg.charsPerSecond * (speed > 0 ? speed : 1));
+    const numFrames = Math.max(1, Math.round(seconds * this.cfg.sampleRate / this.cfg.hopLength));
+    const speakerVec = this.projectSpeaker(speaker, h);
+    const state = new Float32Array(h);
+    const tokens = [];
+    for (let f = 0; f < numFrames; f++) {
+      const charIdx = Math.min(
+        text.tokens.length - 1,
+        Math.floor(f / numFrames * text.tokens.length)
+      );
+      const charVec = this.charEmbed[text.tokens[charIdx] ?? 0];
+      for (let i = 0; i < h; i++) {
+        const input = charVec[i] + speakerVec[i];
+        state[i] = this.decay[i] * state[i] + (1 - this.decay[i]) * input;
+      }
+      tokens.push(this.project(state, speakerVec));
+    }
+    return {
+      codec: {
+        tokens,
+        numFrames,
+        numQuantizers: this.cfg.numQuantizers,
+        codebookSize: this.cfg.codebookSize,
+        hopLength: this.cfg.hopLength,
+        frameLength: this.cfg.frameLength,
+        sampleRate: this.cfg.sampleRate
+      },
+      wordTimestamps: alignWords(text, numFrames, this.cfg.hopLength, this.cfg.sampleRate)
+    };
+  }
+  /** hidden state → one token id per quantizer (argmax of speaker-biased logits). */
+  project(state, speakerVec) {
+    const h = this.cfg.hiddenDim;
+    const v = this.cfg.codebookSize;
+    const ids = [];
+    for (let q = 0; q < this.cfg.numQuantizers; q++) {
+      const signs = this.outProj[q];
+      let bestId = 0;
+      let bestLogit = -Infinity;
+      for (let c = 0; c < v; c++) {
+        let logit = 0;
+        const base = c * h;
+        for (let i = 0; i < h; i++) logit += signs[base + i] * state[i];
+        logit += speakerVec[c % h] * 0.5;
+        if (logit > bestLogit) {
+          bestLogit = logit;
+          bestId = c;
+        }
+      }
+      ids.push(bestId);
+    }
+    return ids;
+  }
+  /** Project a speaker embedding to the hidden dim with a cached sign matrix. */
+  projectSpeaker(speaker, h) {
+    const dim = speaker.dim;
+    if (!this.speakerProj || this.speakerProj.dim !== dim) {
+      const signs2 = new Int8Array(dim * h);
+      const rand = mulberry32((21481 ^ Math.imul(dim, 40503)) >>> 0);
+      for (let i = 0; i < signs2.length; i++) signs2[i] = rand() < 0.5 ? -1 : 1;
+      this.speakerProj = { dim, signs: signs2 };
+    }
+    const { signs } = this.speakerProj;
+    const out = new Float32Array(h);
+    const scale = 1 / Math.sqrt(dim);
+    for (let o = 0; o < h; o++) {
+      let sum = 0;
+      for (let i = 0; i < dim; i++) sum += signs[i * h + o] * speaker.data[i];
+      out[o] = sum * scale;
+    }
+    return out;
+  }
+};
+function alignWords(text, numFrames, hopLength, sampleRate) {
+  if (text.words.length === 0) return [];
+  const totalChars = Math.max(1, text.tokens.length);
+  const msPerFrame = hopLength / sampleRate * 1e3;
+  const result = [];
+  for (const w of text.words) {
+    const startFrame = Math.round(w.startChar / totalChars * numFrames);
+    const endFrame = Math.round(w.endChar / totalChars * numFrames);
+    result.push({
+      word: w.word,
+      startMs: Math.round(startFrame * msPerFrame),
+      endMs: Math.round(endFrame * msPerFrame)
+    });
+  }
+  return result;
+}
+
+// src/engine/voice/voice-clone-engine.ts
+var VoiceCloneEngine = class {
+  codec;
+  acoustic;
+  speakerOptions;
+  sampleRate;
+  constructor(options = {}) {
+    this.codec = new NeuralCodec(options.codec);
+    this.sampleRate = this.codec.sampleRate;
+    this.acoustic = new SSMAcousticModel({
+      sampleRate: this.sampleRate,
+      numQuantizers: this.codec.quantizers,
+      codebookSize: this.codec.vocabSize,
+      ...options.acoustic
+    });
+    this.speakerOptions = { sampleRate: this.sampleRate, ...options.speaker };
+  }
+  /** Enrol a voice: reference sample ▶ reusable speaker embedding. Run once and
+   *  persist the embedding (it's just numbers) — synthesis takes the embedding,
+   *  not the raw audio, so the reference never has to be re-fetched per clip. */
+  enroll(reference) {
+    return encodeSpeaker(reference, this.speakerOptions);
+  }
+  /** Speak `text` in `speaker`'s voice. */
+  async synthesize(options) {
+    const activeDevice = await this.resolveDevice(options.device);
+    options.signal?.throwIfAborted();
+    const text = tokenizeText(options.text);
+    const { codec, wordTimestamps } = this.acoustic.generate(
+      text,
+      options.speaker,
+      options.speed ?? 1
+    );
+    options.signal?.throwIfAborted();
+    const { samples } = this.codec.decode(codec);
+    peakNormalize(samples, 0.95);
+    const durationMs = Math.round(samples.length / this.sampleRate * 1e3);
+    return {
+      pcm: samples,
+      sampleRate: this.sampleRate,
+      durationMs,
+      wordTimestamps,
+      codecTokens: codec,
+      activeDevice
+    };
+  }
+  /** Honour an explicit device, else probe (WebGPU preferred for the SSM scan,
+   *  CPU always works). Never throws on probe failure — degrades to CPU. */
+  async resolveDevice(requested) {
+    if (requested) return requested;
+    const probed = await probeDevice("auto");
+    return probed?.kind ?? "cpu";
+  }
+};
+function peakNormalize(samples, target) {
+  let peak = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const a = Math.abs(samples[i]);
+    if (a > peak) peak = a;
+  }
+  if (peak <= 0) return;
+  const gain = target / peak;
+  for (let i = 0; i < samples.length; i++) samples[i] *= gain;
+}
+
+// src/engine/voice/provider.ts
+var SSMVoiceProvider = class {
+  id = "ssm-webgpu";
+  engine;
+  constructor(options) {
+    this.engine = new VoiceCloneEngine(options);
+  }
+  /** Expose the engine for enrolment (`provider.engine.enroll(...)`). */
+  get cloneEngine() {
+    return this.engine;
+  }
+  async isAvailable() {
+    return true;
+  }
+  async unavailableReason() {
+    return null;
+  }
+  synthesize(options) {
+    return this.engine.synthesize(options);
+  }
+};
+async function resolveVoiceProvider(providers) {
+  if (providers.length === 0) {
+    return { provider: null, reason: "No clone provider is configured." };
+  }
+  const ordered = [...providers].sort((a, b) => preferenceRank(a) - preferenceRank(b));
+  const reasons = [];
+  for (const provider of ordered) {
+    if (await provider.isAvailable()) {
+      return { provider, reason: null };
+    }
+    const reason = await provider.unavailableReason();
+    reasons.push(`${provider.id}: ${reason ?? "unavailable"}`);
+  }
+  return {
+    provider: null,
+    reason: `Cloning unavailable \u2014 ${reasons.join("; ")}`
+  };
+}
+function preferenceRank(provider) {
+  if (provider.id === "ssm-webgpu") return hasWebGPUSupport() ? 0 : 2;
+  if (provider.id === "tts-server") return 1;
+  return 3;
+}
+
+// src/engine/voice/wav.ts
+function encodeWav(audio) {
+  const { samples, sampleRate } = audio;
+  const numSamples = samples.length;
+  const bytesPerSample = 2;
+  const blockAlign = bytesPerSample;
+  const dataSize = numSamples * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  writeAscii(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeAscii(view, 8, "WAVE");
+  writeAscii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 8 * bytesPerSample, true);
+  writeAscii(view, 36, "data");
+  view.setUint32(40, dataSize, true);
+  let offset = 44;
+  for (let i = 0; i < numSamples; i++) {
+    const clamped = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, clamped < 0 ? clamped * 32768 : clamped * 32767, true);
+    offset += 2;
+  }
+  return buffer;
+}
+function encodeWavBlob(audio) {
+  return new Blob([encodeWav(audio)], { type: "audio/wav" });
+}
+function writeAscii(view, offset, text) {
+  for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   CAMERA_MOVES,
   MODEL_REGISTRY,
+  NeuralCodec,
+  SSMAcousticModel,
+  SSMVoiceProvider,
+  TEXT_VOCAB_SIZE,
   VideoEngine,
+  VoiceCloneEngine,
   buildInterpolatedSequence,
   cameraMoveToMotion,
   composeShotPrompt,
   configureOnnxRuntime,
+  cosineSimilarity,
   directorPass,
+  encodeSpeaker,
+  encodeWav,
+  encodeWavBlob,
   estimateBlockMotion,
   hasWebGPUSupport,
   interpolateFrames,
   luma,
+  melSpectrogram,
+  melToWaveform,
   normaliseShotBudget,
   planKeyframeIndices,
   planScene,
   probeDevice,
+  resolveVoiceProvider,
   shotPlannerPass,
   slerp,
   storyboardFrameCount,
-  validateFrame
+  tokenizeText,
+  validateFrame,
+  verifySpeaker
 });
 //# sourceMappingURL=index.cjs.map

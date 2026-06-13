@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "../builderforce/model/agent-types.js";
 import { SessionManager } from "@mariozechner/pi-coding-agent";
 import { describe, expect, it, afterEach } from "vitest";
 import {

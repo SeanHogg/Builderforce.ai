@@ -1,4 +1,4 @@
-import type { AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentToolResult } from "../../builderforce/model/agent-types.js";
 import type { DiscordActionConfig } from "../../config/config.js";
 import { readDiscordComponentSpec } from "../../discord/components.js";
 import {

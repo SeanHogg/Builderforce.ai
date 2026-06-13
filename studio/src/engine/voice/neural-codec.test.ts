@@ -49,7 +49,7 @@ describe('NeuralCodec', () => {
 
   it('more quantizers reconstruct the mel more faithfully (RVQ residual shrink)', () => {
     const pcm = tone(0.2, 175);
-    const mel = melSpectrogram(pcm);
+    const mel = melSpectrogram(pcm.samples);
     const mid = mel.frames.length >> 1;
 
     const err = (numQuantizers: number): number => {

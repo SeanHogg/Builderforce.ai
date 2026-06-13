@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "../builderforce/model/agent-types.js";
 import type { SessionManager } from "@mariozechner/pi-coding-agent";
 import { expect, vi } from "vitest";
 import * as helpers from "./pi-embedded-helpers.js";

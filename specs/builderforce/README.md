@@ -85,6 +85,17 @@
     tasks + falsifiable acceptance checks. Multi-session by design; nothing is deleted before its
     replacement is wired + verified.
 
+12. **[11 — PRD: Agent Engine Consolidation](./11-prd-engine-consolidation.md)**
+    The **umbrella** PRD for the whole "one tool contract + one swappable engine seam, four
+    surfaces" program (cloud Worker/DO, cloud Container, on-prem Node). Records the three pillars
+    (shared `@builderforce/agent-tools` contract, the `resolveEngine` DI seam, capability-gated
+    providers), what's **done** (cloud fully derived from the shared registry + model cascade;
+    shared contract built; on-prem Stage 1/2 per doc 10), and the **full remaining-capability
+    catalog**: the pi-removal tail (doc 10), parity gaps (`ask_human` on Node + Container,
+    `web.search` backend, local-engine streaming), and the cloud concretions of the Node-only
+    tools (orchestrate / memory / message / media), with a surfaces × capabilities target matrix.
+    Read this for the feature-level picture; doc 10 for the pi-removal staging detail.
+
 > **Decision log.** PM + Agile = Phase 1 (BuilderForce owns data, autonomous dev agents, thin
 > embed shells, Tenant→Segment isolation with BurnRateOS as IdP). Security/Governance = Phase 2
 > (doc 07), same model. DSR/suppression re-home per-Segment; BurnRateOS keeps its own

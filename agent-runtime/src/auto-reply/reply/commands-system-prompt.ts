@@ -1,4 +1,4 @@
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool } from "../../builderforce/model/agent-types.js";
 import { resolveSessionAgentIds } from "../../agents/agent-scope.js";
 import { resolveBootstrapContextForRun } from "../../agents/bootstrap-files.js";
 import { resolveDefaultModelForAgent } from "../../agents/model-selection.js";

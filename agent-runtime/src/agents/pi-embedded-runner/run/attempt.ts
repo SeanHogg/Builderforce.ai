@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import os from "node:os";
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "../../../builderforce/model/agent-types.js";
 import type { ImageContent } from "../../../builderforce/model/types.js";
 import { streamSimple } from "@mariozechner/pi-ai";
 import { createAgentSession, SessionManager, SettingsManager } from "@mariozechner/pi-coding-agent";

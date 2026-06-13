@@ -11,7 +11,7 @@
  * connection) it auto-approves so local runs are never hard-blocked.
  */
 
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "../model/agent-types.js";
 import { Type } from "@sinclair/typebox";
 import { jsonResult } from "../../agents/tools/common.js";
 import { requestHumanInput, type RequestKind } from "../../infra/approval-gate.js";
