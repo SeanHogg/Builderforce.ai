@@ -1,4 +1,4 @@
-import type { Model } from "@mariozechner/pi-ai";
+import type { Model } from "../builderforce/model/types.js";
 import { getModel, streamSimple } from "@mariozechner/pi-ai";
 import { describe, expect, it } from "vitest";
 import type { BuilderForceAgentsConfig } from "../config/config.js";

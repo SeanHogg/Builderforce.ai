@@ -1,6 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Api, Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "../../builderforce/model/types.js";
 import type { SessionManager } from "@mariozechner/pi-coding-agent";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import { resolveContextWindowInfo } from "../context-window-guard.js";

@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { StreamFn } from "@mariozechner/pi-agent-core";
-import type { AssistantMessage, StopReason, TextContent, Usage } from "@mariozechner/pi-ai";
+import type { AssistantMessage, StopReason, TextContent, Usage } from "../builderforce/model/types.js";
 import { createAssistantMessageEventStream } from "@mariozechner/pi-ai";
 import { resolveStateDir } from "../config/paths.js";
 import { resolveAgentRuntimeDir, resolveWorkspaceFilePath } from "./workspace.js";

@@ -1,5 +1,5 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { ImageContent } from "@mariozechner/pi-ai";
+import type { ImageContent } from "../../../builderforce/model/types.js";
 import { describe, expect, it } from "vitest";
 import { injectHistoryImagesIntoMessages } from "./attempt.js";
 

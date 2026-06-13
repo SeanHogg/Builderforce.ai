@@ -7,7 +7,7 @@ import type {
   ToolCall,
   Tool,
   Usage,
-} from "@mariozechner/pi-ai";
+} from "../builderforce/model/types.js";
 import { createAssistantMessageEventStream } from "@mariozechner/pi-ai";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
 

@@ -76,6 +76,15 @@
     9c lifecycle → 9d parity+harness) so the operator can prove cloud agents deliver a merged PR
     with no self-hosted host online before GA.
 
+11. **[10 — PRD: PI Framework Cutover](./10-prd-pi-cutover.md)**
+    The **on-prem runtime de-framework**: remove `@mariozechner/pi-*` (138 files) and run the
+    On-Prem agent on the native, surface-agnostic `LocalAgentEngine`. Records what's **done +
+    verified** (Stage 1 — all ~40 tools native; Stage 2 foundations — native LLM client +
+    streaming + native model types) and the **remaining staged plan** (2a type repoint → 2b
+    completion/auth→gateway → 3 agent-loop swap → 4 TUI → 5 delete + flip default), each with
+    tasks + falsifiable acceptance checks. Multi-session by design; nothing is deleted before its
+    replacement is wired + verified.
+
 > **Decision log.** PM + Agile = Phase 1 (BuilderForce owns data, autonomous dev agents, thin
 > embed shells, Tenant→Segment isolation with BurnRateOS as IdP). Security/Governance = Phase 2
 > (doc 07), same model. DSR/suppression re-home per-Segment; BurnRateOS keeps its own

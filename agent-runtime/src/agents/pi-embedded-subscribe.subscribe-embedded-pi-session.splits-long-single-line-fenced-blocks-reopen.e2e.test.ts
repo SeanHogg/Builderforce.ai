@@ -1,4 +1,4 @@
-import type { AssistantMessage } from "@mariozechner/pi-ai";
+import type { AssistantMessage } from "../builderforce/model/types.js";
 import { describe, expect, it, vi } from "vitest";
 import {
   createParagraphChunkedBlockReplyHarness,

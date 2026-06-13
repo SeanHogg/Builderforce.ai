@@ -1,4 +1,4 @@
-import type { Api, Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "../builderforce/model/types.js";
 import { describe, expect, it } from "vitest";
 import { normalizeModelCompat } from "./model-compat.js";
 

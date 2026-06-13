@@ -1,4 +1,4 @@
-import type { Api, Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "../../builderforce/model/types.js";
 import { ensureAuthProfileStore } from "../../agents/auth-profiles.js";
 import { resolveForwardCompatModel } from "../../agents/model-forward-compat.js";
 import { parseModelRef } from "../../agents/model-selection.js";

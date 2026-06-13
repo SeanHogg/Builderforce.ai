@@ -1,5 +1,5 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { ImageContent, TextContent, ToolResultMessage } from "@mariozechner/pi-ai";
+import type { ImageContent, TextContent, ToolResultMessage } from "../../../builderforce/model/types.js";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import type { EffectiveContextPruningSettings } from "./settings.js";
 import { makeToolPrunablePredicate } from "./tools.js";

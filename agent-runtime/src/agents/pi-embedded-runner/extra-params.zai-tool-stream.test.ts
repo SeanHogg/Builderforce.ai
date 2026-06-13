@@ -1,5 +1,5 @@
 import type { StreamFn } from "@mariozechner/pi-agent-core";
-import type { Context, Model, SimpleStreamOptions } from "@mariozechner/pi-ai";
+import type { Context, Model, SimpleStreamOptions } from "../../builderforce/model/types.js";
 import { describe, expect, it, vi } from "vitest";
 import { applyExtraParamsToAgent } from "./extra-params.js";
 

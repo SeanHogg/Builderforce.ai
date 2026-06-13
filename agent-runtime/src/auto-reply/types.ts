@@ -1,4 +1,4 @@
-import type { ImageContent } from "@mariozechner/pi-ai";
+import type { ImageContent } from "../builderforce/model/types.js";
 import type { TypingController } from "./reply/typing.js";
 
 export type BlockReplyContext = {

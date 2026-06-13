@@ -1,4 +1,4 @@
-import type { AssistantMessage } from "@mariozechner/pi-ai";
+import type { AssistantMessage } from "../builderforce/model/types.js";
 import { expect } from "vitest";
 import { subscribeEmbeddedPiSession } from "./pi-embedded-subscribe.js";
 
