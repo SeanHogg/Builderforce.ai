@@ -34,7 +34,10 @@ export function PwaUpdateBanner() {
     let intervalId: ReturnType<typeof setInterval>;
 
     navigator.serviceWorker
-      .register('/sw.js')
+      // updateViaCache: 'none' — never serve the SW script (or its imports) from
+      // the HTTP cache during update checks, so reg.update() always revalidates
+      // /sw.js against the network and the per-build BUILD_VERSION stamp is seen.
+      .register('/sw.js', { updateViaCache: 'none' })
       .then((reg) => {
         // Already waiting on page load (e.g. user has the app open in another tab)
         if (reg.waiting) trackWaiting(reg.waiting);

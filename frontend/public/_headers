@@ -26,3 +26,10 @@
 # (later rule wins for a repeated header, so this overrides COEP above)
 /webcontainer/connect/*
   Cross-Origin-Embedder-Policy: unsafe-none
+
+# The service worker script must always be revalidated against the network so a
+# new deploy's stamped BUILD_VERSION is picked up promptly. Caching /sw.js (even
+# briefly at the CDN edge) delays the update toast. no-cache = store but always
+# revalidate; combined with updateViaCache:'none' in PwaUpdateBanner.
+/sw.js
+  Cache-Control: no-cache, max-age=0, must-revalidate

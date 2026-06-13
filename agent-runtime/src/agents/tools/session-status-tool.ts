@@ -33,8 +33,9 @@ import {
   resolveDefaultModelForAgent,
   resolveModelRefFromString,
 } from "../model-selection.js";
-import type { AnyAgentTool } from "./common.js";
-import { readStringParam } from "./common.js";
+import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
+import type { AgentToolResult, AnyAgentTool } from "./common.js";
+import { nativeToolData, readStringParam } from "./common.js";
 import {
   shouldResolveSessionIdInput,
   resolveInternalSessionKey,
@@ -172,17 +173,17 @@ async function resolveModelOverride(params: {
   };
 }
 
-export function createSessionStatusTool(opts?: {
+export interface SessionStatusDeps {
   agentSessionKey?: string;
   config?: BuilderForceAgentsConfig;
-}): AnyAgentTool {
-  return {
-    label: "Session Status",
-    name: "session_status",
-    description:
-      "Show a /status-equivalent session status card (usage + time + cost when available). Use for model-use questions (📊 session_status). Optional: set per-session model override (model=default resets overrides).",
-    parameters: SessionStatusToolSchema,
-    execute: async (_toolCallId, args) => {
+}
+
+/** Shared implementation — pi wrapper + native ToolDefinition both delegate here (DRY). */
+export async function runSessionStatus(
+  opts: SessionStatusDeps | undefined,
+  args: Record<string, unknown>,
+): Promise<AgentToolResult<unknown>> {
+  {
       const params = args as Record<string, unknown>;
       const cfg = opts?.config ?? loadConfig();
       const { mainKey, alias } = resolveMainSessionAlias(cfg);
@@ -393,6 +394,31 @@ export function createSessionStatusTool(opts?: {
           statusText,
         },
       };
-    },
+  }
+}
+
+export function createSessionStatusTool(opts?: SessionStatusDeps): AnyAgentTool {
+  return {
+    label: "Session Status",
+    name: "session_status",
+    description:
+      "Show a /status-equivalent session status card (usage + time + cost when available). Use for model-use questions (📊 session_status). Optional: set per-session model override (model=default resets overrides).",
+    parameters: SessionStatusToolSchema,
+    execute: async (_toolCallId, args) => runSessionStatus(opts, args as Record<string, unknown>),
   };
+}
+
+/** Native shared {@link ToolDefinition} (cap `orchestrate`) — reuses the TypeBox schema
+ *  and the shared `runSessionStatus` body (throw-safe via nativeToolData). */
+export function buildSessionStatusToolDef(opts?: SessionStatusDeps): ToolDefinition {
+  return defineTool({
+    name: "session_status",
+    description:
+      "Show a /status-equivalent session status card (usage + time + cost when available). Use for model-use questions (📊 session_status). Optional: set per-session model override (model=default resets overrides).",
+    parameters: SessionStatusToolSchema as unknown as ToolDefinition["schema"]["function"]["parameters"],
+    requires: ["orchestrate"],
+    async execute(args): Promise<ToolResult> {
+      return { data: await nativeToolData(() => runSessionStatus(opts, args)) };
+    },
+  });
 }

@@ -30,7 +30,9 @@ export type { NodeServiceToolDeps } from "./node-service-tools.js";
  */
 export function buildNodeToolRegistry(deps?: NodeServiceToolDeps): ToolRegistry {
   const registry = buildCoreToolRegistry();
-  const serviceTools = deps ? buildNodeServiceTools(deps) : [];
+  // The factory always emits its deps-independent tools (agents_list, gateway) and
+  // adds config-gated ones (memory_*) only when `deps` supply the backing.
+  const serviceTools = buildNodeServiceTools(deps ?? {});
   for (const tool of [...NODE_CODE_TOOLS, ...NODE_ORCHESTRATION_TOOLS, ...serviceTools]) registry.register(tool);
   return registry;
 }
