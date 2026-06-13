@@ -69,6 +69,29 @@ export function RoiDashboard() {
         </PmCard>
       )}
 
+      {data.byTask.length > 0 && (
+        <PmCard title="Top spend by task">
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
+                <tr style={theadRowStyle}>
+                  <th style={thStyle}>Task</th>
+                  <th style={thStyle}>Agent LLM spend</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.byTask.map((t) => (
+                  <tr key={t.taskId} style={trStyle}>
+                    <td style={tdStyle}>{t.taskKey ? `${t.taskKey} · ` : ''}{t.title}</td>
+                    <td style={tdMutedStyle}>{usd(t.agentLlmCostUsd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </PmCard>
+      )}
+
       {data.roi.length > 0 && (
         <PmCard title="Tracked features">
           <div style={tableWrapStyle}>

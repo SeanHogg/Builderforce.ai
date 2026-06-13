@@ -211,6 +211,21 @@ function runDispatchType(toolEvents: ExecutionTraceToolEvent[]): string | undefi
   }
 }
 
+/** Lifecycle/telemetry namespaces emitted into the trace stream that are NOT tool
+ *  calls (narration, model completions, dispatch, planning, context prep). The
+ *  Tools tab counts/lists only genuine tool invocations, so these are excluded. */
+const NON_TOOL_NAMESPACES = new Set(['agent', 'llm', 'runtime', 'context', 'planning', 'capabilities']);
+const NON_TOOL_CATEGORIES = new Set(['message', 'llm', 'planning', 'context', 'capabilities', 'lifecycle']);
+
+/** True when a trace event is a real tool call (e.g. write_file, list_files), not
+ *  a lifecycle/telemetry event (agent.message, llm.complete, context.prepare, …). */
+function isGenuineToolCall(ev: ExecutionTraceToolEvent): boolean {
+  if (ev.category && NON_TOOL_CATEGORIES.has(ev.category)) return false;
+  const ns = ev.toolName.includes('.') ? ev.toolName.split('.')[0] : '';
+  if (ns && NON_TOOL_NAMESPACES.has(ns)) return false;
+  return true;
+}
+
 export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task: Task; agentHosts: AgentHost[]; onTaskChanged?: () => void }) {
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -287,6 +302,9 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
 
   const result = parseResult((selected as { result?: unknown } | null)?.result);
   const toolEvents = trace?.trace.toolEvents ?? [];
+  // Genuine tool calls only — the Tools tab count + list exclude lifecycle/telemetry
+  // events (agent.message, llm.complete, …) so "Tools (N)" reflects real invocations.
+  const realToolEvents = toolEvents.filter(isGenuineToolCall);
   const errorMessage = (selected as { errorMessage?: string } | null)?.errorMessage;
   const prUrl = (selected as { githubPrUrl?: string } | null)?.githubPrUrl ?? task.githubPrUrl;
 
@@ -660,7 +678,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
 
           {/* Sub-tabs */}
           <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border-subtle)', marginBottom: 10 }}>
-            {(() => { const changeCount = taskChanges.length || files.length; const base: Array<readonly [SubTab, string]> = [['output', 'Output'], ['changes', `Changes${changeCount ? ` (${changeCount})` : ''}`], ['tools', `Tools${toolEvents.length ? ` (${toolEvents.length})` : ''}`], ['logs', 'Logs'], ['timeline', 'Timeline']]; if (prUrl) base.push(['pull-request', 'Pull Request']); return base; })().map(([id, label]) => (
+            {(() => { const changeCount = taskChanges.length || files.length; const base: Array<readonly [SubTab, string]> = [['output', 'Output'], ['changes', `Changes${changeCount ? ` (${changeCount})` : ''}`], ['tools', `Tools${realToolEvents.length ? ` (${realToolEvents.length})` : ''}`], ['logs', 'Logs'], ['timeline', 'Timeline']]; if (prUrl) base.push(['pull-request', 'Pull Request']); return base; })().map(([id, label]) => (
               <button
                 key={id}
                 type="button"
@@ -787,10 +805,10 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
 
           {subTab === 'tools' && (
             <div style={{ minHeight: 80, maxHeight: 360, overflow: 'auto' }}>
-              {toolEvents.length === 0 ? (
+              {realToolEvents.length === 0 ? (
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 8 }}>No tool calls recorded.</div>
               ) : (
-                toolEvents.map((ev) => (
+                realToolEvents.map((ev) => (
                   <div key={ev.id} style={{ fontSize: 12, color: 'var(--text-secondary)', padding: '3px 0', borderTop: '1px solid var(--border-subtle)' }}>
                     <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--coral-bright)' }}>{ev.toolName}</span>
                     {ev.durationMs != null && <span style={{ color: 'var(--text-muted)' }}> · {ev.durationMs}ms</span>}

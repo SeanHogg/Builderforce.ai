@@ -908,11 +908,12 @@ export const tasksApi = {
     ),
 
   /** Add an edge where `successorTaskId` depends on (is blocked by) `predecessorTaskId`.
-   *  Rejects cross-project edges and cycles server-side (400 'would create a dependency cycle'). */
-  addDependency: (successorTaskId: number, predecessorTaskId: number): Promise<DependencyEdge> =>
+   *  Rejects cross-project edges and cycles server-side (400 'would create a dependency cycle').
+   *  `depType` defaults to finish_to_start. */
+  addDependency: (successorTaskId: number, predecessorTaskId: number, depType?: DepType): Promise<DependencyEdge> =>
     request<DependencyEdge>(`/api/tasks/${successorTaskId}/dependencies`, {
       method: 'POST',
-      body: JSON.stringify({ predecessorTaskId }),
+      body: JSON.stringify({ predecessorTaskId, depType }),
     }),
 
   /** Remove a precedence edge by id. */
@@ -920,13 +921,16 @@ export const tasksApi = {
     request<void>(`/api/tasks/dependencies/${edgeId}`, { method: 'DELETE' }),
 };
 
+/** Dependency edge semantics (mirrors the API's DEP_TYPES). */
+export type DepType = 'finish_to_start' | 'start_to_start' | 'finish_to_finish' | 'start_to_finish';
+
 /** A task precedence edge: predecessor must finish before successor can start. */
 export interface DependencyEdge {
   id: number;
   projectId: number;
   predecessorTaskId: number;
   successorTaskId: number;
-  depType: string;
+  depType: DepType;
   createdAt: string;
 }
 
@@ -2264,6 +2268,7 @@ export interface RoiRollup {
   spend: { sprintRunwayBudget: number; sprintActualBurn: number; agentLlmCostUsd: number; costModelTotal: number };
   roi: TrackerRow[];
   byProject: Array<{ projectId: number; projectName: string; completedCount: number; agentLlmCostUsd: number }>;
+  byTask: Array<{ taskId: number; taskKey: string; title: string; agentLlmCostUsd: number }>;
 }
 
 export const roiApi = {

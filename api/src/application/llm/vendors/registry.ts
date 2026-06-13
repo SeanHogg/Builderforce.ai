@@ -225,72 +225,6 @@ export interface StreamDispatchResult extends VendorStreamResult {
   attempts: DispatchAttempt[];
 }
 
-/** Walk a model chain non-streaming. Throws if every model in the chain fails. */
-export async function dispatchVendor(params: DispatchParams): Promise<DispatchResult> {
-  const { env, modelChain, ...rest } = params;
-  if (modelChain.length === 0) {
-    throw new Error('dispatchVendor: modelChain is empty');
-  }
-
-  const attempts: DispatchAttempt[] = [];
-  const skippedNoKey: string[] = [];
-
-  for (const model of modelChain) {
-    const { vendorId, vendorModel } = resolveVendorAndModel(model);
-    const mod = MODULES_BY_ID[vendorId];
-    const apiKey = mod.apiKeyFrom(env);
-    if (!apiKey) {
-      skippedNoKey.push(`${vendorId}:${model}`);
-      continue;
-    }
-
-    const startedAt = Date.now();
-    try {
-      const result = await mod.call({ ...rest, apiKey, model: vendorModel });
-      // Empty-but-200 detection. Some free-tier upstreams accept a request,
-      // burn 10–20s, then return `choices[0].message.content === ""` with no
-      // error code. Treat as retryable so the cascade advances and the model
-      // gets cooled via the `embedded` classification (5 min).
-      if (isEmptyChatResponse(result)) {
-        throw new VendorRetryableError(
-          vendorId,
-          vendorModel,
-          502,
-          `embedded:empty: upstream returned 200 OK with no content for ${vendorId}/${vendorModel}`,
-        );
-      }
-      // `modelUsed` echoes what the caller asked for (with prefix preserved).
-      return { ...result, modelUsed: model, vendorUsed: vendorId, attempts };
-    } catch (err) {
-      const durationMs = Date.now() - startedAt;
-      // Worker hit Cloudflare's per-invocation subrequest cap — every future
-      // fetch from this isolate is guaranteed to throw the same thing.
-      // Stop advancing the cascade and bubble up so the proxy can surface a
-      // distinct 503 envelope WITHOUT writing more cooldown KV entries
-      // (which would themselves be additional subrequests).
-      if (err instanceof WorkerSubrequestExhaustedError) {
-        attempts.push({ model, vendor: vendorId, status: 0, error: err.message, durationMs, kind: 'network' });
-        throw err;
-      }
-      // Caller cancelled mid-run — stop the cascade (don't fail over and spend more).
-      if (err instanceof RequestAbortedError) {
-        attempts.push({ model, vendor: vendorId, status: 0, error: err.message, durationMs, kind: 'aborted' });
-        throw err;
-      }
-      if (err instanceof VendorRetryableError) {
-        attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message) });
-        console.warn(
-          `[vendors] ${vendorId}/${model} returned ${err.status}; trying next in chain (${attempts.length}/${modelChain.length} failed)`,
-        );
-        continue;
-      }
-      throw err; // VendorFatalError (or anything else) — bubble up
-    }
-  }
-
-  throw new CascadeExhaustedError('json', attempts, skippedNoKey);
-}
-
 /**
  * Resolve a model id to its vendor + the un-prefixed id the vendor expects.
  *   - `openrouter/<x>` → vendor=openrouter, vendorModel=`<x>`
@@ -305,13 +239,41 @@ function resolveVendorAndModel(model: string): { vendorId: VendorId; vendorModel
 }
 
 /**
- * Walk a model chain in streaming mode. Skips vendors that don't implement
- * `callStream` (e.g. Ollama). Throws if every streaming-capable model fails.
+ * Per-surface configuration for {@link dispatchInternal}. The JSON and streaming
+ * dispatchers differ ONLY in these four points — the chain walk, key/skip
+ * handling, error classification, cooldown-relevant `attempts[]`, and
+ * exhaustion error are identical and live once below.
  */
-export async function dispatchVendorStream(params: DispatchParams): Promise<StreamDispatchResult> {
+interface SurfaceConfig<R extends VendorCallResult | VendorStreamResult> {
+  /** Tags the {@link CascadeExhaustedError} and toggles its no-stream list. */
+  kind: 'json' | 'stream';
+  /** Function name for the empty-chain guard message. */
+  fnName: string;
+  /** Log prefix (`''` for JSON, `'stream '` for streaming). */
+  logTag: string;
+  /** False → vendor doesn't support this surface; the model is skipped+recorded. */
+  supports: (mod: VendorModule) => boolean;
+  /** The vendor call for this surface (`mod.call` vs `mod.callStream`). */
+  invoke: (mod: VendorModule, params: VendorCallParams) => Promise<R>;
+  /** Post-success validation; may throw VendorRetryableError (empty-200 check). */
+  validate?: (result: R, vendorId: VendorId, vendorModel: string) => void;
+}
+
+/**
+ * Shared cascade walk for both the JSON and streaming surfaces. Resolves each
+ * model to its vendor, skips no-key (and, per `supports`, no-surface) vendors,
+ * invokes the call, and on `VendorRetryableError` advances to the next model —
+ * recording every attempt so the proxy can apply per-vendor cooldowns before
+ * surfacing exhaustion. Subrequest-exhaustion and request-abort short-circuit
+ * the chain; any other error bubbles up (fatal).
+ */
+async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>(
+  params: DispatchParams,
+  cfg: SurfaceConfig<R>,
+): Promise<R & { modelUsed: string; vendorUsed: VendorId; attempts: DispatchAttempt[] }> {
   const { env, modelChain, ...rest } = params;
   if (modelChain.length === 0) {
-    throw new Error('dispatchVendorStream: modelChain is empty');
+    throw new Error(`${cfg.fnName}: modelChain is empty`);
   }
 
   const attempts: DispatchAttempt[] = [];
@@ -321,7 +283,7 @@ export async function dispatchVendorStream(params: DispatchParams): Promise<Stre
   for (const model of modelChain) {
     const { vendorId, vendorModel } = resolveVendorAndModel(model);
     const mod = MODULES_BY_ID[vendorId];
-    if (!mod.callStream) {
+    if (!cfg.supports(mod)) {
       skippedNoStream.push(`${vendorId}:${model}`);
       continue;
     }
@@ -333,16 +295,21 @@ export async function dispatchVendorStream(params: DispatchParams): Promise<Stre
 
     const startedAt = Date.now();
     try {
-      const result = await mod.callStream({ ...rest, apiKey, model: vendorModel });
+      const result = await cfg.invoke(mod, { ...rest, apiKey, model: vendorModel });
+      cfg.validate?.(result, vendorId, vendorModel);
+      // `modelUsed` echoes what the caller asked for (with prefix preserved).
       return { ...result, modelUsed: model, vendorUsed: vendorId, attempts };
     } catch (err) {
       const durationMs = Date.now() - startedAt;
-      // See dispatchVendor — short-circuit on subrequest exhaustion so we
-      // don't burn the rest of the chain on identical 0ms failures.
+      // Worker hit Cloudflare's per-invocation subrequest cap — every future
+      // fetch from this isolate is guaranteed to throw the same thing. Stop the
+      // cascade and bubble up so the proxy surfaces a distinct 503 envelope
+      // WITHOUT writing more cooldown KV entries (themselves more subrequests).
       if (err instanceof WorkerSubrequestExhaustedError) {
         attempts.push({ model, vendor: vendorId, status: 0, error: err.message, durationMs, kind: 'network' });
         throw err;
       }
+      // Caller cancelled mid-run — stop the cascade (don't fail over and spend more).
       if (err instanceof RequestAbortedError) {
         attempts.push({ model, vendor: vendorId, status: 0, error: err.message, durationMs, kind: 'aborted' });
         throw err;
@@ -350,13 +317,52 @@ export async function dispatchVendorStream(params: DispatchParams): Promise<Stre
       if (err instanceof VendorRetryableError) {
         attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message) });
         console.warn(
-          `[vendors] stream ${vendorId}/${model} returned ${err.status}; trying next in chain (${attempts.length}/${modelChain.length} failed)`,
+          `[vendors] ${cfg.logTag}${vendorId}/${model} returned ${err.status}; trying next in chain (${attempts.length}/${modelChain.length} failed)`,
         );
         continue;
       }
-      throw err;
+      throw err; // VendorFatalError (or anything else) — bubble up
     }
   }
 
-  throw new CascadeExhaustedError('stream', attempts, skippedNoKey, skippedNoStream);
+  throw new CascadeExhaustedError(cfg.kind, attempts, skippedNoKey, skippedNoStream);
+}
+
+/** Walk a model chain non-streaming. Throws if every model in the chain fails. */
+export function dispatchVendor(params: DispatchParams): Promise<DispatchResult> {
+  return dispatchInternal<VendorCallResult>(params, {
+    kind: 'json',
+    fnName: 'dispatchVendor',
+    logTag: '',
+    supports: () => true, // every vendor implements the non-streaming `call`
+    invoke: (mod, p) => mod.call(p),
+    // Empty-but-200 detection. Some free-tier upstreams accept a request, burn
+    // 10–20s, then return `choices[0].message.content === ""` with no error
+    // code. Treat as retryable so the cascade advances and the model gets cooled
+    // via the `embedded` classification (5 min).
+    validate: (result, vendorId, vendorModel) => {
+      if (isEmptyChatResponse(result)) {
+        throw new VendorRetryableError(
+          vendorId,
+          vendorModel,
+          502,
+          `embedded:empty: upstream returned 200 OK with no content for ${vendorId}/${vendorModel}`,
+        );
+      }
+    },
+  });
+}
+
+/**
+ * Walk a model chain in streaming mode. Skips vendors that don't implement
+ * `callStream` (e.g. Ollama). Throws if every streaming-capable model fails.
+ */
+export function dispatchVendorStream(params: DispatchParams): Promise<StreamDispatchResult> {
+  return dispatchInternal<VendorStreamResult>(params, {
+    kind: 'stream',
+    fnName: 'dispatchVendorStream',
+    logTag: 'stream ',
+    supports: (mod) => !!mod.callStream,
+    invoke: (mod, p) => mod.callStream!(p),
+  });
 }

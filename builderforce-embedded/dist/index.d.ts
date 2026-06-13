@@ -162,6 +162,24 @@ declare const EMBED_VIEWS: {
         readonly pillar: "product";
         readonly available: true;
     };
+    readonly 'dependency-graph': {
+        readonly key: "dependency-graph";
+        readonly label: "Dependency Graph";
+        readonly pillar: "product";
+        readonly available: true;
+    };
+    readonly 'rice-matrix': {
+        readonly key: "rice-matrix";
+        readonly label: "RICE Matrix";
+        readonly pillar: "product";
+        readonly available: true;
+    };
+    readonly 'roi-dashboard': {
+        readonly key: "roi-dashboard";
+        readonly label: "ROI Dashboard";
+        readonly pillar: "product";
+        readonly available: true;
+    };
     readonly kanban: {
         readonly key: "kanban";
         readonly label: "Kanban";

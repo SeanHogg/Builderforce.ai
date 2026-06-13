@@ -1,30 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { segmentTrackerClient, type TrackerRow } from '@/lib/builderforceApi';
+import type { TrackerRow } from '@/lib/builderforceApi';
 import { usePmScope } from '@/lib/pm/scope';
 import { usePmData } from '@/lib/pm/usePmData';
+import { roadmapClient, ROADMAP_HORIZONS, rstr } from '@/lib/pm/roadmap';
 import { PmEmpty, PmError, StatusPill } from './pmShared';
+import { RoadmapItemPanel } from './RoadmapItemPanel';
 
 /**
- * Roadmap "now / next / later" horizon swimlanes from roadmap_items, with inline
- * create + delete (the canonical roadmap management surface, replacing the old
- * generic TrackerSurface embed). Project view (scoped) or portfolio (all segment
- * rows) per the active PM scope; a created item inherits the current project scope.
+ * Roadmap "now / next / later" horizon swimlanes from roadmap_items. Create via
+ * "Add item", edit by clicking a card, delete via the card ×. All CRUD flows
+ * through the shared RoadmapItemPanel (DRY with the Gantt view). Project view
+ * (scoped) or portfolio (all segment rows) per the active PM scope.
  */
-const roadmapClient = segmentTrackerClient('/api/product/roadmap');
-
-const HORIZONS: Array<{ key: string; label: string }> = [
-  { key: 'now', label: 'Now' },
-  { key: 'next', label: 'Next' },
-  { key: 'later', label: 'Later' },
-];
-
-function str(row: TrackerRow, key: string): string {
-  const v = row[key];
-  return typeof v === 'string' ? v : '';
-}
-
 export function RoadmapTimeline() {
   const { projectId } = usePmScope();
   const { data, error, reload } = usePmData<TrackerRow[]>(
@@ -32,60 +21,25 @@ export function RoadmapTimeline() {
     [projectId],
   );
 
-  const [adding, setAdding] = useState(false);
-  const [title, setTitle] = useState('');
-  const [horizon, setHorizon] = useState('now');
-  const [busy, setBusy] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  // Panel state: undefined = closed, null = create, row = edit.
+  const [editing, setEditing] = useState<TrackerRow | null | undefined>(undefined);
 
-  const create = async () => {
-    if (!title.trim()) { setFormError('Title is required.'); return; }
-    setBusy(true);
-    setFormError(null);
-    try {
-      await roadmapClient.create({ title: title.trim(), horizon, status: 'planned', projectId: projectId ?? undefined });
-      setTitle('');
-      setAdding(false);
-      reload();
-    } catch (e) {
-      setFormError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const remove = async (id: string) => {
+  const remove = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
     if (!window.confirm('Delete this roadmap item?')) return;
     try { await roadmapClient.remove(id); reload(); } catch { /* surfaced on next load */ }
   };
 
-  const inputStyle: React.CSSProperties = {
-    padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)',
-    background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13,
-  };
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        {!adding ? (
-          <button
-            type="button"
-            onClick={() => { setAdding(true); setFormError(null); }}
-            style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: 'var(--coral-bright)', color: '#fff', fontWeight: 600, cursor: 'pointer' }}
-          >
-            + Add item
-          </button>
-        ) : (
-          <>
-            <input aria-label="Roadmap item title" placeholder="Item title…" value={title} onChange={(e) => setTitle(e.target.value)} style={{ ...inputStyle, minWidth: 220 }} />
-            <select aria-label="Horizon" value={horizon} onChange={(e) => setHorizon(e.target.value)} style={inputStyle}>
-              {HORIZONS.map((h) => <option key={h.key} value={h.key}>{h.label}</option>)}
-            </select>
-            <button type="button" onClick={create} disabled={busy} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: 'var(--coral-bright)', color: '#fff', fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>Save</button>
-            <button type="button" onClick={() => { setAdding(false); setFormError(null); }} style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>Cancel</button>
-            {formError && <span style={{ color: 'var(--danger, #dc2626)', fontSize: 13 }}>{formError}</span>}
-          </>
-        )}
+      <div>
+        <button
+          type="button"
+          onClick={() => setEditing(null)}
+          style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: 'var(--coral-bright)', color: '#fff', fontWeight: 600, cursor: 'pointer' }}
+        >
+          + Add item
+        </button>
       </div>
 
       {error ? (
@@ -96,8 +50,8 @@ export function RoadmapTimeline() {
         <PmEmpty message="No roadmap items yet. Use “Add item” to create one." />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-          {HORIZONS.map(({ key, label }) => {
-            const items = data.filter((r) => (str(r, 'horizon') || 'now') === key);
+          {ROADMAP_HORIZONS.map(({ key, label }) => {
+            const items = data.filter((r) => (rstr(r, 'horizon') || 'now') === key);
             return (
               <div key={key} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -107,16 +61,21 @@ export function RoadmapTimeline() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {items.length === 0 && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>—</div>}
                   {items.map((r) => (
-                    <div key={String(r.id)} style={{ border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '10px 12px' }}>
+                    <button
+                      key={String(r.id)}
+                      type="button"
+                      onClick={() => setEditing(r)}
+                      style={{ textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '10px 12px', background: 'transparent', cursor: 'pointer', color: 'var(--text-primary)' }}
+                    >
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-                        <div style={{ fontWeight: 600, fontSize: '0.86rem' }}>{str(r, 'title')}</div>
-                        <button type="button" aria-label="Delete item" title="Delete" onClick={() => remove(String(r.id))} style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
+                        <div style={{ fontWeight: 600, fontSize: '0.86rem' }}>{rstr(r, 'title')}</div>
+                        <span role="button" tabIndex={0} aria-label="Delete item" title="Delete" onClick={(e) => remove(e, String(r.id))} style={{ color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <StatusPill value={str(r, 'status') || 'planned'} />
-                        {str(r, 'theme') && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{str(r, 'theme')}</span>}
+                        <StatusPill value={rstr(r, 'status') || 'planned'} />
+                        {rstr(r, 'theme') && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{rstr(r, 'theme')}</span>}
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -124,6 +83,14 @@ export function RoadmapTimeline() {
           })}
         </div>
       )}
+
+      <RoadmapItemPanel
+        open={editing !== undefined}
+        item={editing ?? null}
+        projectId={projectId}
+        onClose={() => setEditing(undefined)}
+        onSaved={reload}
+      />
     </div>
   );
 }

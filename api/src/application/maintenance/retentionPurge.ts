@@ -1,0 +1,47 @@
+/**
+ * Retention purge — daily deletion of rows from append-only diagnostic/telemetry
+ * tables that would otherwise grow unbounded. Run from the daily cron tick
+ * (scheduled() in index.ts), mirroring the vendor-health cron.
+ *
+ * Each table keeps a generous live-incident window; older rows are dropped. Every
+ * table here is a diagnostic/event log (no business records), so deletion is safe
+ * and never cascades to domain data. Add new unbounded log tables to PURGE_TARGETS
+ * — one place, one policy (DRY).
+ */
+import { lt } from 'drizzle-orm';
+import { buildDatabase } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
+import { llmTraces, llmFailoverLog, llmHealthProbes, qaJourneyEvents } from '../../infrastructure/database/schema';
+
+/** Days of history kept per table before older rows are purged. */
+const RETENTION_DAYS = {
+  llmTraces: 30,
+  llmFailoverLog: 30,
+  llmHealthProbes: 180,
+  qaJourneyEvents: 90,
+} as const;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const cutoff = (now: number, days: number) => new Date(now - days * DAY_MS);
+
+/**
+ * Delete expired rows from every unbounded log table. Best-effort per table — a
+ * failure on one is logged and does not block the others. `now` is injectable for
+ * tests; defaults to the cron's wall clock.
+ */
+export async function runRetentionPurge(env: Env, now: number = Date.now()): Promise<void> {
+  const db = buildDatabase(env);
+  const targets: Array<{ name: string; run: () => Promise<unknown> }> = [
+    { name: 'llm_traces',        run: () => db.delete(llmTraces).where(lt(llmTraces.createdAt, cutoff(now, RETENTION_DAYS.llmTraces))) },
+    { name: 'llm_failover_log',  run: () => db.delete(llmFailoverLog).where(lt(llmFailoverLog.createdAt, cutoff(now, RETENTION_DAYS.llmFailoverLog))) },
+    { name: 'llm_health_probes', run: () => db.delete(llmHealthProbes).where(lt(llmHealthProbes.createdAt, cutoff(now, RETENTION_DAYS.llmHealthProbes))) },
+    { name: 'qa_journey_events', run: () => db.delete(qaJourneyEvents).where(lt(qaJourneyEvents.ts, cutoff(now, RETENTION_DAYS.qaJourneyEvents))) },
+  ];
+  for (const t of targets) {
+    try {
+      await t.run();
+    } catch (err) {
+      console.error(`[cron:retention] purge ${t.name} failed`, err);
+    }
+  }
+}

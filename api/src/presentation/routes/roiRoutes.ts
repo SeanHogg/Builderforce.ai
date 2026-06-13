@@ -15,7 +15,7 @@
  */
 
 import { Hono } from 'hono';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { getOrSetCached, getCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import {
@@ -35,6 +35,7 @@ interface RoiRollup {
   spend: { sprintRunwayBudget: number; sprintActualBurn: number; agentLlmCostUsd: number; costModelTotal: number };
   roi: Array<Record<string, unknown>>;
   byProject: Array<{ projectId: number; projectName: string; completedCount: number; agentLlmCostUsd: number }>;
+  byTask: Array<{ taskId: number; taskKey: string; title: string; agentLlmCostUsd: number }>;
 }
 
 function num(v: unknown): number {
@@ -111,6 +112,30 @@ async function computeRollup(
     .from(costCalculations)
     .where(and(eq(costCalculations.tenantId, tenantId), eq(costCalculations.segmentId, segmentId)));
 
+  // ── per-task agent spend (the real per-task dollar — llm_usage_log.task_id,
+  //    0104). Top spenders in scope; innerJoin tasks drops web/SDK (null task). ──
+  const taskCostConds = [eq(llmUsageLog.tenantId, tenantId)];
+  if (projectId !== undefined) taskCostConds.push(eq(llmUsageLog.projectId, projectId));
+  const taskCostRows = await db
+    .select({
+      taskId: llmUsageLog.taskId,
+      taskKey: tasks.key,
+      title: tasks.title,
+      millicents: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)`,
+    })
+    .from(llmUsageLog)
+    .innerJoin(tasks, eq(tasks.id, llmUsageLog.taskId))
+    .where(and(...taskCostConds))
+    .groupBy(llmUsageLog.taskId, tasks.key, tasks.title)
+    .orderBy(desc(sql`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)`))
+    .limit(10);
+  const byTask = taskCostRows.map((r) => ({
+    taskId: r.taskId as number,
+    taskKey: r.taskKey ?? '',
+    title: r.title ?? '',
+    agentLlmCostUsd: num(r.millicents) / MILLICENTS_PER_USD,
+  }));
+
   // ── feature ROI tracking list (segment-level) ──────────────────────────────
   const roi = await db
     .select()
@@ -158,6 +183,7 @@ async function computeRollup(
     },
     roi,
     byProject,
+    byTask,
   };
 }
 
@@ -175,7 +201,15 @@ export function createRoiRoutes(db: Db): Hono<HonoEnv> {
     const env = c.env as Env;
     const ver = await getCacheVersion(env, `roi-version:tenant:${tenantId}`);
     const key = `roi:t:${tenantId}:s:${segmentId}:scope:${projectId ?? 'all'}:v:${ver}`;
-    const rollup = await getOrSetCached(env, key, () => computeRollup(db, tenantId, segmentId, projectId, Date.now()));
+    // Structural writes (task status / sprint / cost / feature-roi) bump the
+    // version token for immediate invalidation. Agent LLM spend is written on the
+    // hot metering path (usageLedger) — far too frequent to version-bump — so a
+    // short TTL keeps the spend figure fresh (≤60s lag) without cache thrash.
+    const rollup = await getOrSetCached(
+      env, key,
+      () => computeRollup(db, tenantId, segmentId, projectId, Date.now()),
+      { kvTtlSeconds: 60, l1TtlMs: 15_000 },
+    );
     return c.json(rollup);
   });
 

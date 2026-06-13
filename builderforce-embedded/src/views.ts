@@ -66,6 +66,9 @@ export const EMBED_VIEWS = {
   'feature-flags':       { key: 'feature-flags',         label: 'Feature Flags',       pillar: 'product',    available: true  },
   'feature-roi':         { key: 'feature-roi',           label: 'Feature ROI',         pillar: 'product',    available: true  },
   'business-value':      { key: 'business-value',        label: 'Business-Value Models', pillar: 'product',  available: true  },
+  'dependency-graph':    { key: 'dependency-graph',       label: 'Dependency Graph',    pillar: 'product',    available: true  },
+  'rice-matrix':         { key: 'rice-matrix',            label: 'RICE Matrix',         pillar: 'product',    available: true  },
+  'roi-dashboard':       { key: 'roi-dashboard',          label: 'ROI Dashboard',       pillar: 'product',    available: true  },
 
   // Agile Survival (CTO)
   kanban:                { key: 'kanban',                label: 'Kanban',              pillar: 'agile',      available: true  },

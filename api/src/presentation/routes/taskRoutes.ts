@@ -6,7 +6,7 @@ import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { auditEvents, projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import { addDependency, deleteDependency, listProjectDependencies } from '../../application/task/taskDependencies';
+import { addDependency, deleteDependency, listProjectDependencies, isDepType } from '../../application/task/taskDependencies';
 import { invalidateCompletedByAssignee } from './reportRoutes';
 import { AuditEventType } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
@@ -212,12 +212,15 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
   // and cross-project edges at write time (see taskDependencies.addDependency).
   router.post('/:id/dependencies', async (c) => {
     const successorTaskId = Number(c.req.param('id'));
-    const body = await c.req.json<{ predecessorTaskId?: number }>();
+    const body = await c.req.json<{ predecessorTaskId?: number; depType?: string }>();
     const predecessorTaskId = Number(body.predecessorTaskId);
     if (!Number.isFinite(predecessorTaskId) || predecessorTaskId <= 0) {
       return c.json({ error: 'predecessorTaskId is required' }, 400);
     }
-    const result = await addDependency(db, c.get('tenantId'), successorTaskId, predecessorTaskId);
+    if (body.depType !== undefined && !isDepType(body.depType)) {
+      return c.json({ error: 'invalid depType' }, 400);
+    }
+    const result = await addDependency(db, c.get('tenantId'), successorTaskId, predecessorTaskId, body.depType);
     if (!result.ok) return c.json({ error: result.error }, result.status);
     await bumpCacheVersion(c.env as Env, `task-deps-version:project:${result.edge.projectId}`).catch(() => {});
     return c.json(result.edge, 201);

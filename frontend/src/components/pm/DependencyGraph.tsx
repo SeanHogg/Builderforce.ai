@@ -12,7 +12,7 @@ import {
   type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { tasksApi, type Task, type DependencyEdge } from '@/lib/builderforceApi';
+import { tasksApi, type Task, type DependencyEdge, type DepType } from '@/lib/builderforceApi';
 import { usePmScope } from '@/lib/pm/scope';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmEmpty, PmError, PmSelectProject } from './pmShared';
@@ -32,6 +32,15 @@ const STATUS_COLOR: Record<string, string> = {
 
 const COL_W = 230;
 const ROW_H = 90;
+
+/** Dependency relation types + their short edge badge (FS is the default, unlabelled). */
+const DEP_TYPE_OPTIONS: Array<{ value: DepType; label: string; code: string }> = [
+  { value: 'finish_to_start', label: 'Finish → Start', code: 'FS' },
+  { value: 'start_to_start', label: 'Start → Start', code: 'SS' },
+  { value: 'finish_to_finish', label: 'Finish → Finish', code: 'FF' },
+  { value: 'start_to_finish', label: 'Start → Finish', code: 'SF' },
+];
+const DEP_TYPE_CODE: Record<string, string> = Object.fromEntries(DEP_TYPE_OPTIONS.map((o) => [o.value, o.code]));
 
 /** Longest-path layering over precedence edges; cycle nodes fall back to layer 0. */
 function layout(tasks: Task[], deps: DependencyEdge[]): Map<number, { x: number; y: number }> {
@@ -94,6 +103,7 @@ export function DependencyGraph() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [predId, setPredId] = useState('');
   const [succId, setSuccId] = useState('');
+  const [depType, setDepType] = useState<DepType>('finish_to_start');
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -128,7 +138,7 @@ export function DependencyGraph() {
         animated: !onCycle,
         markerEnd: { type: MarkerType.ArrowClosed },
         style: { stroke: onCycle ? '#dc2626' : 'var(--coral-bright, #f97316)', strokeWidth: 2 },
-        label: onCycle ? '⚠ cycle' : undefined,
+        label: onCycle ? '⚠ cycle' : d.depType !== 'finish_to_start' ? DEP_TYPE_CODE[d.depType] : undefined,
         data: { edgeId: d.id },
       };
     });
@@ -163,7 +173,7 @@ export function DependencyGraph() {
     if (!pred || !succ) { setFormError('Pick both a predecessor and a successor.'); return; }
     setBusy(true);
     try {
-      await tasksApi.addDependency(succ, pred);
+      await tasksApi.addDependency(succ, pred, depType);
       setPredId(''); setSuccId('');
       reload();
     } catch (e) {
@@ -196,6 +206,9 @@ export function DependencyGraph() {
         <select aria-label="Successor task" value={succId} onChange={(e) => setSuccId(e.target.value)} style={selectStyle}>
           <option value="">Successor (blocked by)…</option>
           {tasks.map((t) => <option key={t.id} value={t.id}>{t.key} · {t.title}</option>)}
+        </select>
+        <select aria-label="Dependency type" value={depType} onChange={(e) => setDepType(e.target.value as DepType)} style={selectStyle}>
+          {DEP_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         <button
           type="button"
