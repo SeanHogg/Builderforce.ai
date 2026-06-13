@@ -30,6 +30,13 @@ export interface ChatInputAttachment {
   key: string;
   name: string;
   type: string;
+  /**
+   * Model-visible image source for vision turns — a `data:` URL (inlined small
+   * images) or a short-lived signed public URL (large images). Present only for
+   * raster images; when set, the attachment becomes an `image_url` content part
+   * the vision model can actually see, instead of a plain text link.
+   */
+  imageUrl?: string;
 }
 
 /**

@@ -9,6 +9,7 @@ import {
   type ProjectRepository,
   type IntegrationCredential,
 } from '@/lib/builderforceApi';
+import { saveFile } from '@/lib/api';
 import { parseRepoIdentifier, isValidRepoSegment } from '@/lib/repoIdentifier';
 import { formatRepoDiagnostic } from '@/lib/repoDiagnostic';
 
@@ -58,7 +59,15 @@ const TrashIcon = () => (
   </svg>
 );
 
-export function SourceControlContent({ projectId }: { projectId: number }) {
+export function SourceControlContent({
+  projectId,
+  onImported,
+}: {
+  projectId: number;
+  /** Called after a repo is imported into the IDE workspace, so the IDE can
+   *  refresh its file tree to show the imported files. */
+  onImported?: () => void;
+}) {
   const [repos, setRepos] = useState<ProjectRepository[]>([]);
   const [creds, setCreds] = useState<IntegrationCredential[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,9 +78,12 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [importing, setImporting] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<Record<string, { ok: boolean; message: string }>>({});
 
   // Add/edit-form state (shared between linking a new repo and editing one)
   const [provider, setProvider] = useState<string>('github');
+  const [host, setHost] = useState('');
   const [owner, setOwner] = useState('');
   const [repo, setRepo] = useState('');
   const [defaultBranch, setDefaultBranch] = useState('');
@@ -94,7 +106,7 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
   useEffect(() => { load(); }, [load]);
 
   const resetForm = () => {
-    setProvider('github'); setOwner(''); setRepo(''); setDefaultBranch(''); setCredentialId(''); setIsDefault(false);
+    setProvider('github'); setHost(''); setOwner(''); setRepo(''); setDefaultBranch(''); setCredentialId(''); setIsDefault(false);
   };
 
   const closeForm = () => { setAdding(false); setEditingId(null); resetForm(); setError(null); };
@@ -103,6 +115,8 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
 
   const openEdit = (r: ProjectRepository) => {
     setProvider(r.provider);
+    // Only surface a non-default host (github.com is the implicit default).
+    setHost(r.host && r.host !== 'github.com' ? r.host : '');
     setOwner(r.owner);
     setRepo(r.repo);
     setDefaultBranch(r.defaultBranch ?? '');
@@ -118,8 +132,13 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
   // value when the paste isn't a recognizable owner/repo pair.
   const onOwnerChange = (value: string) => {
     const parsed = parseRepoIdentifier(value);
-    if (parsed) { setOwner(parsed.owner); setRepo(parsed.repo); }
-    else setOwner(value);
+    if (parsed) {
+      setOwner(parsed.owner);
+      setRepo(parsed.repo);
+      // An enterprise host parsed out of a pasted URL prefills the host box so the
+      // probe targets the right server instead of defaulting to github.com.
+      if (parsed.host && parsed.host !== 'github.com') setHost(parsed.host);
+    } else setOwner(value);
   };
 
   const submit = async () => {
@@ -136,6 +155,8 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
     try {
       const payload = {
         provider,
+        // Empty → undefined so the backend keeps its github.com default.
+        host: host.trim() || undefined,
         owner: owner.trim(),
         repo: repo.trim(),
         defaultBranch: defaultBranch.trim() || null,
@@ -188,6 +209,38 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
     }
   };
 
+  // Pull the repo's files into the IDE workspace. The server reads them with the
+  // tenant's token; we persist each via saveFile (which targets whichever storage
+  // backend the IDE reads from), then ask the IDE to refresh its file tree.
+  const importRepo = async (r: ProjectRepository) => {
+    if (!r.credentialId) {
+      setImportResult((p) => ({ ...p, [r.id]: { ok: false, message: 'Link an access key first.' } }));
+      return;
+    }
+    setImporting(r.id);
+    setImportResult((p) => ({ ...p, [r.id]: { ok: true, message: 'Reading repository…' } }));
+    try {
+      const manifest = await reposApi.contents(r.id, r.defaultBranch ?? undefined);
+      if (manifest.files.length === 0) {
+        setImportResult((p) => ({ ...p, [r.id]: { ok: false, message: 'No importable files found on this branch.' } }));
+        return;
+      }
+      let written = 0;
+      for (const f of manifest.files) {
+        await saveFile(projectId, f.path, f.content);
+        written++;
+        setImportResult((p) => ({ ...p, [r.id]: { ok: true, message: `Importing… ${written}/${manifest.files.length}` } }));
+      }
+      const suffix = manifest.truncated ? ` (capped at ${written} of ${manifest.discovered})` : '';
+      setImportResult((p) => ({ ...p, [r.id]: { ok: true, message: `Imported ${written} file(s)${suffix}.` } }));
+      onImported?.();
+    } catch (e) {
+      setImportResult((p) => ({ ...p, [r.id]: { ok: false, message: e instanceof Error ? e.message : 'Import failed' } }));
+    } finally {
+      setImporting(null);
+    }
+  };
+
   const credName = (id: string | null) => creds.find((c) => c.id === id)?.name;
 
   // SCM credentials only (github/gitlab/bitbucket) for the picker
@@ -208,6 +261,7 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
           {repos.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No repositories configured yet.</div>}
           {repos.map((r) => {
             const result = testResult[r.id];
+            const imp = importResult[r.id];
             return (
               <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--border-subtle)' }}>
                 <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--coral-bright)', minWidth: 70 }}>{r.provider}</span>
@@ -224,8 +278,22 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
                     ● {result.message}
                   </span>
                 )}
+                {imp && (
+                  <span style={{ fontSize: 11, color: imp.ok ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)' }}>
+                    ● {imp.message}
+                  </span>
+                )}
                 <button type="button" style={btnSubtle} disabled={testing === r.id} onClick={() => test(r.id)}>
                   {testing === r.id ? 'Testing…' : 'Test'}
+                </button>
+                <button
+                  type="button"
+                  style={btnSubtle}
+                  disabled={importing === r.id}
+                  title="Import this repo's files into the IDE workspace so you can edit and run them in the browser"
+                  onClick={() => importRepo(r)}
+                >
+                  {importing === r.id ? 'Importing…' : 'Import to IDE'}
                 </button>
                 <button
                   type="button"
@@ -262,6 +330,7 @@ export function SourceControlContent({ projectId }: { projectId: number }) {
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -4 }}>
             Owner and repo are separate names from the repo URL — for <code>https://github.com/acme/app</code>, owner is <code>acme</code> and repo is <code>app</code>. Paste a full URL into <em>owner</em> and we&apos;ll split it for you.
           </div>
+          <input style={inputStyle} placeholder="host (optional — e.g. github.example.com for Enterprise; blank = github.com)" value={host} onChange={(e) => setHost(e.target.value)} />
           <input style={inputStyle} placeholder="default branch (optional, e.g. main)" value={defaultBranch} onChange={(e) => setDefaultBranch(e.target.value)} />
           <Select value={credentialId} onChange={(e) => setCredentialId(e.target.value)} style={inputStyle}>
             <option value="">— Select access key —</option>

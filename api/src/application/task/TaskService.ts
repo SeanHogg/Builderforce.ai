@@ -72,6 +72,16 @@ export class TaskService {
      * below is unchanged either way).
      */
     private readonly decomposer: EpicDecomposer = heuristicEpicDecomposer,
+    /**
+     * Optional planner hook: picks an owner for a fan-out child that the
+     * decomposition left unassigned, by ranking the project's workforce on
+     * capability/availability/WIP (see assigneeRecommender). Injected from the
+     * composition root (it needs env+db for caching); absent in unit tests, where
+     * children simply stay unassigned. Returns null when no suitable member.
+     */
+    private readonly recommendChildAssignee?: (
+      projectId: number,
+    ) => Promise<{ memberKind: 'human' | 'cloud_agent' | 'host_agent'; memberRef: string } | null>,
   ) {}
 
   /** List tasks scoped to the caller's tenant. Optionally narrow by project. */
@@ -190,6 +200,21 @@ export class TaskService {
     for (const child of children) {
       if (!child.title.trim()) continue;
       const count = await this.tasks.countByProject(task.projectId);
+
+      // Planner consumption: a child the decomposition left unassigned gets an
+      // owner picked from the project's workforce by capability/availability/WIP,
+      // so fan-out lands on a real assignee instead of the backlog. Explicit
+      // assignments in the plan always win.
+      let hostId = child.assignedAgentHostId ?? null;
+      let agentRef = child.assignedAgentRef ?? null;
+      let userId = child.assignedUserId ?? null;
+      if (this.recommendChildAssignee && hostId == null && !agentRef && !userId) {
+        const pick = await this.recommendChildAssignee(task.projectId as number).catch(() => null);
+        if (pick?.memberKind === 'human') userId = pick.memberRef;
+        else if (pick?.memberKind === 'host_agent') hostId = Number(pick.memberRef);
+        else if (pick?.memberKind === 'cloud_agent') agentRef = pick.memberRef;
+      }
+
       const childTask = Task.create({
         projectId: task.projectId,
         title: child.title,
@@ -199,9 +224,9 @@ export class TaskService {
         taskType: TaskType.TASK,
         parentTaskId: epic.id,
         assignedAgentType: null,
-        assignedAgentHostId: child.assignedAgentHostId != null ? asAgentHostId(child.assignedAgentHostId) : null,
-        assignedAgentRef: child.assignedAgentRef ?? null,
-        assignedUserId: child.assignedUserId ?? null,
+        assignedAgentHostId: hostId != null ? asAgentHostId(hostId) : null,
+        assignedAgentRef: agentRef,
+        assignedUserId: userId,
         startDate: null,
         dueDate: null,
         persona: null,

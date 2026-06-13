@@ -14,6 +14,8 @@ export const EXECUTION_STATUS_COLOR: Record<string, string> = {
   running: 'var(--coral-bright)',
   submitted: 'var(--coral-bright)',
   pending: 'var(--text-muted)',
+  // Agent called ask_human and is waiting on a person — amber "needs attention".
+  paused: 'var(--warning, #d97706)',
 };
 
 /** Statuses that mean an agent is currently working the task. */
@@ -25,9 +27,10 @@ export const ACTIVE_EXECUTION_STATUSES = new Set(['running', 'submitted', 'pendi
  * `resume` continues a halted one. Single source of truth so every surface that
  * renders an execution chip agrees on when the action appears.
  *
- * Note: the backend execution_status enum has no `paused` value today, so the
- * `resume` branch is currently unreachable — kept so the affordance is correct
- * the moment a pause/resume lifecycle lands (see Consolidated Gap Register).
+ * The `paused` lifecycle is now live (migration 0120): a cloud agent that calls
+ * `ask_human` parks its run in `paused` until a human answers its question, so the
+ * `resume` affordance is reachable. The primary resume path is answering the
+ * question in the human-requests queue; the chip glyph is a secondary nudge.
  */
 export type RerunAffordance = 'retry' | 'resume';
 export function rerunAffordance(status: string | undefined): RerunAffordance | null {

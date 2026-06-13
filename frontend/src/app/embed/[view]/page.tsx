@@ -15,6 +15,8 @@ import { TrackerSurface } from '../../../components/governance/TrackerSurface';
 import { TRACKER_CONFIGS } from '../../../components/governance/trackerConfigs';
 import { PokerSurface } from '../../../components/agile/PokerSurface';
 import { RetroSurface } from '../../../components/agile/RetroSurface';
+import { PmScopeProvider } from '../../../lib/pm/scope';
+import { PmVisualizersContent } from '../../../components/pm/PmVisualizersContent';
 
 /**
  * The framed BuilderForce surface. ONE dynamic route serves every embeddable
@@ -116,6 +118,14 @@ function renderSurface(view: string): React.ReactNode {
     case 'prd':
       // PRDs & specs, project-scoped via a picker.
       return <EmbedPrdSurface />;
+    case 'roadmap':
+      // PM visualizers (Timeline / Gantt / Map + Epics + ROI). Portfolio scope by
+      // default; reads ?project=<id> when the host deep-links one.
+      return (
+        <PmScopeProvider>
+          <PmVisualizersContent />
+        </PmScopeProvider>
+      );
     case 'soc2':
       // SOC 2 Control Tracker — bespoke (readiness scoreboard + baseline seed).
       return <Soc2Content />;

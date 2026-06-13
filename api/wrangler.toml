@@ -7,6 +7,20 @@ compatibility_flags = ["nodejs_compat"]
 pattern = "api.builderforce.ai"
 custom_domain = true
 
+# Wildcard subdomain hosting for published IDE (Designer) projects. Every
+# `<sub>.apps.builderforce.ai` request lands on this worker; the host-hosting
+# middleware in src/index.ts serves it from R2 (`sites/<sub>/...`) as a public
+# website. A zone route (not custom_domain) so one pattern covers all subdomains.
+#
+# REQUIRES a matching proxied DNS record so the hostnames resolve to the edge —
+# add a wildcard once (Cloudflare dashboard → DNS, or the API call below):
+#   Type AAAA  Name *.apps  Content 100::  Proxied (orange cloud)
+#   (the 100:: discard-prefix placeholder is the standard pattern for a
+#    Worker-only route with no real origin; the route intercepts before origin)
+[[routes]]
+pattern = "*.apps.builderforce.ai/*"
+zone_name = "builderforce.ai"
+
 [vars]
 # Overridden by Cloudflare dashboard secrets for production.
 CORS_ORIGINS = "*"

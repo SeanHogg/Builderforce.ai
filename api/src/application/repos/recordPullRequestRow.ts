@@ -8,8 +8,8 @@
  * in-product PR list / approval flow. Funnelling both through one helper keeps the
  * recorded shape identical and fixes that gap (DRY — one insert, one column map).
  */
-import { and, desc, eq, ne } from 'drizzle-orm';
-import { pullRequests } from '../../infrastructure/database/schema';
+import { and, desc, eq, isNull, ne } from 'drizzle-orm';
+import { deploymentEvents, pullRequests } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 
 export interface RecordPullRequestInput {
@@ -65,6 +65,32 @@ function mergedSet(opts: { mergeSha?: string | null; mergedBy?: string | null })
   };
 }
 
+/**
+ * A merge-to-base is the DORA "deployment" proxy (Builderforce has no separate
+ * deploy infra): every merge writes one {@link deploymentEvents} row so deployment
+ * frequency + lead time light up, and the post-merge CI outcome later flips it to
+ * a failure / closes MTTR (see {@link setPullRequestBuildStatus}). externalRef is
+ * the PR row id — the stable key both writes share. Best-effort: a metrics row
+ * must never block a merge. The workforce-metrics cache refreshes on its TTL or
+ * the next status write (no env here to bump the version token).
+ */
+async function recordMergeDeployment(db: Db, pr: { id: string; tenantId: number; projectId: number; taskId: number | null }): Promise<void> {
+  try {
+    await db.insert(deploymentEvents).values({
+      tenantId: pr.tenantId,
+      projectId: pr.projectId,
+      taskId: pr.taskId ?? null,
+      environment: 'production',
+      status: 'success',
+      isFailure: false,
+      externalRef: pr.id,
+      deployedAt: new Date(),
+    });
+  } catch {
+    // best-effort — a missing deployment row only undercounts DORA frequency.
+  }
+}
+
 /** Flag a PR row merged by its id (in-product Approve & Merge + finalize auto-merge). */
 export async function markPullRequestMergedById(
   db: Db,
@@ -77,6 +103,7 @@ export async function markPullRequestMergedById(
     .set(mergedSet(opts))
     .where(and(eq(pullRequests.id, id), eq(pullRequests.tenantId, tenantId)))
     .returning();
+  if (row) await recordMergeDeployment(db, { id: row.id, tenantId: row.tenantId, projectId: row.projectId, taskId: row.taskId ?? null });
   return row ?? null;
 }
 
@@ -114,10 +141,29 @@ export async function findMergedPullRequestBySha(db: Db, mergeSha: string) {
   return row ?? null;
 }
 
-/** Record the post-merge build outcome on a PR row. */
+/** Record the post-merge build outcome on a PR row, and reconcile its DORA
+ *  deployment row: a failing post-merge build is a change failure; a later success
+ *  closes MTTR by stamping restored_at on the still-open failure. */
 export async function setPullRequestBuildStatus(db: Db, id: string, buildStatus: string) {
   await db
     .update(pullRequests)
     .set({ buildStatus, updatedAt: new Date() })
     .where(eq(pullRequests.id, id));
+
+  try {
+    if (buildStatus === 'failure') {
+      await db
+        .update(deploymentEvents)
+        .set({ isFailure: true, status: 'failed' })
+        .where(eq(deploymentEvents.externalRef, id));
+    } else if (buildStatus === 'success') {
+      // Restore any still-open failure for this deploy (MTTR = restored_at − deployed_at).
+      await db
+        .update(deploymentEvents)
+        .set({ restoredAt: new Date() })
+        .where(and(eq(deploymentEvents.externalRef, id), eq(deploymentEvents.isFailure, true), isNull(deploymentEvents.restoredAt)));
+    }
+  } catch {
+    // best-effort — DORA change-failure/MTTR self-heals on the next build event.
+  }
 }

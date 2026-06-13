@@ -13,6 +13,7 @@ import {
   type ExecutionTrace,
   type ExecutionTraceToolEvent,
   type TaskFileChange,
+  type TaskRepoStatus,
 } from '@/lib/builderforceApi';
 import { unifiedDiff } from '@/lib/unifiedDiff';
 import { RunAgentControl } from '../task/RunAgentControl';
@@ -77,6 +78,46 @@ function agentMessageText(ev: ExecutionTraceToolEvent): string {
     } catch { /* fall through to result */ }
   }
   return (ev.result ?? '').trim();
+}
+
+/**
+ * Run provenance for the triage report: how the run was dispatched and which LLM
+ * model(s) ACTUALLY served its steps — read from telemetry, not from the task's
+ * request. A "gateway-default" dispatch frequently falls through to a weak model
+ * for every step; surfacing the served model (with a per-model step count) is what
+ * lets a reviewer see that before trusting the output.
+ */
+function runProvenance(toolEvents: ExecutionTraceToolEvent[]): {
+  dispatch?: { engine?: string; surface?: string; model?: string; executor?: string };
+  models: string[];
+  /** repo full-name as the run itself saw it (`context.prepare` telemetry) — a
+   *  zero-fetch fallback when the authoritative repo-status call is unavailable. */
+  repo?: string;
+} {
+  let dispatch: { engine?: string; surface?: string; model?: string; executor?: string } | undefined;
+  let repo: string | undefined;
+  const models = new Map<string, number>();
+  for (const ev of toolEvents) {
+    if (ev.toolName === 'runtime.dispatch' && ev.args && !dispatch) {
+      try {
+        const a = JSON.parse(ev.args) as Record<string, string>;
+        dispatch = { engine: a.engine, surface: a.surface, model: a.model, executor: a.executor };
+      } catch { /* ignore unparseable dispatch args */ }
+    }
+    if (ev.toolName === 'context.prepare' && ev.args && !repo) {
+      try {
+        const a = JSON.parse(ev.args) as { repo?: string };
+        if (a.repo) repo = a.repo;
+      } catch { /* ignore unparseable context args */ }
+    }
+    if (ev.toolName === 'llm.complete' && ev.args) {
+      try {
+        const a = JSON.parse(ev.args) as { model?: string };
+        if (a.model) models.set(a.model, (models.get(a.model) ?? 0) + 1);
+      } catch { /* ignore unparseable llm args */ }
+    }
+  }
+  return { dispatch, models: [...models.entries()].map(([m, n]) => `${m} ×${n}`), repo };
 }
 
 const CHANGE_COLOR: Record<ExecutionFileChange['change'], string> = {
@@ -316,6 +357,18 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
       .catch(() => setPrd(null));
   }, [task.id]);
 
+  // Repo binding for this task — the authoritative repo / base branch and whether
+  // commits can actually land (bound + credentialed). Fed into the review context
+  // so a reviewer knows where the code lives and, when no PR exists, whether that's
+  // because the repo was never wired vs. the agent simply produced nothing. One
+  // fetch per task (deduped by task.id), mirroring the PRD fetch above.
+  const [repoStatus, setRepoStatus] = useState<TaskRepoStatus | null>(null);
+  useEffect(() => {
+    runtimeApi.taskRepoStatus(task.id)
+      .then(setRepoStatus)
+      .catch(() => setRepoStatus(null));
+  }, [task.id]);
+
   // "Materials & Context" section for the copy-triage report: the task + its PRD.
   const reportMaterials = useMemo(() => {
     const lines = ['--- Materials & Context ---', `Task #${task.id}: ${task.title}`];
@@ -323,6 +376,51 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
     if (prd?.trim()) lines.push('', 'PRD:', prd.trim());
     return lines.join('\n');
   }, [task.id, task.title, task.description, prd]);
+
+  // "Review Context" section — the run's provenance and where to find the code it
+  // produced, so the report is independently REVIEWABLE: the PR URL to open, the
+  // branch, the outcome (+ failure reason), and the model(s) that REALLY ran each
+  // step (often weaker than the requested model). Leads the report so a reviewer
+  // can pull up the PR/diff before wading into raw telemetry.
+  const reviewContext = useMemo(() => {
+    const { dispatch, models, repo } = runProvenance(toolEvents);
+    const lines = ['--- Review Context ---'];
+    lines.push(`Outcome: ${status ?? 'unknown'}${errorMessage ? ` — ${errorMessage}` : ''}`);
+    lines.push(
+      prUrl
+        ? `Pull request: ${prUrl}${task.githubPrNumber ? ` (#${task.githubPrNumber})` : ''}`
+        : 'Pull request: none — no PR was opened for this run (nothing to review on GitHub)'
+    );
+    const repoName = repoStatus?.repo ?? repo;
+    if (repoName) lines.push(`Repo: ${repoName}`);
+    const head = task.gitBranch;
+    const base = repoStatus?.base;
+    if (head || base) lines.push(`Branch: ${head ?? '(default)'}${base ? ` → ${base}` : ''}`);
+    // When no PR exists, the binding state is the reviewer's first question: was the
+    // repo even wired? An unbound / uncredentialed task can't commit, so "no PR" is
+    // expected — distinct from the agent running and producing nothing.
+    if (repoStatus && (!repoStatus.bound || !repoStatus.hasCredential)) {
+      const why = !repoStatus.bound ? 'no repo bound' : 'no write credential';
+      lines.push(`Repo binding: NOT WRITABLE — ${repoStatus.reason ?? why} (commits/PR cannot be produced)`);
+    }
+    if (dispatch) {
+      const d = [dispatch.engine, dispatch.surface && `surface=${dispatch.surface}`, dispatch.executor && `executor=${dispatch.executor}`]
+        .filter(Boolean).join(' · ');
+      lines.push(`Dispatch: ${d || '—'}${dispatch.model ? ` · requested model=${dispatch.model}` : ''}`);
+    }
+    lines.push(`Model(s) actually run: ${models.length ? models.join(', ') : 'none recorded'}`);
+    const summary = historicalText.trim();
+    if (summary) lines.push('', 'Agent final summary:', summary.length > 1500 ? summary.slice(0, 1500) + '…' : summary);
+    return lines.join('\n');
+  }, [toolEvents, status, errorMessage, prUrl, task.githubPrNumber, task.gitBranch, historicalText, repoStatus]);
+
+  // The report's leading prose: review context first (where/how to review), then
+  // materials (the goal). Joined here once so both Observability surfaces below
+  // pass the same preamble. Telemetry + diffs follow inside the report builder.
+  const reportPreamble = useMemo(
+    () => [reviewContext, reportMaterials].join('\n\n'),
+    [reviewContext, reportMaterials],
+  );
 
   // "Code Changes (transaction)" section: the actual diffs THIS run produced, so a
   // shared log is reviewable as a patch. Fetched lazily (only when the user copies)
@@ -708,12 +806,12 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
               Observability page renders, so there's one source of truth. */}
           {subTab === 'logs' && selectedId != null && (
             <ObservabilityContent embedded initialView="logs" executionId={selectedId} {...obsScopeProps}
-              reportMaterials={reportMaterials} reportTransaction={buildTransaction} />
+              reportMaterials={reportPreamble} reportTransaction={buildTransaction} />
           )}
 
           {subTab === 'timeline' && selectedId != null && (
             <ObservabilityContent embedded initialView="timeline" executionId={selectedId} {...obsScopeProps}
-              reportMaterials={reportMaterials} reportTransaction={buildTransaction} />
+              reportMaterials={reportPreamble} reportTransaction={buildTransaction} />
           )}
 
           {/* In-product PR review + Approve & Merge (replaces the old external

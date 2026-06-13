@@ -20,6 +20,7 @@ import {
 } from '@/lib/builderforceApi';
 import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
+import { getProjectWorkforce } from '@/lib/teams';
 import {
   assigneeSelectValue,
   parseAssigneeSelectValue,
@@ -206,7 +207,7 @@ export function TaskMgmtContent({
     setLoading(true);
     setError(null);
     try {
-      const [tasksData, agentHostsData, execData, runTargets, membersData] = await Promise.all([
+      const [tasksData, agentHostsData, execData, runTargets, membersData, projectWf] = await Promise.all([
         tasksApi.list(projectId),
         agentHosts.list().catch(() => []),
         runtimeApi.listRecent().catch(() => []),
@@ -216,11 +217,22 @@ export function TaskMgmtContent({
         workflowDefinitions.runTargets().catch(() => ({ hosts: [], cloudAgents: [] })),
         // Human teammates — the human half of the unified assignee picker. Server-cached.
         tasksApi.assignees().catch(() => []),
+        // Scoped board only: the teams assigned to this project narrow the assignee
+        // picker to their members. Falls back to the full roster when no team is
+        // assigned (scopedToTeams=false) or in the all-projects view (no projectId).
+        projectId != null ? getProjectWorkforce(projectId).catch(() => null) : Promise.resolve(null),
       ]);
       setTasks(tasksData);
-      setAgentHostsList(agentHostsData);
-      setCloudAgentsList(runTargets.cloudAgents);
-      setMembersList(membersData);
+      // When a project has teams assigned, the assignable workforce is exactly
+      // those teams' members — filter each pool to the team set so the picker
+      // can't offer someone off-team. We filter the live lists (not the
+      // denormalized team names) so display names stay current.
+      const teamSet = projectWf?.scopedToTeams
+        ? new Set(projectWf.workforce.map((w) => `${w.kind}:${w.ref}`))
+        : null;
+      setAgentHostsList(teamSet ? agentHostsData.filter((h) => teamSet.has(`host_agent:${h.id}`)) : agentHostsData);
+      setCloudAgentsList(teamSet ? runTargets.cloudAgents.filter((a) => teamSet.has(`cloud_agent:${a.ref}`)) : runTargets.cloudAgents);
+      setMembersList(teamSet ? membersData.filter((m) => teamSet.has(`human:${m.id}`)) : membersData);
       setExecutions(execData);
       // Always resolve the full project list (unless the parent supplied one):
       // it backs both the project filter and the "Move to board" destinations,

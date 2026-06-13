@@ -46,6 +46,17 @@ export class RuntimeService {
      * are derived only from tool-audit telemetry. Best-effort by contract.
      */
     private readonly onTerminalFailure?: (e: Execution) => Promise<void>,
+    /**
+     * Optional sink invoked whenever an execution syncs its task's status (an
+     * agent moving a ticket through lanes) or reaches a terminal state. Wired to
+     * the ticket-metrics layer ({@link syncExecutionTaskLifecycle}) so agent lane
+     * moves record transitions exactly like a human PATCH and a terminal run
+     * stamps the work-stopped signal. Best-effort by contract.
+     */
+    private readonly onTaskStatusSync?: (info: {
+      tenantId: number; taskId: number; projectId: number;
+      fromStatus: string; toStatus: string; terminal: boolean;
+    }) => Promise<void>,
   ) {}
 
   async submit(dto: SubmitTaskDto): Promise<Execution> {
@@ -222,10 +233,21 @@ export class RuntimeService {
     const saved = await this.executions.update(execution);
 
     // sync task status based on execution state --------------------------------
+    // Each lane move here is an AGENT moving a ticket — recorded into the ticket-
+    // metrics layer via onTaskStatusSync so it counts exactly like a human PATCH
+    // (and a terminal run stamps the work-stopped signal even on FAILED, where the
+    // lane doesn't change). See syncExecutionTaskLifecycle.
     try {
       const task = await this.tasks.findById(execution.taskId);
       if (task) {
-        if (dto.status === ExecutionStatus.RUNNING && task.status !== TaskStatus.IN_PROGRESS) {
+        const fromStatus = task.status;
+        const projectId = task.toPlain().projectId;
+        const tenantId = Number(execution.tenantId);
+        let toStatus: string = fromStatus;
+        const terminal = dto.status === ExecutionStatus.COMPLETED || dto.status === ExecutionStatus.FAILED;
+
+        if (dto.status === ExecutionStatus.RUNNING && fromStatus !== TaskStatus.IN_PROGRESS) {
+          toStatus = TaskStatus.IN_PROGRESS;
           await this.tasks.update(task.update({ status: TaskStatus.IN_PROGRESS }));
         }
         if (dto.status === ExecutionStatus.COMPLETED) {
@@ -236,8 +258,11 @@ export class RuntimeService {
           if (resultText.includes('[auto-approve]')) {
             newStatus = TaskStatus.DONE;
           }
+          toStatus = newStatus;
           await this.tasks.update(task.update({ status: newStatus }));
         }
+
+        await this.onTaskStatusSync?.({ tenantId, taskId: Number(execution.taskId), projectId, fromStatus, toStatus, terminal });
       }
     } catch {
       // ignore task sync errors to avoid blocking runtime flow

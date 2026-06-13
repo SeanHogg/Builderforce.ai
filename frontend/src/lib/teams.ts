@@ -69,6 +69,18 @@ export async function listTeamsByProject(projectId: number): Promise<AttachedTea
   return r.teams;
 }
 
+/** The assignable workforce for a project — the union of every attached team's
+ *  members. `scopedToTeams` is false (workforce empty) when no team is assigned,
+ *  so callers fall back to the full tenant roster. Drives assignee-picker scoping. */
+export interface ProjectWorkforce {
+  scopedToTeams: boolean;
+  workforce: WorkforceOption[];
+}
+
+export async function getProjectWorkforce(projectId: number): Promise<ProjectWorkforce> {
+  return apiRequest<ProjectWorkforce>(`/api/teams/by-project/${projectId}/workforce`);
+}
+
 export async function createTeam(data: { name: string; description?: string }): Promise<TeamSummary> {
   return apiRequest<TeamSummary>('/api/teams', { method: 'POST', ...json(data) });
 }

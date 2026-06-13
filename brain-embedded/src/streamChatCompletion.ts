@@ -40,10 +40,36 @@ export interface BrainToolSpec {
   };
 }
 
+/** A plain-text content part (OpenAI multimodal `content[]` shape). */
+export interface TextContentPart {
+  type: 'text';
+  text: string;
+}
+
+/**
+ * An image content part. `url` is either a `data:` URI (inlined, the common
+ * case after client-side downscaling) or a short-lived signed public URL the
+ * upstream provider can fetch. The gateway's shape router detects these and
+ * floats a vision-capable model to the head of the cascade.
+ */
+export interface ImageUrlContentPart {
+  type: 'image_url';
+  image_url: { url: string; detail?: 'low' | 'high' | 'auto' };
+}
+
+export type ContentPart = TextContentPart | ImageUrlContentPart;
+
 /** A message in the working array — supports assistant tool-call turns and tool results. */
 export interface ChatCompletionMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
+  /**
+   * Plain string for the overwhelming majority of turns. A `ContentPart[]` is
+   * used only when a user turn carries images (vision): the gateway forwards
+   * the array untouched and routes to a vision model. Persistence stays
+   * text-only — the rich array lives in the in-memory transcript so the model
+   * keeps seeing the image on later turns.
+   */
+  content: string | ContentPart[];
   /** Present on an assistant turn that requested tools. */
   tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>;
   /** Present on a tool-result message, linking it to the call. */

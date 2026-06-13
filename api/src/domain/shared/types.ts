@@ -119,6 +119,9 @@ export enum ExecutionStatus {
   COMPLETED = 'completed',
   FAILED    = 'failed',
   CANCELLED = 'cancelled',
+  /** Non-terminal: a cloud run that called `ask_human` is waiting on a person to
+   *  answer its question (migration 0120). It resumes when the answer lands. */
+  PAUSED    = 'paused',
 }
 
 // ---------------------------------------------------------------------------

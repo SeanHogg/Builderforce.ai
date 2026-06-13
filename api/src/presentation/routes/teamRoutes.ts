@@ -27,6 +27,7 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { teams, teamMembers, teamProjects, projects } from '../../infrastructure/database/schema';
 import { TenantRole } from '../../domain/shared/types';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { loadProjectTeamMembers } from '../../application/metrics/assigneeRecommender';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -42,6 +43,12 @@ const teamsCacheKey = (tenantId: number): string => `teams:tenant:${tenantId}`;
  *  invalidated by attach/detach AND by a team rename/delete. */
 const teamsByProjectCacheKey = (projectId: number): string => `teams:proj:${projectId}`;
 
+/** Cached "assignable workforce for this project" — the union of every attached
+ *  team's members (read by the task assignee picker to scope its options). It
+ *  reflects team_projects AND team_members, so it is invalidated by attach/detach,
+ *  member add/remove, and team delete. */
+const teamsWorkforceCacheKey = (projectId: number): string => `teams:proj-workforce:${projectId}`;
+
 export function createTeamRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
@@ -50,15 +57,22 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
   const invalidate = (c: { env: unknown }, tenantId: number) =>
     invalidateCached(c.env as Env, teamsCacheKey(tenantId));
 
-  // A team's name/description shows in the by-project read, so a rename/delete
-  // must clear the cache for every project it is attached to. Cheap indexed
-  // lookup, run only on the rare rename/delete paths.
+  // Both project-scoped reads (attached-teams + assignable-workforce) for one project.
+  const invalidateProjectCaches = (c: { env: unknown }, projectId: number) =>
+    Promise.all([
+      invalidateCached(c.env as Env, teamsByProjectCacheKey(projectId)),
+      invalidateCached(c.env as Env, teamsWorkforceCacheKey(projectId)),
+    ]);
+
+  // A team's name + membership feed the by-project reads, so a rename/delete or a
+  // member change must clear the caches for every project the team is attached to.
+  // Cheap indexed lookup, run only on those (infrequent) write paths.
   const invalidateProjectsForTeam = async (c: { env: unknown }, teamId: number) => {
     const rows = await db
       .select({ projectId: teamProjects.projectId })
       .from(teamProjects)
       .where(eq(teamProjects.teamId, teamId));
-    await Promise.all(rows.map((r) => invalidateCached(c.env as Env, teamsByProjectCacheKey(r.projectId))));
+    await Promise.all(rows.map((r) => invalidateProjectCaches(c, r.projectId)));
   };
 
   // GET /api/teams — list with member + project counts (single grouped query,
@@ -121,6 +135,29 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
           .orderBy(teams.name),
     );
     return c.json({ teams: rows });
+  });
+
+  // GET /api/teams/by-project/:projectId/workforce — the assignable workforce for
+  // a project: the distinct union (humans + agents) of every team attached to it.
+  // Used by the task assignee picker to SCOPE its options to the project's teams.
+  // `scopedToTeams` is false (and `workforce` empty) when the project has no team
+  // assigned — the caller then falls back to the full tenant roster, so projects
+  // without teams keep today's behaviour. Cached; invalidated on attach/detach +
+  // member add/remove + team delete.
+  router.get('/by-project/:projectId/workforce', async (c) => {
+    const projectId = Number(c.req.param('projectId'));
+    const payload = await getOrSetCached(
+      c.env as Env,
+      teamsWorkforceCacheKey(projectId),
+      async () => {
+        const members = await loadProjectTeamMembers(db, projectId);
+        return {
+          scopedToTeams: members.length > 0,
+          workforce: members.map((m) => ({ kind: m.memberKind, ref: m.memberRef, name: m.memberName })),
+        };
+      },
+    );
+    return c.json(payload);
   });
 
   // GET /api/teams/:id — detail + members + attached projects.
@@ -234,6 +271,8 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       })
       .returning();
 
+    // Membership feeds the per-project assignable-workforce read.
+    await invalidateProjectsForTeam(c, id);
     await invalidate(c, tenantId);
     return c.json(member, 201);
   });
@@ -250,6 +289,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .delete(teamMembers)
       .where(and(eq(teamMembers.id, memberId), eq(teamMembers.teamId, id)));
 
+    await invalidateProjectsForTeam(c, id);
     await invalidate(c, tenantId);
     return c.json({ deleted: true });
   });
@@ -278,7 +318,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .onConflictDoNothing()
       .returning();
 
-    await invalidateCached(c.env as Env, teamsByProjectCacheKey(projectId));
+    await invalidateProjectCaches(c, projectId);
     await invalidate(c, tenantId);
     return c.json(link ?? { error: 'Project already attached' }, link ? 201 : 409);
   });
@@ -295,7 +335,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .delete(teamProjects)
       .where(and(eq(teamProjects.teamId, id), eq(teamProjects.projectId, projectId)));
 
-    await invalidateCached(c.env as Env, teamsByProjectCacheKey(projectId));
+    await invalidateProjectCaches(c, projectId);
     await invalidate(c, tenantId);
     return c.json({ deleted: true });
   });

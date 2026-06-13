@@ -16,7 +16,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useBrainConfig } from './config';
 import type { BrainMessage, BrainModality, ChatInputAttachment } from './types';
-import type { BrainToolSpec, ChatCompletionMessage } from './streamChatCompletion';
+import type { BrainToolSpec, ChatCompletionMessage, ContentPart } from './streamChatCompletion';
+import { prepareImageDataUrl } from './imagePrep';
 
 /** Max agent-loop iterations before we stop chaining tool calls (runaway guard). */
 const MAX_TOOL_ITERATIONS = 5;
@@ -170,7 +171,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
    * from here on accumulates its full tool-call context in-memory. A no-op seed
    * on later turns means the rich, forward-accumulated transcript always wins.
    */
-  const startUserTurn = useCallback((id: number, priorHistory: BrainMessage[], userContent: string) => {
+  const startUserTurn = useCallback((id: number, priorHistory: BrainMessage[], userContent: string | ContentPart[]) => {
     let convo = transcriptRef.current.get(id);
     if (!convo) {
       convo = priorHistory.map((m) => ({
@@ -273,19 +274,40 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       setSending(true);
       setError('');
 
-      let content = trimmed;
+      // Persisted/display content stays text-only (the chat tables store a
+      // string): every attachment shows as a markdown link the user can click.
+      let displayContent = trimmed;
       if (attachments.length > 0) {
         const refs = attachments.map((a) => `[Attached: ${a.name}](${persistence.uploadUrl(a.key)})`).join('\n');
-        content = `${trimmed}\n\n${refs}`;
+        displayContent = `${trimmed}\n\n${refs}`;
       }
       const metadata = attachments.length > 0 ? JSON.stringify({ attachments }) : undefined;
 
+      // Model-visible content: inline images as `image_url` vision parts (the
+      // gateway routes these to a vision model), keeping any non-image
+      // attachments as text links. Without an image it stays a plain string.
+      const imageAtts = attachments.filter((a) => a.imageUrl);
+      let modelContent: string | ContentPart[] = displayContent;
+      if (imageAtts.length > 0) {
+        const nonImageRefs = attachments
+          .filter((a) => !a.imageUrl)
+          .map((a) => `[Attached: ${a.name}](${persistence.uploadUrl(a.key)})`)
+          .join('\n');
+        const text = [trimmed, nonImageRefs].filter(Boolean).join('\n\n');
+        modelContent = [
+          { type: 'text', text },
+          ...imageAtts.map((a) => ({ type: 'image_url' as const, image_url: { url: a.imageUrl! } })),
+        ];
+      }
+
       try {
-        const [userMsg] = await persistence.sendMessages(id, [{ role: 'user', content, metadata }]);
+        const [userMsg] = await persistence.sendMessages(id, [{ role: 'user', content: displayContent, metadata }]);
         setMessages((prev) => [...prev, userMsg]);
         // `messages` (closure) is the prior persisted history, excluding the
-        // just-sent user turn — seed from it once, then append this turn.
-        startUserTurn(id, messages, content);
+        // just-sent user turn — seed from it once, then append this turn (rich
+        // multimodal content when images are present, so the model keeps seeing
+        // them on later turns of the same session).
+        startUserTurn(id, messages, modelContent);
         await runAgentLoop(id);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Send failed');
@@ -338,8 +360,21 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   const attach = useCallback(async (file: File) => {
     setUploading(true);
     try {
+      // Always upload the original so it persists + renders in chat history.
       const result = await persistence.upload(file);
-      setPendingAttachments((prev) => [...prev, { key: result.key, name: result.name, type: result.type }]);
+      const attachment: ChatInputAttachment = { key: result.key, name: result.name, type: result.type };
+      // For raster images, also resolve a model-visible source so the vision
+      // model can actually see it: inline a downscaled data URL when it fits,
+      // else fall back to a short-lived signed URL of the uploaded object.
+      try {
+        const prepared = await prepareImageDataUrl(file);
+        if (prepared?.dataUrl) {
+          attachment.imageUrl = prepared.dataUrl;
+        } else if (prepared?.tooLarge && persistence.signedUploadUrl) {
+          attachment.imageUrl = await persistence.signedUploadUrl(result.key);
+        }
+      } catch { /* non-fatal: fall back to the text-link path */ }
+      setPendingAttachments((prev) => [...prev, attachment]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed');
     } finally {

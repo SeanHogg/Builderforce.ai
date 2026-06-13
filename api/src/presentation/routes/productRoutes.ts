@@ -20,12 +20,12 @@ import type { Db } from '../../infrastructure/database/connection';
 const TRACKERS: Array<{ path: string; table: unknown; opts: TrackerOpts }> = [
   { path: '/mvp', table: mvpScenarios, opts: { fields: ['name', 'description', 'pricingModel', 'targetRevenue', 'timelineConstraint', 'budgetConstraint', 'teamSize', 'status', 'notes'], required: ['name'] } },
   { path: '/validation', table: validationResults, opts: { fields: ['hypothesis', 'validationType', 'method', 'result', 'metrics', 'learnings', 'nextSteps', 'notes'], required: ['hypothesis'] } },
-  { path: '/roadmap', table: roadmapItems, opts: { fields: ['title', 'horizon', 'status', 'theme', 'targetDate', 'priority', 'notes'], required: ['title'], emit: { field: 'status', value: 'shipped', event: 'roadmap.published' } } },
+  { path: '/roadmap', table: roadmapItems, opts: { fields: ['title', 'horizon', 'status', 'theme', 'targetDate', 'priority', 'notes'], required: ['title'], emit: { field: 'status', value: 'shipped', event: 'roadmap.published' }, projectScoped: true, cacheNs: 'roadmap' } },
   { path: '/release-planning', table: productReleases, opts: { fields: ['name', 'version', 'releaseDate', 'status', 'notes'], required: ['name'] } },
   { path: '/changelog', table: changelogEntries, opts: { fields: ['version', 'title', 'body', 'releasedAt', 'status'], required: ['version'] } },
   { path: '/feature-flags', table: featureFlags, opts: { fields: ['key', 'name', 'status', 'rolloutPercentage', 'description', 'notes'], required: ['key'] } },
   { path: '/business-value', table: businessValueConfigs, opts: { fields: ['name', 'valueType', 'displayMode', 'rewardMultiplier', 'isActive', 'notes'], required: ['name'] } },
-  { path: '/feature-roi', table: featureRoi, opts: { fields: ['featureName', 'featureType', 'category', 'status', 'metrics', 'notes'], required: ['featureName'] } },
+  { path: '/feature-roi', table: featureRoi, opts: { fields: ['featureName', 'featureType', 'category', 'status', 'metrics', 'notes'], required: ['featureName'], bumpVersionKeys: (t) => [`roi-version:tenant:${t}`] } },
 ];
 
 export function createProductRoutes(db: Db): Hono<HonoEnv> {

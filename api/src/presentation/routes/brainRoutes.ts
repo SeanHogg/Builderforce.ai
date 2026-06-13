@@ -7,6 +7,7 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { signUpload } from '../../infrastructure/auth/uploadSign';
 import { agentHosts } from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
 import type { BrainService } from '../../application/brain/BrainService';
@@ -239,6 +240,21 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       type: file.type,
       size: file.size,
     }, 201);
+  });
+
+  // POST /uploads/sign — mint a short-lived signed URL for an uploaded object so
+  // an upstream LLM provider can fetch it (vision) without the tenant token. Used
+  // only for images too large to inline as a data URL.
+  router.post('/uploads/sign', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const { key } = await c.req.json<{ key?: string }>();
+    if (!key || !key.startsWith(`${tenantId}/`)) {
+      return c.json({ error: 'Not found' }, 404);
+    }
+    const secret = (c.env as { JWT_SECRET?: string }).JWT_SECRET;
+    if (!secret) return c.json({ error: 'Signing not configured' }, 503);
+    const { exp, sig } = await signUpload(key, secret);
+    return c.json({ exp, sig });
   });
 
   // GET /uploads/:key+ — serve an uploaded file from R2

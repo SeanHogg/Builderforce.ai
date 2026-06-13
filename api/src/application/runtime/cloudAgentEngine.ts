@@ -19,13 +19,14 @@ import { recordPullRequestRow, markPullRequestMergedById } from '../repos/record
 import { readRepoFile, listRepoFiles, searchRepoCode, listBranchDiff } from '../repos/readRepoContents';
 import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
 import { scanWrittenForPlaceholders } from '../repos/scanForPlaceholders';
-import { CODING_BACKSTOP_MODELS, CODING_MODEL_POOL, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
+import { CODING_BACKSTOP_MODELS, CODING_MODEL_POOL, codingModelsForPlan, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
 import { recordUsageRow } from '../llm/usageLedger';
 import { ensureTaskPrdRecord, appendTaskPrdRevision } from '../prd/taskPrd';
 import { loadCapabilityContext } from '../artifact/capabilityContext';
 import { pullPendingSteering, releasePendingSteers } from './executionSteering';
 import { notifyExecutionSubscribers } from './executionEvents';
+import { notifyApprovalRequested } from '../approval/approvalNotifier';
 import {
   CLOUD_AGENT_TOOLS, CONTAINER_AGENT_TOOLS, MAX_CLOUD_TOOL_STEPS, MAX_PLACEHOLDER_FINISH_BLOCKS,
   CONTAINER_MAX_STEPS, assertsUnrunVerification, type RawToolCall,
@@ -36,7 +37,7 @@ import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { executions, tasks, specs, toolAuditEvents, usageSnapshots, projects } from '../../infrastructure/database/schema';
+import { executions, tasks, specs, toolAuditEvents, usageSnapshots, projects, approvals } from '../../infrastructure/database/schema';
 
 /** Resolved cloud-agent identity for a run — engine, display label, surface, model. */
 export interface ResolvedCloudAgent {
@@ -401,8 +402,110 @@ async function emitCodingModelDegraded(
     toolName: 'coding_model_degraded',
     category: 'llm',
     detail: { resolvedModel: args.resolvedModel, requestedModel: args.requestedModel ?? null, executionId: args.executionId },
-    result: `coding run served by non-coder model '${args.resolvedModel}'${args.requestedModel ? ` (requested '${args.requestedModel}')` : ''}`,
+    // Spell out the cause AND the consequence: the curated coders this run seeded
+    // with were all unreachable (vendor key unbound / cooled down / outage), so the
+    // cascade floored onto a generalist backstop. That is the usual root cause of a
+    // run that loops on search and finishes with no edits — say so here so triage
+    // does not have to infer it.
+    result: `Coding turn fell through to non-coder backstop '${args.resolvedModel}'${args.requestedModel ? ` (intended coder: '${args.requestedModel}')` : ''} — the plan's curated coders were unreachable (vendor key unbound / cooled down / outage). Expect weak agentic results: a backstop generalist often loops on search and finishes without producing edits.`,
   });
+}
+
+/**
+ * Run-start model-selection trace. Records WHY this run is on the model it is —
+ * the single most common triage question for a cloud run that produced no output
+ * (see execution #59: dispatched `gateway-default`, silently floored onto the
+ * gemini backstop, spun 7 steps, shipped nothing). The dispatch event only logs
+ * the raw `gateway-default` label; this event makes the resolution legible:
+ *   • what was requested (agent base_model / user pick, or nothing),
+ *   • whether it's a hard strict pin or a soft plan-default seed,
+ *   • the seed model + whether it is a curated coder at all,
+ *   • the coders THIS plan could actually reach (best-first).
+ * Pairs with {@link emitCodingModelDegraded}, which reports the OUTCOME once the
+ * gateway resolves. First tick only — best-effort, never breaks the run.
+ */
+async function emitModelSelection(
+  db: Db,
+  args: {
+    tenantId: number; cloudAgentRef?: string; executionId: number;
+    requested: string | undefined;
+    pick: { model: string; strict: boolean };
+    plan: EffectivePlan; premium: boolean;
+  },
+): Promise<void> {
+  const seedIsCoder = CODING_MODEL_POOL_SET.has(args.pick.model);
+  const planCoders = codingModelsForPlan(args.plan, args.premium);
+  const reason = args.pick.strict
+    ? `Pinned to '${args.pick.model}' (strict — the gateway dispatches only this model, no silent swap).`
+    : `No usable model on this agent${args.requested ? ` ('${args.requested}' is not a known catalog id)` : ' (dispatched as gateway-default)'} → seeding the ${args.plan} plan's best coding model '${args.pick.model}'${seedIsCoder ? '' : ' (NOT a curated coder)'}. Soft seed: the run locks onto whatever the gateway resolves on turn 1, so a cold/keyless seed can fail over once — possibly onto a non-coder backstop (watch for coding_model_degraded).`;
+  await recordCloudToolEvent(db, {
+    tenantId: args.tenantId,
+    cloudAgentRef: args.cloudAgentRef,
+    executionId: args.executionId,
+    toolName: 'model.select',
+    category: 'planning',
+    detail: {
+      requested: args.requested ?? null,
+      pin: args.pick.strict ? 'strict' : 'soft',
+      seed: args.pick.model,
+      seedIsCoder,
+      plan: args.plan,
+      premium: args.premium,
+      planCoders,
+    },
+    result: reason,
+  });
+}
+
+/**
+ * A blocked cloud agent's `ask_human` call: record a `question` approval scoped to
+ * this execution (so the answer routes back to this exact run) into the SAME
+ * approvals queue self-hosted agents use, fan out the team notification (Slack +
+ * email), and surface the question on the live execution stream. Returns the new
+ * approval id so the loop can carry it in the pause result. The run is parked in
+ * `paused` by the caller. Best-effort on notify; the row insert is the durable part.
+ */
+async function createCloudQuestion(
+  env: Env,
+  db: Db,
+  args: {
+    tenantId: number; cloudAgentRef?: string; executionId: number;
+    agentLabel: string; question: string; context?: string;
+  },
+): Promise<string> {
+  const approvalId = crypto.randomUUID();
+  const now = new Date();
+  const description = args.context?.trim()
+    ? `${args.question.trim()}\n\nContext: ${args.context.trim()}`
+    : args.question.trim();
+  await db.insert(approvals).values({
+    id:           approvalId,
+    tenantId:     args.tenantId,
+    // segment_id is set by the DB trigger (0056); omitted like the on-prem POST path.
+    executionId:  args.executionId,
+    cloudAgentRef: args.cloudAgentRef ?? null,
+    requestedBy:  args.agentLabel,
+    kind:         'question',
+    actionType:   'clarify.blocked',
+    description,
+    status:       'pending',
+    createdAt:    now,
+    updatedAt:    now,
+  });
+
+  await notifyApprovalRequested(env, db, {
+    tenantId: args.tenantId, approvalId, kind: 'question',
+    actionType: 'clarify.blocked', description,
+  });
+
+  // Mirror onto the live execution stream so an open panel shows the ask immediately.
+  notifyExecutionSubscribers(args.executionId, {
+    type: 'message', executionId: args.executionId, role: 'assistant',
+    text: `⏸ Paused — waiting on a human answer:\n${args.question.trim()}`,
+    ts: now.toISOString(),
+  });
+
+  return approvalId;
 }
 
 /**
@@ -702,6 +805,10 @@ export interface CloudLoopResult {
    *  false, `state` carries the resume point for the next tick. */
   finished: boolean;
   state?: CloudLoopState;
+  /** Set when the agent called `ask_human`: the run is PAUSED on a human question
+   *  (NOT finished — no PR, not terminal). `state` carries the resume point so the
+   *  surface persists it and wakes the loop once the question is answered. */
+  awaitingInput?: { approvalId: string; question: string };
 }
 
 export async function runCloudToolLoop(
@@ -776,9 +883,23 @@ export async function runCloudToolLoop(
   const strictPin = pick.strict;
   let activeModel: string = opts?.resume?.pinnedModel ?? pick.model;
 
+  // Make the model choice legible on the timeline — once, at run start (resume ticks
+  // already locked their pin). The companion to llm.complete + coding_model_degraded:
+  // those report what RAN; this reports why it was chosen. Best-effort.
+  if (!opts?.resume) {
+    await emitModelSelection(db, {
+      tenantId, cloudAgentRef, executionId,
+      requested: model, pick, plan: routing.effectivePlan, premium: routing.premiumOverride,
+    });
+  }
+
   let finalOutput = '';
   let finished = false;
   let cancelled = false;
+  // Set when the agent calls ask_human: the run pauses on a human question (not a
+  // finish — no PR, not terminal). Carries the approval id so the caller can park
+  // the run in `paused` and resume it when the question is answered.
+  let awaitingInput: { approvalId: string; question: string } | null = null;
   let step = startStep;
   // Honesty gate: this executor has no shell, so it can never actually run a
   // build/type-check/test. Reject a finish that claims one passed — once — to force
@@ -1063,8 +1184,22 @@ export async function runCloudToolLoop(
           finished = true;
           toolResult = { ok: true };
         }
+      } else if (name === 'ask_human') {
+        const question = typeof parsed.question === 'string' ? parsed.question.trim() : '';
+        const context = typeof parsed.context === 'string' ? parsed.context : undefined;
+        if (!question) {
+          toolResult = { ok: false, error: 'question is required to ask a human' };
+        } else {
+          const approvalId = await createCloudQuestion(env, db, {
+            tenantId, cloudAgentRef, executionId, agentLabel, question, context,
+          });
+          awaitingInput = { approvalId, question };
+          // Echo the question turn so the answer (delivered as a user steer on resume)
+          // attaches to a complete conversation, then close out this turn's tool call.
+          toolResult = { ok: true, paused: true, note: 'Question sent to a human. The run is paused until it is answered; you will resume with the answer.' };
+        }
       } else {
-        toolResult = { ok: false, error: `unknown tool '${name}'. Available tools: search_code, list_files, read_file, write_file, delete_file, run_checks, finish. This executor has no shell and cannot run code, builds, or tests — do not claim a check passed; CI on the PR verifies.` };
+        toolResult = { ok: false, error: `unknown tool '${name}'. Available tools: search_code, list_files, read_file, write_file, delete_file, run_checks, ask_human, finish. This executor has no shell and cannot run code, builds, or tests — do not claim a check passed; CI on the PR verifies.` };
       }
 
       await recordCloudToolEvent(db, {
@@ -1077,12 +1212,32 @@ export async function runCloudToolLoop(
 
       messages.push({ role: 'tool', tool_call_id: tc.id ?? '', content: JSON.stringify(toolResult) });
     }
+
+    // ask_human was called this turn — stop the loop and let the caller park the
+    // run in `paused`. The conversation (incl. the tool result above) is captured
+    // in `state` so the resume tick continues right where it left off.
+    if (awaitingInput) break;
   }
   } finally {
     // Stop the cancel watcher (and let it settle) so its timer can't outlive the run.
     watcherDone = true;
     abortController.abort();
     await cancelWatcher.catch(() => { /* ignore */ });
+  }
+
+  // Paused on a human question — do NOT finalize (no PR, not terminal). Hand back
+  // the resume state + the awaiting marker so the surface parks the run in `paused`
+  // and wakes the loop when the question is answered (the answer arrives as a steer).
+  // Applies on BOTH surfaces (the Worker path inspects awaitingInput too).
+  if (awaitingInput && !cancelled) {
+    return {
+      ok: true,
+      output: finalOutput,
+      cancelled: false,
+      finished: false,
+      awaitingInput,
+      state: { messages, writtenPaths: [...writtenPaths], step, pinnedModel: activeModel, routing, repoCtx, repoMiss },
+    };
   }
 
   // Durable (DO) surface: the per-tick budget is exhausted but the run isn't done
@@ -1423,7 +1578,7 @@ export async function runCloudExecution(
     const { systemPrompt, userContent } = await prepareCloudRun(
       env, db, executionId, taskRow, tenantId, projectId, agentLabel, model, artifacts, cloudAgentRef, payload,
     );
-    const { ok, output, cancelled } = await runCloudToolLoop(
+    const { ok, output, cancelled, awaitingInput } = await runCloudToolLoop(
       env, db, executionId, tenantId, taskRow, cloudAgentRef, agentLabel, model, systemPrompt, userContent, isCancelled, projectId,
     );
 
@@ -1434,6 +1589,24 @@ export async function runCloudExecution(
       notifyExecutionSubscribers(executionId, {
         type: 'message', executionId, role: 'assistant',
         text: output || 'Run cancelled.', ts: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // Paused on a human question: park the run in `paused` (NOT terminal) — the
+    // question is already in the human-requests queue. Set the status directly
+    // (RuntimeService.update only permits running/completed/failed), mirroring the
+    // CloudRunnerDO pause. The interim Worker surface has no persisted cursor to
+    // resume, so when the answer lands it is delivered as a steer and picked up by
+    // the follow-up run the answer triggers.
+    if (awaitingInput) {
+      await db.update(executions)
+        .set({ status: ExecutionStatus.PAUSED, updatedAt: new Date() })
+        .where(eq(executions.id, executionId))
+        .catch(() => { /* best-effort */ });
+      const paused = await runtimeService.getExecution(executionId).catch(() => null);
+      if (paused) notifyExecutionSubscribers(executionId, {
+        type: 'status_change', executionId, status: paused.status, execution: paused.toPlain(), ts: new Date().toISOString(),
       });
       return;
     }

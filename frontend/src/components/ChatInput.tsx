@@ -186,6 +186,42 @@ export function ChatInput({
     [onAttach]
   );
 
+  // Paste an image straight from the clipboard (e.g. a screenshot) — same path
+  // as the + button, so it flows through onAttach → vision content part.
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      if (!onAttach) return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            void onAttach(file);
+          }
+        }
+      }
+    },
+    [onAttach]
+  );
+
+  // Drag-and-drop image files onto the input.
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      if (!onAttach) return;
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
+      e.preventDefault();
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.type.startsWith('image/')) void onAttach(file);
+      }
+    },
+    [onAttach]
+  );
+
   const startVoice = useCallback(() => {
     const Win = typeof window !== 'undefined' ? (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionInstance; SpeechRecognition?: new () => SpeechRecognitionInstance }) : null;
     const Recognition = Win?.SpeechRecognition ?? Win?.webkitSpeechRecognition;
@@ -261,6 +297,8 @@ export function ChatInput({
         </div>
       )}
       <div
+        onDrop={onAttach ? handleDrop : undefined}
+        onDragOver={onAttach ? (e) => e.preventDefault() : undefined}
         style={{
           display: 'flex',
           alignItems: 'flex-end',
@@ -297,6 +335,7 @@ export function ChatInput({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={onAttach ? handlePaste : undefined}
           placeholder={placeholder}
           disabled={disabled}
           rows={rows}

@@ -62,6 +62,19 @@ export class CloudRunnerDO implements DurableObject {
       await this.start(body);
       return new Response(JSON.stringify({ ok: true }), { status: 202, headers: { 'Content-Type': 'application/json' } });
     }
+    // Resume a run paused on ask_human: a human answered (delivered as a pending
+    // steer the loop drains on its next tick), so flip back to running and re-arm
+    // the alarm. The cursor (incl. loop resume state) was kept across the pause.
+    if (request.method === 'POST' && url.pathname.endsWith('/resume')) {
+      const cursor = (await this.state.storage.get<Cursor>(CURSOR_KEY)) ?? null;
+      if (!cursor) return new Response(JSON.stringify({ ok: false, reason: 'no paused run' }), { status: 409, headers: { 'Content-Type': 'application/json' } });
+      await this.db.update(executions)
+        .set({ status: 'running', updatedAt: new Date() })
+        .where(eq(executions.id, cursor.executionId))
+        .catch(() => { /* best-effort */ });
+      await this.state.storage.setAlarm(Date.now());
+      return new Response(JSON.stringify({ ok: true }), { status: 202, headers: { 'Content-Type': 'application/json' } });
+    }
     return new Response('not found', { status: 404 });
   }
 
@@ -127,6 +140,19 @@ export class CloudRunnerDO implements DurableObject {
       );
 
       if (result.cancelled) { await this.cleanup(cursor.executionId); return; }
+
+      // Paused on a human question: persist the resume state but do NOT re-arm the
+      // alarm — the run sleeps (no token spend) until /resume wakes it after the
+      // question is answered. The cursor is kept so /resume can continue from here.
+      if (result.awaitingInput) {
+        cursor.loop = result.state;
+        await this.state.storage.put(CURSOR_KEY, cursor);
+        await this.db.update(executions)
+          .set({ status: 'paused', updatedAt: new Date() })
+          .where(eq(executions.id, cursor.executionId))
+          .catch(() => { /* best-effort */ });
+        return;
+      }
 
       if (!result.finished) {
         cursor.loop = result.state;

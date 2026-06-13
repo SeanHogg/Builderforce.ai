@@ -160,6 +160,19 @@ export const brain = {
 
   /** URL to view/download an uploaded file by key. */
   uploadUrl: (key: string) => `${AUTH_API_URL}/api/brain/uploads/${key}`,
+
+  /**
+   * Mint a short-lived signed public URL for an uploaded object so an upstream
+   * LLM provider can fetch it (vision). Used only for an image too large to
+   * inline as a data URL — see brain-embedded's image prep.
+   */
+  signedUploadUrl: async (key: string): Promise<string> => {
+    const { exp, sig } = await request<{ exp: number; sig: string }>('/api/brain/uploads/sign', {
+      method: 'POST',
+      body: JSON.stringify({ key }),
+    });
+    return `${AUTH_API_URL}/api/brain-files/${key}?exp=${exp}&sig=${encodeURIComponent(sig)}`;
+  },
 };
 
 /** Structured error from the LLM gateway, with the fields callers branch on. */
@@ -887,7 +900,35 @@ export const tasksApi = {
       method: 'POST',
       body: JSON.stringify({ projectId }),
     }),
+
+  /** All precedence edges in a project (the dependency graph). */
+  dependencies: (projectId: number): Promise<DependencyEdge[]> =>
+    request<{ dependencies: DependencyEdge[] }>(`/api/tasks/dependencies?project=${projectId}`).then(
+      (r) => r.dependencies ?? [],
+    ),
+
+  /** Add an edge where `successorTaskId` depends on (is blocked by) `predecessorTaskId`.
+   *  Rejects cross-project edges and cycles server-side (400 'would create a dependency cycle'). */
+  addDependency: (successorTaskId: number, predecessorTaskId: number): Promise<DependencyEdge> =>
+    request<DependencyEdge>(`/api/tasks/${successorTaskId}/dependencies`, {
+      method: 'POST',
+      body: JSON.stringify({ predecessorTaskId }),
+    }),
+
+  /** Remove a precedence edge by id. */
+  removeDependency: (edgeId: number): Promise<void> =>
+    request<void>(`/api/tasks/dependencies/${edgeId}`, { method: 'DELETE' }),
 };
+
+/** A task precedence edge: predecessor must finish before successor can start. */
+export interface DependencyEdge {
+  id: number;
+  projectId: number;
+  predecessorTaskId: number;
+  successorTaskId: number;
+  depType: string;
+  createdAt: string;
+}
 
 /** Runtime executions – submit tasks to agentHosts for agent execution. */
 export interface Execution {
@@ -1119,6 +1160,117 @@ export const dashboardApi = {
   usage: (window: 'today' | 'week' | 'month' = 'week'): Promise<DashboardUsage> =>
     request<DashboardUsage>(`/api/dashboard/usage?window=${window}`),
 };
+
+// ---------------------------------------------------------------------------
+// Workforce members — capability/availability profiles + effectiveness /
+// engagement / DORA metrics (humans AND agents). See /api/members.
+// ---------------------------------------------------------------------------
+
+export type MemberKind = 'human' | 'cloud_agent' | 'host_agent';
+
+export interface MemberProfile {
+  memberKind: MemberKind;
+  memberRef: string;
+  timezone: string | null;
+  workHours: unknown;
+  pto: unknown;
+  responseSlaHours: number | null;
+  weeklyCapacityHours: number | null;
+  dailyCapacityPoints: number | null;
+  maxConcurrentWip: number | null;
+  rampFactor: number | null;
+  experienceLevel: 'junior' | 'mid' | 'senior' | 'staff' | 'principal' | null;
+  skills: unknown;
+  focusAreas: unknown;
+  preferredTaskTypes: unknown;
+  availabilityStatus: 'available' | 'busy' | 'focus' | 'ooo' | 'on_call';
+  availabilityUntil: string | null;
+  lastActiveAt: string | null;
+  costRateUsdCents: number | null;
+  syncSource: 'manual' | 'google_calendar';
+}
+
+export interface MemberScorecard {
+  memberKind: MemberKind;
+  memberRef: string;
+  memberName: string;
+  assignedCount: number;
+  completedCount: number;
+  redoCount: number;
+  reopenCount: number;
+  avgCycleTimeHours: number | null;
+  avgPickupLatencyHours: number | null;
+  avgIdleAfterDoneHours: number | null;
+  boardHygieneScore: number | null;
+  engagementScore: number | null;
+  effectivenessScore: number | null;
+}
+
+export interface DoraRollup {
+  windowDays: number;
+  deploymentFrequencyPerDay: number;
+  totalDeployments: number;
+  leadTimeHours: number | null;
+  changeFailureRatePct: number | null;
+  mttrHours: number | null;
+}
+
+export interface AssigneeRecommendation {
+  memberKind: MemberKind;
+  memberRef: string;
+  memberName: string;
+  fitScore: number;
+  wip: number;
+  spareCapacity: number;
+  available: boolean;
+  skillMatchPct: number | null;
+  reasons: string[];
+}
+
+export const membersApi = {
+  /** Every member profile for the tenant (planner-facing). */
+  profiles: (): Promise<{ profiles: MemberProfile[] }> =>
+    request<{ profiles: MemberProfile[] }>('/api/members/profiles'),
+
+  getProfile: (kind: MemberKind, ref: string): Promise<{ profile: MemberProfile | null }> =>
+    request<{ profile: MemberProfile | null }>(`/api/members/${kind}/${encodeURIComponent(ref)}/profile`),
+
+  putProfile: (kind: MemberKind, ref: string, body: Partial<MemberProfile>): Promise<{ profile: MemberProfile }> =>
+    request<{ profile: MemberProfile }>(`/api/members/${kind}/${encodeURIComponent(ref)}/profile`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  /** Effectiveness/engagement scorecards for every member over a window (MANAGER+). */
+  metrics: (days = 7): Promise<{ windowDays: number; members: MemberScorecard[] }> =>
+    request<{ windowDays: number; members: MemberScorecard[] }>(`/api/members/metrics?days=${days}`),
+
+  /** The four DORA metrics for the tenant over a window (MANAGER+). */
+  dora: (days = 30): Promise<DoraRollup> =>
+    request<DoraRollup>(`/api/members/dora?days=${days}`),
+
+  /** Ranked assignee recommendations for a project (planner consumption). */
+  recommend: (projectId: number, skills: string[] = []): Promise<{ recommendations: AssigneeRecommendation[] }> =>
+    request<{ recommendations: AssigneeRecommendation[] }>(
+      `/api/members/recommend?projectId=${projectId}${skills.length ? `&skills=${encodeURIComponent(skills.join(','))}` : ''}`,
+    ),
+
+  /** Overlay a human member's Google Calendar (busy + PTO) onto their profile.
+   *  Requires a connected `google_calendar` integration; 409 if none. */
+  calendarSync: (kind: MemberKind, ref: string, calendarId?: string): Promise<CalendarSyncResult> =>
+    request<CalendarSyncResult>(`/api/members/${kind}/${encodeURIComponent(ref)}/calendar-sync`, {
+      method: 'POST',
+      body: JSON.stringify({ calendarId }),
+    }),
+};
+
+export interface CalendarSyncResult {
+  ok: boolean;
+  message?: string;
+  availabilityStatus?: 'available' | 'busy';
+  availabilityUntil?: string | null;
+  ptoCount?: number;
+}
 
 /**
  * BYO LLM provider keys — a tenant stores its own Anthropic key so the gateway
@@ -2094,12 +2246,32 @@ export type TrackerRow = Record<string, unknown> & { id: string };
 
 export function segmentTrackerClient(apiBase: string) {
   return {
-    list:   () => request<TrackerRow[]>(apiBase),
+    /** List rows. For project-scoped trackers (roadmap, feature-scoring), pass a
+     *  projectId to get that project's rows; omit for the segment/portfolio view. */
+    list:   (projectId?: number) =>
+      request<TrackerRow[]>(projectId != null ? `${apiBase}?project=${projectId}` : apiBase),
     create: (body: Record<string, unknown>) => request<TrackerRow>(apiBase, { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: Record<string, unknown>) => request<TrackerRow>(`${apiBase}/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
     remove: (id: string) => request<{ deleted: string }>(`${apiBase}/${id}`, { method: 'DELETE' }),
   };
 }
+
+// Feature/portfolio ROI rollup (/api/roi/rollup). Composed live from tasks,
+// task_status_transitions, sprints, llm_usage_log, and cost_calculations — see roiRoutes.ts.
+export interface RoiRollup {
+  scope: { projectId: number | null };
+  time: { completedCount: number; avgCycleTimeHours: number; throughputPerWeek: number };
+  spend: { sprintRunwayBudget: number; sprintActualBurn: number; agentLlmCostUsd: number; costModelTotal: number };
+  roi: TrackerRow[];
+  byProject: Array<{ projectId: number; projectName: string; completedCount: number; agentLlmCostUsd: number }>;
+}
+
+export const roiApi = {
+  /** Composed ROI rollup. Pass a projectId for the project view; omit for the
+   *  segment-wide portfolio (which includes a per-project breakdown). */
+  rollup: (projectId?: number): Promise<RoiRollup> =>
+    request<RoiRollup>(`/api/roi/rollup${projectId != null ? `?project=${projectId}` : ''}`),
+};
 
 // Sprints (agile tracker; /api/agile/sprints). A planning ceremony creates/uses a
 // sprint and schedules tasks into it via tasksApi.update({ sprintId }).
@@ -2112,6 +2284,54 @@ export interface Sprint {
   endDate: string | null;
   capacity: number | null;
 }
+
+// ── Ceremony sessions (standup / planning tracking; /api/agile/ceremonies) ──
+export type CeremonyKind = 'standup' | 'planning';
+
+export interface CeremonySession {
+  id: string;
+  projectId: number;
+  kind: CeremonyKind;
+  status: 'active' | 'completed';
+  facilitatorId: string | null;
+  turnMode: 'facilitator' | 'timeboxed';
+  turnSeconds: number;
+  /** Index into participants.turnOrder of the current speaker (null = not started/ended). */
+  currentTurn: number | null;
+  turnStartedAt: string | null;
+  startedAt: string;
+  endedAt: string | null;
+}
+
+export interface CeremonyParticipant {
+  id: string;
+  sessionId: string;
+  memberKind: 'human' | 'cloud_agent' | 'host_agent';
+  memberRef: string;
+  memberName: string;
+  turnOrder: number;
+  durationMs: number;
+}
+
+export interface CeremonySessionDetail {
+  session: CeremonySession | null;
+  participants?: CeremonyParticipant[];
+}
+
+const CEREMONY_BASE = '/api/agile/ceremonies';
+export const ceremonySessionsApi = {
+  active: (projectId: number, kind: CeremonyKind): Promise<CeremonySessionDetail> =>
+    request(`${CEREMONY_BASE}/sessions?projectId=${projectId}&kind=${kind}`),
+  start: (projectId: number, kind: CeremonyKind, participants: Array<{ kind: string; ref: string; name: string }>): Promise<CeremonySessionDetail> =>
+    request(`${CEREMONY_BASE}/sessions`, { method: 'POST', body: JSON.stringify({ projectId, kind, participants }) }),
+  advanceTurn: (id: string, currentTurn: number): Promise<CeremonySessionDetail> =>
+    request(`${CEREMONY_BASE}/sessions/${id}/turn`, { method: 'PATCH', body: JSON.stringify({ currentTurn }) }),
+  complete: (id: string): Promise<CeremonySessionDetail> =>
+    request(`${CEREMONY_BASE}/sessions/${id}/complete`, { method: 'POST' }),
+};
+
+// Member metrics & profiles (the workforce scorecard system) live in `membersApi`
+// (declared earlier in this file) — the ceremony UI consumes those directly.
 
 const sprintTracker = segmentTrackerClient('/api/agile/sprints');
 export const sprintsApi = {
@@ -2376,10 +2596,32 @@ export interface AddRepositoryBody {
   credentialId?: string | null;
 }
 
+export interface ImportedRepoFile {
+  path: string;
+  content: string;
+  truncated: boolean;
+}
+
+export interface ImportRepoManifest {
+  ok: boolean;
+  ref: string;
+  files: ImportedRepoFile[];
+  discovered: number;
+  skipped: string[];
+  truncated: boolean;
+}
+
 export const reposApi = {
   list: (projectId: number): Promise<ProjectRepository[]> =>
     request<{ repositories: ProjectRepository[] }>(`/api/repos/projects/${projectId}/repositories`)
       .then((r) => r.repositories ?? []),
+
+  /** Read a connected repo's files (server-side, token-scoped) for importing into
+   *  the IDE workspace. The caller persists the manifest via saveFile. */
+  contents: (id: string, ref?: string): Promise<ImportRepoManifest> =>
+    request<ImportRepoManifest>(
+      `/api/repos/repositories/${id}/contents${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`,
+    ),
 
   add: (projectId: number, body: AddRepositoryBody): Promise<ProjectRepository> =>
     request(`/api/repos/projects/${projectId}/repositories`, { method: 'POST', body: JSON.stringify(body) }),
@@ -2526,6 +2768,9 @@ export interface Board {
   autonomous: boolean;
   maxConcurrentTickets: number;
   needsAttentionLane: string | null;
+  /** Standup turn-timer behaviour for this board's ceremonies (migration 0119). */
+  standupTurnMode: 'facilitator' | 'timeboxed';
+  standupTurnSeconds: number;
   createdAt: string;
   updatedAt: string;
   swimlanes?: Swimlane[];
@@ -2597,7 +2842,7 @@ export const boardsApi = {
   create: (body: { projectId: number; name: string; maxConcurrentTickets?: number; needsAttentionLane?: string | null }): Promise<Board> =>
     request('/api/boards', { method: 'POST', body: JSON.stringify(body) }),
 
-  update: (boardId: string, body: Partial<{ name: string; maxConcurrentTickets: number; needsAttentionLane: string | null }>): Promise<Board> =>
+  update: (boardId: string, body: Partial<{ name: string; maxConcurrentTickets: number; needsAttentionLane: string | null; standupTurnMode: 'facilitator' | 'timeboxed'; standupTurnSeconds: number }>): Promise<Board> =>
     request(`/api/boards/${boardId}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   remove: (boardId: string): Promise<void> =>

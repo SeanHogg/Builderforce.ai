@@ -171,6 +171,8 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       name?: string;
       maxConcurrentTickets?: number;
       needsAttentionLane?: string;
+      standupTurnMode?: string;
+      standupTurnSeconds?: number;
     }>();
 
     await db
@@ -179,6 +181,8 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         ...(body.name !== undefined ? { name: body.name.trim() } : {}),
         ...(body.maxConcurrentTickets !== undefined ? { maxConcurrentTickets: body.maxConcurrentTickets } : {}),
         ...(body.needsAttentionLane !== undefined ? { needsAttentionLane: body.needsAttentionLane } : {}),
+        ...(body.standupTurnMode !== undefined ? { standupTurnMode: body.standupTurnMode } : {}),
+        ...(body.standupTurnSeconds !== undefined ? { standupTurnSeconds: body.standupTurnSeconds } : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)));

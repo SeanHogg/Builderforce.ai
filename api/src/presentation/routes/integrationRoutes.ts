@@ -21,61 +21,7 @@ import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { githubStatusMessage } from '../../application/integrations/githubTestError';
-
-// ---------------------------------------------------------------------------
-// AES-256-GCM encryption helpers (Web Crypto — works in Cloudflare Workers)
-// ---------------------------------------------------------------------------
-
-/** Derive an AES-256 key from a passphrase using PBKDF2. */
-async function deriveKey(passphrase: string): Promise<CryptoKey> {
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveKey'],
-  );
-  return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: enc.encode('builderforce-integrations'), iterations: 100_000, hash: 'SHA-256' },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt'],
-  );
-}
-
-async function encryptCredentials(
-  data: Record<string, unknown>,
-  secret: string,
-): Promise<{ enc: string; iv: string }> {
-  const key = await deriveKey(secret);
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const enc = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    key,
-    new TextEncoder().encode(JSON.stringify(data)),
-  );
-  return {
-    enc: btoa(String.fromCharCode(...new Uint8Array(enc))),
-    iv:  Array.from(iv).map((b) => b.toString(16).padStart(2, '0')).join(''),
-  };
-}
-
-async function decryptCredentials(
-  encB64: string,
-  ivHex: string,
-  secret: string,
-): Promise<Record<string, unknown> | null> {
-  try {
-    const key = await deriveKey(secret);
-    const iv  = new Uint8Array(ivHex.match(/.{2}/g)!.map((h) => parseInt(h, 16)));
-    const dec = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
-      key,
-      Uint8Array.from(atob(encB64), (c) => c.charCodeAt(0)),
-    );
-    return JSON.parse(new TextDecoder().decode(dec));
-  } catch {
-    return null;
-  }
-}
+import { encryptCredentials, decryptCredentials } from '../../application/integrations/credentialCrypto';
 
 /** Mask a credential value for display (show last 4 chars). */
 function maskToken(token: string): string {

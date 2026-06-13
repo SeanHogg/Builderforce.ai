@@ -10,12 +10,14 @@
  * GET    /api/approvals/escalate  Expire timed-out pending approvals + re-notify (internal/cron)
  */
 import { Hono } from 'hono';
-import { eq, and, desc, lt, or } from 'drizzle-orm';
+import { eq, and, desc, lt } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { approvals, agentHosts, tenantMembers, users } from '../../infrastructure/database/schema';
+import { approvals, agentHosts } from '../../infrastructure/database/schema';
 import { verifySecret } from '../../infrastructure/auth/HashService';
 import { checkAutoApprovalRules } from './approvalRuleRoutes';
 import { normalizeRequestKind, isAnswerableKind } from '../../domain/approval/requestKind';
+import { sendSlackNotification, notifyApprovalRequested } from '../../application/approval/approvalNotifier';
+import { resumePausedExecution } from '../../application/runtime/executionResume';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
@@ -37,51 +39,8 @@ async function verifyAgentHostApiKey(db: Db, id: number, key?: string | null): P
   return valid ? agentHost : null;
 }
 
-// ---------------------------------------------------------------------------
-// Notification helpers
-// ---------------------------------------------------------------------------
-
-async function sendSlackNotification(webhookUrl: string, text: string): Promise<void> {
-  await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
-  }).catch(() => { /* best-effort */ });
-}
-
-async function sendEmailNotification(
-  apiKey: string,
-  from: string,
-  to: string[],
-  subject: string,
-  html: string,
-): Promise<void> {
-  await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({ from, to, subject, html }),
-  }).catch(() => { /* best-effort */ });
-}
-
-/** Collect manager email addresses for the tenant to use as notification recipients. */
-async function getManagerEmails(db: Db, tenantId: number): Promise<string[]> {
-  const rows = await db
-    .select({ email: users.email })
-    .from(tenantMembers)
-    .innerJoin(users, eq(tenantMembers.userId, users.id))
-    .where(and(
-      eq(tenantMembers.tenantId, tenantId),
-      eq(tenantMembers.isActive, true),
-      or(
-        eq(tenantMembers.role, 'manager'),
-        eq(tenantMembers.role, 'owner'),
-      ),
-    ));
-  return rows.map((r) => r.email);
-}
+// Slack/email fan-out + manager-email lookup live in the shared approvalNotifier
+// so the cloud `ask_human` path notifies identically — see imports above.
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -224,28 +183,11 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
       })).catch(() => { /* best-effort */ });
     }
 
-    // Slack notification for new pending approvals (skip if auto-approved)
-    if (!autoApproved && env.SLACK_APPROVAL_WEBHOOK_URL) {
-      await sendSlackNotification(
-        env.SLACK_APPROVAL_WEBHOOK_URL,
-        `:bell: *New approval request* (${body.actionType})\n${body.description}\n` +
-        `Approve or reject at: ${env.APP_URL ?? 'https://builderforce.ai'}/approvals/${approvalId}`,
-      );
-    }
-
-    // Email notification for new pending approvals
-    if (!autoApproved && env.RESEND_API_KEY && env.NOTIFICATION_EMAIL_FROM) {
-      const emails = await getManagerEmails(db, tenantId);
-      if (emails.length > 0) {
-        const subject = `[Builderforce] Approval required: ${body.actionType}`;
-        const html = `<p>A new approval request requires your attention.</p>
-<ul>
-  <li><strong>Action:</strong> ${body.actionType}</li>
-  <li><strong>Description:</strong> ${body.description}</li>
-</ul>
-<p><a href="${env.APP_URL ?? 'https://builderforce.ai'}/approvals/${approvalId}">Review approval</a></p>`;
-        await sendEmailNotification(env.RESEND_API_KEY, env.NOTIFICATION_EMAIL_FROM, emails, subject, html);
-      }
+    // Slack + email fan-out for new pending requests (skip if auto-approved).
+    if (!autoApproved) {
+      await notifyApprovalRequested(env, db, {
+        tenantId, approvalId, kind, actionType: body.actionType, description: body.description,
+      });
     }
 
     return c.json({ approvalId, status }, 201);
@@ -328,6 +270,18 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
         updatedAt:    new Date(),
       })
       .where(and(eq(approvals.id, id), eq(approvals.tenantId, tenantId)));
+
+    // Resume a paused CLOUD run: a cloud agent's question carries the execution it
+    // paused (no agent_host_id). Deliver the answer the same way a steer is — as a
+    // pending user turn the loop drains on its next tick — and wake the durable run.
+    // (The on-prem relay branch below covers self-hosted agents.)
+    if (existing.executionId && responseText) {
+      await resumePausedExecution(env, db, {
+        executionId: existing.executionId,
+        tenantId,
+        answer: responseText,
+      });
+    }
 
     // Notify the agentHost about the decision via the relay so the blocked gate resumes.
     if (existing.agentHostId && env.AGENT_HOST_RELAY) {

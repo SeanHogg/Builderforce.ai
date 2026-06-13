@@ -6,6 +6,7 @@ import { CodePane } from './CodePane';
 import { Terminal } from './Terminal';
 import { AITrainingPanel } from './AITrainingPanel';
 import { AgentPublishPanel } from './AgentPublishPanel';
+import { SitePublishPanel } from './SitePublishPanel';
 import { AgentStateViewer } from './AgentStateViewer';
 import { LlmStudioPanel } from './LlmStudioPanel';
 import { PreviewFrame } from './PreviewFrame';
@@ -36,6 +37,74 @@ interface IDEProps {
 
 type CenterView = 'preview' | 'code';
 
+/**
+ * Run-only fallback files for a missing/empty scaffold. Single source of truth
+ * for both Run and the publish build (previously duplicated inline in each), and
+ * matched to the server-side VANILLA_TEMPLATE so a seeded project runs identically.
+ */
+const VANILLA_DEFAULTS: Record<string, string> = {
+  'package.json': JSON.stringify({
+    name: 'my-app',
+    version: '1.0.0',
+    type: 'module',
+    scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
+    dependencies: { react: '^18.2.0', 'react-dom': '^18.2.0' },
+    devDependencies: { '@vitejs/plugin-react': '^4.0.0', vite: '^4.3.9' },
+  }, null, 2),
+  'index.html': `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My App</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>`,
+  'src/main.jsx': `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+
+function App() {
+  return (
+    <div style={{ padding: '2rem', fontFamily: 'system-ui' }}>
+      <h1>Hello World! 🚀</h1>
+      <p>Edit src/main.jsx to get started.</p>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);`,
+  'src/index.css': `body {
+  margin: 0;
+  padding: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+}`,
+  'vite.config.js': `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+});`,
+};
+
+/** Cheap, stable string hash (djb2) — used to skip npm install when package.json
+ *  is unchanged since the last install in this WebContainer session. */
+function hashString(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return String(h >>> 0);
+}
+
+/** A single in-WebContainer quality check (typecheck / lint / build). */
+interface CheckResult {
+  label: string;
+  status: 'pass' | 'fail' | 'skip';
+  detail?: string;
+}
+
 export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId }: IDEProps) {
   const [modality, setModality] = useState<ProjectModality>(
     (project.modality as ProjectModality | undefined) ?? DEFAULT_MODALITY,
@@ -57,8 +126,13 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   const [projectsPanelOpen, setProjectsPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [terminalExpanded, setTerminalExpanded] = useState(true);
+  const [isChecking, setIsChecking] = useState(false);
+  const [checkResults, setCheckResults] = useState<CheckResult[] | null>(null);
   const shellStartedRef = useRef(false);
   const terminalWriteRef = useRef<((data: string) => void) | null>(null);
+  // package.json hash of the last successful npm install in this WC session, so
+  // Run/Check/Build can skip a redundant install when dependencies are unchanged.
+  const lastInstallHashRef = useRef<string | null>(null);
 
   // Keep title in sync when project prop changes (e.g. after save elsewhere)
   useEffect(() => {
@@ -74,7 +148,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modality]);
 
-  const { state: wcState, mountFiles, runCommand, runCommandAndWait, startShell, startDevServer, getOrBootWebContainer } = useWebContainer();
+  const { state: wcState, mountFiles, runCommand, runCommandAndWait, readDirRecursive, writeFileToContainer, startShell, startDevServer, getOrBootWebContainer } = useWebContainer();
   const { doc: ydoc, connected: collabConnected } = useCollaboration(project.id, 'user-local');
   // Video versions: hook owns the IDB-blob + project-file-sidecar persistence
   // triad, so this component just hands the three values straight to <StudioPanel>.
@@ -159,12 +233,15 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   const handleEditorChange = useCallback(async (value: string) => {
     if (!activeFile) return;
     setFileContents(prev => ({ ...prev, [activeFile]: value }));
+    // Live reload: when a dev server is running, push the edit straight into the
+    // container FS so Vite HMR refreshes the preview without a full re-run.
+    if (previewUrl) writeFileToContainer(activeFile, value).catch(() => { /* best-effort */ });
     try {
       await saveFile(project.id, activeFile, value);
     } catch (e) {
       console.error('Failed to save:', e);
     }
-  }, [activeFile, project.id]);
+  }, [activeFile, project.id, previewUrl, writeFileToContainer]);
 
   const handleFileCreate = useCallback(async (path: string) => {
     try {
@@ -187,6 +264,82 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
     }
   }, [project.id, closeTab]);
 
+  /**
+   * Assemble the path→content map to mount into the WebContainer: the project's
+   * current contents (fetching any not yet loaded into state) plus run-only
+   * defaults for missing/empty required scaffold files. Returns null if a present
+   * package.json is invalid JSON. Shared by Run, Check and the publish build so
+   * the gather/defaults/validate logic lives in exactly one place.
+   */
+  const assembleMountContents = useCallback(async (
+    onLog?: (s: string) => void,
+  ): Promise<Record<string, string> | null> => {
+    const allContents: Record<string, string> = { ...fileContents };
+    const unfetched = files.filter(f => f.type === 'file' && !(f.path in allContents));
+    if (unfetched.length > 0) {
+      const fetched: Record<string, string> = {};
+      await Promise.all(unfetched.map(async (f) => {
+        try {
+          const content = await fetchFileContent(project.id, f.path);
+          allContents[f.path] = content;
+          fetched[f.path] = content;
+        } catch (error) {
+          onLog?.(`  \x1b[31m✗\x1b[0m ${f.path} - Failed to fetch\r\n`);
+          console.error(`Failed to fetch ${f.path}:`, error);
+        }
+      }));
+      // Persist only real project data (never the run-only defaults below).
+      if (Object.keys(fetched).length > 0) {
+        setFileContents(prev => ({ ...prev, ...fetched }));
+        setFiles(prev => {
+          const have = new Set(prev.map(f => f.path));
+          const add = Object.keys(fetched)
+            .filter(p => !have.has(p))
+            .map(path => ({ path, content: fetched[path], type: 'file' as const }));
+          return add.length > 0 ? [...prev, ...add] : prev;
+        });
+      }
+    }
+
+    const mount: Record<string, string> = { ...allContents };
+    for (const [path, content] of Object.entries(VANILLA_DEFAULTS)) {
+      if (!mount[path] || mount[path].trim() === '') {
+        onLog?.(`  \x1b[33m⚠\x1b[0m ${path} is empty, using default for this run only\r\n`);
+        mount[path] = content;
+      }
+    }
+    if (mount['package.json']) {
+      try {
+        JSON.parse(mount['package.json']);
+      } catch (e) {
+        onLog?.('\r\n\x1b[31m✗ Invalid package.json\x1b[0m\r\n');
+        return null;
+      }
+    }
+    return mount;
+  }, [fileContents, files, project.id]);
+
+  /**
+   * Run `npm install` only when package.json changed since the last install in
+   * this WebContainer session (the singleton container keeps node_modules across
+   * runs). Returns the install exit code (0 when skipped). Cuts the dominant cost
+   * of every Run/Check after the first.
+   */
+  const ensureInstalled = useCallback(async (
+    mount: Record<string, string>,
+    onOutput?: (data: string) => void,
+  ): Promise<number> => {
+    if (!mount['package.json']) return 0;
+    const hash = hashString(mount['package.json']);
+    if (lastInstallHashRef.current === hash) {
+      onOutput?.('  \x1b[32m✓\x1b[0m Dependencies unchanged — skipping npm install.\r\n');
+      return 0;
+    }
+    const code = await runCommandAndWait('npm', ['install'], onOutput);
+    if (code === 0) lastInstallHashRef.current = hash;
+    return code;
+  }, [runCommandAndWait]);
+
   const handleRun = useCallback(async () => {
     if (isRunning) return;
     setIsRunning(true);
@@ -195,137 +348,24 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
       terminalWriter?.('\x1b[36m▶ Run started\x1b[0m\r\n');
       terminalWriter?.('\x1b[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n\r\n');
 
-      // Build project contents only (no overwriting user's files)
-      const allContents: Record<string, string> = { ...fileContents };
-      const unfetched = files.filter(f => f.type === 'file' && !(f.path in allContents));
-      const fetchedContents: Record<string, string> = {};
-
-      terminalWriter?.('\x1b[36m[1/4] Fetching file contents...\x1b[0m\r\n');
-      if (unfetched.length === 0) {
-        terminalWriter?.('  No files to fetch (using cached content).\r\n');
-      } else {
-        await Promise.all(
-          unfetched.map(async (f) => {
-            try {
-              const content = await fetchFileContent(project.id, f.path);
-              allContents[f.path] = content;
-              fetchedContents[f.path] = content;
-              terminalWriter?.(`  \x1b[32m✓\x1b[0m ${f.path}\r\n`);
-            } catch (error) {
-              terminalWriter?.(`  \x1b[31m✗\x1b[0m ${f.path} - Failed to fetch\r\n`);
-              console.error(`Failed to fetch ${f.path}:`, error);
-            }
-          })
-        );
-        terminalWriter?.(`  Fetched ${unfetched.length} file(s).\r\n`);
-      }
-      // Update state only with project data (newly fetched), never with Run defaults
-      if (Object.keys(fetchedContents).length > 0) {
-        setFileContents(prev => ({ ...prev, ...fetchedContents }));
-        setFiles(prev => {
-          const existingPaths = new Set(prev.map(f => f.path));
-          const added = Object.keys(fetchedContents)
-            .filter(p => !existingPaths.has(p))
-            .map(path => ({ path, content: fetchedContents[path], type: 'file' as const }));
-          return added.length > 0 ? [...prev, ...added] : prev;
-        });
-      }
-      terminalWriter?.('\r\n');
-
-      terminalWriter?.('\x1b[36m[2/4] Checking project files...\x1b[0m\r\n');
-      // For mount only: use a copy and fill defaults for missing/empty required files (do not overwrite project state)
-      const mountContents: Record<string, string> = { ...allContents };
-      const defaultPackageJson = JSON.stringify({
-        name: 'my-app',
-        version: '1.0.0',
-        type: 'module',
-        scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
-        dependencies: { react: '^18.2.0', 'react-dom': '^18.2.0' },
-        devDependencies: { '@vitejs/plugin-react': '^4.0.0', vite: '^4.3.9' }
-      }, null, 2);
-      const defaultIndexHtml = `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My App</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>`;
-      const defaultMainJsx = `import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';
-
-function App() {
-  return (
-    <div style={{ padding: '2rem', fontFamily: 'system-ui' }}>
-      <h1>Hello World! 🚀</h1>
-      <p>Edit src/main.jsx to get started.</p>
-    </div>
-  );
-}
-
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);`;
-      const defaultIndexCss = `body {
-  margin: 0;
-  padding: 0;
-  font-family: system-ui, -apple-system, sans-serif;
-}`;
-      const defaultViteConfig = `import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-
-export default defineConfig({
-  plugins: [react()],
-});`;
-
-      if (!mountContents['package.json'] || mountContents['package.json'].trim() === '') {
-        terminalWriter?.('  \x1b[33m⚠\x1b[0m package.json is empty, using default for this run only\r\n');
-        mountContents['package.json'] = defaultPackageJson;
-      }
-      if (!mountContents['index.html'] || mountContents['index.html'].trim() === '') {
-        terminalWriter?.('  \x1b[33m⚠\x1b[0m index.html is empty, using default for this run only\r\n');
-        mountContents['index.html'] = defaultIndexHtml;
-      }
-      if (!mountContents['src/main.jsx'] || mountContents['src/main.jsx'].trim() === '') {
-        terminalWriter?.('  \x1b[33m⚠\x1b[0m src/main.jsx is empty, using default for this run only\r\n');
-        mountContents['src/main.jsx'] = defaultMainJsx;
-      }
-      if (!mountContents['src/index.css'] || mountContents['src/index.css'].trim() === '') {
-        terminalWriter?.('  \x1b[33m⚠\x1b[0m src/index.css is empty, using default for this run only\r\n');
-        mountContents['src/index.css'] = defaultIndexCss;
-      }
-      if (!mountContents['vite.config.js'] || mountContents['vite.config.js'].trim() === '') {
-        terminalWriter?.('  \x1b[33m⚠\x1b[0m vite.config.js is empty, using default for this run only\r\n');
-        mountContents['vite.config.js'] = defaultViteConfig;
-      }
-
-      if (mountContents['package.json']) {
-        try {
-          JSON.parse(mountContents['package.json']);
-        } catch (e) {
-          terminalWriter?.('\r\n\x1b[31m✗ Invalid package.json\x1b[0m\r\n');
-          throw new Error('Invalid package.json: ' + (e instanceof Error ? e.message : 'Parse error'));
-        }
+      terminalWriter?.('\x1b[36m[1/3] Preparing project files...\x1b[0m\r\n');
+      const mountContents = await assembleMountContents((s) => terminalWriter?.(s));
+      if (!mountContents) {
+        throw new Error('Invalid package.json: please fix it in the Files tab.');
       }
       terminalWriter?.('  \x1b[32m✓\x1b[0m Project files ready.\r\n\r\n');
 
-      terminalWriter?.('\x1b[36m[3/4] Mounting project files...\x1b[0m\r\n');
+      terminalWriter?.('\x1b[36m[2/3] Mounting project files...\x1b[0m\r\n');
       await mountFiles(mountContents);
-      const fileCount = Object.keys(mountContents).length;
-      terminalWriter?.(`  \x1b[32m✓\x1b[0m Mounted ${fileCount} file(s).\r\n\r\n`);
+      terminalWriter?.(`  \x1b[32m✓\x1b[0m Mounted ${Object.keys(mountContents).length} file(s).\r\n\r\n`);
 
-      if (mountContents['package.json']) {
-        terminalWriter?.('\x1b[36m[4/4] Running npm install...\x1b[0m\r\n');
-        const installCode = await runCommandAndWait('npm', ['install'], (data) => terminalWriter?.(data));
-        if (installCode !== 0) {
-          terminalWriter?.('\r\n\x1b[31m✗ npm install failed (exit code ' + installCode + '). Fix errors above and try again.\x1b[0m\r\n');
-          return;
-        }
-        terminalWriter?.('\r\n  \x1b[32m✓\x1b[0m npm install completed.\r\n\r\n');
+      terminalWriter?.('\x1b[36m[3/3] Installing dependencies...\x1b[0m\r\n');
+      const installCode = await ensureInstalled(mountContents, (data) => terminalWriter?.(data));
+      if (installCode !== 0) {
+        terminalWriter?.('\r\n\x1b[31m✗ npm install failed (exit code ' + installCode + '). Fix errors above and try again.\x1b[0m\r\n');
+        return;
       }
+      terminalWriter?.('\r\n  \x1b[32m✓\x1b[0m Dependencies ready.\r\n\r\n');
 
       terminalWriter?.('\x1b[36mStarting dev server...\x1b[0m\r\n');
       const url = await startDevServer((data) => terminalWriter?.(data));
@@ -367,7 +407,113 @@ export default defineConfig({
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, startDevServer, mountFiles, runCommandAndWait, terminalWriter, files, fileContents, project.id]);
+  }, [isRunning, startDevServer, mountFiles, assembleMountContents, ensureInstalled, terminalWriter]);
+
+  /**
+   * Build the project in the WebContainer and capture its `dist/` output for
+   * publishing. Mirrors handleRun's mount + install, then runs `npm run build`
+   * (instead of the dev server) and reads the build directory back out. Shared
+   * singleton container, so this reuses any already-installed deps.
+   */
+  const handlePublishBuild = useCallback(async (): Promise<Array<{ path: string; data: Uint8Array }>> => {
+    terminalWriter?.('\r\n\x1b[36m━━━ Building for publish ━━━\x1b[0m\r\n');
+
+    const mount = await assembleMountContents((s) => terminalWriter?.(s));
+    if (!mount) throw new Error('Invalid package.json: please fix it in the Files tab.');
+
+    await mountFiles(mount);
+    terminalWriter?.('\x1b[36mnpm install…\x1b[0m\r\n');
+    const installCode = await ensureInstalled(mount, (d) => terminalWriter?.(d));
+    if (installCode !== 0) throw new Error(`npm install failed (exit ${installCode}).`);
+    terminalWriter?.('\r\n\x1b[36mnpm run build…\x1b[0m\r\n');
+    const buildCode = await runCommandAndWait('npm', ['run', 'build'], (d) => terminalWriter?.(d));
+    if (buildCode !== 0) throw new Error(`Build failed (exit ${buildCode}). Check the build output above.`);
+
+    const assets = await readDirRecursive('dist');
+    if (assets.length === 0) {
+      throw new Error('Build produced no dist/ output. Ensure your build script outputs to "dist".');
+    }
+    terminalWriter?.(`\r\n  \x1b[32m✓\x1b[0m Captured ${assets.length} built file(s).\r\n`);
+    return assets;
+  }, [assembleMountContents, ensureInstalled, mountFiles, runCommandAndWait, readDirRecursive, terminalWriter]);
+
+  /**
+   * Run the project's quality checks inside the WebContainer — real, in-browser
+   * validation of the code the IDE/agent produced. Mounts + installs (reusing the
+   * install cache), then runs type-check, lint and build from the project's own
+   * package.json scripts (skipping any it doesn't define). Surfaces a pass/fail
+   * summary the Run button reads to warn before serving a broken preview.
+   */
+  const handleCheck = useCallback(async () => {
+    if (isChecking || isRunning) return;
+    setIsChecking(true);
+    setCheckResults(null);
+    try {
+      terminalWriter?.('\r\n\x1b[36m━━━ Running checks ━━━\x1b[0m\r\n');
+      const mount = await assembleMountContents((s) => terminalWriter?.(s));
+      if (!mount) {
+        setCheckResults([{ label: 'package.json', status: 'fail', detail: 'Invalid JSON' }]);
+        return;
+      }
+      await mountFiles(mount);
+      const installCode = await ensureInstalled(mount, (d) => terminalWriter?.(d));
+      if (installCode !== 0) {
+        setCheckResults([{ label: 'npm install', status: 'fail', detail: `exit ${installCode}` }]);
+        return;
+      }
+
+      let scripts: Record<string, string> = {};
+      let hasTypescript = false;
+      try {
+        const pkg = JSON.parse(mount['package.json'] ?? '{}') as {
+          scripts?: Record<string, string>;
+          dependencies?: Record<string, string>;
+          devDependencies?: Record<string, string>;
+        };
+        scripts = pkg.scripts ?? {};
+        hasTypescript = !!(pkg.dependencies?.typescript || pkg.devDependencies?.typescript);
+      } catch { /* validated above */ }
+
+      // Each check: prefer the project's own script; fall back to a sensible
+      // default only when the toolchain is clearly present.
+      const plan: Array<{ label: string; cmd: [string, string[]] | null }> = [
+        {
+          label: 'type-check',
+          cmd: scripts['typecheck']
+            ? ['npm', ['run', 'typecheck']]
+            : hasTypescript
+              ? ['npx', ['tsc', '--noEmit']]
+              : null,
+        },
+        { label: 'lint', cmd: scripts['lint'] ? ['npm', ['run', 'lint']] : null },
+        { label: 'build', cmd: scripts['build'] ? ['npm', ['run', 'build']] : null },
+      ];
+
+      const results: CheckResult[] = [];
+      for (const step of plan) {
+        if (!step.cmd) {
+          results.push({ label: step.label, status: 'skip', detail: 'no script' });
+          continue;
+        }
+        terminalWriter?.(`\r\n\x1b[36m▶ ${step.label}…\x1b[0m\r\n`);
+        const code = await runCommandAndWait(step.cmd[0], step.cmd[1], (d) => terminalWriter?.(d));
+        results.push({ label: step.label, status: code === 0 ? 'pass' : 'fail', detail: code === 0 ? undefined : `exit ${code}` });
+      }
+      setCheckResults(results);
+      const failed = results.filter(r => r.status === 'fail').length;
+      terminalWriter?.(
+        failed === 0
+          ? '\r\n\x1b[32m✓ All checks passed.\x1b[0m\r\n'
+          : `\r\n\x1b[31m✗ ${failed} check(s) failed.\x1b[0m\r\n`,
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      terminalWriter?.(`\r\n\x1b[31m✗ Check error: ${msg}\x1b[0m\r\n`);
+      setCheckResults([{ label: 'checks', status: 'fail', detail: msg }]);
+    } finally {
+      setIsChecking(false);
+    }
+  }, [isChecking, isRunning, assembleMountContents, ensureInstalled, mountFiles, runCommandAndWait, terminalWriter]);
 
   const handleTerminalInput = useCallback((data: string) => {
     shellWriter?.write(data);
@@ -403,12 +549,14 @@ export default defineConfig({
   const applyCodeToActiveFile = useCallback((code: string) => {
     if (!activeFile) return false;
     setFileContents(prev => ({ ...prev, [activeFile]: code }));
+    if (previewUrl) writeFileToContainer(activeFile, code).catch(() => { /* best-effort */ });
     saveFile(project.id, activeFile, code).catch(console.error);
     return true;
-  }, [activeFile, project.id]);
+  }, [activeFile, project.id, previewUrl, writeFileToContainer]);
 
   const createProjectFile = useCallback((path: string, content: string) => {
     setFileContents(prev => ({ ...prev, [path]: content }));
+    if (previewUrl) writeFileToContainer(path, content).catch(() => { /* best-effort */ });
     saveFile(project.id, path, content)
       .then(() => {
         refreshFiles();
@@ -418,7 +566,7 @@ export default defineConfig({
         }
       })
       .catch(console.error);
-  }, [project.id, refreshFiles, openFiles]);
+  }, [project.id, refreshFiles, openFiles, previewUrl, writeFileToContainer]);
 
   // Latest IDE state for action handlers, so the registered action array stays
   // stable (no re-registration churn) while `run()` reads current values.
@@ -733,6 +881,38 @@ export default defineConfig({
         {statusLabel && (
           <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{statusLabel}</span>
         )}
+        {getModality(modality).showRunButton && checkResults && (() => {
+          const failed = checkResults.filter(r => r.status === 'fail').length;
+          const passed = checkResults.filter(r => r.status === 'pass').length;
+          return (
+            <span
+              title={checkResults.map(r => `${r.label}: ${r.status}${r.detail ? ` (${r.detail})` : ''}`).join('\n')}
+              style={{
+                fontSize: '0.72rem', fontWeight: 600, flexShrink: 0,
+                color: failed > 0 ? '#f87171' : '#4ade80',
+              }}
+            >
+              {failed > 0 ? `✗ ${failed} check${failed > 1 ? 's' : ''} failed` : `✓ ${passed} check${passed > 1 ? 's' : ''} passed`}
+            </span>
+          );
+        })()}
+        {getModality(modality).showRunButton && (
+          <button
+            onClick={handleCheck}
+            disabled={isChecking || isRunning}
+            title="Run type-check, lint and build in the browser to validate the code"
+            style={{
+              background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+              border: '1px solid var(--border-subtle)', borderRadius: 8,
+              padding: '5px 12px', fontSize: '0.82rem', fontWeight: 600,
+              cursor: (isChecking || isRunning) ? 'wait' : 'pointer', fontFamily: 'var(--font-display)',
+              display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
+              opacity: (isChecking || isRunning) ? 0.6 : 1,
+            }}
+          >
+            {isChecking ? '⏳ Checking…' : '✓ Check'}
+          </button>
+        )}
         {getModality(modality).showRunButton && (
           <button
             onClick={handleRun}
@@ -761,6 +941,7 @@ export default defineConfig({
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         projectId={projectIdNum}
+        onImported={refreshFiles}
       />
 
       {/* Main content. In Designer the coding agent lives in the left panel
@@ -984,8 +1165,10 @@ export default defineConfig({
                 })}
               />
             </div>
-            <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'publish' ? 'visible' : 'hidden', pointerEvents: rightTab === 'publish' ? 'auto' : 'none' }}>
-              <AgentPublishPanel projectId={project.id} completedJobs={completedJobs} />
+            <div style={{ position: 'absolute', inset: 0, overflow: 'auto', visibility: rightTab === 'publish' ? 'visible' : 'hidden', pointerEvents: rightTab === 'publish' ? 'auto' : 'none' }}>
+              {modality === 'designer'
+                ? <SitePublishPanel projectId={project.id} projectName={project.name} onBuild={handlePublishBuild} />
+                : <AgentPublishPanel projectId={project.id} completedJobs={completedJobs} />}
             </div>
             <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'state' ? 'visible' : 'hidden', pointerEvents: rightTab === 'state' ? 'auto' : 'none' }}>
               <AgentStateViewer projectId={project.id} />

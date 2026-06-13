@@ -5,6 +5,7 @@ import { TenantRole, TenantBillingCycle, TenantPlan } from '../../domain/shared/
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
@@ -608,6 +609,8 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
 
     const tenant = await tenantService.addMember(id, actorUserId, body.newUserId, body.role);
     await invalidateTaskAssignees(c.env as Env, id);
+    // New membership must resolve at the gateway immediately, not after the 60s TTL.
+    await invalidateJwtMembershipCache(c.env as Env, id, body.newUserId).catch(() => {});
     return c.json(tenant.toPlain());
   });
 
@@ -643,6 +646,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     if (found) {
       const tenant = await tenantService.addMember(id, actorUserId, found.id, role);
       await invalidateTaskAssignees(c.env as Env, id);
+      await invalidateJwtMembershipCache(c.env as Env, id, found.id).catch(() => {});
       return c.json({ ok: true, status: 'added', tenant: tenant.toPlain(), addedUser: { id: found.id, email: found.email } });
     }
 
@@ -725,6 +729,8 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const actorUserId  = c.get('userId') as string;
     const tenant = await tenantService.removeMember(id, actorUserId, targetUserId);
     await invalidateTaskAssignees(c.env as Env, id);
+    // Revoke the removed member's gateway access at once (not after the 60s TTL).
+    await invalidateJwtMembershipCache(c.env as Env, id, targetUserId).catch(() => {});
     return c.json(tenant.toPlain());
   });
 

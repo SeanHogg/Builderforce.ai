@@ -7,12 +7,15 @@ import { useOptionalBrainContext } from '@/lib/brain';
 import { ProjectsContent } from '@/components/ProjectsContent';
 import PageContainer from '@/components/PageContainer';
 import { TaskMgmtContent } from '@/components/TaskMgmtContent';
+import { PmScopeProvider } from '@/lib/pm/scope';
+import { PmVisualizersContent } from '@/components/pm/PmVisualizersContent';
 
-type Tab = 'projects' | 'tasks';
+type Tab = 'projects' | 'tasks' | 'pm';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'projects', label: 'Projects' },
   { id: 'tasks', label: 'Tasks' },
+  { id: 'pm', label: 'Planning' },
 ];
 
 /**
@@ -39,7 +42,8 @@ export default function ProjectsTasksPage() {
   }, [isAuthenticated, hasTenant, router]);
 
   // Active tab is derived from the URL (single source of truth) — no mirrored state.
-  const activeTab: Tab = searchParams.get('tab') === 'tasks' ? 'tasks' : 'projects';
+  const tabParam = searchParams.get('tab');
+  const activeTab: Tab = tabParam === 'tasks' ? 'tasks' : tabParam === 'pm' ? 'pm' : 'projects';
   const projectParam = Number(searchParams.get('project'));
   const scopedProjectId = Number.isFinite(projectParam) && projectParam > 0 ? projectParam : undefined;
 
@@ -56,8 +60,8 @@ export default function ProjectsTasksPage() {
 
   const selectTab = (tab: Tab) => {
     const params = new URLSearchParams(searchParams.toString());
-    if (tab === 'tasks') params.set('tab', 'tasks');
-    else params.delete('tab');
+    if (tab === 'projects') params.delete('tab');
+    else params.set('tab', tab);
     const qs = params.toString();
     router.replace(`/projects${qs ? `?${qs}` : ''}`, { scroll: false });
   };
@@ -97,10 +101,12 @@ export default function ProjectsTasksPage() {
           ))}
         </div>
 
-        {activeTab === 'projects' ? (
-          <ProjectsContent />
-        ) : (
-          <TaskMgmtContent projectId={scopedProjectId} />
+        {activeTab === 'projects' && <ProjectsContent />}
+        {activeTab === 'tasks' && <TaskMgmtContent projectId={scopedProjectId} />}
+        {activeTab === 'pm' && (
+          <PmScopeProvider projectId={scopedProjectId ?? null}>
+            <PmVisualizersContent />
+          </PmScopeProvider>
         )}
     </PageContainer>
   );
