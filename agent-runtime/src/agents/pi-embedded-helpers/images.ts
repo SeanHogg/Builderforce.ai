@@ -1,4 +1,4 @@
-import type { AgentMessage, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentMessage, AgentToolResult } from "../../builderforce/model/agent-types.js";
 import type { ImageSanitizationLimits } from "../image-sanitization.js";
 import type { ToolCallIdMode } from "../tool-call-id.js";
 import { sanitizeToolCallIdsForCloudCodeAssist } from "../tool-call-id.js";

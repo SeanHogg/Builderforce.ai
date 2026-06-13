@@ -1,4 +1,4 @@
-import type { AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentToolResult } from "../../builderforce/model/agent-types.js";
 import { resolveSessionAgentId } from "../../agents/agent-scope.js";
 import {
   readNumberParam,

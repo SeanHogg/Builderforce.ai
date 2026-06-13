@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "../../builderforce/model/agent-types.js";
 
 type OpenAIThinkingBlock = {
   type?: unknown;

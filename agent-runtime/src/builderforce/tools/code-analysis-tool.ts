@@ -6,7 +6,7 @@
  * `ToolDefinition` (DRY). Removed when the pi loop is retired.
  */
 
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "../model/agent-types.js";
 import { Type } from "@sinclair/typebox";
 import { jsonResult } from "../../agents/tools/common.js";
 import { runCodeAnalysis } from "../shared-tools/node-code-tools.js";

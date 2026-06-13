@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "../../builderforce/model/agent-types.js";
 import type { ExtensionAPI, FileOperations } from "@mariozechner/pi-coding-agent";
 import { extractSections } from "../../auto-reply/reply/post-compaction-context.js";
 import {

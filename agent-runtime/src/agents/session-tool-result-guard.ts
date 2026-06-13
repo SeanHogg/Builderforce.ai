@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "../builderforce/model/agent-types.js";
 import type { TextContent } from "../builderforce/model/types.js";
 import type { SessionManager } from "@mariozechner/pi-coding-agent";
 import type {

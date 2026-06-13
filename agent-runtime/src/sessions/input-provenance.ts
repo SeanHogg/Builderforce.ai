@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "../builderforce/model/agent-types.js";
 
 export const INPUT_PROVENANCE_KIND_VALUES = [
   "external_user",

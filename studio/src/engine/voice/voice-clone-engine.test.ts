@@ -36,6 +36,16 @@ describe('VoiceCloneEngine', () => {
     }
   });
 
+  it('emits PCM inside the [-1, 1] contract (peak-normalised)', async () => {
+    const engine = new VoiceCloneEngine();
+    const speaker = engine.enroll(voice(150, 2.2));
+    const { pcm } = await engine.synthesize({ text: 'normalise me please', speaker });
+    let peak = 0;
+    for (let i = 0; i < pcm.length; i++) peak = Math.max(peak, Math.abs(pcm[i]));
+    expect(peak).toBeLessThanOrEqual(1);
+    expect(peak).toBeGreaterThan(0); // not silence
+  });
+
   it('is deterministic for the same (text, voice)', async () => {
     const engine = new VoiceCloneEngine();
     const speaker = engine.enroll(voice(150, 2.2));

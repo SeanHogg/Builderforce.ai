@@ -1,4 +1,4 @@
-import type { AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentToolResult } from "../../builderforce/model/agent-types.js";
 
 export function extractToolPayload(result: AgentToolResult<unknown>): unknown {
   if (result.details !== undefined) {

@@ -1,4 +1,4 @@
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "../../builderforce/model/agent-types.js";
 import type { TSchema } from "@sinclair/typebox";
 import type { MsgContext } from "../../auto-reply/templating.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";

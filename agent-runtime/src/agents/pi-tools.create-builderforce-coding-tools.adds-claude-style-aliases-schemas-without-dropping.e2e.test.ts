@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "../builderforce/model/agent-types.js";
 import { Type } from "@sinclair/typebox";
 import { describe, expect, it, vi } from "vitest";
 import "./test-helpers/fast-coding-tools.js";

@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "../builderforce/model/agent-types.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const piCodingAgentMocks = vi.hoisted(() => ({

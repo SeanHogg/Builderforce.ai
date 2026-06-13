@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "../builderforce/model/agent-types.js";
 import type { AssistantMessage } from "../builderforce/model/types.js";
 import { extractTextFromChatContent } from "../shared/chat-content.js";
 import { stripReasoningTagsFromText } from "../shared/text/reasoning-tags.js";
