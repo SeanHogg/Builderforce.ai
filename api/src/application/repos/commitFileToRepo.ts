@@ -68,8 +68,45 @@ async function gitlabCommit(input: CommitFileInput): Promise<CommitFileResult> {
   return { ok: true, branch: input.branch, commitUrl: null, existed };
 }
 
+/** Bitbucket Cloud path — create the branch off base (needs the base commit
+ *  `hash`), then commit via the form-encoded `/src` API (create-or-update auto).
+ *  Existence is probed for the `existed` signal. */
+async function bitbucketCommit(input: CommitFileInput): Promise<CommitFileResult> {
+  let apiBase: string;
+  try { apiBase = buildGitApiBaseUrl('bitbucket', input.host); } catch (e) { return { ok: false, code: 'unsupported', reason: e instanceof Error ? e.message : 'unsupported host' }; }
+  const repoBase = `${apiBase}/repositories/${input.owner}/${input.repo}`;
+  const jsonHeaders = { Authorization: `Bearer ${input.token}`, 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': 'BuilderForce-PRD/1.0' };
+  const encPath = input.path.split('/').map(encodeURIComponent).join('/');
+
+  // Resolve base head + create the branch off it (ignore "already exists").
+  const baseRef = await fetch(`${repoBase}/refs/branches/${encodeURIComponent(input.base)}`, { headers: jsonHeaders }).catch(() => null);
+  const baseHash = baseRef && baseRef.ok ? ((await baseRef.json().catch(() => null)) as { target?: { hash?: string } } | null)?.target?.hash : undefined;
+  if (baseHash) {
+    await fetch(`${repoBase}/refs/branches`, { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ name: input.branch, target: { hash: baseHash } }) }).catch(() => null);
+  }
+
+  // Existence probe on the branch (authoritative created-vs-modified signal).
+  const probe = await fetch(`${repoBase}/src/${encodeURIComponent(input.branch)}/${encPath}`, { headers: jsonHeaders }).catch(() => null);
+  const existed = !!probe && probe.ok;
+
+  // Commit via the form-encoded /src endpoint: branch + message + <path>=<content>.
+  const form = new URLSearchParams();
+  form.set('branch', input.branch);
+  form.set('message', input.message);
+  form.set(input.path, input.content);
+  const res = await fetch(`${repoBase}/src`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${input.token}`, 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'BuilderForce-PRD/1.0' },
+    body: form.toString(),
+  }).catch(() => null);
+  if (!res) return { ok: false, code: 'provider_error', reason: 'commit request failed (network)' };
+  if (!res.ok) { const t = await res.text().catch(() => ''); return { ok: false, code: 'provider_error', reason: `Bitbucket ${res.status}: ${t.slice(0, 200)}` }; }
+  return { ok: true, branch: input.branch, commitUrl: null, existed };
+}
+
 export async function commitFileToRepo(input: CommitFileInput): Promise<CommitFileResult> {
   if (input.provider === 'gitlab') return gitlabCommit(input);
+  if (input.provider === 'bitbucket') return bitbucketCommit(input);
   if (input.provider !== 'github') {
     return { ok: false, code: 'unsupported', reason: `commit not implemented for provider '${input.provider}'` };
   }
@@ -172,8 +209,32 @@ async function gitlabDelete(input: DeleteFileInput): Promise<DeleteFileResult> {
   return { ok: true, branch: input.branch, commitUrl: null };
 }
 
+/** Bitbucket Cloud path — delete via the form-encoded `/src` API: a `files`
+ *  field names the path(s) to remove (no per-path content). 404 probe → not_found. */
+async function bitbucketDelete(input: DeleteFileInput): Promise<DeleteFileResult> {
+  let apiBase: string;
+  try { apiBase = buildGitApiBaseUrl('bitbucket', input.host); } catch (e) { return { ok: false, code: 'unsupported', reason: e instanceof Error ? e.message : 'unsupported host' }; }
+  const repoBase = `${apiBase}/repositories/${input.owner}/${input.repo}`;
+  const encPath = input.path.split('/').map(encodeURIComponent).join('/');
+  const probe = await fetch(`${repoBase}/src/${encodeURIComponent(input.branch)}/${encPath}`, { headers: { Authorization: `Bearer ${input.token}`, Accept: 'application/json', 'User-Agent': 'BuilderForce-PRD/1.0' } }).catch(() => null);
+  if (probe && probe.status === 404) return { ok: false, code: 'not_found', reason: `file not on branch ${input.branch}: ${input.path}` };
+  const form = new URLSearchParams();
+  form.set('branch', input.branch);
+  form.set('message', input.message);
+  form.set('files', input.path);
+  const res = await fetch(`${repoBase}/src`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${input.token}`, 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'BuilderForce-PRD/1.0' },
+    body: form.toString(),
+  }).catch(() => null);
+  if (!res) return { ok: false, code: 'provider_error', reason: 'delete request failed (network)' };
+  if (!res.ok) { const t = await res.text().catch(() => ''); return { ok: false, code: 'provider_error', reason: `Bitbucket ${res.status}: ${t.slice(0, 200)}` }; }
+  return { ok: true, branch: input.branch, commitUrl: null };
+}
+
 export async function deleteFileFromRepo(input: DeleteFileInput): Promise<DeleteFileResult> {
   if (input.provider === 'gitlab') return gitlabDelete(input);
+  if (input.provider === 'bitbucket') return bitbucketDelete(input);
   if (input.provider !== 'github') {
     return { ok: false, code: 'unsupported', reason: `delete not implemented for provider '${input.provider}'` };
   }

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SwimlaneCoordinator, TicketCapacityError, type StageDispatcher } from './SwimlaneCoordinator';
+import { MAX_AUTO_RETRIES } from './transitions';
 import type {
   AssignmentLite,
   BoardLite,
@@ -145,7 +146,8 @@ class InMemoryStore implements CoordinatorStore {
   seedLane(l: Partial<LaneLite> & { id: string; boardId: string; position: number }): LaneLite {
     const lane: LaneLite = {
       key: l.id, isTerminal: false, gate: 'auto', executionMode: 'sequential',
-      actionType: null, actionTarget: null, successPolicy: 'all', successThreshold: null, ...l,
+      actionType: null, actionTarget: null, successPolicy: 'all', successThreshold: null,
+      failurePolicy: 'needs_attention', ...l,
     };
     this.lanes.push(lane);
     return lane;
@@ -219,6 +221,48 @@ describe('SwimlaneCoordinator — execution loop', () => {
     expect(cur.lifecycle).toBe('needs_attention');
     expect(cur.currentSwimlaneId).toBe('l0'); // did NOT advance to l1
     expect(cur.error).toBe('stage workflow failed');
+  });
+
+  it("failure_policy='skip': a failed stage advances past the lane instead of parking [1316]", async () => {
+    store.seedBoard({ id: 'b1', tenantId: TENANT, autonomous: true });
+    store.seedLane({ id: 'l0', boardId: 'b1', position: 0, failurePolicy: 'skip' });
+    store.seedLane({ id: 'l1', boardId: 'b1', position: 1, isTerminal: true });
+    store.seedAssignment('l0', { id: 'a0', role: 'implementer', runtime: 'browser' });
+
+    const coord = new SwimlaneCoordinator(store);
+    const run = await coord.startTicket('b1', 1, TENANT);
+    const d = store.pending(run.id)[0]!;
+
+    await coord.reportDispatchResult(d.id, TENANT, { status: 'failed', error: 'boom' });
+    const cur = (await store.getTicketRun(run.id))!;
+    // Skipped past the failed l0 and advanced to the next lane (l1, terminal →
+    // the run completes). The key point: it did NOT park at needs_attention on l0.
+    expect(cur.lifecycle).not.toBe('needs_attention');
+    expect(cur.lifecycle).toBe('done');
+    expect(cur.currentSwimlaneId).toBe('l1');
+  });
+
+  it("failure_policy='retry': re-runs the lane up to N times, then parks [1316]", async () => {
+    store.seedBoard({ id: 'b1', tenantId: TENANT, autonomous: true });
+    store.seedLane({ id: 'l0', boardId: 'b1', position: 0, failurePolicy: 'retry' });
+    store.seedLane({ id: 'l1', boardId: 'b1', position: 1, isTerminal: true });
+    store.seedAssignment('l0', { id: 'a0', role: 'implementer', runtime: 'browser' });
+
+    const coord = new SwimlaneCoordinator(store);
+    const run = await coord.startTicket('b1', 1, TENANT);
+
+    // The first MAX_AUTO_RETRIES failures each re-run the same lane (stage_running).
+    for (let i = 0; i < MAX_AUTO_RETRIES; i++) {
+      const d = store.pending(run.id)[0]!;
+      await coord.reportDispatchResult(d.id, TENANT, { status: 'failed', error: 'boom' });
+      const cur = (await store.getTicketRun(run.id))!;
+      expect(cur.lifecycle).toBe('stage_running'); // auto-retried, same lane
+      expect(cur.currentSwimlaneId).toBe('l0');
+    }
+    // One more failure hits the cap → parks for a human.
+    const dFinal = store.pending(run.id)[0]!;
+    await coord.reportDispatchResult(dFinal.id, TENANT, { status: 'failed', error: 'boom' });
+    expect((await store.getTicketRun(run.id))!.lifecycle).toBe('needs_attention');
   });
 
   it('sequential lane: only the first agent dispatches; the second unblocks when the first completes', async () => {

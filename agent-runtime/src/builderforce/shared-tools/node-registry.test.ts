@@ -39,6 +39,10 @@ describe("buildNodeToolRegistry", () => {
     for (const n of ["orchestrate", "agent_fleet", "workflow_status", "save_session_handoff"]) {
       expect(names).toContain(n);
     }
+    // deps-independent service tools (always present, even with no deps)
+    for (const n of ["agents_list", "gateway", "sessions_list", "sessions_history", "sessions_send", "sessions_spawn", "session_status", "subagents", "nodes", "cron"]) {
+      expect(names).toContain(n);
+    }
   });
 
   it("omits config-backed service tools (memory_*) when no deps are supplied", () => {

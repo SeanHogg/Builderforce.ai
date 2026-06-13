@@ -85,11 +85,13 @@ describe('searchRepoCode', () => {
     if (!r.ok) expect(r.reason).toContain('403');
   });
 
-  it('rejects an empty query and a non-github provider without calling fetch', async () => {
+  it('rejects an empty query (github) and an unsupported provider without calling fetch', async () => {
+    // GitLab search IS now supported (routes to fetch); Bitbucket search stays
+    // deferred (workspace-scoped/uncertain) so it rejects without a fetch.
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
     expect((await searchRepoCode(ctx, '   ')).ok).toBe(false);
-    expect((await searchRepoCode({ ...ctx, provider: 'gitlab' }, 'x')).ok).toBe(false);
+    expect((await searchRepoCode({ ...ctx, provider: 'bitbucket' }, 'x')).ok).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

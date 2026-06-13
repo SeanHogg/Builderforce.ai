@@ -1,21 +1,31 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+/** Seconds before an available update auto-applies if the user doesn't act. */
+const AUTORELOAD_SECONDS = 60;
 
 /**
- * Registers the service worker and shows a non-intrusive update toast
- * whenever a new version is waiting to activate.
+ * Registers the service worker and shows an update toast whenever a new version
+ * is waiting to activate. The toast counts down and auto-reloads onto the new
+ * build if the user doesn't act — so an idle/open tab still ends up current.
  *
  * Flow:
- *   1. Registers /sw.js on mount
- *   2. Polls for updates every 60 s
- *   3. Detects waiting SW → shows banner
- *   4. "Update now" → posts SKIP_WAITING → reloads once controllerchange fires
- *   5. "×" dismisses the banner for the current session
+ *   1. Registers /sw.js on mount (updateViaCache:'none' so the script is always
+ *      revalidated against the network).
+ *   2. Checks for updates every 60 s AND on tab focus / regained visibility /
+ *      reconnect — so a returning user is notified promptly, not up to 60 s later.
+ *   3. Detects waiting SW → shows banner with a 60 s auto-reload countdown.
+ *   4. "Update now" (or countdown hitting 0) → posts SKIP_WAITING → reloads once
+ *      controllerchange fires.
+ *   5. "×" cancels the countdown and dismisses the banner for the session.
  */
 export function PwaUpdateBanner() {
   const [waitingSw, setWaitingSw] = useState<ServiceWorker | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState(AUTORELOAD_SECONDS);
+  const reloadingRef = useRef(false);
 
+  // --- Register + detect updates ------------------------------------------
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
 
@@ -32,42 +42,73 @@ export function PwaUpdateBanner() {
     };
 
     let intervalId: ReturnType<typeof setInterval>;
+    let registration: ServiceWorkerRegistration | null = null;
+    const checkForUpdate = () => { void registration?.update(); };
+    const onVisible = () => { if (document.visibilityState === 'visible') checkForUpdate(); };
 
     navigator.serviceWorker
-      // updateViaCache: 'none' — never serve the SW script (or its imports) from
-      // the HTTP cache during update checks, so reg.update() always revalidates
-      // /sw.js against the network and the per-build BUILD_VERSION stamp is seen.
       .register('/sw.js', { updateViaCache: 'none' })
       .then((reg) => {
-        // Already waiting on page load (e.g. user has the app open in another tab)
+        registration = reg;
         if (reg.waiting) trackWaiting(reg.waiting);
-
-        // New update found after the page loaded
         reg.addEventListener('updatefound', () => {
           if (reg.installing) trackWaiting(reg.installing);
         });
 
-        // Poll for updates every 60 s
-        intervalId = setInterval(() => { void reg.update(); }, 60_000);
+        // Poll, plus check whenever the user comes back to the tab or reconnects —
+        // these fire far sooner than the 60 s poll for a returning user.
+        intervalId = setInterval(checkForUpdate, 60_000);
+        document.addEventListener('visibilitychange', onVisible);
+        window.addEventListener('focus', checkForUpdate);
+        window.addEventListener('online', checkForUpdate);
       })
       .catch((err) => {
         console.warn('[SW] Registration failed:', err);
       });
 
-    return () => clearInterval(intervalId);
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', checkForUpdate);
+      window.removeEventListener('online', checkForUpdate);
+    };
   }, []);
 
-  if (!waitingSw) return null;
-
-  const handleUpdate = () => {
+  const applyUpdate = () => {
+    if (reloadingRef.current || !waitingSw) return;
+    reloadingRef.current = true;
     waitingSw.postMessage('SKIP_WAITING');
-    setWaitingSw(null);
-    // Reload once the new SW takes control
     navigator.serviceWorker.addEventListener(
       'controllerchange',
       () => { window.location.reload(); },
       { once: true },
     );
+  };
+
+  // --- Auto-reload countdown ----------------------------------------------
+  useEffect(() => {
+    if (!waitingSw) return;
+    setSecondsLeft(AUTORELOAD_SECONDS);
+    const tick = setInterval(() => {
+      setSecondsLeft((s) => {
+        if (s <= 1) {
+          clearInterval(tick);
+          applyUpdate();
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(tick);
+    // applyUpdate reads the same waitingSw; re-running only when waitingSw changes is correct.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waitingSw]);
+
+  if (!waitingSw) return null;
+
+  const dismiss = () => {
+    reloadingRef.current = true; // block any in-flight countdown from firing after dismiss
+    setWaitingSw(null);
   };
 
   return (
@@ -100,12 +141,12 @@ export function PwaUpdateBanner() {
           fontFamily: 'var(--font-body, sans-serif)',
         }}
       >
-        A new version is ready.
+        A new version is ready — updating in {secondsLeft}s.
       </span>
 
       <button
         type="button"
-        onClick={handleUpdate}
+        onClick={applyUpdate}
         style={{
           padding: '6px 14px',
           background: 'linear-gradient(135deg, var(--coral-bright, #f4726e), var(--coral-dark, #c94f4b))',
@@ -125,7 +166,7 @@ export function PwaUpdateBanner() {
 
       <button
         type="button"
-        onClick={() => setWaitingSw(null)}
+        onClick={dismiss}
         aria-label="Dismiss update notification"
         style={{
           background: 'none',

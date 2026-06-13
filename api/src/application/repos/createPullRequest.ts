@@ -108,9 +108,12 @@ export async function createPullRequest(input: OpenPrInput): Promise<OpenPrResul
     return { ok: false, code: 'provider_error', reason: `${input.provider} returned a PR without number/url` };
   }
 
-  // Idempotency (GitHub): a PR for this head may already be open — resolve it.
-  if (input.provider === 'github' && res.status === 422) {
-    const existing = await findOpenPr(buildGitApiBaseUrl(input.provider, input.host), headers, input);
+  // Idempotency: a conflict-ish failure (GitHub 422 / GitLab+Bitbucket 409, some
+  // 400s) usually means a PR for this head already exists — resolve it so a
+  // retried create returns the existing PR instead of erroring. All three
+  // providers now do this (was GitHub-only). A null lookup → fall to the error.
+  if (res.status === 422 || res.status === 409 || res.status === 400) {
+    const existing = await findOpenPr(input.provider, buildGitApiBaseUrl(input.provider, input.host), headers, input);
     if (existing) return { ok: true, number: existing.number, url: existing.url };
   }
 
@@ -118,19 +121,31 @@ export async function createPullRequest(input: OpenPrInput): Promise<OpenPrResul
   return { ok: false, code: 'provider_error', reason: `${input.provider} ${res.status}: ${text.slice(0, 300)}` };
 }
 
-/** Look up an already-open PR for `owner:head` so retries are idempotent. */
+/** Build the provider-specific "find the already-open PR for this head" request. */
+export function buildFindOpenPrUrl(provider: string, apiBase: string, input: OpenPrInput): string {
+  if (provider === 'gitlab') {
+    const projectId = encodeURIComponent(`${input.owner}/${input.repo}`);
+    return `${apiBase}/projects/${projectId}/merge_requests?state=opened&source_branch=${encodeURIComponent(input.head)}&target_branch=${encodeURIComponent(input.base)}`;
+  }
+  if (provider === 'bitbucket') {
+    const q = encodeURIComponent(`source.branch.name="${input.head}" AND state="OPEN"`);
+    return `${apiBase}/repositories/${input.owner}/${input.repo}/pullrequests?q=${q}`;
+  }
+  return `${apiBase}/repos/${input.owner}/${input.repo}/pulls?state=open&head=${encodeURIComponent(`${input.owner}:${input.head}`)}`;
+}
+
+/** Resolve an already-open PR so retried creates are idempotent (all providers). */
 async function findOpenPr(
+  provider: string,
   apiBase: string,
   headers: Record<string, string>,
   input: OpenPrInput,
 ): Promise<{ number: number; url: string } | null> {
-  const q = `${apiBase}/repos/${input.owner}/${input.repo}/pulls?state=open&head=${encodeURIComponent(`${input.owner}:${input.head}`)}`;
-  const res = await fetch(q, { headers });
-  if (!res.ok) return null;
-  const list = (await res.json()) as Array<{ number?: number; html_url?: string }>;
-  const first = list[0];
-  if (first && typeof first.number === 'number' && typeof first.html_url === 'string') {
-    return { number: first.number, url: first.html_url };
-  }
-  return null;
+  const res = await fetch(buildFindOpenPrUrl(provider, apiBase, input), { headers }).catch(() => null);
+  if (!res || !res.ok) return null;
+  const body = await res.json().catch(() => null);
+  // GitHub → array of pulls; GitLab → array of MRs; Bitbucket → { values: [...] }.
+  const list = Array.isArray(body) ? body : ((body as { values?: unknown[] } | null)?.values ?? []);
+  const first = (list as unknown[])[0];
+  return first ? parseCreatePrSuccess(provider, first) : null;
 }

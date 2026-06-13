@@ -99,11 +99,40 @@ export async function readRepoFile(ctx: RepoReadContext, path: string): Promise<
  * with read_file when in doubt. `ctx.ref` is accepted for signature parity but
  * unused (the index isn't branch-scoped). Never throws.
  */
+/** GitLab project blob search (`scope=blobs`). Each hit carries the matching
+ *  `data` snippet; group by path. Additive — GitHub keeps its richer path. */
+async function gitlabSearchCode(ctx: RepoReadContext, query: string, opts?: { maxResults?: number }): Promise<SearchCodeResult> {
+  if (!query.trim()) return { ok: false, reason: 'query is required' };
+  let apiBase: string;
+  try { apiBase = buildGitApiBaseUrl('gitlab', ctx.host); } catch (e) { return { ok: false, reason: e instanceof Error ? e.message : `search not implemented for provider '${ctx.provider}'` }; }
+  const perPage = Math.min(Math.max(opts?.maxResults ?? 30, 1), 50);
+  const projectId = encodeURIComponent(`${ctx.owner}/${ctx.repo}`);
+  const url = `${apiBase}/projects/${projectId}/search?scope=blobs&search=${encodeURIComponent(query)}&per_page=${perPage}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${ctx.token}`, Accept: 'application/json' } }).catch(() => null);
+  if (!res) return { ok: false, reason: 'search request failed (network)' };
+  if (!res.ok) { const t = await res.text().catch(() => ''); return { ok: false, reason: `GitLab ${res.status}: ${t.slice(0, 160)}` }; }
+  const items = (await res.json().catch(() => null)) as Array<{ path?: string; data?: string }> | null;
+  const byPath = new Map<string, { path: string; fragments: string[] }>();
+  for (const it of items ?? []) {
+    const path = it.path ?? '';
+    if (!path) continue;
+    const frag = (it.data ?? '').trim();
+    const existing = byPath.get(path);
+    if (existing) { if (frag && existing.fragments.length < 3) existing.fragments.push(frag); }
+    else byPath.set(path, { path, fragments: frag ? [frag] : [] });
+  }
+  const matches = [...byPath.values()].slice(0, perPage);
+  return { ok: true, matches, total: matches.length, truncated: (items?.length ?? 0) >= perPage };
+}
+
 export async function searchRepoCode(
   ctx: RepoReadContext,
   query: string,
   opts?: { maxResults?: number },
 ): Promise<SearchCodeResult> {
+  if (ctx.provider === 'gitlab') return gitlabSearchCode(ctx, query, opts);
+  // Bitbucket code search is workspace-scoped (not repo-scoped) + must be enabled
+  // on the workspace — deferred until validatable. Other non-GitHub → unsupported.
   if (ctx.provider !== 'github') return { ok: false, reason: `search not implemented for provider '${ctx.provider}'` };
   if (!query.trim()) return { ok: false, reason: 'query is required' };
   const apiBase = buildGitApiBaseUrl(ctx.provider, ctx.host);
@@ -176,7 +205,61 @@ const MAX_DIFF_ENTRIES = 100;
  * commits yet) returns an empty list, not an error. `ctx.ref` is unused here (the
  * range is explicit). Never throws.
  */
+/** GitLab branch diff via the Repository Compare API (`from`=base, `to`=branch).
+ *  Maps GitLab's per-diff flags to the same status union. Additive — GitHub keeps
+ *  its inline path. A 404 (branch not yet pushed) is a clean empty first run. */
+async function gitlabBranchDiff(ctx: RepoReadContext, base: string, branch: string): Promise<BranchDiffResult> {
+  if (base.trim() === branch.trim()) return { ok: true, files: [], truncated: false };
+  let apiBase: string;
+  try { apiBase = buildGitApiBaseUrl('gitlab', ctx.host); } catch (e) { return { ok: false, reason: e instanceof Error ? e.message : `compare not implemented for provider '${ctx.provider}'` }; }
+  const projectId = encodeURIComponent(`${ctx.owner}/${ctx.repo}`);
+  const url = `${apiBase}/projects/${projectId}/repository/compare?from=${encodeURIComponent(base)}&to=${encodeURIComponent(branch)}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${ctx.token}`, Accept: 'application/json' } }).catch(() => null);
+  if (!res) return { ok: false, reason: 'compare request failed (network)' };
+  if (res.status === 404) return { ok: true, files: [], truncated: false };
+  if (!res.ok) { const t = await res.text().catch(() => ''); return { ok: false, reason: `GitLab ${res.status}: ${t.slice(0, 160)}` }; }
+  const json = (await res.json().catch(() => null)) as { diffs?: Array<{ new_path?: string; old_path?: string; new_file?: boolean; deleted_file?: boolean; renamed_file?: boolean }> } | null;
+  let files = (json?.diffs ?? [])
+    .map((d): BranchDiffEntry | null => {
+      const path = (d.deleted_file ? d.old_path : d.new_path) ?? d.new_path ?? d.old_path;
+      if (!path) return null;
+      const status: BranchDiffEntry['status'] = d.new_file ? 'added' : d.deleted_file ? 'removed' : d.renamed_file ? 'renamed' : 'modified';
+      return { path, status };
+    })
+    .filter((f): f is BranchDiffEntry => f !== null);
+  const truncated = files.length > MAX_DIFF_ENTRIES;
+  if (truncated) files = files.slice(0, MAX_DIFF_ENTRIES);
+  return { ok: true, files, truncated };
+}
+
+/** Bitbucket Cloud branch diff via the diffstat API (`{branch}..{base}`). Clean
+ *  paginated JSON GET (one page is plenty for the MAX_DIFF_ENTRIES cap). */
+async function bitbucketBranchDiff(ctx: RepoReadContext, base: string, branch: string): Promise<BranchDiffResult> {
+  if (base.trim() === branch.trim()) return { ok: true, files: [], truncated: false };
+  let apiBase: string;
+  try { apiBase = buildGitApiBaseUrl('bitbucket', ctx.host); } catch (e) { return { ok: false, reason: e instanceof Error ? e.message : `compare not implemented for provider '${ctx.provider}'` }; }
+  const url = `${apiBase}/repositories/${ctx.owner}/${ctx.repo}/diffstat/${encodeURIComponent(branch)}..${encodeURIComponent(base)}?pagelen=100`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${ctx.token}`, Accept: 'application/json' } }).catch(() => null);
+  if (!res) return { ok: false, reason: 'compare request failed (network)' };
+  if (res.status === 404) return { ok: true, files: [], truncated: false };
+  if (!res.ok) { const t = await res.text().catch(() => ''); return { ok: false, reason: `Bitbucket ${res.status}: ${t.slice(0, 160)}` }; }
+  const json = (await res.json().catch(() => null)) as { values?: Array<{ status?: string; new?: { path?: string } | null; old?: { path?: string } | null }> } | null;
+  let files = (json?.values ?? [])
+    .map((v): BranchDiffEntry | null => {
+      const path = v.new?.path ?? v.old?.path;
+      if (!path) return null;
+      const status: BranchDiffEntry['status'] = v.status === 'added' ? 'added' : v.status === 'removed' ? 'removed' : v.status === 'renamed' ? 'renamed' : 'modified';
+      return { path, status };
+    })
+    .filter((f): f is BranchDiffEntry => f !== null);
+  const truncated = files.length > MAX_DIFF_ENTRIES;
+  if (truncated) files = files.slice(0, MAX_DIFF_ENTRIES);
+  return { ok: true, files, truncated };
+}
+
 export async function listBranchDiff(ctx: RepoReadContext, base: string, branch: string): Promise<BranchDiffResult> {
+  if (ctx.provider === 'gitlab') return gitlabBranchDiff(ctx, base, branch);
+  if (ctx.provider === 'bitbucket') return bitbucketBranchDiff(ctx, base, branch);
   if (ctx.provider !== 'github') return { ok: false, reason: `compare not implemented for provider '${ctx.provider}'` };
   if (base.trim() === branch.trim()) return { ok: true, files: [], truncated: false };
   const apiBase = buildGitApiBaseUrl(ctx.provider, ctx.host);

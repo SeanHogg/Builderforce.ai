@@ -97,3 +97,43 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   }
 });
+
+// ---------------------------------------------------------------------------
+// Push — OS-level notification fired by /api/push/notify-deploy on every deploy.
+// Reaches the user even when the tab is backgrounded or closed.
+// ---------------------------------------------------------------------------
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { /* non-JSON payload */ }
+
+  const title = data.title || 'Builderforce updated';
+  const options = {
+    body: data.body || 'A new version is live. Reload to get the latest.',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: data.tag || 'bf-deploy', // collapse repeats into one notification
+    renotify: true,
+    data: { url: data.url || '/' },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// ---------------------------------------------------------------------------
+// Notification click — focus an existing tab (reloading it onto the new build)
+// or open one. Closing the notification needs no handler.
+// ---------------------------------------------------------------------------
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ('focus' in client) {
+          client.navigate(target).catch(() => { /* navigate may reject cross-origin */ });
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(target);
+    })
+  );
+});
