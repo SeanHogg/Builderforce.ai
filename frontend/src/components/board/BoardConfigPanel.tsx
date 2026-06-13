@@ -2,7 +2,7 @@
 
 import { Select } from '@/components/Select';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { SlideOutPanel } from '../SlideOutPanel';
 import { BoardConnectionsManager } from '../integrations/BoardConnectionsManager';
 import { useBoardConfig } from './useBoardConfig';
@@ -15,6 +15,14 @@ import {
   type WorkflowDefinitionSummary,
 } from '@/lib/builderforceApi';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
+import {
+  listTeams,
+  listTeamsByProject,
+  addTeamProject,
+  removeTeamProject,
+  type TeamSummary,
+  type AttachedTeam,
+} from '@/lib/teams';
 
 /**
  * Board-config slide-out opened from the Task-Mgmt COG. Configures the project's
@@ -37,7 +45,7 @@ const btnSubtle: React.CSSProperties = {
 };
 const sectionPad: React.CSSProperties = { padding: 20 };
 
-type ConfigTab = 'lanes' | 'settings' | 'external';
+type ConfigTab = 'lanes' | 'teams' | 'settings' | 'external';
 
 export interface BoardConfigPanelProps {
   open: boolean;
@@ -99,6 +107,7 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName }: Boar
       width="min(720px, 96vw)"
       tabs={[
         { id: 'lanes', label: 'Swimlanes & agents' },
+        { id: 'teams', label: 'Teams' },
         { id: 'settings', label: 'Board settings' },
         { id: 'external', label: 'External boards' },
       ]}
@@ -119,6 +128,8 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName }: Boar
         <div style={sectionPad}><span style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{shownError}</span></div>
       ) : tab === 'lanes' ? (
         <LanesTab board={board} lanes={lanes} agentsByLane={agentsByLane} reload={reload} />
+      ) : tab === 'teams' ? (
+        <TeamsTab projectId={projectId} />
       ) : tab === 'settings' ? (
         <SettingsTab board={board} onSaved={reload} />
       ) : (
@@ -363,6 +374,117 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
         </>
       ) : (
         <button type="button" style={{ ...btnSubtle, marginTop: 8 }} onClick={() => setAdding(true)}>+ Assign agent</button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Assign workforce Teams to this board. A board is 1:1 with its project, so
+ * "assign a team to the board" attaches the team to the board's project
+ * (team_projects). Members of an attached team are managed in Workforce → Teams;
+ * this tab only governs which teams work this board.
+ */
+function TeamsTab({ projectId }: { projectId: number }) {
+  const [allTeams, setAllTeams] = useState<TeamSummary[]>([]);
+  const [attached, setAttached] = useState<AttachedTeam[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [pick, setPick] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [all, here] = await Promise.all([listTeams(), listTeamsByProject(projectId)]);
+      setAllTeams(all);
+      setAttached(here);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load teams');
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const attachedIds = new Set(attached.map((t) => t.id));
+  const available = allTeams.filter((t) => !attachedIds.has(t.id));
+
+  const mutate = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try { await fn(); await load(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Update failed'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div style={sectionPad}>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+        Teams working this board. A team groups agents and humans; assign one here and it&apos;s linked to this
+        project. Manage a team&apos;s members in{' '}
+        <a href="/workforce?tab=teams" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>Workforce → Teams</a>.
+      </div>
+
+      {error && (
+        <div style={{ fontSize: 13, color: 'var(--danger, #dc2626)', marginBottom: 10 }}>{error}</div>
+      )}
+
+      {loading ? (
+        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading teams…</div>
+      ) : (
+        <>
+          {attached.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>No teams assigned to this board yet.</div>
+          ) : (
+            <div style={{ marginBottom: 12 }}>
+              {attached.map((t) => (
+                <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{t.name}</div>
+                    {t.description && (
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.description}</div>
+                    )}
+                  </div>
+                  <span style={{ flex: 1 }} />
+                  <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} disabled={busy} onClick={() => void mutate(() => removeTeamProject(t.id, projectId))}>
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {allTeams.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              No teams exist yet. Create one in{' '}
+              <a href="/workforce?tab=teams" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>Workforce → Teams</a>, then assign it here.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Select
+                value={pick}
+                onChange={(e) => setPick(e.target.value)}
+                style={{ ...inputStyle, flex: 1, minWidth: 200 }}
+                aria-label="Select a team to assign"
+                disabled={busy || available.length === 0}
+              >
+                <option value="">{available.length === 0 ? 'All teams already assigned' : 'Assign a team…'}</option>
+                {available.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </Select>
+              <button
+                type="button"
+                style={{ ...btnPrimary, opacity: !pick || busy ? 0.6 : 1 }}
+                disabled={!pick || busy}
+                onClick={() => { const id = Number(pick); if (id) void mutate(async () => { await addTeamProject(id, projectId); setPick(''); }); }}
+              >
+                Assign
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

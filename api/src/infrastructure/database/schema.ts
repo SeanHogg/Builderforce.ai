@@ -643,6 +643,25 @@ export const tenantMembers = pgTable('tenant_members', {
   joinedAt:  timestamp('joined_at').notNull().defaultNow(),
 });
 
+/**
+ * Pending/accepted/revoked invitations to a workspace (see migration 0114).
+ * Unlike tenant_members (which requires an existing user), an invitation targets
+ * an email that may not have a Builderforce account yet. On the invitee's next
+ * login with a matching email the pending row auto-converts to a tenant_members
+ * row and is stamped 'accepted'. Managers can 'revoke' a still-pending row.
+ */
+export const tenantInvitations = pgTable('tenant_invitations', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  email:            varchar('email', { length: 255 }).notNull(),   // stored lower-cased
+  role:             tenantRoleEnum('role').notNull().default('developer'),
+  status:           varchar('status', { length: 20 }).notNull().default('pending'), // pending | accepted | revoked
+  invitedByUserId:  varchar('invited_by_user_id', { length: 36 }),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  acceptedAt:       timestamp('accepted_at'),
+  revokedAt:        timestamp('revoked_at'),
+});
+
 export const managedAgentHostRequestStatusEnum = pgEnum('managed_agent_host_request_status', [
   'pending', 'provisioning', 'active', 'cancelled', 'failed',
 ]);
@@ -1755,6 +1774,54 @@ export const devTeamMembers = pgTable('dev_team_members', {
   joinedAt:      timestamp('joined_at').notNull().defaultNow(),
 }, (t) => [
   unique('uq_team_contributor').on(t.teamId, t.contributorId),
+]);
+
+// ---------------------------------------------------------------------------
+// Workforce Teams — group the workforce (agents AND humans) into named teams and
+// attach a team to projects. Distinct from `devTeams` (contributor analytics):
+// a member here is a first-class assignable workforce entity, identified exactly
+// like a task assignee — a human (users.id), a cloud agent (ide_agents.id), or a
+// remote host (agent_hosts.id). See migration 0114.
+// ---------------------------------------------------------------------------
+
+export const teamMemberKindEnum = pgEnum('team_member_kind', [
+  'human', 'cloud_agent', 'host_agent',
+]);
+
+export const teams = pgTable('teams', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
+  name:        varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const teamMembers = pgTable('team_members', {
+  id:         serial('id').primaryKey(),
+  teamId:     integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  /** Which workforce sub-population {@link memberRef} points at. */
+  memberKind: teamMemberKindEnum('member_kind').notNull(),
+  /** Stringified identity in the relevant table (users.id / ide_agents.id /
+   *  agent_hosts.id). No FK — the targets are heterogeneous; integrity is enforced
+   *  in the route. */
+  memberRef:  varchar('member_ref', { length: 64 }).notNull(),
+  /** Denormalized display name, refreshed on (re-)add so the list view never has
+   *  to fan-join across all three populations. */
+  memberName: varchar('member_name', { length: 255 }).notNull(),
+  addedAt:    timestamp('added_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_team_member').on(t.teamId, t.memberKind, t.memberRef),
+]);
+
+export const teamProjects = pgTable('team_projects', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  addedAt:   timestamp('added_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_team_project').on(t.teamId, t.projectId),
 ]);
 
 // ---------------------------------------------------------------------------

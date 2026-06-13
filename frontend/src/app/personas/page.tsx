@@ -193,13 +193,13 @@ export default function PersonasPage() {
     <PageContainer width="readable">
       <div className="page-header" style={{ marginBottom: 24 }}>
         <div>
-          <h1 className="page-title" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-strong)', margin: 0 }}>Personas</h1>
-          <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
+          <h1 className="page-title" style={{ margin: 0 }}>Personas</h1>
+          <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
             Agent personas shape identity, tone, and decision-making for every sub-agent in a workflow
           </p>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>
-          + Create Persona
+          + New persona
         </button>
       </div>
 
@@ -241,7 +241,7 @@ export default function PersonasPage() {
             <div className="empty-state-icon">🎭</div>
             <div className="empty-state-title">No custom personas yet</div>
             <div className="empty-state-sub">Create your own persona to shape how your agents think and communicate</div>
-            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setCreateOpen(true)}>Create Persona</button>
+            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setCreateOpen(true)}>New persona</button>
           </div>
         ) : viewMode === 'card' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
@@ -316,9 +316,9 @@ export default function PersonasPage() {
         <>
           <div style={{ marginBottom: 16 }}>
             <input
-              type="text"
+              type="search"
               className="input"
-              style={{ maxWidth: 300 }}
+              style={{ maxWidth: 320 }}
               placeholder="Search personas…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -458,7 +458,7 @@ export default function PersonasPage() {
         <div className="modal-overlay" onClick={() => setCreateOpen(false)}>
           <div className="card" style={{ maxWidth: 540, width: '100%', padding: 24 }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div className="modal-title">Create Persona</div>
+              <div className="modal-title">New persona</div>
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => setCreateOpen(false)}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

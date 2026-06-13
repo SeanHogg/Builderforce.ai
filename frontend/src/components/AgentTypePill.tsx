@@ -4,17 +4,32 @@
  * WorkforceAgents and its style object was also copy-pasted for the "Marketplace"
  * and "Agent" pills elsewhere.
  */
-export type AgentPillKind = 'cloud' | 'host' | 'marketplace';
+export type AgentPillKind = 'cloud' | 'host' | 'marketplace' | 'human' | 'pending';
 
 const LABELS: Record<AgentPillKind, string> = {
   cloud: 'Cloud',
   host: 'Remote',
   marketplace: 'Marketplace',
+  human: 'Human',
+  pending: 'Pending',
+};
+
+// Three palettes: coral accent (agents), amber (pending invite), neutral (human/host).
+type Palette = { background: string; color: string };
+const ACCENT: Palette = { background: 'var(--surface-coral-soft)', color: 'var(--accent)' };
+const NEUTRAL: Palette = { background: 'var(--bg-elevated)', color: 'var(--text-strong)' };
+const AMBER: Palette = { background: 'rgba(245,158,11,0.15)', color: '#d97706' };
+
+const PALETTES: Record<AgentPillKind, Palette> = {
+  cloud: ACCENT,
+  marketplace: ACCENT,
+  host: NEUTRAL,
+  human: NEUTRAL,
+  pending: AMBER,
 };
 
 export function AgentTypePill({ kind, label }: { kind: AgentPillKind; label?: string }) {
-  // Remote/host is neutral; cloud + marketplace use the coral accent.
-  const neutral = kind === 'host';
+  const palette = PALETTES[kind];
   return (
     <span
       style={{
@@ -24,8 +39,8 @@ export function AgentTypePill({ kind, label }: { kind: AgentPillKind; label?: st
         textTransform: 'uppercase',
         padding: '2px 7px',
         borderRadius: 6,
-        background: neutral ? 'var(--bg-elevated)' : 'var(--surface-coral-soft)',
-        color: neutral ? 'var(--text-strong)' : 'var(--accent)',
+        background: palette.background,
+        color: palette.color,
         border: '1px solid var(--border)',
       }}
     >

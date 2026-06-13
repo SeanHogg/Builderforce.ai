@@ -22,11 +22,6 @@ const card: React.CSSProperties = {
   padding: 16,
 };
 
-const input: React.CSSProperties = {
-  width: '100%', padding: '8px 10px', borderRadius: 8, fontSize: 13,
-  background: 'var(--bg-muted, rgba(255,255,255,0.03))', border: '1px solid var(--border-subtle)', color: 'inherit',
-};
-
 type Tab = 'public' | 'mine';
 
 export default function PromptsPage() {
@@ -91,17 +86,19 @@ export default function PromptsPage() {
 
   return (
     <PageContainer width="readable">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Prompt Library</h1>
+      <div className="page-header" style={{ marginBottom: 16 }}>
+        <div>
+          <h1 className="page-title" style={{ margin: 0 }}>Prompt Library</h1>
+          <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
+            Browse and use community prompt templates. {isAuthed ? 'Publish your own to share them with everyone.' : 'Sign in to publish and star prompts.'}
+          </p>
+        </div>
         {isAuthed && (
-          <button onClick={() => setShowCreate((v) => !v)} style={primaryBtn}>
+          <button type="button" className="btn btn-primary" onClick={() => setShowCreate((v) => !v)}>
             {showCreate ? 'Close' : '+ New prompt'}
           </button>
         )}
       </div>
-      <p style={{ color: 'var(--text-muted)', marginTop: 0, marginBottom: 16, fontSize: 14 }}>
-        Browse and use community prompt templates. {isAuthed ? 'Publish your own to share them with everyone.' : 'Sign in to publish and star prompts.'}
-      </p>
 
       {showCreate && isAuthed && (
         <CreatePromptForm
@@ -110,30 +107,34 @@ export default function PromptsPage() {
         />
       )}
 
-      {/* Tabs + search */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-        <Seg active={tab === 'public'} onClick={() => setTab('public')}>Public gallery</Seg>
-        {isAuthed && <Seg active={tab === 'mine'} onClick={() => setTab('mine')}>My prompts</Seg>}
-        <span style={{ flex: 1 }} />
-        {tab === 'public' && (
-          <>
-            <input
-              style={{ ...input, width: 220 }}
-              placeholder="Search prompts…"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') loadPublic(q); }}
-            />
-            <Select style={{ ...input, width: 130 }} value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
-              <option value="popular">Most used</option>
-              <option value="recent">Newest</option>
-              <option value="featured">Featured</option>
-            </Select>
-          </>
-        )}
-        {tab !== 'public' && <span style={{ flex: 1 }} />}
-        <ViewToggle value={viewMode} onChange={setViewMode} />
+      {/* Tabs + view toggle */}
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
+        <button type="button" className={`btn ${tab === 'public' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('public')}>Public gallery</button>
+        {isAuthed && <button type="button" className={`btn ${tab === 'mine' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('mine')}>My prompts</button>}
+        <div style={{ marginLeft: 'auto' }}>
+          <ViewToggle value={viewMode} onChange={setViewMode} />
+        </div>
       </div>
+
+      {/* Search + sort (public gallery) */}
+      {tab === 'public' && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
+          <input
+            type="search"
+            className="input"
+            style={{ maxWidth: 320 }}
+            placeholder="Search prompts…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') loadPublic(q); }}
+          />
+          <Select className="input" style={{ maxWidth: 150 }} value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
+            <option value="popular">Most used</option>
+            <option value="recent">Newest</option>
+            <option value="featured">Featured</option>
+          </Select>
+        </div>
+      )}
 
       {loading && <div style={card}>Loading prompts…</div>}
       {error && <div style={{ ...card, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>}
@@ -148,8 +149,8 @@ export default function PromptsPage() {
               </div>
               {p.description && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 10px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.description}</p>}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                {p.category && <Tag>{p.category}</Tag>}
-                {p.tags.slice(0, 3).map((t) => <Tag key={t}>#{t}</Tag>)}
+                {p.category && <span className="badge badge-gray">{p.category}</span>}
+                {p.tags.slice(0, 3).map((t) => <span key={t} className="badge badge-gray">#{t}</span>)}
               </div>
               <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--text-muted)' }}>
                 <span>▶ {p.usageCount.toLocaleString()} uses</span>
@@ -198,7 +199,7 @@ export default function PromptsPage() {
                     <td style={tdMutedStyle}>{p.starCount}</td>
                     <td style={tdMutedStyle}>{p.authorName ?? '—'}</td>
                     <td style={tdStyle}>
-                      <button onClick={() => openDetail(p)} style={ghostBtn}>View</button>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => openDetail(p)}>View</button>
                     </td>
                   </tr>
                 ))}
@@ -246,14 +247,14 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
         </div>
         {prompt.description && <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>{prompt.description}</p>}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '8px 0 16px' }}>
-          {prompt.category && <Tag>{prompt.category}</Tag>}
-          {prompt.tags.map((t) => <Tag key={t}>#{t}</Tag>)}
-          {prompt.model && <Tag>model: {prompt.model}</Tag>}
+          {prompt.category && <span className="badge badge-gray">{prompt.category}</span>}
+          {prompt.tags.map((t) => <span key={t} className="badge badge-gray">#{t}</span>)}
+          {prompt.model && <span className="badge badge-gray">model: {prompt.model}</span>}
         </div>
 
         <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
-          <button onClick={onUse} style={primaryBtn}>Use this prompt (copy)</button>
-          {isAuthed && id && <button onClick={toggleStar} style={ghostBtn}>{starred ? '★ Starred' : '☆ Star'}</button>}
+          <button type="button" className="btn btn-primary" onClick={onUse}>Use this prompt (copy)</button>
+          {isAuthed && id && <button type="button" className="btn btn-secondary" onClick={toggleStar}>{starred ? '★ Starred' : '☆ Star'}</button>}
         </div>
 
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>PROMPT (v{prompt.currentVersion})</div>
@@ -321,28 +322,29 @@ function CreatePromptForm({ onCreated, onError }: { onCreated: () => void; onErr
     <div style={{ ...card, marginBottom: 20 }}>
       <h2 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 12px' }}>New prompt</h2>
       <div style={{ display: 'grid', gap: 10 }}>
-        <input style={input} placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <input style={input} placeholder="Short description" value={description} onChange={(e) => setDescription(e.target.value)} />
+        <input className="input" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input className="input" placeholder="Short description" value={description} onChange={(e) => setDescription(e.target.value)} />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <input style={input} placeholder="Category (e.g. code-review)" value={category} onChange={(e) => setCategory(e.target.value)} />
-          <input style={input} placeholder="Tags (comma separated)" value={tags} onChange={(e) => setTags(e.target.value)} />
+          <input className="input" placeholder="Category (e.g. code-review)" value={category} onChange={(e) => setCategory(e.target.value)} />
+          <input className="input" placeholder="Tags (comma separated)" value={tags} onChange={(e) => setTags(e.target.value)} />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <Select style={input} value={visibility} onChange={(e) => setVisibility(e.target.value as typeof visibility)}>
+          <Select className="input" value={visibility} onChange={(e) => setVisibility(e.target.value as typeof visibility)}>
             <option value="private">Private (only me)</option>
             <option value="tenant">Team</option>
             <option value="public">Public (everyone)</option>
           </Select>
-          <input style={input} placeholder="Recommended model (optional)" value={model} onChange={(e) => setModel(e.target.value)} />
+          <input className="input" placeholder="Recommended model (optional)" value={model} onChange={(e) => setModel(e.target.value)} />
         </div>
         <textarea
-          style={{ ...input, minHeight: 160, fontFamily: 'ui-monospace, monospace' }}
+          className="input"
+          style={{ minHeight: 160, fontFamily: 'ui-monospace, monospace' }}
           placeholder={'Prompt body. Use {{variable}} placeholders.'}
           value={body}
           onChange={(e) => setBody(e.target.value)}
         />
         <div>
-          <button onClick={submit} disabled={saving} style={{ ...primaryBtn, opacity: saving ? 0.6 : 1 }}>
+          <button type="button" className="btn btn-primary" onClick={submit} disabled={saving}>
             {saving ? 'Saving…' : 'Create prompt'}
           </button>
         </div>
@@ -350,31 +352,3 @@ function CreatePromptForm({ onCreated, onError }: { onCreated: () => void; onErr
     </div>
   );
 }
-
-function Seg({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button onClick={onClick} style={{
-      padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-      background: active ? 'var(--accent, #2563eb)' : 'transparent',
-      color: active ? '#fff' : 'var(--text-muted)',
-      border: `1px solid ${active ? 'transparent' : 'var(--border-subtle)'}`,
-    }}>{children}</button>
-  );
-}
-
-function Tag({ children }: { children: React.ReactNode }) {
-  return (
-    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'var(--bg-muted, rgba(255,255,255,0.05))', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
-      {children}
-    </span>
-  );
-}
-
-const primaryBtn: React.CSSProperties = {
-  fontSize: 13, padding: '8px 14px', borderRadius: 8, cursor: 'pointer',
-  background: 'var(--accent, #2563eb)', color: '#fff', border: 'none',
-};
-const ghostBtn: React.CSSProperties = {
-  fontSize: 13, padding: '8px 14px', borderRadius: 8, cursor: 'pointer',
-  background: 'transparent', color: 'inherit', border: '1px solid var(--border-subtle)',
-};

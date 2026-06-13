@@ -11,11 +11,15 @@
  * fabricated "tests pass" claims; this is its counterpart for fabricated CODE.
  *
  * Precision over recall (like the honesty gate): the patterns match the explicit
- * "this is a stub" asides a model writes when it scaffolds, NOT ordinary code. We
- * also skip prose/config (`.md`/`.json`/`.yaml`) and test/spec files (which
- * legitimately mock and simulate), so a clean finish is never blocked by a real
- * file. Reads the committed content back via the same `readRepoFile` path as
- * `verifyWrittenFiles`. Never throws.
+ * "this is a stub" asides a model writes when it scaffolds (`// In a real …`), PLUS
+ * structural tells that don't announce themselves in prose — an empty typed
+ * function body, a `throw new Error('not implemented')`, a `return null as Foo`
+ * cast-to-satisfy-the-signature, a `// TODO`, a hard-coded `@example.com` /
+ * `your-api-key` literal. All are kept narrow enough that ordinary finished code
+ * does not trip them. We also skip prose/config (`.md`/`.json`/`.yaml`) and
+ * test/spec files (which legitimately mock and simulate), so a clean finish is
+ * never blocked by a real file. Reads the committed content back via the same
+ * `readRepoFile` path as `verifyWrittenFiles`. Never throws.
  */
 import { readRepoFile, type RepoReadContext } from './readRepoContents';
 
@@ -44,6 +48,23 @@ const STUB_PATTERNS: Array<{ label: string; re: RegExp }> = [
   { label: '"replace with actual" token', re: /\b(to\s+be\s+replaced|replace\s+(?:this\s+)?with\s+(?:the\s+)?actual|substituted?\s+with\s+(?:the\s+)?actual|replace\s+with\s+real)\b/i },
   { label: 'bracketed placeholder token', re: /\[(platform\s+name|your[\s_-][a-z ]+|todo|placeholder|insert[\s_-][a-z ]+)\]/i },
   { label: 'mock value stub', re: /\b(mock|dummy|fake|stub(?:bed)?)\s+(email|data|response|value|implementation|return|account|user|result)\b|\breturn\s+(?:a\s+)?mock\b/i },
+
+  // --- Structural tells: stubs that do NOT announce themselves in a comment. ---
+  // A thrown not-implemented/TODO/stub error — unambiguously unfinished.
+  { label: 'not-implemented throw', re: /\bthrow\s+new\s+\w*Error\s*\([^)]*\b(not[\s_-]?implemented|unimplemented|not\s+yet|todo|stub)\b|\bNotImplementedError\b/i },
+  // `return null/undefined/{}/[]/"" as SomeType` — an empty value cast purely to
+  // satisfy a return signature is the classic "I'll fill this in later" stub.
+  { label: 'type-cast empty return', re: /\breturn\s+(?:null|undefined|\{\s*\}|\[\s*\]|''|""|``|0|false)\s+as\b/i },
+  // A leftover work marker in code the agent just wrote for a task it calls done.
+  { label: 'TODO/FIXME marker', re: /(?:\/\/|\/\*|\*)\s*(?:todo|fixme)\b/i },
+  // An empty body on a function/arrow with a non-void return type: it can't return
+  // what it promises, so it is a stub (and a type error CI would reject). The
+  // `= {}` guard means typed object-literal assignments don't match; requiring the
+  // empty braces at end-of-line means a `Record<string, {}>` return type doesn't.
+  { label: 'empty typed function body', re: /:\s*(?!void\b|Promise<\s*void\s*>|never\b|undefined\b|unknown\b|any\b)[A-Za-z_][\w.<>,\[\] |]*\s*(?:=>\s*)?\{\s*\}[ \t]*$/m },
+  // Hard-coded reserved-example data / obvious secret placeholders standing in for
+  // a real value or lookup.
+  { label: 'placeholder example/secret literal', re: /@example\.(?:com|org|net)\b|['"`][^'"`]{0,40}(?:your[-_ ]?(?:api[-_ ]?key|token|secret)|xxxx+)[^'"`]{0,40}['"`]/i },
 ];
 
 /** Return the distinct stub-marker labels present in a file's content. */

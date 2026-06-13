@@ -4,7 +4,7 @@ import { TenantService } from '../../application/tenant/TenantService';
 import { TenantRole, TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
-import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
@@ -15,6 +15,7 @@ import {
   agentHosts,
   agentHostProjects,
   sourceControlIntegrations,
+  tenantInvitations,
   tenantMembers,
   users,
 } from '../../infrastructure/database/schema';
@@ -47,6 +48,70 @@ async function invalidateTaskAssignees(env: Env, tenantId: number): Promise<void
   await invalidateCached(env, `task-assignees:tenant:${tenantId}`);
 }
 
+/** Cache key for a tenant's pending-invitation roster (GET /:id/invitations). */
+function invitationsCacheKey(tenantId: number): string {
+  return `tenant-invitations:tenant:${tenantId}`;
+}
+
+async function invalidateInvitations(env: Env, tenantId: number): Promise<void> {
+  await invalidateCached(env, invitationsCacheKey(tenantId));
+}
+
+/**
+ * Convert any still-pending invitations addressed to `email` into real
+ * memberships for `userId`. Called on login (GET /tenants/mine) so an invite
+ * sent before the person had an account "lands" the first time they return.
+ *
+ * Each accepted row is stamped accepted/accepted_at and the tenant's assignee +
+ * invitation caches are dropped. If the user is already a member (invited twice,
+ * or added manually in between) the row is still resolved to 'accepted' rather
+ * than retried forever. Best-effort: a single tenant failing never blocks the others.
+ */
+async function acceptPendingInvitations(
+  db: Db,
+  env: Env,
+  tenantService: TenantService,
+  userId: string,
+  email: string,
+): Promise<void> {
+  const normalized = email.toLowerCase().trim();
+  if (!normalized) return;
+
+  const pending = await db
+    .select({
+      id: tenantInvitations.id,
+      tenantId: tenantInvitations.tenantId,
+      role: tenantInvitations.role,
+      invitedByUserId: tenantInvitations.invitedByUserId,
+    })
+    .from(tenantInvitations)
+    .where(and(eq(tenantInvitations.email, normalized), eq(tenantInvitations.status, 'pending')));
+
+  for (const invite of pending) {
+    // The invitee can't authorize their own membership — replay the add under
+    // the manager who sent the invite (guaranteed a manager/owner at invite time).
+    if (!invite.invitedByUserId) continue;
+    try {
+      // Already a member? Resolve the invite without re-adding (addMember would
+      // throw "already a member" and leave the row stuck pending).
+      const alreadyMember = await assertTenantMember(db, invite.tenantId, userId);
+      if (!alreadyMember) {
+        await tenantService.addMember(invite.tenantId, invite.invitedByUserId, userId, invite.role as TenantRole);
+      }
+      await db
+        .update(tenantInvitations)
+        .set({ status: 'accepted', acceptedAt: new Date() })
+        .where(eq(tenantInvitations.id, invite.id));
+      await invalidateTaskAssignees(env, invite.tenantId);
+      await invalidateInvitations(env, invite.tenantId);
+    } catch {
+      // A plan-seat-limit or transient error on one tenant must not block the
+      // user's login or the other tenants' invites — leave the row pending so
+      // it retries on the next visit.
+    }
+  }
+}
+
 export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
@@ -54,6 +119,17 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   // Used by the tenant picker immediately after login (before a tenant JWT exists)
   router.get('/mine', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
+    // Land any invitations sent to this user's email before they had an account
+    // (or before they last returned) — they convert to memberships and show up
+    // in the list below on this very request.
+    const [account] = await db
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (account?.email) {
+      await acceptPendingInvitations(db, c.env as Env, tenantService, userId, account.email);
+    }
     const result = await tenantService.listTenantsForUser(userId);
     return c.json({ tenants: result });
   });
@@ -535,7 +611,10 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     return c.json(tenant.toPlain());
   });
 
-  // POST /api/tenants/:id/invite-by-email — look up user by email and add as member
+  // POST /api/tenants/:id/invite-by-email
+  // Existing account → add as a member immediately (status 'added'). No account
+  // yet → record a pending invitation (status 'pending') that auto-converts to a
+  // membership the first time they log in with that email (see GET /mine).
   router.post('/:id/invite-by-email', requireRole(TenantRole.MANAGER), async (c) => {
     const id          = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
@@ -544,29 +623,99 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const body = await c.req.json<{ email: string; role?: TenantRole }>();
     if (!body.email?.trim()) return c.json({ error: 'email is required' }, 400);
 
+    const email = body.email.toLowerCase().trim();
     const role = body.role ?? TenantRole.DEVELOPER;
+    const actorUserId = c.get('userId') as string;
 
-    const [found] = await db
-      .select({ id: users.id, email: users.email })
-      .from(users)
-      .where(eq(users.email, body.email.toLowerCase().trim()))
-      .limit(1);
-
-    if (!found) {
-      return c.json(
-        { error: 'No account found with that email. Ask them to sign up at builderforce.ai first.' },
-        404,
-      );
-    }
-
+    // Seat limit guards both paths: a pending invite is a promise of a seat, so
+    // refuse to queue one the plan can't honour. (It is not yet counted as a
+    // filled seat — see the Consolidated Gap Register.)
     const guard = buildPlanLimitsGuard(db);
     const limitErr = await guard.checkSeatLimit(id);
     if (limitErr) return c.json(limitErr, 402);
 
-    const actorUserId = c.get('userId') as string;
-    const tenant = await tenantService.addMember(id, actorUserId, found.id, role);
-    await invalidateTaskAssignees(c.env as Env, id);
-    return c.json({ ok: true, tenant: tenant.toPlain(), addedUser: { id: found.id, email: found.email } });
+    const [found] = await db
+      .select({ id: users.id, email: users.email })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    if (found) {
+      const tenant = await tenantService.addMember(id, actorUserId, found.id, role);
+      await invalidateTaskAssignees(c.env as Env, id);
+      return c.json({ ok: true, status: 'added', tenant: tenant.toPlain(), addedUser: { id: found.id, email: found.email } });
+    }
+
+    // No account: upsert the pending invitation (the partial-unique index allows
+    // only one open invite per email, so re-inviting refreshes role + timestamp).
+    const [existing] = await db
+      .select({ id: tenantInvitations.id })
+      .from(tenantInvitations)
+      .where(and(
+        eq(tenantInvitations.tenantId, id),
+        eq(tenantInvitations.email, email),
+        eq(tenantInvitations.status, 'pending'),
+      ))
+      .limit(1);
+
+    if (existing) {
+      await db
+        .update(tenantInvitations)
+        .set({ role, invitedByUserId: actorUserId, createdAt: new Date() })
+        .where(eq(tenantInvitations.id, existing.id));
+    } else {
+      await db
+        .insert(tenantInvitations)
+        .values({ tenantId: id, email, role, invitedByUserId: actorUserId });
+    }
+
+    await invalidateInvitations(c.env as Env, id);
+    return c.json({ ok: true, status: 'pending', email });
+  });
+
+  // GET /api/tenants/:id/invitations — pending (not-yet-accepted) invitations.
+  router.get('/:id/invitations', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    const callerTenantId = c.get('tenantId') as number;
+    if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
+
+    const invitations = await getOrSetCached(c.env as Env, invitationsCacheKey(tenantId), async () => {
+      const rows = await db
+        .select({
+          id: tenantInvitations.id,
+          email: tenantInvitations.email,
+          role: tenantInvitations.role,
+          createdAt: tenantInvitations.createdAt,
+        })
+        .from(tenantInvitations)
+        .where(and(eq(tenantInvitations.tenantId, tenantId), eq(tenantInvitations.status, 'pending')))
+        .orderBy(desc(tenantInvitations.createdAt));
+      return rows;
+    });
+
+    return c.json({ invitations });
+  });
+
+  // DELETE /api/tenants/:id/invitations/:invId — revoke a pending invitation.
+  router.delete('/:id/invitations/:invId', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    const callerTenantId = c.get('tenantId') as number;
+    if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
+
+    const invId = c.req.param('invId');
+    if (!invId) return c.json({ error: 'invId is required' }, 400);
+
+    await db
+      .update(tenantInvitations)
+      .set({ status: 'revoked', revokedAt: new Date() })
+      .where(and(
+        eq(tenantInvitations.id, invId),
+        eq(tenantInvitations.tenantId, tenantId),
+        eq(tenantInvitations.status, 'pending'),
+      ));
+
+    await invalidateInvitations(c.env as Env, tenantId);
+    return c.json({ ok: true });
   });
 
   // DELETE /api/tenants/:id/members/:userId

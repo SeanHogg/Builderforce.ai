@@ -452,13 +452,28 @@ export async function removeTenantMember(
   }
 }
 
+/** A pending (not-yet-accepted) workspace invitation. */
+export interface PendingInvitation {
+  id: string;
+  email: string;
+  role: string;
+  createdAt: string;
+}
+
+/**
+ * Outcome of an invite: `added` when the email already had an account (now a
+ * member), `pending` when it didn't (a pending invite was recorded and will
+ * auto-accept when they sign up).
+ */
+export type InviteResult = { status: 'added' | 'pending'; email: string };
+
 /** Invite a user to a workspace by email. Requires tenant token. */
 export async function inviteByEmail(
   tenantToken: string,
   tenantId: string,
   email: string,
   role: string = 'developer',
-): Promise<void> {
+): Promise<InviteResult> {
   const { planLimitErrorFromResponse } = await import('./planLimitError');
   const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/invite-by-email`, {
     method: 'POST',
@@ -469,6 +484,40 @@ export async function inviteByEmail(
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(body.error ?? 'Failed to invite user');
+  }
+  const body = await res.json().catch(() => ({})) as { status?: 'added' | 'pending' };
+  return { status: body.status ?? 'added', email: email.toLowerCase().trim() };
+}
+
+/** List a workspace's pending invitations. Requires manager role. */
+export async function listInvitations(
+  tenantToken: string,
+  tenantId: string,
+): Promise<PendingInvitation[]> {
+  const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/invitations`, {
+    headers: { Authorization: `Bearer ${tenantToken}` },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? 'Failed to load invitations');
+  }
+  const data = (await res.json()) as { invitations: PendingInvitation[] };
+  return data.invitations ?? [];
+}
+
+/** Revoke a pending invitation. Requires manager role. */
+export async function revokeInvitation(
+  tenantToken: string,
+  tenantId: string,
+  invitationId: string,
+): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/invitations/${invitationId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${tenantToken}` },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? 'Failed to revoke invitation');
   }
 }
 

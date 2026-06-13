@@ -158,7 +158,7 @@ const STATIC_ROUTES: Record<string, string> = {
   training: '/training',
   tenants: '/tenants',
   settings: '/settings',
-  settings_members: '/workforce?tab=members',
+  settings_members: '/workforce',
   settings_api_keys: '/settings/api-keys',
   compare: '/compare',
   pricing: '/pricing',

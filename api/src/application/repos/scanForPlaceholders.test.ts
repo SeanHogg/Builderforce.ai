@@ -30,12 +30,38 @@ describe('detectPlaceholderMarkers', () => {
       .toContain('bracketed placeholder token');
   });
 
+  // Structural tells: silent stubs that carry no "this is a stub" prose.
+  it('flags silent structural stubs (no announcing comment)', () => {
+    expect(detectPlaceholderMarkers('async function getAccountEmail(id: string): Promise<string | null> {}'))
+      .toContain('empty typed function body');
+    expect(detectPlaceholderMarkers('  getEmail(id: string): string {\n  }'))
+      .toContain('empty typed function body');
+    expect(detectPlaceholderMarkers("throw new Error('Not implemented yet');"))
+      .toContain('not-implemented throw');
+    expect(detectPlaceholderMarkers('return null as unknown as User;'))
+      .toContain('type-cast empty return');
+    expect(detectPlaceholderMarkers('// TODO: wire this up to the real accounts service'))
+      .toContain('TODO/FIXME marker');
+    expect(detectPlaceholderMarkers('const to = "test-account-holder@example.com";'))
+      .toContain('placeholder example/secret literal');
+    expect(detectPlaceholderMarkers('const key = "your-api-key";'))
+      .toContain('placeholder example/secret literal');
+  });
+
   it('does not flag ordinary finished code (no false positives)', () => {
     expect(detectPlaceholderMarkers('export async function sendEmail(to: string) { await resend.emails.send({ to }); }')).toEqual([]);
     // DOM placeholder attribute must not trip the placeholder rule.
     expect(detectPlaceholderMarkers('<input placeholder="Enter your email" />')).toEqual([]);
     expect(detectPlaceholderMarkers('const realtimeClient = new Client(); // connects on boot')).toEqual([]);
     expect(detectPlaceholderMarkers('// Retrieves the primary email for an account from the accounts service')).toEqual([]);
+    // Structural-pattern false-positive guards:
+    expect(detectPlaceholderMarkers('const onClick = () => {};')).toEqual([]);            // untyped no-op callback
+    expect(detectPlaceholderMarkers('function noop(): void {}')).toEqual([]);             // void empty body is legit
+    expect(detectPlaceholderMarkers('async function flush(): Promise<void> {}')).toEqual([]);
+    expect(detectPlaceholderMarkers('const config: AppConfig = {};')).toEqual([]);        // typed empty-object assignment
+    expect(detectPlaceholderMarkers('function group(): Record<string, {}> { return rows; }')).toEqual([]); // {} inside the return type
+    expect(detectPlaceholderMarkers('const cents = price as number;')).toEqual([]);       // ordinary cast, not an empty return
+    expect(detectPlaceholderMarkers('const todoList = items.filter(Boolean);')).toEqual([]); // "todo" in an identifier, not a comment
   });
 });
 

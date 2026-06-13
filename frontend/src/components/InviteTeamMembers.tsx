@@ -15,7 +15,9 @@ const ROLES = [
 interface Invite {
   email: string;
   role: string;
-  status: 'pending' | 'sending' | 'sent' | 'error';
+  // sending → in flight; added → joined now (had an account); invited → pending
+  // invite recorded (no account yet); error → failed.
+  status: 'sending' | 'added' | 'invited' | 'error';
   errorMsg?: string;
 }
 
@@ -53,9 +55,9 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
     setAdding(true);
 
     try {
-      await inviteByEmail(tenantToken, tenantId, trimmed, role);
+      const result = await inviteByEmail(tenantToken, tenantId, trimmed, role);
       setInvites((prev) =>
-        prev.map((i) => (i.email === trimmed ? { ...i, status: 'sent' } : i))
+        prev.map((i) => (i.email === trimmed ? { ...i, status: result.status === 'pending' ? 'invited' : 'added' } : i))
       );
       onInvited?.(trimmed, role);
     } catch (err) {
@@ -78,17 +80,9 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
   return (
     <div>
       <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20 }}>
-        Add teammates to your workspace. They need a Builderforce account — if they don&apos;t
-        have one yet, they can sign up at{' '}
-        <a
-          href="https://builderforce.ai/register"
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}
-        >
-          builderforce.ai/register
-        </a>
-        .
+        Add teammates to your workspace by email. If they already have a Builderforce account they
+        join right away; if not, the invite stays <strong>pending</strong> and they join automatically
+        the first time they sign in with that email.
       </p>
 
       <form onSubmit={handleAdd} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
@@ -158,7 +152,7 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
                 gap: 10,
                 padding: '8px 12px',
                 background: 'var(--bg-base)',
-                border: `1px solid ${invite.status === 'error' ? 'var(--error-border, #e74c3c)' : invite.status === 'sent' ? 'rgba(34,197,94,0.3)' : 'var(--border-subtle)'}`,
+                border: `1px solid ${invite.status === 'error' ? 'var(--error-border, #e74c3c)' : invite.status === 'added' ? 'rgba(34,197,94,0.3)' : invite.status === 'invited' ? 'rgba(245,158,11,0.35)' : 'var(--border-subtle)'}`,
                 borderRadius: 8,
                 fontSize: 13,
               }}
@@ -170,8 +164,11 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
               {invite.status === 'sending' && (
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Sending…</span>
               )}
-              {invite.status === 'sent' && (
+              {invite.status === 'added' && (
                 <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 600 }}>✓ Added</span>
+              )}
+              {invite.status === 'invited' && (
+                <span style={{ fontSize: 11, color: '#d97706', fontWeight: 600 }} title="No account yet — joins automatically when they sign up">✉ Invited · pending</span>
               )}
               {invite.status === 'error' && (
                 <span style={{ fontSize: 11, color: 'var(--error-text, #e74c3c)' }} title={invite.errorMsg}>
@@ -186,8 +183,8 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
       {invites.length === 0 && (
         <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
           You can also invite teammates later from{' '}
-          <a href="/workforce?tab=members" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
-            Workforce → Members
+          <a href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
+            Workforce
           </a>
           .
         </p>
