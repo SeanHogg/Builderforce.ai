@@ -211,12 +211,19 @@ export function createAnalyticsRoutes(db: Db): Hono<HonoEnv> {
           .where(eq(contributors.id, existing.id));
         updated++;
       } else {
+        // onConflictDoUpdate against the partial unique index (migration 0124)
+        // so a concurrent sync that inserted the same (tenant, host) first just
+        // updates instead of creating a duplicate — idempotent import [1557].
         await db.insert(contributors).values({
           tenantId,
           displayName: agentHost.name,
           kind: 'agent',
           agentHostId: agentHost.id,
           roleType: 'agent',
+        }).onConflictDoUpdate({
+          target: [contributors.tenantId, contributors.agentHostId],
+          targetWhere: sql`${contributors.kind} = 'agent'`,
+          set: { displayName: agentHost.name, isActive: agentHost.status === 'active', updatedAt: new Date() },
         });
         created++;
       }

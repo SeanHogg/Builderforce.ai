@@ -262,6 +262,63 @@ export function BrainPanel({
     await conv.send(text);
   }, [input, conv]);
 
+  // Capture execution: copy the Brain run's LLM/tool/error trace + transcript to
+  // the clipboard — the Brain twin of the Observability/Logs "Copy triage info"
+  // button, so a misbehaving run can be dropped straight into a bug report.
+  const [captureState, setCaptureState] = useState<'idle' | 'copied' | 'error'>('idle');
+  const personaLabel = useMemo(() => {
+    if (personaSel.startsWith('modality:')) return `Brain — ${getModality(personaSel.slice('modality:'.length)).label}`;
+    if (personaSel.startsWith('agent:')) {
+      const a = brainAgents.find((x) => `agent:${x.agentKind}:${x.agentRef}` === personaSel);
+      return a ? `Brain as ${agentName(a)}` : 'Brain';
+    }
+    return 'Brain (default)';
+  }, [personaSel, brainAgents, agentName]);
+  const captureExecution = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(conv.buildTriageReport(personaLabel));
+      setCaptureState('copied');
+    } catch {
+      setCaptureState('error');
+    }
+    setTimeout(() => setCaptureState('idle'), 2000);
+  }, [conv, personaLabel]);
+
+  // Shared chrome for the "capture execution" icon button (page + docked headers).
+  const captureButton = (
+    <button
+      type="button"
+      onClick={captureExecution}
+      disabled={!conv.hasTrace}
+      title={conv.hasTrace
+        ? 'Copy this run — LLM steps, tool chain, errors, and transcript — to the clipboard'
+        : 'No execution captured yet — send a message first'}
+      aria-label="Capture execution"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 28,
+        height: 24,
+        padding: 0,
+        fontSize: 13,
+        lineHeight: 1,
+        background: 'var(--bg-elevated)',
+        color: captureState === 'error'
+          ? 'var(--red, #ef4444)'
+          : captureState === 'copied'
+            ? 'var(--green, #22c55e)'
+            : 'var(--text-secondary)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 8,
+        cursor: conv.hasTrace ? 'pointer' : 'not-allowed',
+        opacity: conv.hasTrace ? 1 : 0.5,
+      }}
+    >
+      {captureState === 'copied' ? '✓' : captureState === 'error' ? '✕' : '⧉'}
+    </button>
+  );
+
   // Auto-send a one-shot prompt (e.g. a landing-page prompt replayed after auth).
   // `conv.send` creates+selects a chat on demand, so the conversation renders and
   // streams a reply. Ref-guarded so re-renders never re-send.
@@ -469,9 +526,12 @@ export function BrainPanel({
           <div className="bs-sidebar-header">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-strong)' }}>Brain Storm</span>
-              <button type="button" onClick={() => chats.create()} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
-                + New
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {captureButton}
+                <button type="button" onClick={() => chats.create()} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                  + New
+                </button>
+              </div>
             </div>
             <label style={{ display: 'block', marginBottom: 6, fontSize: 12, color: 'var(--muted)' }}>
               Project
@@ -504,6 +564,7 @@ export function BrainPanel({
       <div style={{ flexShrink: 0, padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>🧠 Brain</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {captureButton}
           <button type="button" onClick={() => chats.create()} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>+ New</button>
           <Link href="/brainstorm" title="Open full Brain Storm" style={{ fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}>Expand ↗</Link>
           {onClose && (

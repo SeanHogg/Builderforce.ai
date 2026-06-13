@@ -44,7 +44,7 @@ export async function modelsAuthOrderGetCommand(
   runtime: RuntimeEnv,
 ) {
   const { agentId, agentDir, provider } = resolveAuthOrderContext(opts);
-  const store = ensureAuthProfileStore(agentDir, {
+  const store = await ensureAuthProfileStore(agentDir, {
     allowKeychainPrompt: false,
   });
   const order = describeOrder(store, provider);
@@ -97,7 +97,7 @@ export async function modelsAuthOrderSetCommand(
 ) {
   const { agentId, agentDir, provider } = resolveAuthOrderContext(opts);
 
-  const store = ensureAuthProfileStore(agentDir, {
+  const store = await ensureAuthProfileStore(agentDir, {
     allowKeychainPrompt: false,
   });
   const providerKey = provider;

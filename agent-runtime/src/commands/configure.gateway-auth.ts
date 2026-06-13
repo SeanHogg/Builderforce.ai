@@ -78,7 +78,7 @@ export async function promptAuthConfig(
 ): Promise<BuilderForceAgentsConfig> {
   const authChoice = await promptAuthChoiceGrouped({
     prompter,
-    store: ensureAuthProfileStore(undefined, {
+    store: await ensureAuthProfileStore(undefined, {
       allowKeychainPrompt: false,
     }),
     includeSkip: true,

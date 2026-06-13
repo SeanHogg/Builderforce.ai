@@ -33,8 +33,8 @@ interface StickerCache {
   stickers: Record<string, CachedSticker>;
 }
 
-function loadCache(): StickerCache {
-  const data = loadJsonFile(CACHE_FILE);
+async function loadCache(): Promise<StickerCache> {
+  const data = await loadJsonFile(CACHE_FILE);
   if (!data || typeof data !== "object") {
     return { version: CACHE_VERSION, stickers: {} };
   }
@@ -46,32 +46,32 @@ function loadCache(): StickerCache {
   return cache;
 }
 
-function saveCache(cache: StickerCache): void {
-  saveJsonFile(CACHE_FILE, cache);
+async function saveCache(cache: StickerCache): Promise<void> {
+  await saveJsonFile(CACHE_FILE, cache);
 }
 
 /**
  * Get a cached sticker by its unique ID.
  */
-export function getCachedSticker(fileUniqueId: string): CachedSticker | null {
-  const cache = loadCache();
+export async function getCachedSticker(fileUniqueId: string): Promise<CachedSticker | null> {
+  const cache = await loadCache();
   return cache.stickers[fileUniqueId] ?? null;
 }
 
 /**
  * Add or update a sticker in the cache.
  */
-export function cacheSticker(sticker: CachedSticker): void {
-  const cache = loadCache();
+export async function cacheSticker(sticker: CachedSticker): Promise<void> {
+  const cache = await loadCache();
   cache.stickers[sticker.fileUniqueId] = sticker;
-  saveCache(cache);
+  await saveCache(cache);
 }
 
 /**
  * Search cached stickers by text query (fuzzy match on description + emoji + setName).
  */
-export function searchStickers(query: string, limit = 10): CachedSticker[] {
-  const cache = loadCache();
+export async function searchStickers(query: string, limit = 10): Promise<CachedSticker[]> {
+  const cache = await loadCache();
   const queryLower = query.toLowerCase();
   const results: Array<{ sticker: CachedSticker; score: number }> = [];
 
@@ -117,16 +117,16 @@ export function searchStickers(query: string, limit = 10): CachedSticker[] {
 /**
  * Get all cached stickers (for debugging/listing).
  */
-export function getAllCachedStickers(): CachedSticker[] {
-  const cache = loadCache();
+export async function getAllCachedStickers(): Promise<CachedSticker[]> {
+  const cache = await loadCache();
   return Object.values(cache.stickers);
 }
 
 /**
  * Get cache statistics.
  */
-export function getCacheStats(): { count: number; oldestAt?: string; newestAt?: string } {
-  const cache = loadCache();
+export async function getCacheStats(): Promise<{ count: number; oldestAt?: string; newestAt?: string }> {
+  const cache = await loadCache();
   const stickers = Object.values(cache.stickers);
   if (stickers.length === 0) {
     return { count: 0 };

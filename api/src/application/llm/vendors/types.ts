@@ -97,11 +97,19 @@ export interface VendorStreamResult {
   response: Response;
 }
 
+/** Shape-routing capabilities a model supports. Drives `reorderPoolByShape`
+ *  per-catalog-entry so non-OpenRouter models can be promoted for tool/vision/
+ *  structured/ocr requests instead of relying on OpenRouter-centric id sets [1429]. */
+export type AiCapability = 'tools' | 'structured_output' | 'vision' | 'ocr';
+
 export interface VendorModelEntry {
   id: string;
   label: string;
   brand: string;
   tier: AiModelTier;
+  /** Optional shape capabilities for capability-aware routing. Absent = unknown
+   *  (the legacy literal-id sets still apply for OpenRouter models). */
+  capabilities?: AiCapability[];
 }
 
 export interface VendorModule {

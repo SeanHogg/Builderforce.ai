@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import { TaskService } from '../../application/task/TaskService';
 import { TaskPriority, AgentType, TaskStatus, TaskType } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
@@ -45,6 +45,23 @@ type FinalizeTask = {
  *    opened it — never double-open).
  * A task with neither assignee is a no-op.
  */
+/** Per-task linked-PRD counts via one grouped query [1266]. Best-effort: returns
+ *  an empty map (not an error) where `task_specs` (migration 0098) isn't applied,
+ *  so the board list never 500s on environments that haven't run it yet. */
+async function countSpecsByTask(db: Db, taskIds: number[]): Promise<Map<number, number>> {
+  if (taskIds.length === 0) return new Map();
+  try {
+    const rows = await db
+      .select({ taskId: taskSpecs.taskId, n: count() })
+      .from(taskSpecs)
+      .where(inArray(taskSpecs.taskId, taskIds))
+      .groupBy(taskSpecs.taskId);
+    return new Map(rows.map((r) => [r.taskId, Number(r.n)]));
+  } catch {
+    return new Map();
+  }
+}
+
 async function dispatchTaskFinalize(
   env: HonoEnv['Bindings'],
   db: Db,
@@ -109,7 +126,13 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
     const projectIdParam = c.req.query('project_id');
     const projectId = projectIdParam ? Number(projectIdParam) : undefined;
     const tasks = await taskService.listTasks(c.get('tenantId'), projectId);
-    return c.json({ tasks: tasks.map(t => t.toPlain()) });
+    const plain = tasks.map(t => t.toPlain());
+    // Augment each card with its linked-PRD count [1266] — one grouped query (no
+    // N+1), and best-effort so it no-ops where task_specs (migration 0098) isn't
+    // applied yet (the board still renders, just with no PRD dots).
+    const ids = plain.map(t => Number(t.id)).filter(n => Number.isFinite(n));
+    const specCounts = await countSpecsByTask(db, ids);
+    return c.json({ tasks: plain.map(t => ({ ...t, specCount: specCounts.get(Number(t.id)) ?? 0 })) });
   });
 
   // GET /api/tasks/assignees — the team members (humans) a task can be assigned to.

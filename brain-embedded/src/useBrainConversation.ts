@@ -18,6 +18,7 @@ import { useBrainConfig } from './config';
 import type { BrainMessage, BrainModality, ChatInputAttachment } from './types';
 import type { BrainToolSpec, ChatCompletionMessage, ContentPart } from './streamChatCompletion';
 import { prepareImageDataUrl } from './imagePrep';
+import { buildBrainTriageReport, isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 
 /** Max agent-loop iterations before we stop chaining tool calls (runaway guard). */
 const MAX_TOOL_ITERATIONS = 5;
@@ -67,6 +68,18 @@ export interface UseBrainConversation {
   attach(file: File): Promise<void>;
   removeAttachment(key: string): void;
   setError(msg: string): void;
+  /**
+   * True once the active chat has any recorded execution steps (LLM/tool/error)
+   * — drives the "capture execution" affordance.
+   */
+  hasTrace: boolean;
+  /**
+   * Assemble a paste-able triage report of the active chat's execution — the LLM
+   * steps, the full tool chain (args + results), intermediate assistant messages,
+   * every error, and the visible transcript. `agentLabel` names the persona the
+   * Brain ran as. Mirrors the host/cloud "Copy triage info" report.
+   */
+  buildTriageReport(agentLabel?: string): string;
 }
 
 function parseArgs(raw: string): unknown {
@@ -122,6 +135,19 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   // to conflate records across turns (e.g. write company B's name onto company
   // A). The transcript carries that grounding forward for the session lifetime.
   const transcriptRef = useRef<Map<number, ChatCompletionMessage[]>>(new Map());
+  // Per-chat execution trace: every LLM step, tool call (args + result + timing),
+  // intermediate assistant message, and error the agent loop produces. Accumulates
+  // across turns for the session (like the transcript) so "capture execution"
+  // reports the whole run, not just the last turn. `traceVersion` re-renders the
+  // capture affordance as steps land (the ref mutation alone wouldn't).
+  const traceRef = useRef<Map<number, BrainTraceEvent[]>>(new Map());
+  const [traceVersion, setTraceVersion] = useState(0);
+  const pushTrace = useCallback((id: number, ev: BrainTraceEvent) => {
+    const list = traceRef.current.get(id) ?? [];
+    list.push(ev);
+    traceRef.current.set(id, list);
+    setTraceVersion((v) => v + 1);
+  }, []);
 
   // Load messages whenever the active chat changes.
   useEffect(() => {
@@ -203,10 +229,45 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
           { role: 'system', content: resolvedSystemPrompt },
           ...windowed(convo),
         ];
-        const result = await stream(
-          { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model },
-          { onTextDelta: (d) => setStreamingText((s) => s + d) },
-        );
+        const llmStart = Date.now();
+        let result;
+        try {
+          result = await stream(
+            { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model },
+            { onTextDelta: (d) => setStreamingText((s) => s + d) },
+          );
+        } catch (e) {
+          // Capture the completion failure in the trace before it bubbles to the
+          // caller's catch — otherwise the run is invisible to "capture execution".
+          pushTrace(id, {
+            ts: new Date().toISOString(),
+            category: 'error',
+            label: 'llm.complete',
+            durationMs: Date.now() - llmStart,
+            args: { model: model ?? 'default', step: iter },
+            result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+            isError: true,
+          });
+          throw e;
+        }
+        pushTrace(id, {
+          ts: new Date().toISOString(),
+          category: 'llm',
+          label: 'llm.complete',
+          durationMs: Date.now() - llmStart,
+          args: { model: model ?? 'default', step: iter, toolCalls: result.toolCalls.length },
+          result: `${result.toolCalls.length} tool call(s) · ${result.text.length} chars · finish: ${result.finishReason ?? '—'}`,
+        });
+        // Intermediate assistant text (the model's reasoning before a tool call).
+        if (result.text.trim()) {
+          pushTrace(id, {
+            ts: new Date().toISOString(),
+            category: 'message',
+            label: 'agent.message',
+            args: { step: iter },
+            result: result.text,
+          });
+        }
 
         if (result.toolCalls.length > 0 && runTool) {
           // Assistant requested tools: record the turn, run each, feed results back.
@@ -226,10 +287,48 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
             // so the model can revise instead of the action silently happening.
             if (confirmTool && !(await confirmTool({ name: tc.name, args }))) {
               convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify({ cancelled: true, reason: 'User declined this action.' }) });
+              pushTrace(id, {
+                ts: new Date().toISOString(),
+                category: 'tool',
+                label: tc.name,
+                args,
+                result: { cancelled: true, reason: 'User declined this action.' },
+              });
               continue;
             }
-            const out = await runTool(tc.name, args);
+            const toolStart = Date.now();
+            let out: unknown;
+            try {
+              out = await runTool(tc.name, args);
+            } catch (e) {
+              // A thrown tool error becomes a recoverable result the model can see
+              // and revise against (matching the decline path) — and is recorded
+              // as an error so it surfaces in the captured triage report. Without
+              // this the throw aborted the turn and lost which tool/args failed.
+              const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+              out = { ok: false, error: message };
+              convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out) });
+              pushTrace(id, {
+                ts: new Date().toISOString(),
+                category: 'tool',
+                label: tc.name,
+                durationMs: Date.now() - toolStart,
+                args,
+                result: out,
+                isError: true,
+              });
+              continue;
+            }
             convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out ?? null) });
+            pushTrace(id, {
+              ts: new Date().toISOString(),
+              category: 'tool',
+              label: tc.name,
+              durationMs: Date.now() - toolStart,
+              args,
+              result: out ?? null,
+              isError: isFailedToolResult(out),
+            });
           }
           setStreamingText('');
           continue;
@@ -246,9 +345,17 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       }
       // Loop exhausted without a final text answer.
       setStreamingText('');
-      setError('The assistant kept calling tools without finishing. Try rephrasing.');
+      const exhausted = 'The assistant kept calling tools without finishing. Try rephrasing.';
+      pushTrace(id, {
+        ts: new Date().toISOString(),
+        category: 'error',
+        label: 'agent.loop',
+        result: `Loop exhausted after ${MAX_TOOL_ITERATIONS} tool iterations`,
+        isError: true,
+      });
+      setError(exhausted);
     },
-    [persistence, stream, resolvedSystemPrompt, toolSpecs, runTool, confirmTool, onActivity, model],
+    [persistence, stream, resolvedSystemPrompt, toolSpecs, runTool, confirmTool, onActivity, model, pushTrace],
   );
 
   const send = useCallback(
@@ -386,6 +493,24 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     setPendingAttachments((prev) => prev.filter((a) => a.key !== key));
   }, []);
 
+  // Capture the active chat's execution as a paste-able triage report. Read off
+  // `traceVersion` so it re-derives as the loop records steps.
+  const activeTrace = chatId != null ? (traceRef.current.get(chatId) ?? []) : [];
+  const hasTrace = activeTrace.length > 0;
+  void traceVersion; // dependency marker — see traceRef note above
+  const buildTriageReport = useCallback(
+    (agentLabel?: string) =>
+      buildBrainTriageReport({
+        capturedAt: new Date().toISOString(),
+        events: chatId != null ? (traceRef.current.get(chatId) ?? []) : [],
+        messages,
+        chatId,
+        agentLabel,
+        error,
+      }),
+    [chatId, messages, error],
+  );
+
   return {
     messages,
     loadingMessages,
@@ -402,5 +527,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     attach,
     removeAttachment,
     setError,
+    hasTrace,
+    buildTriageReport,
   };
 }

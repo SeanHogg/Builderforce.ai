@@ -66,7 +66,10 @@ for (const match of schemaText.matchAll(tableRe)) {
   const cols = new Set();
   // Look for the SQL column name, which is always the first string literal
   // inside the column-builder call: e.g. `varchar('foo_bar', ...)`.
-  const colRe = /(?:integer|varchar|text|boolean|timestamp|serial|uuid|json|jsonb|customType|pgEnum)\s*\(\s*'([^']+)'/g;
+  // The trailing `\w*Enum` alternative matches NAMED pgEnum builders
+  // (`taskStatusEnum('status')`, `agentTypeEnum('type')`, …) — without it, enum
+  // columns were silently invisible to the drift check [1316].
+  const colRe = /(?:integer|varchar|text|boolean|timestamp|serial|uuid|json|jsonb|customType|pgEnum|\w*Enum)\s*\(\s*'([^']+)'/g;
   for (const colMatch of block.matchAll(colRe)) cols.add(colMatch[1]);
   drizzleTables.push({ table, cols });
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { createPortal } from 'react-dom';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { contrastText } from '@/lib/contrastText';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import {
@@ -46,6 +47,10 @@ const FIELD_SPECS: FieldSpec[] = [
     label: 'Image input',
     render: (m) => (m.inputModalities?.includes('image') ? '✅' : '—'),
   },
+  {
+    label: 'Routable',
+    render: (m) => (m.isBuilderforce ? '✅' : m.routable ? `✅ ${m.pool ?? ''}`.trim() : '—'),
+  },
 ];
 
 function Badge({ record }: { record: ModelRecord }) {
@@ -58,12 +63,30 @@ function Badge({ record }: { record: ModelRecord }) {
         padding: '2px 8px',
         borderRadius: 99,
         background: tierColor(record),
-        color: '#fff',
+        color: contrastText(tierColor(record)),
         textTransform: 'uppercase',
         whiteSpace: 'nowrap',
       }}
     >
       {record.badge ?? (record.isBuilderforce ? 'Builderforce' : '')}
+    </span>
+  );
+}
+
+/** "Routable on Builderforce" chip — shown for upstream models our cascade
+ *  actually serves (our own Free/Pro products carry their own badge) [1305]. */
+function RoutableChip({ record }: { record: ModelRecord }) {
+  if (record.isBuilderforce || !record.routable) return null;
+  return (
+    <span
+      title="The Builderforce Free/Pro cascade routes this model"
+      style={{
+        fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99,
+        background: 'rgba(34,197,94,0.12)', color: '#16a34a',
+        border: '1px solid rgba(34,197,94,0.35)', whiteSpace: 'nowrap',
+      }}
+    >
+      ✓ Routable{record.pool ? ` · ${record.pool}` : ''}
     </span>
   );
 }
@@ -94,6 +117,7 @@ function ModelDetail({ record }: { record: ModelRecord }) {
     <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <Badge record={record} />
+        <RoutableChip record={record} />
         <code style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{record.id}</code>
       </div>
 
@@ -326,6 +350,7 @@ function ModelCard({
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{record.name}</span>
             <Badge record={record} />
+            <RoutableChip record={record} />
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{record.provider}</div>
         </div>
@@ -373,6 +398,7 @@ export default function ModelsPageClient() {
 
   const [search, setSearch] = useState('');
   const [tierFilter, setTierFilter] = useState<TierFilter>('all');
+  const [routableOnly, setRoutableOnly] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('card');
 
   const [detail, setDetail] = useState<ModelRecord | null>(null);
@@ -408,6 +434,9 @@ export default function ModelsPageClient() {
       if (tierFilter === 'builderforce' && !m.isBuilderforce) return false;
       if (tierFilter === 'free' && !(m.pricing.prompt <= 0 && m.pricing.completion <= 0)) return false;
       if (tierFilter === 'paid' && (m.pricing.prompt <= 0 && m.pricing.completion <= 0)) return false;
+      // "Routable only": our own products always qualify; upstream models only if
+      // the cascade actually routes them [1305].
+      if (routableOnly && !m.isBuilderforce && !m.routable) return false;
       if (!q) return true;
       return (
         m.name.toLowerCase().includes(q) ||
@@ -415,7 +444,7 @@ export default function ModelsPageClient() {
         m.id.toLowerCase().includes(q)
       );
     });
-  }, [models, search, tierFilter]);
+  }, [models, search, tierFilter, routableOnly]);
 
   // Builderforce records always lead, regardless of search ordering.
   const ordered = useMemo(() => {
@@ -486,6 +515,16 @@ export default function ModelsPageClient() {
               {f.label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setRoutableOnly((v) => !v)}
+            aria-pressed={routableOnly}
+            title="Show only models the Builderforce Free/Pro cascade routes"
+            className={routableOnly ? 'btn btn-primary' : 'btn btn-secondary'}
+            style={{ padding: '8px 14px', borderRadius: 8, fontSize: 13 }}
+          >
+            ✓ Routable only
+          </button>
         </div>
         <div style={{ marginLeft: 'auto' }}>
           <ViewToggle value={viewMode} onChange={setViewMode} />

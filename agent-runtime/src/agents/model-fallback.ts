@@ -264,7 +264,7 @@ function shouldProbePrimaryDuringCooldown(params: {
   hasFallbackCandidates: boolean;
   now: number;
   throttleKey: string;
-  authStore: ReturnType<typeof ensureAuthProfileStore>;
+  authStore: Awaited<ReturnType<typeof ensureAuthProfileStore>>;
   profileIds: string[];
 }): boolean {
   if (!params.isPrimary || !params.hasFallbackCandidates) {
@@ -310,7 +310,7 @@ export async function runWithModelFallback<T>(params: {
     fallbacksOverride: params.fallbacksOverride,
   });
   const authStore = params.cfg
-    ? ensureAuthProfileStore(params.agentDir, { allowKeychainPrompt: false })
+    ? await ensureAuthProfileStore(params.agentDir, { allowKeychainPrompt: false })
     : null;
   const attempts: FallbackAttempt[] = [];
   let lastError: unknown;

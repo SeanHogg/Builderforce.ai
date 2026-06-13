@@ -322,7 +322,7 @@ export async function handleTelegramAction(
     }
     const query = readStringParam(params, "query", { required: true });
     const limit = readNumberParam(params, "limit", { integer: true }) ?? 5;
-    const results = searchStickers(query, limit);
+    const results = await searchStickers(query, limit);
     return jsonResult({
       ok: true,
       count: results.length,

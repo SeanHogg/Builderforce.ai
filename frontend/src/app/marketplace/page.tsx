@@ -4,6 +4,7 @@ import { Select } from '@/components/Select';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/AuthContext';
+import { contrastText } from '@/lib/contrastText';
 import { useCart, type ArtifactType } from '@/lib/CartContext';
 import {
   agentHosts,
@@ -854,7 +855,7 @@ export default function MarketplacePage() {
                       padding: '2px 8px',
                       borderRadius: 99,
                       background: typeColor,
-                      color: '#fff',
+                      color: contrastText(typeColor),
                       textTransform: 'uppercase',
                     }}
                   >

@@ -681,6 +681,14 @@ export function TaskMgmtContent({
           >
             {task.priority}
           </span>
+          {task.specCount ? (
+            <span
+              title={`${task.specCount} linked PRD${task.specCount > 1 ? 's' : ''}`}
+              style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+            >
+              📄 PRD{task.specCount > 1 ? ` ×${task.specCount}` : ''}
+            </span>
+          ) : null}
           {exec ? (
             <AgentChip
               label={execAgentLabel(exec)}

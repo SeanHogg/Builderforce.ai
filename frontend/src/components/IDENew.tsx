@@ -18,6 +18,7 @@ import { useCollaboration } from '@/hooks/useCollaboration';
 import { useVideoVersions } from '@/hooks/useVideoVersions';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
 import { saveFile, fetchFileContent, deleteFile, fetchFiles, updateProject } from '@/lib/api';
+import { validateFileContentForPath } from '@/lib/fileContentGuard';
 import { useRegisterBrainActions, useBrainContext, savePrd, saveTasks, type BrainAction } from '@/lib/brain';
 import { MODALITIES, DEFAULT_MODALITY, getModality, RIGHT_TAB_LABELS, type ProjectModality, type RightTab } from '@/lib/modality';
 import { getStoredTenantToken } from '@/lib/auth';
@@ -546,15 +547,21 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   const projectIdNum = typeof project.id === 'number' ? project.id : Number(project.id);
   const brainCtx = useBrainContext();
 
-  const applyCodeToActiveFile = useCallback((code: string) => {
-    if (!activeFile) return false;
+  const applyCodeToActiveFile = useCallback((code: string): { ok: true } | { ok: false; reason: string } => {
+    if (!activeFile) return { ok: false, reason: 'No file is open in the editor.' };
+    // Block structurally-invalid writes (e.g. CSS into package.json) before they
+    // corrupt the file and break Run [1315].
+    const valid = validateFileContentForPath(activeFile, code);
+    if (!valid.ok) { console.error(valid.reason); return valid; }
     setFileContents(prev => ({ ...prev, [activeFile]: code }));
     if (previewUrl) writeFileToContainer(activeFile, code).catch(() => { /* best-effort */ });
     saveFile(project.id, activeFile, code).catch(console.error);
-    return true;
+    return { ok: true };
   }, [activeFile, project.id, previewUrl, writeFileToContainer]);
 
-  const createProjectFile = useCallback((path: string, content: string) => {
+  const createProjectFile = useCallback((path: string, content: string): { ok: true } | { ok: false; reason: string } => {
+    const valid = validateFileContentForPath(path, content);
+    if (!valid.ok) { console.error(valid.reason); return valid; }
     setFileContents(prev => ({ ...prev, [path]: content }));
     if (previewUrl) writeFileToContainer(path, content).catch(() => { /* best-effort */ });
     saveFile(project.id, path, content)
@@ -566,6 +573,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         }
       })
       .catch(console.error);
+    return { ok: true };
   }, [project.id, refreshFiles, openFiles, previewUrl, writeFileToContainer]);
 
   // Latest IDE state for action handlers, so the registered action array stays
@@ -587,8 +595,8 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
       },
       run: async ({ path, content }: { path: string; content: string }) => {
         if (!path) return { error: 'A file path is required.' };
-        liveRef.current.createProjectFile(path, content ?? '');
-        return { created: path };
+        const res = liveRef.current.createProjectFile(path, content ?? '');
+        return res.ok ? { created: path } : { error: res.reason };
       },
     },
     {
@@ -600,8 +608,8 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         required: ['code'],
       },
       run: async ({ code }: { code: string }) => {
-        const applied = liveRef.current.applyCodeToActiveFile(code ?? '');
-        return applied ? { applied: liveRef.current.activeFile } : { error: 'No file is open in the editor.' };
+        const res = liveRef.current.applyCodeToActiveFile(code ?? '');
+        return res.ok ? { applied: liveRef.current.activeFile } : { error: res.reason };
       },
     },
     {

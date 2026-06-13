@@ -172,6 +172,45 @@ export function blogIndexSchema(posts: { slug: string; title: string; date: stri
   };
 }
 
+/** Workforce marketplace: CollectionPage + ItemList of published agents, each a
+ *  SoftwareApplication carrying its discovery tags as `keywords` so search/LLM
+ *  crawlers can find published agents by tag (server-rendered) [1241]. */
+export function marketplaceAgentsSchema(
+  agents: { id: string | number; name: string; description?: string | null; skills?: string[] | null }[],
+) {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'CollectionPage',
+        name: 'Workforce Marketplace',
+        description: 'Browse and hire published AI agents, skills, and personas on the Builderforce.ai Workforce Registry.',
+        url: `${BRAND.url}/marketplace`,
+        publisher: { '@id': `${BRAND.url}/#organization` },
+      },
+      {
+        '@type': 'ItemList',
+        itemListElement: agents.slice(0, 100).map((a, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          item: {
+            '@type': 'SoftwareApplication',
+            name: a.name,
+            applicationCategory: 'BusinessApplication',
+            url: `${BRAND.url}/marketplace?agent=${encodeURIComponent(String(a.id))}`,
+            ...(a.description ? { description: a.description } : {}),
+            ...(a.skills && a.skills.length > 0 ? { keywords: a.skills.join(', ') } : {}),
+          },
+        })),
+      },
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Marketplace', url: `${BRAND.url}/marketplace` },
+      ),
+    ],
+  };
+}
+
 /** Individual blog post: Article + BreadcrumbList */
 export function blogPostSchema(post: {
   slug: string;

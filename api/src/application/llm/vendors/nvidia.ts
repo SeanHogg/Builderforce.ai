@@ -30,7 +30,7 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'qwen/qwen3-coder-480b-a35b-instruct',          tier: 'FREE', label: 'Qwen 3 Coder 480B (NIM)',        brand: 'Qwen'      },
   { id: 'google/gemma-2-2b-it',                         tier: 'FREE', label: 'Gemma 2 2B (NIM)',               brand: 'Google'    },
   { id: 'google/gemma-3n-e4b-it',                       tier: 'FREE', label: 'Gemma 3n E4B (NIM)',             brand: 'Google'    },
-  { id: 'microsoft/phi-4-multimodal-instruct',          tier: 'FREE', label: 'Phi-4 Multimodal (NIM)',         brand: 'Microsoft' },
+  { id: 'microsoft/phi-4-multimodal-instruct',          tier: 'FREE', label: 'Phi-4 Multimodal (NIM)',         brand: 'Microsoft', capabilities: ['vision'] },
   { id: 'minimaxai/minimax-m2.7',                       tier: 'FREE', label: 'MiniMax M2.7 (NIM)',             brand: 'MiniMax'   },
   { id: 'z-ai/glm-5.1',                                 tier: 'FREE', label: 'GLM 5.1 (NIM)',                  brand: 'Z.AI'      },
   { id: 'stepfun-ai/step-3.5-flash',                    tier: 'FREE', label: 'Step 3.5 Flash (NIM)',           brand: 'StepFun'   },

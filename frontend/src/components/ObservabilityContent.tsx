@@ -114,14 +114,18 @@ function fmtDuration(ms: number): string {
 }
 
 /** A terminal-failure trace event (the `run.failed` events emitted on
- *  orphan-reap / FAILED transition), or a tool call that returned a gateway 4xx/5xx.
- *  These render as error-level logs and failed (red) timeline tracks. */
+ *  orphan-reap / FAILED transition), a tool call that returned a gateway 4xx/5xx,
+ *  or a tool whose result reported its own failure (`{"ok":false}` / an `error`
+ *  field — e.g. write_file with no repo bound). All three render as error-level
+ *  logs and failed (red) timeline tracks, and count toward the triage Errors. */
 function isErrorEvent(ev: ToolAuditEvent): boolean {
   const res = (ev.result ?? '').toLowerCase();
   return ev.toolName === 'run.failed'
     || ev.category === 'error'
     || res.includes('gateway 4')
-    || res.includes('gateway 5');
+    || res.includes('gateway 5')
+    || res.includes('"ok":false')
+    || /"error":\s*"[^"]/.test(res);
 }
 
 const AGENT_COLORS = [

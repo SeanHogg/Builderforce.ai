@@ -1,24 +1,27 @@
-# Deploy a Cloud BuilderForce Agent — runbook
+# Deploy a self-hosted (On-Prem) BuilderForce Agent — runbook
 
-A **BuilderForce Agent** can run **On-Premise** (on your own machine) or in the
-**Cloud** (deployed as below). Either agent type can be assigned to a swimlane
-and will auto-execute its tasks. This runbook deploys a Cloud agent: it codes
-against your repos with no browser open — it dials out to the Builderforce relay,
-picks up swimlane `agent_dispatch` tasks, clones the bound repo through the host
-git-proxy, runs the embedded agent, pushes a branch, opens a PR, and reports the
-result so the ticket advances autonomously.
+A **BuilderForce Agent** runs in one of two places:
 
-The whole loop is implemented and unit-tested:
+- **Cloud (V2)** — needs **no separate deploy**. A cloud agent executes inside the
+  Builderforce **api Worker** on Cloudflare: the `durable` surface runs on the
+  `CloudRunnerDO` Durable Object (one LLM step per alarm tick) and the `container`
+  surface targets a Cloudflare Container. Both ship with `api` (`npm run deploy`
+  there); you just create the agent in the portal and pick its `runtime_surface`.
+- **On-Prem (self-hosted)** — the `agent-runtime` process below, running on *your*
+  machine (or any container host with outbound HTTPS). This runbook covers that.
+
+A self-hosted agent codes against your repos with no browser open: it dials out to
+the Builderforce relay, picks up swimlane `agent_dispatch` tasks, clones the bound
+repo through the host git-proxy, runs the embedded agent, pushes a branch, opens a
+PR, and reports the result so the ticket advances autonomously.
+
+The loop is implemented and unit-tested:
 - Runtime handler: `src/infra/builderforce-coding-dispatch.ts` (+ adapters, + the `agent_dispatch` case in `builderforce-relay.ts`).
 - API contracts (in `../api`): `GET /api/agent-hosts/:id/dispatch/:dispatchId`, the host git-proxy, `POST /api/agent-hosts/:id/dispatch/:dispatchId/pull-request`, `POST /api/agent-hosts/:id/dispatch-result`.
 
-## Prerequisite (one-time, blocks the Docker build)
-
-`@builderforce/memory` must be published to npm. The Dockerfile runs
-`pnpm install --frozen-lockfile`, and the lockfile references that package; until
-it is published the build 404s. (Tracked in the root README gap register.)
-Publish it, regenerate the lockfile (`pnpm install` in `agent-runtime`), commit,
-then proceed.
+> The stack is **Cloudflare-only** (Workers + Durable Objects + R2 + KV). There is
+> no Fly.io / managed-cloud deploy of `agent-runtime` — a self-hosted agent is just
+> this runtime started wherever *you* choose to run it.
 
 ## 1. Register the agent (get id + key)
 
@@ -26,44 +29,54 @@ then proceed.
 curl -sX POST https://api.builderforce.ai/api/agent-hosts \
   -H "Authorization: Bearer <TENANT_JWT>" \
   -H 'Content-Type: application/json' \
-  -d '{"name":"cloud-agent-1","machineProfile":{"machineName":"fly-iad"}}'
+  -d '{"name":"agent-1","machineProfile":{"machineName":"my-host"}}'
 # → { "agentHost": { "id": <N> }, "apiKey": "<key>" }   (apiKey shown once)
 ```
 
 Keep `<N>` (the instanceId) and the API key.
 
-## 2. Provision Fly + the volume
+## 2. Run the runtime (any host with outbound HTTPS)
+
+Run `agent-runtime` as a long-lived process — directly on a machine (`pnpm start`)
+or as a container (`docker run`) on whatever infra you control (your laptop, a VM,
+Railway/Render, etc.). It needs:
+
+- `BUILDERFORCE_API_KEY=<key>` — the key from step 1.
+- `BUILDERFORCE_AGENTS_STATE_DIR=<dir>` — a **persistent** directory (the relay
+  reads/writes its identity + memory here; back it with a volume on a container host).
 
 ```bash
-cd agent-runtime
-fly apps create builderforce-agent          # or edit app name in fly.toml
-fly volumes create agent_data --size 10 --region iad
-fly secrets set BUILDERFORCE_API_KEY=<key>  # the key from step 1
+# Container form (mount a volume at the state dir so identity survives restarts):
+docker run -d --restart=unless-stopped \
+  -e BUILDERFORCE_API_KEY=<key> \
+  -e BUILDERFORCE_AGENTS_STATE_DIR=/data \
+  -v agent_data:/data \
+  <your-agent-runtime-image>
 ```
 
 ## 3. Seed the instanceId the relay reads at boot
 
-The relay resolves its `agentNodeId` from `<stateDir>/.builderforce/context.yaml`
-(`BUILDERFORCE_AGENTS_STATE_DIR=/data`). Write it once on the volume:
+The relay resolves its `agentNodeId` from
+`<stateDir>/.builderforce/context.yaml`. Write it once on the persistent dir
+(a host path, or via `docker exec` / your platform's shell):
 
 ```bash
-fly deploy --no-public-ips          # first boot to create the machine + mount
-fly ssh console -C "mkdir -p /data/.builderforce"
-fly ssh console -C "sh -c 'cat > /data/.builderforce/context.yaml <<EOF
+mkdir -p <stateDir>/.builderforce
+cat > <stateDir>/.builderforce/context.yaml <<EOF
 builderforce:
-  instanceId: \"<N>\"
-EOF'"
-fly apps restart builderforce-agent
+  instanceId: "<N>"
+EOF
+# restart the runtime so it picks up the identity
 ```
 
-(If the task's project is fixed, also add `projectId: \"<P>\"` under `builderforce:`.)
+(If the task's project is fixed, also add `projectId: "<P>"` under `builderforce:`.)
 
 ## 4. Verify it's online
 
 ```bash
 curl -s https://api.builderforce.ai/api/agent-hosts/fleet \
   -H "Authorization: Bearer <TENANT_JWT>"   # the agent should appear, online
-fly logs   # expect: "[builderforce] relay started for agentNode <N>"
+# runtime logs should show: "[builderforce] relay started for agentNode <N>"
 ```
 
 ## 5. Drive a coding task end-to-end
@@ -74,7 +87,7 @@ fly logs   # expect: "[builderforce] relay started for agentNode <N>"
    agent as the target; leave target blank to use the tenant's default agent).
 3. Create a task and start its swimlane ticket so an `agent_dispatch` is created
    and routed to this agent.
-4. Watch `fly logs`:
+4. Watch the runtime logs:
    - `received agent_dispatch dispatch=<id>`
    - git clone via `/api/agent-hosts/<N>/git-proxy/<repoId>`
    - agent edits → push → PR open
@@ -87,8 +100,6 @@ fly logs   # expect: "[builderforce] relay started for agentNode <N>"
   injects the real token server-side.
 - PR creation is GitHub-only today; other providers push the branch and report
   "open a PR manually" (tracked in the gap register).
-- Any container with outbound HTTPS works (Railway/Render/a VM with
-  `docker run`) — Fly is just the reference. Set the same env + write the same
-  `context.yaml` + secret. An On-Premise agent is the same runtime started on
-  your own machine instead of a cloud host.
+- A **Cloud** agent is *not* deployed this way — it runs in the api Worker (see the
+  intro). Use this runbook only for self-hosted / On-Prem agents.
 ```

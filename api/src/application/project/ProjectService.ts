@@ -2,6 +2,7 @@ import { IProjectRepository } from '../../domain/project/IProjectRepository';
 import { Project } from '../../domain/project/Project';
 import { ProjectId, ProjectStatus, TenantId, asProjectId, asTenantId } from '../../domain/shared/types';
 import { NotFoundError, ConflictError, ForbiddenError } from '../../domain/shared/errors';
+import { buildProjectKey } from './projectKey';
 
 type SourceControlProvider = 'github' | 'bitbucket';
 
@@ -53,6 +54,26 @@ export class ProjectService {
 
   async findByKey(key: string): Promise<Project | null> {
     return this.projects.findByKey(key);
+  }
+
+  /**
+   * Derive a project key from `name` (via `buildProjectKey`) that is free of
+   * collisions, suffixing `-2`, `-3`, … when the base key is already taken.
+   * Use this for the AUTO-generated key path; an explicitly user-supplied key
+   * keeps the hard `ConflictError` in `createProject` so the user learns their
+   * chosen key is taken. The project key is globally unique, so an unsuffixed
+   * collapse (e.g. every "Untitled" project → `<tid>-PROJECT`) would otherwise
+   * make the second such project fail to create.
+   */
+  async buildUniqueKey(tenantId: number, name: string): Promise<string> {
+    const base = buildProjectKey(tenantId, name);
+    if (!(await this.projects.findByKey(base))) return base;
+    for (let n = 2; n < 1000; n++) {
+      const candidate = `${base}-${n}`.slice(0, 50);
+      if (!(await this.projects.findByKey(candidate))) return candidate;
+    }
+    // Pathological fallback — keep it deterministic and bounded.
+    return `${base}-${tenantId}`.slice(0, 50);
   }
 
   async getProject(id: number | string, callerTenantId: number): Promise<Project> {

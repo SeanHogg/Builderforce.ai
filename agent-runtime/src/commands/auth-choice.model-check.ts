@@ -55,8 +55,8 @@ export async function warnIfModelConfigLooksOff(
     }
   }
 
-  const store = ensureAuthProfileStore(options?.agentDir);
-  const authMode = resolveModelAuthMode(ref.provider, configWithModel, store);
+  const store = await ensureAuthProfileStore(options?.agentDir);
+  const authMode = await resolveModelAuthMode(ref.provider, configWithModel, store);
   if (authMode === "unknown") {
     warnings.push(
       `No auth configured for provider "${ref.provider}". The agent may fail until credentials are added.`,

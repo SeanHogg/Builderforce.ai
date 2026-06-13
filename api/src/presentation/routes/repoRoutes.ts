@@ -18,7 +18,7 @@
  *   env.AGENT_HOST_RELAY.get(env.AGENT_HOST_RELAY.idFromName(String(agentHostId))).fetch(...)
  */
 import { Hono } from 'hono';
-import { and, eq, desc } from 'drizzle-orm';
+import { and, eq, desc, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import {
   projectRepositories,
@@ -167,6 +167,11 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       },
       tenantId,
     );
+
+    // null = the (project, provider, owner, repo) is already bound (0067 UNIQUE).
+    if (!row) {
+      return c.json({ error: 'This repository is already added to the project' }, 409);
+    }
 
     await invalidateCached(c.env as Env, reposCacheKey(tenantId, projectId));
     return c.json(row, 201);
@@ -419,8 +424,12 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const [row] = await db
       .select()
       .from(pullRequests)
+      // Prefer a row with a real provider `number` over a numberless placeholder
+      // (a dispatch inserts an `open`/null-number row before the host calls back;
+      // a never-arriving callback must not let that stale placeholder surface over
+      // a real PR), then newest [1280].
       .where(and(eq(pullRequests.taskId, taskId), eq(pullRequests.tenantId, tenantId)))
-      .orderBy(desc(pullRequests.createdAt))
+      .orderBy(sql`${pullRequests.number} is not null desc`, desc(pullRequests.createdAt))
       .limit(1);
     // No PR yet for this task → 200 with nulls so the client renders "no PR"
     // without treating it as an error (exception-as-control-flow is avoided).

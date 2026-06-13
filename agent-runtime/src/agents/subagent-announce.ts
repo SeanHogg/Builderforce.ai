@@ -819,7 +819,7 @@ export async function runSubagentAnnounceFlow(params: {
     let activeChildDescendantRuns = 0;
     try {
       const { countActiveDescendantRuns } = await import("./subagent-registry.js");
-      activeChildDescendantRuns = Math.max(0, countActiveDescendantRuns(params.childSessionKey));
+      activeChildDescendantRuns = Math.max(0, await countActiveDescendantRuns(params.childSessionKey));
     } catch {
       // Best-effort only; fall back to direct announce behavior when unavailable.
     }
@@ -870,7 +870,7 @@ export async function runSubagentAnnounceFlow(params: {
 
         if (!parentSessionAlive) {
           // Parent session is truly gone — fallback to grandparent
-          const fallback = resolveRequesterForChildSession(targetRequesterSessionKey);
+          const fallback = await resolveRequesterForChildSession(targetRequesterSessionKey);
           if (!fallback?.requesterSessionKey) {
             // Without a requester fallback we cannot safely deliver this nested
             // completion. Keep cleanup retryable so a later registry restore can
@@ -894,7 +894,7 @@ export async function runSubagentAnnounceFlow(params: {
       const { countActiveDescendantRuns } = await import("./subagent-registry.js");
       remainingActiveSubagentRuns = Math.max(
         0,
-        countActiveDescendantRuns(targetRequesterSessionKey),
+        await countActiveDescendantRuns(targetRequesterSessionKey),
       );
     } catch {
       // Best-effort only; fall back to default announce instructions when unavailable.

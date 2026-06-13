@@ -11,6 +11,7 @@
 
 import type { Env } from '../../env';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { catalogEntry } from './vendors';
 
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const CACHE_KEY = 'openrouter-catalog:v1';
@@ -37,6 +38,12 @@ export interface CatalogModel {
   supportedParameters?: string[];
   created?: number;
   tier: 'FREE' | 'STANDARD';
+  /** True when this id is in our curated vendor catalog — i.e. the Free/Pro
+   *  cascade will actually route it (vs an OpenRouter id we list but don't
+   *  serve). Lets the /models page badge "routable on Builderforce" [1305]. */
+  routable: boolean;
+  /** Which pool routes it, when routable: 'free' (FREE tier) | 'pro' (paid). */
+  pool?: 'free' | 'pro';
 }
 
 interface OpenRouterModel {
@@ -79,6 +86,11 @@ function normalize(model: OpenRouterModel): CatalogModel {
   const prompt = num(model.pricing?.prompt);
   const completion = num(model.pricing?.completion);
   const isFree = model.id.endsWith(':free') || (prompt === 0 && completion === 0);
+  // Cross-reference against our curated vendor catalog: an entry exists iff the
+  // Free/Pro cascade can route this id (the pools are modelsByTier over exactly
+  // these entries). entry.tier === 'FREE' → free pool, else the paid pool [1305].
+  const entry = catalogEntry(model.id);
+  const pool: 'free' | 'pro' | undefined = entry ? (entry.tier === 'FREE' ? 'free' : 'pro') : undefined;
   return {
     id: model.id,
     name: model.name ?? model.id,
@@ -97,6 +109,8 @@ function normalize(model: OpenRouterModel): CatalogModel {
     ...(model.supported_parameters ? { supportedParameters: model.supported_parameters } : {}),
     ...(model.created != null ? { created: model.created } : {}),
     tier: isFree ? 'FREE' : 'STANDARD',
+    routable: entry !== null,
+    ...(pool ? { pool } : {}),
   };
 }
 

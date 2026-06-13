@@ -80,8 +80,9 @@ export function createOrchestrateTool(options?: {
   agentGroupChannel?: string | null;
   agentGroupSpace?: string | null;
   requesterAgentIdOverride?: string;
-  /** Task this orchestration runs for — links a planning workflow's PRD to the
-   *  task as its primary spec (parity with the cloud ensureTaskPrd / specRoutes path). */
+  /** When this orchestration runs for a specific ticket, its task id — so a
+   *  planning workflow's PRD is linked to the task as its primary, not left as a
+   *  loose project-level spec [1277]. */
   taskId?: number;
 }): AgentTool<typeof OrchestrateSchema, string> {
   const context: SpawnSubagentContext = {
@@ -149,9 +150,8 @@ export function createOrchestrateTool(options?: {
                   prd: resultValues[0] ?? undefined,
                   archSpec: resultValues[1] ?? undefined,
                   taskList: resultValues[2] ?? undefined,
-                  // Link the PRD to the task as its primary spec when the orchestration
-                  // runs in a task context (else it lands as a loose project PRD).
-                  taskId: options?.taskId,
+                  // Link the PRD to the ticket as its primary when known [1277].
+                  ...(options?.taskId != null ? { taskId: options.taskId } : {}),
                 },
               );
             }

@@ -14,6 +14,11 @@ export default defineConfig({
     // Keep this ordered: the base `@seanhogg/builderforce-agents/plugin-sdk` alias is a prefix match.
     alias: [
       {
+        // Shared cross-package tool contract (also a tsconfig path; vitest needs its own).
+        find: "@builderforce/agent-tools",
+        replacement: path.join(repoRoot, "..", "packages", "agent-tools", "src", "index.ts"),
+      },
+      {
         find: "@seanhogg/builderforce-agents/plugin-sdk/account-id",
         replacement: path.join(repoRoot, "src", "plugin-sdk", "account-id.ts"),
       },

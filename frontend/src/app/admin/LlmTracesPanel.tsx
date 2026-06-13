@@ -65,9 +65,9 @@ interface TraceDetail extends TraceSummary {
   callerMetadata: unknown;
 }
 
-const ok = '#00e5cc';
-const bad = '#ff6b6b';
-const muted = '#8a93a6';
+const ok = 'var(--cyan-bright)';
+const bad = 'var(--error)';
+const muted = 'var(--text-muted)';
 
 function pill(text: string, color: string) {
   return (
@@ -89,9 +89,9 @@ function Json({ value }: { value: unknown }) {
   return (
     <pre
       style={{
-        margin: 0, padding: 12, background: '#05080f', border: '1px solid #1b2436',
+        margin: 0, padding: 12, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)',
         borderRadius: 8, fontSize: 12, lineHeight: 1.5, overflow: 'auto',
-        maxHeight: 360, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#cdd6e6',
+        maxHeight: 360, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: 'var(--text-secondary)',
       }}
     >
       {text}
@@ -103,7 +103,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return (
     <div style={{ display: 'flex', gap: 10, fontSize: 13, padding: '3px 0' }}>
       <div style={{ width: 150, color: muted, flexShrink: 0 }}>{label}</div>
-      <div style={{ color: '#e6ebf5', wordBreak: 'break-word' }}>{children ?? '—'}</div>
+      <div style={{ color: 'var(--text-primary)', wordBreak: 'break-word' }}>{children ?? '—'}</div>
     </div>
   );
 }
@@ -147,7 +147,7 @@ export function LlmTracesPanel() {
   }, []);
 
   return (
-    <div style={{ color: '#e6ebf5' }}>
+    <div style={{ color: 'var(--text-primary)' }}>
       <div style={{ marginBottom: 14 }}>
         <h2 style={{ margin: '0 0 4px', fontSize: 18 }}>LLM Diagnostics</h2>
         <p style={{ margin: 0, color: muted, fontSize: 13 }}>
@@ -165,15 +165,15 @@ export function LlmTracesPanel() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Trace ID, correlation ID, or model…"
           style={{
-            flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid #1b2436',
-            background: '#080c14', color: '#e6ebf5', fontSize: 13,
+            flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+            background: 'var(--bg-deep)', color: 'var(--text-primary)', fontSize: 13,
           }}
         />
         <button
           type="submit"
           style={{
-            padding: '8px 18px', borderRadius: 8, border: '1px solid #2a3a55',
-            background: '#142033', color: '#e6ebf5', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+            padding: '8px 18px', borderRadius: 8, border: '1px solid var(--border-accent)',
+            background: 'var(--bg-elevated)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
           }}
         >
           Search
@@ -188,10 +188,10 @@ export function LlmTracesPanel() {
       <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 1fr' : '1fr', gap: 16 }}>
         {/* List */}
         {viewMode === 'table' ? (
-        <div style={{ border: '1px solid #1b2436', borderRadius: 10, overflowX: 'auto', overflowY: 'hidden' }}>
+        <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, overflowX: 'auto', overflowY: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
             <thead>
-              <tr style={{ background: '#0a0f1a', color: muted, textAlign: 'left' }}>
+              <tr style={{ background: 'var(--bg-base)', color: muted, textAlign: 'left' }}>
                 <th style={{ padding: '8px 10px' }}>Time</th>
                 <th style={{ padding: '8px 10px' }}>Trace</th>
                 <th style={{ padding: '8px 10px' }}>Model</th>
@@ -211,8 +211,8 @@ export function LlmTracesPanel() {
                   key={t.traceId}
                   onClick={() => void openTrace(t.traceId)}
                   style={{
-                    cursor: 'pointer', borderTop: '1px solid #131b2a',
-                    background: selected?.traceId === t.traceId ? '#101826' : 'transparent',
+                    cursor: 'pointer', borderTop: '1px solid var(--border-subtle)',
+                    background: selected?.traceId === t.traceId ? 'var(--surface-interactive)' : 'transparent',
                   }}
                 >
                   <td style={{ padding: '7px 10px', color: muted, whiteSpace: 'nowrap' }}>
@@ -246,8 +246,8 @@ export function LlmTracesPanel() {
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void openTrace(t.traceId); } }}
                 style={{
                   cursor: 'pointer',
-                  background: 'var(--bg-elevated, #0a0f1a)',
-                  border: `1px solid ${selected?.traceId === t.traceId ? '#2a3a55' : 'var(--border-subtle, #1b2436)'}`,
+                  background: 'var(--bg-elevated, var(--bg-base))',
+                  border: `1px solid ${selected?.traceId === t.traceId ? 'var(--border-accent)' : 'var(--border-subtle, var(--border-subtle))'}`,
                   borderRadius: 12,
                   padding: 16,
                   display: 'flex',
@@ -256,12 +256,12 @@ export function LlmTracesPanel() {
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <code style={{ fontFamily: 'monospace', fontSize: 11, color: '#9fb0cc' }}>
+                  <code style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-secondary)' }}>
                     {t.traceId.replace(/^llm-/, '').slice(0, 8)}…
                   </code>
                   {pill(`${t.status ?? '—'}`, t.success ? ok : bad)}
                 </div>
-                <div style={{ fontSize: 13, color: '#e6ebf5', wordBreak: 'break-word' }}>{t.resolvedModel ?? '—'}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-primary)', wordBreak: 'break-word' }}>{t.resolvedModel ?? '—'}</div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: muted }}>
                   <span>{t.createdAt ? new Date(t.createdAt).toLocaleString() : '—'}</span>
                   <span>{t.durationMs} ms</span>
@@ -273,9 +273,9 @@ export function LlmTracesPanel() {
 
         {/* Detail */}
         {selected && (
-          <div style={{ border: '1px solid #1b2436', borderRadius: 10, padding: 16, maxHeight: 700, overflow: 'auto' }}>
+          <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 16, maxHeight: 700, overflow: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <code style={{ fontSize: 12, color: '#9fb0cc' }}>{selected.traceId}</code>
+              <code style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{selected.traceId}</code>
               <button
                 onClick={() => setSelected(null)}
                 style={{ background: 'none', border: 'none', color: muted, cursor: 'pointer', fontSize: 18 }}
@@ -331,7 +331,7 @@ export function LlmTracesPanel() {
                     </thead>
                     <tbody>
                       {selected.attempts.map((a, i) => (
-                        <tr key={i} style={{ borderTop: '1px solid #131b2a' }}>
+                        <tr key={i} style={{ borderTop: '1px solid var(--border-subtle)' }}>
                           <td style={{ padding: '4px 6px' }}>{a.model}</td>
                           <td style={{ padding: '4px 6px', color: muted }}>{a.vendor}</td>
                           <td style={{ padding: '4px 6px' }}>{a.status}</td>

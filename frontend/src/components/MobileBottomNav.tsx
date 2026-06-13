@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
+import { getStoredTenant } from '@/lib/auth';
 import { isNavItemActive, type NavMatch } from '@/lib/nav';
 import MascotIcon from './MascotIcon';
 
@@ -17,7 +18,7 @@ interface BottomItem extends NavMatch {
 // Convention (matches the reference): "Home" is always first. Five high-traffic
 // destinations; the full menu lives in the hamburger drawer. Uses the same
 // isNavItemActive matcher as the Sidebar so both surfaces agree on active state.
-function itemsFor(isAuthenticated: boolean, isSuperadmin: boolean): BottomItem[] {
+export function itemsFor(isAuthenticated: boolean, isSuperadmin: boolean, role?: string): BottomItem[] {
   if (!isAuthenticated) {
     return [
       { href: '/', label: 'Home', icon: '🏠', exactMatch: true },
@@ -27,9 +28,16 @@ function itemsFor(isAuthenticated: boolean, isSuperadmin: boolean): BottomItem[]
       { href: '/login', label: 'Sign In', icon: '🔑', accent: true },
     ];
   }
+  // Last slot is privilege-tuned [1335]: superadmins get Admin; workspace
+  // managers (owner/manager — who actually use billing/members/keys) get
+  // Settings; individual contributors (developer/viewer) get a work-focused
+  // Projects entry instead, since Settings is rarely theirs.
+  const canManage = role === 'owner' || role === 'manager';
   const last: BottomItem = isSuperadmin
     ? { href: '/admin', label: 'Admin', icon: '⚙' }
-    : { href: '/settings', label: 'Settings', icon: '⚙', exactMatch: true };
+    : canManage
+      ? { href: '/settings', label: 'Settings', icon: '⚙', exactMatch: true }
+      : { href: '/projects', label: 'Projects', icon: '📁', activePaths: ['/projects'] };
   return [
     { href: '/dashboard', label: 'Home', icon: '🏠' },
     { href: '/workforce', label: 'Workforce', icon: <MascotIcon size={22} /> },
@@ -47,7 +55,7 @@ function itemsFor(isAuthenticated: boolean, isSuperadmin: boolean): BottomItem[]
 export default function MobileBottomNav() {
   const pathname = usePathname() || '';
   const { isAuthenticated, user } = useAuth();
-  const items = itemsFor(isAuthenticated, !!user?.isSuperadmin);
+  const items = itemsFor(isAuthenticated, !!user?.isSuperadmin, getStoredTenant()?.role);
 
   return (
     <nav className="mobile-bottom-nav" aria-label="Primary">

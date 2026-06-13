@@ -46,9 +46,6 @@ export type BuilderForceAgentsToolsSandboxOptions = {
 
 /** Agent identity and channel routing. */
 export type BuilderForceAgentsToolsAgentOptions = {
-  /** Task this agent session runs for — lets the orchestrate tool link a planning
-   *  workflow's PRD to the task as its primary spec (host-side /spec parity). */
-  taskId?: number;
   agentSessionKey?: string;
   agentChannel?: GatewayMessageChannel;
   agentAccountId?: string;
@@ -213,7 +210,6 @@ export function createBuilderForceAgentsTools(options?: BuilderForceAgentsToolsO
       agentGroupChannel: options?.agentGroupChannel,
       agentGroupSpace: options?.agentGroupSpace,
       requesterAgentIdOverride: options?.requesterAgentIdOverride,
-      taskId: options?.taskId,
     }),
     createGithubIssueWorkflowTool({
       agentSessionKey: options?.agentSessionKey,

@@ -354,7 +354,7 @@ export function createSessionStatusTool(opts?: {
         typeof agentDefaults.model === "object" && agentDefaults.model
           ? { ...agentDefaults.model, primary: defaultLabel }
           : { primary: defaultLabel };
-      const statusText = buildStatusMessage({
+      const statusText = await buildStatusMessage({
         config: cfg,
         agent: {
           ...agentDefaults,
@@ -365,7 +365,7 @@ export function createSessionStatusTool(opts?: {
         sessionKey: resolved.key,
         sessionStorePath: storePath,
         groupActivation,
-        modelAuth: resolveModelAuthLabel({
+        modelAuth: await resolveModelAuthLabel({
           provider: providerForCard,
           cfg,
           sessionEntry: resolved.entry,

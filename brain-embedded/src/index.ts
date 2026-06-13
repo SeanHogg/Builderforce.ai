@@ -59,6 +59,10 @@ export type { UseBrainChats, UseBrainChatsOptions } from './useBrainChats';
 export { useBrainConversation } from './useBrainConversation';
 export type { UseBrainConversation, UseBrainConversationOptions } from './useBrainConversation';
 
+// Execution triage — capture the Brain run (LLM/tool/error trace) as a report.
+export { buildBrainTriageReport, isFailedToolResult } from './brainTriage';
+export type { BrainTraceEvent, BuildBrainTriageOptions } from './brainTriage';
+
 // Landing-page → auth → replay handoff
 export { savePendingPrompt, takePendingPrompt } from './pendingPrompt';
 

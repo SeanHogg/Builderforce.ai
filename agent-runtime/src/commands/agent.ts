@@ -462,7 +462,7 @@ export async function agentCommand(
       const authProfileId = sessionEntry.authProfileOverride;
       if (authProfileId) {
         const entry = sessionEntry;
-        const store = ensureAuthProfileStore();
+        const store = await ensureAuthProfileStore();
         const profile = store.profiles[authProfileId];
         if (!profile || profile.provider !== provider) {
           if (sessionStore && sessionKey) {

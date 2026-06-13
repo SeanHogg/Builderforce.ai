@@ -1524,12 +1524,16 @@ export function reorderPoolByShape(
     return pool;
   }
 
+  // A model has a capability if it's in the legacy literal id-set (OpenRouter-
+  // centric) OR its catalog entry declares it — so non-OpenRouter models (e.g.
+  // NVIDIA NIM vision models) are promoted too, not silently excluded [1429].
+  const caps = (model: string): readonly string[] => catalogEntry(model)?.capabilities ?? [];
   const score = (model: string): number => {
     let s = 0;
-    if (shape.hasOcr              && OCR_MODELS.has(model))               s += 8;
-    if (shape.hasVision           && VISION_MODELS.has(model))            s += 4;
-    if (shape.hasTools            && TOOL_CAPABLE_MODELS.has(model))      s += 2;
-    if (shape.hasStructuredOutput && STRUCTURED_OUTPUT_MODELS.has(model)) s += 1;
+    if (shape.hasOcr              && (OCR_MODELS.has(model)               || caps(model).includes('ocr')))               s += 8;
+    if (shape.hasVision           && (VISION_MODELS.has(model)            || caps(model).includes('vision')))            s += 4;
+    if (shape.hasTools            && (TOOL_CAPABLE_MODELS.has(model)      || caps(model).includes('tools')))             s += 2;
+    if (shape.hasStructuredOutput && (STRUCTURED_OUTPUT_MODELS.has(model) || caps(model).includes('structured_output'))) s += 1;
     return s;
   };
 

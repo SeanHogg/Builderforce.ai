@@ -630,14 +630,14 @@ export function releaseSubagentRun(runId: string) {
   }
 }
 
-function findRunIdsByChildSessionKey(childSessionKey: string): string[] {
+async function findRunIdsByChildSessionKey(childSessionKey: string): Promise<string[]> {
   const key = childSessionKey.trim();
   if (!key) {
     return [];
   }
   const runIds: string[] = [];
   // Use snapshot for read operations to avoid race conditions with ongoing writes.
-  const snapshot = getRunsSnapshotForRead();
+  const snapshot = await getRunsSnapshotForRead();
   for (const entry of snapshot.values()) {
     if (entry.childSessionKey === key) {
       runIds.push(entry.runId);
@@ -646,15 +646,14 @@ function findRunIdsByChildSessionKey(childSessionKey: string): string[] {
   return runIds;
 }
 
-function getRunsSnapshotForRead(): Map<string, SubagentRunRecord> {
+async function getRunsSnapshotForRead(): Promise<Map<string, SubagentRunRecord>> {
   const merged = new Map<string, SubagentRunRecord>();
   const shouldReadDisk = !(process.env.VITEST || process.env.NODE_ENV === "test");
   if (shouldReadDisk) {
     try {
       // Registry state is persisted to disk so other worker processes (for
       // example cron runners) can observe active children spawned elsewhere.
-      // Use await here as loadSubagentRegistryFromDisk is now async.
-      const restored = loadSubagentRegistryFromDisk();
+      const restored = await loadSubagentRegistryFromDisk();
       for (const [runId, entry] of restored.entries()) {
         merged.set(runId, entry);
       }
@@ -670,16 +669,16 @@ function getRunsSnapshotForRead(): Map<string, SubagentRunRecord> {
   return merged;
 }
 
-export function resolveRequesterForChildSession(childSessionKey: string): {
+export async function resolveRequesterForChildSession(childSessionKey: string): Promise<{
   requesterSessionKey: string;
   requesterOrigin?: DeliveryContext;
-} | null {
+} | null> {
   const key = childSessionKey.trim();
   if (!key) {
     return null;
   }
   let best: SubagentRunRecord | undefined;
-  for (const entry of getRunsSnapshotForRead().values()) {
+  for (const entry of (await getRunsSnapshotForRead()).values()) {
     if (entry.childSessionKey !== key) {
       continue;
     }
@@ -696,8 +695,8 @@ export function resolveRequesterForChildSession(childSessionKey: string): {
   };
 }
 
-export function isSubagentSessionRunActive(childSessionKey: string): boolean {
-  const runIds = findRunIdsByChildSessionKey(childSessionKey);
+export async function isSubagentSessionRunActive(childSessionKey: string): Promise<boolean> {
+  const runIds = await findRunIdsByChildSessionKey(childSessionKey);
   for (const runId of runIds) {
     const entry = subagentRuns.get(runId);
     if (!entry) {
@@ -710,17 +709,17 @@ export function isSubagentSessionRunActive(childSessionKey: string): boolean {
   return false;
 }
 
-export function markSubagentRunTerminated(params: {
+export async function markSubagentRunTerminated(params: {
   runId?: string;
   childSessionKey?: string;
   reason?: string;
-}): number {
+}): Promise<number> {
   const runIds = new Set<string>();
   if (typeof params.runId === "string" && params.runId.trim()) {
     runIds.add(params.runId.trim());
   }
   if (typeof params.childSessionKey === "string" && params.childSessionKey.trim()) {
-    for (const runId of findRunIdsByChildSessionKey(params.childSessionKey)) {
+    for (const runId of await findRunIdsByChildSessionKey(params.childSessionKey)) {
       runIds.add(runId);
     }
   }
@@ -760,13 +759,13 @@ export function listSubagentRunsForRequester(requesterSessionKey: string): Subag
   return [...subagentRuns.values()].filter((entry) => entry.requesterSessionKey === key);
 }
 
-export function countActiveRunsForSession(requesterSessionKey: string): number {
+export async function countActiveRunsForSession(requesterSessionKey: string): Promise<number> {
   const key = requesterSessionKey.trim();
   if (!key) {
     return 0;
   }
   let count = 0;
-  for (const entry of getRunsSnapshotForRead().values()) {
+  for (const entry of (await getRunsSnapshotForRead()).values()) {
     if (entry.requesterSessionKey !== key) {
       continue;
     }
@@ -778,12 +777,12 @@ export function countActiveRunsForSession(requesterSessionKey: string): number {
   return count;
 }
 
-export function countActiveDescendantRuns(rootSessionKey: string): number {
+export async function countActiveDescendantRuns(rootSessionKey: string): Promise<number> {
   const root = rootSessionKey.trim();
   if (!root) {
     return 0;
   }
-  const runs = getRunsSnapshotForRead();
+  const runs = await getRunsSnapshotForRead();
   const pending = [root];
   const visited = new Set<string>([root]);
   let count = 0;
@@ -810,12 +809,12 @@ export function countActiveDescendantRuns(rootSessionKey: string): number {
   return count;
 }
 
-export function listDescendantRunsForRequester(rootSessionKey: string): SubagentRunRecord[] {
+export async function listDescendantRunsForRequester(rootSessionKey: string): Promise<SubagentRunRecord[]> {
   const root = rootSessionKey.trim();
   if (!root) {
     return [];
   }
-  const runs = getRunsSnapshotForRead();
+  const runs = await getRunsSnapshotForRead();
   const pending = [root];
   const visited = new Set<string>([root]);
   const descendants: SubagentRunRecord[] = [];

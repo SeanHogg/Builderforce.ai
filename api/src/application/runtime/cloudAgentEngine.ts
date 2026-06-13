@@ -28,9 +28,13 @@ import { pullPendingSteering, releasePendingSteers } from './executionSteering';
 import { notifyExecutionSubscribers } from './executionEvents';
 import { notifyApprovalRequested } from '../approval/approvalNotifier';
 import {
-  CLOUD_AGENT_TOOLS, CONTAINER_AGENT_TOOLS, MAX_CLOUD_TOOL_STEPS, MAX_PLACEHOLDER_FINISH_BLOCKS,
+  CLOUD_AGENT_TOOLS, CONTAINER_AGENT_TOOLS, CLOUD_SURFACE_CAPS, cloudToolRegistry,
+  MAX_CLOUD_TOOL_STEPS, MAX_PLACEHOLDER_FINISH_BLOCKS,
   CONTAINER_MAX_STEPS, assertsUnrunVerification, type RawToolCall,
 } from './cloudAgentTools';
+import type {
+  AgentEngine, AgentRunInput, AgentRunResult, CapabilityProvider, ToolContext,
+} from '@builderforce/agent-tools';
 import { parseRemediation, parseFollowUp, parseCloudAgentRef } from './cloudDispatch';
 import { RuntimeService } from './RuntimeService';
 import { ExecutionStatus } from '../../domain/shared/types';
@@ -811,6 +815,137 @@ export interface CloudLoopResult {
   awaitingInput?: { approvalId: string; question: string };
 }
 
+/**
+ * The durable/Worker surface's {@link CapabilityProvider}: the concrete backing for
+ * the capability-gated tool registry on Cloudflare. It exposes the repo over the git
+ * API (no disk), a shell-free static validator, and human-in-the-loop via the
+ * approvals queue — and OWNS the side effects of a write/delete (tracking the run's
+ * written paths, recording a `task_file_changes` row, notifying subscribers) so each
+ * tool stays a thin schema + result shaper. `repoCtx` and `writtenPaths` are the live
+ * run state, so `readRef` (base before the first write, the ticket branch after) is
+ * computed per call. The SAME tool definitions run on-prem against a disk/shell
+ * provider — only this backing changes per surface (Dependency Inversion).
+ */
+function buildCloudProvider(args: {
+  env: Env;
+  db: Db;
+  tenantId: number;
+  executionId: number;
+  taskRow: { id: number; title: string };
+  agentLabel: string;
+  cloudAgentRef: string | undefined;
+  repoCtx: TicketRepoContext | null;
+  repoMiss: string;
+  /** Live set of paths written this run (mutated by write/delete). */
+  writtenPaths: Set<string>;
+}): CapabilityProvider {
+  const { env, db, tenantId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths } = args;
+  // Read/list against the ticket branch only once it exists (created on the first
+  // commit). Before any write, the branch ref 404s — read from `base` instead, so
+  // the agent sees the real codebase rather than mistaking the missing branch for
+  // "no repo access".
+  const readRef = (): string => (repoCtx ? (writtenPaths.size > 0 ? repoCtx.branch : repoCtx.base) : '');
+  const noRepo = (suffix = ''): string => `no repo bound to this task (${repoMiss})${suffix}`;
+
+  return {
+    capabilities: CLOUD_SURFACE_CAPS,
+    repoRead: {
+      async listFiles(sub) {
+        if (!repoCtx) return { ok: false, error: noRepo() };
+        const ref = readRef();
+        const ls = await listRepoFiles({ ...repoCtx, ref }, sub);
+        return ls.ok ? { ok: true, ref, paths: ls.paths, truncated: ls.truncated } : { ok: false, error: ls.reason };
+      },
+      async readFile(path) {
+        if (!repoCtx) return { ok: false, error: noRepo() };
+        const rf = await readRepoFile({ ...repoCtx, ref: readRef() }, path);
+        return rf.ok ? { ok: true, path: rf.path, content: rf.content, truncated: rf.truncated } : { ok: false, error: rf.reason };
+      },
+      async searchCode(query) {
+        if (!repoCtx) return { ok: false, error: noRepo() };
+        const sr = await searchRepoCode({ ...repoCtx, ref: readRef() }, query, { maxResults: 30 });
+        return sr.ok ? { ok: true, query, total: sr.total, truncated: sr.truncated, matches: sr.matches } : { ok: false, error: sr.reason };
+      },
+    },
+    repoWrite: {
+      async writeFile(path, content, _summary) {
+        if (!repoCtx) return { ok: false, error: noRepo('; include the file contents in your final summary instead') };
+        const firstWriteThisRun = !writtenPaths.has(path);
+        const commit = await commitAgentFile(repoCtx, path, content, `${firstWriteThisRun ? 'Add' : 'Update'} ${path} — task #${taskRow.id} (${agentLabel})`);
+        if (!commit.ok) return { ok: false, error: commit.reason };
+        writtenPaths.add(path);
+        // created vs modified comes from whether the path pre-existed in the repo
+        // (commit.existed), not first-write-this-run.
+        const change = commit.existed ? 'modified' : 'created';
+        await recordTaskFileChange(env, tenantId, taskRow.id, executionId, path, change, agentLabel);
+        notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change, ts: new Date().toISOString() });
+        return { ok: true, branch: repoCtx.branch, commitUrl: commit.commitUrl, change };
+      },
+      async editFile(path, oldString, newString, replaceAll) {
+        if (!repoCtx) return { ok: false, error: noRepo() };
+        const rf = await readRepoFile({ ...repoCtx, ref: readRef() }, path);
+        if (!rf.ok) return { ok: false, error: `cannot edit '${path}': ${rf.reason}` };
+        if (rf.truncated) return { ok: false, error: `'${path}' is too large to edit safely here — rewrite it with write_file instead` };
+        const count = rf.content.split(oldString).length - 1;
+        if (count === 0) return { ok: false, error: `old_string not found in '${path}' — read_file and copy the exact text (including indentation)` };
+        if (count > 1 && !replaceAll) return { ok: false, error: `old_string is not unique in '${path}' (${count} matches) — add surrounding context to make it unique, or set replace_all` };
+        const updated = replaceAll ? rf.content.split(oldString).join(newString) : rf.content.replace(oldString, newString);
+        const firstWriteThisRun = !writtenPaths.has(path);
+        const commit = await commitAgentFile(repoCtx, path, updated, `${firstWriteThisRun ? 'Edit' : 'Update'} ${path} — task #${taskRow.id} (${agentLabel})`);
+        if (!commit.ok) return { ok: false, error: commit.reason };
+        writtenPaths.add(path);
+        await recordTaskFileChange(env, tenantId, taskRow.id, executionId, path, 'modified', agentLabel);
+        notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: 'modified', ts: new Date().toISOString() });
+        return { ok: true, branch: repoCtx.branch, commitUrl: commit.commitUrl, change: 'modified', replaced: replaceAll ? count : 1 };
+      },
+      async deleteFile(path, reason) {
+        if (!repoCtx) return { ok: false, error: noRepo() };
+        const suffix = reason && reason.trim() ? ` — ${reason.trim()}` : '';
+        const del = await deleteAgentFile(repoCtx, path, `Remove ${path} — task #${taskRow.id} (${agentLabel})${suffix}`);
+        if (del.ok) {
+          writtenPaths.delete(path);
+          await recordTaskFileChange(env, tenantId, taskRow.id, executionId, path, 'deleted', agentLabel);
+          notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: 'deleted', ts: new Date().toISOString() });
+          return { ok: true, branch: repoCtx.branch, commitUrl: del.commitUrl };
+        }
+        if (del.code === 'not_found') {
+          // Not on the branch — benign no-op so the model doesn't treat it as a failure.
+          return { ok: true, deleted: false, note: `'${path}' is not on the branch, so there is nothing to delete.` };
+        }
+        return { ok: false, error: del.reason };
+      },
+    },
+    staticCheck: {
+      async verify() {
+        if (!repoCtx) return { ok: true, ran: false, note: `No repository is bound (${repoMiss}) — nothing to validate here; return the deliverable in your finish summary.` };
+        if (writtenPaths.size === 0) return { ok: true, ran: false, note: 'No files written yet — write your changes first, then call run_checks to statically validate config files.' };
+        const v = await verifyWrittenFiles({ ...repoCtx, ref: readRef() }, writtenPaths);
+        return v.ok
+          ? {
+              ok: true, ran: true, kind: 'static-validation',
+              checked: v.checked, skipped: v.skipped,
+              note: `Static syntax validation PASSED for ${v.checked.length} JSON/YAML config file(s)`
+                + `${v.skipped.length ? ` (${v.skipped.length} non-config file(s) can't be parsed without a shell)` : ''}. `
+                + 'This executor has NO shell, so it did NOT run the build, project-wide type-check, lint, or tests — CI on the pull request verifies those. Do not claim those passed; ensure your code is correct.',
+            }
+          : {
+              ok: false, ran: true, kind: 'static-validation',
+              errors: v.errors,
+              note: `Static validation FAILED on ${v.errors.length} file(s) — fix the parse error(s) below with write_file, then call run_checks again.`,
+            };
+      },
+    },
+    human: {
+      async ask(question, context) {
+        const approvalId = await createCloudQuestion(env, db, {
+          tenantId, cloudAgentRef, executionId, agentLabel, question, context,
+        });
+        return { paused: true, approvalId, note: 'Question sent to a human. The run is paused until it is answered; you will resume with the answer.' };
+      },
+    },
+  };
+}
+
 export async function runCloudToolLoop(
   env: Env,
   db: Db,
@@ -880,7 +1015,9 @@ export async function runCloudToolLoop(
   //     model can fail over once — but only once, at the start).
   // The resolved pin rides CloudLoopState so the DO surface keeps every tick on it.
   const pick = pickCloudModel(model, routing.effectivePlan, routing.premiumOverride);
-  const strictPin = pick.strict;
+  // Mutable: a 429 on the pinned model drops the strict pin so the proxy cascades
+  // (see the per-turn cascade below); the run then stays unpinned for later turns.
+  let strictPin = pick.strict;
   let activeModel: string = opts?.resume?.pinnedModel ?? pick.model;
 
   // Make the model choice legible on the timeline — once, at run start (resume ticks
@@ -925,6 +1062,14 @@ export async function runCloudToolLoop(
     }
   })();
 
+  // The surface's capability backing + the tool context handed to every dispatch.
+  // The provider closes over the LIVE `writtenPaths` set + `repoCtx`, so write/delete
+  // bookkeeping and the base→branch read switch stay correct as the run progresses.
+  const provider = buildCloudProvider({
+    env, db, tenantId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths,
+  });
+  const toolCtx: ToolContext = { caps: provider, signal: abortController.signal };
+
   try {
   for (; step < MAX_CLOUD_TOOL_STEPS && !finished && (step - startStep) < maxThisCall; step++) {
     // Between-step guard: stop before issuing the next (paid) call if cancelled.
@@ -948,25 +1093,44 @@ export async function runCloudToolLoop(
     }
 
     const tGen0 = Date.now();
-    let result: Awaited<ReturnType<typeof proxy.complete>>;
-    try {
-      result = await proxy.complete(
-        {
-          messages: messages as unknown as ChatMessage[],
-          tools: CLOUD_AGENT_TOOLS,
-          tool_choice: 'auto',
-          ...(activeModel ? { model: activeModel, ...(strictPin ? { modelStrict: true } : {}) } : {}),
-          useCase: 'task_execution',
-        },
-        undefined,
-        undefined,
-        abortController.signal,
-      );
-    } catch (e) {
-      // The watcher aborted the fetch (cancel mid-call) → stop cleanly.
-      if (abortController.signal.aborted) { cancelled = true; break; }
-      throw e;
+    let result!: Awaited<ReturnType<typeof proxy.complete>>;
+    // Per-turn model cascade: a strict pin (or locked model) that the gateway
+    // rate-limits (429) would otherwise terminate the whole run. Instead, drop the
+    // strict pin ONCE and let the proxy walk its full chain (LlmProxyService already
+    // cascades); then lock onto whatever it resolves so later turns / DO ticks stay
+    // there. Benefits every surface (durable / Worker / container).
+    for (let attempt = 0; ; attempt++) {
+      try {
+        result = await proxy.complete(
+          {
+            messages: messages as unknown as ChatMessage[],
+            tools: CLOUD_AGENT_TOOLS,
+            tool_choice: 'auto',
+            ...(activeModel ? { model: activeModel, ...(strictPin ? { modelStrict: true } : {}) } : {}),
+            useCase: 'task_execution',
+          },
+          undefined,
+          undefined,
+          abortController.signal,
+        );
+      } catch (e) {
+        // The watcher aborted the fetch (cancel mid-call) → stop cleanly.
+        if (abortController.signal.aborted) { cancelled = true; break; }
+        throw e;
+      }
+      // Retry only a 429 on a pinned/locked model, and only once.
+      if (result!.response.status !== 429 || attempt >= 1 || (!strictPin && !activeModel)) break;
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef, executionId,
+        toolName: 'model.cascade', category: 'llm',
+        detail: { step, from: activeModel || null, reason: '429' },
+        result: 'pinned model rate-limited — dropping pin, walking the cascade',
+      });
+      // Unlock for this turn AND the rest of the run: don't re-pin after a cascade.
+      strictPin = false;
+      activeModel = '';
     }
+    if (cancelled) break;
     const genMs = Date.now() - tGen0;
     const resolvedModel = result.resolvedModel ?? activeModel ?? 'default';
     // Lock the non-strict run onto the model the gateway actually used on the
@@ -1036,118 +1200,19 @@ export async function runCloudToolLoop(
       let parsed: Record<string, unknown> = {};
       try { parsed = tc.function?.arguments ? (JSON.parse(tc.function.arguments) as Record<string, unknown>) : {}; } catch { /* leave empty */ }
       const tStart = Date.now();
-      let toolResult: Record<string, unknown>;
 
-      // Read/list against the ticket branch only once it exists (created on the
-      // first commit). Before any write, the branch ref 404s — read from `base`
-      // instead, so the agent sees the real codebase rather than mistaking the
-      // missing branch for "no repo access".
-      const readRef = repoCtx ? (writtenPaths.size > 0 ? repoCtx.branch : repoCtx.base) : '';
+      // Dispatch through the ONE capability-gated registry. Each tool reaches the
+      // repo / static-check / human ONLY via the injected provider (so the same
+      // definition runs on-prem against a disk/shell provider). `finish` and
+      // `ask_human` come back as CONTROL signals the loop interprets below — the
+      // finish honesty/anti-stub gates and the pause/park are loop policy, not a
+      // tool's concern, so they stay here.
+      const dispatched = await cloudToolRegistry.dispatch(name, parsed, toolCtx);
+      let toolResult: Record<string, unknown> = dispatched.data;
+      const control = dispatched.control;
 
-      if (name === 'list_files') {
-        if (!repoCtx) {
-          toolResult = { ok: false, error: `no repo bound to this task (${repoMiss})` };
-        } else {
-          const sub = typeof parsed.path === 'string' ? parsed.path : undefined;
-          const ls = await listRepoFiles({ ...repoCtx, ref: readRef }, sub);
-          toolResult = ls.ok ? { ok: true, ref: readRef, paths: ls.paths, truncated: ls.truncated } : { ok: false, error: ls.reason };
-        }
-      } else if (name === 'search_code') {
-        const query = typeof parsed.query === 'string' ? parsed.query : '';
-        if (!query.trim()) {
-          toolResult = { ok: false, error: 'query is required' };
-        } else if (!repoCtx) {
-          toolResult = { ok: false, error: `no repo bound to this task (${repoMiss})` };
-        } else {
-          const sr = await searchRepoCode({ ...repoCtx, ref: readRef }, query, { maxResults: 30 });
-          toolResult = sr.ok
-            ? { ok: true, query, total: sr.total, truncated: sr.truncated, matches: sr.matches,
-                ...(sr.total === 0 ? { note: 'No matches in the indexed codebase — the term is not referenced. If the task was to remove/replace it, there is nothing to change; say so instead of inventing an edit.' } : {}) }
-            : { ok: false, error: sr.reason };
-        }
-      } else if (name === 'read_file') {
-        const path = typeof parsed.path === 'string' ? parsed.path : '';
-        if (!path) {
-          toolResult = { ok: false, error: 'path is required' };
-        } else if (!repoCtx) {
-          toolResult = { ok: false, error: `no repo bound to this task (${repoMiss})` };
-        } else {
-          const rf = await readRepoFile({ ...repoCtx, ref: readRef }, path);
-          toolResult = rf.ok ? { ok: true, path: rf.path, content: rf.content, truncated: rf.truncated } : { ok: false, error: rf.reason };
-        }
-      } else if (name === 'write_file') {
-        const path = typeof parsed.path === 'string' ? parsed.path : '';
-        const fileContent = typeof parsed.content === 'string' ? parsed.content : '';
-        if (!path || !fileContent) {
-          toolResult = { ok: false, error: 'path and content are both required' };
-        } else if (!repoCtx) {
-          toolResult = { ok: false, error: `no repo bound to this task (${repoMiss}); include the file contents in your final summary instead` };
-        } else {
-          const firstWriteThisRun = !writtenPaths.has(path);
-          const commit = await commitAgentFile(repoCtx, path, fileContent, `${firstWriteThisRun ? 'Add' : 'Update'} ${path} — task #${taskRow.id} (${agentLabel})`);
-          if (commit.ok) {
-            writtenPaths.add(path);
-            // created vs modified comes from whether the path pre-existed in the repo
-            // (commit.existed), not first-write-this-run — a pre-existing file edited
-            // for the first time this run is a modification, not a creation.
-            const change = commit.existed ? 'modified' : 'created';
-            await recordTaskFileChange(env, tenantId, taskRow.id, executionId, path, change, agentLabel);
-            notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change, ts: new Date().toISOString() });
-            toolResult = { ok: true, branch: repoCtx.branch, commitUrl: commit.commitUrl };
-          } else {
-            toolResult = { ok: false, error: commit.reason };
-          }
-        }
-      } else if (name === 'delete_file') {
-        const path = typeof parsed.path === 'string' ? parsed.path : '';
-        if (!path) {
-          toolResult = { ok: false, error: 'path is required' };
-        } else if (!repoCtx) {
-          toolResult = { ok: false, error: `no repo bound to this task (${repoMiss})` };
-        } else {
-          const reason = typeof parsed.reason === 'string' && parsed.reason.trim() ? ` — ${parsed.reason.trim()}` : '';
-          const del = await deleteAgentFile(repoCtx, path, `Remove ${path} — task #${taskRow.id} (${agentLabel})${reason}`);
-          if (del.ok) {
-            writtenPaths.delete(path);
-            await recordTaskFileChange(env, tenantId, taskRow.id, executionId, path, 'deleted', agentLabel);
-            notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: 'deleted', ts: new Date().toISOString() });
-            toolResult = { ok: true, branch: repoCtx.branch, commitUrl: del.commitUrl };
-          } else if (del.code === 'not_found') {
-            // Not on the branch — nothing to remove. Report as a benign no-op so the
-            // model doesn't treat it as a failure and retry.
-            toolResult = { ok: true, deleted: false, note: `'${path}' is not on the branch, so there is nothing to delete.` };
-          } else {
-            toolResult = { ok: false, error: del.reason };
-          }
-        }
-      } else if (name === 'run_checks') {
-        // Real (if scoped) verification: statically validate the config files we
-        // CAN parse in-Worker (JSON/YAML) so broken config is caught BEFORE the PR.
-        // Build / project-wide type-check / lint / tests still need a shell, so
-        // those remain CI's job — be honest about that so the agent doesn't claim
-        // they passed.
-        if (!repoCtx) {
-          toolResult = { ok: true, ran: false, note: `No repository is bound (${repoMiss}) — nothing to validate here; return the deliverable in your finish summary.` };
-        } else if (writtenPaths.size === 0) {
-          toolResult = { ok: true, ran: false, note: 'No files written yet — write your changes first, then call run_checks to statically validate config files.' };
-        } else {
-          const v = await verifyWrittenFiles({ ...repoCtx, ref: readRef }, writtenPaths);
-          toolResult = v.ok
-            ? {
-                ok: true, ran: true, kind: 'static-validation',
-                checked: v.checked, skipped: v.skipped,
-                note: `Static syntax validation PASSED for ${v.checked.length} JSON/YAML config file(s)`
-                  + `${v.skipped.length ? ` (${v.skipped.length} non-config file(s) can't be parsed without a shell)` : ''}. `
-                  + 'This executor has NO shell, so it did NOT run the build, project-wide type-check, lint, or tests — CI on the pull request verifies those. Do not claim those passed; ensure your code is correct.',
-              }
-            : {
-                ok: false, ran: true, kind: 'static-validation',
-                errors: v.errors,
-                note: `Static validation FAILED on ${v.errors.length} file(s) — fix the parse error(s) below with write_file, then call run_checks again.`,
-              };
-        }
-      } else if (name === 'finish') {
-        const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : '';
+      if (control?.kind === 'finish') {
+        const summary = control.summary;
         // Two finish gates, in order. Either yields a block message that forces the
         // agent to call finish again once it has corrected the run; null = ship.
         let finishBlock: string | null = null;
@@ -1184,22 +1249,11 @@ export async function runCloudToolLoop(
           finished = true;
           toolResult = { ok: true };
         }
-      } else if (name === 'ask_human') {
-        const question = typeof parsed.question === 'string' ? parsed.question.trim() : '';
-        const context = typeof parsed.context === 'string' ? parsed.context : undefined;
-        if (!question) {
-          toolResult = { ok: false, error: 'question is required to ask a human' };
-        } else {
-          const approvalId = await createCloudQuestion(env, db, {
-            tenantId, cloudAgentRef, executionId, agentLabel, question, context,
-          });
-          awaitingInput = { approvalId, question };
-          // Echo the question turn so the answer (delivered as a user steer on resume)
-          // attaches to a complete conversation, then close out this turn's tool call.
-          toolResult = { ok: true, paused: true, note: 'Question sent to a human. The run is paused until it is answered; you will resume with the answer.' };
-        }
-      } else {
-        toolResult = { ok: false, error: `unknown tool '${name}'. Available tools: search_code, list_files, read_file, write_file, delete_file, run_checks, ask_human, finish. This executor has no shell and cannot run code, builds, or tests — do not claim a check passed; CI on the PR verifies.` };
+      } else if (control?.kind === 'ask_human') {
+        // The tool already created the human question via the provider; park the run.
+        // Echo the question turn so the answer (delivered as a user steer on resume)
+        // attaches to a complete conversation, then close out this turn's tool call.
+        awaitingInput = { approvalId: control.approvalId ?? '', question: control.question };
       }
 
       await recordCloudToolEvent(db, {
@@ -1261,6 +1315,50 @@ export async function runCloudToolLoop(
     repoCtx, repoMiss, writtenPaths, finalOutput, cancelled,
   });
   return { ok: fin.ok, output: fin.output, cancelled, finished: true };
+}
+
+/** The runtime context an engine is constructed with (the surface-specific wiring
+ *  that {@link AgentRunInput} deliberately omits). */
+export interface CloudEngineContext {
+  env: Env;
+  db: Db;
+  executionId: number;
+  taskRow: { id: number; title: string; description: string | null };
+  tenantId: number;
+  projectId: number;
+  agentLabel: string;
+  cloudAgentRef?: string;
+  isCancelled: () => Promise<boolean>;
+}
+
+/**
+ * The cloud tool-loop engine behind the shared {@link AgentEngine} seam. Wraps
+ * {@link runCloudToolLoop} so dispatch sites depend on the INTERFACE, not the
+ * concrete loop — the whole point of the seam is that "the next engine" (a
+ * Claude-Agent-SDK loop, a different surface strategy) is injected at one composition
+ * root ({@link resolveAgentEngine}) without editing any call site.
+ */
+export class CloudToolLoopEngine implements AgentEngine {
+  readonly id = 'cloud-tool-loop';
+  constructor(private readonly rc: CloudEngineContext) {}
+  async run(input: AgentRunInput): Promise<AgentRunResult> {
+    const r = await runCloudToolLoop(
+      this.rc.env, this.rc.db, this.rc.executionId, this.rc.tenantId, this.rc.taskRow,
+      this.rc.cloudAgentRef, this.rc.agentLabel, input.model, input.systemPrompt, input.userContent,
+      this.rc.isCancelled, this.rc.projectId,
+    );
+    return { ok: r.ok, output: r.output, cancelled: r.cancelled, finished: r.finished, awaitingInput: r.awaitingInput, state: r.state };
+  }
+}
+
+/**
+ * The single composition root for engine selection. Today every cloud surface runs
+ * {@link CloudToolLoopEngine}; this is where a different engine would be injected per
+ * `resolved.engine` / `runtime_surface` once V1 is retired and "the next engine"
+ * lands — by construction, no dispatch site changes.
+ */
+export function resolveAgentEngine(rc: CloudEngineContext, _resolved?: ResolvedCloudAgent): AgentEngine {
+  return new CloudToolLoopEngine(rc);
 }
 
 /**
@@ -1578,9 +1676,12 @@ export async function runCloudExecution(
     const { systemPrompt, userContent } = await prepareCloudRun(
       env, db, executionId, taskRow, tenantId, projectId, agentLabel, model, artifacts, cloudAgentRef, payload,
     );
-    const { ok, output, cancelled, awaitingInput } = await runCloudToolLoop(
-      env, db, executionId, tenantId, taskRow, cloudAgentRef, agentLabel, model, systemPrompt, userContent, isCancelled, projectId,
-    );
+    // Resolve the engine behind the shared seam (DI), then drive it with just the
+    // per-task input. Surface/runtime wiring lives in the engine, not this call site.
+    const engine = resolveAgentEngine({
+      env, db, executionId, taskRow, tenantId, projectId, agentLabel, cloudAgentRef, isCancelled,
+    });
+    const { ok, output, cancelled, awaitingInput } = await engine.run({ systemPrompt, userContent, model });
 
     // Run was cancelled mid-loop: the row is already CANCELLED (a terminal
     // state). Don't attempt a COMPLETED/FAILED transition (it would throw) —

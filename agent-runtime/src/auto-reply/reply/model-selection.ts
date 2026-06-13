@@ -361,7 +361,7 @@ export async function createModelSelectionState(params: {
   }
 
   if (sessionEntry && sessionStore && sessionKey && sessionEntry.authProfileOverride) {
-    const store = ensureAuthProfileStore(undefined, {
+    const store = await ensureAuthProfileStore(undefined, {
       allowKeychainPrompt: false,
     });
     const profile = store.profiles[sessionEntry.authProfileOverride];

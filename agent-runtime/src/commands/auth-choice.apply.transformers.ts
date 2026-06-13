@@ -242,7 +242,7 @@ export async function applyAuthChoiceTransformers(
 
   const llmChoice = await promptAuthChoiceGrouped({
     prompter: params.prompter,
-    store: ensureAuthProfileStore(params.agentDir, { allowKeychainPrompt: false }),
+    store: await ensureAuthProfileStore(params.agentDir, { allowKeychainPrompt: false }),
     includeSkip: false,
   });
 

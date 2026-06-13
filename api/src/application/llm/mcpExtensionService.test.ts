@@ -1,5 +1,33 @@
 import { describe, it, expect, vi } from 'vitest';
-import { listToolsForTenant, callMcpTool } from './mcpExtensionService';
+import { listToolsForTenant, callMcpTool, assertSafeServerUrl } from './mcpExtensionService';
+
+describe('assertSafeServerUrl (SSRF guard)', () => {
+  it('accepts a public https host', () => {
+    expect(() => assertSafeServerUrl('https://crm.example.com/mcp')).not.toThrow();
+    expect(() => assertSafeServerUrl('https://1.2.3.4/mcp')).not.toThrow();
+  });
+  it('rejects non-https', () => {
+    expect(() => assertSafeServerUrl('http://crm.example.com')).toThrow(/https/);
+  });
+  it('rejects loopback / private / link-local / metadata IPs', () => {
+    for (const url of [
+      'https://127.0.0.1', 'https://10.0.0.5', 'https://192.168.1.10',
+      'https://172.16.0.1', 'https://169.254.169.254', 'https://0.0.0.0',
+      'https://100.64.0.1',
+    ]) {
+      expect(() => assertSafeServerUrl(url), url).toThrow(/public host/);
+    }
+  });
+  it('rejects internal hostnames and IPv6 loopback/ULA/link-local', () => {
+    for (const url of [
+      'https://localhost', 'https://api.internal', 'https://db.local',
+      'https://metadata.google.internal', 'https://[::1]', 'https://[fe80::1]',
+      'https://[fd00::1]',
+    ]) {
+      expect(() => assertSafeServerUrl(url), url).toThrow(/public host/);
+    }
+  });
+});
 
 // Decryption is exercised through the real MfaService helpers, so encrypt a
 // secret with the same keyMaterial the service uses and assert it's forwarded.

@@ -429,12 +429,81 @@ interface UseBrainConversation {
     attach(file: File): Promise<void>;
     removeAttachment(key: string): void;
     setError(msg: string): void;
+    /**
+     * True once the active chat has any recorded execution steps (LLM/tool/error)
+     * — drives the "capture execution" affordance.
+     */
+    hasTrace: boolean;
+    /**
+     * Assemble a paste-able triage report of the active chat's execution — the LLM
+     * steps, the full tool chain (args + results), intermediate assistant messages,
+     * every error, and the visible transcript. `agentLabel` names the persona the
+     * Brain ran as. Mirrors the host/cloud "Copy triage info" report.
+     */
+    buildTriageReport(agentLabel?: string): string;
 }
 declare function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation;
+
+/**
+ * Brain execution triage — capture the Brain's run (LLM steps, tool chain,
+ * intermediate assistant messages, and errors) as a single paste-able report.
+ *
+ * This mirrors the "Copy triage info" report the Observability/Logs view emits
+ * for host & cloud agents, but for the in-browser Brain agent loop. The loop
+ * (useBrainConversation) records a BrainTraceEvent per step; this module turns
+ * the recorded trace + the visible conversation into one report a user can drop
+ * straight into a bug report.
+ */
+
+/** One step of the Brain agent loop, recorded as it runs. */
+interface BrainTraceEvent {
+    /** ISO timestamp of when the step completed. */
+    ts: string;
+    /**
+     * Category, matching the host/cloud triage vocabulary:
+     * - `llm`     — a streamed completion (model, step, tool-call count)
+     * - `tool`    — a client action the model invoked (args + result)
+     * - `message` — assistant text emitted on a turn
+     * - `error`   — a thrown exception or a tool result that failed
+     */
+    category: 'llm' | 'tool' | 'message' | 'error';
+    /** Display label — the tool name, or `llm.complete` / `agent.message`. */
+    label: string;
+    /** Wall-clock duration of the step, when measured. */
+    durationMs?: number;
+    /** Tool arguments / completion request summary. */
+    args?: unknown;
+    /** Tool result / completion summary / error message. */
+    result?: unknown;
+    /** True when this step represents a failure (thrown, or `{ ok: false }`). */
+    isError?: boolean;
+}
+/** Heuristic: did a tool result represent a failure? Mirrors the host/cloud rule. */
+declare function isFailedToolResult(result: unknown): boolean;
+interface BuildBrainTriageOptions {
+    /** ISO capture time (caller supplies it so the module stays clock-free). */
+    capturedAt: string;
+    /** The trace recorded by the agent loop for the active chat. */
+    events: BrainTraceEvent[];
+    /** The visible conversation, included as a transcript section. */
+    messages?: BrainMessage[];
+    /** The chat being captured. */
+    chatId?: number | null;
+    chatTitle?: string;
+    /** The persona / agent the Brain ran as. */
+    agentLabel?: string;
+    /** The current top-level error surfaced to the user, if any. */
+    error?: string;
+}
+/**
+ * Assemble the Brain triage report. Same shape as the host/cloud report:
+ * header → errors-first → full event log → derived log lines → transcript.
+ */
+declare function buildBrainTriageReport(opts: BuildBrainTriageOptions): string;
 
 /** Persist a landing-page prompt for replay after authentication. No-ops on empty input or SSR. */
 declare function savePendingPrompt(text: string): void;
 /** Read and clear the saved prompt. Returns null when none is stored or on SSR. */
 declare function takePendingPrompt(): string | null;
 
-export { type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTransport, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type ImageUrlContentPart, type PreparedImage, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, prepareImageDataUrl, savePendingPrompt, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions };
+export { type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type ImageUrlContentPart, type PreparedImage, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, buildBrainTriageReport, isFailedToolResult, prepareImageDataUrl, savePendingPrompt, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions };

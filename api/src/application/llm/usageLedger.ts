@@ -75,6 +75,8 @@ export interface RecordUsageRow {
   useCase?: string | null;
   tenantApiKeyId?: string | null;
   attribution?: UsageAttribution | null;
+  /** Links this usage row to its `llm_traces.trace_id` for billing→trace pivot [1299]. */
+  traceId?: string | null;
 }
 
 /** Minimal shape of a ProxyResult this helper needs — avoids importing the full type. */
@@ -150,6 +152,7 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       taskId:              row.attribution?.taskId ?? null,
       projectId:           row.attribution?.projectId ?? null,
       costUsdMillicents,
+      traceId:             row.traceId ?? null,
     });
   } catch { /* never let usage logging fail the request */ }
 }

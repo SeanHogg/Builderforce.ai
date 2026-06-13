@@ -258,7 +258,7 @@ export async function agentsAddCommand(
       initialValue: false,
     });
     if (wantsAuth) {
-      const authStore = ensureAuthProfileStore(agentDir, {
+      const authStore = await ensureAuthProfileStore(agentDir, {
         allowKeychainPrompt: false,
       });
       const authChoice = await promptAuthChoiceGrouped({

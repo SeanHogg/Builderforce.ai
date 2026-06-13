@@ -7,6 +7,7 @@ const projectSvc = vi.hoisted(() => ({
   createProject: vi.fn(),
   updateProject: vi.fn(),
   deleteProject: vi.fn(),
+  buildUniqueKey: vi.fn(async (tid: number, name: string) => `${tid}-${name.toUpperCase().replace(/[^A-Z0-9]+/g, '-')}`),
 }));
 const taskSvc = vi.hoisted(() => ({
   listTasks: vi.fn(),
@@ -41,6 +42,14 @@ describe('listBuiltinTools', () => {
     expect(names).toContain('builtin_projects_create');
     expect(names).toContain('builtin_tasks_create');
     expect(names).toContain('builtin_tasks_move');
+    // Additional domains wired server-side (read) [1296].
+    expect(names).toContain('builtin_workflows_list');
+    expect(names).toContain('builtin_specs_list');
+    expect(names).toContain('builtin_prompts_list');
+    expect(names).toContain('builtin_approvals_list');
+    expect(names).toContain('builtin_agents_list');
+    expect(names).toContain('builtin_boards_list');
+    expect(names).toContain('builtin_cron_list');
     for (const t of tools) {
       expect(t.name).toMatch(/^builtin_[a-z_]+$/); // flat, no dots
       expect(t.parameters).toMatchObject({ type: 'object' });

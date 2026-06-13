@@ -1,6 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+/** Read + parse a JSON file (async; returns `undefined` if missing/invalid). All
+ *  callers must `await` it — see the async-loadJsonFile fixups across the credential
+ *  stores, telegram sticker cache, subagent registry, and copilot-token cache. */
 export async function loadJsonFile(pathname: string): Promise<unknown | undefined> {
   try {
     if (!(await fs.stat(pathname).catch(() => null))) {

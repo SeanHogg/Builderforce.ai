@@ -679,7 +679,7 @@ export async function runCronIsolatedAgentTurn(params: {
           ? params.job.name.trim()
           : `cron:${params.job.id}`;
       const initialSynthesizedText = synthesizedText.trim();
-      let activeSubagentRuns = countActiveDescendantRuns(agentSessionKey);
+      let activeSubagentRuns = await countActiveDescendantRuns(agentSessionKey);
       const expectedSubagentFollowup = expectsSubagentFollowup(initialSynthesizedText);
       const hadActiveDescendants = activeSubagentRuns > 0;
       if (activeSubagentRuns > 0 || expectedSubagentFollowup) {
@@ -689,7 +689,7 @@ export async function runCronIsolatedAgentTurn(params: {
           timeoutMs,
           observedActiveDescendants: activeSubagentRuns > 0 || expectedSubagentFollowup,
         });
-        activeSubagentRuns = countActiveDescendantRuns(agentSessionKey);
+        activeSubagentRuns = await countActiveDescendantRuns(agentSessionKey);
         if (
           !finalReply &&
           activeSubagentRuns === 0 &&

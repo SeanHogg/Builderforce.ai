@@ -44,6 +44,13 @@ import { dispatchResultToRemoteAgentNode, type RemoteDispatchOptions } from "./r
 import { setRelayHook } from "./workflow-telemetry.js";
 import { buildSteeringInjection } from "./relay-steering.js";
 import { runClaudeAgentSdkV2, type V2RunnerSinks } from "../agents/claude-agent-sdk-runner.js";
+import { buildCoreToolRegistry } from "@builderforce/agent-tools";
+import {
+  LocalAgentEngine,
+  createGatewayComplete,
+  buildNodeCapabilityProvider,
+} from "../builderforce/shared-tools/index.js";
+import type { AgentEngine, EngineDispatch } from "./agent-engine.js";
 import { buildAssignedCapabilityAppend } from "../agents/assigned-capabilities.js";
 import {
   taskWorkspaceDir,
@@ -138,22 +145,30 @@ export class BuilderforceRelayService implements IRelayService {
   private readonly assignmentContextUrl: string;
   private readonly gatewayWsUrl: string;
 
-  private dispatchTaskFromRelay(payload: {
-    title: string;
-    description?: string;
-    executionId?: number;
-    taskId?: number;
-    sourceType: "task.assign" | "task.broadcast";
-    artifacts?: { skills?: string[]; personas?: string[]; content?: string[] };
-    /** Agent runtime engine. 'builderforce-v2' runs the Claude Agent SDK. */
-    engine?: string;
-    /** Model id from the run payload (forwarded to the engine). */
-    model?: string;
-    /** Repo bound to the task's project (for cloning into the ticket workspace). */
-    repo?: { repoId: string; defaultBranch: string | null };
-    /** Human label of the executing agent (for change traceability). */
-    agentLabel?: string;
-  }): void {
+  /**
+   * Engine registry — the dependency-injection seam. Maps an engine id to its
+   * {@link AgentEngine} implementation; `dispatchTaskFromRelay` resolves by id and
+   * calls `run()` instead of branching. Adding/swapping a runner is a registry
+   * entry; retiring V1 is deleting its entry + `runV1Engine`. Implementations wrap
+   * the relay's methods so each closes over the shared relay context (gateway
+   * client, workspace, sinks) — DI without leaking relay internals to callers.
+   *
+   * Default (unspecified engine) stays V1 until V2 reaches full tool parity (see
+   * the engine-consolidation entry in the Consolidated Gap Register); flipping the
+   * default is then a one-line change here.
+   */
+  private resolveEngine(engineId?: string): AgentEngine {
+    const v1: AgentEngine = { id: "builderforce-v1", run: (d, p) => this.runV1Engine(d, p) };
+    const v2: AgentEngine = { id: "builderforce-v2", run: (d, p) => this.runV2Engine(d, p) };
+    // The pi-FREE local engine: the shared `LocalAgentEngine` driving the shared
+    // tool registry + Node provider + a `fetch`-backed gateway client. No
+    // `@mariozechner/pi-*` in its path — the on-prem foothold for removing pi.
+    const local: AgentEngine = { id: "builderforce-local", run: (d, p) => this.runLocalEngine(d, p) };
+    const registry: Record<string, AgentEngine> = { [v1.id]: v1, [v2.id]: v2, [local.id]: local };
+    return registry[engineId ?? ""] ?? v1;
+  }
+
+  private dispatchTaskFromRelay(payload: EngineDispatch): void {
     const lines = [
       `[Builderforce ${payload.sourceType}] ${payload.title}`,
       payload.description ? "" : undefined,
@@ -174,16 +189,12 @@ export class BuilderforceRelayService implements IRelayService {
       void this.reportExecutionState(payload.executionId, "running");
     }
 
-    // Both engines run out of the shared per-ticket workspace; V2 runs the Claude
-    // Agent SDK loop in-process, V1 runs the pi-coding-agent loop via the local
-    // gateway's chat.send.
-    const runEngine = () => {
-      if (payload.engine === "builderforce-v2") {
-        void this.runV2Engine(payload, message);
-      } else {
-        void this.runV1Engine(payload, message);
-      }
-    };
+    // Resolve the runtime by id from the engine registry (DI seam) and run it —
+    // no hard-coded V1/V2 branch. Adding/swapping a runner is a registry change;
+    // removing V1 is deleting its registration. Both engines run out of the shared
+    // per-ticket workspace.
+    const engine = this.resolveEngine(payload.engine);
+    const runEngine = () => { void engine.run(payload, message); };
 
     // Apply assigned artifacts FIRST, then run — both engines read the synced
     // persona registry / sidecar at run start, so the sync must complete before
@@ -344,14 +355,7 @@ export class BuilderforceRelayService implements IRelayService {
    * reports the terminal execution state.
    */
   private async runV1Engine(
-    payload: {
-      executionId?: number;
-      taskId?: number;
-      title?: string;
-      sourceType: string;
-      repo?: { repoId: string; defaultBranch: string | null };
-      agentLabel?: string;
-    },
+    payload: EngineDispatch,
     prompt: string,
   ): Promise<void> {
     const agentLabel = payload.agentLabel?.trim() || "BuilderForce-V1";
@@ -389,15 +393,7 @@ export class BuilderforceRelayService implements IRelayService {
    * renders both engines identically, then reports the terminal execution state.
    */
   private async runV2Engine(
-    payload: {
-      executionId?: number;
-      taskId?: number;
-      title?: string;
-      model?: string;
-      sourceType: string;
-      repo?: { repoId: string; defaultBranch: string | null };
-      agentLabel?: string;
-    },
+    payload: EngineDispatch,
     prompt: string,
   ): Promise<void> {
     const agentLabel = payload.agentLabel?.trim() || "BuilderForce-V2";
@@ -481,6 +477,79 @@ export class BuilderforceRelayService implements IRelayService {
         payload.executionId,
         result.ok ? "completed" : "failed",
         result.ok ? { result: result.text } : { errorMessage: result.text },
+      );
+    }
+  }
+
+  /**
+   * BuilderForce-Local engine path — the pi-FREE on-prem runner. Drives the shared
+   * {@link LocalAgentEngine} over the shared tool registry + a Node disk/shell
+   * {@link buildNodeCapabilityProvider}, talking to the gateway's OpenAI-compatible
+   * endpoint over `fetch` (no `pi-ai`). Forwards assistant text + tool events onto
+   * the same relay frames V1/V2 emit, then commits/pushes + reports terminal state —
+   * so the portal renders it identically. This is the execution path that runs WITH
+   * NO pi loop; making it the default awaits the full native tool set (gap register).
+   */
+  private async runLocalEngine(payload: EngineDispatch, prompt: string): Promise<void> {
+    const agentLabel = payload.agentLabel?.trim() || "BuilderForce-Local";
+    const cwd = await this.ensureTaskWorkspace(payload.taskId, payload.repo);
+    const appendSystemPrompt = await buildAssignedCapabilityAppend();
+
+    const abortController = new AbortController();
+    if (payload.executionId != null) this.v2Aborts.set(payload.executionId, abortController);
+
+    const provider = buildNodeCapabilityProvider(cwd);
+    const registry = buildCoreToolRegistry();
+    const complete = createGatewayComplete({
+      // The gateway's OpenAI-compatible endpoint lives under /llm (parity with the
+      // V2 path's Anthropic-Messages base); createGatewayComplete appends /v1/chat/completions.
+      baseUrl: `${normalizeBaseUrl(this.opts.baseUrl)}/llm`,
+      apiKey: this.opts.apiKey,
+    });
+    const engine = new LocalAgentEngine({
+      registry,
+      provider,
+      complete,
+      sinks: {
+        onAssistantText: (text) => {
+          this.sendToRelay({ type: "chat.message", role: "assistant", text, session: "main" });
+          void this.persistToolAudit({ executionId: payload.executionId, toolName: "agent.message", category: "message", result: text });
+        },
+        onToolUse: (toolName, toolCallId, args) => {
+          this.sendToRelay({ type: "tool.audit", sessionKey: "main", toolName, toolCallId, category: "local", args, ts: new Date().toISOString() });
+          void this.persistToolAudit({ executionId: payload.executionId, toolName, toolCallId, category: "local", args });
+        },
+      },
+    });
+
+    const systemPrompt =
+      `You are ${agentLabel}, a coding agent working inside the ticket's cloned git repository (already on its branch). `
+      + `Use the tools to explore, read, edit, and create files, then call finish with a summary. Do NOT run git — BuilderForce commits your changes to the ticket branch after the run.`
+      + (appendSystemPrompt ? `\n\n${appendSystemPrompt}` : "");
+
+    let result: { ok: boolean; output: string };
+    try {
+      result = await engine.run({ systemPrompt, userContent: prompt, model: payload.model, signal: abortController.signal });
+    } catch (err) {
+      result = { ok: false, output: `Local engine error: ${String(err)}` };
+    } finally {
+      if (payload.executionId != null) this.v2Aborts.delete(payload.executionId);
+    }
+
+    if (abortController.signal.aborted) {
+      await this.emitTaskChanges(cwd, agentLabel, payload.executionId, payload.taskId);
+      return;
+    }
+
+    await this.emitTaskChanges(cwd, agentLabel, payload.executionId, payload.taskId);
+    if (payload.taskId != null && payload.repo?.repoId) {
+      await this.commitAndPushTicketBranch(payload.taskId, payload.repo, payload.title ?? `Task ${payload.taskId}`, agentLabel);
+    }
+    if (payload.executionId != null) {
+      await this.reportExecutionState(
+        payload.executionId,
+        result.ok ? "completed" : "failed",
+        result.ok ? { result: result.output } : { errorMessage: result.output },
       );
     }
   }

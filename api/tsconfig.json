@@ -7,10 +7,13 @@
     "noUncheckedIndexedAccess": true,
     "lib": ["ES2022"],
     "types": ["@cloudflare/workers-types"],
-    "rootDir": "./src",
     "outDir": "./dist",
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "@builderforce/agent-tools": ["../packages/agent-tools/src/index.ts"],
+      "@builderforce/agent-tools/*": ["../packages/agent-tools/src/*"]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]

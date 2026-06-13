@@ -1,12 +1,19 @@
 /**
- * Tool schemas + step budgets for the cloud agent loops — the durable/Worker
- * surface (`CLOUD_AGENT_TOOLS`, provider-API-backed, no shell) and the long-lived
- * Container surface (`CONTAINER_AGENT_TOOLS`, real shell via `run_command`).
+ * The cloud agent toolset, now just the cloud-SURFACE wiring over the shared,
+ * runtime-agnostic registry (`@builderforce/agent-tools`). The tool DEFINITIONS live
+ * in the shared package (`core-tools`) so the SAME definitions run on cloud Worker,
+ * cloud Container, and on-prem Node — "any cloud tool is usable on-prem" is now
+ * literally the same object, not a re-implementation.
  *
- * Extracted from the runtime routes so the schema lives in ONE place that both the
- * in-Worker loop and the container-op `llm` handler import — no duplication, and
- * the routes file stops being a god module that also owns the tool catalogue.
+ * This module contributes only what is cloud-specific:
+ *   • the two cloud surfaces' capability SETS (which derive their tool lists), and
+ *   • the derived schema arrays their consumers expect (the in-Worker loop sends
+ *     `schemasFor(provider)`; the container `llm` op advertises `CONTAINER_AGENT_TOOLS`,
+ *     then runs the loop in its own image), plus
+ *   • the step budgets and the finish-honesty matcher (loop policy).
  */
+
+import { buildCoreToolRegistry, type Capability } from '@builderforce/agent-tools';
 
 /** Shape of one tool call in an OpenAI-compatible completion response. */
 export interface RawToolCall { id?: string; type?: string; function?: { name?: string; arguments?: string } }
@@ -23,122 +30,39 @@ export function assertsUnrunVerification(summary: string): boolean {
   return check.test(s) && pass.test(s);
 }
 
+/** The one registry the cloud engine drives (schemas + dispatch). Seeded from the
+ *  shared core tools — adding a tool there makes it available to every surface that
+ *  backs its capability, with no array edit here. */
+export const cloudToolRegistry = buildCoreToolRegistry();
+
 /**
- * Tools the cloud (Worker) agent loop can actually execute. The Worker has no
- * filesystem/shell, so the toolset is provider-API-backed: `write_file` lands a
- * file on the ticket branch as a pending change; `finish` ends the run. Both V1
- * and V2 cloud runs use this same loop so they genuinely *execute tools* (not a
- * single completion) and every call is recorded to the Observability timeline.
+ * The durable/Worker surface: provider-API-backed, no shell. It can list/read/search
+ * the repo over the git API, write + delete files as pending changes, statically
+ * validate config (no shell), and pause for a human. → list_files, search_code,
+ * read_file, write_file, delete_file, run_checks, ask_human, finish.
  */
-export const CLOUD_AGENT_TOOLS = [
-  {
-    type: 'function',
-    function: {
-      name: 'list_files',
-      description: 'List repo files (recursively) on the ticket branch so you can discover the existing codebase before editing. Optionally pass a subdirectory to scope the listing.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'Optional repo-relative subdirectory to scope to, e.g. "src/components".' },
-        },
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'search_code',
-      description: 'Search the ENTIRE repo for a string/symbol in one call (indexed code search) — use this FIRST to find where something is referenced instead of reading files one by one. Returns matching file paths with line fragments. 0 results means the term does not appear in the indexed codebase (so "remove all references to X" with 0 results means there is nothing to remove — say so, do not invent a change). Recently-pushed code may lag the index; confirm a specific file with read_file. Then read_file the matches you intend to edit.',
-      parameters: {
-        type: 'object',
-        properties: {
-          query: { type: 'string', description: 'Exact text or symbol to find, e.g. a model id, function name, import path, or config key.' },
-        },
-        required: ['query'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'read_file',
-      description: 'Read the FULL current contents of a repo file on the ticket branch. Always read a file before editing it so you preserve existing code and only change what is needed.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'Repo-relative path, e.g. "src/feature.ts".' },
-        },
-        required: ['path'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'write_file',
-      description: 'Create or update a file on the ticket branch as a reviewable pending change (a PR is opened/updated for the run). Use once per deliverable file. Provide the FULL file content.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'Repo-relative path, e.g. "src/feature.ts".' },
-          content: { type: 'string', description: 'Complete file content (no placeholders).' },
-          summary: { type: 'string', description: 'One-line description of the change.' },
-        },
-        required: ['path', 'content'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'delete_file',
-      description: 'Remove a file from the ticket branch so it does NOT ship in the pull request. Use this to clean up dead code: a stub/placeholder, an unreferenced file, or a file a PRIOR pass on this branch created that should not be part of the final change. The "Files already on this branch" list in your context shows what a prior pass left — reconcile against it. Verify the file is genuinely unused (search_code for its exports) before deleting. Deleting a file not on the branch is a no-op (reported back), not an error.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'Repo-relative path to remove, e.g. "src/utils/email.ts".' },
-          reason: { type: 'string', description: 'One-line why this file should not ship (e.g. "stub superseded by existing email infra").' },
-        },
-        required: ['path'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'run_checks',
-      description: 'Statically validate the files you have written: it parses your committed JSON and YAML config files in-place and reports any syntax errors to fix BEFORE finishing. IMPORTANT: this serverless executor has NO shell, so it does NOT run the build, project-wide type-check, lint, or tests — those run in CI on the pull request your changes open (the source of truth). Call this after writing config files. Never claim the build/type-check/lint/tests passed — you cannot run those here; only the JSON/YAML syntax check is real.',
-      parameters: { type: 'object', properties: {} },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'ask_human',
-      description: 'Pause and ask a human for input when you are genuinely BLOCKED — a requirement is ambiguous, you cannot find an expected file/system after searching, a decision needs product/business judgement, or you would otherwise have to guess. The run pauses (no further token spend) and the question goes to the team\'s human-requests queue with a notification; when someone answers, you resume automatically with their answer and continue. Prefer this over guessing or finishing with a "could not proceed" summary — a blocked task that asks gets unblocked; one that gives up silently does not. Do NOT use it for things you can determine yourself with list_files/search_code/read_file.',
-      parameters: {
-        type: 'object',
-        properties: {
-          question: { type: 'string', description: 'The specific question for the human. Be concrete and self-contained — they may not have the full task context.' },
-          context: { type: 'string', description: 'Optional: what you have tried / why you are blocked, so the human can answer well.' },
-        },
-        required: ['question'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'finish',
-      description: 'Call ONLY when the task is fully complete — every deliverable file written with real, working content (no stubs/placeholders) and every task/PRD requirement implemented. Your changes open a pull request for human review, so a partial scaffold is not "done". Provide a concise summary of what was delivered. Do NOT assert that a build/type-check/lint/test passed — you cannot run those here (CI on the PR verifies). If you are blocked rather than done, call ask_human instead of finishing with a "could not proceed" summary.',
-      parameters: {
-        type: 'object',
-        properties: { summary: { type: 'string', description: 'What was delivered.' } },
-        required: ['summary'],
-      },
-    },
-  },
-] as const;
+export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
+  'repo.read', 'repo.search', 'repo.write', 'repo.edit', 'repo.delete', 'static-check', 'human',
+]);
+
+/**
+ * The long-lived Container surface: a real Linux process with a shell + a local
+ * clone. It greps via the shell (NOT the indexed searcher), commits via the
+ * container-op, and runs real build/test — so it advertises repo.read + repo.write +
+ * shell, and NOT repo.search / static-check (shell-free) / human (not yet wired in
+ * the image). → list_files, read_file, write_file, run_command, finish. The container
+ * runs its OWN loop in its image; this set is only the schema it advertises to the
+ * gateway, so it MUST match what that image implements.
+ */
+export const CONTAINER_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
+  'repo.read', 'repo.write', 'shell',
+]);
+
+/** Durable/Worker schema array — derived, not hand-maintained. */
+export const CLOUD_AGENT_TOOLS = cloudToolRegistry.schemasForCapabilities(CLOUD_SURFACE_CAPS);
+
+/** Container schema array — derived. Kept stable for the container image's loop. */
+export const CONTAINER_AGENT_TOOLS = cloudToolRegistry.schemasForCapabilities(CONTAINER_SURFACE_CAPS);
 
 // Read→edit→write workflows on a multi-file task need many turns: explore the
 // repo, read several files, then write each change — 10 was too few (a real run
@@ -160,44 +84,3 @@ export const MAX_PLACEHOLDER_FINISH_BLOCKS = 2;
 // surface. The container heartbeats `executions.updated_at` on every LLM step so a
 // healthy long run never trips the orphan reaper.
 export const CONTAINER_MAX_STEPS = 40;
-
-/** Pick a CLOUD_AGENT_TOOLS entry by name — name-based (not index) so adding a
- *  tool to the durable set can't silently re-map the container's toolset. */
-const cloudTool = (name: string) => {
-  const t = CLOUD_AGENT_TOOLS.find((x) => x.function.name === name);
-  if (!t) throw new Error(`cloud tool '${name}' not found`);
-  return t;
-};
-
-/**
- * Toolset for the long-lived Container executor (the `container` runtime surface).
- * Same file tools as the durable loop, but `run_checks` (a no-op confessing "no
- * shell") is replaced by a REAL `run_command` — the Container's whole reason to
- * exist. list_files/read_file run against the container's local clone; write_file
- * mirrors to the ticket branch via the container-op endpoint; run_command runs in
- * the container's shell. The container drives this loop in its own process and
- * sends each assistant turn to the `llm` op (which calls the gateway with THIS
- * toolset), so the schema lives in one place.
- */
-export const CONTAINER_AGENT_TOOLS = [
-  cloudTool('list_files'),
-  // No search_code here: the container has a real shell, so it greps via
-  // run_command natively (and only the Worker handler implements search_code).
-  cloudTool('read_file'),
-  cloudTool('write_file'),
-  {
-    type: 'function',
-    function: {
-      name: 'run_command',
-      description: 'Run a shell command in the checked-out repository (real shell). Use it to install dependencies and run the build, type-check, lint, and tests. Returns combined stdout/stderr and the exit code. Verify your changes this way BEFORE calling finish.',
-      parameters: {
-        type: 'object',
-        properties: {
-          command: { type: 'string', description: 'The shell command to run, e.g. "npm install" or "npm test".' },
-        },
-        required: ['command'],
-      },
-    },
-  },
-  cloudTool('finish'),
-] as const;

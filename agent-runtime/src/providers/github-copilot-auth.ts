@@ -125,7 +125,7 @@ export async function githubCopilotLoginCommand(
   intro(stylePromptTitle("GitHub Copilot login"));
 
   const profileId = opts.profileId?.trim() || "github-copilot:github";
-  const store = ensureAuthProfileStore(undefined, {
+  const store = await ensureAuthProfileStore(undefined, {
     allowKeychainPrompt: false,
   });
 
