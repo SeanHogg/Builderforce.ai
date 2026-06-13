@@ -36,8 +36,9 @@ import {
   replaceSubagentRunAfterSteer,
   type SubagentRunRecord,
 } from "../subagent-registry.js";
-import type { AnyAgentTool } from "./common.js";
-import { jsonResult, readNumberParam, readStringParam } from "./common.js";
+import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
+import type { AgentToolResult, AnyAgentTool } from "./common.js";
+import { jsonResult, nativeToolData, readNumberParam, readStringParam } from "./common.js";
 import { resolveInternalSessionKey, resolveMainSessionAlias } from "./sessions-helpers.js";
 
 const SUBAGENT_ACTIONS = ["list", "kill", "steer"] as const;
@@ -337,14 +338,16 @@ function buildListText(params: {
   return lines.join("\n");
 }
 
-export function createSubagentsTool(opts?: { agentSessionKey?: string }): AnyAgentTool {
-  return {
-    label: "Subagents",
-    name: "subagents",
-    description:
-      "List, kill, or steer spawned sub-agents for this requester session. Use this for sub-agent orchestration.",
-    parameters: SubagentsToolSchema,
-    execute: async (_toolCallId, args) => {
+export interface SubagentsDeps {
+  agentSessionKey?: string;
+}
+
+/** Shared implementation — pi wrapper + native ToolDefinition both delegate here (DRY). */
+export async function runSubagents(
+  opts: SubagentsDeps | undefined,
+  args: Record<string, unknown>,
+): Promise<AgentToolResult<unknown>> {
+  {
       const params = args as Record<string, unknown>;
       const action = (readStringParam(params, "action") ?? "list") as SubagentAction;
       const cfg = loadConfig();
@@ -673,6 +676,31 @@ export function createSubagentsTool(opts?: { agentSessionKey?: string }): AnyAge
         status: "error",
         error: "Unsupported action.",
       });
-    },
+  }
+}
+
+export function createSubagentsTool(opts?: SubagentsDeps): AnyAgentTool {
+  return {
+    label: "Subagents",
+    name: "subagents",
+    description:
+      "List, kill, or steer spawned sub-agents for this requester session. Use this for sub-agent orchestration.",
+    parameters: SubagentsToolSchema,
+    execute: async (_toolCallId, args) => runSubagents(opts, args as Record<string, unknown>),
   };
+}
+
+/** Native shared {@link ToolDefinition} (cap `orchestrate`) — reuses the TypeBox schema
+ *  and the shared `runSubagents` body. */
+export function buildSubagentsToolDef(opts?: SubagentsDeps): ToolDefinition {
+  return defineTool({
+    name: "subagents",
+    description:
+      "List, kill, or steer spawned sub-agents for this requester session. Use this for sub-agent orchestration.",
+    parameters: SubagentsToolSchema as unknown as ToolDefinition["schema"]["function"]["parameters"],
+    requires: ["orchestrate"],
+    async execute(args): Promise<ToolResult> {
+      return { data: await nativeToolData(() => runSubagents(opts, args)) };
+    },
+  });
 }

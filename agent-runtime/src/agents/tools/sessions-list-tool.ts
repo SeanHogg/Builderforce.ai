@@ -1,11 +1,12 @@
 import path from "node:path";
+import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
 import { Type } from "@sinclair/typebox";
 import { loadConfig } from "../../config/config.js";
 import { resolveSessionFilePath } from "../../config/sessions.js";
 import { callGateway } from "../../gateway/call.js";
 import { resolveAgentIdFromSessionKey } from "../../routing/session-key.js";
-import type { AnyAgentTool } from "./common.js";
-import { jsonResult, readStringArrayParam } from "./common.js";
+import type { AgentToolResult, AnyAgentTool } from "./common.js";
+import { detailsData, jsonResult, readStringArrayParam } from "./common.js";
 import {
   createSessionVisibilityGuard,
   createAgentToAgentPolicy,
@@ -26,16 +27,17 @@ const SessionsListToolSchema = Type.Object({
   messageLimit: Type.Optional(Type.Number({ minimum: 0 })),
 });
 
-export function createSessionsListTool(opts?: {
+export interface SessionsListDeps {
   agentSessionKey?: string;
   sandboxed?: boolean;
-}): AnyAgentTool {
-  return {
-    label: "Sessions",
-    name: "sessions_list",
-    description: "List sessions with optional filters and last messages.",
-    parameters: SessionsListToolSchema,
-    execute: async (_toolCallId, args) => {
+}
+
+/** Shared implementation — pi wrapper + native ToolDefinition both delegate here (DRY). */
+export async function runSessionsList(
+  opts: SessionsListDeps | undefined,
+  args: Record<string, unknown>,
+): Promise<AgentToolResult<unknown>> {
+  {
       const params = args as Record<string, unknown>;
       const cfg = loadConfig();
       const { mainKey, alias, requesterInternalKey, restrictToSpawned } =
@@ -238,6 +240,29 @@ export function createSessionsListTool(opts?: {
         count: rows.length,
         sessions: rows,
       });
-    },
+  }
+}
+
+export function createSessionsListTool(opts?: SessionsListDeps): AnyAgentTool {
+  return {
+    label: "Sessions",
+    name: "sessions_list",
+    description: "List sessions with optional filters and last messages.",
+    parameters: SessionsListToolSchema,
+    execute: async (_toolCallId, args) => runSessionsList(opts, args as Record<string, unknown>),
   };
+}
+
+/** Native shared {@link ToolDefinition} (cap `orchestrate`) — reuses the TypeBox schema
+ *  and the shared `runSessionsList` body. */
+export function buildSessionsListToolDef(opts?: SessionsListDeps): ToolDefinition {
+  return defineTool({
+    name: "sessions_list",
+    description: "List sessions with optional filters and last messages.",
+    parameters: SessionsListToolSchema as unknown as ToolDefinition["schema"]["function"]["parameters"],
+    requires: ["orchestrate"],
+    async execute(args): Promise<ToolResult> {
+      return { data: detailsData(await runSessionsList(opts, args)) };
+    },
+  });
 }

@@ -955,6 +955,23 @@ export const deploymentEvents = pgTable('deployment_events', {
   createdAt:    timestamp('created_at').notNull().defaultNow(),
 });
 
+// Web Push subscriptions — one row per browser/device that opted in to OS-level
+// notifications (currently: "a new app version deployed"). The deploy hook
+// (POST /api/push/notify-deploy) fans out to every row; dead endpoints (404/410
+// from the push service) are pruned on send. endpoint is unique so a re-subscribe
+// from the same browser upserts rather than duplicating.
+export const pushSubscriptions = pgTable('push_subscriptions', {
+  id:             serial('id').primaryKey(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  userId:         varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  endpoint:       text('endpoint').notNull().unique(),
+  p256dh:         text('p256dh').notNull(), // client public key (base64url)
+  auth:           text('auth').notNull(),   // client auth secret (base64url)
+  userAgent:      varchar('user_agent', { length: 512 }),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  lastNotifiedAt: timestamp('last_notified_at'),
+});
+
 export const agents = pgTable('agents', {
   id:         serial('id').primaryKey(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),

@@ -6,6 +6,7 @@ import { sanitizeToolResultImages } from "../tool-images.js";
 
 // oxlint-disable-next-line typescript/no-explicit-any
 export type AnyAgentTool = AgentTool<any, unknown>;
+export type { AgentToolResult };
 
 export type StringParamOptions = {
   required?: boolean;
@@ -206,6 +207,38 @@ export function jsonResult(payload: unknown): AgentToolResult<unknown> {
     ],
     details: payload,
   };
+}
+
+/**
+ * Extract the JSON payload from a {@link jsonResult}-shaped tool result for the shared
+ * native `ToolDefinition` path (whose `ToolResult.data` is the JSON object the model
+ * reads). Lets a legacy tool's `run*` keep returning an `AgentToolResult` so the pi
+ * wrapper and the native def share ONE body (DRY) — `jsonResult` stores the payload
+ * verbatim on `.details`, so there is no re-serialize/parse round-trip.
+ */
+export function detailsData(result: AgentToolResult<unknown>): Record<string, unknown> {
+  const details = (result as { details?: unknown }).details;
+  if (details && typeof details === "object") {
+    return details as Record<string, unknown>;
+  }
+  // Fall back to the text block when a tool didn't use jsonResult.
+  const text = result.content?.find((b) => b.type === "text");
+  return { text: text && "text" in text ? (text as { text: string }).text : "" };
+}
+
+/**
+ * Throw-safe bridge for the native `ToolDefinition` path: runs a legacy tool body
+ * and returns its JSON payload, converting a thrown error into an `{ error }` object
+ * (the shared engine surfaces tool errors as data, never as a thrown run failure).
+ */
+export async function nativeToolData(
+  run: () => Promise<AgentToolResult<unknown>>,
+): Promise<Record<string, unknown>> {
+  try {
+    return detailsData(await run());
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 export async function imageResult(params: {

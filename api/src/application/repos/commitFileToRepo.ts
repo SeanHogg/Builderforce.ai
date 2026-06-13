@@ -4,8 +4,10 @@
  *
  * Used to land an agent-authored `PRD.md` as a real **pending change** on a
  * dedicated branch even when no local git runtime is available (the cloud path
- * runs in a Cloudflare Worker with no filesystem). GitHub-only; other providers
- * return a typed `unsupported` result so callers degrade gracefully.
+ * runs in a Cloudflare Worker with no filesystem). GitHub + GitLab are
+ * implemented; Bitbucket Cloud's `/src` write API (form-encoded, deletion via a
+ * `files` field) is the remaining provider and returns `unsupported` for now, so
+ * callers degrade gracefully.
  */
 import { buildGitApiBaseUrl } from './gitProxy';
 
@@ -39,7 +41,35 @@ function toBase64Utf8(str: string): string {
   return btoa(binary);
 }
 
+/** GitLab path — Repository Files API (plain-text content; branch auto-forked
+ *  off `base`). POST creates, PUT updates; existence is probed first so the
+ *  `existed` (created-vs-modified) signal is authoritative. */
+async function gitlabCommit(input: CommitFileInput): Promise<CommitFileResult> {
+  let apiBase: string;
+  try { apiBase = buildGitApiBaseUrl('gitlab', input.host); } catch (e) { return { ok: false, code: 'unsupported', reason: e instanceof Error ? e.message : 'unsupported host' }; }
+  const proj = `${apiBase}/projects/${encodeURIComponent(`${input.owner}/${input.repo}`)}`;
+  const headers = { Authorization: `Bearer ${input.token}`, 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': 'BuilderForce-PRD/1.0' };
+  const encPath = encodeURIComponent(input.path);
+
+  // Create the branch off base (ignore "already exists").
+  await fetch(`${proj}/repository/branches?branch=${encodeURIComponent(input.branch)}&ref=${encodeURIComponent(input.base)}`, { method: 'POST', headers }).catch(() => null);
+
+  // Probe existence on the branch → POST (create) vs PUT (update).
+  const probe = await fetch(`${proj}/repository/files/${encPath}?ref=${encodeURIComponent(input.branch)}`, { headers }).catch(() => null);
+  const existed = !!probe && probe.ok;
+
+  const res = await fetch(`${proj}/repository/files/${encPath}`, {
+    method: existed ? 'PUT' : 'POST',
+    headers,
+    body: JSON.stringify({ branch: input.branch, content: input.content, commit_message: input.message }),
+  }).catch(() => null);
+  if (!res) return { ok: false, code: 'provider_error', reason: 'commit request failed (network)' };
+  if (!res.ok) { const t = await res.text().catch(() => ''); return { ok: false, code: 'provider_error', reason: `GitLab ${res.status}: ${t.slice(0, 200)}` }; }
+  return { ok: true, branch: input.branch, commitUrl: null, existed };
+}
+
 export async function commitFileToRepo(input: CommitFileInput): Promise<CommitFileResult> {
+  if (input.provider === 'gitlab') return gitlabCommit(input);
   if (input.provider !== 'github') {
     return { ok: false, code: 'unsupported', reason: `commit not implemented for provider '${input.provider}'` };
   }
@@ -125,7 +155,25 @@ export type DeleteFileResult =
  * typed `not_found` so the loop can tell the model "nothing to delete" instead of
  * surfacing it as an error.
  */
+/** GitLab path — Repository Files API DELETE. A 404 maps to `not_found`. */
+async function gitlabDelete(input: DeleteFileInput): Promise<DeleteFileResult> {
+  let apiBase: string;
+  try { apiBase = buildGitApiBaseUrl('gitlab', input.host); } catch (e) { return { ok: false, code: 'unsupported', reason: e instanceof Error ? e.message : 'unsupported host' }; }
+  const proj = `${apiBase}/projects/${encodeURIComponent(`${input.owner}/${input.repo}`)}`;
+  const headers = { Authorization: `Bearer ${input.token}`, 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': 'BuilderForce-PRD/1.0' };
+  const res = await fetch(`${proj}/repository/files/${encodeURIComponent(input.path)}`, {
+    method: 'DELETE',
+    headers,
+    body: JSON.stringify({ branch: input.branch, commit_message: input.message }),
+  }).catch(() => null);
+  if (!res) return { ok: false, code: 'provider_error', reason: 'delete request failed (network)' };
+  if (res.status === 404) return { ok: false, code: 'not_found', reason: `file not on branch ${input.branch}: ${input.path}` };
+  if (!res.ok) { const t = await res.text().catch(() => ''); return { ok: false, code: 'provider_error', reason: `GitLab ${res.status}: ${t.slice(0, 200)}` }; }
+  return { ok: true, branch: input.branch, commitUrl: null };
+}
+
 export async function deleteFileFromRepo(input: DeleteFileInput): Promise<DeleteFileResult> {
+  if (input.provider === 'gitlab') return gitlabDelete(input);
   if (input.provider !== 'github') {
     return { ok: false, code: 'unsupported', reason: `delete not implemented for provider '${input.provider}'` };
   }

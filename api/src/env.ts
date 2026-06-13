@@ -185,6 +185,28 @@ export interface Env {
   CRON_SECRET?: string;
 
   // ---------------------------------------------------------------------------
+  // Web Push (optional — required for OS-level "new version deployed" notifications)
+  // Generate a keypair once: `node api/scripts/gen-vapid-keys.mjs`
+  // ---------------------------------------------------------------------------
+
+  /** VAPID public key (base64url, uncompressed P-256 point). Also handed to the
+   *  browser via GET /api/push/public-key as the applicationServerKey.
+   *  Set via: wrangler secret put VAPID_PUBLIC_KEY */
+  VAPID_PUBLIC_KEY?: string;
+
+  /** VAPID private key (base64url, 32-byte P-256 scalar `d`). Signs the VAPID JWT.
+   *  Set via: wrangler secret put VAPID_PRIVATE_KEY */
+  VAPID_PRIVATE_KEY?: string;
+
+  /** VAPID `sub` claim — a mailto: or https: contact URI required by push services.
+   *  e.g. "mailto:ops@builderforce.ai". Set via: wrangler secret put VAPID_SUBJECT */
+  VAPID_SUBJECT?: string;
+
+  /** Shared secret guarding POST /api/push/notify-deploy, called by the frontend's
+   *  cf-deploy step after a successful deploy. Set via: wrangler secret put DEPLOY_NOTIFY_SECRET */
+  DEPLOY_NOTIFY_SECRET?: string;
+
+  // ---------------------------------------------------------------------------
   // DevDynamics / Phase 6 (optional — required for integrations feature)
   // ---------------------------------------------------------------------------
 

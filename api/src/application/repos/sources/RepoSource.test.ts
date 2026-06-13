@@ -105,6 +105,35 @@ describe('GitHubRepoSource', () => {
     const src = createRepoSource('github', { owner: 'o', repo: 'r', token: 't' }, fetchFn);
     await expect(src.getTree('main')).rejects.toThrow(/tree fetch failed/);
   });
+
+  it('expands subtrees when the recursive root tree is truncated [1552]', async () => {
+    const fetchFn: FetchLike = vi.fn(async (url: string) => {
+      // 1) recursive root → truncated with only a partial listing
+      if (url.includes('/git/trees/main?recursive=1')) {
+        return jsonResponse({ truncated: true, tree: [{ path: 'README.md', type: 'blob', size: 10 }] });
+      }
+      // 2) per-subdir recursive subtree (by sha) → the files the root call dropped
+      if (url.includes('/git/trees/sha-src?recursive=1')) {
+        return jsonResponse({ truncated: false, tree: [
+          { path: 'a.ts', type: 'blob', size: 5 },
+          { path: 'b.ts', type: 'blob', size: 7 },
+        ] });
+      }
+      // 3) non-recursive root → top-level listing carrying subdir shas
+      if (url.includes('/git/trees/main')) {
+        return jsonResponse({ tree: [
+          { path: 'README.md', type: 'blob', size: 10 },
+          { path: 'src', type: 'tree', sha: 'sha-src' },
+        ] });
+      }
+      return jsonResponse({}, 404);
+    });
+    const src = createRepoSource('github', { owner: 'o', repo: 'r', token: 't' }, fetchFn);
+    const tree = await src.getTree('main');
+    const paths = tree.entries.map((e) => e.path).sort();
+    expect(paths).toEqual(['README.md', 'src', 'src/a.ts', 'src/b.ts']); // subtree files re-rooted + deduped
+    expect(tree.truncated).toBe(false); // fully recovered within the fetch cap
+  });
 });
 
 describe('GitLabRepoSource', () => {

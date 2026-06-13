@@ -4,10 +4,13 @@
  *
  * These back the cloud agent's read tools (`read_file` / `list_files`) so the
  * Worker loop — which has no filesystem — can inspect an EXISTING codebase before
- * editing it, instead of only writing fresh files. GitHub-only; other providers
- * return a typed `unsupported` result. Never throws.
+ * editing it, instead of only writing fresh files. `read_file`/`list_files` work
+ * for GitHub, GitLab, and Bitbucket Cloud (non-GitHub via the shared RepoSource);
+ * `searchRepoCode`/`compare` remain GitHub-only (no cross-provider code-search /
+ * compare equivalent yet). Never throws.
  */
 import { buildGitApiBaseUrl } from './gitProxy';
+import { createRepoSource, makeRepoFetch } from './sources/RepoSource';
 
 export interface RepoReadContext {
   provider: string;
@@ -54,8 +57,20 @@ function fromBase64Utf8(b64: string): string {
 }
 
 export async function readRepoFile(ctx: RepoReadContext, path: string): Promise<ReadFileResult> {
-  if (ctx.provider !== 'github') return { ok: false, reason: `read not implemented for provider '${ctx.provider}'` };
   if (!path) return { ok: false, reason: 'path is required' };
+  // GitLab/Bitbucket route through the shared (tested) RepoSource.getFileContent;
+  // GitHub keeps its richer inline path below (no-regression). [1248]
+  if (ctx.provider !== 'github') {
+    try {
+      const src = createRepoSource(ctx.provider, { owner: ctx.owner, repo: ctx.repo, host: ctx.host, token: ctx.token }, makeRepoFetch());
+      const content = await src.getFileContent(path, ctx.ref);
+      if (content == null) return { ok: false, reason: `file not found on ${ctx.ref}: ${path}` };
+      const truncated = content.length > MAX_FILE_CHARS;
+      return { ok: true, path, content: truncated ? content.slice(0, MAX_FILE_CHARS) : content, truncated };
+    } catch (e) {
+      return { ok: false, reason: e instanceof Error ? e.message : `read not implemented for provider '${ctx.provider}'` };
+    }
+  }
   const apiBase = buildGitApiBaseUrl(ctx.provider, ctx.host);
   const url = `${apiBase}/repos/${ctx.owner}/${ctx.repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ctx.ref)}`;
   const res = await fetch(url, { headers: ghHeaders(ctx.token) }).catch(() => null);
@@ -182,7 +197,24 @@ export async function listBranchDiff(ctx: RepoReadContext, base: string, branch:
 }
 
 export async function listRepoFiles(ctx: RepoReadContext, subPath?: string): Promise<ListFilesResult> {
-  if (ctx.provider !== 'github') return { ok: false, reason: `list not implemented for provider '${ctx.provider}'` };
+  // GitLab/Bitbucket via the shared RepoSource.getTree (which also recovers
+  // truncated GitHub trees); GitHub keeps its inline path below (no-regression). [1248]
+  if (ctx.provider !== 'github') {
+    try {
+      const src = createRepoSource(ctx.provider, { owner: ctx.owner, repo: ctx.repo, host: ctx.host, token: ctx.token }, makeRepoFetch());
+      const { entries } = await src.getTree(ctx.ref);
+      const prefix = subPath?.replace(/^\/+|\/+$/g, '');
+      let paths = entries
+        .filter((e) => e.type === 'file')
+        .map((e) => e.path)
+        .filter((p) => (prefix ? p === prefix || p.startsWith(`${prefix}/`) : true));
+      const truncated = paths.length > MAX_TREE_ENTRIES;
+      if (truncated) paths = paths.slice(0, MAX_TREE_ENTRIES);
+      return { ok: true, paths, truncated };
+    } catch (e) {
+      return { ok: false, reason: e instanceof Error ? e.message : `list not implemented for provider '${ctx.provider}'` };
+    }
+  }
   const apiBase = buildGitApiBaseUrl(ctx.provider, ctx.host);
   // The ref lives in the path here (not a query param); a branch like
   // "builderforce/task-12" must keep its slash, so encode segments individually.
