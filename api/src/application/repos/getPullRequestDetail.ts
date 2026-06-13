@@ -6,8 +6,10 @@
  * This is a read-heavy provider round-trip on a read path, so it is served through
  * the canonical read-through cache ({@link getOrSetCached} — L1 + KV), keyed by the
  * PR id + a version token (its `updatedAt`) so the entry ages out when the row
- * changes and a merge can bust it explicitly. GitHub-only; other providers return
- * `supported: false` so the UI degrades to "open on provider".
+ * changes and a merge can bust it explicitly. GitHub has the richest detail
+ * (mergeable + combined CI + diff stat); GitLab/Bitbucket Cloud return core
+ * state/merged (+ GitLab mergeable/pipeline) so the PR tab + merge gate work for
+ * them too. Unmapped providers (e.g. Bitbucket Server) return `supported: false`.
  */
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { buildGitApiBaseUrl } from './gitProxy';
