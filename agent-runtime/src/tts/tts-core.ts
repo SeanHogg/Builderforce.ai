@@ -1,5 +1,6 @@
 import { rmSync } from "node:fs";
-import { completeSimple, type TextContent } from "@mariozechner/pi-ai";
+import { completeSimple } from "@mariozechner/pi-ai";
+import type { TextContent } from "../builderforce/model/types.js";
 import { EdgeTTS } from "node-edge-tts";
 import { getApiKeyForModel, requireApiKey } from "../agents/model-auth.js";
 import {
