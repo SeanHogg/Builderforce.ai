@@ -33,6 +33,13 @@ export interface ToolSchema {
 export interface ToolContext {
   readonly caps: CapabilityProvider;
   readonly signal?: AbortSignal;
+  /** Absolute path of the working tree, when the surface has one on a real
+   *  filesystem (on-prem Node, the cloud Container). Runtime-agnostic tools never
+   *  read this — they go through {@link CapabilityProvider}. It exists for
+   *  surface-NATIVE tool definitions (e.g. the Node code-intelligence tools that
+   *  shell out to `git`/`rg` against the checked-out repo) that are registered only
+   *  on a filesystem-backed surface and would otherwise have no path to operate on. */
+  readonly workspaceRoot?: string;
   /** Optional structured logging/telemetry sink (a no-op when unset). */
   readonly emit?: (event: { level?: "debug" | "info" | "warn"; message: string; detail?: unknown }) => void;
 }
