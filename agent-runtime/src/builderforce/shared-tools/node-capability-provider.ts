@@ -29,9 +29,12 @@ const execAsync = promisify(exec);
 
 /** Every capability a Node workspace can physically back. No `static-check` (it has
  *  a real shell, so it runs the actual build/tests); `human` is wired separately
- *  (the legacy on-prem loop has its own ask-human), so it is omitted here by default. */
+ *  (the legacy on-prem loop has its own ask-human), so it is omitted here by default.
+ *  `orchestrate` + `memory` are advertised because their tools reach module-level
+ *  Node singletons (the workflow orchestrator, the project session/knowledge store)
+ *  directly — no provider service object is needed, only the capability gate. */
 export const NODE_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
-  "repo.read", "repo.search", "repo.write", "repo.edit", "repo.delete", "shell", "process", "web",
+  "repo.read", "repo.search", "repo.write", "repo.edit", "repo.delete", "shell", "process", "web", "orchestrate", "memory",
 ]);
 
 const MAX_WEB_BYTES = 256 * 1024;
