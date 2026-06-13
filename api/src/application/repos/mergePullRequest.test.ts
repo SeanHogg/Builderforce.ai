@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { mergePullRequest, normalizeMergeMethod } from './mergePullRequest';
+import { mergePullRequest, normalizeMergeMethod, buildMergeRequest } from './mergePullRequest';
 import { cloudAutoMergeEnabled, cloudAutoMergeRequiresGreen } from './mergeBranchToBase';
 
 afterEach(() => vi.unstubAllGlobals());
