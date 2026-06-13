@@ -245,6 +245,7 @@ function toLane(l: LaneRow): LaneLite {
     actionTarget: l.actionTarget,
     successPolicy: l.successPolicy,
     successThreshold: l.successThreshold,
+    failurePolicy: l.failurePolicy,
   };
 }
 

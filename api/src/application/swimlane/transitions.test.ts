@@ -4,9 +4,43 @@ import {
   canTransitionTicket,
   mapWorkflowStatusToTicketEvent,
   resolveStageAction,
+  shouldSkipFailedStage,
+  countLaneFailures,
   type TicketLifecycle,
   type WorkflowStatus,
 } from './transitions';
+
+describe('shouldSkipFailedStage [1316]', () => {
+  it("only 'skip' on a non-terminal lane advances a failed stage", () => {
+    expect(shouldSkipFailedStage('skip', false)).toBe(true);
+    expect(shouldSkipFailedStage('skip', true)).toBe(false);  // terminal lane → park
+    expect(shouldSkipFailedStage('needs_attention', false)).toBe(false);
+    expect(shouldSkipFailedStage('retry', false)).toBe(false); // retry is handled separately
+    expect(shouldSkipFailedStage(null, false)).toBe(false);
+    expect(shouldSkipFailedStage(undefined, false)).toBe(false);
+  });
+});
+
+describe('countLaneFailures [1316]', () => {
+  const history = JSON.stringify([
+    { swimlaneId: 'l0', status: 'failed' },
+    { swimlaneId: 'l0', status: 'retry' },
+    { swimlaneId: 'l0', status: 'failed' },
+    { swimlaneId: 'l1', status: 'failed' },
+    { swimlaneId: 'l0', status: 'completed' },
+  ]);
+  it('counts only the failed entries for the given lane', () => {
+    expect(countLaneFailures(history, 'l0')).toBe(2);
+    expect(countLaneFailures(history, 'l1')).toBe(1);
+    expect(countLaneFailures(history, 'lX')).toBe(0);
+  });
+  it('returns 0 for empty/null/malformed history', () => {
+    expect(countLaneFailures(null, 'l0')).toBe(0);
+    expect(countLaneFailures('', 'l0')).toBe(0);
+    expect(countLaneFailures('not json', 'l0')).toBe(0);
+    expect(countLaneFailures(history, null)).toBe(0);
+  });
+});
 
 const ALL_STATES: TicketLifecycle[] = [
   'queued',

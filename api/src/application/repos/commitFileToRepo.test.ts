@@ -59,11 +59,28 @@ describe('deleteFileFromRepo — GitLab', () => {
   });
 });
 
-describe('commitFileToRepo — Bitbucket still unsupported (write API deferred)', () => {
-  it('returns unsupported without calling fetch', async () => {
+describe('commitFileToRepo — Bitbucket Cloud (/src form-encoded)', () => {
+  it('resolves base hash, creates the branch, commits via form-encoded /src', async () => {
+    const calls: Array<{ url: string; method: string; ct?: string }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, method: init?.method ?? 'GET', ct: (init?.headers as Record<string, string>)?.['Content-Type'] });
+      if (url.includes('/refs/branches/main')) return res({ target: { hash: 'basehash' } });
+      if (url.endsWith('/refs/branches')) return res({ name: 'feature' }, 201);
+      if (url.includes('/src/') && (init?.method ?? 'GET') === 'GET') return res({ path: 'src/x.ts' }, 404); // not existing
+      if (url.endsWith('/src')) return res({}, 201);
+      return res({}, 404);
+    }));
+    const r = await commitFileToRepo({ ...commitBase, provider: 'bitbucket' });
+    expect(r.ok).toBe(true);
+    expect(r.ok && r.existed).toBe(false);
+    const srcPost = calls.find((c) => c.method === 'POST' && c.url.endsWith('/src'));
+    expect(srcPost?.ct).toBe('application/x-www-form-urlencoded');
+  });
+
+  it('rejects an unknown provider without calling fetch', async () => {
     const spy = vi.fn();
     vi.stubGlobal('fetch', spy);
-    const r = await commitFileToRepo({ ...commitBase, provider: 'bitbucket' });
+    const r = await commitFileToRepo({ ...commitBase, provider: 'gitea' });
     expect(r.ok).toBe(false);
     expect(spy).not.toHaveBeenCalled();
   });

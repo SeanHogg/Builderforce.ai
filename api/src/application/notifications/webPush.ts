@@ -35,7 +35,7 @@ export interface VapidKeys {
 function bytesToB64url(input: ArrayBuffer | Uint8Array): string {
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
   let bin = '';
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
@@ -104,12 +104,22 @@ async function encryptPayload(payload: Uint8Array, p256dhB64: string, authB64: s
   const authSecret = b64urlToBytes(authB64);     // 16 bytes
 
   // Per-message ephemeral server keypair.
-  const serverKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
-  const serverPublic = new Uint8Array(await crypto.subtle.exportKey('raw', serverKeys.publicKey)); // 65 bytes
+  const serverKeys = (await crypto.subtle.generateKey(
+    { name: 'ECDH', namedCurve: 'P-256' } as SubtleCryptoGenerateKeyAlgorithm, true, ['deriveBits'],
+  )) as CryptoKeyPair;
+  const serverPublic = new Uint8Array(
+    (await crypto.subtle.exportKey('raw', serverKeys.publicKey)) as ArrayBuffer,
+  ); // 65 bytes
 
   const clientKey = await crypto.subtle.importKey('raw', clientPublic, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  // The Workers runtime uses the standard `public` field; @cloudflare/workers-types
+  // mistypes it as `$public`, so cast the params to satisfy the compiler.
   const ecdhSecret = new Uint8Array(
-    await crypto.subtle.deriveBits({ name: 'ECDH', public: clientKey }, serverKeys.privateKey, 256),
+    await crypto.subtle.deriveBits(
+      { name: 'ECDH', public: clientKey } as unknown as SubtleCryptoDeriveKeyAlgorithm,
+      serverKeys.privateKey,
+      256,
+    ),
   );
 
   // IKM = HKDF(salt=authSecret, ikm=ecdh, info="WebPush: info\0" || client || server)

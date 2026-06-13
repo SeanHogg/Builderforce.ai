@@ -29,6 +29,10 @@ export interface LaneLite {
   actionTarget: string | null;     // target lane key (move_ticket) | workflow id (run_workflow)
   successPolicy: string;           // 'all' | 'any' | 'n_of_m'
   successThreshold: number | null; // required when successPolicy='n_of_m'
+  /** What a FAILED/unmet-quorum stage does (migration 0084): 'needs_attention'
+   *  (default — park for a human), 'skip' (tolerate + advance past the lane), or
+   *  'retry' (re-run — currently falls back to needs_attention, see Gap Register). */
+  failurePolicy: string;
 }
 
 export interface AssignmentLite {

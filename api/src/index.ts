@@ -74,6 +74,7 @@ import { createWorkflowDefinitionRoutes } from './presentation/routes/workflowDe
 import { createWorkflowTriggerRoutes } from './presentation/routes/workflowTriggerRoutes';
 import { createApprovalRoutes }     from './presentation/routes/approvalRoutes';
 import { createApprovalRuleRoutes } from './presentation/routes/approvalRuleRoutes';
+import { createPushSubscriptionRoutes } from './presentation/routes/pushSubscriptionRoutes';
 import { createTelemetryRoutes }    from './presentation/routes/telemetryRoutes';
 import { createQaRoutes }           from './presentation/routes/qaRoutes';
 import { createRepoAnalysisRoutes } from './presentation/routes/repoAnalysisRoutes';
@@ -276,6 +277,10 @@ function buildApp(env: Env): Hono<HonoEnv> {
   // Public workflow trigger entrypoints (webhook) — addressed by per-trigger
   // token, optional HMAC; no JWT. Mounted with the other public webhook routes.
   app.route('/api/workflow-triggers', createWorkflowTriggerRoutes(db));
+
+  // Web Push: /public-key + /notify-deploy are public/secret-guarded; /subscribe
+  // applies authMiddleware per-route inside the router.
+  app.route('/api/push', createPushSubscriptionRoutes(db));
 
   // Public endpoints (no JWT required)
   app.route('/api/auth',    createAuthRoutes(authService, db));

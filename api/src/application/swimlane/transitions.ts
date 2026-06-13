@@ -64,8 +64,9 @@ export type TicketEvent = {
  *
  * INVARIANT: workflow 'completed' yields a success event whose `next` is
  * 'stage_completed' (the caller then decides advance vs. gate vs. done);
- * workflow 'failed' ALWAYS yields 'needs_attention' with canAutoAdvance=false.
- * There is no path where a 'failed' workflow advances the ticket.
+ * workflow 'failed' yields 'needs_attention' with canAutoAdvance=false — UNLESS
+ * the lane's `failure_policy='skip'` (see {@link shouldSkipFailedStage}), the one
+ * path where a failed stage advances instead of parking for a human.
  */
 export function mapWorkflowStatusToTicketEvent(workflowStatus: WorkflowStatus): TicketEvent {
   switch (workflowStatus) {
@@ -81,6 +82,39 @@ export function mapWorkflowStatusToTicketEvent(workflowStatus: WorkflowStatus): 
     case 'pending':
     default:
       return { next: 'stage_running', reason: 'pending', canAutoAdvance: false };
+  }
+}
+
+/**
+ * Whether a FAILED stage should be SKIPPED (advance past the lane) instead of
+ * parked at `needs_attention`, per the lane's `failure_policy`. Only `'skip'` on
+ * a NON-terminal lane advances; `'needs_attention'` (default) and `'retry'`
+ * (auto-retry not yet implemented — needs a per-run attempt counter, see Gap
+ * Register) both park for a human. Pure — unit-tested. [1316]
+ */
+export function shouldSkipFailedStage(failurePolicy: string | null | undefined, isTerminal: boolean): boolean {
+  return failurePolicy === 'skip' && !isTerminal;
+}
+
+/** Default cap on automatic `failure_policy='retry'` re-runs before a stage
+ *  parks at needs_attention. */
+export const MAX_AUTO_RETRIES = 2;
+
+/**
+ * Count how many times the given lane has already FAILED, from the run's
+ * structured `stage_history` JSON (`{swimlaneId, status}[]`). Used to cap
+ * auto-retry without any new state — the history is already persisted. Pure +
+ * unit-tested; tolerates malformed/empty history (returns 0). [1316]
+ */
+export function countLaneFailures(stageHistory: string | null | undefined, swimlaneId: string | null): number {
+  if (!stageHistory || !swimlaneId) return 0;
+  try {
+    const entries = JSON.parse(stageHistory) as Array<{ swimlaneId?: string | null; status?: string }>;
+    return Array.isArray(entries)
+      ? entries.filter((e) => e.swimlaneId === swimlaneId && e.status === 'failed').length
+      : 0;
+  } catch {
+    return 0;
   }
 }
 

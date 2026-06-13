@@ -16,8 +16,11 @@
  */
 import {
   canTransitionTicket,
+  countLaneFailures,
   mapWorkflowStatusToTicketEvent,
+  MAX_AUTO_RETRIES,
   resolveStageAction,
+  shouldSkipFailedStage,
   type TicketLifecycle,
   type WorkflowStatus,
 } from './transitions';
@@ -205,6 +208,42 @@ export class SwimlaneCoordinator {
     const event = mapWorkflowStatusToTicketEvent(workflowStatus);
 
     if (!event.canAutoAdvance) {
+      // A failed stage normally parks at needs_attention — UNLESS the lane's
+      // failure_policy is 'skip', which tolerates the failure and advances past
+      // the lane (reusing the success-advance path). [1316]
+      if (workflowStatus === 'failed') {
+        const failedLane = await this.loadLane(run.currentSwimlaneId, run.tenantId);
+        if (failedLane && shouldSkipFailedStage(failedLane.failurePolicy, failedLane.isTerminal)) {
+          const destLane = await this.nextLane(run.boardId, run.tenantId, failedLane.position);
+          return this.applyLifecycle(run, {
+            next: destLane ? 'stage_running' : 'done',
+            currentSwimlaneId: destLane?.id ?? run.currentSwimlaneId,
+            reason: 'autonomous',
+            workflowStatus,
+            historyStatus: workflowStatus,
+            toSwimlaneId: destLane?.id ?? run.currentSwimlaneId,
+            intermediate: destLane ? ['stage_completed', 'advancing'] : 'stage_completed',
+            error: 'stage failed — skipped per lane failure_policy',
+          });
+        }
+        // failure_policy='retry': re-run the SAME lane up to MAX_AUTO_RETRIES
+        // times before parking. The cap is derived from the persisted, structured
+        // stage_history (count of prior 'failed' entries for this lane) — no new
+        // state/column. Record THIS failure (→needs_attention), then re-dispatch. [1316]
+        if (failedLane?.failurePolicy === 'retry'
+            && countLaneFailures(run.stageHistory, run.currentSwimlaneId) < MAX_AUTO_RETRIES) {
+          const parked = await this.applyLifecycle(run, {
+            next: 'needs_attention',
+            currentSwimlaneId: run.currentSwimlaneId,
+            reason: 'failed',
+            workflowStatus,
+            historyStatus: 'failed',
+            toSwimlaneId: run.currentSwimlaneId,
+            error: 'stage failed — auto-retrying',
+          });
+          return this.retryStage(parked.id);
+        }
+      }
       return this.applyLifecycle(run, {
         next: event.next,
         currentSwimlaneId: run.currentSwimlaneId,
