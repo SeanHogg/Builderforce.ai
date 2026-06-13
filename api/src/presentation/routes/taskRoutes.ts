@@ -134,6 +134,38 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
     return c.json(task.toPlain());
   });
 
+  // GET /api/tasks/:id/tree — an Epic and its direct child tasks (parent/child
+  // tree for the board). Children carry their own assignees (the Epic is just the
+  // planning container), so the board can render the breakdown under the Epic.
+  router.get('/:id/tree', async (c) => {
+    const id = Number(c.req.param('id'));
+    const { epic, children } = await taskService.getEpicTree(id);
+    return c.json({ epic: epic.toPlain(), children: children.map(t => t.toPlain()) });
+  });
+
+  // POST /api/tasks/:id/decompose — explicitly turn a task into an Epic and fan
+  // its children out (the "Break into subtasks" board action). The on-assign hook
+  // does this automatically when an agent is assigned; this is the manual trigger.
+  router.post('/:id/decompose', async (c) => {
+    const id = Number(c.req.param('id'));
+    const body = await c.req.json<{
+      children: Array<{
+        title: string;
+        description?: string | null;
+        priority?: TaskPriority;
+        assignedUserId?: string | null;
+        assignedAgentHostId?: number | null;
+        assignedAgentRef?: string | null;
+      }>;
+    }>();
+    if (!Array.isArray(body.children) || body.children.length === 0) {
+      return c.json({ error: 'children is required and must be non-empty' }, 400);
+    }
+    const epic = await taskService.decomposeEpic(id, body.children);
+    const children = (await taskService.getEpicTree(id)).children;
+    return c.json({ epic: epic.toPlain(), children: children.map(t => t.toPlain()) }, 201);
+  });
+
   // POST /api/tasks
   router.post('/', async (c) => {
     const body = await c.req.json<{

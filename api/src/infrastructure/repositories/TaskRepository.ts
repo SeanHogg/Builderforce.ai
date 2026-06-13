@@ -2,7 +2,7 @@ import { eq, count, inArray, and, sql, asc } from 'drizzle-orm';
 import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { Task } from '../../domain/task/Task';
 import {
-  TaskId, ProjectId, TaskStatus, TaskPriority, AgentType,
+  TaskId, ProjectId, TaskStatus, TaskPriority, TaskType, AgentType,
   asTaskId, asProjectId, asAgentHostId,
 } from '../../domain/shared/types';
 import { tasks as tasksTable } from '../database/schema';
@@ -37,6 +37,15 @@ export class TaskRepository implements ITaskRepository {
     return row ? toDomain(row) : null;
   }
 
+  async findChildren(parentId: TaskId): Promise<Task[]> {
+    const rows = await this.db
+      .select()
+      .from(tasksTable)
+      .where(eq(tasksTable.parentTaskId, parentId))
+      .orderBy(asc(tasksTable.createdAt));
+    return rows.map(toDomain);
+  }
+
   async countByProject(projectId: ProjectId): Promise<number> {
     const [row] = await this.db
       .select({ value: count() })
@@ -56,6 +65,8 @@ export class TaskRepository implements ITaskRepository {
         description:       plain.description ?? undefined,
         status:            plain.status,
         priority:          plain.priority,
+        taskType:          plain.taskType,
+        parentTaskId:      plain.parentTaskId ?? undefined,
         assignedAgentType: plain.assignedAgentType ?? undefined,
         assignedAgentHostId: plain.assignedAgentHostId ?? undefined,
         assignedAgentRef:  plain.assignedAgentRef ?? undefined,
@@ -87,6 +98,10 @@ export class TaskRepository implements ITaskRepository {
         description:       plain.description ?? undefined,
         status:            plain.status,
         priority:          plain.priority,
+        taskType:          plain.taskType,
+        // Authoritative (real null) so de-nesting a child (clearing its parent)
+        // actually NULLs the column — Drizzle would omit `undefined` from SET.
+        parentTaskId:      plain.parentTaskId ?? null,
         assignedAgentType: plain.assignedAgentType ?? undefined,
         // Assignee columns write real null (not undefined) so reassignment actually
         // CLEARS the other two — a task is owned by exactly one of host/cloud/human.
@@ -174,6 +189,8 @@ function toDomain(row: Row): Task {
     description:       row.description ?? null,
     status:            row.status,
     priority:          row.priority as TaskPriority,
+    taskType:          (row.taskType as TaskType) ?? TaskType.TASK,
+    parentTaskId:      row.parentTaskId != null ? asTaskId(row.parentTaskId) : null,
     assignedAgentType: (row.assignedAgentType as AgentType) ?? null,
     assignedAgentHostId: row.assignedAgentHostId != null ? asAgentHostId(row.assignedAgentHostId) : null,
     assignedAgentRef:  row.assignedAgentRef ?? null,

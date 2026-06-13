@@ -5,6 +5,8 @@ export interface ITaskRepository {
   findAll(projectId?: ProjectId): Promise<Task[]>;
   findByProjectIds(ids: ProjectId[]): Promise<Task[]>;
   findById(id: TaskId): Promise<Task | null>;
+  /** Direct child tasks of an Epic (parent_task_id = parentId), oldest first. */
+  findChildren(parentId: TaskId): Promise<Task[]>;
   countByProject(projectId: ProjectId): Promise<number>;
   save(task: Task): Promise<Task>;
   update(task: Task): Promise<Task>;

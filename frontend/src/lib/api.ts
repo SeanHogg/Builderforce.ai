@@ -504,6 +504,28 @@ export async function deleteAgent(agentId: string): Promise<void> {
 }
 
 /**
+ * Owner-only agent performance + buyer-feedback rollup (gap [1247]). Success rate
+ * / runs / latency are computed per currently-hired tenant from execution
+ * telemetry; ratings are the buyers' feedback. The backend 404s unless the caller
+ * owns the agent, so this is safe to call only from owner surfaces.
+ */
+export interface AgentPerfRollup {
+  totalRuns: number;
+  completedRuns: number;
+  failedRuns: number;
+  successRate: number | null;
+  avgLatencyMs: number | null;
+  hiredTenants: number;
+  ratingCount: number;
+  avgRating: number | null;
+  feedback: { rating: number; comment: string | null; createdAt: string }[];
+}
+
+export async function fetchAgentPerf(agentId: string): Promise<AgentPerfRollup> {
+  return apiRequest<AgentPerfRollup>(`/api/workforce/agents/${agentId}/perf`);
+}
+
+/**
  * Ensure the agent's canonical (project-less) identity row and return its
  * numeric id. Per-agent skills/personas are assigned against this id with
  * artifact_assignments scope='agent', so they follow the agent everywhere.

@@ -1,4 +1,4 @@
-import { TaskId, ProjectId, TaskStatus, TaskPriority, AgentType, AgentHostId } from '../shared/types';
+import { TaskId, ProjectId, TaskStatus, TaskPriority, TaskType, AgentType, AgentHostId } from '../shared/types';
 import { ValidationError } from '../shared/errors';
 
 export interface TaskProps {
@@ -14,6 +14,10 @@ export interface TaskProps {
    */
   status: string;
   priority: TaskPriority;
+  /** Fixed type dimension: a plain `task` or an `epic` that decomposes into children. */
+  taskType: TaskType;
+  /** Parent Epic's id (null for top-level tasks). Set on children of a decomposed Epic. */
+  parentTaskId: TaskId | null;
   assignedAgentType: AgentType | null;
   githubIssueNumber: number | null;
   githubIssueUrl: string | null;
@@ -52,7 +56,7 @@ export class Task {
   static create(
     props: Omit<
       TaskProps,
-      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId'
+      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'taskType' | 'parentTaskId'
     > & {
       projectKey: string;
       projectTaskCount: number;
@@ -60,6 +64,9 @@ export class Task {
       assignedAgentRef?: string | null;
       /** Optional human assignee (users.id) at creation time. */
       assignedUserId?: string | null;
+      /** Type at creation (default `task`). A decomposed child passes the Epic's id as parent. */
+      taskType?: TaskType;
+      parentTaskId?: TaskId | null;
     },
   ): Task {
     if (!props.title.trim()) throw new ValidationError('Task title is required');
@@ -76,6 +83,8 @@ export class Task {
       description: props.description,
       status: props.status ?? TaskStatus.BACKLOG,
       priority: props.priority ?? TaskPriority.MEDIUM,
+      taskType: props.taskType ?? TaskType.TASK,
+      parentTaskId: props.parentTaskId ?? null,
       assignedAgentType: props.assignedAgentType,
       githubIssueNumber: null,
       githubIssueUrl: null,
@@ -110,6 +119,14 @@ export class Task {
   get description(): string | null { return this.props.description; }
   get status(): string { return this.props.status; }
   get priority(): TaskPriority { return this.props.priority; }
+  get taskType(): TaskType { return this.props.taskType; }
+  get parentTaskId(): TaskId | null { return this.props.parentTaskId; }
+  get isEpic(): boolean { return this.props.taskType === TaskType.EPIC; }
+  /** True when an AGENT (self-hosted host or cloud ref) owns this task — the
+   *  on-assign decomposition hook only fires for agent assignees, not humans. */
+  get isAssignedToAgent(): boolean {
+    return this.props.assignedAgentHostId != null || this.props.assignedAgentRef != null;
+  }
   get assignedAgentType(): AgentType | null { return this.props.assignedAgentType; }
   get githubIssueNumber(): number | null { return this.props.githubIssueNumber; }
   get githubIssueUrl(): string | null { return this.props.githubIssueUrl; }
@@ -135,13 +152,31 @@ export class Task {
     updates: Partial<
       Pick<
         TaskProps,
-        'title' | 'description' | 'status' | 'priority' | 'assignedAgentType'
+        'title' | 'description' | 'status' | 'priority' | 'taskType' | 'parentTaskId' | 'assignedAgentType'
         | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'startDate' | 'dueDate'
         | 'persona' | 'archived'
       >
     >,
   ): Task {
     return new Task({ ...this.props, ...updates, updatedAt: new Date() });
+  }
+
+  /**
+   * Reclassify this task as an Epic — the first step of agent-driven decomposition.
+   * A BA-style agent assigned a vague "new item" may determine it is really an Epic
+   * (too large to execute directly) and flip the type before fanning it out into
+   * child tasks. An Epic is a planning container, not an executable unit, so it also
+   * sheds any agent assignee (the children carry the real execution assignments).
+   */
+  reclassifyAsEpic(): Task {
+    if (this.props.taskType === TaskType.EPIC) return this;
+    return new Task({
+      ...this.props,
+      taskType: TaskType.EPIC,
+      assignedAgentHostId: null,
+      assignedAgentRef: null,
+      updatedAt: new Date(),
+    });
   }
 
   /**

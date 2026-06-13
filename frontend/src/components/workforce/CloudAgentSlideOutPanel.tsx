@@ -7,10 +7,12 @@ import {
   updateAgent,
   deleteAgent,
   ensureWorkforceAgentBridge,
+  fetchAgentPerf,
   type AgentPricingModel,
+  type AgentPerfRollup,
 } from '@/lib/api';
 import type { PublishedAgent } from '@/lib/types';
-import { canDeleteAgent } from '@/lib/agentPermissions';
+import { canDeleteAgent, isAgentOwner } from '@/lib/agentPermissions';
 import { CapabilitiesContent } from '@/components/CapabilitiesContent';
 import {
   CloudAgentFormFields,
@@ -28,13 +30,15 @@ import {
  * follow it into any context — IDE, Workflow, on-prem or cloud.
  */
 
-export type CloudAgentPanelTab = 'details' | 'capabilities' | 'pricing';
+export type CloudAgentPanelTab = 'details' | 'capabilities' | 'pricing' | 'performance';
 
-const TABS: { id: CloudAgentPanelTab; label: string }[] = [
+const BASE_TABS: { id: CloudAgentPanelTab; label: string }[] = [
   { id: 'details', label: 'Details' },
   { id: 'capabilities', label: 'Capabilities' },
   { id: 'pricing', label: 'Pricing' },
 ];
+/** Owner-only insight tab (gap [1247]) — appended only when the viewer owns the agent. */
+const OWNER_PERF_TAB: { id: CloudAgentPanelTab; label: string } = { id: 'performance', label: 'Performance' };
 
 const panelOverlayStyle: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 9998 };
 const panelDrawerStyle: React.CSSProperties = {
@@ -44,6 +48,21 @@ const panelDrawerStyle: React.CSSProperties = {
 };
 const btnPrimary: React.CSSProperties = { padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' };
 const btnSubtle: React.CSSProperties = { padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-strong)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' };
+
+function formatLatency(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
+}
+
+/** One labelled metric tile on the owner-only Performance tab (gap [1247]). */
+function PerfStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="text-gray-100" style={{ padding: '12px 14px', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-elevated)' }}>
+      <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
+      <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
 
 function formFromAgent(a: PublishedAgent): CloudAgentFormState {
   return {
@@ -94,6 +113,14 @@ export function CloudAgentSlideOutPanel({
   const [pricingModel, setPricingModel] = useState<AgentPricingModel>('flat_fee');
   const [priceUnit, setPriceUnit] = useState('');
 
+  // Owner-only performance + feedback (gap [1247]). The panel SELF-GATES on the
+  // shared isAgentOwner rule (no prop-drilled canSeePerf) and only fetches/renders
+  // the rollup for the agent's owner — the backend 404s for anyone else anyway.
+  const owner = isAgentOwner(agent, tenantId);
+  const TABS = owner ? [...BASE_TABS, OWNER_PERF_TAB] : BASE_TABS;
+  const [perf, setPerf] = useState<AgentPerfRollup | null>(null);
+  const [perfError, setPerfError] = useState('');
+
   useEffect(() => {
     if (!open) return;
     setActiveTab(initialTab);
@@ -115,6 +142,18 @@ export function CloudAgentSlideOutPanel({
       .catch((e) => { if (!cancelled) setBridgeError(e instanceof Error ? e.message : 'Failed to load capabilities'); });
     return () => { cancelled = true; };
   }, [open, agent.id]);
+
+  // Load the owner-only perf rollup lazily when the Performance tab is opened.
+  useEffect(() => {
+    if (!open || !owner || activeTab !== 'performance') return;
+    let cancelled = false;
+    setPerf(null);
+    setPerfError('');
+    fetchAgentPerf(agent.id)
+      .then((r) => { if (!cancelled) setPerf(r); })
+      .catch((e) => { if (!cancelled) setPerfError(e instanceof Error ? e.message : 'Failed to load performance'); });
+    return () => { cancelled = true; };
+  }, [open, owner, activeTab, agent.id]);
 
   const saveDetails = useCallback(async () => {
     if (!form.name.trim()) { setError('Name is required'); return; }
@@ -263,6 +302,42 @@ export function CloudAgentSlideOutPanel({
                 </button>
               </div>
             </div>
+          )}
+
+          {activeTab === 'performance' && owner && (
+            perfError ? (
+              <div style={{ fontSize: 13, color: 'var(--error-text)', padding: 16 }}>{perfError}</div>
+            ) : perf == null ? (
+              <div style={{ color: 'var(--muted)', fontSize: 13, padding: 16 }}>Loading performance…</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                <p style={{ fontSize: 12, color: 'var(--muted)', margin: 0 }}>
+                  How <strong>{agent.name}</strong> is performing for the {perf.hiredTenants} workspace{perf.hiredTenants === 1 ? '' : 's'} currently hiring it. Visible only to you, the owner.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
+                  <PerfStat label="Success rate" value={perf.successRate == null ? '—' : `${Math.round(perf.successRate * 100)}%`} />
+                  <PerfStat label="Runs" value={`${perf.totalRuns}`} sub={`${perf.completedRuns} ok / ${perf.failedRuns} failed`} />
+                  <PerfStat label="Avg latency" value={perf.avgLatencyMs == null ? '—' : formatLatency(perf.avgLatencyMs)} />
+                  <PerfStat label="Avg rating" value={perf.avgRating == null ? '—' : `${perf.avgRating.toFixed(1)}★`} sub={`${perf.ratingCount} rating${perf.ratingCount === 1 ? '' : 's'}`} />
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-strong)', marginBottom: 8 }}>Buyer feedback</div>
+                  {perf.feedback.length === 0 ? (
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>No feedback yet from buyers.</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {perf.feedback.map((f, i) => (
+                        <div key={i} className="text-gray-100" style={{ padding: '10px 12px', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-elevated)' }}>
+                          <div style={{ fontSize: 12, color: 'var(--coral-bright)', fontWeight: 600 }}>{'★'.repeat(f.rating)}{'☆'.repeat(5 - f.rating)}</div>
+                          {f.comment && <div style={{ fontSize: 13, marginTop: 4 }}>{f.comment}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
           )}
         </div>
       </div>

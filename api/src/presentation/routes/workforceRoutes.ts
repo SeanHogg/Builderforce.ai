@@ -24,6 +24,13 @@ import type { Env, HonoEnv } from '../../env';
 /** Cache key for a tenant's purchased (marketplace-acquired) agents. */
 const purchasedCacheKey = (tenantId: number): string => `wf:purchased:${tenantId}`;
 
+/** Cache key for an agent's owner-only performance + feedback rollup (gap [1247]).
+ *  Keyed on agent_id (not tenant) — the rollup spans every tenant that hired it.
+ *  Invalidated on a new feedback row; a short TTL covers fresh-run drift since
+ *  run completion is written from many out-of-scope runtime sites. */
+const perfCacheKey = (agentId: string): string => `wf:perf:${agentId}`;
+const PERF_CACHE_TTL_SECONDS = 60;
+
 const RUNTIME_SUPPORT = ['cloud', 'host', 'both'] as const;
 const PRICING_MODELS = ['flat_fee', 'consumption'] as const;
 const AGENT_ENGINES = ['builderforce-v1', 'builderforce-v2'] as const;
@@ -45,6 +52,83 @@ function mapAgentRow<T extends Record<string, unknown>>(row: T | null | undefine
       ? (() => { try { const v = JSON.parse(skills); return Array.isArray(v) ? v : []; } catch { return []; } })()
       : [];
   return { ...row, skills: parsed };
+}
+
+/**
+ * Owner-only performance + buyer-feedback rollup for one agent (gap [1247]).
+ * Read-heavy (fan-out over telemetry + feedback) → served through getOrSetCached.
+ *
+ * Perf is computed from the `executions` telemetry for the agent's PAST runs that
+ * ran AS this agent (`cloud_agent_ref`), restricted to the tenants currently
+ * holding an active hire — i.e. "how well is the agent performing per hired
+ * tenant". `success rate` = completed / terminal runs; `avg latency` is the mean
+ * completed-minus-started duration over completed runs. Feedback is the buyers'
+ * ratings/comments. All cross-tenant numbers — owner-only, never on a public route.
+ */
+export interface AgentPerfRollup {
+  totalRuns: number;
+  completedRuns: number;
+  failedRuns: number;
+  successRate: number | null;       // completed / (completed+failed+cancelled), null when no terminal runs
+  avgLatencyMs: number | null;      // mean completed-started over completed runs, null when none
+  hiredTenants: number;             // distinct tenants currently holding an active hire
+  ratingCount: number;
+  avgRating: number | null;
+  feedback: { rating: number; comment: string | null; createdAt: string }[];
+}
+
+/** The neon tagged-template the routes build via `sql(c.env)` (array-mode false). */
+type SqlClient = ReturnType<typeof neon<false, false>>;
+
+export async function loadAgentPerfRollup(
+  q: SqlClient,
+  agentId: string,
+): Promise<AgentPerfRollup> {
+  // Perf telemetry, scoped to runs that ran AS this agent for a currently-active
+  // hirer. Latency is server-side seconds*1000 so it survives JSON without TZ drift.
+  const [perf] = await q`
+    SELECT
+      COUNT(*)::int                                                        AS total_runs,
+      COUNT(*) FILTER (WHERE e.status = 'completed')::int                  AS completed_runs,
+      COUNT(*) FILTER (WHERE e.status IN ('failed','cancelled'))::int      AS failed_runs,
+      AVG(EXTRACT(EPOCH FROM (e.completed_at - e.started_at)) * 1000)
+        FILTER (WHERE e.status = 'completed'
+                AND e.started_at IS NOT NULL AND e.completed_at IS NOT NULL) AS avg_latency_ms
+    FROM executions e
+    WHERE e.cloud_agent_ref = ${agentId}
+      AND EXISTS (
+        SELECT 1 FROM agent_purchases p
+        WHERE p.agent_id = ${agentId} AND p.tenant_id = e.tenant_id AND p.unhired_at IS NULL
+      )
+  `;
+  const [hires] = await q`
+    SELECT COUNT(*)::int AS hired_tenants
+    FROM agent_purchases p WHERE p.agent_id = ${agentId} AND p.unhired_at IS NULL
+  `;
+  const fbRows = await q`
+    SELECT rating, comment, created_at
+    FROM agent_feedback WHERE agent_id = ${agentId}
+    ORDER BY created_at DESC
+    LIMIT 50
+  ` as unknown as { rating: number; comment: string | null; created_at: string }[];
+
+  const completed = Number(perf?.completed_runs ?? 0);
+  const failed = Number(perf?.failed_runs ?? 0);
+  const terminal = completed + failed;
+  const ratings = fbRows.map((r) => Number(r.rating));
+  const avgLatency = perf?.avg_latency_ms == null ? null : Math.round(Number(perf.avg_latency_ms));
+
+  return {
+    totalRuns: Number(perf?.total_runs ?? 0),
+    completedRuns: completed,
+    failedRuns: failed,
+    successRate: terminal === 0 ? null : completed / terminal,
+    avgLatencyMs: avgLatency,
+    hiredTenants: Number(hires?.hired_tenants ?? 0),
+    ratingCount: ratings.length,
+    avgRating: ratings.length === 0 ? null : ratings.reduce((a, b) => a + b, 0) / ratings.length,
+    feedback: fbRows.map((r) => ({ rating: Number(r.rating), comment: r.comment, createdAt: r.created_at })),
+  };
 }
 
 export function createWorkforceRoutes(): Hono<HonoEnv> {
@@ -335,6 +419,56 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     `;
     if (!row) return c.json({ error: 'Failed to create agent identity' }, 500);
     return c.json({ projectAgentId: row.id });
+  });
+
+  // ----- Owner-only: agent performance + buyer feedback (gap [1247]) -------
+  // GET /agents/:id/perf — owner-only rollup (success rate / runs / latency per
+  // hired tenant + buyer ratings). 404 unless the caller OWNS the agent, so the
+  // cross-tenant telemetry never leaks. Read-heavy → read-through cached on
+  // agent_id; invalidated when a buyer posts feedback (short TTL covers run drift).
+  router.get('/agents/:id/perf', authMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const [owned] = await sql(c.env)`
+      SELECT 1 FROM ide_agents WHERE id = ${id} AND tenant_id = ${tenantId}
+    `;
+    if (!owned) return c.json({ error: 'Agent not found' }, 404);
+    const rollup = await getOrSetCached(
+      c.env as Env,
+      perfCacheKey(id),
+      () => loadAgentPerfRollup(sql(c.env), id),
+      { kvTtlSeconds: PERF_CACHE_TTL_SECONDS },
+    );
+    return c.json(rollup);
+  });
+
+  // POST /agents/:id/feedback — a BUYER (a tenant holding an active hire) rates
+  // the agent. One row per hire (UPSERT), invalidates the owner's perf cache.
+  router.post('/agents/:id/feedback', authMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const body = await c.req.json<{ rating?: number; comment?: string | null }>();
+    const rating = Math.round(Number(body.rating));
+    if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+      return c.json({ error: 'rating must be an integer 1..5' }, 400);
+    }
+    // Must hold an ACTIVE hire to leave feedback — feedback rides the purchase row.
+    const [purchase] = await sql(c.env)`
+      SELECT id FROM agent_purchases
+      WHERE tenant_id = ${tenantId} AND agent_id = ${id} AND unhired_at IS NULL
+    `;
+    if (!purchase) return c.json({ error: 'Hire this agent before leaving feedback.' }, 409);
+
+    const comment = (body.comment ?? '').toString().trim() || null;
+    const [row] = await sql(c.env)`
+      INSERT INTO agent_feedback (purchase_id, agent_id, tenant_id, rating, comment)
+      VALUES (${purchase.id}, ${id}, ${tenantId}, ${rating}, ${comment})
+      ON CONFLICT (purchase_id) DO UPDATE
+        SET rating = ${rating}, comment = ${comment}, created_at = NOW()
+      RETURNING id
+    `;
+    await invalidateCached(c.env as Env, perfCacheKey(id));
+    return c.json({ id: row?.id }, 201);
   });
 
   // ----- Public: browse published agents ---------------------------------
