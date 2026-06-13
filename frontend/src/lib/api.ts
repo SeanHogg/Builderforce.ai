@@ -56,13 +56,28 @@ async function projectsRequest<T>(
 // Projects (worker: /api/projects array | API: /api/projects { projects })
 // ---------------------------------------------------------------------------
 
+// In-flight coalescing: concurrent callers (e.g. the dashboard's stat-card load
+// AND an embedded <ProjectsContent>) share ONE /api/projects round-trip instead of
+// each firing their own. Browser-side, so this is request coalescing — not the
+// server's cross-isolate getOrSetCached, which can't run here. Cleared on settle,
+// so there's no staleness window: later (sequential) calls always re-fetch.
+let inFlightProjects: Promise<Project[]> | null = null;
+
 export async function fetchProjects(): Promise<Project[]> {
-  if (isWorkerForProjects()) {
-    const arr = await projectsRequest<Project[]>('/api/projects');
-    return Array.isArray(arr) ? arr : [];
+  if (inFlightProjects) return inFlightProjects;
+  inFlightProjects = (async () => {
+    if (isWorkerForProjects()) {
+      const arr = await projectsRequest<Project[]>('/api/projects');
+      return Array.isArray(arr) ? arr : [];
+    }
+    const res = await apiRequest<{ projects: Project[] }>('/api/projects');
+    return res?.projects ?? [];
+  })();
+  try {
+    return await inFlightProjects;
+  } finally {
+    inFlightProjects = null;
   }
-  const res = await apiRequest<{ projects: Project[] }>('/api/projects');
-  return res?.projects ?? [];
 }
 
 export async function fetchProject(id: number | string): Promise<Project> {

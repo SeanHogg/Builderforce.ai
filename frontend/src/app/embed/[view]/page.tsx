@@ -17,6 +17,9 @@ import { PokerSurface } from '../../../components/agile/PokerSurface';
 import { RetroSurface } from '../../../components/agile/RetroSurface';
 import { PmScopeProvider } from '../../../lib/pm/scope';
 import { PmVisualizersContent } from '../../../components/pm/PmVisualizersContent';
+import { DependencyGraph } from '../../../components/pm/DependencyGraph';
+import { RiceMatrix } from '../../../components/pm/RiceMatrix';
+import { RoiDashboard } from '../../../components/pm/RoiDashboard';
 
 /**
  * The framed BuilderForce surface. ONE dynamic route serves every embeddable
@@ -126,6 +129,13 @@ function renderSurface(view: string): React.ReactNode {
           <PmVisualizersContent />
         </PmScopeProvider>
       );
+    // Standalone PM visualizers — host can embed one surface on its own.
+    case 'dependency-graph':
+      return <PmScopeProvider><DependencyGraph /></PmScopeProvider>;
+    case 'rice-matrix':
+      return <PmScopeProvider><RiceMatrix /></PmScopeProvider>;
+    case 'roi-dashboard':
+      return <PmScopeProvider><RoiDashboard /></PmScopeProvider>;
     case 'soc2':
       // SOC 2 Control Tracker — bespoke (readiness scoreboard + baseline seed).
       return <Soc2Content />;

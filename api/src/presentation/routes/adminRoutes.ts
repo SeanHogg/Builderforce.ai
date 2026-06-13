@@ -101,7 +101,7 @@ function coercePermissions(value: unknown): string[] {
 }
 
 /** Persist one health-probe run. Shared by the manual route and the cron handler.
- *  `modelsJson` column is `text` per schema convention — store as a JSON string. */
+ *  `modelsJson` is a JSONB column ([1449]) — pass the JS array; Drizzle encodes it. */
 export async function persistProbe(
   db: Db,
   result: VendorProbeResult,
@@ -114,14 +114,14 @@ export async function persistProbe(
     okCount:      result.okCount,
     failedCount:  result.failedCount,
     latencyMs:    result.latencyMs,
-    modelsJson:   JSON.stringify(result.models),
+    modelsJson:   result.models,
     trigger,
   });
 }
 
-/** Schema-drift coercion mirroring `coercePermissions` above: the column is
- *  declared `text` in Drizzle but is JSONB in the database, so the pg driver
- *  may return either a string or a pre-decoded array. */
+/** Defensive coercion for `models_json` (now `jsonb` [1449]): the pg driver
+ *  decodes JSONB to an array, but legacy rows written while the column was
+ *  mis-handled as text may still come back as a JSON string. Accept both. */
 function coerceProbeModels(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
   if (typeof value === 'string' && value.length > 0) {

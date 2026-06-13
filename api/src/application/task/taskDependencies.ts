@@ -86,6 +86,14 @@ export function hasPathReachingTarget(
   return false;
 }
 
+/** Dependency edge semantics. finish_to_start (default) = predecessor must finish
+ *  before successor starts; the rest mirror standard PM scheduling relations. */
+export const DEP_TYPES = ['finish_to_start', 'start_to_start', 'finish_to_finish', 'start_to_finish'] as const;
+export type DepType = (typeof DEP_TYPES)[number];
+export function isDepType(v: unknown): v is DepType {
+  return typeof v === 'string' && (DEP_TYPES as readonly string[]).includes(v);
+}
+
 export type AddDependencyResult =
   | { ok: true; edge: DependencyEdge }
   | { ok: false; status: 400 | 404 | 409; error: string };
@@ -100,6 +108,7 @@ export async function addDependency(
   tenantId: number,
   successorTaskId: number,
   predecessorTaskId: number,
+  depType: DepType = 'finish_to_start',
 ): Promise<AddDependencyResult> {
   if (successorTaskId === predecessorTaskId) {
     return { ok: false, status: 400, error: 'a task cannot depend on itself' };
@@ -125,9 +134,22 @@ export async function addDependency(
 
   const rows = (await db
     .insert(taskDependencies)
-    .values({ tenantId, projectId, predecessorTaskId, successorTaskId })
+    .values({ tenantId, projectId, predecessorTaskId, successorTaskId, depType })
     .returning()) as DependencyEdge[];
-  return { ok: true, edge: rows[0]! };
+  const edge = rows[0]!;
+
+  // Close the check-then-insert race: the pre-check + insert are not atomic
+  // (neon-http has no interactive transactions / advisory locks), so a concurrent
+  // insert of the reverse path could have slipped in between, making our edge
+  // close a cycle. Re-verify against the now-current edge set and compensate by
+  // deleting our edge if so. (Our P→S edge can't itself create an S→P path, so a
+  // positive result means a genuine concurrent reverse path exists.)
+  const after = await listProjectDependencies(db, projectId);
+  if (hasPathReachingTarget(after, successorTaskId, predecessorTaskId)) {
+    await db.delete(taskDependencies).where(eq(taskDependencies.id, edge.id));
+    return { ok: false, status: 400, error: 'would create a dependency cycle' };
+  }
+  return { ok: true, edge };
 }
 
 /** Delete an edge by id, scoped to the tenant. Returns the deleted edge or null. */

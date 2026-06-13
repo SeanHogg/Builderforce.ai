@@ -364,9 +364,10 @@ export const llmFailoverLog = pgTable('llm_failover_log', {
 
 /**
  * Per-vendor health-probe results. One row per run. `modelsJson` is a JSONB
- * array of `{ model, ok, status, latencyMs, error? }` (stored as text per the
- * column convention used elsewhere — the pg driver auto-decodes JSONB at read
- * time). Used by the admin UI vendor cards and the scheduled() cron handler.
+ * array of `{ model, ok, status, latencyMs, error? }`. Declared `jsonb` to match
+ * the live column created by migration 0050 (was previously mis-declared `text`,
+ * a schema-drift item [1449]); the pg driver auto-decodes JSONB to a JS array.
+ * Used by the admin UI vendor cards and the scheduled() cron handler.
  */
 export const llmHealthProbes = pgTable('llm_health_probes', {
   id:           serial('id').primaryKey(),
@@ -376,7 +377,9 @@ export const llmHealthProbes = pgTable('llm_health_probes', {
   okCount:      integer('ok_count').notNull().default(0),
   failedCount:  integer('failed_count').notNull().default(0),
   latencyMs:    integer('latency_ms').notNull().default(0),
-  modelsJson:   text('models_json').notNull().default('[]'),
+  modelsJson:   jsonb('models_json')
+    .$type<Array<{ model: string; ok: boolean; status: number; latencyMs: number; error?: string }>>()
+    .notNull().default([]),
   trigger:      varchar('trigger', { length: 16 }).notNull(),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
 });
@@ -1075,7 +1078,10 @@ export const tenantSkillAssignments = pgTable('tenant_skill_assignments', {
   assignedBy: varchar('assigned_by', { length: 36 }).references(() => users.id),
   assignedAt: timestamp('assigned_at').notNull().defaultNow(),
 }, (t) => [
-  primaryKey({ columns: [t.tenantId, t.skillSlug] }),
+  // `id` above is the PK; this is the enforced uniqueness contract. (Postgres
+  // permits only one PRIMARY KEY per table, so a composite primaryKey() here
+  // would silently fight the column-level id PK — demoted to unique() [1315].)
+  unique().on(t.tenantId, t.skillSlug),
 ]);
 
 /**
@@ -1090,7 +1096,8 @@ export const agentHostSkillAssignments = pgTable('agent_host_skill_assignments',
   assignedBy: varchar('assigned_by', { length: 36 }).references(() => users.id),
   assignedAt: timestamp('assigned_at').notNull().defaultNow(),
 }, (t) => [
-  primaryKey({ columns: [t.agentHostId, t.skillSlug] }),
+  // `id` above is the PK; composite demoted to unique() — see note above [1315].
+  unique().on(t.agentHostId, t.skillSlug),
 ]);
 
 // ---------------------------------------------------------------------------

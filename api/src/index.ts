@@ -117,6 +117,7 @@ import {
   OPENAPI_DESCRIPTION,
 } from './openapi/schema';
 import { runVendorHealthCron } from './application/llm/vendorHealthCron';
+import { runRetentionPurge } from './application/maintenance/retentionPurge';
 import { runDueTriggers } from './application/workflow/runDueTriggers';
 import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
 import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
@@ -408,6 +409,13 @@ export default {
       ctx.waitUntil(
         runVendorHealthCron(env).catch((err) => {
           console.error('[cron:llm-health] failed', err);
+        }),
+      );
+      // Daily retention purge of unbounded diagnostic/telemetry log tables
+      // (llm_traces, llm_failover_log, llm_health_probes, qa_journey_events).
+      ctx.waitUntil(
+        runRetentionPurge(env).catch((err) => {
+          console.error('[cron:retention] failed', err);
         }),
       );
     }

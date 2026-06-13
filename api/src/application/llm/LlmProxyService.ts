@@ -659,7 +659,11 @@ export class LlmProxyService {
     const env = this.vendorEnv();
     const poolVendors = Array.from(new Set(this.modelPool.map((m) => vendorForModel(m))));
     const [cooledMap, vendorCooledMap] = await Promise.all([
-      loadCooldownExpiries(this.env, this.modelPool.map((m) => ({ vendor: vendorForModel(m), model: m }))),
+      // `'display'` mode (not the default `'gate'`) so a model still inside its
+      // cooldown TTL but past its `trialAfter` half-open instant ([1235]) keeps
+      // reporting its full `until` — the admin UI can show the "cooling, probing"
+      // countdown for that ~5-min tail instead of flipping to `available:true`.
+      loadCooldownExpiries(this.env, this.modelPool.map((m) => ({ vendor: vendorForModel(m), model: m })), 'display'),
       loadCooledVendorExpiries(this.env, poolVendors),
     ]);
     return this.modelPool.map((model, i) => {
