@@ -13,10 +13,11 @@ import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { DEFAULT_ENGINE_ID, ENGINE_IDS } from "@builderforce/agent-tools";
+import { type AgentEngine, DEFAULT_ENGINE_ID, ENGINE_IDS, resolveEngineById } from "@builderforce/agent-tools";
 import { WebSocket } from "ws";
 import { buildAssignedCapabilityAppend } from "../agents/assigned-capabilities.js";
-import { runClaudeAgentSdkV2, type V2RunnerSinks } from "../agents/claude-agent-sdk-runner.js";
+import { type V2RunnerSinks } from "../agents/claude-agent-sdk-runner.js";
+import { ClaudeSdkAgentEngine } from "./sdk-agent-engine.js";
 import { loadProjectContext, updateProjectContextFields } from "../builderforce/project-context.js";
 import type { IRelayService } from "../builderforce/relay-service.js";
 import { GatewayClient, type GatewayClientOptions } from "../gateway/client.js";
@@ -146,7 +147,8 @@ export class BuilderforceRelayService implements IRelayService {
   private resolveEngine(engineId?: string): RelayTaskEngine {
     const v2: RelayTaskEngine = { id: ENGINE_IDS.v2, run: (d, p) => this.runV2Engine(d, p) };
     const registry: Record<string, RelayTaskEngine> = { [v2.id]: v2 };
-    return registry[engineId ?? ""] ?? registry[DEFAULT_ENGINE_ID];
+    // Shared id→impl + default-fallback (so a V3 registers the same way on every surface).
+    return resolveEngineById(registry, engineId);
   }
 
   private dispatchTaskFromRelay(payload: EngineDispatch): void {
@@ -396,22 +398,29 @@ export class BuilderforceRelayService implements IRelayService {
       this.v2Aborts.set(payload.executionId, abortController);
     }
 
+    // Drive the on-prem loop through the SHARED `AgentEngine` contract (the same
+    // interface the cloud `CloudToolLoopEngine` implements) — so a future V3 is a
+    // sibling `AgentEngine` constructed here, not a rewrite of this path (PRD 12).
+    const engine: AgentEngine = new ClaudeSdkAgentEngine({
+      cwd,
+      // SDK posts Messages to `${anthropicBaseUrl}/v1/messages`; the gateway's
+      // Anthropic-Messages endpoint lives under /llm.
+      anthropicBaseUrl: `${normalizeBaseUrl(this.opts.baseUrl)}/llm`,
+      gatewayAuthKey: this.opts.apiKey,
+      abortController,
+      sinks,
+    });
     let result: { ok: boolean; text: string };
     try {
-      result = await runClaudeAgentSdkV2(
-        {
-          prompt,
-          model: payload.model,
-          cwd,
-          // SDK posts Messages to `${anthropicBaseUrl}/v1/messages`; the gateway's
-          // Anthropic-Messages endpoint lives under /llm.
-          anthropicBaseUrl: `${normalizeBaseUrl(this.opts.baseUrl)}/llm`,
-          gatewayAuthKey: this.opts.apiKey,
-          appendSystemPrompt,
-          abortController,
-        },
-        sinks,
-      );
+      const run = await engine.run({
+        // Assigned Skills/Personas/Content ride as the system prompt (the SDK
+        // engine folds it into the prompt); the task message is the user content.
+        systemPrompt: appendSystemPrompt,
+        userContent: prompt,
+        model: payload.model,
+        signal: abortController.signal,
+      });
+      result = { ok: run.ok, text: run.output };
     } finally {
       if (payload.executionId != null) {
         this.v2Aborts.delete(payload.executionId);

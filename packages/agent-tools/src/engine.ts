@@ -74,3 +74,23 @@ export type EngineId = (typeof ENGINE_IDS)[keyof typeof ENGINE_IDS];
  * `resolveEngine`, `workforceRoutes` create, and the `task.assign` fallback all read this.
  */
 export const DEFAULT_ENGINE_ID: EngineId = ENGINE_IDS.v2;
+
+/**
+ * Resolve an engine implementation by id from a registry, falling back to the default
+ * when the id is unknown/absent (legacy `builderforce-v1`/`builderforce-local` rows all
+ * land on {@link DEFAULT_ENGINE_ID}). The id→impl + fallback logic lived inline in the
+ * relay `resolveEngine`; sharing it here means every surface that keeps an engine
+ * registry (on-prem relay today, a cloud registry tomorrow) registers a V3 the same way
+ * — a registry entry, never a new branch. Generic over the engine shape so it serves
+ * both the orchestration `RelayTaskEngine` and the pure-loop `AgentEngine`.
+ */
+export function resolveEngineById<E>(
+  registry: Readonly<Record<string, E>>,
+  id: string | undefined,
+  defaultId: string = DEFAULT_ENGINE_ID,
+): E {
+  // `defaultId` is guaranteed registered by the caller's contract (every surface
+  // registers DEFAULT_ENGINE_ID), so the fallback is non-null — assert it so the
+  // return is `E`, not `E | undefined`, under `noUncheckedIndexedAccess`.
+  return registry[id ?? ""] ?? registry[defaultId]!;
+}

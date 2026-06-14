@@ -20,6 +20,8 @@ import {
   PRODUCT_SECTIONS,
   PROJECTS_TASKS_FAQ,
   type FaqItem,
+  type CompetitorSeo,
+  type IntegrationSeo,
 } from './content';
 
 /* ════════ Helpers ════════ */
@@ -451,6 +453,115 @@ export function registerSchema() {
       breadcrumbs(
         { name: 'Home', url: BRAND.url },
         { name: 'Create Account', url: `${BRAND.url}/register` },
+      ),
+    ],
+  };
+}
+
+
+/* ════════ Programmatic SEO — competitor & integration leaf pages ════════ */
+
+/**
+ * Per-competitor `/compare/{slug}` JSON-LD: a WebPage scoped to the rivalry, the
+ * Builderforce SoftwareApplication entity, the competitor-intent FAQ, and a
+ * breadcrumb trail. Mirrors `compareSchema()` but narrowed to a single rival so
+ * each leaf page carries its own structured data.
+ */
+export function competitorCompareSchema(seo: CompetitorSeo) {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'WebPage',
+        name: `Builderforce.ai vs ${seo.name}`,
+        description: seo.summary,
+        url: `${BRAND.url}/compare/${seo.slug}`,
+        dateModified: BRAND.dateModified,
+        about: { '@type': 'Thing', name: seo.name },
+      },
+      {
+        '@type': 'SoftwareApplication',
+        name: BRAND.name,
+        applicationCategory: 'DeveloperApplication',
+        operatingSystem: 'Web, Self-hosted',
+        description: seo.verdict,
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      },
+      faqSchema(COMPARE_FAQ),
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Compare', url: `${BRAND.url}/compare` },
+        { name: `vs ${seo.name}`, url: `${BRAND.url}/compare/${seo.slug}` },
+      ),
+    ],
+  };
+}
+
+/**
+ * Per-integration `/integrations/{slug}` JSON-LD: a WebPage describing the
+ * integration plus the Builderforce SoftwareApplication entity and a breadcrumb.
+ */
+export function integrationSchema(seo: IntegrationSeo) {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'WebPage',
+        name: `Builderforce.ai + ${seo.name} integration`,
+        description: seo.summary,
+        url: `${BRAND.url}/integrations/${seo.slug}`,
+        dateModified: BRAND.dateModified,
+        about: { '@type': 'Thing', name: seo.name },
+      },
+      {
+        '@type': 'SoftwareApplication',
+        name: BRAND.name,
+        applicationCategory: 'DeveloperApplication',
+        operatingSystem: 'Web, Self-hosted',
+        description: seo.tagline,
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      },
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Integrations', url: `${BRAND.url}/integrations` },
+        { name: seo.name, url: `${BRAND.url}/integrations/${seo.slug}` },
+      ),
+    ],
+  };
+}
+
+/** Standalone BreadcrumbList graph for simple index/leaf pages. */
+export function breadcrumbSchema(items: { name: string; url: string }[]) {
+  return { '@context': 'https://schema.org', '@graph': [breadcrumbs(...items)] };
+}
+
+/** Individual published marketplace skill detail (`/marketplace/[slug]`). */
+export function marketplaceSkillSchema(skill: {
+  name: string;
+  slug: string;
+  description: string;
+  category?: string | null;
+  author_display_name?: string | null;
+  tags?: string[];
+}) {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'SoftwareApplication',
+        name: skill.name,
+        description: skill.description,
+        applicationCategory: skill.category || 'BusinessApplication',
+        url: `${BRAND.url}/marketplace/${skill.slug}`,
+        operatingSystem: 'Web, Self-hosted',
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+        ...(skill.author_display_name ? { author: { '@type': 'Person', name: skill.author_display_name } } : {}),
+        ...(skill.tags && skill.tags.length ? { keywords: skill.tags.join(', ') } : {}),
+      },
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Marketplace', url: `${BRAND.url}/marketplace` },
+        { name: skill.name, url: `${BRAND.url}/marketplace/${skill.slug}` },
       ),
     ],
   };

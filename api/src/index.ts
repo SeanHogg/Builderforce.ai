@@ -75,6 +75,7 @@ import { createWorkflowTriggerRoutes } from './presentation/routes/workflowTrigg
 import { createApprovalRoutes }     from './presentation/routes/approvalRoutes';
 import { createApprovalRuleRoutes } from './presentation/routes/approvalRuleRoutes';
 import { createPushSubscriptionRoutes } from './presentation/routes/pushSubscriptionRoutes';
+import { createPendingPromptRoutes } from './presentation/routes/pendingPromptRoutes';
 import { createTelemetryRoutes }    from './presentation/routes/telemetryRoutes';
 import { createQaRoutes }           from './presentation/routes/qaRoutes';
 import { createRepoAnalysisRoutes } from './presentation/routes/repoAnalysisRoutes';
@@ -282,6 +283,10 @@ function buildApp(env: Env): Hono<HonoEnv> {
   // Web Push: /public-key + /notify-deploy are public/secret-guarded; /subscribe
   // applies authMiddleware per-route inside the router.
   app.route('/api/push', createPushSubscriptionRoutes(db));
+
+  // Anonymous landing-prompt handoff: POST / is public (pre-auth); /claim applies
+  // web-auth per-route so it can associate the row to the now-known user.
+  app.route('/api/pending-prompts', createPendingPromptRoutes(db));
 
   // Public endpoints (no JWT required)
   app.route('/api/auth',    createAuthRoutes(authService, db));

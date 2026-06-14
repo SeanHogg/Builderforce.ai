@@ -1,15 +1,18 @@
 import type { MetadataRoute } from 'next';
 import { BLOG_POSTS } from '@/lib/blogData';
+import { COMPETITOR_SEO, SEO_INTEGRATIONS } from '@/lib/content';
+import { listPublishedSkillSlugs } from '@/lib/marketplaceSeo';
 
 const BASE = 'https://builderforce.ai';
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date().toISOString();
 
   const staticPages: MetadataRoute.Sitemap = [
     { url: BASE, lastModified: now, changeFrequency: 'weekly', priority: 1.0 },
     { url: `${BASE}/product`, lastModified: now, changeFrequency: 'weekly', priority: 0.9 },
     { url: `${BASE}/compare`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
+    { url: `${BASE}/integrations`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${BASE}/pricing`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
     { url: `${BASE}/blog`, lastModified: now, changeFrequency: 'weekly', priority: 0.8 },
     { url: `${BASE}/marketplace`, lastModified: now, changeFrequency: 'daily', priority: 0.7 },
@@ -25,5 +28,30 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.6,
   }));
 
-  return [...staticPages, ...blogPages];
+  // Programmatic SEO leaf pages — "vs {competitor}" and "+ {tool}" long-tail.
+  const comparePages: MetadataRoute.Sitemap = Object.values(COMPETITOR_SEO).map((c) => ({
+    url: `${BASE}/compare/${c.slug}`,
+    lastModified: now,
+    changeFrequency: 'monthly' as const,
+    priority: 0.7,
+  }));
+
+  const integrationPages: MetadataRoute.Sitemap = SEO_INTEGRATIONS.map((i) => ({
+    url: `${BASE}/integrations/${i.slug}`,
+    lastModified: now,
+    changeFrequency: 'monthly' as const,
+    priority: 0.6,
+  }));
+
+  // Published Workforce Registry skills — live, indexable detail pages. Best-effort
+  // (empty on API error so sitemap generation never fails). [1333]
+  const skillSlugs = await listPublishedSkillSlugs();
+  const marketplacePages: MetadataRoute.Sitemap = skillSlugs.map((slug) => ({
+    url: `${BASE}/marketplace/${slug}`,
+    lastModified: now,
+    changeFrequency: 'weekly' as const,
+    priority: 0.6,
+  }));
+
+  return [...staticPages, ...blogPages, ...comparePages, ...integrationPages, ...marketplacePages];
 }

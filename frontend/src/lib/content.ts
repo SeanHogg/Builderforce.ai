@@ -747,3 +747,223 @@ export const FOOTER_LINKS: NavLink[] = [
   { href: '/login', label: 'Sign In' },
   { href: '/register', label: 'Get Started' },
 ];
+
+/* ════════════════════ PROGRAMMATIC SEO — COMPETITOR LEAF PAGES ════════════════════ */
+
+/**
+ * Per-competitor SEO copy for the statically-generated `/compare/{slug}` leaf
+ * pages. Keyed by the `COMPETITORS` column key so the comparison matrix
+ * (`COMPETITIVE_COMPARISON`) can be filtered to that single rival. `slug` is the
+ * public URL segment; one entry per row captures "{competitor} alternative" /
+ * "Builderforce vs {competitor}" long-tail search intent without thin pages.
+ */
+export interface CompetitorSeo {
+  /** URL segment, e.g. 'github-copilot'. */
+  slug: string;
+  /** Marketing label for the rival (may differ from the short matrix label). */
+  name: string;
+  /** One-line page subtitle. */
+  tagline: string;
+  /** 1-2 sentence intro paragraph (used in copy + meta description). */
+  summary: string;
+  /** Plain-language bottom-line for the page + JSON-LD. */
+  verdict: string;
+}
+
+export const COMPETITOR_SEO: Record<string, CompetitorSeo> = {
+  copilot: {
+    slug: 'github-copilot',
+    name: 'GitHub Copilot',
+    tagline: 'A self-hosted, multi-agent alternative to single-agent autocomplete',
+    summary:
+      'GitHub Copilot is single-agent autocomplete inside VS Code, tied to GPT and Claude. Builderforce.ai is a self-hosted, MIT-licensed multi-agent platform that plans, builds, reviews and tests features across 30+ model providers with approvals, audit and persistent memory.',
+    verdict:
+      'Choose Builderforce.ai over GitHub Copilot when you have outgrown line completion and need orchestrated, governed, model-agnostic delivery you can self-host.',
+  },
+  cursor: {
+    slug: 'cursor',
+    name: 'Cursor & Windsurf',
+    tagline: 'Orchestrate a self-hosted agent workforce, not one IDE-bound agent',
+    summary:
+      'Cursor and Windsurf are AI-native editors, but still single-agent and IDE-bound. Builderforce.ai is IDE-independent, coordinates multiple agents on one task through a dependency DAG, is fully self-hosted, and can even sit behind Cursor over MCP as your orchestration and memory layer.',
+    verdict:
+      'Choose Builderforce.ai over Cursor or Windsurf when you want IDE-independent multi-agent orchestration, model freedom, and self-hosting rather than a single editor fork.',
+  },
+  claudeCode: {
+    slug: 'claude-code',
+    name: 'Claude Code',
+    tagline: 'Model-agnostic, multi-agent delivery beyond a single-vendor CLI',
+    summary:
+      'Claude Code is locked to Anthropic models and drives a single terminal agent. Builderforce.ai runs a team of specialist agents with a built-in adversarial review pass, approval gates, an audit trail, and persistent project memory - model-agnostic across 30+ providers including local Ollama.',
+    verdict:
+      'Choose Builderforce.ai over Claude Code when you need multi-agent workflows, governance, and freedom from a single model vendor.',
+  },
+  devin: {
+    slug: 'devin',
+    name: 'Devin',
+    tagline: 'Self-hosted, MIT-licensed autonomous engineering with governance',
+    summary:
+      'Devin is a proprietary hosted autonomous agent at $500/mo. Builderforce.ai delivers true multi-agent orchestration that you self-host and own, MIT-licensed, with approval gates, audit trails and self-healing recovery - keeping your code on your own infrastructure with any model.',
+    verdict:
+      'Choose Builderforce.ai over Devin when you want self-hosted, auditable, model-agnostic autonomous engineering without a proprietary cloud or a $500/mo floor.',
+  },
+  openhands: {
+    slug: 'openhands',
+    name: 'OpenHands',
+    tagline: 'Multi-agent orchestration and governance on top of open runtimes',
+    summary:
+      'OpenHands is an open single-agent runtime. Builderforce.ai adds true multi-agent orchestration (seven roles + dependency DAG), human approval gates, an audit trail, persistent memory and fleet mesh - all self-hosted and MIT-licensed.',
+    verdict:
+      'Choose Builderforce.ai over OpenHands when you need coordinated multi-agent workflows and governance, not a single-agent loop.',
+  },
+  aider: {
+    slug: 'aider',
+    name: 'Aider',
+    tagline: 'From a single CLI agent to an orchestrated, governed agent workforce',
+    summary:
+      'Aider runs one git-aware CLI agent. Builderforce.ai coordinates a team of specialist agents with adversarial review, approval gates, persistent project memory, fleet mesh and 15+ chat channels - model-agnostic across 30+ providers and self-hosted.',
+    verdict:
+      'Choose Builderforce.ai over Aider when one CLI agent is no longer enough and you need orchestration, governance and memory at team scale.',
+  },
+  continueDev: {
+    slug: 'continue-dev',
+    name: 'Continue.dev',
+    tagline: 'Beyond an IDE extension - orchestration, governance and memory',
+    summary:
+      'Continue.dev is an open IDE extension for single-agent assistance. Builderforce.ai is IDE-independent and orchestrates multiple specialist agents through full planning, bug-fix, refactor and review workflows with approvals, audit and persistent memory.',
+    verdict:
+      'Choose Builderforce.ai over Continue.dev when you want IDE-independent multi-agent delivery and governance rather than an in-editor assistant.',
+  },
+};
+
+/** Slug -> competitor column key, for `/compare/{slug}` route resolution. */
+export const COMPETITOR_SLUG_TO_KEY: Record<string, string> = Object.fromEntries(
+  Object.entries(COMPETITOR_SEO).map(([key, v]) => [v.slug, key]),
+);
+
+/* ════════════════════ PROGRAMMATIC SEO — INTEGRATION LEAF PAGES ════════════════════ */
+
+/**
+ * Bounded set of statically-generated `/integrations/{slug}` leaf pages that
+ * capture "Builderforce + {tool}" search intent. Single source of truth - keep
+ * this list curated (no thin auto-generated bloat); each entry must say
+ * something specific about how the agent workforce uses that tool.
+ */
+export interface IntegrationSeo {
+  slug: string;
+  name: string;
+  category: string;
+  tagline: string;
+  summary: string;
+  useCases: string[];
+  /** Optional deep link into docs/skills for the "Learn more" CTA. */
+  docsHref?: string;
+}
+
+export const SEO_INTEGRATIONS: IntegrationSeo[] = [
+  {
+    slug: 'github',
+    name: 'GitHub',
+    category: 'Source control',
+    tagline: 'Let your agent workforce open PRs, review code and run CI on GitHub',
+    summary:
+      'Connect Builderforce.ai to GitHub so agents read repositories, branch, commit, open pull requests and react to CI checks - with every action gated by approvals and recorded in the audit trail.',
+    useCases: ['Autonomous PR creation from a task', 'Review-and-merge with human approval gates', 'CI-aware build/fix loops', 'Repo-wide semantic search and refactors'],
+    docsHref: '/agents/integrations',
+  },
+  {
+    slug: 'gitlab',
+    name: 'GitLab',
+    category: 'Source control',
+    tagline: 'Self-hosted agent delivery against GitLab merge requests',
+    summary:
+      'Builderforce.ai drives the full GitLab repo loop - read, branch, commit, and open merge requests - so a self-hosted agent workforce ships changes on your GitLab without leaving your infrastructure.',
+    useCases: ['Merge-request automation', 'Cross-repo task execution', 'Air-gapped GitLab deployments'],
+    docsHref: '/agents/integrations',
+  },
+  {
+    slug: 'slack',
+    name: 'Slack',
+    category: 'Chat channels',
+    tagline: 'Run and govern your agents straight from Slack',
+    summary:
+      'Reach the agent workforce from any Slack workspace: assign tasks, stream progress, and respond to human-in-the-loop approval prompts without leaving chat.',
+    useCases: ['Assign tasks from a channel', 'Approve agent actions inline', 'Stream run status to a thread'],
+    docsHref: '/agents/integrations',
+  },
+  {
+    slug: 'discord',
+    name: 'Discord',
+    category: 'Chat channels',
+    tagline: 'Command your agent workforce across Discord servers and DMs',
+    summary:
+      'Builderforce.ai connects to Discord servers, channels and DMs so your community or team can dispatch agents and receive results in real time.',
+    useCases: ['Server-wide agent commands', 'DM-based private tasks', 'Live run notifications'],
+    docsHref: '/agents/integrations',
+  },
+  {
+    slug: 'whatsapp',
+    name: 'WhatsApp',
+    category: 'Chat channels',
+    tagline: 'Direct your AI agents from WhatsApp',
+    summary:
+      'Pair a WhatsApp number to Builderforce.ai and run agent tasks, get summaries, and approve actions from your phone - useful for on-call and mobile-first workflows.',
+    useCases: ['Mobile task dispatch', 'On-call approvals', 'Run summaries on the go'],
+    docsHref: '/agents/integrations',
+  },
+  {
+    slug: 'ollama',
+    name: 'Ollama',
+    category: 'Model providers',
+    tagline: 'Run the entire agent workforce on local, offline models',
+    summary:
+      'With Ollama, Builderforce.ai routes any task to local models so the full multi-agent workforce runs air-gapped - no code or prompt leaves your network and there are zero cloud GPU bills.',
+    useCases: ['Air-gapped / offline delivery', 'Zero-cost local inference', 'Data-residency compliance'],
+    docsHref: '/agents/integrations',
+  },
+  {
+    slug: 'anthropic',
+    name: 'Anthropic Claude',
+    category: 'Model providers',
+    tagline: 'Use Claude models inside a governed, multi-agent workflow',
+    summary:
+      'Builderforce.ai routes tasks to Anthropic Claude alongside 30+ other providers, so you get Claude strengths within orchestrated workflows, approvals and persistent memory - without single-vendor lock-in.',
+    useCases: ['Best-model-per-task routing', 'Claude + local-model fallback', 'Governed Claude usage with audit'],
+    docsHref: '/agents/integrations',
+  },
+  {
+    slug: 'mcp',
+    name: 'Model Context Protocol (MCP)',
+    category: 'Protocols',
+    tagline: 'Consume MCP tools and expose Builderforce.ai as an MCP server',
+    summary:
+      'Builderforce.ai both consumes MCP servers and exposes its own /mcp endpoint, so other tools (Cursor, Claude Desktop, and more) can use it as an orchestration and memory layer over the open protocol.',
+    useCases: ['Connect external MCP tools', 'Expose projects/tasks over MCP', 'Use Builderforce.ai as a memory backend'],
+    docsHref: '/agents/integrations',
+  },
+  {
+    slug: 'notion',
+    name: 'Notion',
+    category: 'Knowledge & docs',
+    tagline: 'Give your agents read/write access to Notion knowledge',
+    summary:
+      'Connect Notion so agents ground their work in your team docs and write results back - turning living documentation into agent context.',
+    useCases: ['Doc-grounded task execution', 'Auto-update specs and notes', 'Knowledge-base Q&A'],
+    docsHref: '/agents/integrations',
+  },
+  {
+    slug: 'gmail',
+    name: 'Gmail',
+    category: 'Productivity',
+    tagline: 'Let agents triage and act on email',
+    summary:
+      'With Gmail connected, agents can read, summarize and draft email as part of a workflow - useful for support triage, follow-ups and inbound-to-task flows.',
+    useCases: ['Inbox triage to tasks', 'Drafted replies for approval', 'Email-driven workflow triggers'],
+    docsHref: '/agents/integrations',
+  },
+];
+
+/** Slug -> integration record, for `/integrations/{slug}` route resolution. */
+export const INTEGRATION_SLUG_MAP: Record<string, IntegrationSeo> = Object.fromEntries(
+  SEO_INTEGRATIONS.map((it) => [it.slug, it]),
+);
