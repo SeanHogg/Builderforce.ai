@@ -56,7 +56,7 @@ describe("models list auth-profile sync", () => {
       process.env.BUILDERFORCE_AGENTS_CONFIG_PATH = configPath;
       delete process.env.OPENROUTER_API_KEY;
 
-      saveAuthProfileStore(
+      await saveAuthProfileStore(
         {
           version: 1,
           profiles: {

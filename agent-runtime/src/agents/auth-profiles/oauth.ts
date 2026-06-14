@@ -92,7 +92,7 @@ async function refreshOAuthTokenWithLock(params: {
   agentDir?: string;
 }): Promise<{ apiKey: string; newCredentials: OAuthCredentials } | null> {
   const authPath = resolveAuthStorePath(params.agentDir);
-  ensureAuthStoreFile(authPath);
+  await ensureAuthStoreFile(authPath);
 
   return await withFileLock(authPath, AUTH_STORE_LOCK_OPTIONS, async () => {
     const store = await ensureAuthProfileStore(params.agentDir);
@@ -140,7 +140,7 @@ async function refreshOAuthTokenWithLock(params: {
       ...result.newCredentials,
       type: "oauth",
     };
-    saveAuthProfileStore(store, params.agentDir);
+    await saveAuthProfileStore(store, params.agentDir);
 
     return result;
   });
@@ -286,7 +286,7 @@ export async function resolveApiKeyForProfile(
         if (mainCred?.type === "oauth" && Date.now() < mainCred.expires) {
           // Main agent has fresh credentials - copy them to this agent and use them
           refreshedStore.profiles[profileId] = { ...mainCred };
-          saveAuthProfileStore(refreshedStore, params.agentDir);
+          await saveAuthProfileStore(refreshedStore, params.agentDir);
           log.info("inherited fresh OAuth credentials from main agent", {
             profileId,
             agentDir: params.agentDir,

@@ -9,7 +9,7 @@
  */
 
 async function main() {
-  console.log("🦞 Git-Aware Refactoring Example\n");
+  console.log("🤖 Git-Aware Refactoring Example\n");
 
   console.log("Git History Awareness Features:\n");
 

@@ -533,10 +533,10 @@ async function runGatewayModelSuite(params: GatewayModelSuiteParams) {
   tempStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "builderforce-live-state-"));
   process.env.BUILDERFORCE_AGENTS_STATE_DIR = tempStateDir;
   tempAgentDir = path.join(tempStateDir, "agents", DEFAULT_AGENT_ID, "agent");
-  saveAuthProfileStore(sanitizedStore, tempAgentDir);
+  await saveAuthProfileStore(sanitizedStore, tempAgentDir);
   const tempSessionAgentDir = path.join(tempStateDir, "agents", agentId, "agent");
   if (tempSessionAgentDir !== tempAgentDir) {
-    saveAuthProfileStore(sanitizedStore, tempSessionAgentDir);
+    await saveAuthProfileStore(sanitizedStore, tempSessionAgentDir);
   }
   process.env.BUILDERFORCE_AGENTS_AGENT_DIR = tempAgentDir;
   process.env.PI_CODING_AGENT_DIR = tempAgentDir;
