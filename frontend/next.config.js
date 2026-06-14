@@ -23,6 +23,18 @@ const nextConfig = {
     // declared path's parents — which are inside frontend/node_modules
     // where both packages exist together.
     config.resolve.symlinks = false;
+    // @huggingface/transformers (pulled in transitively by the linked
+    // @seanhogg/builderforce-studio voice/video engine) ships a Node build that
+    // imports the native `onnxruntime-node` binding and `sharp`. Neither is
+    // usable in the browser/edge bundle this app ships — webpack chokes trying
+    // to parse the `.node` binaries. Stub both to `false` so the bundle uses the
+    // browser inference path (onnxruntime-web, a studio peerDependency) instead.
+    // This is the transformers.js-recommended Next.js config.
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'onnxruntime-node$': false,
+      sharp$: false,
+    };
     return config;
   },
   async redirects() {
