@@ -1,6 +1,4 @@
 import { rmSync } from "node:fs";
-import { completeSimple } from "@mariozechner/pi-ai";
-import type { TextContent } from "../builderforce/model/types.js";
 import { EdgeTTS } from "node-edge-tts";
 import { getApiKeyForModel, requireApiKey } from "../agents/model-auth.js";
 import {
@@ -10,6 +8,7 @@ import {
   type ModelRef,
 } from "../agents/model-selection.js";
 import { resolveModel } from "../agents/pi-embedded-runner/model.js";
+import { nativeComplete } from "../builderforce/model/native-llm.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
 import type {
@@ -415,10 +414,6 @@ function resolveSummaryModelRef(
   return { ref: resolved.ref, source: "summaryModel" };
 }
 
-function isTextContentBlock(block: { type: string }): block is TextContent {
-  return block.type === "text";
-}
-
 export async function summarizeText(params: {
   text: string;
   targetLength: number;
@@ -447,9 +442,12 @@ export async function summarizeText(params: {
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const res = await completeSimple(
-        resolved.model,
+      // Gateway-routed completion (pi-ai `completeSimple` replacement). `resolved.model.baseUrl`
+      // is the OpenAI-compatible endpoint; `apiKey` is the resolved provider/gateway key.
+      const res = await nativeComplete(
+        { baseUrl: resolved.model.baseUrl, apiKey, defaultModel: resolved.model.id },
         {
+          model: resolved.model.id,
           messages: [
             {
               role: "user",
@@ -458,24 +456,15 @@ export async function summarizeText(params: {
                 `Summarize the text to approximately ${targetLength} characters. Maintain the original tone and style. ` +
                 `Reply only with the summary, without additional explanations.\n\n` +
                 `<text_to_summarize>\n${text}\n</text_to_summarize>`,
-              timestamp: Date.now(),
             },
           ],
-        },
-        {
-          apiKey,
-          maxTokens: Math.ceil(targetLength / 2),
           temperature: 0.3,
-          signal: controller.signal,
+          extra: { max_tokens: Math.ceil(targetLength / 2) },
         },
+        controller.signal,
       );
 
-      const summary = res.content
-        .filter(isTextContentBlock)
-        .map((block) => block.text.trim())
-        .filter(Boolean)
-        .join(" ")
-        .trim();
+      const summary = res.content.trim();
 
       if (!summary) {
         throw new Error("No summary returned");

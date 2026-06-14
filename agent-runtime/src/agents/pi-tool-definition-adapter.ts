@@ -1,5 +1,5 @@
 import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "../builderforce/model/agent-types.js";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import type { ToolDefinition } from "./tool-definition.js";
 import { logDebug, logError } from "../logger.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import { isPlainObject } from "../utils.js";

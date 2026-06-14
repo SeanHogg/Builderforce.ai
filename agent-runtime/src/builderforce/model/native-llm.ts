@@ -17,7 +17,8 @@
 /** An OpenAI-compatible chat message (the wire shape the gateway accepts). */
 export interface LlmMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content?: string | null;
+  /** String for text turns, or an OpenAI multi-part array (e.g. text + `image_url`) for vision. */
+  content?: string | null | unknown[];
   tool_calls?: unknown;
   tool_call_id?: string;
   [k: string]: unknown;

@@ -1,5 +1,6 @@
 import path from "node:path";
-import { type Api, getEnvApiKey, type Model } from "@mariozechner/pi-ai";
+import { getEnvApiKey } from "./model-sdk-shims.js";
+import type { Api, Model } from "../builderforce/model/types.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import type { ModelProviderAuthMode, ModelProviderConfig } from "../config/types.js";

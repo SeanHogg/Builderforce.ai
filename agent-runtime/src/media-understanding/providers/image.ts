@@ -1,10 +1,10 @@
-import type { Api, Context, Model } from "../../builderforce/model/types.js";
-import { complete } from "@mariozechner/pi-ai";
 import { minimaxUnderstandImage } from "../../agents/minimax-vlm.js";
 import { getApiKeyForModel, requireApiKey } from "../../agents/model-auth.js";
 import { ensureBuilderForceAgentsModelsJson } from "../../agents/models-config.js";
 import { discoverAuthStorage, discoverModels } from "../../agents/pi-model-discovery.js";
 import { coerceImageAssistantText } from "../../agents/tools/image-tool.helpers.js";
+import { nativeComplete } from "../../builderforce/model/native-llm.js";
+import type { Api, AssistantMessage, Context, Model } from "../../builderforce/model/types.js";
 import type { ImageDescriptionRequest, ImageDescriptionResult } from "../types.js";
 
 export async function describeImageWithModel(
@@ -53,10 +53,40 @@ export async function describeImageWithModel(
       },
     ],
   };
-  const message = await complete(model, context, {
-    apiKey,
-    maxTokens: params.maxTokens ?? 512,
-  });
+  const visionMessages = context.messages.map((m) => ({
+    role: m.role as "user",
+    content: Array.isArray(m.content)
+      ? m.content.map((c) =>
+          c.type === "image"
+            ? {
+                type: "image_url" as const,
+                image_url: { url: `data:${c.mimeType};base64,${c.data}` },
+              }
+            : { type: "text" as const, text: (c as { text: string }).text },
+        )
+      : (m.content as string),
+  }));
+  const res = await nativeComplete(
+    { baseUrl: model.baseUrl, apiKey, defaultModel: model.id },
+    { model: model.id, messages: visionMessages, extra: { max_tokens: params.maxTokens ?? 512 } },
+  );
+  const message: AssistantMessage = {
+    role: "assistant",
+    content: [{ type: "text", text: res.content }],
+    api: model.api,
+    provider: model.provider,
+    model: model.id,
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: res.finishReason === "error" ? "error" : "stop",
+    timestamp: Date.now(),
+  };
   const text = coerceImageAssistantText({
     message,
     provider: model.provider,

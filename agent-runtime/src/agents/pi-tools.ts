@@ -1,10 +1,3 @@
-import {
-  codingTools,
-  createEditTool,
-  createReadTool,
-  createWriteTool,
-  readTool,
-} from "@mariozechner/pi-coding-agent";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import type { ToolLoopDetectionConfig } from "../config/types.tools.js";
 import { logWarn } from "../logger.js";
@@ -19,10 +12,11 @@ import {
   type ExecToolDefaults,
   type ProcessToolDefaults,
 } from "./bash-tools.js";
-import { listChannelAgentTools } from "./channel-tools.js";
 import { createBuilderForceAgentsTools } from "./builderforce-tools.js";
+import { listChannelAgentTools } from "./channel-tools.js";
 import { resolveImageSanitizationLimits } from "./image-sanitization.js";
 import type { ModelAuthMode } from "./model-auth.js";
+import { createEditTool, createReadTool, createWriteTool } from "./native-file-tools.js";
 import { wrapToolWithAbortSignal } from "./pi-tools.abort.js";
 import { wrapToolWithBeforeToolCallHook } from "./pi-tools.before-tool-call.js";
 import {
@@ -305,8 +299,10 @@ export function createBuilderForceAgentsCodingTools(options?: {
   }
   const imageSanitization = resolveImageSanitizationLimits(options?.config);
 
-  const base = (codingTools as unknown as AnyAgentTool[]).flatMap((tool) => {
-    if (tool.name === readTool.name) {
+  // The native coding tool set is read/bash/edit/write; bash is dropped here (replaced by
+  // createExecTool below). Iterate the names (was pi's `codingTools` marker array).
+  const base = (["read", "bash", "edit", "write"] as const).flatMap((toolName): AnyAgentTool[] => {
+    if (toolName === "read") {
       if (sandboxRoot) {
         const sandboxed = createSandboxedReadTool({
           root: sandboxRoot,
@@ -324,10 +320,10 @@ export function createBuilderForceAgentsCodingTools(options?: {
       });
       return [workspaceOnly ? wrapToolWorkspaceRootGuard(wrapped, workspaceRoot) : wrapped];
     }
-    if (tool.name === "bash" || tool.name === execToolName) {
+    if (toolName === "bash") {
       return [];
     }
-    if (tool.name === "write") {
+    if (toolName === "write") {
       if (sandboxRoot) {
         return [];
       }
@@ -339,7 +335,7 @@ export function createBuilderForceAgentsCodingTools(options?: {
       );
       return [workspaceOnly ? wrapToolWorkspaceRootGuard(wrapped, workspaceRoot) : wrapped];
     }
-    if (tool.name === "edit") {
+    if (toolName === "edit") {
       if (sandboxRoot) {
         return [];
       }
@@ -351,7 +347,7 @@ export function createBuilderForceAgentsCodingTools(options?: {
       );
       return [workspaceOnly ? wrapToolWorkspaceRootGuard(wrapped, workspaceRoot) : wrapped];
     }
-    return [tool];
+    return [];
   });
   const { cleanupMs: cleanupMsOverride, ...execDefaults } = options?.exec ?? {};
   const execTool = createExecTool({

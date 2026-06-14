@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   createVpsAwareOAuthHandlers: vi.fn(),
 }));
 
-vi.mock("@mariozechner/pi-ai", () => ({
+vi.mock("../agents/oauth/index.js", () => ({
   loginOpenAICodex: mocks.loginOpenAICodex,
 }));
 

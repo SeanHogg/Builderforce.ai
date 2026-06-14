@@ -6,9 +6,9 @@ const piCodingAgentMocks = vi.hoisted(() => ({
   estimateTokens: vi.fn(() => 1),
 }));
 
-vi.mock("@mariozechner/pi-coding-agent", async () => {
-  const actual = await vi.importActual<typeof import("@mariozechner/pi-coding-agent")>(
-    "@mariozechner/pi-coding-agent",
+vi.mock("../builderforce/agent-loop/index.js", async () => {
+  const actual = await vi.importActual<typeof import("../builderforce/agent-loop/index.js")>(
+    "../builderforce/agent-loop/index.js",
   );
   return {
     ...actual,
