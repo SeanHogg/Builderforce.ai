@@ -20,6 +20,7 @@ import type { Project, FileEntry, TrainingJob } from '@/lib/types';
 import { saveFile, fetchFileContent, deleteFile, fetchFiles, updateProject } from '@/lib/api';
 import { validateFileContentForPath } from '@/lib/fileContentGuard';
 import { useRegisterBrainActions, useBrainContext, savePrd, saveTasks, type BrainAction } from '@/lib/brain';
+import { PrdReviewModal, TasksReviewModal } from './ArtifactReviewModals';
 import { MODALITIES, DEFAULT_MODALITY, getModality, RIGHT_TAB_LABELS, type ProjectModality, type RightTab } from '@/lib/modality';
 import { getStoredTenantToken } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/apiClient';
@@ -129,6 +130,18 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   const [terminalExpanded, setTerminalExpanded] = useState(true);
   const [isChecking, setIsChecking] = useState(false);
   const [checkResults, setCheckResults] = useState<CheckResult[] | null>(null);
+  // When on, a Run is hard-gated on the last check pass — "code must be good
+  // before it runs". When off, failed checks only warn (confirm) before serving.
+  const [gateRunOnChecks, setGateRunOnChecks] = useState(true);
+  // Pending Brain-tool artifact reviews. The `generate_prd`/`generate_tasks`
+  // tools surface the generated artifact here and await the user's confirm/cancel
+  // (parity with the message-action button path), so nothing saves unreviewed.
+  const [prdReview, setPrdReview] = useState<{ prd: string; resolve: (saved: boolean) => void } | null>(null);
+  const [tasksReview, setTasksReview] = useState<
+    { titles: string[]; descriptions: string[]; resolve: (saved: boolean) => void } | null
+  >(null);
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
   const shellStartedRef = useRef(false);
   const terminalWriteRef = useRef<((data: string) => void) | null>(null);
   // package.json hash of the last successful npm install in this WC session, so
@@ -343,6 +356,21 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
 
   const handleRun = useCallback(async () => {
     if (isRunning) return;
+    // Gate on the last check result so a known-broken build isn't served as a
+    // preview. Hard-gate when enabled; otherwise warn and let the user override.
+    const failedChecks = checkResults?.filter((r) => r.status === 'fail') ?? [];
+    if (failedChecks.length > 0) {
+      const summary = failedChecks.map((r) => r.label).join(', ');
+      if (gateRunOnChecks) {
+        terminalWriter?.('\r\n\x1b[31m✗ Run blocked — last checks failed: ' + summary + '\x1b[0m\r\n');
+        terminalWriter?.('\x1b[33m  Fix the issues and re-run Check, or turn off "Gate Run on checks" to override.\x1b[0m\r\n');
+        return;
+      }
+      if (typeof window !== 'undefined' &&
+        !window.confirm(`Last checks failed (${summary}). Serve the preview anyway?`)) {
+        return;
+      }
+    }
     setIsRunning(true);
     try {
       terminalWriter?.('\r\n\x1b[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
@@ -408,7 +436,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, startDevServer, mountFiles, assembleMountContents, ensureInstalled, terminalWriter]);
+  }, [isRunning, startDevServer, mountFiles, assembleMountContents, ensureInstalled, terminalWriter, checkResults, gateRunOnChecks]);
 
   /**
    * Build the project in the WebContainer and capture its `dist/` output for
@@ -456,13 +484,6 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         setCheckResults([{ label: 'package.json', status: 'fail', detail: 'Invalid JSON' }]);
         return;
       }
-      await mountFiles(mount);
-      const installCode = await ensureInstalled(mount, (d) => terminalWriter?.(d));
-      if (installCode !== 0) {
-        setCheckResults([{ label: 'npm install', status: 'fail', detail: `exit ${installCode}` }]);
-        return;
-      }
-
       let scripts: Record<string, string> = {};
       let hasTypescript = false;
       try {
@@ -474,6 +495,42 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         scripts = pkg.scripts ?? {};
         hasTypescript = !!(pkg.dependencies?.typescript || pkg.devDependencies?.typescript);
       } catch { /* validated above */ }
+
+      // When we'll fall back to `npx tsc --noEmit` (TS present, no project
+      // typecheck script) and the project ships no tsconfig.json, synthesize a
+      // minimal one into the WebContainer so tsc doesn't bail with "no inputs"/
+      // default-config noise. Mounted only in the WC — never persisted to the project.
+      const willUseTscFallback = hasTypescript && !scripts['typecheck'];
+      if (willUseTscFallback && !mount['tsconfig.json']) {
+        mount['tsconfig.json'] = JSON.stringify(
+          {
+            compilerOptions: {
+              target: 'ES2020',
+              module: 'ESNext',
+              moduleResolution: 'Bundler',
+              jsx: 'react-jsx',
+              strict: true,
+              noEmit: true,
+              esModuleInterop: true,
+              skipLibCheck: true,
+              allowJs: true,
+              resolveJsonModule: true,
+              isolatedModules: true,
+            },
+            include: ['**/*.ts', '**/*.tsx'],
+          },
+          null,
+          2,
+        );
+        terminalWriter?.('\x1b[2m  (synthesized a minimal tsconfig.json for the type-check fallback)\x1b[0m\r\n');
+      }
+
+      await mountFiles(mount);
+      const installCode = await ensureInstalled(mount, (d) => terminalWriter?.(d));
+      if (installCode !== 0) {
+        setCheckResults([{ label: 'npm install', status: 'fail', detail: `exit ${installCode}` }]);
+        return;
+      }
 
       // Each check: prefer the project's own script; fall back to a sensible
       // default only when the toolchain is clearly present.
@@ -636,8 +693,12 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
       },
       run: async ({ prd }: { prd: string }) => {
         if (!prd?.trim()) return { error: 'PRD content is empty.' };
-        await savePrd(projectIdNum, prd);
-        return { saved: true };
+        // Surface for review; resolve once the user saves or cancels.
+        const saved = await new Promise<boolean>((resolve) => {
+          setReviewError(null);
+          setPrdReview({ prd: prd.trim(), resolve });
+        });
+        return saved ? { saved: true } : { saved: false, note: 'User declined to save the PRD.' };
       },
     },
     {
@@ -660,16 +721,66 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
       run: async ({ tasks }: { tasks: Array<{ title: string; description?: string }> }) => {
         const list = Array.isArray(tasks) ? tasks.filter(t => t?.title?.trim()) : [];
         if (list.length === 0) return { error: 'No tasks provided.' };
-        await saveTasks(projectIdNum, {
-          titles: list.map(t => t.title),
-          descriptions: list.map(t => t.description ?? ''),
+        const titles = list.map(t => t.title);
+        const descriptions = list.map(t => t.description ?? '');
+        // Surface for review; resolve once the user adds or cancels.
+        const saved = await new Promise<boolean>((resolve) => {
+          setReviewError(null);
+          setTasksReview({ titles, descriptions, resolve });
         });
-        return { added: list.length };
+        return saved ? { added: list.length } : { added: 0, note: 'User declined to add the tasks.' };
       },
     },
-  ], [projectIdNum]);
+    // Closures read only stable refs/setters + module imports; the actual save
+    // (which needs projectIdNum) happens in the review-confirm handlers below.
+  ], []);
 
   useRegisterBrainActions(brainActions);
+
+  // Review-modal handlers for the Brain `generate_prd`/`generate_tasks` tools.
+  const confirmPrdReview = useCallback(async () => {
+    if (!prdReview) return;
+    setReviewSaving(true);
+    setReviewError(null);
+    try {
+      await savePrd(projectIdNum, prdReview.prd);
+      prdReview.resolve(true);
+      setPrdReview(null);
+    } catch (e) {
+      setReviewError(e instanceof Error ? e.message : 'Failed to save PRD');
+    } finally {
+      setReviewSaving(false);
+    }
+  }, [prdReview, projectIdNum]);
+
+  const cancelPrdReview = useCallback(() => {
+    if (!prdReview) return;
+    prdReview.resolve(false);
+    setPrdReview(null);
+    setReviewError(null);
+  }, [prdReview]);
+
+  const confirmTasksReview = useCallback(async () => {
+    if (!tasksReview) return;
+    setReviewSaving(true);
+    setReviewError(null);
+    try {
+      await saveTasks(projectIdNum, { titles: tasksReview.titles, descriptions: tasksReview.descriptions });
+      tasksReview.resolve(true);
+      setTasksReview(null);
+    } catch (e) {
+      setReviewError(e instanceof Error ? e.message : 'Failed to add tasks');
+    } finally {
+      setReviewSaving(false);
+    }
+  }, [tasksReview, projectIdNum]);
+
+  const cancelTasksReview = useCallback(() => {
+    if (!tasksReview) return;
+    tasksReview.resolve(false);
+    setTasksReview(null);
+    setReviewError(null);
+  }, [tasksReview]);
 
   // Publish ambient context so the Brain knows the active project/modality and
   // can see the open file.
@@ -905,6 +1016,23 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
           );
         })()}
         {getModality(modality).showRunButton && (
+          <label
+            title="When on, Run is blocked while the last checks are failing"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
+              fontSize: '0.72rem', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={gateRunOnChecks}
+              onChange={(e) => setGateRunOnChecks(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            Gate Run
+          </label>
+        )}
+        {getModality(modality).showRunButton && (
           <button
             onClick={handleCheck}
             disabled={isChecking || isRunning}
@@ -951,6 +1079,28 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         projectId={projectIdNum}
         onImported={refreshFiles}
       />
+
+      {/* Brain-tool artifact reviews — the agent's generate_prd/generate_tasks
+          surface here for confirm-before-save, matching the button-action path. */}
+      {prdReview && (
+        <PrdReviewModal
+          prd={prdReview.prd}
+          onCancel={cancelPrdReview}
+          onConfirm={confirmPrdReview}
+          saving={reviewSaving}
+          error={reviewError}
+        />
+      )}
+      {tasksReview && (
+        <TasksReviewModal
+          titles={tasksReview.titles}
+          descriptions={tasksReview.descriptions}
+          onCancel={cancelTasksReview}
+          onConfirm={confirmTasksReview}
+          saving={reviewSaving}
+          error={reviewError}
+        />
+      )}
 
       {/* Main content. In Designer the coding agent lives in the left panel
           (the shared <BrainPanel> wired to this project's brain actions); other
