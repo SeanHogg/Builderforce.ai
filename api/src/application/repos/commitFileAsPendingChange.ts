@@ -9,16 +9,25 @@
  * loop resolves it ONCE and reuses it for every file the agent writes, instead of
  * re-decrypting the token per tool call.
  */
+import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import { tasks } from '../../infrastructure/database/schema';
 import { resolveDefaultRepoForTask } from './resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
 import { commitFileToRepo, deleteFileFromRepo, type CommitFileResult, type DeleteFileResult } from './commitFileToRepo';
 
 /**
- * The single ticket branch a run's changes land on. The PRD, every agent-written
- * file, and the finalize PR all reference THIS one branch, so a task's PRD + code
- * live on one branch and in one PR (not a separate `-prd` branch/PR). One source of
- * truth so the PRD-commit path and the file-commit path never diverge.
+ * The DEFAULT ticket branch a run's changes land on when the task has not already
+ * pinned an explicit branch. The PRD, every agent-written file, and the finalize PR
+ * all reference THIS one branch, so a task's PRD + code live on one branch and in
+ * one PR (not a separate `-prd` branch/PR). One source of truth so the PRD-commit
+ * path and the file-commit path never diverge.
+ *
+ * NOTE: this is only the *fallback*. The authoritative per-task branch is
+ * {@link tasks.gitBranch} once a run (cloud OR on-prem custom-branch via
+ * {@link openTaskPullRequest}) has committed — {@link resolveTicketRepoContext}
+ * prefers it so the diff read-back, the cloud commit path, and finalize all
+ * converge on the same ref instead of this hardcoded default.
  */
 export function ticketBranchName(taskId: number): string {
   return `builderforce/task-${taskId}`;
@@ -64,6 +73,18 @@ export async function resolveTicketRepoContext(
   const resolved = await resolveRepoCredential(db, secret, tenantId, repoRef.repoId);
   if (isResolveError(resolved)) return { ok: false, reason: resolved.error };
 
+  // Prefer the task's already-pinned branch (set by the cloud commit path AND by
+  // the on-prem/custom-branch finalize in openTaskPullRequest) over the hardcoded
+  // default, so the diff read-back, the commit path, and finalize all reference ONE
+  // branch. A fresh run has no gitBranch yet → falls back to the canonical default
+  // (which the first commit then writes back, keeping subsequent calls stable).
+  const [taskRow] = await db
+    .select({ gitBranch: tasks.gitBranch })
+    .from(tasks)
+    .where(eq(tasks.id, taskId))
+    .limit(1);
+  const branch = taskRow?.gitBranch?.trim() || ticketBranchName(taskId);
+
   return {
     ok: true,
     ctx: {
@@ -73,7 +94,7 @@ export async function resolveTicketRepoContext(
       repo: resolved.repo.repo,
       token: resolved.token,
       base: (resolved.repo.defaultBranch ?? 'main').trim(),
-      branch: ticketBranchName(taskId),
+      branch,
       repoId: resolved.repo.id,
       segmentId: resolved.repo.segmentId,
       projectId: resolved.repo.projectId,

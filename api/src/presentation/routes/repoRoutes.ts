@@ -36,6 +36,7 @@ import { mergePullRequest, normalizeMergeMethod } from '../../application/repos/
 import { markPullRequestMergedById } from '../../application/repos/recordPullRequestRow';
 import { getPullRequestDetail, invalidatePullRequestDetail } from '../../application/repos/getPullRequestDetail';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
 import type { CreatePrMessage } from '../../application/repos/prDispatch';
 
 /** Read-through cache key for a project's repo list (the picker + SourceControl read
@@ -117,6 +118,39 @@ async function probeRepoAccess(
 
 export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
   const router = new Hono<RepoHonoEnv>();
+
+  // POST /api/repos/pull-requests/:id/result — record the resulting PR number/url/status.
+  // DUAL-AUTH, registered BEFORE authMiddleware (mirrors specRoutes): the agentHost
+  // runtime that opened the PR calls back with its API key (Bearer + X-AgentHost-Id,
+  // or ?agentHostId=&key=); the portal can also record a result with a tenant JWT.
+  // Without the host-key branch a headless agent could not report its PR result.
+  router.post('/pull-requests/:id/result', async (c) => {
+    let tenantId: number;
+    const host = await resolveHostAuth(db, c);
+    if (host) {
+      tenantId = host.tenantId;
+    } else {
+      // Fall back to tenant JWT (portal). A bare Bearer JWT has no X-AgentHost-Id so
+      // resolveHostAuth returns null and we land here.
+      await authMiddleware(c, async () => {});
+      const tid = c.get('tenantId') as number | undefined;
+      if (!tid) return c.text('Unauthorized', 401);
+      tenantId = tid;
+    }
+
+    const id = c.req.param('id');
+    const body = await c.req.json<{
+      number?: number | null;
+      url?: string | null;
+      status?: string | null;
+    }>();
+
+    const service = new RepoService(db, makeAgentHostDispatcher(c.env));
+    const row = await service.recordPrResult(id, tenantId, body);
+    if (!row) return c.json({ error: 'Pull request not found' }, 404);
+    return c.json(row);
+  });
+
   router.use('*', authMiddleware);
 
   // ---- project_repositories CRUD --------------------------------------------
@@ -349,13 +383,22 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
   // ---- PR / branch dispatch -------------------------------------------------
 
   // POST /api/repos/tasks/:taskId/pull-request — resolve repo + dispatch PR creation.
+  // Optional body { repoId?, labels? } pins a specific repo or supplies board labels
+  // for hint matching (the task row carries no labels of its own).
   router.post('/tasks/:taskId/pull-request', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const taskId = Number(c.req.param('taskId'));
     if (!Number.isFinite(taskId)) return c.json({ error: 'Invalid taskId' }, 400);
 
+    const body = await c.req
+      .json<{ repoId?: string | null; labels?: string[] | null }>()
+      .catch(() => ({} as { repoId?: string | null; labels?: string[] | null }));
+
     const service = new RepoService(db, makeAgentHostDispatcher(c.env));
-    const result = await service.dispatchPrCreation(taskId, tenantId);
+    const result = await service.dispatchPrCreation(taskId, tenantId, {
+      explicitRepoId: body.repoId ?? null,
+      labels: Array.isArray(body.labels) ? body.labels : null,
+    });
 
     if (!result.ok) {
       switch (result.code) {
@@ -380,23 +423,6 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       },
       201,
     );
-  });
-
-  // POST /api/repos/pull-requests/:id/result — agentHost callback to record PR result.
-  router.post('/pull-requests/:id/result', async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    const id = c.req.param('id');
-
-    const body = await c.req.json<{
-      number?: number | null;
-      url?: string | null;
-      status?: string | null;
-    }>();
-
-    const service = new RepoService(db, makeAgentHostDispatcher(c.env));
-    const row = await service.recordPrResult(id, tenantId, body);
-    if (!row) return c.json({ error: 'Pull request not found' }, 404);
-    return c.json(row);
   });
 
   // GET /api/repos/projects/:projectId/pull-requests
