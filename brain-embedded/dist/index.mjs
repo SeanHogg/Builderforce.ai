@@ -317,6 +317,7 @@ var BrainContext = createContext3(null);
 function BrainContextProvider({ children }) {
   const [open, setOpen] = useState3(false);
   const [pageContext, setPageContext] = useState3(DEFAULT_CONTEXT);
+  const [activeChatId, setActiveChatId] = useState3(null);
   const setContext = useCallback2((patch) => {
     setPageContext((prev) => {
       const next = { ...prev, ...patch };
@@ -327,8 +328,8 @@ function BrainContextProvider({ children }) {
     });
   }, []);
   const value = useMemo4(
-    () => ({ ...pageContext, open, setOpen, setContext }),
-    [pageContext, open, setContext]
+    () => ({ ...pageContext, open, setOpen, setContext, activeChatId, setActiveChatId }),
+    [pageContext, open, setContext, activeChatId]
   );
   return /* @__PURE__ */ jsx3(BrainContext.Provider, { value, children });
 }
@@ -345,12 +346,23 @@ function useOptionalBrainContext() {
 import { useCallback as useCallback3, useEffect as useEffect3, useMemo as useMemo5, useRef as useRef2, useState as useState4 } from "react";
 function useBrainChats(options = {}) {
   const { persistence } = useBrainConfig();
-  const { filterProjectId, pinnedProjectId } = options;
+  const { filterProjectId, pinnedProjectId, activeChatId: controlledActiveId, onActiveChatChange } = options;
   const [chats, setChats] = useState4([]);
   const [loading, setLoading] = useState4(true);
   const [error, setError] = useState4("");
-  const [activeChatId, setActiveChatId] = useState4(null);
+  const [internalActiveId, setInternalActiveId] = useState4(null);
   const assigningRef = useRef2(false);
+  const isControlled = controlledActiveId !== void 0;
+  const activeChatId = isControlled ? controlledActiveId ?? null : internalActiveId;
+  const activeIdRef = useRef2(activeChatId);
+  activeIdRef.current = activeChatId;
+  const setActiveChatId = useCallback3(
+    (id) => {
+      if (isControlled) onActiveChatChange?.(id);
+      else setInternalActiveId(id);
+    },
+    [isControlled, onActiveChatChange]
+  );
   const defaultProjectId = useCallback3(() => {
     if (pinnedProjectId != null) return pinnedProjectId;
     return filterProjectId && filterProjectId !== "none" ? Number(filterProjectId) : null;
@@ -388,7 +400,7 @@ function useBrainChats(options = {}) {
       setError(e instanceof Error ? e.message : "Failed to open chat");
       return null;
     }
-  }, [persistence, chats]);
+  }, [persistence, chats, setActiveChatId]);
   const create = useCallback3(async (opts) => {
     setError("");
     try {
@@ -401,7 +413,7 @@ function useBrainChats(options = {}) {
       setError(e instanceof Error ? e.message : "Failed to create chat");
       return null;
     }
-  }, [persistence, defaultProjectId]);
+  }, [persistence, defaultProjectId, setActiveChatId]);
   const rename = useCallback3(async (id, title) => {
     const trimmed = title.trim();
     if (!trimmed) return;
@@ -432,11 +444,11 @@ function useBrainChats(options = {}) {
     try {
       await persistence.deleteChat(id);
       setChats((prev) => prev.filter((c) => c.id !== id));
-      setActiveChatId((cur) => cur === id ? null : cur);
+      if (activeIdRef.current === id) setActiveChatId(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Delete failed");
     }
-  }, [persistence]);
+  }, [persistence, setActiveChatId]);
   const assignToProject = useCallback3(async (id, projectId) => {
     if (assigningRef.current) return;
     assigningRef.current = true;
@@ -453,7 +465,7 @@ function useBrainChats(options = {}) {
   const touch = useCallback3(async (id) => {
     await reload();
     setActiveChatId(id);
-  }, [reload]);
+  }, [reload, setActiveChatId]);
   const activeChat = useMemo5(
     () => chats.find((c) => c.id === activeChatId) ?? null,
     [chats, activeChatId]
