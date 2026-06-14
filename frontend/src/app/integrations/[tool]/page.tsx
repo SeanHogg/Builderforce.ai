@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import JsonLd from '@/components/JsonLd';
 import { pageMetadata } from '@/lib/seo';
 import { integrationSchema } from '@/lib/structured-data';
-import { SEO_INTEGRATIONS, INTEGRATION_SLUG_MAP, FOOTER_LINKS } from '@/lib/content';
+import { SEO_INTEGRATIONS, INTEGRATION_SLUG_MAP } from '@/lib/content';
 
 export const runtime = 'edge';
 export const dynamicParams = false;
@@ -59,9 +59,6 @@ export default async function IntegrationPage({
         .intg-uses { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
         .intg-use { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 16px 18px; color: var(--text-primary); font-size: 0.92rem; line-height: 1.5; }
         .intg-use::before { content: '\\2713'; color: var(--coral-bright); font-weight: 700; margin-right: 8px; }
-        .intg-footer { border-top: 1px solid var(--border-subtle); margin-top: 28px; padding: 24px; display: flex; gap: 16px 22px; flex-wrap: wrap; justify-content: center; }
-        .intg-footer a { color: var(--text-secondary); text-decoration: none; font-size: 0.85rem; }
-        .intg-footer a:hover { color: var(--text-primary); }
       `}</style>
 
       <main className="intg">
@@ -94,11 +91,7 @@ export default async function IntegrationPage({
           </p>
         </section>
 
-        <footer className="intg-footer">
-          {FOOTER_LINKS.map((l) => (
-            <Link key={l.href} href={l.href}>{l.label}</Link>
-          ))}
-        </footer>
+        {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
       </main>
     </>
   );

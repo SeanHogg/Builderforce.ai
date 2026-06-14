@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
-import { HOMEPAGE_FAQ, FOOTER_LINKS, COMPARE } from '@/lib/content';
+import { HOMEPAGE_FAQ, COMPARE } from '@/lib/content';
 import { savePendingPrompt } from '@/lib/brain';
 import { pendingPromptsApi } from '@/lib/builderforceApi';
 import { BLOG_POSTS } from '@/lib/blogData';
@@ -464,45 +464,6 @@ export default function LandingPage() {
           line-height: 1.65;
         }
 
-        /* ════════ FOOTER ════════ */
-        .lp-footer {
-          border-top: 1px solid var(--border-subtle);
-          padding: 36px 24px;
-          text-align: center;
-        }
-        .lp-footer-inner {
-          max-width: 1200px;
-          margin: 0 auto;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 16px;
-        }
-        .lp-footer-links {
-          display: flex;
-          flex-wrap: wrap;
-          justify-content: center;
-          gap: 2px;
-          list-style: none;
-        }
-        .lp-footer-links a {
-          font-size: 0.82rem;
-          color: var(--text-muted);
-          text-decoration: none;
-          padding: 4px 10px;
-          border-radius: 6px;
-          transition: color 0.2s;
-        }
-        .lp-footer-links a:hover { color: var(--text-secondary); }
-        .lp-footer-copy {
-          font-size: 0.78rem;
-          color: var(--text-muted);
-        }
-        .lp-footer-copy a {
-          color: var(--coral-bright);
-          text-decoration: none;
-        }
-
         @media (max-width: 640px) {
           .lp-cta-box { padding: 40px 24px; }
           .lp-hero { padding: 28px 20px 48px; }
@@ -812,24 +773,7 @@ export default function LandingPage() {
           </div>
         </section>
         </main>
-
-        {/* ── Footer ── */}
-        <footer className="lp-footer">
-          <div className="lp-footer-inner">
-            <ul className="lp-footer-links">
-              {FOOTER_LINKS.map((l) => (
-                <li key={l.href}><Link href={l.href}>{l.label}</Link></li>
-              ))}
-            </ul>
-            <p className="lp-footer-copy">
-              Built by{' '}
-              <a href="https://myvideoresu.me/resumes/seanhogg" target="_blank" rel="noopener">
-                Sean Hogg
-              </a>
-              {' '}· Builderforce.ai © 2026
-            </p>
-          </div>
-        </footer>
+        {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
 
       </div>
     </>
