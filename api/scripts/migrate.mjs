@@ -196,11 +196,17 @@ for (const file of files) {
 
   const stmts = splitSqlStatements(sqlText);
 
-  for (const stmt of stmts) {
-    await sql(stmt);
-  }
-
-  await sql('INSERT INTO _migrations (name) VALUES ($1)', [file]);
+  // Apply the whole file + its ledger row in ONE transaction. neon's HTTP
+  // transport is non-interactive (all queries must be known up front) — which
+  // is exactly the case here — so `sql.transaction([...])` wraps the file in a
+  // single BEGIN/COMMIT. A failure midway rolls the WHOLE file back, so a
+  // migration can never leave the DB half-applied with the file un-recorded
+  // (the failure mode 0056 hit). The ledger INSERT rides the same transaction,
+  // so "DDL applied" and "migration recorded" are atomic.
+  await sql.transaction([
+    ...stmts.map((stmt) => sql(stmt)),
+    sql('INSERT INTO _migrations (name) VALUES ($1)', [file]),
+  ]);
   applied_count++;
   console.log(`  ✅ ${file}`);
 }

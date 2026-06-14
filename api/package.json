@@ -12,7 +12,8 @@
     "db:push": "npx drizzle-kit push",
     "type-check": "tsc --noEmit",
     "check:schema": "node scripts/check-schema-drift.mjs",
-    "test": "npm run check:schema && vitest run"
+    "check:migrations": "node scripts/check-migrations.mjs",
+    "test": "npm run check:schema && npm run check:migrations && vitest run"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",
