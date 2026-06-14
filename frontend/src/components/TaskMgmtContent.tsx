@@ -10,7 +10,6 @@ import {
   runtimeApi,
   boardsApi,
   workflowDefinitions,
-  isAwaitingApprovalExecution,
   type Task,
   type TaskPriority,
   type AgentHost,
@@ -33,7 +32,6 @@ import {
 import { BoardConfigPanel } from './board/BoardConfigPanel';
 import { AgentChip } from './board/AgentChip';
 import { useBoardConfig } from './board/useBoardConfig';
-import { decideLaneAutoRun } from '@/lib/laneAutoRun';
 import { SlideOutPanel } from './SlideOutPanel';
 import { MoveToBoardControl } from './MoveToBoardControl';
 import { AgentTab } from './agent/AgentTab';
@@ -509,50 +507,17 @@ export function TaskMgmtContent({
     }
   };
 
-  const patchStatus = async (
-    id: number,
-    status: string,
-    opts?: { skipAutoSubmit?: boolean }
-  ) => {
+  const patchStatus = async (id: number, status: string) => {
     try {
       const updated = await tasksApi.update(id, { status });
       setTasks((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
       if (drawerTask?.id === id) setDrawerTask(updated);
-
-      // Autonomous trigger: when a ticket enters a lane, decide whether to auto-run
-      // and — critically — AS WHICH AGENT. A lane configured with a cloud agent
-      // (e.g. a Coder Agent V2) must run AS that agent: pass its ref + model so the
-      // backend resolves the right engine instead of falling back to the V1
-      // gateway-default. The decision lives in one place (decideLaneAutoRun).
-      if (!opts?.skipAutoSubmit) {
-        const column = boardColumns.find((c) => c.status === status);
-        // Autonomy is per-lane: a lane with agents + an `auto` gate fires; a
-        // `human` gate waits. (board.autonomous is legacy/unused — always false.)
-        const laneGate = lanes.find((l) => l.key === status)?.gate;
-        const decision = decideLaneAutoRun(column?.agents, status, laneGate);
-        if (decision.autoRun) {
-          const payloadObj: { cloudAgentRef?: string; model?: string } = {};
-          if (decision.cloudAgentRef) payloadObj.cloudAgentRef = decision.cloudAgentRef;
-          if (decision.model) payloadObj.model = decision.model;
-          try {
-            const result = await runtimeApi.submitExecution({
-              taskId: id,
-              agentHostId: updated.assignedAgentHostId ?? undefined,
-              payload: Object.keys(payloadObj).length > 0 ? JSON.stringify(payloadObj) : undefined,
-            });
-
-            if (isAwaitingApprovalExecution(result)) {
-              setApprovalGate({
-                approvalId: result.approvalId,
-                taskId: result.taskId,
-                reason: result.reason,
-              });
-            }
-          } catch {
-            // Non-blocking: status was updated; execution may fail if no agentHost connected
-          }
-        }
-      }
+      // The board "autonomous trigger" (auto-run a ticket entering a lane with a
+      // configured cloud agent) is now decided SERVER-SIDE on the task PATCH — see
+      // maybeAutoRunOnLaneEntry / decideLaneAutoRun in the api. The frontend no
+      // longer fires its own submitExecution here: doing so duplicated the logic
+      // and skipped every non-board path (brain-created / API status changes). The
+      // server is the single source of truth.
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Update failed');
     }
@@ -2036,7 +2001,7 @@ export function TaskMgmtContent({
               <RunTaskButton
                 task={drawerTask}
                 label="Run this task"
-                onRan={() => { patchStatus(drawerTask.id, 'in_progress', { skipAutoSubmit: true }); setDrawerTab('agent'); }}
+                onRan={() => { patchStatus(drawerTask.id, 'in_progress'); setDrawerTab('agent'); }}
                 onAwaitingApproval={(g) => setApprovalGate({ approvalId: g.approvalId, taskId: g.taskId, reason: g.reason })}
               />
             </div>

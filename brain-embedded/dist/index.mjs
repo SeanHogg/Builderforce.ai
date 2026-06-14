@@ -1,6 +1,137 @@
 // src/config.tsx
 import { createContext, useContext, useMemo } from "react";
 
+// src/xmlToolCalls.ts
+var OPEN = "<tool_call>";
+var CLOSE = "</tool_call>";
+function partialTailPrefix(buf, tag) {
+  const max = Math.min(buf.length, tag.length - 1);
+  for (let L = max; L > 0; L--) {
+    if (buf.slice(buf.length - L) === tag.slice(0, L)) return L;
+  }
+  return 0;
+}
+function coerceArg(raw) {
+  const v = raw.trim();
+  if (v === "") return "";
+  try {
+    return JSON.parse(v);
+  } catch {
+    return v;
+  }
+}
+function parseInner(inner, seq) {
+  const trimmed = inner.trim();
+  if (!trimmed) return null;
+  const firstArg = trimmed.indexOf("<arg_key>");
+  if (firstArg >= 0) {
+    const name = trimmed.slice(0, firstArg).trim();
+    if (!name) return null;
+    const args = {};
+    const re = /<arg_key>([\s\S]*?)<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/g;
+    let m;
+    while ((m = re.exec(trimmed)) !== null) {
+      const key = m[1].trim();
+      if (key) args[key] = coerceArg(m[2]);
+    }
+    return { id: `xmltc_${seq}`, name, args: JSON.stringify(args) };
+  }
+  const jsonStart = trimmed.indexOf("{");
+  if (jsonStart >= 0) {
+    const maybeName = trimmed.slice(0, jsonStart).trim();
+    try {
+      const obj = JSON.parse(trimmed.slice(jsonStart));
+      if (maybeName) {
+        return { id: `xmltc_${seq}`, name: maybeName, args: JSON.stringify(obj ?? {}) };
+      }
+      if (obj && typeof obj === "object" && typeof obj.name === "string") {
+        const a = obj.arguments ?? obj.parameters ?? {};
+        const argsStr = typeof a === "string" ? a : JSON.stringify(a ?? {});
+        return { id: `xmltc_${seq}`, name: obj.name, args: argsStr };
+      }
+    } catch {
+      if (maybeName) return { id: `xmltc_${seq}`, name: maybeName, args: "{}" };
+    }
+    return null;
+  }
+  return { id: `xmltc_${seq}`, name: trimmed, args: "{}" };
+}
+var XmlToolCallFilter = class {
+  buf = "";
+  inside = false;
+  innerBuf = "";
+  clean = "";
+  calls = [];
+  seq = 0;
+  /** Feed a content delta; returns clean (markup-free) text to emit now. */
+  push(delta) {
+    this.buf += delta;
+    let emit2 = "";
+    for (; ; ) {
+      if (!this.inside) {
+        const open = this.buf.indexOf(OPEN);
+        if (open >= 0) {
+          emit2 += this.buf.slice(0, open);
+          this.buf = this.buf.slice(open + OPEN.length);
+          this.inside = true;
+          this.innerBuf = "";
+          continue;
+        }
+        const hold2 = partialTailPrefix(this.buf, OPEN);
+        emit2 += this.buf.slice(0, this.buf.length - hold2);
+        this.buf = hold2 ? this.buf.slice(this.buf.length - hold2) : "";
+        break;
+      }
+      const close = this.buf.indexOf(CLOSE);
+      if (close >= 0) {
+        this.innerBuf += this.buf.slice(0, close);
+        this.buf = this.buf.slice(close + CLOSE.length);
+        this.inside = false;
+        const parsed = parseInner(this.innerBuf, this.seq++);
+        if (parsed) this.calls.push(parsed);
+        this.innerBuf = "";
+        continue;
+      }
+      const hold = partialTailPrefix(this.buf, CLOSE);
+      this.innerBuf += this.buf.slice(0, this.buf.length - hold);
+      this.buf = hold ? this.buf.slice(this.buf.length - hold) : "";
+      break;
+    }
+    this.clean += emit2;
+    return emit2;
+  }
+  /** End of stream: flush held-back text and close any unterminated call. */
+  flush() {
+    let emit2 = "";
+    if (this.inside) {
+      this.innerBuf += this.buf;
+      const parsed = parseInner(this.innerBuf, this.seq++);
+      if (parsed) this.calls.push(parsed);
+    } else {
+      emit2 = this.buf;
+    }
+    this.buf = "";
+    this.innerBuf = "";
+    this.inside = false;
+    this.clean += emit2;
+    return emit2;
+  }
+  /** The full clean text accumulated so far. */
+  cleanText() {
+    return this.clean;
+  }
+  /** Tool calls lifted out of the text. */
+  toolCalls() {
+    return this.calls;
+  }
+};
+function extractXmlToolCalls(raw) {
+  const f = new XmlToolCallFilter();
+  f.push(raw);
+  f.flush();
+  return { text: f.cleanText(), toolCalls: f.toolCalls() };
+}
+
 // src/streamChatCompletion.ts
 async function defaultMapError(res) {
   const body = await res.json().catch(() => ({}));
@@ -32,13 +163,14 @@ async function streamChatCompletion(opts, handlers = {}) {
   if (res.status === 401) transport.onUnauthorized?.(res, !!token);
   if (!res.ok) throw await (transport.mapError ?? defaultMapError)(res);
   const toolAcc = /* @__PURE__ */ new Map();
-  let text = "";
+  const xml = new XmlToolCallFilter();
   let finishReason = null;
+  const allToolCalls = () => [...assemble(toolAcc), ...xml.toolCalls()];
   const reader = res.body?.getReader();
   if (!reader) {
     const data = await res.json().catch(() => null);
     const choice = data?.choices?.[0];
-    text = choice?.message?.content ?? "";
+    const { text, toolCalls: xmlCalls } = extractXmlToolCalls(choice?.message?.content ?? "");
     if (text) handlers.onTextDelta?.(text);
     (choice?.message?.tool_calls ?? []).forEach((tc, i) => {
       const idx = tc.index ?? i;
@@ -46,7 +178,7 @@ async function streamChatCompletion(opts, handlers = {}) {
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: assemble(toolAcc), finishReason };
+    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason };
   }
   const decoder = new TextDecoder();
   let buffer = "";
@@ -61,8 +193,10 @@ async function streamChatCompletion(opts, handlers = {}) {
       if (!trimmed.startsWith("data: ")) continue;
       const payload = trimmed.slice(6).trim();
       if (payload === "[DONE]") {
+        const tail2 = xml.flush();
+        if (tail2) handlers.onTextDelta?.(tail2);
         handlers.onDone?.(finishReason);
-        return { text, toolCalls: assemble(toolAcc), finishReason };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason };
       }
       let parsed;
       try {
@@ -74,8 +208,8 @@ async function streamChatCompletion(opts, handlers = {}) {
       if (choice?.finish_reason) finishReason = choice.finish_reason;
       const contentDelta = (typeof choice?.delta?.content === "string" ? choice.delta.content : null) || parsed.response || parsed.text || parsed.delta || "";
       if (contentDelta) {
-        text += contentDelta;
-        handlers.onTextDelta?.(contentDelta);
+        const visible = xml.push(contentDelta);
+        if (visible) handlers.onTextDelta?.(visible);
       }
       const tcDeltas = choice?.delta?.tool_calls;
       if (tcDeltas) {
@@ -96,8 +230,10 @@ async function streamChatCompletion(opts, handlers = {}) {
       }
     }
   }
+  const tail = xml.flush();
+  if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text, toolCalls: assemble(toolAcc), finishReason };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason };
 }
 function assemble(acc) {
   return [...acc.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => ({ id: v.id, name: v.name, args: v.args })).filter((c) => c.name.length > 0);

@@ -47,6 +47,19 @@ import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 const MAX_TOOL_ITERATIONS = 25;
 /** How much history we send to the model. */
 const HISTORY_WINDOW = 80;
+/**
+ * Memory bounds. Run cells are session-lived (the transcript IS the cross-turn
+ * grounding), so without a cap a long session touching many chats grows the
+ * module-level `Map` without limit. We keep at most {@link MAX_CELLS} cells,
+ * evicting the least-recently-used **idle** ones (never an in-flight run or a
+ * cell a mounted view is subscribed to); a re-visited evicted chat just rebuilds
+ * its cell and reloads visible history from persistence — the same grounding
+ * loss as a page reload. Per-cell, the trace and the live-append buffer are also
+ * capped so a single marathon chat can't grow unbounded either.
+ */
+const MAX_CELLS = 50;
+const MAX_TRACE_EVENTS = 500;
+const MAX_APPENDED = 50;
 
 /** Streaming fn shape (matches BrainRuntime.stream). */
 export type BrainStreamFn = (
@@ -142,12 +155,35 @@ function makeCell(): RunCell {
 }
 
 function getCell(chatId: number): RunCell {
-  let c = cells.get(chatId);
-  if (!c) {
-    c = makeCell();
-    cells.set(chatId, c);
+  const existing = cells.get(chatId);
+  if (existing) {
+    // Refresh LRU recency: re-insert so this chat moves to the most-recent end
+    // (Map preserves insertion order, which we use as the eviction queue).
+    cells.delete(chatId);
+    cells.set(chatId, existing);
+    return existing;
   }
+  const c = makeCell();
+  cells.set(chatId, c);
+  evictIdleCells(chatId);
   return c;
+}
+
+/**
+ * Evict least-recently-used cells over the cap, skipping any that are still
+ * running, have a mounted subscriber, or are `protectId` (the cell we just
+ * created and are about to return — its subscriber attaches right after, so it
+ * must not be evicted out from under the mounting view). Iterates oldest-first
+ * via the Map's insertion order. When everything in range is protected the store
+ * is allowed to exceed the cap rather than drop live state.
+ */
+function evictIdleCells(protectId: number): void {
+  if (cells.size <= MAX_CELLS) return;
+  for (const [id, cell] of cells) {
+    if (cells.size <= MAX_CELLS) break;
+    if (id === protectId || cell.running || cell.listeners.size > 0) continue;
+    cells.delete(id);
+  }
 }
 
 /** Re-derive the cached snapshot and notify subscribers. */
@@ -166,7 +202,23 @@ function emit(c: RunCell): void {
 
 function pushTrace(c: RunCell, ev: BrainTraceEvent): void {
   c.trace.push(ev);
+  // Bound a single run's trace so a long tool-chain can't grow without limit.
+  if (c.trace.length > MAX_TRACE_EVENTS) c.trace.splice(0, c.trace.length - MAX_TRACE_EVENTS);
   emit(c);
+}
+
+/**
+ * Record a freshly-persisted assistant message for live splice-in and bump the
+ * epoch. The buffer is capped to the most recent {@link MAX_APPENDED}: any older
+ * entries were already merged into mounted views (merge is id-keyed), and a
+ * late-mounting view loads full history from persistence — so trimming is safe
+ * and keeps a marathon chat's cell bounded. (Cap ≫ a single run's max turns, so
+ * nothing is ever trimmed before delivery within one run.)
+ */
+function recordAppended(c: RunCell, msg: BrainMessage): void {
+  const next = [...c.appended, msg];
+  c.appended = next.length > MAX_APPENDED ? next.slice(next.length - MAX_APPENDED) : next;
+  c.messagesEpoch += 1;
 }
 
 function nowMs(): number {
@@ -207,6 +259,11 @@ function windowed(convo: ChatCompletionMessage[]): ChatCompletionMessage[] {
  */
 export function resetBrainRunStore(): void {
   cells.clear();
+}
+
+/** Number of run cells currently retained in memory (diagnostics/tests). */
+export function getRunStoreSize(): number {
+  return cells.size;
 }
 
 /** Subscribe to a chat's run state. Returns an unsubscribe fn. */
@@ -339,8 +396,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       const narration = result.text.trim();
       if (narration) {
         const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: result.text }]);
-        c.appended = [...c.appended, narrationMsg];
-        c.messagesEpoch += 1;
+        recordAppended(c, narrationMsg);
       }
       c.streamingText = '';
       emit(c);
@@ -383,8 +439,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     convo.push({ role: 'assistant', content: finalText });
     const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: finalText }]);
     c.streamingText = '';
-    c.appended = [...c.appended, assistantMsg];
-    c.messagesEpoch += 1;
+    recordAppended(c, assistantMsg);
     emit(c);
     onActivity?.(chatId);
     return;
