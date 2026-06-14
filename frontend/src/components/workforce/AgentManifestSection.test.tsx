@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import type { PublishedAgent } from '@/lib/types';
 import type { AgentManifest } from '@/lib/builderforceApi';
-import { AgentManifestSection, buildAgentManifestText } from './AgentManifestSection';
+import { AgentManifestSection, AgentManifestInline, buildAgentManifestText } from './AgentManifestSection';
 
 const agent = (over: Partial<PublishedAgent> = {}): PublishedAgent => ({
   id: 'agent_kevin',
@@ -65,5 +65,31 @@ describe('AgentManifestSection', () => {
     expect(getByText('Code Creator')).toBeTruthy();
     expect(getByText('GitHub')).toBeTruthy();
     expect(queryByText('No skills or personas assigned')).toBeNull();
+  });
+});
+
+describe('AgentManifestInline (list view)', () => {
+  it('shows "None assigned" + a Copy button when empty', () => {
+    const { getByText, getByRole } = render(<AgentManifestInline agent={agent()} manifest={manifest()} />);
+    expect(getByText('None assigned')).toBeTruthy();
+    expect(getByRole('button', { name: 'Copy' })).toBeTruthy();
+  });
+
+  it('caps the chip strip and shows a +N overflow', () => {
+    const { getByText, queryByText } = render(
+      <AgentManifestInline
+        agent={agent()}
+        manifest={manifest({
+          personas: [{ slug: 'a', name: 'A' }, { slug: 'b', name: 'B' }],
+          skills: [{ slug: 'c', name: 'C' }, { slug: 'd', name: 'D' }, { slug: 'e', name: 'E' }],
+        })}
+      />,
+    );
+    // First three (personas first) are shown; the remaining two collapse into +2.
+    expect(getByText('A')).toBeTruthy();
+    expect(getByText('B')).toBeTruthy();
+    expect(getByText('C')).toBeTruthy();
+    expect(getByText('+2')).toBeTruthy();
+    expect(queryByText('E')).toBeNull();
   });
 });

@@ -7,7 +7,13 @@ export interface ITaskRepository {
   findById(id: TaskId): Promise<Task | null>;
   /** Direct child tasks of an Epic (parent_task_id = parentId), oldest first. */
   findChildren(parentId: TaskId): Promise<Task[]>;
-  countByProject(projectId: ProjectId): Promise<number>;
+  /**
+   * Highest existing task-key sequence number in a project (0 if none). Keys are
+   * `${projectKey}-${NNN}`; the next key is this + 1. Used instead of a row count
+   * for key allocation: counts skip the gaps left by deletes/moves and would
+   * collide on the globally-unique `tasks.key`.
+   */
+  maxKeySeqByProject(projectId: ProjectId): Promise<number>;
   save(task: Task): Promise<Task>;
   update(task: Task): Promise<Task>;
   delete(id: TaskId): Promise<void>;

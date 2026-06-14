@@ -91,10 +91,10 @@ export function AgentCard({
             </span>
             <span style={pricePillStyle}>{formatAgentPrice(agent)}</span>
           </div>
-          {/* Assigned configuration + Copy manifest. Owners always see it (an empty
-              section is the "nothing configured" signal); non-owners only when the
-              caller supplies a manifest. */}
-          {(owner || manifest) && <AgentManifestSection agent={agent} manifest={manifest} />}
+          {/* Assigned configuration + Copy manifest — on every agent card (an empty
+              section is the "nothing configured" signal), consistent with the list
+              view's Configuration column. */}
+          <AgentManifestSection agent={agent} manifest={manifest} />
         </>
       }
       footer={

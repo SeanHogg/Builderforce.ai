@@ -74,7 +74,6 @@ import { createWorkflowDefinitionRoutes } from './presentation/routes/workflowDe
 import { createWorkflowTriggerRoutes } from './presentation/routes/workflowTriggerRoutes';
 import { createApprovalRoutes }     from './presentation/routes/approvalRoutes';
 import { createApprovalRuleRoutes } from './presentation/routes/approvalRuleRoutes';
-import { createPushSubscriptionRoutes } from './presentation/routes/pushSubscriptionRoutes';
 import { createPendingPromptRoutes } from './presentation/routes/pendingPromptRoutes';
 import { createTelemetryRoutes }    from './presentation/routes/telemetryRoutes';
 import { createQaRoutes }           from './presentation/routes/qaRoutes';
@@ -283,10 +282,6 @@ function buildApp(env: Env): Hono<HonoEnv> {
   // token, optional HMAC; no JWT. Mounted with the other public webhook routes.
   app.route('/api/workflow-triggers', createWorkflowTriggerRoutes(db));
 
-  // Web Push: /public-key + /notify-deploy are public/secret-guarded; /subscribe
-  // applies authMiddleware per-route inside the router.
-  app.route('/api/push', createPushSubscriptionRoutes(db));
-
   // Anonymous landing-prompt handoff: POST / is public (pre-auth); /claim applies
   // web-auth per-route so it can associate the row to the now-known user.
   app.route('/api/pending-prompts', createPendingPromptRoutes(db));
@@ -339,7 +334,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/specs',    createSpecRoutes(db));
   app.route('/api/workflows', createWorkflowRoutes(db));
   app.route('/api/workflow-definitions', createWorkflowDefinitionRoutes(db));
-  app.route('/api/approvals',       createApprovalRoutes(db));
+  app.route('/api/approvals',       createApprovalRoutes(db, runtimeService));
   app.route('/api/approval-rules',  createApprovalRuleRoutes(db));
   app.route('/api/telemetry',       createTelemetryRoutes(db));
   app.route('/api/qa',              createQaRoutes(db));

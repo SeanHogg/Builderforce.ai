@@ -124,12 +124,45 @@ function requiresTaskExecutionApproval(task: ExecutionTaskRow): boolean {
   return task.priority === 'high' || task.priority === 'urgent';
 }
 
+/** Run context replayed when a `task.execution` approval is approved. */
+export interface ApprovalReplay {
+  taskId: number;
+  /** The original submit payload (carries the cloud-agent ref + model + repo pin). */
+  payload?: string;
+  /** A per-run pinned host, if the gated run targeted one. */
+  agentHostId?: number | null;
+}
+
+/**
+ * Read the stored run context off a `task.execution` approval so approving it can
+ * replay the original submit AS the same agent + model — the gate discards no run
+ * detail (see {@link evaluateExecutionApprovalGate}). Returns null for approvals
+ * without a parseable taskId (non-task.execution rows).
+ */
+export function parseApprovalReplay(metadata: string | null): ApprovalReplay | null {
+  const taskId = parseApprovalTaskId(metadata);
+  if (taskId == null || !metadata) return null;
+  try {
+    const parsed = JSON.parse(metadata) as { payload?: unknown; agentHostId?: unknown };
+    const payload = typeof parsed.payload === 'string' ? parsed.payload : undefined;
+    const agentHostId =
+      typeof parsed.agentHostId === 'number' && Number.isFinite(parsed.agentHostId)
+        ? parsed.agentHostId
+        : null;
+    return { taskId, payload, agentHostId };
+  } catch {
+    return { taskId };
+  }
+}
+
 async function evaluateExecutionApprovalGate(
   db: Db,
   tenantId: number,
   requestedBy: string,
   task: ExecutionTaskRow,
   requestedAgentHostId: number | null,
+  /** The original submit context, persisted so an approve replays the exact run. */
+  submitContext?: { payload?: string },
 ): Promise<ExecutionApprovalGateResult> {
   if (!requiresTaskExecutionApproval(task)) {
     return { allowed: true };
@@ -180,6 +213,10 @@ async function evaluateExecutionApprovalGate(
     metadata: JSON.stringify({
       taskId: task.id,
       priority: task.priority,
+      // Persist the run context so approving the request replays the exact run
+      // (as the same cloud agent + model + repo pin) — see parseApprovalReplay.
+      payload: submitContext?.payload ?? null,
+      agentHostId: task.assignedAgentHostId ?? requestedAgentHostId,
     }),
     createdAt: now,
     updatedAt: now,
@@ -314,7 +351,7 @@ export async function dispatchCloudRunForTask(
   db: Db,
   runtimeService: RuntimeService,
   waitUntil: (p: Promise<unknown>) => void,
-  params: { taskId: number; tenantId: number; payload?: string; submittedBy?: string },
+  params: { taskId: number; tenantId: number; payload?: string; submittedBy?: string; agentHostId?: number | null },
 ): Promise<number | null> {
   const [taskRow] = await db
     .select({
@@ -328,14 +365,20 @@ export async function dispatchCloudRunForTask(
     .limit(1);
   if (!taskRow) return null;
 
+  // A per-run pinned host (e.g. an approved high-priority on-prem run) overrides
+  // the task's assignee for THIS dispatch so host targeting survives the replay.
+  const effectiveTaskRow = (params.agentHostId != null
+    ? { ...taskRow, assignedAgentHostId: params.agentHostId }
+    : taskRow) as ExecutionTaskRow;
+
   const execution = await runtimeService.submit({
     taskId: params.taskId,
-    agentHostId: taskRow.assignedAgentHostId ?? undefined,
+    agentHostId: effectiveTaskRow.assignedAgentHostId ?? undefined,
     tenantId: params.tenantId,
     submittedBy: params.submittedBy ?? 'system:autofix',
     payload: params.payload,
   });
-  await startDispatchedExecution(env, db, runtimeService, waitUntil, params.tenantId, execution as SubmittedExecution, taskRow as ExecutionTaskRow, params.payload);
+  await startDispatchedExecution(env, db, runtimeService, waitUntil, params.tenantId, execution as SubmittedExecution, effectiveTaskRow, params.payload);
   return execution.id;
 }
 
@@ -724,6 +767,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       c.get('userId'),
       taskRow,
       agentHostIdFromHeader ?? body.agentHostId ?? null,
+      { payload: body.payload },
     );
     if (!gate.allowed) {
       return c.json(
@@ -803,6 +847,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       c.get('userId'),
       taskRow,
       agentHostIdFromHeader ?? body.agentHostId ?? null,
+      { payload: body.payload },
     );
     if (!gate.allowed) {
       return c.json(
@@ -1412,12 +1457,15 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     // ── Terminal run → start a NEW run carrying the directive ─────────────────
     if (!taskRow) return c.json({ error: 'Task no longer exists' }, 409);
 
-    const gate = await evaluateExecutionApprovalGate(db, tenantId, c.get('userId'), taskRow, plain.agentHostId ?? null);
+    // Build the follow-up payload BEFORE the gate so an approval persists (and
+    // later replays) the run carrying this directive — not the bare prior payload.
+    const followUpPayload = buildFollowUpPayload(plain.payload, { directive: text, priorExecutionId: id });
+
+    const gate = await evaluateExecutionApprovalGate(db, tenantId, c.get('userId'), taskRow, plain.agentHostId ?? null, { payload: followUpPayload });
     if (!gate.allowed) {
       return c.json({ status: 'awaiting_approval', approvalId: gate.approvalId, taskId: taskRow.id, reason: gate.reason }, 202);
     }
 
-    const followUpPayload = buildFollowUpPayload(plain.payload, { directive: text, priorExecutionId: id });
     const newExecution = await runtimeService.submit({
       taskId: taskRow.id,
       agentHostId: plain.agentHostId ?? undefined,

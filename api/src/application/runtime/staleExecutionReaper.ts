@@ -20,7 +20,7 @@
 
 import { neon } from '@neondatabase/serverless';
 import type { Env } from '../../env';
-import { CLOUD_ORPHAN_REASON } from './orphanReasons';
+import { cloudOrphanReason } from './orphanReasons';
 import { markReaperRequeued, wasReaperRequeued } from './cloudDispatch';
 
 /** A self-hosted host run executing longer than this is treated as hung. */
@@ -69,6 +69,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
   // decide per-row whether to re-dispatch or fail — see requeueCloudRun.
   const cloudCandidates = (await sql`
     SELECT e.id, e.tenant_id, e.agent_host_id, e.payload, e.error_message,
+           e.started_at AS started_at, e.created_at AS created_at, e.updated_at AS updated_at,
            t.id AS task_id, t.title AS task_title, t.description AS task_description,
            t.project_id AS project_id, e.cloud_agent_ref AS cloud_agent_ref,
            (SELECT count(*) FROM pull_requests pr
@@ -96,10 +97,14 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
       continue;
     }
 
+    // Surface-aware reason: a run whose last activity outlasted the serverless wall
+    // ran on a long-lived executor (durable/container) and crashed — don't claim a
+    // 30s serverless timeout or tell the user to downgrade to a durable runtime.
+    const reason = cloudOrphanReason(tsToMs(row.started_at ?? row.created_at), tsToMs(row.updated_at ?? row.created_at));
     const [failed] = (await sql`
       UPDATE executions
          SET status = 'failed',
-             error_message = ${CLOUD_ORPHAN_REASON},
+             error_message = ${reason},
              completed_at = now(),
              updated_at = now()
        WHERE id = ${row.id} AND status = 'running'
@@ -151,12 +156,23 @@ interface ReapedRow {
 
 /** A stale cloud run + the task context the durable executor needs to resume it. */
 interface CloudCandidateRow extends ReapedRow {
+  started_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
   task_id: number;
   task_title: string;
   task_description: string | null;
   project_id: number;
   cloud_agent_ref: string | null;
   open_pr_count: number | string;
+}
+
+/** Parse a timestamp column (ISO string or null) to epoch ms, or null when absent
+ *  / unparseable — so the reason picker falls back to the serverless message. */
+function tsToMs(ts: string | null | undefined): number | null {
+  if (!ts) return null;
+  const ms = Date.parse(ts);
+  return Number.isFinite(ms) ? ms : null;
 }
 
 type SqlTag = ReturnType<typeof neon<false, false>>;

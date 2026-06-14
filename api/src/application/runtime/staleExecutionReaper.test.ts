@@ -13,6 +13,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 // candidate rows + the PR count, and we capture the UPDATEs the reaper issues.
 interface Captured {
   failed: number[];
+  failedReasons: Map<number, string>;
   requeuedPayloads: Map<number, string>;
   requeueEvents: number[];
 }
@@ -32,11 +33,14 @@ function makeSql() {
       captured.requeuedPayloads.set(Number(values[1]), String(values[0]));
       return Promise.resolve([]);
     }
-    // Fail a single cloud run by id.
+    // Fail a single cloud run by id. UPDATE ... error_message = ${reason} WHERE id = ${id}
+    // → values are [reason, id].
     if (text.includes("status = 'failed'") && text.includes('WHERE id =')) {
+      const reason = String(values[0]);
       const id = Number(values[1]);
       captured.failed.push(id);
-      return Promise.resolve([{ id, tenant_id: 1, agent_host_id: null, payload: null, error_message: 'x' }]);
+      captured.failedReasons.set(id, reason);
+      return Promise.resolve([{ id, tenant_id: 1, agent_host_id: null, payload: null, error_message: reason }]);
     }
     // The host-running + queued sweeps (no candidates in these tests).
     if (text.includes("status = 'failed'")) return Promise.resolve([]);
@@ -57,6 +61,7 @@ vi.mock('@neondatabase/serverless', () => ({
 }));
 
 import { reapStaleExecutions } from './staleExecutionReaper';
+import { CLOUD_ORPHAN_REASON, CLOUD_LONG_LIVED_ORPHAN_REASON } from './orphanReasons';
 
 const startMock = vi.fn();
 
@@ -75,7 +80,7 @@ const STALE_TS = '2000-01-01T00:00:00.000Z'; // far past every deadline
 
 beforeEach(() => {
   candidateRows = [];
-  captured = { failed: [], requeuedPayloads: new Map(), requeueEvents: [] };
+  captured = { failed: [], failedReasons: new Map(), requeuedPayloads: new Map(), requeueEvents: [] };
   startMock.mockReset();
 });
 
@@ -130,5 +135,37 @@ describe('reapStaleExecutions — orphaned cloud run re-dispatch', () => {
     expect(res.requeuedCloud).toBe(0);
     expect(captured.failed).toContain(5);
     expect(startMock).not.toHaveBeenCalled();
+  });
+
+  it('stamps the LONG-LIVED crash reason (not the serverless ~30s one) on a run that ran past the wall', async () => {
+    // Container/durable run that heartbeated for ~77s then went silent — exactly the
+    // execution #62 shape. It already used its one retry, so it is failed here.
+    candidateRows = [{
+      id: 62, tenant_id: 1, agent_host_id: null, payload: '{"reaperRequeued":true}', error_message: null,
+      task_id: 78, task_title: 'Avatar filters', task_description: null,
+      project_id: 3, cloud_agent_ref: 'bob', open_pr_count: 0,
+      started_at: '2026-06-14T23:26:24.000Z', updated_at: '2026-06-14T23:27:41.000Z',
+    }];
+
+    await reapStaleExecutions(envWithRunner(true));
+
+    expect(captured.failed).toContain(62);
+    expect(captured.failedReasons.get(62)).toBe(CLOUD_LONG_LIVED_ORPHAN_REASON);
+    expect(captured.failedReasons.get(62)).not.toBe(CLOUD_ORPHAN_REASON);
+  });
+
+  it('stamps the serverless ~30s reason on a short-lived Worker-loop orphan', async () => {
+    // No heartbeat past start (started == last activity) → the dying Worker loop.
+    candidateRows = [{
+      id: 63, tenant_id: 1, agent_host_id: null, payload: '{"reaperRequeued":true}', error_message: null,
+      task_id: 79, task_title: 'Quick task', task_description: null,
+      project_id: 3, cloud_agent_ref: null, open_pr_count: 0,
+      started_at: '2026-06-14T23:26:24.000Z', updated_at: '2026-06-14T23:26:30.000Z',
+    }];
+
+    await reapStaleExecutions(envWithRunner(true));
+
+    expect(captured.failed).toContain(63);
+    expect(captured.failedReasons.get(63)).toBe(CLOUD_ORPHAN_REASON);
   });
 });
