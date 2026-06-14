@@ -23,8 +23,7 @@ import { resolveSessionAgentId } from "../agent-scope.js";
 import { resolveImageSanitizationLimits } from "../image-sanitization.js";
 import { optionalStringEnum, stringEnum } from "../schema/typebox.js";
 import { sanitizeToolResultImages } from "../tool-images.js";
-import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
-import { type AnyAgentTool, jsonResult, nativeToolData, readStringParam } from "./common.js";
+import { type AnyAgentTool, jsonResult, readStringParam } from "./common.js";
 import { callGatewayTool, readGatewayCallOptions } from "./gateway.js";
 import { listNodes, resolveNodeIdFromList, resolveNodeId } from "./nodes-utils.js";
 
@@ -563,19 +562,4 @@ export function createNodesTool(options?: NodesDeps): AnyAgentTool {
     parameters: NodesToolSchema,
     execute: async (_toolCallId, args) => runNodes(options, args as Record<string, unknown>),
   };
-}
-
-/** Native shared {@link ToolDefinition} (cap `orchestrate`) — reuses the TypeBox schema
- *  and the shared `runNodes` body (throw-safe via nativeToolData). */
-export function buildNodesToolDef(options?: NodesDeps): ToolDefinition {
-  return defineTool({
-    name: "nodes",
-    description:
-      "Discover and control paired nodes (status/describe/pairing/notify/camera/screen/location/run/invoke).",
-    parameters: NodesToolSchema as unknown as ToolDefinition["schema"]["function"]["parameters"],
-    requires: ["orchestrate"],
-    async execute(args): Promise<ToolResult> {
-      return { data: await nativeToolData(() => runNodes(options, args)) };
-    },
-  });
 }

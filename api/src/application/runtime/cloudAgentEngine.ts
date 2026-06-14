@@ -33,7 +33,7 @@ import {
   CONTAINER_MAX_STEPS, assertsUnrunVerification, type RawToolCall,
 } from './cloudAgentTools';
 import {
-  DEFAULT_ENGINE_ID,
+  DEFAULT_ENGINE_ID, ENGINE_IDS,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext,
 } from '@builderforce/agent-tools';
 import { parseRemediation, parseFollowUp, parseCloudAgentRef } from './cloudDispatch';
@@ -1340,7 +1340,9 @@ export interface CloudEngineContext {
  * root ({@link resolveAgentEngine}) without editing any call site.
  */
 export class CloudToolLoopEngine implements AgentEngine {
-  readonly id = 'cloud-tool-loop';
+  // The engine id that backs `builderforce-v2` cloud agents — drawn from the single
+  // ENGINE_IDS source so the id never drifts from the registry's well-known names.
+  readonly id = ENGINE_IDS.v2;
   constructor(private readonly rc: CloudEngineContext) {}
   async run(input: AgentRunInput): Promise<AgentRunResult> {
     const r = await runCloudToolLoop(

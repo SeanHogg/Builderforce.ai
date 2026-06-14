@@ -50,21 +50,27 @@ export interface AgentEngine {
 /**
  * The well-known engine ids, shared so every surface names the same engines and the
  * default lives in ONE place. The on-prem relay registry, the cloud `resolveCloudAgent`,
- * and the API route fallbacks all import {@link DEFAULT_ENGINE_ID} — so retiring V1 /
- * flipping the default to `builderforce-local` is a one-line change here, not a hunt for
- * every duplicated `'builderforce-v1'` literal (PRD 11 §5.4 / §5.1 Stage 5).
+ * and the API route fallbacks all import {@link DEFAULT_ENGINE_ID}.
+ *
+ * **V1 and Local are RETIRED (operator decision 2026-06-14).** `v2` (the Claude-Agent-SDK
+ * engine, gateway-routed — drives the vendor pool, no tenant BYO key) is the SOLE runner and
+ * the consolidated default on every surface (cloud + on-prem); the frontend/api `AGENT_ENGINES`
+ * set is `['builderforce-v2']`. The retired `v1` id is kept only to recognize/back-fill legacy
+ * `engine='builderforce-v1'` rows — no runtime serves it. `builderforce-local` (the on-prem
+ * pi-free shared-registry engine) was deleted as dead code: it was never selectable, so no row
+ * carries it and no back-fill token is needed.
  */
 export const ENGINE_IDS = {
+  /** RETIRED — legacy pi loop. Kept only to recognize/back-fill old rows; no runner. */
   v1: "builderforce-v1",
   v2: "builderforce-v2",
-  local: "builderforce-local",
 } as const;
 
 export type EngineId = (typeof ENGINE_IDS)[keyof typeof ENGINE_IDS];
 
 /**
- * The default engine when a dispatch / agent record does not name one. Stays
- * `builderforce-v1` until on-prem tool parity is proven; flipping it to
- * `ENGINE_IDS.local` here changes every surface at once.
+ * The default engine when a dispatch / agent record does not name one. **`builderforce-v2`**
+ * (V1 retired) — one constant, every surface. Cloud `resolveCloudAgent`, on-prem relay
+ * `resolveEngine`, `workforceRoutes` create, and the `task.assign` fallback all read this.
  */
-export const DEFAULT_ENGINE_ID: EngineId = ENGINE_IDS.v1;
+export const DEFAULT_ENGINE_ID: EngineId = ENGINE_IDS.v2;

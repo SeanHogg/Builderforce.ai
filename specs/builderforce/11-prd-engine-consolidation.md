@@ -1,7 +1,15 @@
 # 11 — PRD: Agent Engine Consolidation (one contract, one engine seam, four surfaces)
 
-**Status: On-prem pi-removal ~95% (3 of 4 deps deleted; runtime pi-free; only `pi-tui` + the
-single default-engine flip remain).** Umbrella PRD for the program that collapses Builderforce's
+**Status: V1 + LOCAL RETIRED ✅ (V1 2026-06-13; `builderforce-local` deleted as dead code
+2026-06-14 per operator decision §5.5(a)). `builderforce-v2` is now the SOLE runner and the
+consolidated default on every surface. The whole unselectable Node shared-registry engine —
+`LocalAgentEngine`, `node-capability-provider`, `buildNodeToolRegistry`, the 14 duplicate
+`build*ToolDef` `ToolDefinition` wrappers, and the orphaned `createNodeWebSearch` — was removed
+(the `run*` pure backends stay; they back the live native `create*Tool` `AgentTool`s). The
+dormant V1 `pendingTaskRun`/`flushPendingTaskChanges` is also gone. All 4 packages `tsc` 0; zero
+dangling refs. On-prem pi-removal ~95% (3 of 4 deps deleted; runtime pi-free; only `pi-tui`
+remains). Remaining V1 tail is deploy-gated dead-code (cloud V1 dispatch branch — see §5.5).**
+Umbrella PRD for the program that collapses Builderforce's
 formerly-forked agent runtimes into **one tool contract + one swappable engine seam**,
 runnable on every surface. The on-prem `@mariozechner/pi-*` removal — the largest single
 slice — has its own staged plan in [10-prd-pi-cutover.md](10-prd-pi-cutover.md); this
@@ -13,11 +21,12 @@ engine with **full tool parity on every surface — no reduced tool set anywhere
 runners join via **interfaces + dependency injection** (a registry entry, never a new
 dispatch branch); per-surface differences are **injected dependencies**, not forked engines.
 **Clarified 2026-06-13 (pass 13):** the on-prem target is **V1 retired, the native engine
-serving the full ~40-tool set** — the default must NOT regress to a reduced set. (Note the
-engine the on-prem default lands on must carry the full `buildNodeToolRegistry` tool set;
-`builderforce-local`'s registry must be built WITH its `NodeServiceToolDeps` bag so the
-~12 service/media tools are present, not just the ~21 core+code+orchestration tools — see
-§5.1.)
+serving the full ~40-tool set** — the default must NOT regress to a reduced set. **Resolved
+2026-06-14 (§5.5(a)):** that native engine is the **native embedded runner** (Claude-SDK
+`builderforce-v2`), which already carries the full ~40-tool native `AgentTool` set (service/media
+included). The alternative — making `builderforce-local` the default and wiring
+`buildNodeToolRegistry` WITH its `NodeServiceToolDeps` bag — is moot: `builderforce-local` was
+deleted as dead code (it was never selectable), so that whole registry layer is gone.
 
 > **STATUS UPDATE 2026-06-13 (this pass): the on-prem `pi-*` removal is ~95% done — 3 of 4
 > deps deleted.** `@mariozechner/pi-agent-core`, `pi-coding-agent`, and `pi-ai` are at **0
@@ -93,14 +102,13 @@ the interface.
 - **Cloud:** `runCloudToolLoop` drives `cloudToolRegistry` (= `buildCoreToolRegistry()`) through
   a per-surface `CapabilityProvider` (`buildCloudProvider`) — same loop on the Worker and the
   durable DO (one step per alarm tick), plus `handleContainerOp` for the container surface.
-- **On-prem:** `LocalAgentEngine` (shared-tools/local-agent-engine.ts) — a pi-free
-  model→tools→dispatch loop over `buildNodeToolRegistry()` and `buildNodeCapabilityProvider()`,
-  with the model client INJECTED (`createGatewayComplete` → gateway `/v1/chat/completions`).
-- **The DI seam:** `builderforce-relay.ts` `resolveEngine(id)` maps `builderforce-v1` (legacy pi
-  loop via `chat.send`), `builderforce-v2` (Claude Agent SDK), and `builderforce-local`
-  (LocalAgentEngine) → an `AgentEngine`. `dispatchTaskFromRelay` resolves + calls `.run()` —
-  no V1/V2 branch. Adding a runner = one registry entry; removing V1 = delete its entry +
-  `runV1Engine`. Default is still `builderforce-v1` until parity is proven (one-line flip).
+- **On-prem:** the **native embedded runner** (Claude-SDK `builderforce-v2` via `runV2Engine`),
+  driving the full ~40-tool native `AgentTool` set out of the shared per-ticket workspace. (The
+  earlier `LocalAgentEngine` shared-registry path was deleted as dead code — §5.5(a).)
+- **The DI seam:** `builderforce-relay.ts` `resolveEngine(id)` is a one-entry `{ builderforce-v2 }`
+  registry → an `AgentEngine`; any legacy id (`builderforce-v1`, `builderforce-local`) falls through
+  to `DEFAULT_ENGINE_ID` (= v2). `dispatchTaskFromRelay` resolves + calls `.run()` — no V1/V2 branch.
+  The seam is retained even with one runner so the NEXT engine is a registry entry, not a branch.
 
 ### 3.3 Capability-gated surfaces — same tools, different concretion (Dependency Inversion)
 A tool's `execute` calls `ctx.caps.repoWrite.writeFile(...)`; each surface supplies a different
@@ -189,22 +197,36 @@ Grouped by theme. Each is a discrete, verifiable unit; "surface" notes where it 
   onto the port and build the live `ink` render tree (add `ink`/`react`; swap `visibleWidth`/
   `truncateToWidth` → `string-width`/`cli-truncate`). **Needs a real terminal to verify rendering**
   (locked-decision-4). See `packages/tui/src/{renderer,registry}.ts` + `adapters/*`.
-- **Delete + flip default (Stage 5).** `grep @mariozechner agent-runtime/src` → empty (only
-  pi-tui left); drop `pi-tui` from package.json + lockfile (`pnpm install`). **Default-engine
-  decision (operator):** per the §intro clarification (retire V1, full 40-tool parity, no reduced
-  set), the on-prem default should resolve to the native engine carrying the FULL tool set. Two
-  shapes: **(a)** flip `resolveEngine` default `builderforce-v1` → `builderforce-local` AND ensure
-  `runLocalEngine` builds `buildNodeToolRegistry` **with `NodeServiceToolDeps`** (so local has all
-  ~40 tools + streaming via `nativeStream`, per §5.2) before the flip, OR **(b)** keep
-  `runV1Engine` (now pi-free, dispatches to the native embedded runner with the full set) as the
-  default and delete `runV2`/`local` divergence — i.e. V1's *implementation* is already the native
-  full-tool runtime. Either way, extract the default to ONE source of truth (it's duplicated in
-  `resolveEngine` + the `task.assign/broadcast` fallback + cloud `resolveCloudAgent`, §5.4) so the
-  flip is one edit. **Today both `runV1Engine` and the on-prem chat/cron path are pi-free**; this
-  step is the explicit engine consolidation + the single literal default, not a pi blocker.
+- ~~**Delete + flip default (Stage 5).**~~ **✅ V1 RETIRED 2026-06-13.** **Resolved decision:** the
+  consolidated default is **`builderforce-v2`** (the Claude-Agent-SDK engine, gateway-routed) — NOT
+  `builderforce-local`, because `local` is **on-prem-only** (the frontend/api `AGENT_ENGINES` set and
+  `AgentEngine` type accept only `v1|v2`), so flipping the default to `local` would have broken cloud
+  dispatch; `v2` is the only non-V1 engine valid on BOTH surfaces. Done: `DEFAULT_ENGINE_ID =
+  ENGINE_IDS.v2` (single source — flips relay `resolveEngine` + cloud `resolveCloudAgent` +
+  `workforceRoutes` create + `task.assign` fallback together); on-prem `runV1Engine` DELETED + its
+  registry entry removed; `AGENT_ENGINES = ['builderforce-v2']`; frontend `AgentEngine` narrowed to
+  `'builderforce-v2'`; migration `0120_engine_v2_retire_v1.sql` back-fills `ide_agents.engine` v1→v2
+  + flips the column default. All 4 packages `tsc` 0; no test asserted the old default.
+  (Update 2026-06-14, §5.5(a): `builderforce-local` was subsequently DELETED — it was never
+  selectable, so it is no longer a registered engine.) **Remaining V1 tail (deploy-gated):** the
+  cloud V1 **dispatch branch** is now unreachable dead code — the `isV2===false` else-path in
+  `runtimeRoutes.ts` (~L430) + `cloudAgentTypeLabel`'s V1 arm — delete it after a cloud trace +
+  deploy (un-migrated `engine='builderforce-v1'` rows still reach it until migration-0120 runs
+  live, so source-removal is premature). The dormant on-prem `pendingTaskRun`/`flushPendingTaskChanges`
+  cleanup is ✅ DONE (2026-06-14); migration-0120 apply + a live e2e still owed. `pi-tui` removal
+  (drop the dep) still needs Stage 4.
 
 ### 5.2 Capability parity gaps (block "no reduced tool set" on a surface)
-- ~~**`ask_human` on Node (on-prem `local`).**~~ **✅ DONE 2026-06-13.** `buildNodeCapabilityProvider`
+> **NOTE 2026-06-14:** the three `local`-engine items below (`ask_human` on Node, `web.search`
+> adapter, local-engine streaming) were built against the now-DELETED `LocalAgentEngine` /
+> `buildNodeCapabilityProvider` (§5.5(a)) and their wiring (`createNodeWebSearch`, the
+> `NodeProviderOptions.human`/`webSearch` injections, `runLocalEngine`'s `LlmStream`) has been
+> removed. On the LIVE on-prem path (the native embedded runner) these capabilities are served by
+> the native `AgentTool`s instead — `askHumanTool`, `createWebSearchTool`, and the agent-loop's
+> native streaming — so the surface still offers them; only the dead duplicate path is gone. Struck
+> through for the record; no longer action items.
+- ~~**`ask_human` on Node (on-prem `local`).**~~ **✅ DONE 2026-06-13; wiring removed with `local`
+  2026-06-14 (served by native `askHumanTool`).** `buildNodeCapabilityProvider`
   now takes an optional `NodeProviderOptions.human` concretion and advertises `human` only when it
   is wired; the relay's `runLocalEngine` injects a `HumanCapability` backed by the approval-gate
   (`requestHumanInput` `kind: "question"` → portal queue, mirroring cloud `createCloudQuestion`).
@@ -246,21 +268,62 @@ The orchestrate / memory / message / media / code-intelligence tools are current
 - **Container-companion OS-tools for the durable surface** — the DO has no shell; the design
   has it delegate OS-ops (`run_command`) to a container companion. Unbuilt.
 - ~~**Single default-engine source of truth**~~ **✅ DONE 2026-06-13.** `@builderforce/agent-tools`
-  now exports `ENGINE_IDS` + `DEFAULT_ENGINE_ID` (engine.ts). Every previously-duplicated literal
-  imports it: the relay `resolveEngine` + `task.assign/broadcast` fallback, cloud `resolveCloudAgent`
-  (DEFAULT + row fallback), and `workforceRoutes` agent-create default. Flipping the default to
-  `ENGINE_IDS.local` is now a ONE-line change in engine.ts (still `builderforce-v1` until on-prem
-  tool parity is proven — §5.1 Stage 5).
+  exports `ENGINE_IDS` + `DEFAULT_ENGINE_ID` (engine.ts); the relay `resolveEngine` + `task.assign`
+  fallback, cloud `resolveCloudAgent`, and `workforceRoutes` create-default all import it. **The flip
+  is DONE: `DEFAULT_ENGINE_ID = ENGINE_IDS.v2` and V1 is retired (§5.5).**
+
+### 5.5 V1-retirement residue & open questions (surfaced 2026-06-13 by the V1 cutover)
+V1 is retired in source (default `builderforce-v2`, `runV1Engine` deleted, creation v2-only,
+migration 0120 back-fill — §5.1 Stage 5). The remaining items are dead-code cleanup, deploy steps,
+and one architecture question the cutover exposed:
+- **Cloud V1 dispatch branch — now unreachable dead code (deploy-gated removal).** With creation
+  restricted to v2 and all rows back-filled, the `isV2 === false` else-path in
+  `api/.../runtimeRoutes.ts` (~L430) and `cloudAgentTypeLabel`'s V1 arm can never run. Delete them
+  (and any cloud "V1 Cloud Agent" runtime wiring) after a cloud trace + a deploy to verify — not
+  closable from source alone.
+- ~~**Dormant on-prem dead code.** `pendingTaskRun` + `flushPendingTaskChanges`~~ **✅ DONE
+  2026-06-14.** Both removed from `builderforce-relay.ts` (the field was write-never after
+  `runV1Engine`'s deletion; the two callers in the gateway `legacy.state` handler were no-ops). The
+  handler itself is KEPT — it still reports terminal execution state for the live native embedded
+  runner (its other purpose). The `start()` workspace-sweep's `activeTaskIds` (which had read
+  `pendingTaskRun`) is now `[]` — correct, since nothing is in flight at startup.
+- **Migration 0120 apply + live e2e.** `0120_engine_v2_retire_v1.sql` must run on the live DB
+  (back-fill `ide_agents.engine` v1→v2 + default flip); then an end-to-end check that a newly
+  created agent dispatches on V2 across cloud (durable/container) and on-prem.
+- ~~**OPEN QUESTION — is `builderforce-local` now unreachable, and is that intended?**~~ **RESOLVED
+  2026-06-14 — operator decision (a): Claude-SDK-`builderforce-v2` is the canonical runner on BOTH
+  surfaces; `builderforce-local` was DELETED as dead code.** It was never selectable (creation is
+  v2-only; the frontend/api `AGENT_ENGINES` accept only `v2`), so no agent record carried it and no
+  back-fill token is needed. Removed: the relay `local` registry entry + `runLocalEngine`;
+  `shared-tools/local-agent-engine.ts` (`LocalAgentEngine` + `createGateway{Complete,Stream}`);
+  `node-capability-provider.ts` (`buildNodeCapabilityProvider` + `NODE_SURFACE_CAPS`);
+  `shared-tools/index.ts` (`buildNodeToolRegistry`); the 14 duplicate `build*ToolDef`
+  `ToolDefinition` wrappers across `agents/tools/*` + the 3 `shared-tools/node-*-tools.ts` arrays;
+  `ENGINE_IDS.local`; and the orphaned `createNodeWebSearch`. **Kept:** every `run*` pure backend
+  (`runCodebaseSearch`, `runOrchestrate`, `runGateway`, `runMemorySearch`, …) and every native
+  `create*Tool` `AgentTool` — the live on-prem path. Net effect: this collapsed an engine-introduced
+  DRY violation (each service tool had been defined twice — once as `AgentTool`, once as
+  `ToolDefinition`). The §5.1/§5.2/§5.3 `local` wins (full `NodeServiceToolDeps`, `ask_human` on
+  Node, `web.search` adapter, local-engine streaming) were consciously discarded as the cost of (a).
+  All 4 packages `tsc` 0.
+- ~~**`LocalAgentEngine` compaction / session-persistence parity (only if `local` is kept).**~~
+  **N/A — `local` deleted (a).** The live on-prem path is the native embedded runner, which already
+  has `SessionManager` + compaction.
 
 ## 6. Surfaces × capabilities — target matrix (post-consolidation)
 
-| Capability | Worker/DO | Container | On-prem `local` |
+The on-prem column is now the **native embedded runner** (Claude-SDK `builderforce-v2`, full
+~40-tool native `AgentTool` set) — the deleted `builderforce-local` shared-registry engine (§5.5(a))
+is gone, so on-prem capabilities are served by the native `create*Tool`s, not the (deleted)
+`CapabilityProvider`.
+
+| Capability | Worker/DO | Container | On-prem (native v2) |
 |---|---|---|---|
 | repo.read/search/write/edit/delete | ✅ | ✅ (shell grep, no indexed search) | ✅ |
 | shell / process | — | ✅ | ✅ |
 | static-check | ✅ | — | — (real shell instead) |
-| human (ask_human) | ✅ | **gap → 5.2** | ✅ (5.2 done) |
-| web / web.search | web ✅ / search **gap → 5.3** | via shell | web ✅ / search ✅ (5.2 done) |
+| human (ask_human) | ✅ | **gap → 5.2** | ✅ (native `askHumanTool`) |
+| web / web.search | web ✅ / search **gap → 5.3** | via shell | web ✅ / search ✅ (native `web_search`) |
 | memory | **gap → 5.3** | **gap → 5.3** | ✅ |
 | orchestrate | **gap → 5.3** | **gap → 5.3** | ✅ |
 | message / media | **gap → 5.3** | **gap → 5.3** | ✅ |
@@ -271,14 +334,17 @@ The orchestrate / memory / message / media / code-intelligence tools are current
   that backs its capability with no per-surface array edit (already true; keep as a guard).
 - **Cloud:** `CLOUD_AGENT_TOOLS`/`CONTAINER_AGENT_TOOLS` remain derived (no hand-written arrays);
   a cloud run executes the shared loop with model-cascade telemetry. ✅ today.
-- **On-prem parity:** an on-prem chat/cron/channel session runs end-to-end on `LocalAgentEngine`
-  with the full ~40-tool set, streaming, and `ask_human` pause/resume; `grep @mariozechner
-  agent-runtime/src` → empty (Stage 5 gate).
+- **On-prem parity:** an on-prem chat/cron/channel session runs end-to-end on the **native embedded
+  runner** (Claude-SDK `builderforce-v2`) with the full ~40-tool native `AgentTool` set, streaming,
+  and `ask_human` pause/resume; `grep @mariozechner agent-runtime/src` → only `pi-tui` (Stage 4).
+  (The `builderforce-local` shared-registry engine that previously held this gate was deleted —
+  §5.5(a).)
 - **Render seam:** the interactive CLI draws through a `TuiRenderer` resolved from `RendererRegistry`
   (no `@mariozechner/pi-tui` import at any `src/tui/*` site); swapping `ink`→native is a new adapter
   + registry entry, no call-site edit. The headless renderer drives `src/tui` tests without a TTY.
-- **Default flip:** on-prem default is `builderforce-local`; no `builderforce-v1` path is reachable;
-  `pnpm build && pnpm check && pnpm test` green across `shared` + `api` + `agent-runtime`.
+- **Default flip:** ✅ DONE — default is `builderforce-v2` on every surface; no `builderforce-v1`
+  runner is reachable (`runV1Engine` deleted; v1 not creatable). `tsc` 0 across `shared` + `api` +
+  `agent-runtime` + `frontend`; live `pnpm build && check && test` + the cloud V1-branch deletion owed.
 - **Every stage lands green:** all three packages at `tsc` 0 + suites passing before the next.
 
 ## 8. Sequencing & risk
@@ -290,19 +356,21 @@ The orchestrate / memory / message / media / code-intelligence tools are current
   consolidation choice (§5.1 Stage 5), not a pi blocker.
 - **Highest risk now:** Stage 4 (the pi-tui TUI-framework replacement, terminal-verified) and the
   §5.3 cloud concretions. Stage 2b/3's risk (every LLM call + every surface) is retired — green.
-- ~~**Independent, lower-risk wins available now:** §5.2 `ask_human`-on-Node, `web.search` backend,
-  local-engine streaming~~ **✅ ALL THREE DONE 2026-06-13** (each shippable without touching the
-  now-native loop). Plus §5.4 single default-engine source of truth. These were the prerequisites
-  for Stage 5 flipping the default to `builderforce-local`; the remaining Stage-5 blockers are the
-  full-tool-set wiring (`buildNodeToolRegistry` WITH `NodeServiceToolDeps` in `runLocalEngine`,
-  §5.1) and the pi-tui removal (§5.1 Stage 4). Remaining §5.2 item: `ask_human` on the Cloud
-  Container (infra-blocked — needs the container image's in-loop handler).
+- **Stage 5 superseded by §5.5(a) (2026-06-14):** the default was NOT flipped to `builderforce-local`
+  — `local` was deleted instead. The §5.2 `local` wins (`ask_human`-on-Node, `web.search` adapter,
+  local-engine streaming) were removed with it; the live on-prem path is the native embedded runner,
+  which already provides them via native `AgentTool`s. Remaining real work: §5.1 Stage 4 (pi-tui),
+  §5.3 cloud concretions, and the §5.2 `ask_human` on the Cloud Container (infra-blocked — needs the
+  container image's in-loop handler).
 
 ## 9. References
 - [10-prd-pi-cutover.md](10-prd-pi-cutover.md) — staged on-prem `pi-*` removal (Stages 2b–5 detail).
 - `packages/agent-tools/src/{capabilities,tool,registry,engine,core-tools}.ts` — the tool/engine contract.
 - `packages/tui/src/{renderer,registry}.ts` + `adapters/{headless,ink}-renderer.ts` — the render seam (`@builderforce/tui`).
-- `agent-runtime/src/infra/builderforce-relay.ts` `resolveEngine` — the engine DI seam (the `RendererRegistry` mirrors it).
-- `agent-runtime/src/builderforce/shared-tools/*` — Node provider, engine, native tools.
+- `agent-runtime/src/infra/builderforce-relay.ts` `resolveEngine` — the engine DI seam (now a
+  one-entry `{ v2 }` registry; the `RendererRegistry` mirrors it).
+- `agent-runtime/src/builderforce/shared-tools/{node-code-tools,node-orchestration-tools,node-service-tools}.ts`
+  — the `run*` pure backends shared by the native `create*Tool` `AgentTool`s. (The `LocalAgentEngine` /
+  `node-capability-provider` / `buildNodeToolRegistry` / `build*ToolDef` layer was deleted — §5.5(a).)
 - `api/src/application/runtime/{cloudAgentEngine,cloudAgentTools}.ts` — the cloud engine/registry.
 - Root `README.md` → Consolidated Gap Register → "Remove `@mariozechner/pi-*`" bullet.

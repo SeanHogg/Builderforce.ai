@@ -1,4 +1,3 @@
-import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
 import { Type } from "@sinclair/typebox";
 import { SILENT_REPLY_TOKEN } from "../../auto-reply/tokens.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
@@ -6,7 +5,7 @@ import { loadConfig } from "../../config/config.js";
 import { textToSpeech } from "../../tts/tts.js";
 import type { GatewayMessageChannel } from "../../utils/message-channel.js";
 import type { AgentToolResult, AnyAgentTool } from "./common.js";
-import { nativeToolResult, readStringParam } from "./common.js";
+import { readStringParam } from "./common.js";
 
 const TtsToolSchema = Type.Object({
   text: Type.String({ description: "Text to convert to speech." }),
@@ -62,19 +61,4 @@ export function createTtsTool(opts?: TtsDeps): AnyAgentTool {
     parameters: TtsToolSchema,
     execute: async (_toolCallId, args) => runTts(opts, args as Record<string, unknown>),
   };
-}
-
-/** Native shared {@link ToolDefinition} (cap `media`) — reuses the TypeBox schema and
- *  the shared `runTts` body; media is surfaced via {@link ToolResult.content}. */
-export function buildTtsToolDef(opts?: TtsDeps): ToolDefinition {
-  return defineTool({
-    name: "tts",
-    description:
-      "Convert text to speech. The generated audio is returned as a media content block for the host to deliver.",
-    parameters: TtsToolSchema as unknown as ToolDefinition["schema"]["function"]["parameters"],
-    requires: ["media"],
-    async execute(args): Promise<ToolResult> {
-      return nativeToolResult(() => runTts(opts, args));
-    },
-  });
 }

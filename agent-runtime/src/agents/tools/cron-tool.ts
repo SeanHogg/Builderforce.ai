@@ -8,8 +8,7 @@ import { extractTextFromChatContent } from "../../shared/chat-content.js";
 import { isRecord, truncateUtf16Safe } from "../../utils.js";
 import { resolveSessionAgentId } from "../agent-scope.js";
 import { optionalStringEnum, stringEnum } from "../schema/typebox.js";
-import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
-import { type AgentToolResult, type AnyAgentTool, jsonResult, nativeToolData, readStringParam } from "./common.js";
+import { type AgentToolResult, type AnyAgentTool, jsonResult, readStringParam } from "./common.js";
 import { callGatewayTool, type GatewayCallOptions } from "./gateway.js";
 import { resolveInternalSessionKey, resolveMainSessionAlias } from "./sessions-helpers.js";
 
@@ -481,19 +480,4 @@ export async function runCron(
           throw new Error(`Unknown action: ${action}`);
       }
   }
-}
-
-/** Native shared {@link ToolDefinition} (cap `orchestrate`) — reuses the TypeBox schema
- *  and the shared `runCron` body (throw-safe via nativeToolData). */
-export function buildCronToolDef(opts?: CronToolOptions): ToolDefinition {
-  return defineTool({
-    name: "cron",
-    description:
-      "Manage Gateway cron jobs (status/list/add/update/remove/run/runs) and send wake events. Pass an `action` plus the action's fields (job, jobId, patch, text, mode).",
-    parameters: CronToolSchema as unknown as ToolDefinition["schema"]["function"]["parameters"],
-    requires: ["orchestrate"],
-    async execute(args): Promise<ToolResult> {
-      return { data: await nativeToolData(() => runCron(opts, args)) };
-    },
-  });
 }

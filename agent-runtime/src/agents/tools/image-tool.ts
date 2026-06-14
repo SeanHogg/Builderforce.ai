@@ -1,5 +1,4 @@
 import path from "node:path";
-import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
 import { Type } from "@sinclair/typebox";
 import { nativeComplete } from "../../builderforce/model/native-llm.js";
 import type { Api, AssistantMessage, Context, Model } from "../../builderforce/model/types.js";
@@ -17,7 +16,6 @@ import { discoverAuthStorage, discoverModels } from "../model-discovery.js";
 import type { SandboxFsBridge } from "../sandbox/fs-bridge.js";
 import { normalizeWorkspaceDir } from "../workspace-dir.js";
 import type { AgentToolResult, AnyAgentTool } from "./common.js";
-import { nativeToolData } from "./common.js";
 import {
   coerceImageAssistantText,
   coerceImageModelConfig,
@@ -659,20 +657,4 @@ export function createImageTool(options?: ImageDeps): AnyAgentTool | null {
     execute: async (_toolCallId, args) =>
       runImage(options, descriptor, args as Record<string, unknown>),
   };
-}
-
-/** Native shared {@link ToolDefinition} (cap `media`) — reuses the TypeBox schema and the
- *  shared `runImage` body; returns text analysis as `data`. Null when image is not enabled. */
-export function buildImageToolDef(options?: ImageDeps): ToolDefinition | null {
-  const descriptor = imageToolDescriptor(options);
-  if (!descriptor) return null;
-  return defineTool({
-    name: "image",
-    description: descriptor.description,
-    parameters: ImageToolSchema as unknown as ToolDefinition["schema"]["function"]["parameters"],
-    requires: ["media"],
-    async execute(args): Promise<ToolResult> {
-      return { data: await nativeToolData(() => runImage(options, descriptor, args)) };
-    },
-  });
 }

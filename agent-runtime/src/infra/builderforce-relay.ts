@@ -13,22 +13,12 @@ import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { DEFAULT_ENGINE_ID, ENGINE_IDS, type HumanCapability } from "@builderforce/agent-tools";
+import { DEFAULT_ENGINE_ID, ENGINE_IDS } from "@builderforce/agent-tools";
 import { WebSocket } from "ws";
 import { buildAssignedCapabilityAppend } from "../agents/assigned-capabilities.js";
 import { runClaudeAgentSdkV2, type V2RunnerSinks } from "../agents/claude-agent-sdk-runner.js";
-import { createNodeWebSearch } from "../agents/tools/web-search.js";
 import { loadProjectContext, updateProjectContextFields } from "../builderforce/project-context.js";
 import type { IRelayService } from "../builderforce/relay-service.js";
-import {
-  LocalAgentEngine,
-  createGatewayComplete,
-  createGatewayStream,
-  buildNodeCapabilityProvider,
-  buildNodeToolRegistry,
-  type NodeProviderOptions,
-} from "../builderforce/shared-tools/index.js";
-import { loadConfig } from "../config/config.js";
 import { GatewayClient, type GatewayClientOptions } from "../gateway/client.js";
 import type { EventFrame } from "../gateway/protocol/index.js";
 import { logDebug, logWarn } from "../logger.js";
@@ -36,7 +26,6 @@ import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
 import type { AgentEngine, EngineDispatch } from "./agent-engine.js";
 import { onAgentEvent } from "./agent-events.js";
 import { resolveApproval } from "./approval-gate.js";
-import { requestHumanInput } from "./approval-gate.js";
 import {
   makeCodingAgent,
   makeCodingGit,
@@ -128,16 +117,6 @@ export class BuilderforceRelayService implements IRelayService {
   /** Abort handles for in-flight V2 (Claude Agent SDK) runs, keyed by executionId,
    *  so an `execution.cancel` frame from the portal can actually halt the run. */
   private readonly v2Aborts = new Map<number, AbortController>();
-  /** Context for the in-flight V1 task run, so the session-final handler can
-   *  diff the shared workspace and attribute the changes to the executing agent. */
-  private pendingTaskRun: {
-    executionId?: number;
-    taskId?: number;
-    agentLabel: string;
-    cwd: string;
-    title: string;
-    repo?: { repoId: string; defaultBranch: string | null };
-  } | null = null;
   /** Tracks pending remote task correlations so results can be sent back. */
   private pendingRemoteCorrelations = new Map<
     string,
@@ -154,23 +133,19 @@ export class BuilderforceRelayService implements IRelayService {
   /**
    * Engine registry — the dependency-injection seam. Maps an engine id to its
    * {@link AgentEngine} implementation; `dispatchTaskFromRelay` resolves by id and
-   * calls `run()` instead of branching. Adding/swapping a runner is a registry
-   * entry; retiring V1 is deleting its entry + `runV1Engine`. Implementations wrap
-   * the relay's methods so each closes over the shared relay context (gateway
-   * client, workspace, sinks) — DI without leaking relay internals to callers.
+   * calls `run()` instead of branching. Adding/swapping a runner is a registry entry.
    *
-   * Default (unspecified engine) stays V1 until V2 reaches full tool parity (see
-   * the engine-consolidation entry in the Consolidated Gap Register); flipping the
-   * default is then a one-line change here.
+   * **V1 and Local are RETIRED (operator decision 2026-06-14)** — `runV1Engine` and the
+   * `builderforce-local` shared-registry engine are gone; neither has a registry entry.
+   * The sole runner is `builderforce-v2` (the Claude-Agent-SDK engine, gateway-routed),
+   * which is also {@link DEFAULT_ENGINE_ID}; any legacy `engine` value (`builderforce-v1`,
+   * `builderforce-local`) is unknown here and falls through to v2. Adding a runner is a
+   * registry entry; the DI seam stays even with one engine so the next runner is a wiring
+   * change, not a branch.
    */
   private resolveEngine(engineId?: string): AgentEngine {
-    const v1: AgentEngine = { id: ENGINE_IDS.v1, run: (d, p) => this.runV1Engine(d, p) };
     const v2: AgentEngine = { id: ENGINE_IDS.v2, run: (d, p) => this.runV2Engine(d, p) };
-    // The pi-FREE local engine: the shared `LocalAgentEngine` driving the shared
-    // tool registry + Node provider + a `fetch`-backed gateway client. No
-    // `@mariozechner/pi-*` in its path — the on-prem foothold for removing pi.
-    const local: AgentEngine = { id: ENGINE_IDS.local, run: (d, p) => this.runLocalEngine(d, p) };
-    const registry: Record<string, AgentEngine> = { [v1.id]: v1, [v2.id]: v2, [local.id]: local };
+    const registry: Record<string, AgentEngine> = { [v2.id]: v2 };
     return registry[engineId ?? ""] ?? registry[DEFAULT_ENGINE_ID];
   }
 
@@ -361,59 +336,6 @@ export class BuilderforceRelayService implements IRelayService {
     }
   }
 
-  /** When a V1 session ends: attribute its changes, then commit + push them to the
-   *  ticket branch as pending changes. */
-  private flushPendingTaskChanges(): void {
-    const run = this.pendingTaskRun;
-    if (!run) return;
-    this.pendingTaskRun = null;
-    void (async () => {
-      await this.emitTaskChanges(run.cwd, run.agentLabel, run.executionId, run.taskId);
-      if (run.taskId != null && run.repo?.repoId) {
-        await this.commitAndPushTicketBranch(run.taskId, run.repo, run.title, run.agentLabel);
-      }
-    })();
-  }
-
-  /**
-   * BuilderForce-V1 engine path. Runs the pi-coding-agent loop via the gateway's
-   * `chat.send`, steered to work in the shared ticket workspace. The gateway's
-   * session-`final` handler attributes the changes (via `pendingTaskRun`) and
-   * reports the terminal execution state.
-   */
-  private async runV1Engine(payload: EngineDispatch, prompt: string): Promise<void> {
-    const agentLabel = payload.agentLabel?.trim() || "BuilderForce-V1";
-    const cwd = await this.ensureTaskWorkspace(payload.taskId, payload.repo);
-    // Record context so the session-final handler can diff + attribute + commit changes.
-    this.pendingTaskRun = {
-      executionId: payload.executionId,
-      taskId: payload.taskId,
-      agentLabel,
-      cwd,
-      title: payload.title ?? `Task ${payload.taskId ?? ""}`.trim(),
-      repo: payload.repo,
-    };
-
-    // The agent's cwd is enforced via the chat.send workspaceDir param. Changes are
-    // committed to the ticket branch automatically after the run — the agent must
-    // not manage git itself.
-    const effectivePrompt = payload.repo?.repoId
-      ? `${prompt}\n\n[Workspace] You are working in the ticket's cloned git repository (already on its branch). Edit/create files freely. Do NOT run \`git\` — BuilderForce commits your changes to the ticket branch as pending changes after this run.`
-      : prompt;
-
-    this.gatewayClient
-      ?.request("chat.send", {
-        sessionKey: "main",
-        message: effectivePrompt,
-        // Enforce the shared ticket workspace as the agent's working directory.
-        ...(payload.taskId != null ? { workspaceDir: cwd } : {}),
-        idempotencyKey: `task-${payload.sourceType}-${payload.taskId ?? "na"}-${payload.executionId ?? Date.now()}`,
-      })
-      .catch((err: unknown) => {
-        logWarn(`[builderforce] ${payload.sourceType} dispatch failed: ${String(err)}`);
-      });
-  }
-
   /**
    * BuilderForce-V2 engine path. Runs the Claude Agent SDK against the workspace,
    * forwarding its events onto the same relay frames the V1 loop emits
@@ -520,158 +442,6 @@ export class BuilderforceRelayService implements IRelayService {
         payload.executionId,
         result.ok ? "completed" : "failed",
         result.ok ? { result: result.text } : { errorMessage: result.text },
-      );
-    }
-  }
-
-  /**
-   * BuilderForce-Local engine path — the pi-FREE on-prem runner. Drives the shared
-   * {@link LocalAgentEngine} over the shared tool registry + a Node disk/shell
-   * {@link buildNodeCapabilityProvider}, talking to the gateway's OpenAI-compatible
-   * endpoint over `fetch` (no `pi-ai`). Forwards assistant text + tool events onto
-   * the same relay frames V1/V2 emit, then commits/pushes + reports terminal state —
-   * so the portal renders it identically. This is the execution path that runs WITH
-   * NO pi loop; making it the default awaits the full native tool set (gap register).
-   */
-  private async runLocalEngine(payload: EngineDispatch, prompt: string): Promise<void> {
-    const agentLabel = payload.agentLabel?.trim() || "BuilderForce-Local";
-    const cwd = await this.ensureTaskWorkspace(payload.taskId, payload.repo);
-    const appendSystemPrompt = await buildAssignedCapabilityAppend();
-
-    const abortController = new AbortController();
-    if (payload.executionId != null) this.v2Aborts.set(payload.executionId, abortController);
-
-    // Inject the on-prem backings for the optional capabilities so `local` reaches
-    // FULL parity (PRD 11 §5.2): `ask_human` (the relay approval-gate → portal queue)
-    // and `web_search` (the config-resolved provider). Each is advertised only when
-    // wired, so the registry offers the tool iff the surface can fulfill it.
-    const human: HumanCapability = {
-      async ask(question: string, context?: string) {
-        const description = context?.trim() ? `${question}\n\nContext: ${context}` : question;
-        const r = await requestHumanInput({
-          kind: "question",
-          actionType: "clarify.blocked",
-          description,
-        });
-        if (r.decision === "answered") return { paused: false, answer: r.responseText ?? null };
-        if (r.decision === "timeout") {
-          return {
-            paused: false,
-            answer: null,
-            note: "No human answered in time; proceed with your best judgment.",
-          };
-        }
-        // 'approved'/'rejected' aren't expected for a free-text question; surface them.
-        return { paused: false, answer: null, note: `Human responded: ${r.decision}` };
-      },
-    };
-    let webSearch: NodeProviderOptions["webSearch"];
-    let config: ReturnType<typeof loadConfig> | undefined;
-    try {
-      config = loadConfig();
-      webSearch = createNodeWebSearch({ config }) ?? undefined;
-    } catch {
-      config = undefined; // no config → memory/web.search caps simply not advertised
-      webSearch = undefined;
-    }
-    const provider = buildNodeCapabilityProvider(cwd, { human, webSearch });
-    // FULL on-prem tool set (PRD 11 §5.1 Stage 5): pass the NodeServiceToolDeps bag so
-    // `local` carries the ~12 service/media/memory tools, not just core+code+orchestration.
-    // A task dispatch has no chat session key, so the service tools resolve to the default
-    // agent at call time — the SAME `build*ToolDef` the V1 path uses (consistent behavior).
-    const registry = buildNodeToolRegistry({
-      config,
-      workspaceDir: cwd,
-      agentDir: cwd,
-      sandboxed: false,
-    });
-    const gatewayLlm = {
-      // The gateway's OpenAI-compatible endpoint lives under /llm (parity with the
-      // V2 path's Anthropic-Messages base); the factories append /v1/chat/completions.
-      baseUrl: `${normalizeBaseUrl(this.opts.baseUrl)}/llm`,
-      apiKey: this.opts.apiKey,
-    };
-    const complete = createGatewayComplete(gatewayLlm);
-    const stream = createGatewayStream(gatewayLlm);
-    const engine = new LocalAgentEngine({
-      registry,
-      provider,
-      workspaceRoot: cwd,
-      complete,
-      stream,
-      sinks: {
-        // Incremental output for live chat/channel UX (parity with V1's deltas).
-        onAssistantDelta: (delta) => {
-          this.sendToRelay({ type: "chat.delta", delta, session: "main" });
-        },
-        onAssistantText: (text) => {
-          this.sendToRelay({ type: "chat.message", role: "assistant", text, session: "main" });
-          void this.persistToolAudit({
-            executionId: payload.executionId,
-            toolName: "agent.message",
-            category: "message",
-            result: text,
-          });
-        },
-        onToolUse: (toolName, toolCallId, args) => {
-          this.sendToRelay({
-            type: "tool.audit",
-            sessionKey: "main",
-            toolName,
-            toolCallId,
-            category: "local",
-            args,
-            ts: new Date().toISOString(),
-          });
-          void this.persistToolAudit({
-            executionId: payload.executionId,
-            toolName,
-            toolCallId,
-            category: "local",
-            args,
-          });
-        },
-      },
-    });
-
-    const systemPrompt =
-      `You are ${agentLabel}, a coding agent working inside the ticket's cloned git repository (already on its branch). ` +
-      `Use the tools to explore, read, edit, and create files, then call finish with a summary. Do NOT run git — BuilderForce commits your changes to the ticket branch after the run.` +
-      (appendSystemPrompt ? `\n\n${appendSystemPrompt}` : "");
-
-    let result: { ok: boolean; output: string };
-    try {
-      result = await engine.run({
-        systemPrompt,
-        userContent: prompt,
-        model: payload.model,
-        signal: abortController.signal,
-      });
-    } catch (err) {
-      result = { ok: false, output: `Local engine error: ${String(err)}` };
-    } finally {
-      if (payload.executionId != null) this.v2Aborts.delete(payload.executionId);
-    }
-
-    if (abortController.signal.aborted) {
-      await this.emitTaskChanges(cwd, agentLabel, payload.executionId, payload.taskId);
-      return;
-    }
-
-    await this.emitTaskChanges(cwd, agentLabel, payload.executionId, payload.taskId);
-    if (payload.taskId != null && payload.repo?.repoId) {
-      await this.commitAndPushTicketBranch(
-        payload.taskId,
-        payload.repo,
-        payload.title ?? `Task ${payload.taskId}`,
-        agentLabel,
-      );
-    }
-    if (payload.executionId != null) {
-      await this.reportExecutionState(
-        payload.executionId,
-        result.ok ? "completed" : "failed",
-        result.ok ? { result: result.output } : { errorMessage: result.output },
       );
     }
   }
@@ -922,10 +692,10 @@ export class BuilderforceRelayService implements IRelayService {
       this.sendToRelay({ type: "event", event, payload });
     });
     // Reclaim ticket workspaces orphaned by a previous crash/kill (a run that
-    // never received task.finalize leaves its clone on disk). Skips the dir of
-    // any run currently in flight. Best-effort; never blocks startup.
+    // never received task.finalize leaves its clone on disk). At startup nothing
+    // is in flight, so no active dir needs protecting. Best-effort; never blocks startup.
     void sweepStaleTaskWorkspaces(this.opts.workspaceDir ?? process.cwd(), {
-      activeTaskIds: this.pendingTaskRun?.taskId != null ? [this.pendingTaskRun.taskId] : [],
+      activeTaskIds: [],
     })
       .then(({ removed }) => {
         if (removed.length) {
@@ -1465,8 +1235,6 @@ export class BuilderforceRelayService implements IRelayService {
         if (resolveCodingSession(session, { ok: true, text })) {
           return;
         }
-        // Attribute the V1 run's file changes to its agent before completing.
-        this.flushPendingTaskChanges();
         // Report execution completed to Builderforce if one is pending.
         if (this.pendingExecutionId != null) {
           const eid = this.pendingExecutionId;
@@ -1489,8 +1257,6 @@ export class BuilderforceRelayService implements IRelayService {
         if (resolveCodingSession(session, { ok: false, text: text ?? "agent error" })) {
           return;
         }
-        // Attribute any partial changes the V1 run made before it errored.
-        this.flushPendingTaskChanges();
         // Report execution failed to Builderforce if one is pending.
         if (this.pendingExecutionId != null) {
           const eid = this.pendingExecutionId;

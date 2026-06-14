@@ -11,10 +11,9 @@
  *   github_issue_workflow({ issue: "https://github.com/owner/repo/issues/42" })
  */
 
-import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
 import type { AgentTool, AgentToolResult } from "../model/agent-types.js";
 import { Type } from "@sinclair/typebox";
-import { jsonResult, nativeToolData } from "../../agents/tools/common.js";
+import { jsonResult } from "../../agents/tools/common.js";
 import { runExec } from "../../process/exec.js";
 import {
   globalOrchestrator,
@@ -441,20 +440,4 @@ export function createGithubIssueWorkflowTool(
     parameters: GithubIssueWorkflowSchema,
     execute: async (_toolCallId, params) => runGithubIssueWorkflow(context, params as GithubIssueWorkflowParams),
   };
-}
-
-/** Native shared {@link ToolDefinition} (cap `orchestrate`) — reuses the TypeBox schema
- *  and the shared `runGithubIssueWorkflow` body. */
-export function buildGithubIssueWorkflowToolDef(spawnContext?: SpawnSubagentContext): ToolDefinition {
-  const context: SpawnSubagentContext = spawnContext ?? {};
-  return defineTool({
-    name: "github_issue_workflow",
-    description:
-      "Fetch a GitHub issue, execute a multi-agent implementation workflow (feature or bugfix based on labels), and optionally open a draft PR when done. Requires GITHUB_TOKEN in the environment.",
-    parameters: GithubIssueWorkflowSchema as unknown as ToolDefinition["schema"]["function"]["parameters"],
-    requires: ["orchestrate"],
-    async execute(args): Promise<ToolResult> {
-      return { data: await nativeToolData(() => runGithubIssueWorkflow(context, args as unknown as GithubIssueWorkflowParams)) };
-    },
-  });
 }

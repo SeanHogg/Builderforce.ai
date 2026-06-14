@@ -1,10 +1,9 @@
-import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
 import { Type } from "@sinclair/typebox";
 import type { GatewayMessageChannel } from "../../utils/message-channel.js";
 import { optionalStringEnum } from "../schema/typebox.js";
 import { spawnSubagentDirect } from "../subagent-spawn.js";
 import type { AgentToolResult, AnyAgentTool } from "./common.js";
-import { detailsData, jsonResult, readStringParam } from "./common.js";
+import { jsonResult, readStringParam } from "./common.js";
 
 const SessionsSpawnToolSchema = Type.Object({
   task: Type.String(),
@@ -86,19 +85,4 @@ export function createSessionsSpawnTool(opts?: SessionsSpawnDeps): AnyAgentTool 
     parameters: SessionsSpawnToolSchema,
     execute: async (_toolCallId, args) => runSessionsSpawn(opts, args as Record<string, unknown>),
   };
-}
-
-/** Native shared {@link ToolDefinition} (cap `orchestrate`) — reuses the TypeBox schema
- *  (which is JSON Schema) and the shared `runSessionsSpawn` body. */
-export function buildSessionsSpawnToolDef(opts?: SessionsSpawnDeps): ToolDefinition {
-  return defineTool({
-    name: "sessions_spawn",
-    description:
-      "Spawn a background sub-agent run in an isolated session and announce the result back to the requester chat.",
-    parameters: SessionsSpawnToolSchema as unknown as ToolDefinition["schema"]["function"]["parameters"],
-    requires: ["orchestrate"],
-    async execute(args): Promise<ToolResult> {
-      return { data: detailsData(await runSessionsSpawn(opts, args)) };
-    },
-  });
 }
