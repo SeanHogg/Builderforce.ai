@@ -250,3 +250,75 @@ describe('emitCodingModelDegraded → coding_model_degraded llm event', () => {
     expect(rowsFor(toolAuditEvents)).toHaveLength(0);
   });
 });
+
+// ── Defensive boundaries: inject wrong/hostile values, prove a run never breaks ──
+// Telemetry is best-effort: a malformed input or a dead DB must degrade to "no
+// row" or "verbatim row", NEVER a throw that aborts the agent run it instruments.
+describe('cloud telemetry — defensive boundaries', () => {
+  it('recordCloudToolEvent swallows a non-serializable detail (circular ref) — no row, no throw', async () => {
+    const { db, rowsFor } = makeFakeDb();
+    const circular: Record<string, unknown> = {};
+    circular.self = circular; // JSON.stringify will throw on this
+
+    await expect(
+      recordCloudToolEvent(db, { tenantId: 1, executionId: 5, toolName: 'x', category: 'tool', detail: circular }),
+    ).resolves.toBeUndefined();
+    // The stringify throw happens INSIDE the guarded insert, so nothing lands —
+    // but the run is not taken down with it.
+    expect(rowsFor(toolAuditEvents)).toHaveLength(0);
+  });
+
+  it('recordCloudToolEvent tolerates a hostile/degenerate executionId without throwing', async () => {
+    const { db, rowsFor } = makeFakeDb();
+    await expect(
+      recordCloudToolEvent(db, { tenantId: 1, executionId: Number.NaN, toolName: 'x', category: 'tool' }),
+    ).resolves.toBeUndefined();
+    // Defensive contract is "never throw"; the key is still derived deterministically.
+    expect(rowsFor(toolAuditEvents)[0]).toMatchObject({ sessionKey: 'exec:NaN' });
+  });
+
+  it('recordCloudUsage never throws even when BOTH ledger inserts fail', async () => {
+    const db = { insert: () => ({ values: async () => { throw new Error('db down'); } }) } as unknown as Db;
+    await expect(
+      recordCloudUsage(env, db, { tenantId: 1, executionId: 9, taskId: 1, model: 'm', inputTokens: 10, outputTokens: 5 }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('recordCloudUsage tolerates non-finite / negative token counts (best-effort, no crash)', async () => {
+    const { db, rowsFor } = makeFakeDb();
+    await expect(
+      recordCloudUsage(env, db, {
+        tenantId: 1, executionId: 9, taskId: 1, model: 'm',
+        inputTokens: Number.NaN, outputTokens: -3,
+      }),
+    ).resolves.toBeUndefined();
+    // The run is never blocked on bad usage numbers — both ledgers are still attempted.
+    expect(rowsFor(usageSnapshots)).toHaveLength(1);
+    expect(rowsFor(llmUsageLog)).toHaveLength(1);
+  });
+
+  it('emitModelSelection does not throw on an unknown plan + blank model', async () => {
+    const { db, rowsFor } = makeFakeDb();
+    await expect(
+      emitModelSelection(db, {
+        tenantId: 1, executionId: 9,
+        requested: undefined,
+        pick: { model: '', strict: false },
+        plan: 'garbage-plan' as never, // wrong value injected past the type system
+        premium: false,
+      }),
+    ).resolves.toBeUndefined();
+    // A blank seed is NOT a curated coder, and the planning row is still emitted.
+    const detail = JSON.parse(rowsFor(toolAuditEvents)[0]!.args as string);
+    expect(detail.seedIsCoder).toBe(false);
+  });
+
+  it('emitCodingModelDegraded is a strict no-op for junk/sentinel resolved models (no false alarm)', async () => {
+    const { db, rowsFor } = makeFakeDb();
+    for (const m of [undefined, '', 'default', 'default'] as Array<string | undefined>) {
+      await emitCodingModelDegraded(db, { tenantId: 1, executionId: 9, resolvedModel: m, requestedModel: undefined });
+    }
+    // "unknown" must never be reported as "degraded" — that would be a false alarm.
+    expect(rowsFor(toolAuditEvents)).toHaveLength(0);
+  });
+});

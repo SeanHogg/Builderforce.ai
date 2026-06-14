@@ -206,3 +206,62 @@ describe("WorkflowTelemetryService — live relay hook", () => {
     expect(span.kind).toBe("workflow.start");
   });
 });
+
+// ── Defensive boundaries: inject wrong values, prove telemetry degrades safely ──
+// Telemetry must never take down the agent run it instruments: a non-numeric host
+// id, a rejecting network, or an invalid timestamp must each degrade to "skip that
+// sink" / "write what we can", never an unhandled throw.
+describe("WorkflowTelemetryService — defensive boundaries", () => {
+  it("a non-numeric agentNodeId SKIPS the numeric OTel proxy but still does the REST sync", async () => {
+    const svc = new WorkflowTelemetryService();
+    // "host-7" is a valid REST tag but parseInt → NaN, so the OTel span POST guards out.
+    svc.init({ projectRoot, agentNodeId: "host-7", linkApiUrl: "https://bf.test", linkApiKey: "k" });
+
+    svc.emitWorkflowStart("wf-1");
+    await spansSettle(1);
+
+    const urls = urlsFetched();
+    expect(urls).toContain("https://bf.test/api/workflows");                 // REST sync still fires
+    expect(urls.some((u) => u.includes("/api/telemetry/spans"))).toBe(false); // OTel proxy skipped (NaN guard)
+  });
+
+  it("a fetch that REJECTS (network down) never throws and never blocks the JSONL audit", async () => {
+    fetchMock.mockRejectedValue(new Error("ECONNREFUSED"));
+    const svc = new WorkflowTelemetryService();
+    svc.init({ projectRoot, agentNodeId: "7", linkApiUrl: "https://bf.test", linkApiKey: "k" });
+
+    expect(() => svc.emitWorkflowStart("wf-1")).not.toThrow();
+
+    const [span] = await spansSettle(1); // local audit is independent of the network
+    expect(span.kind).toBe("workflow.start");
+  });
+
+  it("an invalid startedAt (NaN duration) is tolerated — the span is still recorded", async () => {
+    const svc = new WorkflowTelemetryService();
+    svc.init({ projectRoot });
+    svc.emitWorkflowStart("wf-1");
+
+    // Wrong value: an unparseable Date → getTime() is NaN → durationMs NaN. Must not throw.
+    expect(() => svc.emitTaskEnd("wf-1", "t-1", "coder", new Date("not-a-date"))).not.toThrow();
+
+    const spans = await spansSettle(2);
+    const done = spans.find((s) => s.kind === "task.complete")!;
+    expect(done).toBeDefined();
+    // NaN serializes to JSON null — degraded but safe (no crash, span still queryable).
+    expect(done.durationMs).toBeNull();
+  });
+
+  it("emitting after a workflow ended (no active trace) still records, with no trace id", async () => {
+    const svc = new WorkflowTelemetryService();
+    svc.init({ projectRoot });
+    svc.emitWorkflowStart("wf-1");
+    svc.emitWorkflowEnd("wf-1", false); // trace cleared
+    expect(svc.getActiveTraceId()).toBeNull();
+
+    // A late task end (out-of-order frames) must not throw or carry a stale trace.
+    expect(() => svc.emitTaskEnd("wf-1", "t-late", "coder", new Date())).not.toThrow();
+    const spans = await spansSettle(3);
+    const late = spans.find((s) => s.taskId === "t-late")!;
+    expect(late.traceId).toBeUndefined();
+  });
+});
