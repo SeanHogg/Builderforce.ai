@@ -633,12 +633,30 @@ export interface ArtifactAssignment {
   assignedAt: string;
 }
 
+/** An assigned artifact with its display name (null when unpublished / nameless). */
+export interface NamedArtifact {
+  slug: string;
+  name: string | null;
+}
+
+/** The capabilities pinned directly to one agent (its agent-scoped assignments). */
+export interface AgentManifest {
+  skills: NamedArtifact[];
+  personas: NamedArtifact[];
+  content: NamedArtifact[];
+}
+
 export const artifactAssignments = {
   list: (scope: AssignmentScope, scopeId: number, artifactType?: ArtifactType) => {
     const q = new URLSearchParams({ scope: String(scope), scopeId: String(scopeId) });
     if (artifactType) q.set('artifactType', artifactType);
     return request<{ assignments: ArtifactAssignment[] }>(`/api/artifact-assignments?${q}`).then((r) => r.assignments);
   },
+
+  /** Per-agent assigned-capability manifests for every workforce agent of the tenant,
+   *  keyed by the agent's ref (= PublishedAgent.id). Powers the /workforce cards. */
+  agentManifests: () =>
+    request<{ manifests: Record<string, AgentManifest> }>(`/api/artifact-assignments/agent-manifests`).then((r) => r.manifests),
 
   assign: (
     artifactType: ArtifactType,

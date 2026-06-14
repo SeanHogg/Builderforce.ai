@@ -4,8 +4,10 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   agentHosts,
   tenantDefaultAgentHost,
+  artifactAssignments,
   type AgentHost,
   type AgentHostRegistration,
+  type AgentManifest,
 } from '@/lib/builderforceApi';
 import {
   listMyAgents,
@@ -36,6 +38,7 @@ import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import { CloudAgentSlideOutPanel, type CloudAgentPanelTab } from './CloudAgentSlideOutPanel';
 import { ConfiguredQuickstartPopover } from './ConfiguredQuickstartPopover';
 import { AgentCard } from './AgentCard';
+import { AgentManifestInline } from './AgentManifestSection';
 import { MemberCard, PendingInviteCard } from './MemberCard';
 import { AgentOwnerActions } from './AgentOwnerActions';
 import { AgentTypePill } from '@/components/AgentTypePill';
@@ -99,6 +102,10 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   // --- Cloud agents --------------------------------------------------------
   const [cloudAgents, setCloudAgents] = useState<PublishedAgent[]>([]);
   const [loadingCloud, setLoadingCloud] = useState(true);
+  // Per-agent assigned-capability manifests, keyed by agent ref (= PublishedAgent.id).
+  // One cached fetch for the whole grid (no per-card N+1); refreshed when an agent's
+  // capabilities are edited in the slide-out, or an agent is created/deleted.
+  const [agentManifests, setAgentManifests] = useState<Record<string, AgentManifest>>({});
   // Agents acquired from the marketplace (distinct from the tenant's own).
   const [purchasedAgents, setPurchasedAgents] = useState<PublishedAgent[]>([]);
 
@@ -153,6 +160,10 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     return listPurchasedAgents().then(setPurchasedAgents).catch(() => setPurchasedAgents([]));
   }, []);
 
+  const loadManifests = useCallback(() => {
+    return artifactAssignments.agentManifests().then(setAgentManifests).catch(() => setAgentManifests({}));
+  }, []);
+
   // People (members + pending invites) require the tenant token; both share one
   // loading flag since they render in the same section of the grid.
   const loadPeople = useCallback(async () => {
@@ -173,7 +184,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     }
   }, [tenant, tenantToken]);
 
-  useEffect(() => { loadHosts(); loadCloud(); loadPurchased(); loadPeople(); }, [loadHosts, loadCloud, loadPurchased, loadPeople]);
+  useEffect(() => { loadHosts(); loadCloud(); loadPurchased(); loadPeople(); loadManifests(); }, [loadHosts, loadCloud, loadPurchased, loadPeople, loadManifests]);
 
   useEffect(() => {
     if (tenantId == null) return;
@@ -442,6 +453,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
             <AgentCard
               key={`cloud-${a.id}`}
               agent={a}
+              manifest={agentManifests[a.id]}
               onOpenPanel={openAgentPanel}
               onUnpublish={unpublish}
               onDelete={deleteOwned}
@@ -454,6 +466,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
             <AgentCard
               key={`purchased-${a.id}`}
               agent={a}
+              manifest={agentManifests[a.id]}
               hired
               onUnhire={unhire}
               unhiring={unhiringId === a.id}
@@ -633,15 +646,16 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
           open={!!selectedAgent}
           initialTab={agentPanelTab}
           tenantId={tenantId}
-          onClose={() => setSelectedAgent(null)}
+          onClose={() => { setSelectedAgent(null); loadManifests(); }}
           onSaved={async () => {
             // Refetch AND re-sync the open panel's agent so its header (name,
             // DRAFT/PUBLISHED) reflects the just-saved/published values — without
             // this the panel keeps the stale prop and looks like nothing changed.
-            const list = await loadCloud();
+            // Capabilities are edited in this panel too, so refresh the manifests.
+            const [list] = await Promise.all([loadCloud(), loadManifests()]);
             setSelectedAgent((cur) => (cur ? list.find((x) => x.id === cur.id) ?? cur : cur));
           }}
-          onDeleted={() => { setSelectedAgent(null); loadCloud(); }}
+          onDeleted={() => { setSelectedAgent(null); loadCloud(); loadManifests(); }}
         />
       )}
 
