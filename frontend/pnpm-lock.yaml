@@ -40,6 +40,9 @@ importers:
       '@seanhogg/builderforce-studio-embedded':
         specifier: link:../studio-embedded
         version: link:../studio-embedded
+      '@seanhogg/builderforce-voice':
+        specifier: link:../voice
+        version: link:../voice
       '@webcontainer/api':
         specifier: ^1.3.0
         version: 1.6.4
@@ -75,7 +78,7 @@ importers:
         version: 0.2.117
       mambacode.js:
         specifier: git+https://github.com/SeanHogg/Mamba.git
-        version: '@seanhogg/mambacode.js@git+https://github.com/SeanHogg/Mamba.git#6bac8c989a225b0f3811d75df0617d2856e45f12'
+        version: '@seanhogg/mambacode.js@git+https://github.com/SeanHogg/Mamba.git#d986cdaf810a4c4365971fb1a05a22b617d52473'
       mermaid:
         specifier: ^11.15.0
         version: 11.15.0
@@ -1140,8 +1143,8 @@ packages:
   '@rtsao/scc@1.1.0':
     resolution: {integrity: sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g==}
 
-  '@seanhogg/mambacode.js@git+https://github.com/SeanHogg/Mamba.git#6bac8c989a225b0f3811d75df0617d2856e45f12':
-    resolution: {commit: 6bac8c989a225b0f3811d75df0617d2856e45f12, repo: https://github.com/SeanHogg/Mamba.git, type: git}
+  '@seanhogg/mambacode.js@git+https://github.com/SeanHogg/Mamba.git#d986cdaf810a4c4365971fb1a05a22b617d52473':
+    resolution: {commit: d986cdaf810a4c4365971fb1a05a22b617d52473, repo: https://github.com/SeanHogg/Mamba.git, type: git}
     version: 2026.5.31
     engines: {node: '>=18.0.0'}
 
@@ -5977,7 +5980,7 @@ snapshots:
 
   '@rtsao/scc@1.1.0': {}
 
-  '@seanhogg/mambacode.js@git+https://github.com/SeanHogg/Mamba.git#6bac8c989a225b0f3811d75df0617d2856e45f12': {}
+  '@seanhogg/mambacode.js@git+https://github.com/SeanHogg/Mamba.git#d986cdaf810a4c4365971fb1a05a22b617d52473': {}
 
   '@sinclair/typebox@0.25.24': {}
 
