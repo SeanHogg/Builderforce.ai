@@ -5,7 +5,6 @@ import JsonLd from '@/components/JsonLd';
 import { pageMetadata } from '@/lib/seo';
 import { marketplaceSkillSchema } from '@/lib/structured-data';
 import { getPublishedSkill } from '@/lib/marketplaceSeo';
-import { FOOTER_LINKS } from '@/lib/content';
 
 export const runtime = 'edge';
 
@@ -55,9 +54,6 @@ export default async function MarketplaceSkillPage({
         .mps-btn-ghost { background: var(--surface-card); border: 1px solid var(--border-subtle); color: var(--text-primary); }
         .mps-readme { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: 14px; padding: 22px 24px; color: var(--text-primary); line-height: 1.7; white-space: pre-wrap; font-size: 0.92rem; }
         .mps-h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; color: var(--text-primary); margin: 0 0 12px; }
-        .mps-footer { border-top: 1px solid var(--border-subtle); margin-top: 28px; padding: 24px; display: flex; gap: 16px 22px; flex-wrap: wrap; justify-content: center; }
-        .mps-footer a { color: var(--text-secondary); text-decoration: none; font-size: 0.85rem; }
-        .mps-footer a:hover { color: var(--text-primary); }
       `}</style>
 
       <main className="mps">
@@ -96,11 +92,7 @@ export default async function MarketplaceSkillPage({
           ) : null}
         </div>
 
-        <footer className="mps-footer">
-          {FOOTER_LINKS.map((l) => (
-            <Link key={l.href} href={l.href}>{l.label}</Link>
-          ))}
-        </footer>
+        {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
       </main>
     </>
   );
