@@ -36,7 +36,7 @@ import {
   DEFAULT_ENGINE_ID, ENGINE_IDS,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext,
 } from '@builderforce/agent-tools';
-import { parseRemediation, parseFollowUp, parseCloudAgentRef } from './cloudDispatch';
+import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel } from './cloudDispatch';
 import { RuntimeService } from './RuntimeService';
 import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
@@ -606,11 +606,7 @@ export async function loadContainerRunContext(env: Env, db: Db, executionId: num
     if (!task) return null;
     const ref = parseCloudAgentRef(exec.payload ?? undefined) ?? task.assignedAgentRef ?? undefined;
     const agent = await resolveCloudAgent(env, exec.tenantId, ref);
-    let payloadModel: string | undefined;
-    try {
-      const p = exec.payload ? (JSON.parse(exec.payload) as { model?: unknown }) : null;
-      if (p && typeof p.model === 'string' && p.model.trim()) payloadModel = p.model.trim();
-    } catch { /* default model */ }
+    const payloadModel = parseModel(exec.payload ?? undefined);
     const routing = await resolveCloudRouting(env, exec.tenantId);
     return {
       tenantId: exec.tenantId, taskId: exec.taskId, projectId: task.projectId,
@@ -628,6 +624,79 @@ async function isExecutionCancelled(db: Db, executionId: number): Promise<boolea
     const [row] = await db.select({ status: executions.status }).from(executions).where(eq(executions.id, executionId)).limit(1);
     return row?.status === 'cancelled';
   } catch { return false; }
+}
+
+/** Parse the assistant turn (content + tool calls) off a gateway chat-completion
+ *  response body. One reader for both the in-Worker loop and the container `llm` op. */
+function parseLlmChoice(json: unknown): { content: string; toolCalls: RawToolCall[] } {
+  const j = json as { choices?: Array<{ message?: { content?: unknown; tool_calls?: unknown } }> } | null;
+  const choice = j?.choices?.[0]?.message;
+  const content = typeof choice?.content === 'string' ? choice.content : '';
+  const toolCalls = Array.isArray(choice?.tool_calls) ? (choice!.tool_calls as RawToolCall[]) : [];
+  return { content, toolCalls };
+}
+
+type CloudLlmTurn =
+  | { ok: true; content: string; toolCalls: RawToolCall[]; resolvedModel: string }
+  | { ok: false; error: string; resolvedModel: string };
+
+interface CloudLlmTurnCtx {
+  env: Env; db: Db;
+  tenantId: number; cloudAgentRef?: string; executionId: number;
+  taskId: number; projectId?: number | null;
+  /** The run's seed/pin, for the coding-degraded comparison (NOT the resolved model). */
+  requestedModel?: string;
+  /** Model id to attribute when the gateway doesn't echo a resolved one. */
+  fallbackModel?: string;
+}
+
+/**
+ * The post-`complete` half of one cloud LLM turn, shared by {@link runCloudToolLoop}
+ * (in-Worker) and the container `llm` op so metering + the `llm.complete` /
+ * coding-degraded / `agent.message` telemetry have ONE implementation (the
+ * proxy.complete call + the loop-only 429 cascade stay at the call site). Records
+ * usage, shapes a gateway error, parses the choice, and emits the timeline events;
+ * `notify` surfaces the assistant message to live subscribers (the loop streams its
+ * final turn separately, so it passes false).
+ */
+async function recordCloudLlmTurn(
+  result: Awaited<ReturnType<ReturnType<typeof llmProxyForPlan>['complete']>>,
+  rc: CloudLlmTurnCtx,
+  opts: { tGen0: number; step?: number; notify: boolean },
+): Promise<CloudLlmTurn> {
+  const evtBase = { tenantId: rc.tenantId, cloudAgentRef: rc.cloudAgentRef, executionId: rc.executionId };
+  const resolvedModel = result.resolvedModel ?? rc.fallbackModel ?? 'default';
+  if (result.usage) {
+    await recordCloudUsage(rc.env, rc.db, {
+      ...evtBase, taskId: rc.taskId, projectId: rc.projectId, model: resolvedModel,
+      inputTokens: result.usage.promptTokens ?? 0, outputTokens: result.usage.completionTokens ?? 0,
+    });
+  }
+  const durationMs = Date.now() - opts.tGen0;
+  if (result.response.status >= 400) {
+    const text = await result.response.text().catch(() => '');
+    await recordCloudToolEvent(rc.db, {
+      ...evtBase, toolName: 'llm.complete', category: 'llm',
+      detail: { model: resolvedModel, traceId: result.traceId ?? null, status: result.response.status, step: opts.step },
+      result: `gateway ${result.response.status}`, durationMs,
+    });
+    return { ok: false, error: `Gateway ${result.response.status}: ${text.slice(0, 300)}`, resolvedModel };
+  }
+  const { content, toolCalls } = parseLlmChoice(await result.response.json().catch(() => null));
+  await recordCloudToolEvent(rc.db, {
+    ...evtBase, toolName: 'llm.complete', category: 'llm',
+    detail: { model: resolvedModel, traceId: result.traceId ?? null, step: opts.step, toolCalls: toolCalls.length },
+    result: `${toolCalls.length} tool call(s)${content ? ` · ${content.length} chars` : ''}`, durationMs,
+  });
+  await emitCodingModelDegraded(rc.db, { ...evtBase, resolvedModel, requestedModel: rc.requestedModel ?? '' });
+  if (content) {
+    await recordCloudToolEvent(rc.db, {
+      ...evtBase, toolName: 'agent.message', category: 'message',
+      detail: { step: opts.step, content }, result: content.slice(0, 280),
+    });
+    if (opts.notify) notifyExecutionSubscribers(rc.executionId, { type: 'message', executionId: rc.executionId, role: 'assistant', text: content, ts: new Date().toISOString() });
+  }
+  return { ok: true, content, toolCalls, resolvedModel };
 }
 
 /**
@@ -695,31 +764,17 @@ export async function handleContainerOp(
       ...(pick.model ? { model: pick.model, ...(pick.strict ? { modelStrict: true } : {}) } : {}),
       useCase: 'task_execution',
     });
-    const resolvedModel = result.resolvedModel ?? pick.model ?? 'default';
-    if (result.usage) {
-      await recordCloudUsage(env, db, {
-        tenantId, cloudAgentRef, executionId, taskId, projectId, model: resolvedModel,
-        inputTokens: result.usage.promptTokens ?? 0, outputTokens: result.usage.completionTokens ?? 0,
-      });
-    }
+    // Shared post-`complete` processing (metering + telemetry) — identical to the
+    // in-Worker loop. `notify: true` surfaces the assistant message to subscribers
+    // (the container has no separate output stream).
+    const turn = await recordCloudLlmTurn(result, {
+      env, db, tenantId, cloudAgentRef, executionId, taskId, projectId,
+      requestedModel: pick.model ?? model, fallbackModel: pick.model,
+    }, { tGen0, notify: true });
     // Heartbeat: a live container keeps the run out of the orphan reaper.
     await db.update(executions).set({ updatedAt: new Date() }).where(eq(executions.id, executionId)).catch(() => { /* best-effort */ });
-    if (result.response.status >= 400) {
-      const text = await result.response.text().catch(() => '');
-      await recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName: 'llm.complete', category: 'llm', detail: { model: resolvedModel, status: result.response.status }, result: `gateway ${result.response.status}`, durationMs: Date.now() - tGen0 });
-      return { status: 200, body: { error: `Gateway ${result.response.status}: ${text.slice(0, 300)}` } };
-    }
-    const json = (await result.response.json().catch(() => null)) as { choices?: Array<{ message?: { content?: unknown; tool_calls?: unknown } }> } | null;
-    const choice = json?.choices?.[0]?.message;
-    const content = typeof choice?.content === 'string' ? choice.content : '';
-    const toolCalls = Array.isArray(choice?.tool_calls) ? choice.tool_calls : [];
-    await recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName: 'llm.complete', category: 'llm', detail: { model: resolvedModel, traceId: result.traceId ?? null, toolCalls: toolCalls.length }, result: `${toolCalls.length} tool call(s)${content ? ` · ${content.length} chars` : ''}`, durationMs: Date.now() - tGen0 });
-    await emitCodingModelDegraded(db, { tenantId, cloudAgentRef, executionId, resolvedModel, requestedModel: pick.model ?? model });
-    if (content) {
-      await recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName: 'agent.message', category: 'message', detail: { content }, result: content.slice(0, 280) });
-      notifyExecutionSubscribers(executionId, { type: 'message', executionId, role: 'assistant', text: content, ts: new Date().toISOString() });
-    }
-    return { status: 200, body: { content, toolCalls, steering, cancelled: await isExecutionCancelled(db, executionId) } };
+    if (!turn.ok) return { status: 200, body: { error: turn.error } };
+    return { status: 200, body: { content: turn.content, toolCalls: turn.toolCalls, steering, cancelled: await isExecutionCancelled(db, executionId) } };
   }
 
   if (op === 'write') {
@@ -1132,64 +1187,21 @@ export async function runCloudToolLoop(
       activeModel = '';
     }
     if (cancelled) break;
-    const genMs = Date.now() - tGen0;
-    const resolvedModel = result.resolvedModel ?? activeModel ?? 'default';
     // Lock the non-strict run onto the model the gateway actually used on the
     // first turn, so every later turn (and DO tick) stays on it. Strict pins
     // already resolve to `activeModel`, so this is a no-op for them.
     if (!strictPin && result.resolvedModel) activeModel = result.resolvedModel;
-    if (result.usage) {
-      await recordCloudUsage(env, db, {
-        tenantId, cloudAgentRef, executionId, taskId: taskRow.id, projectId, model: resolvedModel,
-        inputTokens: result.usage.promptTokens ?? 0,
-        outputTokens: result.usage.completionTokens ?? 0,
-      });
-    }
-    if (result.response.status >= 400) {
-      const body = await result.response.text().catch(() => '');
-      await recordCloudToolEvent(db, {
-        tenantId, cloudAgentRef, executionId,
-        toolName: 'llm.complete', category: 'llm',
-        detail: { model: resolvedModel, traceId: result.traceId ?? null, step },
-        result: `gateway ${result.response.status}`, durationMs: genMs,
-      });
-      return { ok: false, output: `Gateway ${result.response.status}: ${body.slice(0, 300)}`, cancelled, finished: true };
-    }
-
-    const json = (await result.response.json().catch(() => null)) as
-      | { choices?: Array<{ message?: { content?: unknown; tool_calls?: unknown } }> }
-      | null;
-    const choice = json?.choices?.[0]?.message;
-    const content = typeof choice?.content === 'string' ? choice.content : '';
-    const toolCalls = Array.isArray(choice?.tool_calls) ? (choice!.tool_calls as RawToolCall[]) : [];
+    // Shared post-`complete` processing (metering + `llm.complete`/degraded/agent.message
+    // telemetry) — identical to the container `llm` op. `notify: false`: the loop streams
+    // its own final turn. The degraded comparison is the seed/pin (`pick.model`), not the
+    // just-locked `activeModel`.
+    const turn = await recordCloudLlmTurn(result, {
+      env, db, tenantId, cloudAgentRef, executionId, taskId: taskRow.id, projectId,
+      requestedModel: pick.model, fallbackModel: activeModel,
+    }, { tGen0, step, notify: false });
+    if (!turn.ok) return { ok: false, output: turn.error, cancelled, finished: true };
+    const { content, toolCalls } = turn;
     if (content) finalOutput = content;
-
-    await recordCloudToolEvent(db, {
-      tenantId, cloudAgentRef, executionId,
-      toolName: 'llm.complete', category: 'llm',
-      detail: { model: resolvedModel, traceId: result.traceId ?? null, step, toolCalls: toolCalls.length },
-      result: `${toolCalls.length} tool call(s)${content ? ` · ${content.length} chars` : ''}`,
-      durationMs: genMs,
-    });
-
-    // Degradation signal: a coding run served by a non-coder model (the coding
-    // cascade fell through CODING_MODEL_POOL onto a CODING_BACKSTOP_MODELS generalist).
-    // Invisible in usage rows, so emit it as its own timeline event. The requested
-    // model is the run's seed/pin (`pick.model`), not `activeModel` (which may have
-    // just locked onto the gateway-resolved id above).
-    await emitCodingModelDegraded(db, { tenantId, cloudAgentRef, executionId, resolvedModel, requestedModel: pick.model });
-
-    // The agent's natural-language turns are part of "what the agent did" — record
-    // each as its own event so the Logs/Timeline show the actual message text, not
-    // just an llm.complete counter. (Output streams the final turn separately.)
-    if (content) {
-      await recordCloudToolEvent(db, {
-        tenantId, cloudAgentRef, executionId,
-        toolName: 'agent.message', category: 'message',
-        detail: { step, content },
-        result: content.slice(0, 280),
-      });
-    }
 
     if (toolCalls.length === 0) { finished = true; break; }
 
@@ -1355,12 +1367,13 @@ export class CloudToolLoopEngine implements AgentEngine {
 }
 
 /**
- * The single composition root for engine selection. Today every cloud surface runs
- * {@link CloudToolLoopEngine}; this is where a different engine would be injected per
- * `resolved.engine` / `runtime_surface` once V1 is retired and "the next engine"
- * lands — by construction, no dispatch site changes.
+ * The single composition root for cloud engine selection. Exactly one engine is
+ * reachable from this in-Worker loop today — {@link CloudToolLoopEngine} — so this
+ * returns it directly; the seam exists so "the next engine" is injected HERE without
+ * editing the call site. (Surface routing — durable DO / container / worker — is a
+ * separate decision made in `runtimeRoutes.ts`, not an engine choice.)
  */
-export function resolveAgentEngine(rc: CloudEngineContext, _resolved?: ResolvedCloudAgent): AgentEngine {
+export function resolveAgentEngine(rc: CloudEngineContext): AgentEngine {
   return new CloudToolLoopEngine(rc);
 }
 
@@ -1649,11 +1662,7 @@ export async function runCloudExecution(
   payload?: string,
   artifacts?: ResolvedArtifacts,
 ): Promise<void> {
-  let model: string | undefined;
-  try {
-    const p = payload ? (JSON.parse(payload) as { model?: unknown }) : null;
-    if (p && typeof p.model === 'string' && p.model.trim()) model = p.model.trim();
-  } catch { /* payload not JSON — use default model */ }
+  const model = parseModel(payload);
 
   // Cross-isolate cancel check: the /cancel endpoint flips the DB row to
   // CANCELLED from a different request/isolate; the background loop polls this

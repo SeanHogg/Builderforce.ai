@@ -6,9 +6,8 @@ import {
   matchesKey,
   type SelectItem,
   type SelectListTheme,
-  truncateToWidth,
 } from "@mariozechner/pi-tui";
-import { stripAnsi, visibleWidth } from "../../terminal/ansi.js";
+import { stripAnsi, truncateToWidth, visibleWidth } from "../../terminal/ansi.js";
 import { findWordBoundaryIndex, fuzzyFilterLower } from "./fuzzy-filter.js";
 
 const ANSI_ESCAPE = String.fromCharCode(27);

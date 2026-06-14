@@ -50,9 +50,18 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  * clone. It greps via the shell (NOT the indexed searcher), commits via the
  * container-op, and runs real build/test — so it advertises repo.read + repo.write +
  * shell, and NOT repo.search / static-check (shell-free) / human (not yet wired in
- * the image). → list_files, read_file, write_file, run_command, finish. The container
- * runs its OWN loop in its image; this set is only the schema it advertises to the
- * gateway, so it MUST match what that image implements.
+ * the image). → list_files, read_file, write_file, run_command, finish.
+ *
+ * `repo.edit` is INTENTIONALLY omitted (not a gap): unlike the shell-less durable
+ * surface — which must do surgical edits over the git API (read blob → string-replace
+ * → commit), hence advertises `repo.edit` — the container edits files IN its local
+ * clone via the shell and delegates only the whole-file COMMIT back to the Worker via
+ * the `write` container-op. There is no `edit` container-op, so advertising `repo.edit`
+ * here would surface an `edit_file` tool that 400s. If the image ever gains an in-loop
+ * edit handler, add both `repo.edit` here AND the `edit` op in `handleContainerOp`.
+ *
+ * The container runs its OWN loop in its image; this set is only the schema it
+ * advertises to the gateway, so it MUST match what that image implements.
  */
 export const CONTAINER_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   'repo.read', 'repo.write', 'shell',

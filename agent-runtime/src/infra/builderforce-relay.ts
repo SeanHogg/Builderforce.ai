@@ -23,7 +23,7 @@ import { GatewayClient, type GatewayClientOptions } from "../gateway/client.js";
 import type { EventFrame } from "../gateway/protocol/index.js";
 import { logDebug, logWarn } from "../logger.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
-import type { AgentEngine, EngineDispatch } from "./agent-engine.js";
+import type { RelayTaskEngine, EngineDispatch } from "./agent-engine.js";
 import { onAgentEvent } from "./agent-events.js";
 import { resolveApproval } from "./approval-gate.js";
 import {
@@ -132,7 +132,7 @@ export class BuilderforceRelayService implements IRelayService {
 
   /**
    * Engine registry — the dependency-injection seam. Maps an engine id to its
-   * {@link AgentEngine} implementation; `dispatchTaskFromRelay` resolves by id and
+   * {@link RelayTaskEngine} implementation; `dispatchTaskFromRelay` resolves by id and
    * calls `run()` instead of branching. Adding/swapping a runner is a registry entry.
    *
    * **V1 and Local are RETIRED (operator decision 2026-06-14)** — `runV1Engine` and the
@@ -143,9 +143,9 @@ export class BuilderforceRelayService implements IRelayService {
    * registry entry; the DI seam stays even with one engine so the next runner is a wiring
    * change, not a branch.
    */
-  private resolveEngine(engineId?: string): AgentEngine {
-    const v2: AgentEngine = { id: ENGINE_IDS.v2, run: (d, p) => this.runV2Engine(d, p) };
-    const registry: Record<string, AgentEngine> = { [v2.id]: v2 };
+  private resolveEngine(engineId?: string): RelayTaskEngine {
+    const v2: RelayTaskEngine = { id: ENGINE_IDS.v2, run: (d, p) => this.runV2Engine(d, p) };
+    const registry: Record<string, RelayTaskEngine> = { [v2.id]: v2 };
     return registry[engineId ?? ""] ?? registry[DEFAULT_ENGINE_ID];
   }
 

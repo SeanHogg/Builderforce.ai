@@ -19,6 +19,11 @@ export default defineConfig({
         replacement: path.join(repoRoot, "..", "packages", "agent-tools", "src", "index.ts"),
       },
       {
+        // Render seam (ink/headless renderers). Also a tsconfig path; vitest needs its own.
+        find: "@builderforce/tui",
+        replacement: path.join(repoRoot, "..", "packages", "tui", "src", "index.ts"),
+      },
+      {
         find: "@seanhogg/builderforce-agents/plugin-sdk/account-id",
         replacement: path.join(repoRoot, "src", "plugin-sdk", "account-id.ts"),
       },

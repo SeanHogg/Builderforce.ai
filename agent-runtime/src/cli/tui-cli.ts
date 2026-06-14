@@ -59,6 +59,24 @@ export function registerTuiCli(program: Command) {
           );
         }
         const historyLimit = Number.parseInt(String(opts.historyLimit ?? "200"), 10);
+
+        // Opt-in: the pi-free `ink` TUI wired through the `@builderforce/tui` render seam
+        // (PRD 11 §5.1 Stage 4). Reachable today; becomes the default once it reaches
+        // feature parity with the legacy pi-tui `runTui` and `@mariozechner/pi-tui` is dropped.
+        if (process.env.BUILDERFORCE_AGENTS_INK_TUI === "1") {
+          const { runInkSession } = await import("../tui/ink-session.js");
+          await runInkSession({
+            sessionKey: (opts.session as string | undefined)?.trim() || "main",
+            connection: {
+              url: opts.url as string | undefined,
+              token: opts.token as string | undefined,
+              password: opts.password as string | undefined,
+            },
+            showThinking: typeof opts.thinking === "string" && opts.thinking !== "off",
+          });
+          return;
+        }
+
         await runTui({
           url: opts.url as string | undefined,
           token: opts.token as string | undefined,

@@ -1,5 +1,5 @@
-import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import type { Component, TUI } from "@mariozechner/pi-tui";
+import { truncateToWidth, visibleWidth } from "../terminal/ansi.js";
 import { theme } from "./theme/theme.js";
 
 type OverlayHost = Pick<TUI, "showOverlay" | "hideOverlay" | "hasOverlay" | "setFocus">;
