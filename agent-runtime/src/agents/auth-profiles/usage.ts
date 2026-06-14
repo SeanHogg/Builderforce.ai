@@ -171,7 +171,7 @@ export async function markAuthProfileUsed(params: {
     disabledReason: undefined,
     failureCounts: undefined,
   };
-  saveAuthProfileStore(store, agentDir);
+  await saveAuthProfileStore(store, agentDir);
 }
 
 export function calculateAuthProfileCooldownMs(errorCount: number): number {
@@ -358,7 +358,7 @@ export async function markAuthProfileFailure(params: {
     reason,
     cfgResolved,
   });
-  saveAuthProfileStore(store, agentDir);
+  await saveAuthProfileStore(store, agentDir);
 }
 
 /**
@@ -417,5 +417,5 @@ export async function clearAuthProfileCooldown(params: {
     errorCount: 0,
     cooldownUntil: undefined,
   };
-  saveAuthProfileStore(store, agentDir);
+  await saveAuthProfileStore(store, agentDir);
 }

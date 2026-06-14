@@ -21,7 +21,7 @@ export function resolveAuthStorePathForDisplay(agentDir?: string): string {
   return pathname.startsWith("~") ? pathname : resolveUserPath(pathname);
 }
 
-export function ensureAuthStoreFile(pathname: string) {
+export async function ensureAuthStoreFile(pathname: string): Promise<void> {
   if (fs.existsSync(pathname)) {
     return;
   }
@@ -29,5 +29,5 @@ export function ensureAuthStoreFile(pathname: string) {
     version: AUTH_STORE_VERSION,
     profiles: {},
   };
-  saveJsonFile(pathname, payload);
+  await saveJsonFile(pathname, payload);
 }

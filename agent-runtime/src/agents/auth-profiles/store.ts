@@ -23,14 +23,14 @@ export async function updateAuthProfileStoreWithLock(params: {
   updater: (store: AuthProfileStore) => boolean;
 }): Promise<AuthProfileStore | null> {
   const authPath = resolveAuthStorePath(params.agentDir);
-  ensureAuthStoreFile(authPath);
+  await ensureAuthStoreFile(authPath);
 
   try {
     return await withFileLock(authPath, AUTH_STORE_LOCK_OPTIONS, async () => {
       const store = await ensureAuthProfileStore(params.agentDir);
       const shouldSave = params.updater(store);
       if (shouldSave) {
-        saveAuthProfileStore(store, params.agentDir);
+        await saveAuthProfileStore(store, params.agentDir);
       }
       return store;
     });
@@ -333,7 +333,10 @@ export async function ensureAuthProfileStore(
   return merged;
 }
 
-export function saveAuthProfileStore(store: AuthProfileStore, agentDir?: string): void {
+export async function saveAuthProfileStore(
+  store: AuthProfileStore,
+  agentDir?: string,
+): Promise<void> {
   const authPath = resolveAuthStorePath(agentDir);
   const payload = {
     version: AUTH_STORE_VERSION,
@@ -342,5 +345,5 @@ export function saveAuthProfileStore(store: AuthProfileStore, agentDir?: string)
     lastGood: store.lastGood ?? undefined,
     usageStats: store.usageStats ?? undefined,
   } satisfies AuthProfileStore;
-  saveJsonFile(authPath, payload);
+  await saveJsonFile(authPath, payload);
 }
