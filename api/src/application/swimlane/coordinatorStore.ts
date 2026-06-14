@@ -53,6 +53,8 @@ export interface TicketRunLite {
   currentSwimlaneId: string | null;
   lifecycle: string;
   currentWorkflowId: string | null;
+  /** When lifecycle='awaiting_workflow': the spawned run_workflow id being awaited. */
+  awaitingWorkflowId: string | null;
   stageHistory: string | null;
   error: string | null;
 }
@@ -128,9 +130,23 @@ export interface CoordinatorStore {
   updateTicketRun(
     id: string,
     tenantId: number,
-    patch: { lifecycle: string; currentSwimlaneId: string | null; stageHistory: string; error: string | null },
+    patch: {
+      lifecycle: string;
+      currentSwimlaneId: string | null;
+      stageHistory: string;
+      error: string | null;
+      /** Set/clear the parked-on workflow id. Omit to leave it unchanged. */
+      awaitingWorkflowId?: string | null;
+    },
   ): Promise<TicketRunLite | null>;
   recordTransition(t: TransitionRecord): Promise<void>;
+  /**
+   * Find the ticket run currently parked on (awaiting) the given spawned
+   * workflow id, if any. Used by the parked-workflow sweep to resume a ticket
+   * once its run_workflow side-effect settles. Optional — in-memory test stores
+   * that don't exercise the gate may omit it.
+   */
+  findAwaitingWorkflowRun?(workflowId: string): Promise<TicketRunLite | null>;
 
   insertDispatch(data: NewDispatch): Promise<string>;
   updateDispatch(

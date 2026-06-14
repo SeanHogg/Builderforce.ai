@@ -1,0 +1,11 @@
+-- Migration: persist the normalized field bag on external_ticket_links.
+--
+-- The board-sync reconciler keys idempotency on content_hash / external_version
+-- (whole-record last-writer-wins), but it never stored the actual reconciled
+-- field values, so the Drizzle store returned fields:null on every read. That
+-- made field-level three-way merge impossible. This adds the JSONB column the
+-- SyncEngine port (UpsertLinkInput.fields / StoredLink.fields) already carries,
+-- so the last-reconciled bag round-trips and per-field conflict merge becomes
+-- possible. Nullable + idempotent; no backfill (existing links re-populate the
+-- bag on their next inbound reconcile).
+ALTER TABLE external_ticket_links ADD COLUMN IF NOT EXISTS fields JSONB;

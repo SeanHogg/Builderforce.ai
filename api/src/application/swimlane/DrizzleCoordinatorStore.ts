@@ -135,7 +135,13 @@ export class DrizzleCoordinatorStore implements CoordinatorStore {
   async updateTicketRun(
     id: string,
     tenantId: number,
-    patch: { lifecycle: string; currentSwimlaneId: string | null; stageHistory: string; error: string | null },
+    patch: {
+      lifecycle: string;
+      currentSwimlaneId: string | null;
+      stageHistory: string;
+      error: string | null;
+      awaitingWorkflowId?: string | null;
+    },
   ): Promise<TicketRunLite | null> {
     const [run] = await this.db
       .update(ticketRuns)
@@ -144,10 +150,26 @@ export class DrizzleCoordinatorStore implements CoordinatorStore {
         currentSwimlaneId: patch.currentSwimlaneId,
         stageHistory: patch.stageHistory,
         error: patch.error,
+        // Only touch the parked-on link when the caller explicitly set it.
+        ...('awaitingWorkflowId' in patch ? { awaitingWorkflowId: patch.awaitingWorkflowId } : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(ticketRuns.id, id), eq(ticketRuns.tenantId, tenantId)))
       .returning();
+    return run ? toRun(run) : null;
+  }
+
+  async findAwaitingWorkflowRun(workflowId: string): Promise<TicketRunLite | null> {
+    const [run] = await this.db
+      .select()
+      .from(ticketRuns)
+      .where(
+        and(
+          eq(ticketRuns.awaitingWorkflowId, workflowId),
+          eq(ticketRuns.lifecycle, 'awaiting_workflow'),
+        ),
+      )
+      .limit(1);
     return run ? toRun(run) : null;
   }
 
@@ -258,6 +280,7 @@ function toRun(r: RunRow): TicketRunLite {
     currentSwimlaneId: r.currentSwimlaneId,
     lifecycle: r.lifecycle,
     currentWorkflowId: r.currentWorkflowId,
+    awaitingWorkflowId: r.awaitingWorkflowId,
     stageHistory: r.stageHistory,
     error: r.error,
   };
