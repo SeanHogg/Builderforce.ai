@@ -1,5 +1,5 @@
 import type { AgentToolResult } from "../builderforce/model/agent-types.js";
-import { createEditTool, createReadTool, createWriteTool } from "@mariozechner/pi-coding-agent";
+import { createEditTool, createReadTool, createWriteTool } from "./native-file-tools.js";
 import { detectMime } from "../media/mime.js";
 import { sniffMimeFromBase64 } from "../media/sniff-mime-from-base64.js";
 import type { ImageSanitizationLimits } from "./image-sanitization.js";

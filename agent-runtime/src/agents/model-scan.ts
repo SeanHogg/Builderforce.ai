@@ -1,14 +1,8 @@
-import {
-  type Context,
-  complete,
-  getEnvApiKey,
-  getModel,
-  type Model,
-  type OpenAICompletionsOptions,
-  type Tool,
-} from "@mariozechner/pi-ai";
 import { Type } from "@sinclair/typebox";
+import { nativeComplete } from "../builderforce/model/native-llm.js";
+import type { Context, Model, Tool } from "../builderforce/model/types.js";
 import { inferParamBFromIdOrName } from "../shared/model-param-b.js";
+import { getEnvApiKey, getModel } from "./model-sdk-shims.js";
 
 const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
 const DEFAULT_TIMEOUT_MS = 12_000;
@@ -260,16 +254,30 @@ async function probeTool(
   const startedAt = Date.now();
   try {
     const message = await withTimeout(timeoutMs, (signal) =>
-      complete(model, context, {
-        apiKey,
-        maxTokens: 32,
-        temperature: 0,
-        toolChoice: "required",
+      nativeComplete(
+        { baseUrl: model.baseUrl, apiKey, defaultModel: model.id },
+        {
+          model: model.id,
+          messages: context.messages.map((m) => ({
+            role: m.role as "user",
+            content: m.content as string,
+          })),
+          tools: context.tools?.map((t) => ({
+            type: "function" as const,
+            function: {
+              name: t.name,
+              description: t.description,
+              parameters: t.parameters as Record<string, unknown>,
+            },
+          })),
+          temperature: 0,
+          extra: { max_tokens: 32, tool_choice: "required" },
+        },
         signal,
-      } satisfies OpenAICompletionsOptions),
+      ),
     );
 
-    const hasToolCall = message.content.some((block) => block.type === "toolCall");
+    const hasToolCall = message.toolCalls.length > 0;
     if (!hasToolCall) {
       return {
         ok: false,
@@ -308,12 +316,19 @@ async function probeImage(
   const startedAt = Date.now();
   try {
     await withTimeout(timeoutMs, (signal) =>
-      complete(model, context, {
-        apiKey,
-        maxTokens: 16,
-        temperature: 0,
+      nativeComplete(
+        { baseUrl: model.baseUrl, apiKey, defaultModel: model.id },
+        {
+          model: model.id,
+          messages: context.messages.map((m) => ({
+            role: m.role as "user",
+            content: m.content as string,
+          })),
+          temperature: 0,
+          extra: { max_tokens: 16 },
+        },
         signal,
-      } satisfies OpenAICompletionsOptions),
+      ),
     );
     return { ok: true, latencyMs: Date.now() - startedAt };
   } catch (err) {

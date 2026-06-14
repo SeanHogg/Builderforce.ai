@@ -1,6 +1,8 @@
 import path from "node:path";
-import { type Api, type Context, complete, type Model } from "@mariozechner/pi-ai";
+import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
 import { Type } from "@sinclair/typebox";
+import { nativeComplete } from "../../builderforce/model/native-llm.js";
+import type { Api, AssistantMessage, Context, Model } from "../../builderforce/model/types.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import { resolveUserPath } from "../../utils.js";
 import { getDefaultLocalRoots, loadWebMedia } from "../../web/media.js";
@@ -14,7 +16,6 @@ import { ensureBuilderForceAgentsModelsJson } from "../models-config.js";
 import { discoverAuthStorage, discoverModels } from "../pi-model-discovery.js";
 import type { SandboxFsBridge } from "../sandbox/fs-bridge.js";
 import { normalizeWorkspaceDir } from "../workspace-dir.js";
-import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
 import type { AgentToolResult, AnyAgentTool } from "./common.js";
 import { nativeToolData } from "./common.js";
 import {
@@ -62,7 +63,10 @@ function resolveDefaultModelRef(cfg?: BuilderForceAgentsConfig): {
   return { provider: DEFAULT_PROVIDER, model: DEFAULT_MODEL };
 }
 
-async function hasAuthForProvider(params: { provider: string; agentDir: string }): Promise<boolean> {
+async function hasAuthForProvider(params: {
+  provider: string;
+  agentDir: string;
+}): Promise<boolean> {
   if (resolveEnvApiKey(params.provider)?.apiKey) {
     return true;
   }
@@ -308,10 +312,45 @@ async function runImagePrompt(params: {
       }
 
       const context = buildImageContext(params.prompt, params.images);
-      const message = await complete(model, context, {
-        apiKey,
-        maxTokens: resolveImageToolMaxTokens(model.maxTokens),
-      });
+      // Map pi vision content -> OpenAI image_url wire format for the gateway.
+      const visionMessages = context.messages.map((m) => ({
+        role: m.role as "user",
+        content: Array.isArray(m.content)
+          ? m.content.map((c) =>
+              c.type === "image"
+                ? {
+                    type: "image_url" as const,
+                    image_url: { url: `data:${c.mimeType};base64,${c.data}` },
+                  }
+                : { type: "text" as const, text: (c as { text: string }).text },
+            )
+          : (m.content as string),
+      }));
+      const res = await nativeComplete(
+        { baseUrl: model.baseUrl, apiKey, defaultModel: model.id },
+        {
+          model: model.id,
+          messages: visionMessages,
+          extra: { max_tokens: resolveImageToolMaxTokens(model.maxTokens) },
+        },
+      );
+      const message: AssistantMessage = {
+        role: "assistant",
+        content: [{ type: "text", text: res.content }],
+        api: model.api,
+        provider: model.provider,
+        model: model.id,
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: res.finishReason === "error" ? "error" : "stop",
+        timestamp: Date.now(),
+      };
       const text = coerceImageAssistantText({
         message,
         provider: model.provider,
@@ -565,7 +604,9 @@ export async function runImage(
       });
       if (!imageModelConfig) {
         return {
-          content: [{ type: "text", text: "No image-capable model is configured or authenticated." }],
+          content: [
+            { type: "text", text: "No image-capable model is configured or authenticated." },
+          ],
           details: { error: "no_image_model" },
         };
       }
@@ -615,7 +656,8 @@ export function createImageTool(options?: ImageDeps): AnyAgentTool | null {
     name: "image",
     description: descriptor.description,
     parameters: ImageToolSchema,
-    execute: async (_toolCallId, args) => runImage(options, descriptor, args as Record<string, unknown>),
+    execute: async (_toolCallId, args) =>
+      runImage(options, descriptor, args as Record<string, unknown>),
   };
 }
 

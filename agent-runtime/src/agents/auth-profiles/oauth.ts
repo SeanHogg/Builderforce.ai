@@ -1,9 +1,5 @@
-import {
-  getOAuthApiKey,
-  getOAuthProviders,
-  type OAuthCredentials,
-  type OAuthProvider,
-} from "@mariozechner/pi-ai";
+import { getOAuthApiKey, getOAuthProviders } from "../oauth/index.js";
+import type { OAuthCredentials, OAuthProvider } from "../../builderforce/model/types.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import { withFileLock } from "../../infra/file-lock.js";
 import { refreshQwenPortalCredentials } from "../../providers/qwen-portal-oauth.js";

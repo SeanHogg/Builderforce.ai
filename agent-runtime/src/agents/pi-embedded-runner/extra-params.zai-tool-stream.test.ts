@@ -1,14 +1,12 @@
+import { describe, expect, it, vi } from "vitest";
 import type { StreamFn } from "../../builderforce/agent-loop/index.js";
 import type { Context, Model, SimpleStreamOptions } from "../../builderforce/model/types.js";
-import { describe, expect, it, vi } from "vitest";
 import { applyExtraParamsToAgent } from "./extra-params.js";
 
 // Mock streamSimple for testing
-vi.mock("@mariozechner/pi-ai", () => ({
-  streamSimple: vi.fn(() => ({
-    push: vi.fn(),
-    result: vi.fn(),
-  })),
+vi.mock("../../builderforce/agent-loop/index.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../builderforce/agent-loop/index.js")>()),
+  nativeStreamSimple: vi.fn(() => ({ push: vi.fn(), result: vi.fn() })),
 }));
 
 type ToolStreamCase = {

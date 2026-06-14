@@ -1,5 +1,5 @@
 import type { OAuthCredentials } from "../builderforce/model/types.js";
-import { loginOpenAICodex } from "@mariozechner/pi-ai";
+import { loginOpenAICodex } from "../agents/oauth/index.js";
 import type { RuntimeEnv } from "../runtime.js";
 import type { WizardPrompter } from "../wizard/prompts.js";
 import { createVpsAwareOAuthHandlers } from "./oauth-flow.js";
