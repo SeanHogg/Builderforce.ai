@@ -21,6 +21,7 @@ import {
 import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
 import { getProjectWorkforce } from '@/lib/teams';
+import { onBrainDataChanged } from '@/lib/brain/brainDataEvent';
 import {
   assigneeSelectValue,
   parseAssigneeSelectValue,
@@ -253,6 +254,15 @@ export function TaskMgmtContent({
   useEffect(() => {
     load();
   }, [load]);
+
+  // When the Brain mutates tasks/projects/executions (e.g. the user approves an
+  // "update task" action in the docked drawer), the write lands via the API but
+  // this board holds its own state — so listen on the brain-data bus and refetch
+  // to reflect the change live instead of going stale until a manual reload.
+  useEffect(
+    () => onBrainDataChanged(['tasks', 'executions', 'projects'], () => { void load(); }),
+    [load],
+  );
 
   useEffect(() => {
     if (view === 'board') {

@@ -75,3 +75,12 @@ export {
   type PlatformActionContext,
 } from './platformActions';
 export { PLATFORM_BRAIN_SYSTEM_PROMPT } from './platformPrompt';
+
+// Brain → data-view refresh bus: mutating platform actions announce writes here
+// so the page rendering that data (e.g. the Tasks board) can refetch live.
+export {
+  BRAIN_DATA_CHANGED_EVENT,
+  dispatchBrainDataChanged,
+  onBrainDataChanged,
+  type BrainDataChangedEvent,
+} from './brainDataEvent';

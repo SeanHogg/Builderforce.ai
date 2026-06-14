@@ -2785,7 +2785,7 @@ export interface Board {
 }
 
 /** What a lane does once its agents settle per its success policy. */
-export type LaneActionType = 'advance' | 'move_ticket' | 'run_workflow';
+export type LaneActionType = 'advance' | 'move_ticket' | 'run_workflow' | 'do_nothing';
 export type LaneSuccessPolicy = 'all' | 'any' | 'n_of_m';
 
 export interface Swimlane {
