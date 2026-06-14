@@ -111,6 +111,19 @@ export function parseRepoId(payload: string | undefined): string | undefined {
   }
 }
 
+/** The pinned model off an execution payload (trimmed), or undefined when absent /
+ *  blank / the payload is not JSON. The single reader of `payload.model` — the dispatch
+ *  loop, the durable runner, and `withDefaultModel` all go through this. */
+export function parseModel(payload: string | undefined): string | undefined {
+  if (!payload) return undefined;
+  try {
+    const p = JSON.parse(payload) as { model?: unknown };
+    return typeof p.model === 'string' && p.model.trim() ? p.model.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Stamp a one-time "the orphan reaper re-queued this run on the durable executor"
  * flag into the execution payload. The reaper reads {@link wasReaperRequeued} on
@@ -200,11 +213,11 @@ export function parseRemediation(payload: string | undefined): RemediationContex
  */
 export function withDefaultModel(payload: string | undefined, baseModel: string | undefined): string | undefined {
   if (!baseModel) return payload;
+  if (parseModel(payload)) return payload; // already pinned — leave as-is
   let obj: Record<string, unknown> = {};
   if (payload) {
     try { obj = JSON.parse(payload) as Record<string, unknown>; } catch { return payload; }
   }
-  if (typeof obj.model === 'string' && obj.model.trim()) return payload;
   obj.model = baseModel;
   return JSON.stringify(obj);
 }

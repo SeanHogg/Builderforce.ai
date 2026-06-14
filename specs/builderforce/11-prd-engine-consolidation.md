@@ -192,11 +192,33 @@ Grouped by theme. Each is a discrete, verifiable unit; "surface" notes where it 
   framework for third parties — that is exactly the pi-tui maintenance-asymmetry trap; internal
   swappability needs only the port. **The seam is BUILT** (`packages/tui`, `@builderforce/tui`): the
   `TuiRenderer` contract + `RendererRegistry`/`DEFAULT_RENDERER_ID` (mirrors `ENGINE_IDS`) + a real
-  working **headless** renderer (tests/CI, no TTY) + an **ink** adapter skeleton (the typed target;
-  `start()` gated until the live render tree is wired). **Remaining:** migrate the 18 `pi-tui` sites
-  onto the port and build the live `ink` render tree (add `ink`/`react`; swap `visibleWidth`/
-  `truncateToWidth` → `string-width`/`cli-truncate`). **Needs a real terminal to verify rendering**
-  (locked-decision-4). See `packages/tui/src/{renderer,registry}.ts` + `adapters/*`.
+  working **headless** renderer (tests/CI, no TTY) + a **live `ink` renderer** (see next). **Live ink
+  render tree ✅ BUILT 2026-06-14:** `adapters/ink-renderer.ts` is no longer a throwing skeleton — `ink`
+  (^7) + `react` (^19) + `string-width`/`cli-truncate` are installed and the `InkRenderer` mounts a real
+  render tree: chat scrollback (`<Box>` column of typed `ChatEntry` rows), a status footer, a single-line
+  input editor with up/down history, and focus-trapping `select`/`settings`/`confirm` overlays that
+  resolve a promise (arrow-key nav, enter/esc). `TextMetrics` is now `string-width`/`cli-truncate`-backed.
+  `@builderforce/tui` `tsc` 0. **Needs a real terminal to verify rendering** (locked-decision-4) but it
+  draws for real, not `throw`. **Text-metrics slice ✅ DONE 2026-06-14
+  (TTY-free):** the two sites that pulled `visibleWidth`/`truncateToWidth` from `pi-tui`
+  (`tui/tui-overlays.ts`, `tui/components/searchable-select-list.ts`) now use a native, dependency-free
+  `truncateToWidth` added to [`src/terminal/ansi.ts`](../../agent-runtime/src/terminal/ansi.ts) (ANSI-aware,
+  code-point counted, preserves styling/resets across the cut — unit-tested in `ansi.test.ts`). This is
+  the on-prem analogue of the PRD's `string-width`/`cli-truncate` swap (the runtime already ships its own
+  native width utils, so no new dep was needed); the in-package ink adapter now uses `string-width`/
+  `cli-truncate` directly. **Wired into `agent-runtime` ✅ 2026-06-14:** the seam now has a real consumer.
+  [`src/tui/renderer-registry.ts`](../../agent-runtime/src/tui/renderer-registry.ts) is the composition
+  root (a populated `RendererRegistry` — `headless` + `ink`, default `ink` — + `resolveTuiRenderer`), and
+  [`src/tui/ink-session.ts`](../../agent-runtime/src/tui/ink-session.ts) `runInkSession` drives a complete,
+  runnable ink chat loop through the port: it wires the input editor's submits → `chat.send` and maps the
+  gateway's `chat`/`agent` events (reusing the renderer-agnostic `TuiStreamAssembler`) onto the chat
+  surface (assistant streaming, tool start/result, lifecycle status). It is reachable from the CLI today
+  via `BUILDERFORCE_AGENTS_INK_TUI=1 builderforce tui`. The wiring core (`wireInkSession`) takes its
+  renderer + client by injection and is unit-tested headlessly (`ink-session.test.ts`, 6 tests) — `tsgo`
+  0, all 138 `src/tui` tests green. **Remaining (TTY-verified):** bring `runInkSession` to feature parity
+  with the legacy pi-tui `runTui` (slash-command autocomplete, bash mode, session switching, verbose
+  stats), flip the default off `BUILDERFORCE_AGENTS_INK_TUI`, then delete the legacy `src/tui` pi-tui
+  components and drop `@mariozechner/pi-tui` from `package.json`. See `packages/tui/src/adapters/ink-renderer.ts`.
 - ~~**Delete + flip default (Stage 5).**~~ **✅ V1 RETIRED 2026-06-13.** **Resolved decision:** the
   consolidated default is **`builderforce-v2`** (the Claude-Agent-SDK engine, gateway-routed) — NOT
   `builderforce-local`, because `local` is **on-prem-only** (the frontend/api `AGENT_ENGINES` set and
