@@ -58,6 +58,11 @@ type BrainModality = string;
  * Tool names are kept flat snake_case by convention (no dots), so the gateway's
  * tool-name sanitizer is a no-op and streamed `tool_calls` names round-trip
  * unchanged.
+ *
+ * Some models emit tool calls inline in the *text* stream as `<tool_call>…`
+ * markup instead of native `tool_calls` deltas. {@link XmlToolCallFilter} lifts
+ * those into the same structured shape (so they actually execute) and strips the
+ * markup from the visible text — see `xmlToolCalls.ts`.
  */
 /** Injected auth + endpoint config. Built once by BrainProvider from BrainConfig.transport. */
 interface BrainTransport {

@@ -85,4 +85,32 @@ describe('streamChatCompletion transport injection', () => {
     expect(result.toolCalls).toHaveLength(1);
     expect(result.toolCalls[0]).toMatchObject({ id: 'c1', name: 'create_file', args: '{"path":"a.ts"}' });
   });
+
+  it('lifts an inline <tool_call> from the text stream and hides the markup', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        sseResponse([
+          'data: {"choices":[{"delta":{"content":"Cleaning up."}}]}\n',
+          'data: {"choices":[{"delta":{"content":"<tool_call>delete_task<arg_key>id</arg"}}]}\n',
+          'data: {"choices":[{"delta":{"content":"_key><arg_value>75</arg_value></tool_call>"},"finish_reason":"stop"}]}\n',
+          'data: [DONE]\n',
+        ]),
+      ),
+    );
+
+    const deltas: string[] = [];
+    const result = await streamChatCompletion(
+      { messages: [], transport: baseTransport },
+      { onTextDelta: (d) => deltas.push(d) },
+    );
+
+    // The markup never reaches the display deltas nor the final text.
+    expect(deltas.join('')).toBe('Cleaning up.');
+    expect(result.text).toBe('Cleaning up.');
+    // The call is structured so the agent loop will actually execute it.
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].name).toBe('delete_task');
+    expect(JSON.parse(result.toolCalls[0].args)).toEqual({ id: 75 });
+  });
 });

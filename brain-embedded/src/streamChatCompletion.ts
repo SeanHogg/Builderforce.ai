@@ -13,7 +13,14 @@
  * Tool names are kept flat snake_case by convention (no dots), so the gateway's
  * tool-name sanitizer is a no-op and streamed `tool_calls` names round-trip
  * unchanged.
+ *
+ * Some models emit tool calls inline in the *text* stream as `<tool_call>…`
+ * markup instead of native `tool_calls` deltas. {@link XmlToolCallFilter} lifts
+ * those into the same structured shape (so they actually execute) and strips the
+ * markup from the visible text — see `xmlToolCalls.ts`.
  */
+
+import { XmlToolCallFilter, extractXmlToolCalls } from './xmlToolCalls';
 
 /** Injected auth + endpoint config. Built once by BrainProvider from BrainConfig.transport. */
 export interface BrainTransport {
@@ -162,8 +169,13 @@ export async function streamChatCompletion(
 
   // Tool calls are accumulated by index across deltas.
   const toolAcc = new Map<number, { id: string; name: string; args: string }>();
-  let text = '';
+  // Lifts inline `<tool_call>…` markup out of the text stream into structured
+  // calls and yields only clean text for display.
+  const xml = new XmlToolCallFilter();
   let finishReason: string | null = null;
+
+  /** Stitch the native + inline-XML tool calls; native first, XML as fallback. */
+  const allToolCalls = (): AssembledToolCall[] => [...assemble(toolAcc), ...xml.toolCalls()];
 
   const reader = res.body?.getReader();
   if (!reader) {
@@ -172,7 +184,7 @@ export async function streamChatCompletion(
       | { choices?: Array<{ message?: { content?: string; tool_calls?: DeltaToolCall[] }; finish_reason?: string }> }
       | null;
     const choice = data?.choices?.[0];
-    text = choice?.message?.content ?? '';
+    const { text, toolCalls: xmlCalls } = extractXmlToolCalls(choice?.message?.content ?? '');
     if (text) handlers.onTextDelta?.(text);
     (choice?.message?.tool_calls ?? []).forEach((tc, i) => {
       const idx = tc.index ?? i;
@@ -180,7 +192,7 @@ export async function streamChatCompletion(
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: assemble(toolAcc), finishReason };
+    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason };
   }
 
   const decoder = new TextDecoder();
@@ -196,8 +208,10 @@ export async function streamChatCompletion(
       if (!trimmed.startsWith('data: ')) continue;
       const payload = trimmed.slice(6).trim();
       if (payload === '[DONE]') {
+        const tail = xml.flush();
+        if (tail) handlers.onTextDelta?.(tail);
         handlers.onDone?.(finishReason);
-        return { text, toolCalls: assemble(toolAcc), finishReason };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason };
       }
       let parsed: {
         choices?: Array<{
@@ -225,8 +239,8 @@ export async function streamChatCompletion(
         parsed.delta ||
         '';
       if (contentDelta) {
-        text += contentDelta;
-        handlers.onTextDelta?.(contentDelta);
+        const visible = xml.push(contentDelta);
+        if (visible) handlers.onTextDelta?.(visible);
       }
 
       const tcDeltas = choice?.delta?.tool_calls;
@@ -249,8 +263,10 @@ export async function streamChatCompletion(
     }
   }
 
+  const tail = xml.flush();
+  if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text, toolCalls: assemble(toolAcc), finishReason };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason };
 }
 
 function assemble(acc: Map<number, { id: string; name: string; args: string }>): AssembledToolCall[] {

@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import { TaskService } from '../../application/task/TaskService';
-import { TaskPriority, AgentType, TaskStatus, TaskType } from '../../domain/shared/types';
+import { TaskPriority, AgentType, TaskStatus, TaskType, ExecutionStatus } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { auditEvents, projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
+import { auditEvents, boards, executions, projects, specs, swimlanes, swimlaneAgentAssignments, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { addDependency, deleteDependency, listProjectDependencies, isDepType } from '../../application/task/taskDependencies';
 import { invalidateCompletedByAssignee } from './reportRoutes';
@@ -14,6 +14,9 @@ import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaul
 import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
 import { ensureTaskPrdRecord, linkSpecToTask } from '../../application/prd/taskPrd';
 import { recordStatusTransition } from '../../application/task/taskLifecycle';
+import { RuntimeService } from '../../application/runtime/RuntimeService';
+import { dispatchCloudRunForTask } from './runtimeRoutes';
+import { decideLaneAutoRun, type LaneAgentLike } from '../../application/swimlane/laneAutoRun';
 
 /** Minimal shape of the agentHost relay Durable Object namespace binding. */
 type RelayNamespace = {
@@ -102,7 +105,97 @@ async function dispatchTaskFinalize(
   }
 }
 
-export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv> {
+/**
+ * Board "autonomous trigger" — the SERVER-SIDE source of truth. When a ticket
+ * enters a lane (created into it, or its status PATCHed into it by ANY client —
+ * board drag, the status dropdown, the brain, a raw API call) and that lane has
+ * a configured cloud agent with a non-human gate, auto-start the run AS that
+ * agent. This used to live only in the board frontend, so brain-created / API /
+ * non-board status changes silently skipped the run (the reported bug). The
+ * decision lives in one place ({@link decideLaneAutoRun}); this just resolves the
+ * lane's agents/gate, guards against double-dispatch, and hands off to the same
+ * cloud dispatch path the manual run and CI auto-fix use.
+ *
+ * Best-effort and meant for `waitUntil`: a dispatch failure must never block or
+ * fail the status change itself.
+ */
+async function maybeAutoRunOnLaneEntry(
+  env: Env,
+  db: Db,
+  runtimeService: RuntimeService,
+  waitUntil: (p: Promise<unknown>) => void,
+  args: { tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string },
+): Promise<void> {
+  try {
+    // A terminal (Done) lane finalizes the ticket; never spin up a fresh agent run
+    // for it — that path is handled by dispatchTaskFinalize.
+    if (args.status === TaskStatus.DONE) return;
+
+    // Resolve the lane the ticket just entered + its configured agents and gate.
+    // No board / no matching lane → agents stay undefined and the decision falls
+    // back to the legacy default-column behaviour.
+    let agents: LaneAgentLike[] | undefined;
+    let gate: 'auto' | 'human' | undefined;
+    const [board] = await db
+      .select({ id: boards.id })
+      .from(boards)
+      .where(eq(boards.projectId, args.projectId))
+      .limit(1);
+    if (board) {
+      const [lane] = await db
+        .select({ id: swimlanes.id, gate: swimlanes.gate })
+        .from(swimlanes)
+        .where(and(eq(swimlanes.boardId, board.id), eq(swimlanes.key, args.status)))
+        .limit(1);
+      if (lane) {
+        gate = lane.gate === 'human' ? 'human' : 'auto';
+        agents = await db
+          .select({
+            runtime: swimlaneAgentAssignments.runtime,
+            agentRef: swimlaneAgentAssignments.agentRef,
+            model: swimlaneAgentAssignments.model,
+          })
+          .from(swimlaneAgentAssignments)
+          .where(eq(swimlaneAgentAssignments.swimlaneId, lane.id));
+      }
+    }
+
+    const decision = decideLaneAutoRun(agents, args.status, gate);
+    if (!decision.autoRun) return;
+
+    // Idempotency: never stack a second run on a ticket that already has a live
+    // one (e.g. a manual run just started, or a re-PATCH to the same lane). This
+    // is what lets BOTH the create and PATCH paths call this safely.
+    const active = await db
+      .select({ id: executions.id })
+      .from(executions)
+      .where(and(
+        eq(executions.taskId, args.taskId),
+        inArray(executions.status, [ExecutionStatus.PENDING, ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING]),
+      ))
+      .limit(1);
+    if (active.length > 0) return;
+
+    // Pass the lane's pinned agent + model so the run executes AS that agent
+    // instead of falling back to the gateway default (legacy lanes send no
+    // payload and fall back to the ticket's assignee / gateway default).
+    const payloadObj: { cloudAgentRef?: string; model?: string } = {};
+    if (decision.cloudAgentRef) payloadObj.cloudAgentRef = decision.cloudAgentRef;
+    if (decision.model) payloadObj.model = decision.model;
+
+    await dispatchCloudRunForTask(env, db, runtimeService, waitUntil, {
+      taskId: args.taskId,
+      tenantId: args.tenantId,
+      payload: Object.keys(payloadObj).length > 0 ? JSON.stringify(payloadObj) : undefined,
+      submittedBy: args.submittedBy,
+    });
+  } catch {
+    // Best-effort: the status change already succeeded; an autonomous-run failure
+    // must not surface as a failed PATCH/create.
+  }
+}
+
+export function createTaskRoutes(taskService: TaskService, db: Db, runtimeService: RuntimeService): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
@@ -291,8 +384,22 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
       persona?: string | null;
     }>();
     const task = await taskService.createTask(body, c.get('tenantId'));
-    await bumpTreeVersion(c.env as Env, task.toPlain().projectId);
-    return c.json(task.toPlain(), 201);
+    const created = task.toPlain();
+    await bumpTreeVersion(c.env as Env, created.projectId);
+
+    // Autonomous trigger: a ticket CREATED straight into a lane with a configured
+    // cloud agent (e.g. the brain drops a task into an agent-owned lane) must
+    // auto-run just like one dragged in. Best-effort, off the response path.
+    c.executionCtx.waitUntil(
+      maybeAutoRunOnLaneEntry(c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p), {
+        tenantId:    c.get('tenantId'),
+        projectId:   created.projectId,
+        taskId:      created.id,
+        status:      created.status,
+        submittedBy: (c as any).get('userId') ?? 'system:lane-auto',
+      }),
+    );
+    return c.json(created, 201);
   });
 
   // PATCH /api/tasks/:id
@@ -349,6 +456,21 @@ export function createTaskRoutes(taskService: TaskService, db: Db): Hono<HonoEnv
           toStatus:    body.status,
           actorUserId: (c as any).get('userId') ?? null,
         }).catch(() => {}),
+      );
+
+      // Autonomous trigger: the ticket just ENTERED a new lane. If that lane has a
+      // configured cloud agent (auto gate), start the run AS that agent. This is
+      // the server-side source of truth — it fires no matter which client moved
+      // the ticket (board drag, status dropdown, the brain, a raw API PATCH), so a
+      // brain-created ticket moved to a To Do lane with an agent actually runs.
+      c.executionCtx.waitUntil(
+        maybeAutoRunOnLaneEntry(c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p), {
+          tenantId:    c.get('tenantId'),
+          projectId:   prevStatus.projectId,
+          taskId:      id,
+          status:      body.status,
+          submittedBy: (c as any).get('userId') ?? 'system:lane-auto',
+        }),
       );
     }
 
