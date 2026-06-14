@@ -14,9 +14,6 @@ import {
 } from "./bash-tools.js";
 import { createBuilderForceAgentsTools } from "./builderforce-tools.js";
 import { listChannelAgentTools } from "./channel-tools.js";
-import { resolveImageSanitizationLimits } from "./image-sanitization.js";
-import type { ModelAuthMode } from "./model-auth.js";
-import { createEditTool, createReadTool, createWriteTool } from "./native-file-tools.js";
 import { wrapToolWithAbortSignal } from "./coding-tools.abort.js";
 import { wrapToolWithBeforeToolCallHook } from "./coding-tools.before-tool-call.js";
 import {
@@ -40,6 +37,10 @@ import {
 } from "./coding-tools.read.js";
 import { cleanToolSchemaForGemini, normalizeToolParameters } from "./coding-tools.schema.js";
 import type { AnyAgentTool } from "./coding-tools.types.js";
+import { buildConvergedFileTools } from "./converged-coding-tools.js";
+import { resolveImageSanitizationLimits } from "./image-sanitization.js";
+import type { ModelAuthMode } from "./model-auth.js";
+import { createEditTool, createReadTool, createWriteTool } from "./native-file-tools.js";
 import type { SandboxContext } from "./sandbox.js";
 import { getSubagentDepthFromSessionStore } from "./subagent-depth.js";
 import {
@@ -118,6 +119,7 @@ function resolveFsConfig(params: { cfg?: BuilderForceAgentsConfig; agentId?: str
     cfg && params.agentId ? resolveAgentConfig(cfg, params.agentId)?.tools?.fs : undefined;
   return {
     workspaceOnly: agentFs?.workspaceOnly ?? globalFs?.workspaceOnly,
+    convergedFileTools: agentFs?.convergedFileTools ?? globalFs?.convergedFileTools,
   };
 }
 
@@ -211,8 +213,16 @@ export function createBuilderForceAgentsCodingTools(options?: {
   disableMessageTool?: boolean;
   /** Whether the sender is an owner (required for owner-only tools). */
   senderIsOwner?: boolean;
+  /**
+   * Source the overlapping FILE tools (`write`/`edit` + additive `delete_file`/`list_files`)
+   * from the shared `@builderforce/agent-tools` registry via a disk capability provider,
+   * instead of the native per-tool copies — the on-prem half of the one-definition-per-tool
+   * convergence (PRD 12 Phase B). Honored ONLY for non-sandboxed sessions (a sandboxed
+   * session needs the fs-bridge, not direct disk). Default off; the converged tools still
+   * flow through the same normalize/hook/abort/policy pipeline below.
+   */
+  convergedFileTools?: boolean;
 }): AnyAgentTool[] {
-  const execToolName = "exec";
   const sandbox = options?.sandbox?.enabled ? options.sandbox : undefined;
   const {
     agentId,
@@ -297,6 +307,11 @@ export function createBuilderForceAgentsCodingTools(options?: {
   if (sandboxRoot && !sandboxFsBridge) {
     throw new Error("Sandbox filesystem bridge is unavailable.");
   }
+  // Converge the overlapping file tools onto the shared registry (PRD 12 Phase B) only
+  // for non-sandboxed sessions — a sandboxed session routes file ops through the fs-bridge,
+  // which the disk-backed Node provider does not (yet) use.
+  const useConvergedFileTools =
+    (options?.convergedFileTools ?? fsConfig.convergedFileTools) === true && !sandboxRoot;
   const imageSanitization = resolveImageSanitizationLimits(options?.config);
 
   // The native coding tool set is read/bash/edit/write; bash is dropped here (replaced by
@@ -324,7 +339,8 @@ export function createBuilderForceAgentsCodingTools(options?: {
       return [];
     }
     if (toolName === "write") {
-      if (sandboxRoot) {
+      // Converged: the shared `write_file` (exposed as `write`) replaces this native copy.
+      if (sandboxRoot || useConvergedFileTools) {
         return [];
       }
       // Wrap with param normalization for Claude Code compatibility
@@ -336,7 +352,8 @@ export function createBuilderForceAgentsCodingTools(options?: {
       return [workspaceOnly ? wrapToolWorkspaceRootGuard(wrapped, workspaceRoot) : wrapped];
     }
     if (toolName === "edit") {
-      if (sandboxRoot) {
+      // Converged: the shared `edit_file` (exposed as `edit`) replaces this native copy.
+      if (sandboxRoot || useConvergedFileTools) {
         return [];
       }
       // Wrap with param normalization for Claude Code compatibility
@@ -395,8 +412,15 @@ export function createBuilderForceAgentsCodingTools(options?: {
               : undefined,
           workspaceOnly: applyPatchWorkspaceOnly,
         });
+  // Converged file tools (shared registry → disk provider): write/edit replace the native
+  // copies skipped above, delete_file/list_files are additive. They join `tools` here so
+  // the normalize/hook/abort/policy pipeline below wraps them like every other tool.
+  const convergedFileTools = useConvergedFileTools
+    ? buildConvergedFileTools({ workspaceRoot })
+    : [];
   const tools: AnyAgentTool[] = [
     ...base,
+    ...convergedFileTools,
     ...(sandboxRoot
       ? allowWorkspaceWrites
         ? [

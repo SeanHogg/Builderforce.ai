@@ -395,7 +395,7 @@ export function isCodingModelDegraded(resolvedModel: string | undefined): boolea
  * so it surfaces on the Observability timeline — no separate channel. No-op when the
  * model is a curated coder. Best-effort — never breaks the run.
  */
-async function emitCodingModelDegraded(
+export async function emitCodingModelDegraded(
   db: Db,
   args: { tenantId: number; cloudAgentRef?: string; executionId: number; resolvedModel: string | undefined; requestedModel: string | undefined },
 ): Promise<void> {
@@ -429,7 +429,7 @@ async function emitCodingModelDegraded(
  * Pairs with {@link emitCodingModelDegraded}, which reports the OUTCOME once the
  * gateway resolves. First tick only — best-effort, never breaks the run.
  */
-async function emitModelSelection(
+export async function emitModelSelection(
   db: Db,
   args: {
     tenantId: number; cloudAgentRef?: string; executionId: number;
@@ -524,7 +524,7 @@ async function createCloudQuestion(
  *     recordUsageRow.
  * Best-effort — never throws.
  */
-async function recordCloudUsage(
+export async function recordCloudUsage(
   env: Env,
   db: Db,
   args: { tenantId: number; cloudAgentRef?: string; executionId: number; taskId: number; projectId?: number | null; model: string; inputTokens: number; outputTokens: number },
