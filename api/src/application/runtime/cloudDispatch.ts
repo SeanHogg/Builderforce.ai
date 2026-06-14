@@ -68,11 +68,10 @@ export async function probeContainerHealth(stub: { fetch: (input: string, init?:
   }
 }
 
-/** Human-readable name for a cloud agent's type — the canonical taxonomy. Used in
- *  dispatch telemetry so the timeline says exactly which of the three cloud agent
- *  types (and surface) actually ran, not a bare engine string. */
-export function cloudAgentTypeLabel(engine: string, surface: string): string {
-  if (engine !== 'builderforce-v2') return 'V1 Cloud Agent';
+/** Human-readable name for a cloud agent run by surface — the canonical taxonomy.
+ *  Used in dispatch telemetry so the timeline says exactly which cloud surface ran.
+ *  There is ONE engine (the V2 Agent; V1 is deleted), so only the surface varies. */
+export function cloudAgentTypeLabel(surface: string): string {
   return surface === 'container' ? 'V2 Cloud Agent (Node/Container)' : 'V2 Cloud Agent (Durable Object)';
 }
 

@@ -8,7 +8,7 @@ import {
   codingDefaultForPlan,
   pickCloudModel,
 } from './LlmProxyService';
-import { catalogEntry } from './vendors';
+import { catalogEntry, vendorForModel, autoRoutableModelsByTier, modelsByTier } from './vendors';
 
 // ---------------------------------------------------------------------------
 // Drift guard for the curated coding pool. The capability-reorder + the cloud-
@@ -39,6 +39,21 @@ describe('CODING_MODEL_POOL', () => {
     expect(isKnownModel('totally/made-up-model')).toBe(false);
     expect(isKnownModel('')).toBe(false);
     expect(isKnownModel(undefined)).toBe(false);
+  });
+});
+
+describe('auto-route pool composition', () => {
+  it('FREE_MODEL_POOL excludes Ollama (local/self-hosted vendor) so a cloud run never cascades onto it', () => {
+    const ollama = FREE_MODEL_POOL.filter((m) => vendorForModel(m) === 'ollama');
+    expect(ollama, `auto-routed free pool must not include Ollama ids: ${ollama.join(', ')}`).toEqual([]);
+  });
+
+  it('Ollama models still exist in the catalog (reachable via an explicit ollama/ pin)', () => {
+    // The exclusion is at pool-composition time only — the catalog still owns them
+    // so `ollama/gpt-oss:120b` resolves for genuine on-prem/self-hosted use.
+    expect(catalogEntry('gpt-oss:120b')).not.toBeNull();
+    expect(modelsByTier('FREE')).toContain('gpt-oss:120b');
+    expect(autoRoutableModelsByTier('FREE')).not.toContain('gpt-oss:120b');
   });
 });
 

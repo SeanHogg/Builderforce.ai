@@ -27,7 +27,7 @@ import {
   dispatchVendor,
   dispatchVendorStream,
   kindForStatus,
-  modelsByTier,
+  autoRoutableModelsByTier,
   tierForModel,
   vendorForModel,
   vendorKeyBound,
@@ -62,11 +62,18 @@ import { validateJsonSchema } from './jsonSchemaValidator';
 // `status()` so the admin UI doesn't claim availability for unbound vendors.
 // ---------------------------------------------------------------------------
 
-/** Free-tier model ids across every registered vendor. */
-export const FREE_MODEL_POOL: readonly string[] = modelsByTier('FREE');
+// `autoRoutableModelsByTier` (not `modelsByTier`) is the pool composer: it walks
+// the same registry order but DROPS vendors that opt out of auto-routing
+// (`autoRoute: false`, currently Ollama). A non-auto-route vendor stays in the
+// catalog — reachable via an explicit `ollama/<id>` pin — but is never a model a
+// FREE/PRO cascade can silently fall onto. (Fixes: a cloud coding agent cascading
+// into `ollama/gpt-oss:120b`, which 400s on the tool payload.)
 
-/** Paid-tier model ids (STANDARD / PREMIUM / ULTRA) across every registered vendor. */
-export const PRO_PAID_MODEL_POOL: readonly string[] = modelsByTier('STANDARD', 'PREMIUM', 'ULTRA');
+/** Auto-routable free-tier model ids across every registered cloud vendor. */
+export const FREE_MODEL_POOL: readonly string[] = autoRoutableModelsByTier('FREE');
+
+/** Auto-routable paid-tier model ids (STANDARD / PREMIUM / ULTRA) across vendors. */
+export const PRO_PAID_MODEL_POOL: readonly string[] = autoRoutableModelsByTier('STANDARD', 'PREMIUM', 'ULTRA');
 
 /** Pro tries free first (cost-optimized), falls over to paid. */
 export const PRO_MODEL_POOL: readonly string[] = [...FREE_MODEL_POOL, ...PRO_PAID_MODEL_POOL];
@@ -208,7 +215,7 @@ export function resolveCacheTtl(body: Record<string, unknown>): '1h' | undefined
  */
 const PREMIUM_PRIORITY_COUNT = 3;
 export const PREMIUM_PRIORITY_POOL: readonly string[] =
-  modelsByTier('PREMIUM').slice(0, PREMIUM_PRIORITY_COUNT);
+  autoRoutableModelsByTier('PREMIUM').slice(0, PREMIUM_PRIORITY_COUNT);
 
 /**
  * Per-vendor-call timeout for premium routing. PREMIUM-tier models on long-
@@ -1332,11 +1339,16 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean },
+  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean },
 ): LlmProxyService {
   const { productName, modelPool, vendorCallTimeoutMs } = resolveRouting(effectivePlan, premiumOverride);
+  // A CODING run restricts its failover cascade to the curated coding pool, so an
+  // exhausted/failed primary escalates to the paid CODING backstop (deepseek-v4-flash)
+  // — NOT to a random free non-coder (gemini-flash-lite) or a tool-unreliable vendor.
+  // Without this the cascade walks the whole plan pool and "degrades" off the coders.
+  const pool = opts?.codingOnly ? codingModelsForPlan(effectivePlan, premiumOverride) : modelPool;
   return new LlmProxyService(env, {
-    modelPool,
+    modelPool: pool,
     preferredPoolSize: PREFERRED_POOL_SIZE,
     productName,
     ...(vendorCallTimeoutMs ? { vendorCallTimeoutMs } : {}),
