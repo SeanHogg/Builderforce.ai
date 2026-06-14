@@ -6,13 +6,11 @@ import JsonLd from '@/components/JsonLd';
 import { pageMetadata } from '@/lib/seo';
 import { competitorCompareSchema } from '@/lib/structured-data';
 import {
-  BRAND,
   COMPETITORS,
   COMPETITIVE_COMPARISON,
   COMPARE_FAQ,
   COMPETITOR_SEO,
   COMPETITOR_SLUG_TO_KEY,
-  FOOTER_LINKS,
 } from '@/lib/content';
 
 export const runtime = 'edge';
@@ -84,9 +82,6 @@ export default async function CompetitorComparePage({
         .vs-verdict { background: var(--surface-card); border: 1px solid var(--border-subtle); border-left: 3px solid var(--coral-bright); border-radius: 12px; padding: 18px 20px; margin: 8px 0 0; color: var(--text-primary); line-height: 1.65; font-size: 0.97rem; }
         .vs-faq-q { font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: var(--text-primary); margin: 18px 0 6px; }
         .vs-faq-a { font-size: 0.92rem; color: var(--text-secondary); line-height: 1.7; margin: 0; }
-        .vs-footer { border-top: 1px solid var(--border-subtle); margin-top: 28px; padding: 24px; display: flex; gap: 16px 22px; flex-wrap: wrap; justify-content: center; }
-        .vs-footer a { color: var(--text-secondary); text-decoration: none; font-size: 0.85rem; }
-        .vs-footer a:hover { color: var(--text-primary); }
       `}</style>
 
       <main className="vs">
@@ -144,11 +139,7 @@ export default async function CompetitorComparePage({
           ))}
         </section>
 
-        <footer className="vs-footer">
-          {FOOTER_LINKS.map((l) => (
-            <Link key={l.href} href={l.href}>{l.label}</Link>
-          ))}
-        </footer>
+        {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
       </main>
     </>
   );

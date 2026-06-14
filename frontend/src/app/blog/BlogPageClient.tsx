@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { BLOG_POSTS } from '@/lib/blogData';
 import JsonLd from '@/components/JsonLd';
 import { blogIndexSchema } from '@/lib/structured-data';
@@ -76,45 +75,6 @@ export default function BlogPageClient() {
         }
         /* Card + grid styles live in components/blog/ArticleCard.tsx */
 
-        /* ── FOOTER ── */
-        .blog-footer {
-          border-top: 1px solid var(--border-subtle);
-          padding: 36px 24px;
-          text-align: center;
-        }
-        .blog-footer-inner {
-          max-width: 1100px;
-          margin: 0 auto;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 16px;
-        }
-        .blog-footer-links {
-          display: flex;
-          flex-wrap: wrap;
-          justify-content: center;
-          gap: 2px;
-          list-style: none;
-        }
-        .blog-footer-links a {
-          font-size: 0.82rem;
-          color: var(--text-muted);
-          text-decoration: none;
-          padding: 4px 10px;
-          border-radius: 6px;
-          transition: color 0.2s;
-        }
-        .blog-footer-links a:hover { color: var(--text-secondary); }
-        .blog-footer-copy {
-          font-size: 0.78rem;
-          color: var(--text-muted);
-        }
-        .blog-footer-copy a {
-          color: var(--coral-bright);
-          text-decoration: none;
-        }
-
         @media (max-width: 640px) {
           .blog-hero { padding: 40px 20px 24px; }
           .blog-main { padding: 8px 16px 48px; }
@@ -139,26 +99,7 @@ export default function BlogPageClient() {
           <ArticleCardGrid posts={BLOG_POSTS} />
         </main>
 
-        {/* ── Footer ── */}
-        <footer className="blog-footer">
-          <div className="blog-footer-inner">
-            <ul className="blog-footer-links">
-              <li><Link href="/">Home</Link></li>
-              <li><Link href="/workforce">Workforce Registry</Link></li>
-              <li><Link href="/blog">Blog</Link></li>
-              <li><Link href="/login">Sign In</Link></li>
-              <li><Link href="/register">Get Started</Link></li>
-              <li><a href="https://builderforce.ai" target="_blank" rel="noopener">BuilderForce Agents</a></li>
-            </ul>
-            <p className="blog-footer-copy">
-              Built by{' '}
-              <a href="https://myvideoresu.me/resumes/seanhogg" target="_blank" rel="noopener">
-                Sean Hogg
-              </a>
-              {' '}· Builderforce.ai © 2026
-            </p>
-          </div>
-        </footer>
+        {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
       </div>
     </>
   );
