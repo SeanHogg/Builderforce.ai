@@ -18,7 +18,7 @@ import { enqueueExecutionMessage, listExecutionMessages, releasePendingSteers } 
 import { subscribeExecution, unsubscribeExecution, notifyExecutionSubscribers } from '../../application/runtime/executionEvents';
 import {
   runCloudExecution, prepareCloudRun, gitSecret, recordCloudToolEvent, recordPrdDirective,
-  handleContainerOp, loadContainerRunContext, resolveCloudAgent, DEFAULT_CLOUD_REF,
+  handleContainerOp, loadContainerRunContext, resolveCloudAgent, agentAllowsHostExecution, DEFAULT_CLOUD_REF,
 } from '../../application/runtime/cloudAgentEngine';
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
 import { ExecutionStatus } from '../../domain/shared/types';
@@ -432,8 +432,22 @@ async function startDispatchedExecution(
 
   // Dispatch to an On-Prem host ONLY for an explicitly pinned host run (legacy
   // AgentHost path). A V2 cloud agent never reaches a host: the 'container' surface
-  // targets a long-lived Cloudflare Container (cloud), not a client machine.
-  const delivered = pinnedHostId != null && !isV2
+  // targets a long-lived Cloudflare Container (cloud), not a client machine. We also
+  // enforce the agent's declared `runtime_support` here: an agent marked cloud-only
+  // is never delivered to a pinned host (it falls through to the cloud executor),
+  // closing the "declared metadata not enforced at dispatch" gap. preferred_runtime
+  // (for runtime_support==='both') is resolved on the swimlane path; here a host run
+  // still requires an explicit pin, so it cannot route AWAY from a pinned host.
+  const hostAllowed = agentAllowsHostExecution(agent.runtimeSupport);
+  if (pinnedHostId != null && !isV2 && !hostAllowed) {
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+      toolName: 'runtime.route', category: 'planning',
+      detail: { reason: 'agent runtime_support=cloud; pinned host ignored', pinnedHostId, ranOn: 'cloud' },
+      result: `Agent "${agent.label ?? agent.ref ?? 'cloud agent'}" is cloud-only (runtime_support=cloud); the pinned On-Prem host was not used — running in the cloud.`,
+    }).catch(() => { /* best-effort telemetry */ });
+  }
+  const delivered = pinnedHostId != null && !isV2 && hostAllowed
     ? (await Promise.all(hostTargets.map((targetId) => dispatchToAgentHost(env as RuntimeHonoEnv['Bindings'], targetId, message).catch(() => false)))).some(Boolean)
     : false;
 
