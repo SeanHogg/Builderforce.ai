@@ -3258,6 +3258,9 @@ export const webhookDeliveries = pgTable('webhook_deliveries', {
   status:         varchar('status', { length: 16 }).notNull().default('pending'), // pending|delivered|failed
   responseStatus: integer('response_status'),
   attempts:       integer('attempts').notNull().default(0),
+  payload:        text('payload'),          // exact signed POST body, for faithful redelivery
+  nextRetryAt:    timestamp('next_retry_at'), // when next retry-eligible; NULL = terminal (delivered or exhausted)
+  lastError:      text('last_error'),       // most recent failure reason (truncated)
   createdAt:      timestamp('created_at').notNull().defaultNow(),
   deliveredAt:    timestamp('delivered_at'),
 });
