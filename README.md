@@ -1257,7 +1257,8 @@ Dispatch **one agent per track**. Tracks are **file-disjoint by construction**, 
 
 ### 🔓 Newly logged (open)
 
-_None currently — see Resolved below._
+- **Autonomous lane trigger only routes cloud + pinned-host runs; a lane configured with a *non-cloud* agent doesn't auto-run AS that agent** (2026-06-14). The new server-side trigger (`maybeAutoRunOnLaneEntry` in `api/src/presentation/routes/taskRoutes.ts` → `decideLaneAutoRun`) recognizes a lane's **cloud** agent and dispatches via `dispatchCloudRunForTask`, which delivers to an On-Prem host only when the task is *pinned* (`assignedAgentHostId`). A swimlane whose configured agent has `runtime` `'local'`/`'remote'` (an on-prem/remote lane agent, not a cloud one) falls to the legacy branch and is **not** dispatched AS that agent on lane entry. Fixing it means routing lane entry through `SwimlaneCoordinator` (which already resolves host targets via `AgentHostStageDispatcher`) instead of the lightweight `dispatchCloudRunForTask` path — the same "drag/PATCH path bypasses SwimlaneCoordinator" gap. Unblocks: full surface-agnostic board autonomy (on-prem/remote lane agents auto-run identically to cloud).
+- **Autonomous lane runs bypass the execution governance approval gate** (2026-06-14). The manual `/api/runtime/executions` route runs `evaluateExecutionApprovalGate` (governance approval rules) before dispatch; the autonomous lane trigger uses `dispatchCloudRunForTask`, which (like the CI auto-fix path) skips that gate. The lane's own `gate: 'human'` provides board-level human-in-the-loop, but tenant governance approval *rules* are not enforced on autonomously-triggered runs. Unblocks: consistent policy enforcement — every agent run (manual or autonomous) honors the same approval rules.
 
 ### ✅ Done / Resolved (53)
 
