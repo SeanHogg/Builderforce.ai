@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import React from 'react';
 import { useBrainConversation } from './useBrainConversation';
+import { resetBrainRunStore } from './brainRunStore';
 import { streamChatCompletion, type StreamChatResult } from './streamChatCompletion';
 import { BrainProvider, type BrainConfig, type BrainPersistenceAdapter } from './config';
 
@@ -50,6 +51,9 @@ beforeEach(() => {
   seq = 0;
   mockStream.mockReset();
   vi.mocked(persistence.sendMessages).mockClear();
+  // The run engine is a module-level singleton keyed by chatId; reset it so a
+  // chat's session-lived transcript doesn't leak between tests reusing chatId 1.
+  resetBrainRunStore();
 });
 
 describe('useBrainConversation agent loop (injected transport + persistence)', () => {

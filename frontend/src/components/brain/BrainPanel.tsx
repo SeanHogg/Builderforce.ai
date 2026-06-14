@@ -93,15 +93,16 @@ export function BrainPanel({
   const { toolSpecs, runTool, isMutating } = useBrainActions();
 
   // Human-in-the-loop gate: a mutating tool (create/update/delete/run/…) pauses
-  // the agent loop here for an explicit Approve/Cancel before it runs. The loop
-  // (useBrainConversation) awaits the promise we hand back from `confirmTool`.
+  // the agent loop for an explicit Approve/Cancel before it runs. The pause +
+  // the pending-confirm state now live in the module-level run store (via
+  // useBrainConversation below), so the gate survives a Brain-initiated
+  // navigation that swaps which panel is mounted — this component only supplies
+  // the decision predicate (`needsConfirm`) and renders the prompt.
   //
   // Auto-approve mode lets the user skip the per-action prompt — essential for
   // bulk runs (link 50 tickets, archive 18) where approving each one by hand is
-  // unworkable. It's read through a ref so `confirmTool` stays referentially
+  // unworkable. It's read through a ref so `needsConfirm` stays referentially
   // stable, mirrored to state for the toggle UI, and persisted per-browser.
-  const [pendingConfirm, setPendingConfirm] = useState<{ name: string; args: unknown } | null>(null);
-  const confirmResolverRef = useRef<((ok: boolean) => void) | null>(null);
   const [autoApprove, setAutoApprove] = useState(false);
   const autoApproveRef = useRef(false);
   useEffect(() => {
@@ -116,27 +117,10 @@ export function BrainPanel({
     setAutoApprove(on);
     try { localStorage.setItem('brain.autoApprove', on ? '1' : '0'); } catch { /* ignore */ }
   }, []);
-  const confirmTool = useCallback(
-    (req: { name: string; args: unknown }) => {
-      if (!isMutating(req.name, req.args)) return Promise.resolve(true);
-      if (autoApproveRef.current) return Promise.resolve(true);
-      return new Promise<boolean>((resolve) => {
-        confirmResolverRef.current = resolve;
-        setPendingConfirm(req);
-      });
-    },
+  const needsConfirm = useCallback(
+    (req: { name: string; args: unknown }) => isMutating(req.name, req.args) && !autoApproveRef.current,
     [isMutating],
   );
-  const resolveConfirm = useCallback((ok: boolean) => {
-    confirmResolverRef.current?.(ok);
-    confirmResolverRef.current = null;
-    setPendingConfirm(null);
-  }, []);
-  // "Approve all": run this action and auto-approve the rest of the run/session.
-  const approveAll = useCallback(() => {
-    setAutoApproveMode(true);
-    resolveConfirm(true);
-  }, [setAutoApproveMode, resolveConfirm]);
 
   // Brain agent/persona switcher: the user can run the Brain as the default
   // assistant, as a built-in modality persona, or as one of the agents assigned
@@ -227,10 +211,17 @@ export function BrainPanel({
     model: personaModel,
     toolSpecs,
     runTool,
-    confirmTool,
+    needsConfirm,
     ensureChatId,
     onActivity: chats.touch,
   });
+
+  const { pendingConfirm, resolveConfirm } = conv;
+  // "Approve all": run this action and auto-approve the rest of the run/session.
+  const approveAll = useCallback(() => {
+    setAutoApproveMode(true);
+    resolveConfirm(true);
+  }, [setAutoApproveMode, resolveConfirm]);
 
   // Projects for the filter/assignment dropdowns.
   useEffect(() => {

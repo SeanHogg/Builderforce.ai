@@ -1,35 +1,38 @@
 'use client';
 
 /**
- * The heart of the Brain: messages + send + the tool-call agent loop.
+ * The Brain's React binding: messages + send + the live view of the agent loop.
  *
- * Persistence and the streaming client are injected via BrainProvider. When the
- * model requests tools, the registered handlers run and their results are fed
- * back until the model produces final text.
+ * The tool-call agent loop itself lives in {@link ./brainRunStore} (a
+ * module-level singleton keyed by chatId), NOT in this hook — so a run survives
+ * the unmount of the component that started it. When the Brain navigates the
+ * user mid-run, the route-scoped panel unmounts and a different one mounts; both
+ * subscribe to the same run cell, so the loop keeps streaming into whichever
+ * Brain is on screen and a second instance can never spawn a duplicate loop.
+ *
+ * This hook: loads/persists the visible message list, mirrors the run snapshot
+ * (running / streaming delta / error / pending confirmation) into render state,
+ * and seeds + starts a run on send / auto-reply.
  *
  * Persistence note: only the user message and the FINAL assistant text are
  * persisted (the chat tables have no tool columns). Intermediate
- * assistant-tool-call turns and tool results live in-memory for the loop, so
- * message rendering stays exactly as before.
+ * assistant-tool-call turns and tool results live in the run store for the loop.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBrainConfig } from './config';
 import type { BrainMessage, BrainModality, ChatInputAttachment } from './types';
 import type { BrainToolSpec, ChatCompletionMessage, ContentPart } from './streamChatCompletion';
 import { prepareImageDataUrl } from './imagePrep';
-import { buildBrainTriageReport, isFailedToolResult, type BrainTraceEvent } from './brainTriage';
-
-/**
- * Max agent-loop iterations before we stop chaining tool calls (runaway guard).
- * Each iteration is one model turn and can batch several tool calls, but models
- * commonly emit one call per turn — so the cap must be high enough for real bulk
- * operations (e.g. "link 50 tickets to their epics, archive 18 duplicates") to
- * complete instead of dying with "kept calling tools without finishing".
- */
-const MAX_TOOL_ITERATIONS = 25;
-/** How much history we send to the model. */
-const HISTORY_WINDOW = 80;
+import { buildBrainTriageReport } from './brainTriage';
+import {
+  startRun,
+  isRunning,
+  subscribeRun,
+  getRunSnapshot,
+  getRunTrace,
+  resolveRunConfirm,
+} from './brainRunStore';
 
 export interface UseBrainConversationOptions {
   chatId: number | null;
@@ -45,12 +48,14 @@ export interface UseBrainConversationOptions {
   /** Dispatch a tool call to the registry. */
   runTool?: (name: string, args: unknown) => Promise<unknown>;
   /**
-   * Confirm a tool call before it runs (the human-in-the-loop gate). Return
-   * false to skip the call — a `{ cancelled: true }` result is fed back to the
-   * model so it can adjust. Omit to run every requested tool immediately.
+   * Pure predicate: return true to pause the loop for an explicit user
+   * confirmation before the tool runs (the human-in-the-loop gate). The prompt
+   * UI is driven by `pendingConfirm` + `resolveConfirm` on the return value, so
+   * the gate survives a navigation that swaps which Brain panel is mounted.
    * Hosts typically gate only mutating tools (see BrainActions `isMutating`).
+   * Omit to run every requested tool immediately.
    */
-  confirmTool?: (req: { name: string; args: unknown }) => Promise<boolean>;
+  needsConfirm?: (req: { name: string; args: unknown }) => boolean;
   /** Create-on-demand when sending without an active chat; returns the new chat id. */
   ensureChatId?: () => Promise<number | null>;
   /** Notify the host (chats hook) that this chat got new activity. */
@@ -74,6 +79,10 @@ export interface UseBrainConversation {
   attach(file: File): Promise<void>;
   removeAttachment(key: string): void;
   setError(msg: string): void;
+  /** A tool call awaiting the user's Approve/Cancel decision (or null). */
+  pendingConfirm: { name: string; args: unknown } | null;
+  /** Resolve the pending confirmation. */
+  resolveConfirm(ok: boolean): void;
   /**
    * True once the active chat has any recorded execution steps (LLM/tool/error)
    * — drives the "capture execution" affordance.
@@ -88,26 +97,6 @@ export interface UseBrainConversation {
   buildTriageReport(agentLabel?: string): string;
 }
 
-function parseArgs(raw: string): unknown {
-  try {
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-/**
- * Trim the in-memory transcript to the history window before sending it to the
- * model. Slicing can orphan a leading `tool` message whose owning assistant
- * `tool_calls` turn fell off the front — the gateway rejects a tool result that
- * doesn't follow its call — so drop any such leading tool messages.
- */
-function windowed(convo: ChatCompletionMessage[]): ChatCompletionMessage[] {
-  let w = convo.slice(-HISTORY_WINDOW);
-  while (w.length > 0 && w[0].role === 'tool') w = w.slice(1);
-  return w;
-}
-
 export function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation {
   const { persistence, resolveSystemPrompt, stream } = useBrainConfig();
   const {
@@ -118,42 +107,30 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     model,
     toolSpecs,
     runTool,
-    confirmTool,
+    needsConfirm,
     ensureChatId,
     onActivity,
   } = options;
 
   const [messages, setMessages] = useState<BrainMessage[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState('');
-  const [streamingText, setStreamingText] = useState('');
+  const [localSending, setLocalSending] = useState(false);
+  const [localError, setLocalError] = useState('');
   const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
   const [feedbackMap, setFeedbackMap] = useState<Record<number, 'up' | 'down'>>({});
   const [pendingAttachments, setPendingAttachments] = useState<ChatInputAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const autoRepliedChatIdRef = useRef<number | null>(null);
-  // Rich in-memory transcript per chat: the FULL working message list (user +
-  // assistant tool-call turns + tool results + assistant text), keyed by chat
-  // id. The chat tables only persist user + final-assistant text, so without
-  // this the next turn would rebuild from text-only history and lose every
-  // entity id / tool result the model resolved in the prior turn — causing it
-  // to conflate records across turns (e.g. write company B's name onto company
-  // A). The transcript carries that grounding forward for the session lifetime.
-  const transcriptRef = useRef<Map<number, ChatCompletionMessage[]>>(new Map());
-  // Per-chat execution trace: every LLM step, tool call (args + result + timing),
-  // intermediate assistant message, and error the agent loop produces. Accumulates
-  // across turns for the session (like the transcript) so "capture execution"
-  // reports the whole run, not just the last turn. `traceVersion` re-renders the
-  // capture affordance as steps land (the ref mutation alone wouldn't).
-  const traceRef = useRef<Map<number, BrainTraceEvent[]>>(new Map());
-  const [traceVersion, setTraceVersion] = useState(0);
-  const pushTrace = useCallback((id: number, ev: BrainTraceEvent) => {
-    const list = traceRef.current.get(id) ?? [];
-    list.push(ev);
-    traceRef.current.set(id, list);
-    setTraceVersion((v) => v + 1);
-  }, []);
+
+  // Live view of the chat's run (owned by the module-level store). Re-read the
+  // snapshot on every store emit; the snapshot identity is stable until it
+  // actually changes, so this only re-renders when the run state moves.
+  const [snapshot, setSnapshot] = useState(() => getRunSnapshot(chatId));
+  useEffect(() => {
+    setSnapshot(getRunSnapshot(chatId));
+    if (chatId == null) return;
+    return subscribeRun(chatId, () => setSnapshot(getRunSnapshot(chatId)));
+  }, [chatId]);
 
   // Load messages whenever the active chat changes.
   useEffect(() => {
@@ -163,20 +140,30 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       return;
     }
     setLoadingMessages(true);
-    setError('');
+    setLocalError('');
     persistence
       .getMessages(chatId)
       .then((list) => {
         if (!cancelled) setMessages(list);
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load messages');
+        if (!cancelled) setLocalError(e instanceof Error ? e.message : 'Failed to load messages');
       })
       .finally(() => {
         if (!cancelled) setLoadingMessages(false);
       });
     return () => { cancelled = true; };
   }, [persistence, chatId]);
+
+  // A run (possibly started in another, now-unmounted Brain instance) persisted
+  // a new assistant message — splice it in without a refetch. Keyed on the
+  // store's messagesEpoch so it fires once per completed turn for EVERY mounted
+  // instance, not just the one that drove the loop.
+  useEffect(() => {
+    const msg = snapshot.lastAssistant;
+    if (!msg) return;
+    setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+  }, [snapshot.messagesEpoch, snapshot.lastAssistant]);
 
   // Derive feedback state from persisted message metadata.
   useEffect(() => {
@@ -191,201 +178,47 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     setFeedbackMap(map);
   }, [messages]);
 
-  const resolvedSystemPrompt = useMemo(() => {
-    const base = systemPrompt ?? resolveSystemPrompt(modality);
-    return extraSystem ? `${base}\n${extraSystem}` : base;
-  }, [resolveSystemPrompt, systemPrompt, modality, extraSystem]);
+  const resolvedSystemPrompt = systemPrompt ?? resolveSystemPrompt(modality);
+  const fullSystemPrompt = extraSystem ? `${resolvedSystemPrompt}\n${extraSystem}` : resolvedSystemPrompt;
 
-  /**
-   * Seed a chat's rich transcript from persisted (text-only) history the FIRST
-   * time we touch it this session, then append the new user turn. Prior turns
-   * can only carry text (the chat tables have no tool columns), but every turn
-   * from here on accumulates its full tool-call context in-memory. A no-op seed
-   * on later turns means the rich, forward-accumulated transcript always wins.
-   */
-  const startUserTurn = useCallback((id: number, priorHistory: BrainMessage[], userContent: string | ContentPart[]) => {
-    let convo = transcriptRef.current.get(id);
-    if (!convo) {
-      convo = priorHistory.map((m) => ({
-        role: m.role as ChatCompletionMessage['role'],
-        content: m.content,
-      }));
-      transcriptRef.current.set(id, convo);
-    }
-    convo.push({ role: 'user', content: userContent });
-  }, []);
-
-  /**
-   * Run the tool-call agent loop against the chat's rich transcript and persist
-   * the final assistant text to `id`. Shared by `send` and auto-reply. The
-   * caller must have appended the triggering user turn via `startUserTurn`.
-   */
-  const runAgentLoop = useCallback(
-    async (id: number) => {
-      // The transcript accumulates the assistant tool-call turns + tool results
-      // in place, so it carries forward to the next turn (the whole fix).
-      const convo = transcriptRef.current.get(id) ?? [];
-      transcriptRef.current.set(id, convo);
-
-      const tools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined;
-
-      for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
-        setStreamingText('');
-        const working: ChatCompletionMessage[] = [
-          { role: 'system', content: resolvedSystemPrompt },
-          ...windowed(convo),
-        ];
-        const llmStart = Date.now();
-        let result;
-        try {
-          result = await stream(
-            { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model },
-            { onTextDelta: (d) => setStreamingText((s) => s + d) },
-          );
-        } catch (e) {
-          // Capture the completion failure in the trace before it bubbles to the
-          // caller's catch — otherwise the run is invisible to "capture execution".
-          pushTrace(id, {
-            ts: new Date().toISOString(),
-            category: 'error',
-            label: 'llm.complete',
-            durationMs: Date.now() - llmStart,
-            args: { model: model ?? 'default', step: iter },
-            result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
-            isError: true,
-          });
-          throw e;
-        }
-        pushTrace(id, {
-          ts: new Date().toISOString(),
-          category: 'llm',
-          label: 'llm.complete',
-          durationMs: Date.now() - llmStart,
-          args: { model: model ?? 'default', step: iter, toolCalls: result.toolCalls.length },
-          result: `${result.toolCalls.length} tool call(s) · ${result.text.length} chars · finish: ${result.finishReason ?? '—'}`,
-        });
-        // Intermediate assistant text (the model's reasoning before a tool call).
-        if (result.text.trim()) {
-          pushTrace(id, {
-            ts: new Date().toISOString(),
-            category: 'message',
-            label: 'agent.message',
-            args: { step: iter },
-            result: result.text,
-          });
-        }
-
-        if (result.toolCalls.length > 0 && runTool) {
-          // Assistant requested tools: record the turn, run each, feed results back.
-          convo.push({
-            role: 'assistant',
-            content: result.text,
-            tool_calls: result.toolCalls.map((tc) => ({
-              id: tc.id,
-              type: 'function' as const,
-              function: { name: tc.name, arguments: tc.args },
-            })),
-          });
-          for (const tc of result.toolCalls) {
-            const args = parseArgs(tc.args);
-            // Human-in-the-loop gate: let the host veto (e.g. mutating tools)
-            // before anything runs. A declined call returns a recoverable result
-            // so the model can revise instead of the action silently happening.
-            if (confirmTool && !(await confirmTool({ name: tc.name, args }))) {
-              convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify({ cancelled: true, reason: 'User declined this action.' }) });
-              pushTrace(id, {
-                ts: new Date().toISOString(),
-                category: 'tool',
-                label: tc.name,
-                args,
-                result: { cancelled: true, reason: 'User declined this action.' },
-              });
-              continue;
-            }
-            const toolStart = Date.now();
-            let out: unknown;
-            try {
-              out = await runTool(tc.name, args);
-            } catch (e) {
-              // A thrown tool error becomes a recoverable result the model can see
-              // and revise against (matching the decline path) — and is recorded
-              // as an error so it surfaces in the captured triage report. Without
-              // this the throw aborted the turn and lost which tool/args failed.
-              const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-              out = { ok: false, error: message };
-              convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out) });
-              pushTrace(id, {
-                ts: new Date().toISOString(),
-                category: 'tool',
-                label: tc.name,
-                durationMs: Date.now() - toolStart,
-                args,
-                result: out,
-                isError: true,
-              });
-              continue;
-            }
-            convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out ?? null) });
-            pushTrace(id, {
-              ts: new Date().toISOString(),
-              category: 'tool',
-              label: tc.name,
-              durationMs: Date.now() - toolStart,
-              args,
-              result: out ?? null,
-              isError: isFailedToolResult(out),
-            });
-          }
-          setStreamingText('');
-          continue;
-        }
-
-        // Final text — record in the transcript, persist, and finish.
-        const finalText = result.text.trim() || 'No response.';
-        convo.push({ role: 'assistant', content: finalText });
-        const [assistantMsg] = await persistence.sendMessages(id, [{ role: 'assistant', content: finalText }]);
-        setMessages((prev) => [...prev, assistantMsg]);
-        setStreamingText('');
-        onActivity?.(id);
-        return;
-      }
-      // Loop exhausted without a final text answer.
-      setStreamingText('');
-      const exhausted = 'The assistant kept calling tools without finishing. Try rephrasing.';
-      pushTrace(id, {
-        ts: new Date().toISOString(),
-        category: 'error',
-        label: 'agent.loop',
-        result: `Loop exhausted after ${MAX_TOOL_ITERATIONS} tool iterations`,
-        isError: true,
-      });
-      setError(exhausted);
-    },
-    [persistence, stream, resolvedSystemPrompt, toolSpecs, runTool, confirmTool, onActivity, model, pushTrace],
+  /** Assemble the BrainRunRequest from the current options (captured at run start). */
+  const buildRequest = useCallback(
+    (seed?: ChatCompletionMessage[], userTurn?: string | ContentPart[]) => ({
+      resolvedSystemPrompt: fullSystemPrompt,
+      tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined,
+      model,
+      runTool,
+      needsConfirm,
+      stream,
+      persistence,
+      onActivity,
+      seed,
+      userTurn,
+    }),
+    [fullSystemPrompt, toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity],
   );
 
   const send = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
-      if (!trimmed || sending) return;
+      if (!trimmed || localSending || isRunning(chatId)) return;
 
       let id = chatId;
       if (id == null) {
         id = (await ensureChatId?.()) ?? null;
         if (id == null) {
-          setError('Could not start a chat.');
+          setLocalError('Could not start a chat.');
           return;
         }
       }
       // Claim the auto-reply guard for this chat: a user-driven send must not be
-      // re-answered by the trailing-user-message auto-reply effect (which exists
-      // only for chats seeded elsewhere and deep-linked in).
+      // re-answered by the trailing-user-message auto-reply effect.
       autoRepliedChatIdRef.current = id;
 
       const attachments = [...pendingAttachments];
       setPendingAttachments([]);
-      setSending(true);
-      setError('');
+      setLocalSending(true);
+      setLocalError('');
 
       // Persisted/display content stays text-only (the chat tables store a
       // string): every attachment shows as a markdown link the user can click.
@@ -406,9 +239,9 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
           .filter((a) => !a.imageUrl)
           .map((a) => `[Attached: ${a.name}](${persistence.uploadUrl(a.key)})`)
           .join('\n');
-        const text = [trimmed, nonImageRefs].filter(Boolean).join('\n\n');
+        const textPart = [trimmed, nonImageRefs].filter(Boolean).join('\n\n');
         modelContent = [
-          { type: 'text', text },
+          { type: 'text', text: textPart },
           ...imageAtts.map((a) => ({ type: 'image_url' as const, image_url: { url: a.imageUrl! } })),
         ];
       }
@@ -416,37 +249,40 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       try {
         const [userMsg] = await persistence.sendMessages(id, [{ role: 'user', content: displayContent, metadata }]);
         setMessages((prev) => [...prev, userMsg]);
-        // `messages` (closure) is the prior persisted history, excluding the
-        // just-sent user turn — seed from it once, then append this turn (rich
-        // multimodal content when images are present, so the model keeps seeing
-        // them on later turns of the same session).
-        startUserTurn(id, messages, modelContent);
-        await runAgentLoop(id);
+        // Seed the rich transcript from the prior persisted history (the closure
+        // `messages`, excluding the just-sent user turn), then append this turn.
+        const seed: ChatCompletionMessage[] = messages.map((m) => ({
+          role: m.role as ChatCompletionMessage['role'],
+          content: m.content,
+        }));
+        await startRun(id, buildRequest(seed, modelContent));
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Send failed');
+        setLocalError(e instanceof Error ? e.message : 'Send failed');
       } finally {
-        setSending(false);
+        setLocalSending(false);
       }
     },
-    [persistence, chatId, sending, pendingAttachments, messages, ensureChatId, runAgentLoop, startUserTurn],
+    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest],
   );
 
   // Auto-reply when a chat loads with a trailing unanswered user message
-  // (e.g. a chat seeded elsewhere and deep-linked into the Brain).
+  // (e.g. a chat seeded elsewhere and deep-linked into the Brain). Skipped when
+  // a run for this chat is already in flight (the store is single-flight, so
+  // this only guards against starting redundant work / a self re-answer).
   useEffect(() => {
-    if (chatId == null || loadingMessages || sending || messages.length === 0) return;
+    if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
+    if (isRunning(chatId)) return;
     const last = messages[messages.length - 1];
     if (last.role !== 'user') return;
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
-    setSending(true);
-    setError('');
-    // Seed from everything before the trailing user message, then append it.
-    startUserTurn(chatId, messages.slice(0, -1), last.content);
-    runAgentLoop(chatId)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Reply failed'))
-      .finally(() => setSending(false));
-  }, [chatId, loadingMessages, sending, messages, runAgentLoop, startUserTurn]);
+    setLocalError('');
+    const seed: ChatCompletionMessage[] = messages.slice(0, -1).map((m) => ({
+      role: m.role as ChatCompletionMessage['role'],
+      content: m.content,
+    }));
+    void startRun(chatId, buildRequest(seed, last.content));
+  }, [chatId, loadingMessages, localSending, messages, buildRequest]);
 
   const copyMessage = useCallback(async (msg: BrainMessage) => {
     try {
@@ -489,7 +325,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       } catch { /* non-fatal: fall back to the text-link path */ }
       setPendingAttachments((prev) => [...prev, attachment]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Upload failed');
+      setLocalError(e instanceof Error ? e.message : 'Upload failed');
     } finally {
       setUploading(false);
     }
@@ -499,30 +335,29 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     setPendingAttachments((prev) => prev.filter((a) => a.key !== key));
   }, []);
 
-  // Capture the active chat's execution as a paste-able triage report. Read off
-  // `traceVersion` so it re-derives as the loop records steps.
-  const activeTrace = chatId != null ? (traceRef.current.get(chatId) ?? []) : [];
-  const hasTrace = activeTrace.length > 0;
-  void traceVersion; // dependency marker — see traceRef note above
+  const resolveConfirm = useCallback((ok: boolean) => {
+    if (chatId != null) resolveRunConfirm(chatId, ok);
+  }, [chatId]);
+
   const buildTriageReport = useCallback(
     (agentLabel?: string) =>
       buildBrainTriageReport({
         capturedAt: new Date().toISOString(),
-        events: chatId != null ? (traceRef.current.get(chatId) ?? []) : [],
+        events: getRunTrace(chatId),
         messages,
         chatId,
         agentLabel,
-        error,
+        error: localError || snapshot.error,
       }),
-    [chatId, messages, error],
+    [chatId, messages, localError, snapshot.error],
   );
 
   return {
     messages,
     loadingMessages,
-    sending,
-    error,
-    streamingText,
+    sending: localSending || snapshot.running,
+    error: localError || snapshot.error,
+    streamingText: snapshot.streamingText,
     copiedMessageId,
     feedbackMap,
     pendingAttachments,
@@ -532,8 +367,10 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     submitFeedback,
     attach,
     removeAttachment,
-    setError,
-    hasTrace,
+    setError: setLocalError,
+    pendingConfirm: snapshot.pendingConfirm,
+    resolveConfirm,
+    hasTrace: snapshot.hasTrace,
     buildTriageReport,
   };
 }
