@@ -1,0 +1,210 @@
+{
+  "$comment": "Machine-readable source of truth for the README '🧵 Isolation Tracks' table (T9 · Platform · DB · CI steward). The track-scope guard (api/scripts/check-track-scope.mjs, run by .github/workflows/track-scope.yml) reads THIS file to enforce that a `track/<id>` branch edits only files under its track's `owns` globs (minus `excludes`) plus the shared hubs, and draws migration numbers only from its band. Keep this file and the README table in sync — this file is canonical.",
+  "globSyntax": "Paths are repo-root-relative. `**` matches any number of path segments, `*` matches within one segment. `[` and `]` are LITERAL (Next.js route dirs like marketplace/[slug]), not character classes.",
+  "sharedHubs": [
+    "api/src/infrastructure/database/schema.ts",
+    "api/src/index.ts",
+    "frontend/src/lib/builderforceApi.ts",
+    "README.md",
+    "api/package.json",
+    "frontend/package.json"
+  ],
+  "tracks": [
+    {
+      "id": "T1",
+      "name": "Marketing & SEO Web",
+      "migrationBand": null,
+      "owns": [
+        "frontend/src/app/page.tsx",
+        "frontend/src/app/compare/**",
+        "frontend/src/app/integrations/**",
+        "frontend/src/app/marketplace/[slug]/**",
+        "frontend/src/app/product/**",
+        "frontend/src/app/agents/**",
+        "frontend/src/app/blog/**",
+        "frontend/src/app/pricing/**",
+        "frontend/src/app/projects/[id]/**",
+        "frontend/src/app/sitemap.ts",
+        "frontend/src/lib/seo.*",
+        "frontend/src/lib/content.*",
+        "frontend/src/lib/structured-data.*",
+        "frontend/src/lib/og.*",
+        "frontend/src/lib/marketplaceSeo.*",
+        "frontend/src/lib/blogData.*",
+        "frontend/src/lib/routeMarketing.*",
+        "frontend/src/components/PublicShell*",
+        "frontend/src/components/MarketingHeader*",
+        "frontend/src/components/AppFooter*",
+        "frontend/src/components/PageContainer*",
+        "frontend/src/components/RouteMarketing*",
+        "frontend/src/components/QuickStart*",
+        "frontend/src/components/blog/**",
+        "frontend/public/robots.txt",
+        "frontend/public/install.*",
+        "api/src/presentation/routes/pendingPromptRoutes.ts",
+        "api/src/presentation/routes/pushSubscriptionRoutes.ts"
+      ],
+      "excludes": []
+    },
+    {
+      "id": "T2",
+      "name": "App UI & Brain",
+      "migrationBand": [180, 189],
+      "owns": [
+        "frontend/src/app/**",
+        "frontend/src/components/**",
+        "frontend/src/lib/brain/**",
+        "brain-embedded/**",
+        "api/src/presentation/routes/dashboardRoutes.ts"
+      ],
+      "excludes": [
+        "frontend/src/app/page.tsx",
+        "frontend/src/app/compare/**",
+        "frontend/src/app/integrations/**",
+        "frontend/src/app/marketplace/[slug]/**",
+        "frontend/src/app/product/**",
+        "frontend/src/app/agents/**",
+        "frontend/src/app/blog/**",
+        "frontend/src/app/pricing/**",
+        "frontend/src/app/projects/[id]/**",
+        "frontend/src/app/sitemap.ts",
+        "frontend/src/app/ide/voice/**",
+        "frontend/src/app/workflows/**",
+        "frontend/src/app/embed/**",
+        "frontend/src/components/PublicShell*",
+        "frontend/src/components/MarketingHeader*",
+        "frontend/src/components/AppFooter*",
+        "frontend/src/components/PageContainer*",
+        "frontend/src/components/RouteMarketing*",
+        "frontend/src/components/QuickStart*",
+        "frontend/src/components/blog/**",
+        "frontend/src/components/workflow-builder/**",
+        "frontend/src/components/LlmStudioPanel*",
+        "frontend/src/components/VoiceClonePanel*",
+        "frontend/src/components/QaContent.tsx"
+      ]
+    },
+    {
+      "id": "T3",
+      "name": "Gateway & LLM",
+      "migrationBand": [130, 139],
+      "owns": [
+        "api/src/application/llm/**",
+        "api/src/infrastructure/cache/**",
+        "api/src/presentation/routes/llmRoutes.ts"
+      ],
+      "excludes": []
+    },
+    {
+      "id": "T4",
+      "name": "Cloud Runtime & PR loop",
+      "migrationBand": [140, 149],
+      "owns": [
+        "api/src/application/runtime/**",
+        "api/src/application/repos/**",
+        "api/src/infrastructure/relay/**",
+        "api/src/presentation/routes/runtimeRoutes.ts",
+        "api/src/presentation/routes/repoRoutes.ts",
+        "api/src/presentation/routes/repoAnalysisRoutes.ts",
+        "api/src/presentation/routes/taskRoutes.ts",
+        "api/src/presentation/routes/agentRuntimeRoutes.ts"
+      ],
+      "excludes": []
+    },
+    {
+      "id": "T5",
+      "name": "On-Prem Agent Runtime",
+      "migrationBand": null,
+      "owns": [
+        "agent-runtime/**",
+        "packages/**"
+      ],
+      "excludes": []
+    },
+    {
+      "id": "T6",
+      "name": "Studio & Voice",
+      "migrationBand": [150, 159],
+      "owns": [
+        "studio/**",
+        "studio-embedded/**",
+        "voice/**",
+        "api/src/presentation/routes/studioVoiceCloneRoutes.ts",
+        "api/src/presentation/routes/studioWeightRoutes.ts",
+        "frontend/src/components/LlmStudioPanel*",
+        "frontend/src/components/VoiceClonePanel*",
+        "frontend/src/app/ide/voice/**"
+      ],
+      "excludes": []
+    },
+    {
+      "id": "T7",
+      "name": "Tenant · Embed · Governance",
+      "migrationBand": [160, 169],
+      "owns": [
+        "builderforce-embedded/**",
+        "frontend/src/app/embed/**",
+        "frontend/src/lib/embed/**",
+        "api/src/application/seams/**",
+        "api/src/infrastructure/auth/segment*",
+        "api/src/presentation/routes/tenant*",
+        "api/src/presentation/routes/embedRoutes.ts",
+        "api/src/presentation/routes/governanceRoutes.ts",
+        "api/src/presentation/routes/segment*",
+        "api/src/presentation/routes/seamRoutes.ts",
+        "api/src/presentation/routes/webhookRoutes.ts",
+        "api/src/presentation/routes/biRoutes.ts",
+        "api/src/presentation/routes/mcpExtensionRoutes.ts",
+        "api/src/presentation/routes/reportRoutes.ts"
+      ],
+      "excludes": []
+    },
+    {
+      "id": "T8",
+      "name": "Workflows · Boards",
+      "migrationBand": [170, 179],
+      "owns": [
+        "api/src/application/workflow/**",
+        "api/src/application/boardsync/**",
+        "api/src/application/swimlane/**",
+        "api/src/presentation/routes/workflow*",
+        "api/src/presentation/routes/board*",
+        "api/src/presentation/routes/integrationRoutes.ts",
+        "api/src/presentation/routes/githubWebhookRoutes.ts",
+        "frontend/src/components/workflow-builder/**",
+        "frontend/src/app/workflows/**"
+      ],
+      "excludes": []
+    },
+    {
+      "id": "T9",
+      "name": "Platform · DB · CI",
+      "steward": true,
+      "migrationBand": [190, null],
+      "owns": [
+        "api/migrations/**",
+        "api/scripts/**",
+        ".github/workflows/**",
+        ".github/isolation-tracks.json",
+        "frontend/eslint.config.js",
+        "tsconfig*.json",
+        "frontend/tsconfig.json",
+        "api/tsconfig.json"
+      ],
+      "excludes": []
+    },
+    {
+      "id": "T10",
+      "name": "Docs & QA",
+      "migrationBand": null,
+      "owns": [
+        "docs-site/**",
+        "qa-e2e/**",
+        "api/src/application/qa/**",
+        "api/src/presentation/routes/qaRoutes.ts",
+        "frontend/src/components/QaContent.tsx"
+      ],
+      "excludes": []
+    }
+  ]
+}

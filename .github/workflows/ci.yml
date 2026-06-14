@@ -67,15 +67,18 @@ jobs:
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
 
-      # Frontend's `link:` deps to ../sdk and ../studio require those packages'
-      # dist/ to exist before pnpm install symlinks them. Each linked package's
-      # `prepare` script runs `npm run build` on install — so a bare npm
-      # install in those dirs is sufficient.
-      - name: "Build SDK + Studio + Studio-embedded (link: dep prerequisites)"
+      # Frontend's `link:` deps to ../sdk, ../studio, ../studio-embedded and
+      # ../brain-embedded require those packages' dist/ to exist before pnpm
+      # install symlinks them. Each linked package's `prepare` script runs
+      # `npm run build` on install — so a bare npm install in those dirs is
+      # sufficient. brain-embedded is built here too (not just relying on its
+      # committed dist/) so its dist/ can be gitignored to match the siblings.
+      - name: "Build SDK + Studio + Studio-embedded + Brain-embedded (link: dep prerequisites)"
         run: |
           (cd sdk && npm install --no-audit --no-fund)
           (cd studio && npm install --no-audit --no-fund)
           (cd studio-embedded && npm install --no-audit --no-fund)
+          (cd brain-embedded && npm install --no-audit --no-fund)
 
       - name: Install dependencies
         working-directory: frontend

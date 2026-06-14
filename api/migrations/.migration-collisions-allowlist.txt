@@ -1,0 +1,25 @@
+# Migration numeric-prefix collision allowlist (T9 · Platform · DB · CI steward).
+#
+# The migration runner (scripts/migrate.mjs) sorts by FULL filename, so two files
+# that share a numeric prefix are both applied in a deterministic order — they are
+# not broken today. The risk is a future runner that dedupes on the bare prefix
+# token and silently skips one. check-migrations.mjs (run in `npm test` / CI) fails
+# the build on ANY duplicate numeric prefix so new collisions can never land.
+#
+# The prefixes below are GRANDFATHERED: they collided before the guard existed and
+# are already applied identically to every live/self-hosted DB. Renumbering them now
+# would re-run their DDL under a new filename against every deployed `_migrations`
+# ledger — a release-level operation, not a CI cleanup. They are accepted-as-is and
+# tracked in the README Consolidated Gap Register for a future deliberate backfill.
+#
+# One bare numeric prefix per line. A prefix listed here that no longer collides is
+# reported as a stale entry (remove it). Newest collisions must be renumbered into a
+# free slot from your track's migration band — never added here.
+0009
+0014
+0018
+0060
+0064
+0068
+0075
+0076
