@@ -1,14 +1,14 @@
 import fs from "node:fs/promises";
 import os from "node:os";
-import type { AgentMessage } from "../../builderforce/model/agent-types.js";
+import { resolveHeartbeatPrompt } from "../../auto-reply/heartbeat.js";
+import type { ReasoningLevel, ThinkLevel } from "../../auto-reply/thinking.js";
 import {
   createAgentSession,
   estimateTokens,
   SessionManager,
   SettingsManager,
-} from "@mariozechner/pi-coding-agent";
-import { resolveHeartbeatPrompt } from "../../auto-reply/heartbeat.js";
-import type { ReasoningLevel, ThinkLevel } from "../../auto-reply/thinking.js";
+} from "../../builderforce/agent-loop/index.js";
+import type { AgentMessage, AgentTool } from "../../builderforce/model/agent-types.js";
 import { resolveChannelCapabilities } from "../../config/channel-capabilities.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import { getMachineDisplayName } from "../../infra/machine-name.js";
@@ -22,9 +22,9 @@ import { buildTtsSystemPromptHint } from "../../tts/tts.js";
 import { resolveUserPath } from "../../utils.js";
 import { normalizeMessageChannel } from "../../utils/message-channel.js";
 import { isReasoningTagProvider } from "../../utils/provider-utils.js";
-import { buildAssignedPersonaPrompt } from "../assigned-capabilities.js";
 import { resolveBuilderForceAgentsAgentDir } from "../agent-paths.js";
 import { resolveSessionAgentIds } from "../agent-scope.js";
+import { buildAssignedPersonaPrompt } from "../assigned-capabilities.js";
 import type { ExecElevatedDefaults } from "../bash-tools.js";
 import { makeBootstrapWarn, resolveBootstrapContextForRun } from "../bootstrap-files.js";
 import { listChannelSupportedActions, resolveChannelMessageToolHints } from "../channel-tools.js";
@@ -561,8 +561,8 @@ export async function compactEmbeddedPiSessionDirect(
         modelRegistry,
         model,
         thinkingLevel: mapThinkingLevel(params.thinkLevel),
-        tools: builtInTools,
-        customTools,
+        tools: builtInTools as unknown as AgentTool[],
+        customTools: customTools as unknown as AgentTool[],
         sessionManager,
         settingsManager,
       });

@@ -1,5 +1,6 @@
+import { nativeStreamSimple } from "../builderforce/agent-loop/index.js";
 import type { Model } from "../builderforce/model/types.js";
-import { getModel, streamSimple } from "@mariozechner/pi-ai";
+import { getModel } from "@mariozechner/pi-ai";
 import { describe, expect, it } from "vitest";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { isTruthyEnvValue } from "../infra/env.js";
@@ -29,11 +30,11 @@ describeLive("pi embedded extra params (live)", () => {
       },
     };
 
-    const agent = { streamFn: streamSimple };
+    const agent = { streamFn: nativeStreamSimple };
 
     applyExtraParamsToAgent(agent, cfg, "openai", model.id);
 
-    const stream = agent.streamFn(
+    const stream = await agent.streamFn(
       model,
       {
         messages: [

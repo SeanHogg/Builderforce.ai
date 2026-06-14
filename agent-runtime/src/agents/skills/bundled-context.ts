@@ -1,4 +1,4 @@
-import { loadSkillsFromDir } from "@mariozechner/pi-coding-agent";
+import { loadSkillsFromDir } from "./native-loader.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { resolveBundledSkillsDir, type BundledSkillsResolveOptions } from "./bundled-dir.js";
 

@@ -1,5 +1,5 @@
 import type { AgentMessage } from "../builderforce/model/agent-types.js";
-import { SessionManager } from "@mariozechner/pi-coding-agent";
+import { SessionManager } from "../builderforce/agent-loop/index.js";
 import { describe, expect, it, vi } from "vitest";
 import { applyGoogleTurnOrderingFix } from "./pi-embedded-runner.js";
 

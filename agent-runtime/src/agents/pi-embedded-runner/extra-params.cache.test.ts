@@ -1,4 +1,4 @@
-import type { StreamFn } from "@mariozechner/pi-agent-core";
+import type { StreamFn } from "../../builderforce/agent-loop/index.js";
 import type { Api, Context, Model, SimpleStreamOptions } from "../../builderforce/model/types.js";
 import { describe, expect, it } from "vitest";
 import { addAnthropicSystemCacheControl, applyExtraParamsToAgent } from "./extra-params.js";

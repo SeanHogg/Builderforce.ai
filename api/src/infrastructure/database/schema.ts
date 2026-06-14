@@ -3453,3 +3453,86 @@ export const agentDispatches = pgTable('agent_dispatches', {
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// Studio voice cloning (Voice PRD #1994). A clone is an enrolled voice identity
+// (a reference sample in R2 + a cached speaker embedding); synthesis output is
+// persisted to studio_voiceovers, which doubles as the read-through synthesis
+// cache (keyed by sha256(cloneId+text+speed+lang)). Licensing lets one tenant
+// use another's published clone. Migration 0127.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Who may use/see a clone: only its owner, anyone with the link, or listed in
+ *  the marketplace catalog. */
+export const voiceCloneVisibilityEnum = pgEnum('voice_clone_visibility', [
+  'private',
+  'unlisted',
+  'marketplace',
+]);
+
+/** Lifecycle: enrolling, usable, or published to the marketplace. */
+export const voiceCloneStatusEnum = pgEnum('voice_clone_status', ['draft', 'ready', 'published']);
+
+export const studioVoiceClones = pgTable('studio_voice_clones', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  /** The enrolling user (owner). */
+  userId:        varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  name:          varchar('name', { length: 255 }).notNull(),
+  description:   text('description'),
+  /** Synthesis backend honored at synth time (PRD §8 — never hardcode the engine). */
+  provider:      varchar('provider', { length: 64 }).notNull().default('ssm-webgpu'),
+  /** R2 key of the reference sample the clone was enrolled from. */
+  referenceKey:  varchar('reference_key', { length: 512 }),
+  /** Cached speaker embedding (L2-normalised number[]) so synthesis skips re-analysis. */
+  embedding:     jsonb('embedding').$type<number[]>(),
+  visibility:    voiceCloneVisibilityEnum('visibility').notNull().default('private'),
+  status:        voiceCloneStatusEnum('status').notNull().default('ready'),
+  /** Marketplace price in millicents (1/100000 USD). 0 = free. */
+  priceMillicents: integer('price_millicents').notNull().default(0),
+  /** Consent attestation (PRD §5 / ToS §9a) — set only when the enroller affirmed
+   *  "this is my voice OR I have written permission". Synthesis is gated on it. */
+  consentAttestedAt:  timestamp('consent_attested_at'),
+  consentTextVersion: varchar('consent_text_version', { length: 32 }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant: index('idx_studio_voice_clones_tenant').on(t.tenantId),
+  byVisibility: index('idx_studio_voice_clones_visibility').on(t.visibility),
+}));
+
+export const studioVoiceCloneLicenses = pgTable('studio_voice_clone_licenses', {
+  id:        serial('id').primaryKey(),
+  /** The licensee (buyer) tenant + user. */
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  userId:    varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  cloneId:   integer('clone_id').notNull().references(() => studioVoiceClones.id, { onDelete: 'cascade' }),
+  status:    varchar('status', { length: 16 }).notNull().default('active'),  // active|revoked
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uniqueLicense: uniqueIndex('uq_voice_clone_license').on(t.cloneId, t.tenantId),
+  byTenant: index('idx_voice_clone_licenses_tenant').on(t.tenantId),
+}));
+
+export const studioVoiceovers = pgTable('studio_voiceovers', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  cloneId:      integer('clone_id').notNull().references(() => studioVoiceClones.id, { onDelete: 'cascade' }),
+  /** sha256(cloneId + normalizedText + speed + lang) — the read-through cache key.
+   *  Identical re-synthesis returns this row instead of re-billing. */
+  cacheKey:     varchar('cache_key', { length: 64 }).notNull(),
+  text:         text('text').notNull(),
+  /** R2 key of the synthesized audio. */
+  audioKey:     varchar('audio_key', { length: 512 }).notNull(),
+  durationMs:   integer('duration_ms').notNull().default(0),
+  wordTimestamps: jsonb('word_timestamps')
+    .$type<Array<{ word: string; startMs: number; endMs: number }>>()
+    .notNull()
+    .default([]),
+  costUsdMillicents: integer('cost_usd_millicents').notNull().default(0),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uniqueCacheKey: uniqueIndex('uq_studio_voiceovers_cache_key').on(t.cacheKey),
+  byClone: index('idx_studio_voiceovers_clone').on(t.cloneId),
+}));

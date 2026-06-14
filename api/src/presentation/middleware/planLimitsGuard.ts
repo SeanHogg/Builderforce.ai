@@ -76,6 +76,22 @@ export function buildPlanLimitsGuard(db: Db) {
       };
     },
 
+    /**
+     * Returns an error payload if a Pro-only feature is used by a non-paid plan,
+     * otherwise null. The single gate for entitlement-gated features (e.g. Voice
+     * Cloning) — callers pass a human feature name for the 402 message instead of
+     * re-deriving "is this tenant paid" themselves.
+     */
+    async checkProFeature(tenantId: number, featureName: string): Promise<LimitError | null> {
+      const plan = await getTenantPlan(db, tenantId);
+      if (plan !== TenantPlan.FREE) return null;
+      return {
+        error: `${featureName} requires a paid plan. Upgrade to unlock it.`,
+        upgradeRequired: true,
+        currentPlan: plan,
+      };
+    },
+
     /** Returns an error payload if the tenant has reached their seat limit, otherwise null. */
     async checkSeatLimit(tenantId: number): Promise<LimitError | null> {
       const plan = await getTenantPlan(db, tenantId);

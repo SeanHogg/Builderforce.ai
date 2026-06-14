@@ -1,6 +1,6 @@
+import { estimateTokens, generateSummary } from "../builderforce/agent-loop/index.js";
 import type { AgentMessage } from "../builderforce/model/agent-types.js";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { estimateTokens, generateSummary } from "@mariozechner/pi-coding-agent";
+import type { Model } from "../builderforce/model/types.js";
 import { retryAsync } from "../infra/retry.js";
 import { DEFAULT_CONTEXT_TOKENS } from "./defaults.js";
 import { repairToolUseResultPairing, stripToolResultDetails } from "./session-transcript-repair.js";
@@ -142,7 +142,7 @@ export function isOversizedForSummary(msg: AgentMessage, contextWindow: number):
 
 async function summarizeChunks(params: {
   messages: AgentMessage[];
-  model: NonNullable<ExtensionContext["model"]>;
+  model: Model;
   apiKey: string;
   signal: AbortSignal;
   reserveTokens: number;
@@ -191,7 +191,7 @@ async function summarizeChunks(params: {
  */
 export async function summarizeWithFallback(params: {
   messages: AgentMessage[];
-  model: NonNullable<ExtensionContext["model"]>;
+  model: Model;
   apiKey: string;
   signal: AbortSignal;
   reserveTokens: number;
@@ -259,7 +259,7 @@ export async function summarizeWithFallback(params: {
 
 export async function summarizeInStages(params: {
   messages: AgentMessage[];
-  model: NonNullable<ExtensionContext["model"]>;
+  model: Model;
   apiKey: string;
   signal: AbortSignal;
   reserveTokens: number;
@@ -384,6 +384,6 @@ export function pruneHistoryForContextShare(params: {
   };
 }
 
-export function resolveContextWindowTokens(model?: ExtensionContext["model"]): number {
+export function resolveContextWindowTokens(model?: Model): number {
   return Math.max(1, Math.floor(model?.contextWindow ?? DEFAULT_CONTEXT_TOKENS));
 }

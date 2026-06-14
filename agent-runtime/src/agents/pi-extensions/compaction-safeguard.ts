@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import type { AgentMessage } from "../../builderforce/model/agent-types.js";
-import type { ExtensionAPI, FileOperations } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, FileOperations } from "./types.js";
 import { extractSections } from "../../auto-reply/reply/post-compaction-context.js";
 import {
   BASE_CHUNK_RATIO,

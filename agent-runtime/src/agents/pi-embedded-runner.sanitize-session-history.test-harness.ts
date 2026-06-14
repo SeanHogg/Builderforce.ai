@@ -1,5 +1,5 @@
 import type { AgentMessage } from "../builderforce/model/agent-types.js";
-import type { SessionManager } from "@mariozechner/pi-coding-agent";
+import type { SessionManager } from "../builderforce/agent-loop/index.js";
 import { expect, vi } from "vitest";
 import * as helpers from "./pi-embedded-helpers.js";
 

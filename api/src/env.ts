@@ -71,6 +71,18 @@ export interface Env {
   /** R2 bucket for file uploads. */
   UPLOADS?: R2Bucket;
 
+  /** Clone-capable TTS endpoint for server-side voice synthesis (Voice PRD §3.1).
+   *  Provider-agnostic: any service that accepts (referenceAudio, text) and
+   *  returns audio bytes. When unset, the synthesize route returns an honest 503
+   *  ("synthesis provider not configured") instead of faking audio.
+   *  Set via `wrangler secret put VOICE_CLONE_TTS_URL`. */
+  VOICE_CLONE_TTS_URL?: string;
+  /** Bearer key for VOICE_CLONE_TTS_URL. `wrangler secret put VOICE_CLONE_TTS_KEY`. */
+  VOICE_CLONE_TTS_KEY?: string;
+  /** $/second-of-audio synthesis cost basis for ledger billing, in millicents
+   *  per second. Defaults to 5 (≈ $0.05/min). `wrangler secret put VOICE_CLONE_COST_MC_PER_SEC`. */
+  VOICE_CLONE_COST_MC_PER_SEC?: string;
+
   /** Durable Object namespace for per-tenant sliding-window rate limiting.
    *  Bind in wrangler.toml:  [[durable_objects.bindings]]  name = "TENANT_RATE_LIMITER" */
   TENANT_RATE_LIMITER?: DurableObjectNamespace;

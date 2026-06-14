@@ -32,9 +32,9 @@
 
 import { randomUUID } from "node:crypto";
 import { Worker } from "node:worker_threads";
-import type { StreamFn } from "@mariozechner/pi-agent-core";
+import type { StreamFn } from "../builderforce/agent-loop/index.js";
 import type { AssistantMessage, StopReason, TextContent, Usage } from "../builderforce/model/types.js";
-import { createAssistantMessageEventStream } from "@mariozechner/pi-ai";
+import { createAssistantMessageEventStream } from "../builderforce/agent-loop/index.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";

@@ -1,6 +1,6 @@
 import type { AgentMessage } from "../../builderforce/model/agent-types.js";
 import type { TextContent } from "../../builderforce/model/types.js";
-import { SessionManager } from "@mariozechner/pi-coding-agent";
+import { SessionManager } from "../../builderforce/agent-loop/index.js";
 import { log } from "./logger.js";
 
 /**

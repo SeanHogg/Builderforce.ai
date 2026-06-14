@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import type { AgentMessage, AgentTool } from "../../builderforce/model/agent-types.js";
-import type { SessionManager } from "@mariozechner/pi-coding-agent";
+import type { SessionManager } from "../../builderforce/agent-loop/index.js";
 import type { TSchema } from "@sinclair/typebox";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import { registerUnhandledRejectionHandler } from "../../infra/unhandled-rejections.js";
