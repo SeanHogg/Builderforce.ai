@@ -3,6 +3,7 @@
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import MobileBottomNav from './MobileBottomNav';
+import AppFooter from './AppFooter';
 import { useSidebarCollapse } from '@/lib/useSidebarCollapse';
 import { useMobileNav } from '@/lib/useMobileNav';
 
@@ -25,7 +26,11 @@ export default function PublicShell({ children }: { children: React.ReactNode })
       <div className={`shell ${collapsed ? 'nav-collapsed' : ''}`} style={{ position: 'relative' }}>
         <TopBar onMenuClick={openNav} />
         <Sidebar collapsed={collapsed} onToggleCollapsed={toggle} mobileOpen={navOpen} onMobileClose={closeNav} />
-        <main className="content">{children}</main>
+        <main className="content">
+          {children}
+          {/* One canonical site footer for every marketing/browse route. */}
+          <AppFooter variant="full" />
+        </main>
       </div>
       <MobileBottomNav />
     </div>

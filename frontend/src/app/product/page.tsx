@@ -4,10 +4,8 @@ import JsonLd from '@/components/JsonLd';
 import { productSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
 import {
-  BRAND,
   STATS,
   PRODUCT_SECTIONS,
-  FOOTER_LINKS,
 } from '@/lib/content';
 
 export const runtime = 'edge';
@@ -94,12 +92,6 @@ export default function ProductPage() {
           font-family: var(--font-display); font-weight: 600; font-size: 0.92rem; text-decoration: none;
         }
         .pp-btn-secondary:hover { border-color: var(--border-accent); }
-
-        .pp-footer { border-top: 1px solid var(--border-subtle); padding: 32px 24px; text-align: center; }
-        .pp-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; list-style: none; padding: 0; margin: 0 0 14px; }
-        .pp-footer-links a { font-size: 0.82rem; color: var(--text-muted); text-decoration: none; padding: 4px 10px; border-radius: 6px; }
-        .pp-footer-links a:hover { color: var(--text-secondary); }
-        .pp-footer-copy { font-size: 0.78rem; color: var(--text-muted); }
       `}</style>
 
       <div className="pp">
@@ -162,15 +154,7 @@ export default function ProductPage() {
             </div>
           </section>
         </main>
-
-        <footer className="pp-footer">
-          <ul className="pp-footer-links">
-            {FOOTER_LINKS.map((l) => (
-              <li key={l.href}><Link href={l.href}>{l.label}</Link></li>
-            ))}
-          </ul>
-          <p className="pp-footer-copy">Builderforce.ai © {BRAND.year}</p>
-        </footer>
+        {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
       </div>
     </>
   );

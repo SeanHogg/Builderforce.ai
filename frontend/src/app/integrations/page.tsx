@@ -3,7 +3,7 @@ import Link from 'next/link';
 import JsonLd from '@/components/JsonLd';
 import { pageMetadata } from '@/lib/seo';
 import { breadcrumbSchema } from '@/lib/structured-data';
-import { SEO_INTEGRATIONS, FOOTER_LINKS } from '@/lib/content';
+import { SEO_INTEGRATIONS } from '@/lib/content';
 
 export const runtime = 'edge';
 
@@ -39,9 +39,6 @@ export default function IntegrationsIndexPage() {
         .intx-card:hover { border-color: var(--coral-bright); }
         .intx-card-name { font-family: var(--font-display); font-weight: 700; font-size: 1.02rem; color: var(--text-primary); margin: 0 0 6px; }
         .intx-card-desc { font-size: 0.86rem; color: var(--text-secondary); line-height: 1.55; margin: 0; }
-        .intx-footer { border-top: 1px solid var(--border-subtle); margin-top: 28px; padding: 24px; display: flex; gap: 16px 22px; flex-wrap: wrap; justify-content: center; }
-        .intx-footer a { color: var(--text-secondary); text-decoration: none; font-size: 0.85rem; }
-        .intx-footer a:hover { color: var(--text-primary); }
       `}</style>
 
       <main className="intx">
@@ -71,11 +68,7 @@ export default function IntegrationsIndexPage() {
           ))}
         </section>
 
-        <footer className="intx-footer">
-          {FOOTER_LINKS.map((l) => (
-            <Link key={l.href} href={l.href}>{l.label}</Link>
-          ))}
-        </footer>
+        {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
       </main>
     </>
   );

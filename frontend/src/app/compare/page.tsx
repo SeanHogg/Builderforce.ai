@@ -5,12 +5,10 @@ import JsonLd from '@/components/JsonLd';
 import { compareSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
 import {
-  BRAND,
   COMPARE,
   COMPARE_FAQ,
   COMPETITORS,
   COMPETITIVE_COMPARISON,
-  FOOTER_LINKS,
 } from '@/lib/content';
 
 export const runtime = 'edge';
@@ -127,11 +125,6 @@ export default function ComparePage() {
         }
         .cmp-btn-secondary:hover { border-color: var(--border-accent); }
 
-        .cmp-footer { border-top: 1px solid var(--border-subtle); padding: 32px 24px; text-align: center; }
-        .cmp-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; list-style: none; padding: 0; margin: 0 0 14px; }
-        .cmp-footer-links a { font-size: 0.82rem; color: var(--text-muted); text-decoration: none; padding: 4px 10px; border-radius: 6px; }
-        .cmp-footer-links a:hover { color: var(--text-secondary); }
-        .cmp-footer-copy { font-size: 0.78rem; color: var(--text-muted); }
       `}</style>
 
       <div className="cmp">
@@ -221,15 +214,7 @@ export default function ComparePage() {
             </div>
           </section>
         </main>
-
-        <footer className="cmp-footer">
-          <ul className="cmp-footer-links">
-            {FOOTER_LINKS.map((l) => (
-              <li key={l.href}><Link href={l.href}>{l.label}</Link></li>
-            ))}
-          </ul>
-          <p className="cmp-footer-copy">Builderforce.ai © {BRAND.year}</p>
-        </footer>
+        {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
       </div>
     </>
   );
