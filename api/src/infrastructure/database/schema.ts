@@ -3151,6 +3151,9 @@ export const ticketRuns = pgTable('ticket_runs', {
   // queued|awaiting_gate|stage_running|stage_completed|advancing|needs_attention|done|cancelled
   lifecycle:         varchar('lifecycle', { length: 24 }).notNull().default('queued'),
   currentWorkflowId: uuid('current_workflow_id').references(() => workflows.id, { onDelete: 'set null' }),
+  // The spawned run_workflow workflow this ticket is parked on (lifecycle
+  // 'awaiting_workflow'); resumed when that workflow settles (migration 0171).
+  awaitingWorkflowId: uuid('awaiting_workflow_id').references(() => workflows.id, { onDelete: 'set null' }),
   stageHistory:      text('stage_history'),   // JSON array of {swimlaneId, workflowId, status, at}
   branchName:        varchar('branch_name', { length: 255 }),
   error:             text('error'),
@@ -3205,6 +3208,7 @@ export const externalTicketLinks = pgTable('external_ticket_links', {
   externalUrl:     varchar('external_url', { length: 500 }),
   externalVersion: varchar('external_version', { length: 128 }),  // etag/updated_at/version#
   contentHash:     varchar('content_hash', { length: 64 }),
+  fields:          jsonb('fields'),  // last-reconciled normalized field bag (enables field-level 3-way merge — migration 0170)
   syncState:       varchar('sync_state', { length: 16 }).notNull().default('synced'), // synced|dirty_local|dirty_remote|conflict
   lastInboundAt:   timestamp('last_inbound_at'),
   lastOutboundAt:  timestamp('last_outbound_at'),

@@ -125,6 +125,8 @@ import { runDueTriggers } from './application/workflow/runDueTriggers';
 import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
 import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
 import { runWebhookRetrySweep } from './application/seams/webhookService';
+import { runBoardSyncSweep } from './application/boardsync/runBoardSyncSweep';
+import { runParkedWorkflowSweep } from './application/swimlane/resumeParkedWorkflows';
 import { handleInboundEmail } from './application/workflow/inboundEmail';
 
 // Middleware
@@ -454,6 +456,20 @@ export default {
       ctx.waitUntil(
         runWebhookRetrySweep(env).catch((err) => {
           console.error('[cron:webhook-retry] failed', err);
+        }),
+      );
+      // Poll active external board connections whose interval has elapsed +
+      // drain their reverse-sync outbox (inbound polling + reliable writeback).
+      ctx.waitUntil(
+        runBoardSyncSweep(env).catch((err) => {
+          console.error('[cron:board-sync] failed', err);
+        }),
+      );
+      // Resume tickets parked on a run_workflow lane action whose spawned
+      // workflow has now settled (advance on success / needs_attention on fail).
+      ctx.waitUntil(
+        runParkedWorkflowSweep(env).catch((err) => {
+          console.error('[cron:wf-gate] failed', err);
         }),
       );
     }

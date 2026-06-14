@@ -45,6 +45,7 @@ describe('countLaneFailures [1316]', () => {
 const ALL_STATES: TicketLifecycle[] = [
   'queued',
   'awaiting_gate',
+  'awaiting_workflow',
   'stage_running',
   'stage_completed',
   'advancing',
@@ -97,6 +98,13 @@ describe('canTransitionTicket', () => {
   it('allows the gate path stage_completed -> awaiting_gate -> advancing', () => {
     expect(canTransitionTicket('stage_completed', 'awaiting_gate')).toBe(true);
     expect(canTransitionTicket('awaiting_gate', 'advancing')).toBe(true);
+  });
+
+  it('allows the run_workflow gate path stage_completed -> awaiting_workflow -> advancing | done | needs_attention', () => {
+    expect(canTransitionTicket('stage_completed', 'awaiting_workflow')).toBe(true);
+    expect(canTransitionTicket('awaiting_workflow', 'advancing')).toBe(true);
+    expect(canTransitionTicket('awaiting_workflow', 'done')).toBe(true);
+    expect(canTransitionTicket('awaiting_workflow', 'needs_attention')).toBe(true);
   });
 
   it('allows recovery from needs_attention via retry (stage_running) or manual (advancing)', () => {
