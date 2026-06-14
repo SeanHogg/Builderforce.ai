@@ -1,7 +1,7 @@
 import type { StreamFn } from "../builderforce/agent-loop/index.js";
 import type { Context, Model, SimpleStreamOptions } from "../builderforce/model/types.js";
 import { describe, expect, it } from "vitest";
-import { applyExtraParamsToAgent, resolveExtraParams } from "./pi-embedded-runner.js";
+import { applyExtraParamsToAgent, resolveExtraParams } from "./embedded-runner.js";
 
 describe("resolveExtraParams", () => {
   it("returns undefined with no model config", () => {

@@ -2,13 +2,13 @@ import type { BuilderForceAgentsConfig } from "../config/config.js";
 
 export const DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR = 20_000;
 
-type PiSettingsManagerLike = {
+type SettingsManagerLike = {
   getCompactionReserveTokens: () => number;
   applyOverrides: (overrides: { compaction: { reserveTokens: number } }) => void;
 };
 
-export function ensurePiCompactionReserveTokens(params: {
-  settingsManager: PiSettingsManagerLike;
+export function ensureCompactionReserveTokens(params: {
+  settingsManager: SettingsManagerLike;
   minReserveTokens?: number;
 }): { didOverride: boolean; reserveTokens: number } {
   const minReserveTokens = params.minReserveTokens ?? DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR;

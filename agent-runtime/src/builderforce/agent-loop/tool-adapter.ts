@@ -3,7 +3,7 @@
  * into a native loop {@link AgentTool} (PI cutover, loop stage). This is what lets the
  * native `Agent` run the SAME cross-surface tool set the cloud loop runs (read/write/
  * edit/bash/web/…), instead of `pi-coding-agent`'s `createReadTool`/`createWriteTool`/
- * `createEditTool`. The reverse of [pi-tool-definition-adapter.ts](../../agents/pi-tool-definition-adapter.ts),
+ * `createEditTool`. The reverse of [tool-definition-adapter.ts](../../agents/tool-definition-adapter.ts),
  * which targeted the pi `AgentTool`; this targets the native one.
  *
  * The shared tool reaches the runtime ONLY through the injected {@link CapabilityProvider}

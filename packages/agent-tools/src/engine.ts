@@ -46,3 +46,25 @@ export interface AgentEngine {
   readonly id: string;
   run(input: AgentRunInput): Promise<AgentRunResult>;
 }
+
+/**
+ * The well-known engine ids, shared so every surface names the same engines and the
+ * default lives in ONE place. The on-prem relay registry, the cloud `resolveCloudAgent`,
+ * and the API route fallbacks all import {@link DEFAULT_ENGINE_ID} — so retiring V1 /
+ * flipping the default to `builderforce-local` is a one-line change here, not a hunt for
+ * every duplicated `'builderforce-v1'` literal (PRD 11 §5.4 / §5.1 Stage 5).
+ */
+export const ENGINE_IDS = {
+  v1: "builderforce-v1",
+  v2: "builderforce-v2",
+  local: "builderforce-local",
+} as const;
+
+export type EngineId = (typeof ENGINE_IDS)[keyof typeof ENGINE_IDS];
+
+/**
+ * The default engine when a dispatch / agent record does not name one. Stays
+ * `builderforce-v1` until on-prem tool parity is proven; flipping it to
+ * `ENGINE_IDS.local` here changes every surface at once.
+ */
+export const DEFAULT_ENGINE_ID: EngineId = ENGINE_IDS.v1;

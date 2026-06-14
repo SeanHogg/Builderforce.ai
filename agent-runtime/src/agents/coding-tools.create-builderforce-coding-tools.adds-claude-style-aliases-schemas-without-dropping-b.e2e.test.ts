@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import "./test-helpers/fast-coding-tools.js";
-import { createBuilderForceAgentsCodingTools } from "./pi-tools.js";
+import { createBuilderForceAgentsCodingTools } from "./coding-tools.js";
 
 const defaultTools = createBuilderForceAgentsCodingTools();
 

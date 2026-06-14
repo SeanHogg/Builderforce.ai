@@ -4,21 +4,21 @@ import {
   logSessionStateChange,
 } from "../../logging/diagnostic.js";
 
-type EmbeddedPiQueueHandle = {
+type EmbeddedQueueHandle = {
   queueMessage: (text: string) => Promise<void>;
   isStreaming: () => boolean;
   isCompacting: () => boolean;
   abort: () => void;
 };
 
-const ACTIVE_EMBEDDED_RUNS = new Map<string, EmbeddedPiQueueHandle>();
+const ACTIVE_EMBEDDED_RUNS = new Map<string, EmbeddedQueueHandle>();
 type EmbeddedRunWaiter = {
   resolve: (ended: boolean) => void;
   timer: NodeJS.Timeout;
 };
 const EMBEDDED_RUN_WAITERS = new Map<string, Set<EmbeddedRunWaiter>>();
 
-export function queueEmbeddedPiMessage(sessionId: string, text: string): boolean {
+export function queueEmbeddedMessage(sessionId: string, text: string): boolean {
   const handle = ACTIVE_EMBEDDED_RUNS.get(sessionId);
   if (!handle) {
     diag.debug(`queue message failed: sessionId=${sessionId} reason=no_active_run`);
@@ -32,12 +32,12 @@ export function queueEmbeddedPiMessage(sessionId: string, text: string): boolean
     diag.debug(`queue message failed: sessionId=${sessionId} reason=compacting`);
     return false;
   }
-  logMessageQueued({ sessionId, source: "pi-embedded-runner" });
+  logMessageQueued({ sessionId, source: "embedded-runner" });
   void handle.queueMessage(text);
   return true;
 }
 
-export function abortEmbeddedPiRun(sessionId: string): boolean {
+export function abortEmbeddedRun(sessionId: string): boolean {
   const handle = ACTIVE_EMBEDDED_RUNS.get(sessionId);
   if (!handle) {
     diag.debug(`abort failed: sessionId=${sessionId} reason=no_active_run`);
@@ -48,7 +48,7 @@ export function abortEmbeddedPiRun(sessionId: string): boolean {
   return true;
 }
 
-export function isEmbeddedPiRunActive(sessionId: string): boolean {
+export function isEmbeddedRunActive(sessionId: string): boolean {
   const active = ACTIVE_EMBEDDED_RUNS.has(sessionId);
   if (active) {
     diag.debug(`run active check: sessionId=${sessionId} active=true`);
@@ -56,7 +56,7 @@ export function isEmbeddedPiRunActive(sessionId: string): boolean {
   return active;
 }
 
-export function isEmbeddedPiRunStreaming(sessionId: string): boolean {
+export function isEmbeddedRunStreaming(sessionId: string): boolean {
   const handle = ACTIVE_EMBEDDED_RUNS.get(sessionId);
   if (!handle) {
     return false;
@@ -68,7 +68,7 @@ export function getActiveEmbeddedRunCount(): number {
   return ACTIVE_EMBEDDED_RUNS.size;
 }
 
-export function waitForEmbeddedPiRunEnd(sessionId: string, timeoutMs = 15_000): Promise<boolean> {
+export function waitForEmbeddedRunEnd(sessionId: string, timeoutMs = 15_000): Promise<boolean> {
   if (!sessionId || !ACTIVE_EMBEDDED_RUNS.has(sessionId)) {
     return Promise.resolve(true);
   }
@@ -117,7 +117,7 @@ function notifyEmbeddedRunEnded(sessionId: string) {
 
 export function setActiveEmbeddedRun(
   sessionId: string,
-  handle: EmbeddedPiQueueHandle,
+  handle: EmbeddedQueueHandle,
   sessionKey?: string,
 ) {
   const wasActive = ACTIVE_EMBEDDED_RUNS.has(sessionId);
@@ -135,7 +135,7 @@ export function setActiveEmbeddedRun(
 
 export function clearActiveEmbeddedRun(
   sessionId: string,
-  handle: EmbeddedPiQueueHandle,
+  handle: EmbeddedQueueHandle,
   sessionKey?: string,
 ) {
   if (ACTIVE_EMBEDDED_RUNS.get(sessionId) === handle) {
@@ -150,4 +150,4 @@ export function clearActiveEmbeddedRun(
   }
 }
 
-export type { EmbeddedPiQueueHandle };
+export type { EmbeddedQueueHandle };

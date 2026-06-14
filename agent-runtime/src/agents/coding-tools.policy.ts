@@ -5,7 +5,7 @@ import { resolveThreadParentSessionKey } from "../sessions/session-key-utils.js"
 import { normalizeMessageChannel } from "../utils/message-channel.js";
 import { resolveAgentConfig, resolveAgentIdFromSessionKey } from "./agent-scope.js";
 import { compileGlobPatterns, matchesAnyGlobPattern } from "./glob-pattern.js";
-import type { AnyAgentTool } from "./pi-tools.types.js";
+import type { AnyAgentTool } from "./coding-tools.types.js";
 import { pickSandboxToolPolicy } from "./sandbox-tool-policy.js";
 import type { SandboxToolPolicy } from "./sandbox.js";
 import { expandToolGroups, normalizeToolName } from "./tool-policy.js";

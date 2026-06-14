@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import "./test-helpers/fast-coding-tools.js";
-import { createBuilderForceAgentsCodingTools } from "./pi-tools.js";
+import { createBuilderForceAgentsCodingTools } from "./coding-tools.js";
 
 describe("createBuilderForceAgentsCodingTools", () => {
   it("uses workspaceDir for Read tool path resolution", async () => {

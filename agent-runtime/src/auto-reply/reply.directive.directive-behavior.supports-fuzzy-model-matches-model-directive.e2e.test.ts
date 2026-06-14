@@ -5,7 +5,7 @@ import type { BuilderForceAgentsConfig } from "../config/config.js";
 import {
   assertModelSelection,
   installDirectiveBehaviorE2EHooks,
-  runEmbeddedPiAgent,
+  runEmbeddedAgent,
   withTempHome,
 } from "./reply.directive.directive-behavior.e2e-harness.js";
 import { getReplyFromConfig } from "./reply.js";
@@ -74,7 +74,7 @@ describe("directive behavior", () => {
       provider: "moonshot",
       model: "kimi-k2-0905-preview",
     });
-    expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+    expect(runEmbeddedAgent).not.toHaveBeenCalled();
   }
 
   it("supports fuzzy model matches on /model directive", async () => {
@@ -157,7 +157,7 @@ describe("directive behavior", () => {
       );
 
       assertModelSelection(storePath);
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("picks the best fuzzy match within a provider", async () => {
@@ -197,7 +197,7 @@ describe("directive behavior", () => {
       );
 
       assertModelSelection(storePath);
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
 });

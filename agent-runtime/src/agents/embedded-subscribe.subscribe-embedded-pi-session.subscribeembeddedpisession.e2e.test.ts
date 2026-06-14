@@ -5,14 +5,14 @@ import {
   emitMessageStartAndEndForAssistantText,
   expectSingleAgentEventText,
   extractAgentEventPayloads,
-} from "./pi-embedded-subscribe.e2e-harness.js";
-import { subscribeEmbeddedPiSession } from "./pi-embedded-subscribe.js";
+} from "./embedded-subscribe.e2e-harness.js";
+import { subscribeEmbeddedSession } from "./embedded-subscribe.js";
 
 type StubSession = {
   subscribe: (fn: (evt: unknown) => void) => () => void;
 };
 
-describe("subscribeEmbeddedPiSession", () => {
+describe("subscribeEmbeddedSession", () => {
   const THINKING_TAG_CASES = [
     { tag: "think", open: "<think>", close: "</think>" },
     { tag: "thinking", open: "<thinking>", close: "</thinking>" },
@@ -24,7 +24,7 @@ describe("subscribeEmbeddedPiSession", () => {
     const { session, emit } = createStubSessionHarness();
     const onAgentEvent = vi.fn();
 
-    subscribeEmbeddedPiSession({
+    subscribeEmbeddedSession({
       session,
       runId: options?.runId ?? "run",
       onAgentEvent,
@@ -36,7 +36,7 @@ describe("subscribeEmbeddedPiSession", () => {
 
   function createToolErrorHarness(runId: string) {
     const { session, emit } = createStubSessionHarness();
-    const subscription = subscribeEmbeddedPiSession({
+    const subscription = subscribeEmbeddedSession({
       session,
       runId,
       sessionKey: "test-session",
@@ -82,8 +82,8 @@ describe("subscribeEmbeddedPiSession", () => {
       const onReasoningStream = vi.fn();
       const onBlockReply = vi.fn();
 
-      subscribeEmbeddedPiSession({
-        session: session as unknown as Parameters<typeof subscribeEmbeddedPiSession>[0]["session"],
+      subscribeEmbeddedSession({
+        session: session as unknown as Parameters<typeof subscribeEmbeddedSession>[0]["session"],
         runId: "run",
         onReasoningStream,
         onBlockReply,
@@ -148,8 +148,8 @@ describe("subscribeEmbeddedPiSession", () => {
 
       const onBlockReply = vi.fn();
 
-      subscribeEmbeddedPiSession({
-        session: session as unknown as Parameters<typeof subscribeEmbeddedPiSession>[0]["session"],
+      subscribeEmbeddedSession({
+        session: session as unknown as Parameters<typeof subscribeEmbeddedSession>[0]["session"],
         runId: "run",
         onBlockReply,
         blockReplyBreak: "text_end",
@@ -228,7 +228,7 @@ describe("subscribeEmbeddedPiSession", () => {
 
     const onAgentEvent = vi.fn();
 
-    subscribeEmbeddedPiSession({
+    subscribeEmbeddedSession({
       session,
       runId: "run",
       onAgentEvent,

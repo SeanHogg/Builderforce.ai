@@ -111,7 +111,7 @@ function credentialsEqual(a: AuthJsonCredential | undefined, b: AuthJsonCredenti
  *
  * Syncs all credential types: api_key, token (as api_key), and oauth.
  */
-export async function ensurePiAuthJsonFromAuthProfiles(agentDir: string): Promise<{
+export async function ensureAuthJsonFromAuthProfiles(agentDir: string): Promise<{
   wrote: boolean;
   authPath: string;
 }> {

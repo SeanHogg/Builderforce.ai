@@ -17,6 +17,7 @@
  */
 import { Hono } from 'hono';
 import { neon } from '@neondatabase/serverless';
+import { DEFAULT_ENGINE_ID } from '@builderforce/agent-tools';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env, HonoEnv } from '../../env';
@@ -253,7 +254,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const pricingModel = (PRICING_MODELS as readonly string[]).includes(body.pricingModel ?? '')
       ? body.pricingModel! : 'flat_fee';
     const engine = (AGENT_ENGINES as readonly string[]).includes(body.engine ?? '')
-      ? body.engine! : 'builderforce-v1';
+      ? body.engine! : DEFAULT_ENGINE_ID;
     // Which execution surface a V2 agent runs on (durable DO vs long-lived node).
     const runtimeSurface = (RUNTIME_SURFACES as readonly string[]).includes(body.runtimeSurface ?? '')
       ? body.runtimeSurface! : 'durable';

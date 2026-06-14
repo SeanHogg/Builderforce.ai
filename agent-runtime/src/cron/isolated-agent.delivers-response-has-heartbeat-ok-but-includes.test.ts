@@ -1,6 +1,6 @@
 import "./isolated-agent.mocks.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { runEmbeddedPiAgent } from "../agents/pi-embedded.js";
+import { runEmbeddedAgent } from "../agents/embedded.js";
 import { runSubagentAnnounceFlow } from "../agents/subagent-announce.js";
 import type { CliDeps } from "../cli/deps.js";
 import { runCronIsolatedAgentTurn } from "./isolated-agent.js";
@@ -37,7 +37,7 @@ describe("runCronIsolatedAgentTurn", () => {
       };
 
       // Media should still be delivered even if text is just HEARTBEAT_OK.
-      vi.mocked(runEmbeddedPiAgent).mockResolvedValue({
+      vi.mocked(runEmbeddedAgent).mockResolvedValue({
         payloads: [{ text: "HEARTBEAT_OK", mediaUrl: "https://example.com/img.png" }],
         meta: {
           durationMs: 5,
@@ -66,7 +66,7 @@ describe("runCronIsolatedAgentTurn", () => {
 
       vi.mocked(runSubagentAnnounceFlow).mockClear();
       vi.mocked(deps.sendMessageTelegram).mockClear();
-      vi.mocked(runEmbeddedPiAgent).mockResolvedValue({
+      vi.mocked(runEmbeddedAgent).mockResolvedValue({
         payloads: [{ text: "HEARTBEAT_OK 🦞" }],
         meta: {
           durationMs: 5,

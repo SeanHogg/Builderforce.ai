@@ -8,7 +8,7 @@ import {
   makeElevatedDirectiveConfig,
   makeWhatsAppDirectiveConfig,
   replyText,
-  runEmbeddedPiAgent,
+  runEmbeddedAgent,
   sessionStorePath,
   withTempHome,
 } from "./reply.directive.directive-behavior.e2e-harness.js";
@@ -56,7 +56,7 @@ describe("directive behavior", () => {
       const text = await runCommand(home, "/verbose", { defaults: { verboseDefault: "on" } });
       expect(text).toContain("Current verbose level: on");
       expect(text).toContain("Options: on, full, off.");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("shows current reasoning level when /reasoning has no argument", async () => {
@@ -64,7 +64,7 @@ describe("directive behavior", () => {
       const text = await runCommand(home, "/reasoning");
       expect(text).toContain("Current reasoning level: off");
       expect(text).toContain("Options: on, off, stream.");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("shows current elevated level when /elevated has no argument", async () => {
@@ -73,7 +73,7 @@ describe("directive behavior", () => {
       const text = replyText(res);
       expect(text).toContain("Current elevated level: on");
       expect(text).toContain("Options: on, off, ask, full.");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("shows current exec defaults when /exec has no argument", async () => {
@@ -96,7 +96,7 @@ describe("directive behavior", () => {
       expect(text).toContain(
         "Options: host=sandbox|gateway|node, security=deny|allowlist|full, ask=off|on-miss|always, node=<id>.",
       );
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("persists elevated off and reflects it in /status (even when default is on)", async () => {
@@ -108,12 +108,12 @@ describe("directive behavior", () => {
 
       const store = loadSessionStore(storePath);
       expect(store["agent:main:main"]?.elevatedLevel).toBe("off");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("strips inline elevated directives from the user text (does not persist session override)", async () => {
     await withTempHome(async (home) => {
-      vi.mocked(runEmbeddedPiAgent).mockResolvedValue({
+      vi.mocked(runEmbeddedAgent).mockResolvedValue({
         payloads: [{ text: "ok" }],
         meta: {
           durationMs: 1,
@@ -137,7 +137,7 @@ describe("directive behavior", () => {
       const store = loadSessionStore(storePath);
       expect(store["agent:main:main"]?.elevatedLevel).toBeUndefined();
 
-      const calls = vi.mocked(runEmbeddedPiAgent).mock.calls;
+      const calls = vi.mocked(runEmbeddedAgent).mock.calls;
       expect(calls.length).toBeGreaterThan(0);
       const call = calls[0]?.[0];
       expect(call?.prompt).toContain("hello there");

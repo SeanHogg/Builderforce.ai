@@ -16,7 +16,7 @@ import {
   normalizeProviderId,
   parseModelRef,
 } from "../../agents/model-selection.js";
-import { runEmbeddedPiAgent } from "../../agents/pi-embedded.js";
+import { runEmbeddedAgent } from "../../agents/embedded.js";
 import { resolveDefaultAgentWorkspaceDir } from "../../agents/workspace.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import {
@@ -307,7 +307,7 @@ async function probeTarget(params: {
 
   const start = Date.now();
   try {
-    await runEmbeddedPiAgent({
+    await runEmbeddedAgent({
       sessionId,
       sessionFile,
       agentId,

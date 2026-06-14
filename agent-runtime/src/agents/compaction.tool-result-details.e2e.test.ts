@@ -1,7 +1,7 @@
 import type { AgentMessage } from "../builderforce/model/agent-types.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const piCodingAgentMocks = vi.hoisted(() => ({
+const nativeLoopMocks = vi.hoisted(() => ({
   generateSummary: vi.fn(async () => "summary"),
   estimateTokens: vi.fn(() => 1),
 }));
@@ -12,8 +12,8 @@ vi.mock("../builderforce/agent-loop/index.js", async () => {
   );
   return {
     ...actual,
-    generateSummary: piCodingAgentMocks.generateSummary,
-    estimateTokens: piCodingAgentMocks.estimateTokens,
+    generateSummary: nativeLoopMocks.generateSummary,
+    estimateTokens: nativeLoopMocks.estimateTokens,
   };
 });
 
@@ -55,10 +55,10 @@ describe("compaction toolResult details stripping", () => {
     });
 
     expect(summary).toBe("summary");
-    expect(piCodingAgentMocks.generateSummary).toHaveBeenCalled();
+    expect(nativeLoopMocks.generateSummary).toHaveBeenCalled();
 
     const chunk = (
-      piCodingAgentMocks.generateSummary.mock.calls as unknown as Array<[unknown]>
+      nativeLoopMocks.generateSummary.mock.calls as unknown as Array<[unknown]>
     )[0]?.[0];
     const serialized = JSON.stringify(chunk);
     expect(serialized).not.toContain("Ignore previous instructions");

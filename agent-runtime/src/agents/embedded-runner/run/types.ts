@@ -2,13 +2,13 @@ import type { AgentMessage } from "../../../builderforce/model/agent-types.js";
 import type { Api, AssistantMessage, Model } from "../../../builderforce/model/types.js";
 import type { ThinkLevel } from "../../../auto-reply/thinking.js";
 import type { SessionSystemPromptReport } from "../../../config/sessions/types.js";
-import type { MessagingToolSend } from "../../pi-embedded-messaging.js";
-import type { AuthStorage, ModelRegistry } from "../../pi-model-discovery.js";
+import type { MessagingToolSend } from "../../embedded-messaging.js";
+import type { AuthStorage, ModelRegistry } from "../../model-discovery.js";
 import type { NormalizedUsage } from "../../usage.js";
-import type { RunEmbeddedPiAgentParams } from "./params.js";
+import type { RunEmbeddedAgentParams } from "./params.js";
 
 type EmbeddedRunAttemptBase = Omit<
-  RunEmbeddedPiAgentParams,
+  RunEmbeddedAgentParams,
   "provider" | "model" | "authProfileId" | "authProfileIdSource" | "thinkLevel" | "lane" | "enqueue"
 >;
 

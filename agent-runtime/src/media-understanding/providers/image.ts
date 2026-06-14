@@ -1,7 +1,7 @@
 import { minimaxUnderstandImage } from "../../agents/minimax-vlm.js";
 import { getApiKeyForModel, requireApiKey } from "../../agents/model-auth.js";
 import { ensureBuilderForceAgentsModelsJson } from "../../agents/models-config.js";
-import { discoverAuthStorage, discoverModels } from "../../agents/pi-model-discovery.js";
+import { discoverAuthStorage, discoverModels } from "../../agents/model-discovery.js";
 import { coerceImageAssistantText } from "../../agents/tools/image-tool.helpers.js";
 import { nativeComplete } from "../../builderforce/model/native-llm.js";
 import type { Api, AssistantMessage, Context, Model } from "../../builderforce/model/types.js";

@@ -3,24 +3,24 @@ import {
   handleAgentStart,
   handleAutoCompactionEnd,
   handleAutoCompactionStart,
-} from "./pi-embedded-subscribe.handlers.lifecycle.js";
+} from "./embedded-subscribe.handlers.lifecycle.js";
 import {
   handleMessageEnd,
   handleMessageStart,
   handleMessageUpdate,
-} from "./pi-embedded-subscribe.handlers.messages.js";
+} from "./embedded-subscribe.handlers.messages.js";
 import {
   handleToolExecutionEnd,
   handleToolExecutionStart,
   handleToolExecutionUpdate,
-} from "./pi-embedded-subscribe.handlers.tools.js";
+} from "./embedded-subscribe.handlers.tools.js";
 import type {
-  EmbeddedPiSubscribeContext,
-  EmbeddedPiSubscribeEvent,
-} from "./pi-embedded-subscribe.handlers.types.js";
+  EmbeddedSubscribeContext,
+  EmbeddedSubscribeEvent,
+} from "./embedded-subscribe.handlers.types.js";
 
-export function createEmbeddedPiSessionEventHandler(ctx: EmbeddedPiSubscribeContext) {
-  return (evt: EmbeddedPiSubscribeEvent) => {
+export function createEmbeddedSessionEventHandler(ctx: EmbeddedSubscribeContext) {
+  return (evt: EmbeddedSubscribeEvent) => {
     switch (evt.type) {
       case "message_start":
         handleMessageStart(ctx, evt as never);

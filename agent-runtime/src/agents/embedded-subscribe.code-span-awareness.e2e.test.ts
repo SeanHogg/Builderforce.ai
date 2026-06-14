@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { createStubSessionHarness } from "./pi-embedded-subscribe.e2e-harness.js";
-import { subscribeEmbeddedPiSession } from "./pi-embedded-subscribe.js";
+import { createStubSessionHarness } from "./embedded-subscribe.e2e-harness.js";
+import { subscribeEmbeddedSession } from "./embedded-subscribe.js";
 
-describe("subscribeEmbeddedPiSession thinking tag code span awareness", () => {
+describe("subscribeEmbeddedSession thinking tag code span awareness", () => {
   function createPartialReplyHarness() {
     const { session, emit } = createStubSessionHarness();
     const onPartialReply = vi.fn();
 
-    subscribeEmbeddedPiSession({
+    subscribeEmbeddedSession({
       session,
       runId: "run",
       onPartialReply,

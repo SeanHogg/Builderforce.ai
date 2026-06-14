@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import * as helpers from "./pi-embedded-helpers.js";
+import * as helpers from "./embedded-helpers.js";
 import {
   expectGoogleModelApiFullSanitizeCall,
   loadSanitizeSessionHistoryWithCleanMocks,
@@ -7,13 +7,13 @@ import {
   makeSimpleUserMessages,
   makeSnapshotChangedOpenAIReasoningScenario,
   sanitizeWithOpenAIResponses,
-} from "./pi-embedded-runner.sanitize-session-history.test-harness.js";
+} from "./embedded-runner.sanitize-session-history.test-harness.js";
 
 type SanitizeSessionHistory = Awaited<ReturnType<typeof loadSanitizeSessionHistoryWithCleanMocks>>;
 let sanitizeSessionHistory: SanitizeSessionHistory;
 
-vi.mock("./pi-embedded-helpers.js", async () => {
-  const actual = await vi.importActual("./pi-embedded-helpers.js");
+vi.mock("./embedded-helpers.js", async () => {
+  const actual = await vi.importActual("./embedded-helpers.js");
   return {
     ...actual,
     isGoogleModelApi: vi.fn(),

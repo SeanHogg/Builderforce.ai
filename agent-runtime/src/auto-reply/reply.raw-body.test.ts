@@ -3,20 +3,20 @@ import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { createTempHomeHarness, makeReplyConfig } from "./reply.test-harness.js";
 
 const agentMocks = vi.hoisted(() => ({
-  runEmbeddedPiAgent: vi.fn(),
+  runEmbeddedAgent: vi.fn(),
   loadModelCatalog: vi.fn(),
   webAuthExists: vi.fn().mockResolvedValue(true),
   getWebAuthAgeMs: vi.fn().mockReturnValue(120_000),
   readWebSelfId: vi.fn().mockReturnValue({ e164: "+1999" }),
 }));
 
-vi.mock("../agents/pi-embedded.js", () => ({
-  abortEmbeddedPiRun: vi.fn().mockReturnValue(false),
-  runEmbeddedPiAgent: agentMocks.runEmbeddedPiAgent,
-  queueEmbeddedPiMessage: vi.fn().mockReturnValue(false),
+vi.mock("../agents/embedded.js", () => ({
+  abortEmbeddedRun: vi.fn().mockReturnValue(false),
+  runEmbeddedAgent: agentMocks.runEmbeddedAgent,
+  queueEmbeddedMessage: vi.fn().mockReturnValue(false),
   resolveEmbeddedSessionLane: (key: string) => `session:${key.trim() || "main"}`,
-  isEmbeddedPiRunActive: vi.fn().mockReturnValue(false),
-  isEmbeddedPiRunStreaming: vi.fn().mockReturnValue(false),
+  isEmbeddedRunActive: vi.fn().mockReturnValue(false),
+  isEmbeddedRunStreaming: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock("../agents/model-catalog.js", () => ({
@@ -36,7 +36,7 @@ const { withTempHome } = createTempHomeHarness({ prefix: "builderforce-rawbody-"
 describe("RawBody directive parsing", () => {
   beforeEach(() => {
     vi.stubEnv("BUILDERFORCE_AGENTS_TEST_FAST", "1");
-    agentMocks.runEmbeddedPiAgent.mockReset();
+    agentMocks.runEmbeddedAgent.mockReset();
     agentMocks.loadModelCatalog.mockReset();
     agentMocks.loadModelCatalog.mockResolvedValue([
       { id: "claude-opus-4-5", name: "Opus 4.5", provider: "anthropic" },
@@ -49,7 +49,7 @@ describe("RawBody directive parsing", () => {
 
   it("handles directives and history in the prompt", async () => {
     await withTempHome(async (home) => {
-      agentMocks.runEmbeddedPiAgent.mockResolvedValue({
+      agentMocks.runEmbeddedAgent.mockResolvedValue({
         payloads: [{ text: "ok" }],
         meta: {
           durationMs: 1,
@@ -80,9 +80,9 @@ describe("RawBody directive parsing", () => {
       const payloads = Array.isArray(res) ? res : [res];
       const texts = payloads.map((p) => p?.text).filter((text): text is string => !!text);
       expect(texts).toContain("ok");
-      expect(agentMocks.runEmbeddedPiAgent).toHaveBeenCalledOnce();
+      expect(agentMocks.runEmbeddedAgent).toHaveBeenCalledOnce();
       const prompt =
-        (agentMocks.runEmbeddedPiAgent.mock.calls[0]?.[0] as { prompt?: string } | undefined)
+        (agentMocks.runEmbeddedAgent.mock.calls[0]?.[0] as { prompt?: string } | undefined)
           ?.prompt ?? "";
       expect(prompt).toContain("Chat history since last reply (untrusted, for context):");
       expect(prompt).toContain('"sender": "Peter"');

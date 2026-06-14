@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
-import { createBuilderForceAgentsCodingTools } from "./pi-tools.js";
+import { createBuilderForceAgentsCodingTools } from "./coding-tools.js";
 import type { SandboxContext } from "./sandbox.js";
 import type { SandboxFsBridge, SandboxResolvedPath } from "./sandbox/fs-bridge.js";
 import { createSandboxFsBridgeFromResolver } from "./test-helpers/host-sandbox-fs-bridge.js";

@@ -1,5 +1,5 @@
 /**
- * Test: after_tool_call hook wiring (pi-embedded-subscribe.handlers.tools.ts)
+ * Test: after_tool_call hook wiring (embedded-subscribe.handlers.tools.ts)
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -72,7 +72,7 @@ describe("after_tool_call hook wiring", () => {
     hookMocks.runner.hasHooks.mockReturnValue(true);
 
     const { handleToolExecutionEnd, handleToolExecutionStart } =
-      await import("../agents/pi-embedded-subscribe.handlers.tools.js");
+      await import("../agents/embedded-subscribe.handlers.tools.js");
 
     const ctx = createToolHandlerCtx({
       runId: "test-run-1",
@@ -126,7 +126,7 @@ describe("after_tool_call hook wiring", () => {
     hookMocks.runner.hasHooks.mockReturnValue(true);
 
     const { handleToolExecutionEnd, handleToolExecutionStart } =
-      await import("../agents/pi-embedded-subscribe.handlers.tools.js");
+      await import("../agents/embedded-subscribe.handlers.tools.js");
 
     const ctx = createToolHandlerCtx({ runId: "test-run-2" });
 
@@ -167,7 +167,7 @@ describe("after_tool_call hook wiring", () => {
     hookMocks.runner.hasHooks.mockReturnValue(false);
 
     const { handleToolExecutionEnd } =
-      await import("../agents/pi-embedded-subscribe.handlers.tools.js");
+      await import("../agents/embedded-subscribe.handlers.tools.js");
 
     const ctx = createToolHandlerCtx({ runId: "r" });
 

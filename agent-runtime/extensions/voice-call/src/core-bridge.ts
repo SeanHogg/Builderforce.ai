@@ -25,7 +25,7 @@ type CoreAgentDeps = {
     provider?: string;
     model?: string;
   }) => string;
-  runEmbeddedPiAgent: (params: {
+  runEmbeddedAgent: (params: {
     sessionId: string;
     sessionKey?: string;
     messageProvider?: string;
@@ -128,7 +128,7 @@ async function importCoreExtensionAPI(): Promise<{
   DEFAULT_PROVIDER: string;
   resolveAgentIdentity: CoreAgentDeps["resolveAgentIdentity"];
   resolveThinkingDefault: CoreAgentDeps["resolveThinkingDefault"];
-  runEmbeddedPiAgent: CoreAgentDeps["runEmbeddedPiAgent"];
+  runEmbeddedAgent: CoreAgentDeps["runEmbeddedAgent"];
   resolveAgentTimeoutMs: CoreAgentDeps["resolveAgentTimeoutMs"];
   ensureAgentWorkspace: CoreAgentDeps["ensureAgentWorkspace"];
   resolveStorePath: CoreAgentDeps["resolveStorePath"];

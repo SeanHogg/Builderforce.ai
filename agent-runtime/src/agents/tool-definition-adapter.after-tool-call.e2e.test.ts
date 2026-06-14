@@ -1,7 +1,7 @@
 import type { AgentTool } from "../builderforce/model/agent-types.js";
 import { Type } from "@sinclair/typebox";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { toToolDefinitions } from "./pi-tool-definition-adapter.js";
+import { toToolDefinitions } from "./tool-definition-adapter.js";
 
 const hookMocks = vi.hoisted(() => ({
   runner: {
@@ -20,7 +20,7 @@ vi.mock("../plugins/hook-runner-global.js", () => ({
   getGlobalHookRunner: () => hookMocks.runner,
 }));
 
-vi.mock("./pi-tools.before-tool-call.js", () => ({
+vi.mock("./coding-tools.before-tool-call.js", () => ({
   consumeAdjustedParamsForToolCall: hookMocks.consumeAdjustedParamsForToolCall,
   isToolWrappedWithBeforeToolCallHook: hookMocks.isToolWrappedWithBeforeToolCallHook,
   runBeforeToolCallHook: hookMocks.runBeforeToolCallHook,

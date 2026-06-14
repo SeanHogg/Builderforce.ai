@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  getRunEmbeddedPiAgentMock,
+  getRunEmbeddedAgentMock,
   installTriggerHandlingE2eTestHooks,
   makeCfg,
   withTempHome,
@@ -19,7 +19,7 @@ describe("group intro prompts", () => {
 
   it("labels Discord groups using the surface metadata", async () => {
     await withTempHome(async (home) => {
-      getRunEmbeddedPiAgentMock().mockResolvedValue({
+      getRunEmbeddedAgentMock().mockResolvedValue({
         payloads: [{ text: "ok" }],
         meta: {
           durationMs: 1,
@@ -41,9 +41,9 @@ describe("group intro prompts", () => {
         makeCfg(home),
       );
 
-      expect(getRunEmbeddedPiAgentMock()).toHaveBeenCalledOnce();
+      expect(getRunEmbeddedAgentMock()).toHaveBeenCalledOnce();
       const extraSystemPrompt =
-        getRunEmbeddedPiAgentMock().mock.calls.at(-1)?.[0]?.extraSystemPrompt ?? "";
+        getRunEmbeddedAgentMock().mock.calls.at(-1)?.[0]?.extraSystemPrompt ?? "";
       expect(extraSystemPrompt).toContain('"channel": "discord"');
       expect(extraSystemPrompt).toContain(
         `You are in the Discord group chat "Release Squad". Participants: Alice, Bob.`,
@@ -55,7 +55,7 @@ describe("group intro prompts", () => {
   });
   it("keeps WhatsApp labeling for WhatsApp group chats", async () => {
     await withTempHome(async (home) => {
-      getRunEmbeddedPiAgentMock().mockResolvedValue({
+      getRunEmbeddedAgentMock().mockResolvedValue({
         payloads: [{ text: "ok" }],
         meta: {
           durationMs: 1,
@@ -76,9 +76,9 @@ describe("group intro prompts", () => {
         makeCfg(home),
       );
 
-      expect(getRunEmbeddedPiAgentMock()).toHaveBeenCalledOnce();
+      expect(getRunEmbeddedAgentMock()).toHaveBeenCalledOnce();
       const extraSystemPrompt =
-        getRunEmbeddedPiAgentMock().mock.calls.at(-1)?.[0]?.extraSystemPrompt ?? "";
+        getRunEmbeddedAgentMock().mock.calls.at(-1)?.[0]?.extraSystemPrompt ?? "";
       expect(extraSystemPrompt).toContain('"channel": "whatsapp"');
       expect(extraSystemPrompt).toContain(`You are in the WhatsApp group chat "Ops".`);
       expect(extraSystemPrompt).toContain(
@@ -91,7 +91,7 @@ describe("group intro prompts", () => {
   });
   it("labels Telegram groups using their own surface", async () => {
     await withTempHome(async (home) => {
-      getRunEmbeddedPiAgentMock().mockResolvedValue({
+      getRunEmbeddedAgentMock().mockResolvedValue({
         payloads: [{ text: "ok" }],
         meta: {
           durationMs: 1,
@@ -112,9 +112,9 @@ describe("group intro prompts", () => {
         makeCfg(home),
       );
 
-      expect(getRunEmbeddedPiAgentMock()).toHaveBeenCalledOnce();
+      expect(getRunEmbeddedAgentMock()).toHaveBeenCalledOnce();
       const extraSystemPrompt =
-        getRunEmbeddedPiAgentMock().mock.calls.at(-1)?.[0]?.extraSystemPrompt ?? "";
+        getRunEmbeddedAgentMock().mock.calls.at(-1)?.[0]?.extraSystemPrompt ?? "";
       expect(extraSystemPrompt).toContain('"channel": "telegram"');
       expect(extraSystemPrompt).toContain(`You are in the Telegram group chat "Dev Chat".`);
       expect(extraSystemPrompt).toContain(

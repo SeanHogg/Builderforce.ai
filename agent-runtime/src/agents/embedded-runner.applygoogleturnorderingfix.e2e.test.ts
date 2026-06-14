@@ -1,7 +1,7 @@
 import type { AgentMessage } from "../builderforce/model/agent-types.js";
 import { SessionManager } from "../builderforce/agent-loop/index.js";
 import { describe, expect, it, vi } from "vitest";
-import { applyGoogleTurnOrderingFix } from "./pi-embedded-runner.js";
+import { applyGoogleTurnOrderingFix } from "./embedded-runner.js";
 
 describe("applyGoogleTurnOrderingFix", () => {
   const makeAssistantFirst = (): AgentMessage[] => [

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import type { ModelDefinitionConfig } from "../../config/types.models.js";
 import { withFetchPreconnect } from "../../test-utils/fetch-mock.js";
-import { createBuilderForceAgentsCodingTools } from "../pi-tools.js";
+import { createBuilderForceAgentsCodingTools } from "../coding-tools.js";
 import { createHostSandboxFsBridge } from "../test-helpers/host-sandbox-fs-bridge.js";
 import { __testing, createImageTool, resolveImageModelConfigForTool } from "./image-tool.js";
 

@@ -1,9 +1,9 @@
 import type { AgentEvent } from "../builderforce/model/agent-types.js";
 import { emitAgentEvent } from "../infra/agent-events.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
-import type { EmbeddedPiSubscribeContext } from "./pi-embedded-subscribe.handlers.types.js";
+import type { EmbeddedSubscribeContext } from "./embedded-subscribe.handlers.types.js";
 
-export function handleAutoCompactionStart(ctx: EmbeddedPiSubscribeContext) {
+export function handleAutoCompactionStart(ctx: EmbeddedSubscribeContext) {
   ctx.state.compactionInFlight = true;
   ctx.incrementCompactionCount();
   ctx.ensureCompactionPromise();
@@ -35,7 +35,7 @@ export function handleAutoCompactionStart(ctx: EmbeddedPiSubscribeContext) {
 }
 
 export function handleAutoCompactionEnd(
-  ctx: EmbeddedPiSubscribeContext,
+  ctx: EmbeddedSubscribeContext,
   evt: AgentEvent & { willRetry?: unknown },
 ) {
   ctx.state.compactionInFlight = false;

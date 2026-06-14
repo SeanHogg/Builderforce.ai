@@ -3,12 +3,12 @@ import type { ReplyDirectiveParseResult } from "../auto-reply/reply/reply-direct
 import type { ReasoningLevel } from "../auto-reply/thinking.js";
 import type { InlineCodeState } from "../markdown/code-spans.js";
 import type { HookRunner } from "../plugins/hooks.js";
-import type { EmbeddedBlockChunker } from "./pi-embedded-block-chunker.js";
-import type { MessagingToolSend } from "./pi-embedded-messaging.js";
+import type { EmbeddedBlockChunker } from "./embedded-block-chunker.js";
+import type { MessagingToolSend } from "./embedded-messaging.js";
 import type {
   BlockReplyChunking,
-  SubscribeEmbeddedPiSessionParams,
-} from "./pi-embedded-subscribe.types.js";
+  SubscribeEmbeddedSessionParams,
+} from "./embedded-subscribe.types.js";
 import type { NormalizedUsage } from "./usage.js";
 
 export type EmbeddedSubscribeLogger = {
@@ -30,7 +30,7 @@ export type ToolCallSummary = {
   actionFingerprint?: string;
 };
 
-export type EmbeddedPiSubscribeState = {
+export type EmbeddedSubscribeState = {
   assistantTexts: string[];
   toolMetas: Array<{ toolName?: string; meta?: string }>;
   toolMetaById: Map<string, ToolCallSummary>;
@@ -78,9 +78,9 @@ export type EmbeddedPiSubscribeState = {
   lastAssistant?: AgentMessage;
 };
 
-export type EmbeddedPiSubscribeContext = {
-  params: SubscribeEmbeddedPiSessionParams;
-  state: EmbeddedPiSubscribeState;
+export type EmbeddedSubscribeContext = {
+  params: SubscribeEmbeddedSessionParams;
+  state: EmbeddedSubscribeState;
   log: EmbeddedSubscribeLogger;
   blockChunking?: BlockReplyChunking;
   blockChunker: EmbeddedBlockChunker | null;
@@ -127,15 +127,15 @@ export type EmbeddedPiSubscribeContext = {
 /**
  * Minimal context type for tool execution handlers. Allows
  * tests provide only the fields they exercise
- * without needing the full `EmbeddedPiSubscribeContext`.
+ * without needing the full `EmbeddedSubscribeContext`.
  */
 export type ToolHandlerParams = Pick<
-  SubscribeEmbeddedPiSessionParams,
+  SubscribeEmbeddedSessionParams,
   "runId" | "onBlockReplyFlush" | "onAgentEvent" | "onToolResult"
 >;
 
 export type ToolHandlerState = Pick<
-  EmbeddedPiSubscribeState,
+  EmbeddedSubscribeState,
   | "toolMetaById"
   | "toolMetas"
   | "toolSummaryById"
@@ -163,7 +163,7 @@ export type ToolHandlerContext = {
   trimMessagingToolSent: () => void;
 };
 
-export type EmbeddedPiSubscribeEvent =
+export type EmbeddedSubscribeEvent =
   | AgentEvent
   | { type: string; [k: string]: unknown }
   | { type: "message_start"; message: AgentMessage };

@@ -4,18 +4,18 @@ import path from "node:path";
 import type { AssistantMessage } from "../builderforce/model/types.js";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
-import type { EmbeddedRunAttemptResult } from "./pi-embedded-runner/run/types.js";
+import type { EmbeddedRunAttemptResult } from "./embedded-runner/run/types.js";
 
 const runEmbeddedAttemptMock = vi.fn<(params: unknown) => Promise<EmbeddedRunAttemptResult>>();
 
-vi.mock("./pi-embedded-runner/run/attempt.js", () => ({
+vi.mock("./embedded-runner/run/attempt.js", () => ({
   runEmbeddedAttempt: (params: unknown) => runEmbeddedAttemptMock(params),
 }));
 
-let runEmbeddedPiAgent: typeof import("./pi-embedded-runner.js").runEmbeddedPiAgent;
+let runEmbeddedAgent: typeof import("./embedded-runner.js").runEmbeddedAgent;
 
 beforeAll(async () => {
-  ({ runEmbeddedPiAgent } = await import("./pi-embedded-runner.js"));
+  ({ runEmbeddedAgent } = await import("./embedded-runner.js"));
 });
 
 beforeEach(() => {
@@ -150,7 +150,7 @@ async function runAutoPinnedOpenAiTurn(params: {
   runId: string;
   authProfileId?: string;
 }) {
-  await runEmbeddedPiAgent({
+  await runEmbeddedAgent({
     sessionId: "session:test",
     sessionKey: params.sessionKey,
     sessionFile: path.join(params.workspaceDir, "session.jsonl"),
@@ -232,7 +232,7 @@ async function runTurnWithCooldownSeed(params: {
     });
     mockSingleSuccessfulAttempt();
 
-    await runEmbeddedPiAgent({
+    await runEmbeddedAgent({
       sessionId: "session:test",
       sessionKey: params.sessionKey,
       sessionFile: path.join(workspaceDir, "session.jsonl"),
@@ -253,7 +253,7 @@ async function runTurnWithCooldownSeed(params: {
   });
 }
 
-describe("runEmbeddedPiAgent auth profile rotation", () => {
+describe("runEmbeddedAgent auth profile rotation", () => {
   it("rotates for auto-pinned profiles", async () => {
     const agentDir = await fs.mkdtemp(path.join(os.tmpdir(), "builderforce-agent-"));
     const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "builderforce-workspace-"));
@@ -315,7 +315,7 @@ describe("runEmbeddedPiAgent auth profile rotation", () => {
         }),
       );
 
-      const result = await runEmbeddedPiAgent({
+      const result = await runEmbeddedAgent({
         sessionId: "session:test",
         sessionKey: "agent:test:compaction-timeout",
         sessionFile: path.join(workspaceDir, "session.jsonl"),
@@ -357,7 +357,7 @@ describe("runEmbeddedPiAgent auth profile rotation", () => {
         }),
       );
 
-      await runEmbeddedPiAgent({
+      await runEmbeddedAgent({
         sessionId: "session:test",
         sessionKey: "agent:test:user",
         sessionFile: path.join(workspaceDir, "session.jsonl"),
@@ -410,7 +410,7 @@ describe("runEmbeddedPiAgent auth profile rotation", () => {
         }),
       );
 
-      await runEmbeddedPiAgent({
+      await runEmbeddedAgent({
         sessionId: "session:test",
         sessionKey: "agent:test:mismatch",
         sessionFile: path.join(workspaceDir, "session.jsonl"),
@@ -455,7 +455,7 @@ describe("runEmbeddedPiAgent auth profile rotation", () => {
       });
 
       await expect(
-        runEmbeddedPiAgent({
+        runEmbeddedAgent({
           sessionId: "session:test",
           sessionKey: "agent:test:cooldown-failover",
           sessionFile: path.join(workspaceDir, "session.jsonl"),
@@ -490,7 +490,7 @@ describe("runEmbeddedPiAgent auth profile rotation", () => {
       await fs.writeFile(authPath, JSON.stringify({ version: 1, profiles: {}, usageStats: {} }));
 
       await expect(
-        runEmbeddedPiAgent({
+        runEmbeddedAgent({
           sessionId: "session:test",
           sessionKey: "agent:test:auth-unavailable",
           sessionFile: path.join(workspaceDir, "session.jsonl"),
@@ -537,7 +537,7 @@ describe("runEmbeddedPiAgent auth profile rotation", () => {
 
       let thrown: unknown;
       try {
-        await runEmbeddedPiAgent({
+        await runEmbeddedAgent({
           sessionId: "session:test",
           sessionKey: "agent:test:billing-failover-active-model",
           sessionFile: path.join(workspaceDir, "session.jsonl"),

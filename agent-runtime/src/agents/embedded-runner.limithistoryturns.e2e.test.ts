@@ -1,6 +1,6 @@
 import type { AgentMessage } from "../builderforce/model/agent-types.js";
 import { describe, expect, it } from "vitest";
-import { limitHistoryTurns } from "./pi-embedded-runner.js";
+import { limitHistoryTurns } from "./embedded-runner.js";
 
 describe("limitHistoryTurns", () => {
   const mockUsage = {

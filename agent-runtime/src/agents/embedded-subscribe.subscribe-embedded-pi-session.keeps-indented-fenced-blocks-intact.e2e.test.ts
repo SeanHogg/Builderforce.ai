@@ -3,9 +3,9 @@ import {
   createParagraphChunkedBlockReplyHarness,
   emitAssistantTextDeltaAndEnd,
   extractTextPayloads,
-} from "./pi-embedded-subscribe.e2e-harness.js";
+} from "./embedded-subscribe.e2e-harness.js";
 
-describe("subscribeEmbeddedPiSession", () => {
+describe("subscribeEmbeddedSession", () => {
   it("keeps indented fenced blocks intact", () => {
     const onBlockReply = vi.fn();
     const { emit } = createParagraphChunkedBlockReplyHarness({

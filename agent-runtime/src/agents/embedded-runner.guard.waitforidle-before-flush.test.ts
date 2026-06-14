@@ -1,7 +1,7 @@
 import type { AgentMessage } from "../builderforce/model/agent-types.js";
 import { SessionManager } from "../builderforce/agent-loop/index.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { flushPendingToolResultsAfterIdle } from "./pi-embedded-runner/wait-for-idle-before-flush.js";
+import { flushPendingToolResultsAfterIdle } from "./embedded-runner/wait-for-idle-before-flush.js";
 import { guardSessionManager } from "./session-tool-result-guard-wrapper.js";
 
 function assistantToolCall(id: string): AgentMessage {

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { onAgentEvent } from "../infra/agent-events.js";
-import { createSubscribedSessionHarness } from "./pi-embedded-subscribe.e2e-harness.js";
+import { createSubscribedSessionHarness } from "./embedded-subscribe.e2e-harness.js";
 
-describe("subscribeEmbeddedPiSession", () => {
+describe("subscribeEmbeddedSession", () => {
   it("waits for multiple compaction retries before resolving", async () => {
     const { emit, subscription } = createSubscribedSessionHarness({
       runId: "run-3",

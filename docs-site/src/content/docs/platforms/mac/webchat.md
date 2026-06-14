@@ -17,7 +17,7 @@ agent (with a session switcher for other sessions).
 
 ## Launch & debugging
 
-- Manual: Lobster menu → “Open Chat”.
+- Manual: the menu bar icon → “Open Chat”.
 - Auto‑open for testing:
 
   ```bash

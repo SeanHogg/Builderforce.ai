@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { subscribeEmbeddedPiSession } from "./pi-embedded-subscribe.js";
+import { subscribeEmbeddedSession } from "./embedded-subscribe.js";
 
 type StubSession = {
   subscribe: (fn: (evt: unknown) => void) => () => void;
 };
 
-describe("subscribeEmbeddedPiSession", () => {
+describe("subscribeEmbeddedSession", () => {
   function setupTextEndSubscription() {
     let handler: ((evt: unknown) => void) | undefined;
     const session: StubSession = {
@@ -17,8 +17,8 @@ describe("subscribeEmbeddedPiSession", () => {
 
     const onBlockReply = vi.fn();
 
-    const subscription = subscribeEmbeddedPiSession({
-      session: session as unknown as Parameters<typeof subscribeEmbeddedPiSession>[0]["session"],
+    const subscription = subscribeEmbeddedSession({
+      session: session as unknown as Parameters<typeof subscribeEmbeddedSession>[0]["session"],
       runId: "run",
       onBlockReply,
       blockReplyBreak: "text_end",

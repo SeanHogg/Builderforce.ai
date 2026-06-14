@@ -13,15 +13,36 @@ import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { DEFAULT_ENGINE_ID, ENGINE_IDS, type HumanCapability } from "@builderforce/agent-tools";
 import { WebSocket } from "ws";
+import { buildAssignedCapabilityAppend } from "../agents/assigned-capabilities.js";
+import { runClaudeAgentSdkV2, type V2RunnerSinks } from "../agents/claude-agent-sdk-runner.js";
+import { createNodeWebSearch } from "../agents/tools/web-search.js";
 import { loadProjectContext, updateProjectContextFields } from "../builderforce/project-context.js";
 import type { IRelayService } from "../builderforce/relay-service.js";
+import {
+  LocalAgentEngine,
+  createGatewayComplete,
+  createGatewayStream,
+  buildNodeCapabilityProvider,
+  buildNodeToolRegistry,
+  type NodeProviderOptions,
+} from "../builderforce/shared-tools/index.js";
+import { loadConfig } from "../config/config.js";
 import { GatewayClient, type GatewayClientOptions } from "../gateway/client.js";
 import type { EventFrame } from "../gateway/protocol/index.js";
 import { logDebug, logWarn } from "../logger.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
+import type { AgentEngine, EngineDispatch } from "./agent-engine.js";
 import { onAgentEvent } from "./agent-events.js";
 import { resolveApproval } from "./approval-gate.js";
+import { requestHumanInput } from "./approval-gate.js";
+import {
+  makeCodingAgent,
+  makeCodingGit,
+  makeCodingHttp,
+} from "./builderforce-coding-dispatch-adapters.js";
+import { runCodingDispatch } from "./builderforce-coding-dispatch.js";
 import {
   buildLocalMachineProfile,
   mergeBuilderforceContext,
@@ -32,26 +53,10 @@ import {
   RelayLogPoller,
   RelayPresencePoller,
 } from "./builderforce-relay-helpers.js";
-import { resolveRemoteResult } from "./remote-result-broker.js";
 import { resolveCodingSession } from "./coding-session-broker.js";
-import { runCodingDispatch } from "./builderforce-coding-dispatch.js";
-import {
-  makeCodingAgent,
-  makeCodingGit,
-  makeCodingHttp,
-} from "./builderforce-coding-dispatch-adapters.js";
-import { dispatchResultToRemoteAgentNode, type RemoteDispatchOptions } from "./remote-subagent.js";
-import { setRelayHook } from "./workflow-telemetry.js";
 import { buildSteeringInjection } from "./relay-steering.js";
-import { runClaudeAgentSdkV2, type V2RunnerSinks } from "../agents/claude-agent-sdk-runner.js";
-import {
-  LocalAgentEngine,
-  createGatewayComplete,
-  buildNodeCapabilityProvider,
-  buildNodeToolRegistry,
-} from "../builderforce/shared-tools/index.js";
-import type { AgentEngine, EngineDispatch } from "./agent-engine.js";
-import { buildAssignedCapabilityAppend } from "../agents/assigned-capabilities.js";
+import { resolveRemoteResult } from "./remote-result-broker.js";
+import { dispatchResultToRemoteAgentNode, type RemoteDispatchOptions } from "./remote-subagent.js";
 import {
   taskWorkspaceDir,
   buildTaskCloneUrl,
@@ -60,6 +65,7 @@ import {
   detectTaskChanges,
   sweepStaleTaskWorkspaces,
 } from "./task-workspace.js";
+import { setRelayHook } from "./workflow-telemetry.js";
 
 function extractChatText(message: unknown): string {
   if (!message || typeof message !== "object") {
@@ -158,14 +164,14 @@ export class BuilderforceRelayService implements IRelayService {
    * default is then a one-line change here.
    */
   private resolveEngine(engineId?: string): AgentEngine {
-    const v1: AgentEngine = { id: "builderforce-v1", run: (d, p) => this.runV1Engine(d, p) };
-    const v2: AgentEngine = { id: "builderforce-v2", run: (d, p) => this.runV2Engine(d, p) };
+    const v1: AgentEngine = { id: ENGINE_IDS.v1, run: (d, p) => this.runV1Engine(d, p) };
+    const v2: AgentEngine = { id: ENGINE_IDS.v2, run: (d, p) => this.runV2Engine(d, p) };
     // The pi-FREE local engine: the shared `LocalAgentEngine` driving the shared
     // tool registry + Node provider + a `fetch`-backed gateway client. No
     // `@mariozechner/pi-*` in its path — the on-prem foothold for removing pi.
-    const local: AgentEngine = { id: "builderforce-local", run: (d, p) => this.runLocalEngine(d, p) };
+    const local: AgentEngine = { id: ENGINE_IDS.local, run: (d, p) => this.runLocalEngine(d, p) };
     const registry: Record<string, AgentEngine> = { [v1.id]: v1, [v2.id]: v2, [local.id]: local };
-    return registry[engineId ?? ""] ?? v1;
+    return registry[engineId ?? ""] ?? registry[DEFAULT_ENGINE_ID];
   }
 
   private dispatchTaskFromRelay(payload: EngineDispatch): void {
@@ -194,14 +200,19 @@ export class BuilderforceRelayService implements IRelayService {
     // removing V1 is deleting its registration. Both engines run out of the shared
     // per-ticket workspace.
     const engine = this.resolveEngine(payload.engine);
-    const runEngine = () => { void engine.run(payload, message); };
+    const runEngine = () => {
+      void engine.run(payload, message);
+    };
 
     // Apply assigned artifacts FIRST, then run — both engines read the synced
     // persona registry / sidecar at run start, so the sync must complete before
     // the run begins (otherwise the agent races past its own capabilities).
     if (payload.artifacts) {
-      void this.syncAssignedCapabilities(payload.artifacts, payload.executionId, payload.taskId)
-        .finally(runEngine);
+      void this.syncAssignedCapabilities(
+        payload.artifacts,
+        payload.executionId,
+        payload.taskId,
+      ).finally(runEngine);
     } else {
       runEngine();
     }
@@ -260,12 +271,18 @@ export class BuilderforceRelayService implements IRelayService {
   ): Promise<string> {
     const baseDir = this.opts.workspaceDir ?? process.cwd();
     const cwd = taskId != null ? taskWorkspaceDir(baseDir, taskId) : baseDir;
-    await fs.mkdir(cwd, { recursive: true }).catch(() => { /* fall back to baseDir */ });
+    await fs.mkdir(cwd, { recursive: true }).catch(() => {
+      /* fall back to baseDir */
+    });
     if (repo?.repoId && taskId != null) {
       const git = makeCodingGit({ apiKey: this.opts.apiKey });
       if (!(await isCloned(cwd))) {
         try {
-          const cloneUrl = buildTaskCloneUrl(normalizeBaseUrl(this.opts.baseUrl), this.opts.agentNodeId, repo.repoId);
+          const cloneUrl = buildTaskCloneUrl(
+            normalizeBaseUrl(this.opts.baseUrl),
+            this.opts.agentNodeId,
+            repo.repoId,
+          );
           await git.clone(cloneUrl, cwd, repo.defaultBranch ?? null);
         } catch (err) {
           logWarn(`[builderforce] task ${taskId} clone failed: ${String(err)}`);
@@ -274,7 +291,9 @@ export class BuilderforceRelayService implements IRelayService {
       // Execute under the ticket branch so every change is pending on it. Idempotent:
       // creating an existing branch fails harmlessly (the tree is already on it).
       if (await isCloned(cwd)) {
-        await git.checkoutNewBranch(cwd, taskBranchName(taskId)).catch(() => { /* already on the branch */ });
+        await git.checkoutNewBranch(cwd, taskBranchName(taskId)).catch(() => {
+          /* already on the branch */
+        });
       }
     }
     return cwd;
@@ -297,17 +316,25 @@ export class BuilderforceRelayService implements IRelayService {
     const git = makeCodingGit({ apiKey: this.opts.apiKey });
     const branch = taskBranchName(taskId);
     try {
-      const { changed } = await git.commitAll(dir, `BuilderForce: task ${taskId} — ${title} (by ${agentLabel})`.trim());
+      const { changed } = await git.commitAll(
+        dir,
+        `BuilderForce: task ${taskId} — ${title} (by ${agentLabel})`.trim(),
+      );
       if (!changed) return; // nothing new to push
       const base = normalizeBaseUrl(this.opts.baseUrl);
       await git.push(dir, buildTaskCloneUrl(base, this.opts.agentNodeId, repo.repoId), branch);
       // Open/keep a PR so the pending changes are reviewable (idempotent server-side).
       await fetch(`${base}/api/agent-hosts/${this.opts.agentNodeId}/tasks/${taskId}/pull-request`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.opts.apiKey}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.opts.apiKey}`,
+        },
         body: JSON.stringify({ branch, base: repo.defaultBranch ?? undefined, title }),
         signal: AbortSignal.timeout(30_000),
-      }).catch(() => { /* branch pushed; PR can be opened manually */ });
+      }).catch(() => {
+        /* branch pushed; PR can be opened manually */
+      });
       logWarn(`[builderforce] task ${taskId}: pushed pending changes to ${branch}`);
     } catch (err) {
       logWarn(`[builderforce] task ${taskId} commit/push failed: ${String(err)}`);
@@ -354,16 +381,17 @@ export class BuilderforceRelayService implements IRelayService {
    * session-`final` handler attributes the changes (via `pendingTaskRun`) and
    * reports the terminal execution state.
    */
-  private async runV1Engine(
-    payload: EngineDispatch,
-    prompt: string,
-  ): Promise<void> {
+  private async runV1Engine(payload: EngineDispatch, prompt: string): Promise<void> {
     const agentLabel = payload.agentLabel?.trim() || "BuilderForce-V1";
     const cwd = await this.ensureTaskWorkspace(payload.taskId, payload.repo);
     // Record context so the session-final handler can diff + attribute + commit changes.
     this.pendingTaskRun = {
-      executionId: payload.executionId, taskId: payload.taskId, agentLabel, cwd,
-      title: payload.title ?? `Task ${payload.taskId ?? ""}`.trim(), repo: payload.repo,
+      executionId: payload.executionId,
+      taskId: payload.taskId,
+      agentLabel,
+      cwd,
+      title: payload.title ?? `Task ${payload.taskId ?? ""}`.trim(),
+      repo: payload.repo,
     };
 
     // The agent's cwd is enforced via the chat.send workspaceDir param. Changes are
@@ -392,10 +420,7 @@ export class BuilderforceRelayService implements IRelayService {
    * (chat.message for assistant text, tool.audit for tool calls) so the portal
    * renders both engines identically, then reports the terminal execution state.
    */
-  private async runV2Engine(
-    payload: EngineDispatch,
-    prompt: string,
-  ): Promise<void> {
+  private async runV2Engine(payload: EngineDispatch, prompt: string): Promise<void> {
     const agentLabel = payload.agentLabel?.trim() || "BuilderForce-V2";
     const sinks: V2RunnerSinks = {
       onAssistantText: (text) => {
@@ -403,7 +428,12 @@ export class BuilderforceRelayService implements IRelayService {
         this.sendToRelay({ type: "chat.message", role: "assistant", text, session: "main" });
         // …and durable persistence, so the V2 run's natural-language turns show on
         // the Logs/Timeline after it ends (parity with V1's `agent.message`).
-        void this.persistToolAudit({ executionId: payload.executionId, toolName: "agent.message", category: "message", result: text });
+        void this.persistToolAudit({
+          executionId: payload.executionId,
+          toolName: "agent.message",
+          category: "message",
+          result: text,
+        });
       },
       onToolUse: (toolName, toolCallId, args) => {
         // Live view (fans out to subscribers)…
@@ -417,7 +447,13 @@ export class BuilderforceRelayService implements IRelayService {
           ts: new Date().toISOString(),
         });
         // …and durable persistence, so the run stays on the timeline after it ends.
-        void this.persistToolAudit({ executionId: payload.executionId, toolName, toolCallId, category: "v2", args });
+        void this.persistToolAudit({
+          executionId: payload.executionId,
+          toolName,
+          toolCallId,
+          category: "v2",
+          args,
+        });
       },
       onResult: () => {
         /* terminal state is reported below from the runner's return value */
@@ -434,7 +470,9 @@ export class BuilderforceRelayService implements IRelayService {
 
     // Register an abort handle so an `execution.cancel` frame can stop this run.
     const abortController = new AbortController();
-    if (payload.executionId != null) { this.v2Aborts.set(payload.executionId, abortController); }
+    if (payload.executionId != null) {
+      this.v2Aborts.set(payload.executionId, abortController);
+    }
 
     let result: { ok: boolean; text: string };
     try {
@@ -453,7 +491,9 @@ export class BuilderforceRelayService implements IRelayService {
         sinks,
       );
     } finally {
-      if (payload.executionId != null) { this.v2Aborts.delete(payload.executionId); }
+      if (payload.executionId != null) {
+        this.v2Aborts.delete(payload.executionId);
+      }
     }
 
     // If the run was cancelled, the API already flipped the row to CANCELLED (a
@@ -468,7 +508,10 @@ export class BuilderforceRelayService implements IRelayService {
     await this.emitTaskChanges(cwd, agentLabel, payload.executionId, payload.taskId);
     if (payload.taskId != null && payload.repo?.repoId) {
       await this.commitAndPushTicketBranch(
-        payload.taskId, payload.repo, payload.title ?? `Task ${payload.taskId}`, agentLabel,
+        payload.taskId,
+        payload.repo,
+        payload.title ?? `Task ${payload.taskId}`,
+        agentLabel,
       );
     }
 
@@ -498,39 +541,100 @@ export class BuilderforceRelayService implements IRelayService {
     const abortController = new AbortController();
     if (payload.executionId != null) this.v2Aborts.set(payload.executionId, abortController);
 
-    const provider = buildNodeCapabilityProvider(cwd);
+    // Inject the on-prem backings for the optional capabilities so `local` reaches
+    // FULL parity (PRD 11 §5.2): `ask_human` (the relay approval-gate → portal queue)
+    // and `web_search` (the config-resolved provider). Each is advertised only when
+    // wired, so the registry offers the tool iff the surface can fulfill it.
+    const human: HumanCapability = {
+      async ask(question: string, context?: string) {
+        const description = context?.trim() ? `${question}\n\nContext: ${context}` : question;
+        const r = await requestHumanInput({
+          kind: "question",
+          actionType: "clarify.blocked",
+          description,
+        });
+        if (r.decision === "answered") return { paused: false, answer: r.responseText ?? null };
+        if (r.decision === "timeout") {
+          return {
+            paused: false,
+            answer: null,
+            note: "No human answered in time; proceed with your best judgment.",
+          };
+        }
+        // 'approved'/'rejected' aren't expected for a free-text question; surface them.
+        return { paused: false, answer: null, note: `Human responded: ${r.decision}` };
+      },
+    };
+    let webSearch: NodeProviderOptions["webSearch"];
+    try {
+      webSearch = createNodeWebSearch({ config: loadConfig() }) ?? undefined;
+    } catch {
+      webSearch = undefined; // no config / search disabled → cap simply not advertised
+    }
+    const provider = buildNodeCapabilityProvider(cwd, { human, webSearch });
     const registry = buildNodeToolRegistry();
-    const complete = createGatewayComplete({
+    const gatewayLlm = {
       // The gateway's OpenAI-compatible endpoint lives under /llm (parity with the
-      // V2 path's Anthropic-Messages base); createGatewayComplete appends /v1/chat/completions.
+      // V2 path's Anthropic-Messages base); the factories append /v1/chat/completions.
       baseUrl: `${normalizeBaseUrl(this.opts.baseUrl)}/llm`,
       apiKey: this.opts.apiKey,
-    });
+    };
+    const complete = createGatewayComplete(gatewayLlm);
+    const stream = createGatewayStream(gatewayLlm);
     const engine = new LocalAgentEngine({
       registry,
       provider,
       workspaceRoot: cwd,
       complete,
+      stream,
       sinks: {
+        // Incremental output for live chat/channel UX (parity with V1's deltas).
+        onAssistantDelta: (delta) => {
+          this.sendToRelay({ type: "chat.delta", delta, session: "main" });
+        },
         onAssistantText: (text) => {
           this.sendToRelay({ type: "chat.message", role: "assistant", text, session: "main" });
-          void this.persistToolAudit({ executionId: payload.executionId, toolName: "agent.message", category: "message", result: text });
+          void this.persistToolAudit({
+            executionId: payload.executionId,
+            toolName: "agent.message",
+            category: "message",
+            result: text,
+          });
         },
         onToolUse: (toolName, toolCallId, args) => {
-          this.sendToRelay({ type: "tool.audit", sessionKey: "main", toolName, toolCallId, category: "local", args, ts: new Date().toISOString() });
-          void this.persistToolAudit({ executionId: payload.executionId, toolName, toolCallId, category: "local", args });
+          this.sendToRelay({
+            type: "tool.audit",
+            sessionKey: "main",
+            toolName,
+            toolCallId,
+            category: "local",
+            args,
+            ts: new Date().toISOString(),
+          });
+          void this.persistToolAudit({
+            executionId: payload.executionId,
+            toolName,
+            toolCallId,
+            category: "local",
+            args,
+          });
         },
       },
     });
 
     const systemPrompt =
-      `You are ${agentLabel}, a coding agent working inside the ticket's cloned git repository (already on its branch). `
-      + `Use the tools to explore, read, edit, and create files, then call finish with a summary. Do NOT run git — BuilderForce commits your changes to the ticket branch after the run.`
-      + (appendSystemPrompt ? `\n\n${appendSystemPrompt}` : "");
+      `You are ${agentLabel}, a coding agent working inside the ticket's cloned git repository (already on its branch). ` +
+      `Use the tools to explore, read, edit, and create files, then call finish with a summary. Do NOT run git — BuilderForce commits your changes to the ticket branch after the run.` +
+      (appendSystemPrompt ? `\n\n${appendSystemPrompt}` : "");
 
     let result: { ok: boolean; output: string };
     try {
-      result = await engine.run({ systemPrompt, userContent: prompt, model: payload.model, signal: abortController.signal });
+      result = await engine.run({
+        systemPrompt,
+        userContent: prompt,
+        model: payload.model,
+        signal: abortController.signal,
+      });
     } catch (err) {
       result = { ok: false, output: `Local engine error: ${String(err)}` };
     } finally {
@@ -544,7 +648,12 @@ export class BuilderforceRelayService implements IRelayService {
 
     await this.emitTaskChanges(cwd, agentLabel, payload.executionId, payload.taskId);
     if (payload.taskId != null && payload.repo?.repoId) {
-      await this.commitAndPushTicketBranch(payload.taskId, payload.repo, payload.title ?? `Task ${payload.taskId}`, agentLabel);
+      await this.commitAndPushTicketBranch(
+        payload.taskId,
+        payload.repo,
+        payload.title ?? `Task ${payload.taskId}`,
+        agentLabel,
+      );
     }
     if (payload.executionId != null) {
       await this.reportExecutionState(
@@ -576,7 +685,9 @@ export class BuilderforceRelayService implements IRelayService {
       );
     }
     // Tear the ticket workspace down — the work is committed/pushed, ticket is Done.
-    await fs.rm(dir, { recursive: true, force: true }).catch(() => { /* best-effort */ });
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {
+      /* best-effort */
+    });
   }
 
   /**
@@ -804,8 +915,14 @@ export class BuilderforceRelayService implements IRelayService {
     void sweepStaleTaskWorkspaces(this.opts.workspaceDir ?? process.cwd(), {
       activeTaskIds: this.pendingTaskRun?.taskId != null ? [this.pendingTaskRun.taskId] : [],
     })
-      .then(({ removed }) => { if (removed.length) { logWarn(`[builderforce] swept ${removed.length} stale ticket workspace(s)`); } })
-      .catch(() => { /* best-effort */ });
+      .then(({ removed }) => {
+        if (removed.length) {
+          logWarn(`[builderforce] swept ${removed.length} stale ticket workspace(s)`);
+        }
+      })
+      .catch(() => {
+        /* best-effort */
+      });
     this.connectUpstream();
     this.connectLocalGateway();
     this.startRemoteResultTracking();
@@ -1014,14 +1131,18 @@ export class BuilderforceRelayService implements IRelayService {
       case "remote.task": {
         // Peer agentNode delegated a task to this agentNode — execute it as a chat message.
         const task = typeof msg.task === "string" ? msg.task : "";
-        const fromAgentNodeId = typeof msg.fromAgentNodeId === "string" ? msg.fromAgentNodeId : "unknown";
+        const fromAgentNodeId =
+          typeof msg.fromAgentNodeId === "string" ? msg.fromAgentNodeId : "unknown";
         const correlationId = typeof msg.correlationId === "string" ? msg.correlationId : "";
-        const callbackAgentNodeId = typeof msg.callbackAgentNodeId === "string" ? msg.callbackAgentNodeId : "";
+        const callbackAgentNodeId =
+          typeof msg.callbackAgentNodeId === "string" ? msg.callbackAgentNodeId : "";
         const callbackBaseUrl = typeof msg.callbackBaseUrl === "string" ? msg.callbackBaseUrl : "";
         if (!task) {
           break;
         }
-        logDebug(`[builderforce-relay] remote task from agentNode ${fromAgentNodeId}: ${task.slice(0, 80)}…`);
+        logDebug(
+          `[builderforce-relay] remote task from agentNode ${fromAgentNodeId}: ${task.slice(0, 80)}…`,
+        );
         // Track correlation so we can send result back when the session completes.
         const sessionKey = correlationId ? `remote-${correlationId}` : "main";
         if (correlationId && callbackAgentNodeId) {
@@ -1096,10 +1217,13 @@ export class BuilderforceRelayService implements IRelayService {
 
         // Engine selector + model are resolved by the API (engine from the cloud
         // agent record, model from the run payload).
-        const engine = typeof msg.engine === "string" ? msg.engine : "builderforce-v1";
+        const engine = typeof msg.engine === "string" ? msg.engine : DEFAULT_ENGINE_ID;
         let model: string | undefined;
         try {
-          const p = typeof msg.payload === "string" ? (JSON.parse(msg.payload) as { model?: unknown }) : null;
+          const p =
+            typeof msg.payload === "string"
+              ? (JSON.parse(msg.payload) as { model?: unknown })
+              : null;
           if (p && typeof p.model === "string" && p.model.trim()) model = p.model.trim();
         } catch {
           /* payload not JSON — use the engine default model */
@@ -1107,10 +1231,16 @@ export class BuilderforceRelayService implements IRelayService {
 
         // Repo coords (for cloning into the ticket workspace) + executing agent
         // label (for change traceability) are resolved by the API.
-        const repoRaw = msg.repo && typeof msg.repo === "object" ? (msg.repo as Record<string, unknown>) : null;
-        const repo = repoRaw && typeof repoRaw.repoId === "string"
-          ? { repoId: repoRaw.repoId, defaultBranch: typeof repoRaw.defaultBranch === "string" ? repoRaw.defaultBranch : null }
-          : undefined;
+        const repoRaw =
+          msg.repo && typeof msg.repo === "object" ? (msg.repo as Record<string, unknown>) : null;
+        const repo =
+          repoRaw && typeof repoRaw.repoId === "string"
+            ? {
+                repoId: repoRaw.repoId,
+                defaultBranch:
+                  typeof repoRaw.defaultBranch === "string" ? repoRaw.defaultBranch : null,
+              }
+            : undefined;
         const agentLabel = typeof msg.agentLabel === "string" ? msg.agentLabel : undefined;
 
         logWarn(
@@ -1144,11 +1274,9 @@ export class BuilderforceRelayService implements IRelayService {
         const injection = buildSteeringInjection(executionId, msg.text, Date.now());
         if (!injection) break;
         logWarn(`[builderforce] steering message for execution ${executionId ?? "?"}`);
-        this.gatewayClient
-          ?.request("chat.send", injection)
-          .catch((err: unknown) => {
-            logWarn(`[builderforce] execution.message dispatch failed: ${String(err)}`);
-          });
+        this.gatewayClient?.request("chat.send", injection).catch((err: unknown) => {
+          logWarn(`[builderforce] execution.message dispatch failed: ${String(err)}`);
+        });
         break;
       }
 
@@ -1164,7 +1292,13 @@ export class BuilderforceRelayService implements IRelayService {
         logWarn(`[builderforce] cancel execution ${executionId ?? "?"}`);
         if (executionId != null) {
           const ctrl = this.v2Aborts.get(executionId);
-          if (ctrl) { try { ctrl.abort(); } catch { /* ignore */ } }
+          if (ctrl) {
+            try {
+              ctrl.abort();
+            } catch {
+              /* ignore */
+            }
+          }
         }
         // V1 (pi) runs out of the live `main` session — abort the current turn.
         // The API already set the row to CANCELLED (terminal) before relaying
@@ -1179,12 +1313,14 @@ export class BuilderforceRelayService implements IRelayService {
         const finalizeTaskId =
           typeof msg.taskId === "number" && Number.isFinite(msg.taskId) ? msg.taskId : undefined;
         if (finalizeTaskId == null) break;
-        const repoRaw = msg.repo && typeof msg.repo === "object" ? (msg.repo as Record<string, unknown>) : null;
+        const repoRaw =
+          msg.repo && typeof msg.repo === "object" ? (msg.repo as Record<string, unknown>) : null;
         void this.finalizeTask({
           taskId: finalizeTaskId,
           title: typeof msg.title === "string" ? msg.title : undefined,
           repoId: repoRaw && typeof repoRaw.repoId === "string" ? repoRaw.repoId : undefined,
-          defaultBranch: repoRaw && typeof repoRaw.defaultBranch === "string" ? repoRaw.defaultBranch : null,
+          defaultBranch:
+            repoRaw && typeof repoRaw.defaultBranch === "string" ? repoRaw.defaultBranch : null,
         });
         break;
       }
@@ -1209,7 +1345,10 @@ export class BuilderforceRelayService implements IRelayService {
         const approvalId = typeof msg.approvalId === "string" ? msg.approvalId : "";
         const decision = typeof msg.status === "string" ? msg.status : "";
         const responseText = typeof msg.responseText === "string" ? msg.responseText : undefined;
-        if (approvalId && (decision === "approved" || decision === "rejected" || decision === "answered")) {
+        if (
+          approvalId &&
+          (decision === "approved" || decision === "rejected" || decision === "answered")
+        ) {
           logWarn(`[builderforce-relay] approval.decision ${approvalId}: ${decision}`);
           resolveApproval(approvalId, decision, responseText);
         }

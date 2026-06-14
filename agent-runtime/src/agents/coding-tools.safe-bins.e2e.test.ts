@@ -73,7 +73,7 @@ describe("createBuilderForceAgentsCodingTools safeBins", () => {
       return;
     }
 
-    const { createBuilderForceAgentsCodingTools } = await import("./pi-tools.js");
+    const { createBuilderForceAgentsCodingTools } = await import("./coding-tools.js");
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "builderforce-safe-bins-"));
     const cfg: BuilderForceAgentsConfig = {
       tools: {
@@ -120,7 +120,7 @@ describe("createBuilderForceAgentsCodingTools safeBins", () => {
       return;
     }
 
-    const { createBuilderForceAgentsCodingTools } = await import("./pi-tools.js");
+    const { createBuilderForceAgentsCodingTools } = await import("./coding-tools.js");
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "builderforce-safe-bins-expand-"));
 
     const secret = `TOP_SECRET_${Date.now()}`;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fixMissingRootSeparator, normalizeToolParams } from "./pi-tools.read.js";
+import { fixMissingRootSeparator, normalizeToolParams } from "./coding-tools.read.js";
 
 describe("normalizeToolParams", () => {
   it("maps common edit aliases to oldText/newText", () => {

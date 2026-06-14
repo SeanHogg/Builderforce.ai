@@ -7,7 +7,7 @@ import {
   makeWhatsAppDirectiveConfig,
   replyText,
   replyTexts,
-  runEmbeddedPiAgent,
+  runEmbeddedAgent,
   sessionStorePath,
   withTempHome,
 } from "./reply.directive.directive-behavior.e2e-harness.js";
@@ -39,7 +39,7 @@ async function runInFlightVerboseToggleCase(params: {
     "main",
   );
 
-  vi.mocked(runEmbeddedPiAgent).mockImplementation(async (agentParams) => {
+  vi.mocked(runEmbeddedAgent).mockImplementation(async (agentParams) => {
     const shouldEmit = agentParams.shouldEmitToolResult;
     expect(shouldEmit?.()).toBe(params.shouldEmitBefore);
     const store = loadSessionStore(storePath);
@@ -100,7 +100,7 @@ describe("directive behavior", () => {
 
       const texts = replyTexts(res);
       expect(texts).toContain("done");
-      expect(runEmbeddedPiAgent).toHaveBeenCalledOnce();
+      expect(runEmbeddedAgent).toHaveBeenCalledOnce();
     });
   });
   it("updates tool verbose during an in-flight run (toggle off)", async () => {
@@ -114,7 +114,7 @@ describe("directive behavior", () => {
 
       const texts = replyTexts(res);
       expect(texts).toContain("done");
-      expect(runEmbeddedPiAgent).toHaveBeenCalledOnce();
+      expect(runEmbeddedAgent).toHaveBeenCalledOnce();
     });
   });
   it("shows summary on /model", async () => {
@@ -125,7 +125,7 @@ describe("directive behavior", () => {
       expect(text).toContain("Browse: /models (providers) or /models <provider> (models)");
       expect(text).toContain("More: /model status");
       expect(text).not.toContain("openai/gpt-4.1-mini");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("lists allowlisted models on /model status", async () => {
@@ -135,7 +135,7 @@ describe("directive behavior", () => {
       expect(text).toContain("openai/gpt-4.1-mini");
       expect(text).not.toContain("claude-sonnet-4-1");
       expect(text).toContain("auth:");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
 });

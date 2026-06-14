@@ -5,7 +5,7 @@ import { normalizeTestText } from "../../test/helpers/normalize-text.js";
 import {
   createBlockReplyCollector,
   getProviderUsageMocks,
-  getRunEmbeddedPiAgentMock,
+  getRunEmbeddedAgentMock,
   installTriggerHandlingE2eTestHooks,
   makeCfg,
   withTempHome,
@@ -113,7 +113,7 @@ describe("trigger handling", () => {
       expect(blockReplies.length).toBe(0);
       expect(replies.length).toBe(1);
       expect(String(replies[0]?.text ?? "")).toContain("Usage footer: tokens");
-      expect(getRunEmbeddedPiAgentMock()).not.toHaveBeenCalled();
+      expect(getRunEmbeddedAgentMock()).not.toHaveBeenCalled();
     });
   });
 
@@ -175,7 +175,7 @@ describe("trigger handling", () => {
       const s3 = await readSessionStore(home);
       expect(pickFirstStoreEntry<{ responseUsage?: string }>(s3)?.responseUsage).toBeUndefined();
 
-      expect(getRunEmbeddedPiAgentMock()).not.toHaveBeenCalled();
+      expect(getRunEmbeddedAgentMock()).not.toHaveBeenCalled();
     });
   });
 
@@ -201,12 +201,12 @@ describe("trigger handling", () => {
       const store = await readSessionStore(home);
       expect(pickFirstStoreEntry<{ responseUsage?: string }>(store)?.responseUsage).toBe("tokens");
 
-      expect(getRunEmbeddedPiAgentMock()).not.toHaveBeenCalled();
+      expect(getRunEmbeddedAgentMock()).not.toHaveBeenCalled();
     });
   });
   it("sends one inline status and still returns agent reply for mixed text", async () => {
     await withTempHome(async (home) => {
-      getRunEmbeddedPiAgentMock().mockResolvedValue({
+      getRunEmbeddedAgentMock().mockResolvedValue({
         payloads: [{ text: "agent says hi" }],
         meta: {
           durationMs: 1,
@@ -222,7 +222,7 @@ describe("trigger handling", () => {
       expect(String(blockReplies[0]?.text ?? "")).toContain("Model:");
       expect(replies.length).toBe(1);
       expect(replies[0]?.text).toBe("agent says hi");
-      const prompt = getRunEmbeddedPiAgentMock().mock.calls[0]?.[0]?.prompt ?? "";
+      const prompt = getRunEmbeddedAgentMock().mock.calls[0]?.[0]?.prompt ?? "";
       expect(prompt).not.toContain("/status");
     });
   });
@@ -240,7 +240,7 @@ describe("trigger handling", () => {
       );
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text).toBe("⚙️ Agent was aborted.");
-      expect(getRunEmbeddedPiAgentMock()).not.toHaveBeenCalled();
+      expect(getRunEmbeddedAgentMock()).not.toHaveBeenCalled();
     });
   });
   it("handles /stop without invoking the agent", async () => {
@@ -257,7 +257,7 @@ describe("trigger handling", () => {
       );
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text).toBe("⚙️ Agent was aborted.");
-      expect(getRunEmbeddedPiAgentMock()).not.toHaveBeenCalled();
+      expect(getRunEmbeddedAgentMock()).not.toHaveBeenCalled();
     });
   });
 });

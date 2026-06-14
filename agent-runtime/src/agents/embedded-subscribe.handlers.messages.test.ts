@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveSilentReplyFallbackText } from "./pi-embedded-subscribe.handlers.messages.js";
+import { resolveSilentReplyFallbackText } from "./embedded-subscribe.handlers.messages.js";
 
 describe("resolveSilentReplyFallbackText", () => {
   it("replaces NO_REPLY with latest messaging tool text when available", () => {

@@ -2,7 +2,7 @@ import type { AgentMessage } from "../builderforce/model/agent-types.js";
 import type { AssistantMessage } from "../builderforce/model/types.js";
 import { extractTextFromChatContent } from "../shared/chat-content.js";
 import { stripReasoningTagsFromText } from "../shared/text/reasoning-tags.js";
-import { sanitizeUserFacingText } from "./pi-embedded-helpers.js";
+import { sanitizeUserFacingText } from "./embedded-helpers.js";
 import { formatToolDetail, resolveToolDisplay } from "./tool-display.js";
 
 export function isAssistantMessage(msg: AgentMessage | undefined): msg is AssistantMessage {

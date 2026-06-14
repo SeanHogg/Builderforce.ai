@@ -5,10 +5,10 @@ vi.mock("../../agents/auth-profiles/session-override.js", () => ({
   resolveSessionAuthProfileOverride: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../../agents/pi-embedded.js", () => ({
-  abortEmbeddedPiRun: vi.fn().mockReturnValue(false),
-  isEmbeddedPiRunActive: vi.fn().mockReturnValue(false),
-  isEmbeddedPiRunStreaming: vi.fn().mockReturnValue(false),
+vi.mock("../../agents/embedded.js", () => ({
+  abortEmbeddedRun: vi.fn().mockReturnValue(false),
+  isEmbeddedRunActive: vi.fn().mockReturnValue(false),
+  isEmbeddedRunStreaming: vi.fn().mockReturnValue(false),
   resolveEmbeddedSessionLane: vi.fn().mockReturnValue("session:session-key"),
 }));
 

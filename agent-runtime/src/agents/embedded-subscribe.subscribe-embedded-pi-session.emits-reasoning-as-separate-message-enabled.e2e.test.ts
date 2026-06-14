@@ -1,9 +1,9 @@
 import type { AssistantMessage } from "../builderforce/model/types.js";
 import { describe, expect, it, vi } from "vitest";
-import { createStubSessionHarness } from "./pi-embedded-subscribe.e2e-harness.js";
-import { subscribeEmbeddedPiSession } from "./pi-embedded-subscribe.js";
+import { createStubSessionHarness } from "./embedded-subscribe.e2e-harness.js";
+import { subscribeEmbeddedSession } from "./embedded-subscribe.js";
 
-describe("subscribeEmbeddedPiSession", () => {
+describe("subscribeEmbeddedSession", () => {
   const THINKING_TAG_CASES = [
     { tag: "think", open: "<think>", close: "</think>" },
     { tag: "thinking", open: "<thinking>", close: "</thinking>" },
@@ -15,7 +15,7 @@ describe("subscribeEmbeddedPiSession", () => {
     const { session, emit } = createStubSessionHarness();
     const onBlockReply = vi.fn();
 
-    subscribeEmbeddedPiSession({
+    subscribeEmbeddedSession({
       session,
       runId: "run",
       onBlockReply,

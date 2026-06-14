@@ -1,5 +1,5 @@
 import type { AgentMessage } from "../builderforce/model/agent-types.js";
-import type { ExtensionContext } from "./pi-extensions/types.js";
+import type { ExtensionContext } from "./agent-extensions/types.js";
 import * as agentLoop from "../builderforce/agent-loop/index.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { retryAsync } from "../infra/retry.js";

@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { loadSessionStore, resolveSessionKey } from "../config/sessions.js";
 import {
-  getCompactEmbeddedPiSessionMock,
-  getRunEmbeddedPiAgentMock,
+  getCompactEmbeddedSessionMock,
+  getRunEmbeddedAgentMock,
   installTriggerHandlingE2eTestHooks,
   makeCfg,
   withTempHome,
@@ -18,7 +18,7 @@ beforeAll(async () => {
 installTriggerHandlingE2eTestHooks();
 
 function mockSuccessfulCompaction() {
-  getCompactEmbeddedPiSessionMock().mockResolvedValue({
+  getCompactEmbeddedSessionMock().mockResolvedValue({
     ok: true,
     compacted: true,
     result: {
@@ -66,8 +66,8 @@ describe("trigger handling", () => {
       );
       const text = replyText(res);
       expect(text?.startsWith("⚙️ Compacted")).toBe(true);
-      expect(getCompactEmbeddedPiSessionMock()).toHaveBeenCalledOnce();
-      expect(getRunEmbeddedPiAgentMock()).not.toHaveBeenCalled();
+      expect(getCompactEmbeddedSessionMock()).toHaveBeenCalledOnce();
+      expect(getRunEmbeddedAgentMock()).not.toHaveBeenCalled();
       const store = loadSessionStore(storePath);
       const sessionKey = resolveSessionKey("per-sender", {
         Body: "/compact focus on decisions",
@@ -79,7 +79,7 @@ describe("trigger handling", () => {
   });
   it("runs /compact for non-default agents without transcript path validation failures", async () => {
     await withTempHome(async (home) => {
-      getCompactEmbeddedPiSessionMock().mockClear();
+      getCompactEmbeddedSessionMock().mockClear();
       mockSuccessfulCompaction();
 
       const res = await getReplyFromConfig(
@@ -96,16 +96,16 @@ describe("trigger handling", () => {
 
       const text = replyText(res);
       expect(text?.startsWith("⚙️ Compacted")).toBe(true);
-      expect(getCompactEmbeddedPiSessionMock()).toHaveBeenCalledOnce();
-      expect(getCompactEmbeddedPiSessionMock().mock.calls[0]?.[0]?.sessionFile).toContain(
+      expect(getCompactEmbeddedSessionMock()).toHaveBeenCalledOnce();
+      expect(getCompactEmbeddedSessionMock().mock.calls[0]?.[0]?.sessionFile).toContain(
         join("agents", "worker1", "sessions"),
       );
-      expect(getRunEmbeddedPiAgentMock()).not.toHaveBeenCalled();
+      expect(getRunEmbeddedAgentMock()).not.toHaveBeenCalled();
     });
   });
   it("ignores think directives that only appear in the context wrapper", async () => {
     await withTempHome(async (home) => {
-      getRunEmbeddedPiAgentMock().mockResolvedValue({
+      getRunEmbeddedAgentMock().mockResolvedValue({
         payloads: [{ text: "ok" }],
         meta: {
           durationMs: 1,
@@ -131,8 +131,8 @@ describe("trigger handling", () => {
 
       const text = replyText(res);
       expect(text).toBe("ok");
-      expect(getRunEmbeddedPiAgentMock()).toHaveBeenCalledOnce();
-      const prompt = getRunEmbeddedPiAgentMock().mock.calls[0]?.[0]?.prompt ?? "";
+      expect(getRunEmbeddedAgentMock()).toHaveBeenCalledOnce();
+      const prompt = getRunEmbeddedAgentMock().mock.calls[0]?.[0]?.prompt ?? "";
       expect(prompt).toContain("Give me the status");
       expect(prompt).not.toContain("/thinking high");
       expect(prompt).not.toContain("/think high");
@@ -140,7 +140,7 @@ describe("trigger handling", () => {
   });
   it("does not emit directive acks for heartbeats with /think", async () => {
     await withTempHome(async (home) => {
-      getRunEmbeddedPiAgentMock().mockResolvedValue({
+      getRunEmbeddedAgentMock().mockResolvedValue({
         payloads: [{ text: "ok" }],
         meta: {
           durationMs: 1,
@@ -161,7 +161,7 @@ describe("trigger handling", () => {
       const text = replyText(res);
       expect(text).toBe("ok");
       expect(text).not.toMatch(/Thinking level set/i);
-      expect(getRunEmbeddedPiAgentMock()).toHaveBeenCalledOnce();
+      expect(getRunEmbeddedAgentMock()).toHaveBeenCalledOnce();
     });
   });
 });

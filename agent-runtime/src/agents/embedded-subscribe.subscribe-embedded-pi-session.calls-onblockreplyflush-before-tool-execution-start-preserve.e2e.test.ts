@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { subscribeEmbeddedPiSession } from "./pi-embedded-subscribe.js";
+import { subscribeEmbeddedSession } from "./embedded-subscribe.js";
 
 type StubSession = {
   subscribe: (fn: (evt: unknown) => void) => () => void;
@@ -7,7 +7,7 @@ type StubSession = {
 
 type SessionEventHandler = (evt: unknown) => void;
 
-describe("subscribeEmbeddedPiSession", () => {
+describe("subscribeEmbeddedSession", () => {
   it("calls onBlockReplyFlush before tool_execution_start to preserve message boundaries", () => {
     let handler: SessionEventHandler | undefined;
     const session: StubSession = {
@@ -20,8 +20,8 @@ describe("subscribeEmbeddedPiSession", () => {
     const onBlockReplyFlush = vi.fn();
     const onBlockReply = vi.fn();
 
-    subscribeEmbeddedPiSession({
-      session: session as unknown as Parameters<typeof subscribeEmbeddedPiSession>[0]["session"],
+    subscribeEmbeddedSession({
+      session: session as unknown as Parameters<typeof subscribeEmbeddedSession>[0]["session"],
       runId: "run-flush-test",
       onBlockReply,
       onBlockReplyFlush,
@@ -77,8 +77,8 @@ describe("subscribeEmbeddedPiSession", () => {
     const onBlockReply = vi.fn();
     const onBlockReplyFlush = vi.fn();
 
-    subscribeEmbeddedPiSession({
-      session: session as unknown as Parameters<typeof subscribeEmbeddedPiSession>[0]["session"],
+    subscribeEmbeddedSession({
+      session: session as unknown as Parameters<typeof subscribeEmbeddedSession>[0]["session"],
       runId: "run-flush-buffer",
       onBlockReply,
       onBlockReplyFlush,

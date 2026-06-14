@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   sanitizeGoogleTurnOrdering,
   sanitizeSessionMessagesImages,
-} from "./pi-embedded-helpers.js";
+} from "./embedded-helpers.js";
 
 function makeToolCallResultPairInput(): AgentMessage[] {
   return [

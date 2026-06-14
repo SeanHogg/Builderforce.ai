@@ -4,17 +4,17 @@ import {
   createStubSessionHarness,
   emitMessageStartAndEndForAssistantText,
   expectSingleAgentEventText,
-} from "./pi-embedded-subscribe.e2e-harness.js";
-import { subscribeEmbeddedPiSession } from "./pi-embedded-subscribe.js";
+} from "./embedded-subscribe.e2e-harness.js";
+import { subscribeEmbeddedSession } from "./embedded-subscribe.js";
 
-describe("subscribeEmbeddedPiSession", () => {
+describe("subscribeEmbeddedSession", () => {
   it("filters to <final> and suppresses output without a start tag", () => {
     const { session, emit } = createStubSessionHarness();
 
     const onPartialReply = vi.fn();
     const onAgentEvent = vi.fn();
 
-    subscribeEmbeddedPiSession({
+    subscribeEmbeddedSession({
       session,
       runId: "run",
       enforceFinalTag: true,
@@ -55,7 +55,7 @@ describe("subscribeEmbeddedPiSession", () => {
 
     const onAgentEvent = vi.fn();
 
-    subscribeEmbeddedPiSession({
+    subscribeEmbeddedSession({
       session,
       runId: "run",
       enforceFinalTag: true,
@@ -69,7 +69,7 @@ describe("subscribeEmbeddedPiSession", () => {
 
     const onPartialReply = vi.fn();
 
-    subscribeEmbeddedPiSession({
+    subscribeEmbeddedSession({
       session,
       runId: "run",
       onPartialReply,
@@ -92,7 +92,7 @@ describe("subscribeEmbeddedPiSession", () => {
 
     const onBlockReply = vi.fn();
 
-    subscribeEmbeddedPiSession({
+    subscribeEmbeddedSession({
       session,
       runId: "run",
       onBlockReply,

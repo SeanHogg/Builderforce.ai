@@ -11,7 +11,7 @@ import {
   resolveAgentDir,
 } from "../agents/agent-scope.js";
 import { resolveDefaultModelForAgent } from "../agents/model-selection.js";
-import { runEmbeddedPiAgent } from "../agents/pi-embedded.js";
+import { runEmbeddedAgent } from "../agents/embedded.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 
 /**
@@ -40,7 +40,7 @@ ${params.sessionContent.slice(0, 2000)}
 
 Reply with ONLY the slug, nothing else. Examples: "vendor-pitch", "api-design", "bug-fix"`;
 
-    const result = await runEmbeddedPiAgent({
+    const result = await runEmbeddedAgent({
       sessionId: `slug-generator-${Date.now()}`,
       sessionKey: "temp:slug-generator",
       agentId,

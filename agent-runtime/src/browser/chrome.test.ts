@@ -83,7 +83,7 @@ describe("browser chrome profile decoration", () => {
 
   it("best-effort writes name when color is invalid", async () => {
     const userDataDir = await createUserDataDir();
-    decorateBuilderForceAgentsProfile(userDataDir, { color: "lobster-orange" });
+    decorateBuilderForceAgentsProfile(userDataDir, { color: "not-a-real-color" });
     const localState = await readJson(path.join(userDataDir, "Local State"));
     const profile = localState.profile as Record<string, unknown>;
     const infoCache = profile.info_cache as Record<string, unknown>;

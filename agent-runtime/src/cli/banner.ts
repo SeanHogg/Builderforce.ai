@@ -12,22 +12,6 @@ type BannerOptions = TaglineOptions & {
 
 let bannerEmitted = false;
 
-const graphemeSegmenter =
-  typeof Intl !== "undefined" && "Segmenter" in Intl
-    ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
-    : null;
-
-function splitGraphemes(value: string): string[] {
-  if (!graphemeSegmenter) {
-    return Array.from(value);
-  }
-  try {
-    return Array.from(graphemeSegmenter.segment(value), (seg) => seg.segment);
-  } catch {
-    return Array.from(value);
-  }
-}
-
 const hasJsonFlag = (argv: string[]) =>
   argv.some((arg) => arg === "--json" || arg.startsWith("--json="));
 
@@ -60,51 +44,6 @@ export function formatCliBannerLine(version: string, options: BannerOptions = {}
   const line1 = `${title} ${version} (${commitLabel})`;
   const line2 = `${" ".repeat(prefix.length)}${tagline}`;
   return `${line1}\n${line2}`;
-}
-
-const LOBSTER_ASCII = [
-  " ██████╗ ██████╗ ██████╗ ███████╗██████╗  ██████╗██╗      █████╗ ██╗    ██╗",
-  "██╔════╝██╔═══██╗██╔══██╗██╔════╝██╔══██╗██╔════╝██║     ██╔══██╗██║    ██║",
-  "██║     ██║   ██║██║  ██║█████╗  ██████╔╝██║     ██║     ███████║██║ █╗ ██║",
-  "██║     ██║   ██║██║  ██║██╔══╝  ██╔══██╗██║     ██║     ██╔══██║██║███╗██║",
-  "╚██████╗╚██████╔╝██████╔╝███████╗██║  ██║╚██████╗███████╗██║  ██║╚███╔███╔╝",
-  " ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝ ",
-  "                  🦞 BUILDERFORCE_AGENTS 🦞                   ",
-  " ",
-];
-
-export function formatCliBannerArt(options: BannerOptions = {}): string {
-  const rich = options.richTty ?? isRich();
-  if (!rich) {
-    return LOBSTER_ASCII.join("\n");
-  }
-
-  const colorChar = (ch: string) => {
-    if (ch === "█") {
-      return theme.brand(ch);
-    }
-    if (ch === "░") {
-      return theme.info(ch);
-    }
-    if (ch === "▀") {
-      return theme.brand(ch);
-    }
-    return theme.muted(ch);
-  };
-
-  const colored = LOBSTER_ASCII.map((line) => {
-    if (line.includes("BUILDERFORCE_AGENTS")) {
-      return (
-        theme.muted("              ") +
-        theme.brand("🦞") +
-        theme.brand(" BUILDERFORCE_AGENTS ") +
-        theme.brand("🦞")
-      );
-    }
-    return splitGraphemes(line).map(colorChar).join("");
-  });
-
-  return colored.join("\n");
 }
 
 export function emitCliBanner(version: string, options: BannerOptions = {}) {

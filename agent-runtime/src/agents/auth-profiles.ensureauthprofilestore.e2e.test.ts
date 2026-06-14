@@ -50,7 +50,7 @@ describe("ensureAuthProfileStore", () => {
   it("merges main auth profiles into agent store and keeps agent overrides", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "builderforce-auth-merge-"));
     const previousAgentDir = process.env.BUILDERFORCE_AGENTS_AGENT_DIR;
-    const previousPiAgentDir = process.env.PI_CODING_AGENT_DIR;
+    const previousCodingAgentDir = process.env.PI_CODING_AGENT_DIR;
     try {
       const mainDir = path.join(root, "main-agent");
       const agentDir = path.join(root, "agent-x");
@@ -114,10 +114,10 @@ describe("ensureAuthProfileStore", () => {
       } else {
         process.env.BUILDERFORCE_AGENTS_AGENT_DIR = previousAgentDir;
       }
-      if (previousPiAgentDir === undefined) {
+      if (previousCodingAgentDir === undefined) {
         delete process.env.PI_CODING_AGENT_DIR;
       } else {
-        process.env.PI_CODING_AGENT_DIR = previousPiAgentDir;
+        process.env.PI_CODING_AGENT_DIR = previousCodingAgentDir;
       }
       fs.rmSync(root, { recursive: true, force: true });
     }

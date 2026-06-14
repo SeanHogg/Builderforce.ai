@@ -2,14 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import {
   handleToolExecutionEnd,
   handleToolExecutionStart,
-} from "./pi-embedded-subscribe.handlers.tools.js";
-import type { EmbeddedPiSubscribeContext } from "./pi-embedded-subscribe.handlers.types.js";
+} from "./embedded-subscribe.handlers.tools.js";
+import type { EmbeddedSubscribeContext } from "./embedded-subscribe.handlers.types.js";
 
 // Minimal mock context factory. Only the fields needed for the media emission path.
 function createMockContext(overrides?: {
   shouldEmitToolOutput?: boolean;
   onToolResult?: ReturnType<typeof vi.fn>;
-}): EmbeddedPiSubscribeContext {
+}): EmbeddedSubscribeContext {
   const onToolResult = overrides?.onToolResult ?? vi.fn();
   return {
     params: {
@@ -56,7 +56,7 @@ function createMockContext(overrides?: {
     incrementCompactionCount: vi.fn(),
     getUsageTotals: vi.fn(() => undefined),
     getCompactionCount: vi.fn(() => 0),
-  } as unknown as EmbeddedPiSubscribeContext;
+  } as unknown as EmbeddedSubscribeContext;
 }
 
 describe("handleToolExecutionEnd media emission", () => {

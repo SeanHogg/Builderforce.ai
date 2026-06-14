@@ -1,3 +1,4 @@
+import type { WebSearchResult as SharedWebSearchResult } from "@builderforce/agent-tools";
 import { Type } from "@sinclair/typebox";
 import { formatCliCommand } from "../../cli/command-format.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
@@ -705,19 +706,103 @@ async function runWebSearch(params: {
   return payload;
 }
 
+/** The web-search backing resolved once from config — provider + per-provider auth
+ *  config. Shared by the pi-free `web_search` tool and the Node CapabilityProvider's
+ *  `web.search` (PRD 11 §5.2) so both run the SAME backend (DRY). */
+interface ResolvedSearchBackend {
+  search: WebSearchConfig;
+  provider: (typeof SEARCH_PROVIDERS)[number];
+  perplexityConfig: PerplexityConfig;
+  grokConfig: GrokConfig;
+}
+
+function resolveSearchBackend(config?: BuilderForceAgentsConfig): ResolvedSearchBackend {
+  const search = resolveSearchConfig(config);
+  return {
+    search,
+    provider: resolveSearchProvider(search),
+    perplexityConfig: resolvePerplexityConfig(search),
+    grokConfig: resolveGrokConfig(search),
+  };
+}
+
+/**
+ * Run one web search against the resolved backend, returning the raw payload (the
+ * same object the `web_search` tool serializes). Carries an `{ error, message }`
+ * payload for a missing key / invalid argument instead of throwing — callers decide
+ * how to surface it. The single implementation behind both surfaces.
+ */
+async function executeWebSearch(
+  backend: ResolvedSearchBackend,
+  params: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const { search, provider, perplexityConfig, grokConfig } = backend;
+  const perplexityAuth =
+    provider === "perplexity" ? resolvePerplexityApiKey(perplexityConfig) : undefined;
+  const apiKey =
+    provider === "perplexity"
+      ? perplexityAuth?.apiKey
+      : provider === "grok"
+        ? resolveGrokApiKey(grokConfig)
+        : resolveSearchApiKey(search);
+
+  if (!apiKey) {
+    return missingSearchKeyPayload(provider);
+  }
+  const query = readStringParam(params, "query", { required: true });
+  const count =
+    readNumberParam(params, "count", { integer: true }) ?? search?.maxResults ?? undefined;
+  const country = readStringParam(params, "country");
+  const search_lang = readStringParam(params, "search_lang");
+  const ui_lang = readStringParam(params, "ui_lang");
+  const rawFreshness = readStringParam(params, "freshness");
+  if (rawFreshness && provider !== "brave" && provider !== "perplexity") {
+    return {
+      error: "unsupported_freshness",
+      message: "freshness is only supported by the Brave and Perplexity web_search providers.",
+      docs: "https://docs.builderforce.ai/tools/web",
+    };
+  }
+  const freshness = rawFreshness ? normalizeFreshness(rawFreshness) : undefined;
+  if (rawFreshness && !freshness) {
+    return {
+      error: "invalid_freshness",
+      message: "freshness must be one of pd, pw, pm, py, or a range like YYYY-MM-DDtoYYYY-MM-DD.",
+      docs: "https://docs.builderforce.ai/tools/web",
+    };
+  }
+  return runWebSearch({
+    query,
+    count: resolveSearchCount(count, DEFAULT_SEARCH_COUNT),
+    apiKey,
+    timeoutSeconds: resolveTimeoutSeconds(search?.timeoutSeconds, DEFAULT_TIMEOUT_SECONDS),
+    cacheTtlMs: resolveCacheTtlMs(search?.cacheTtlMinutes, DEFAULT_CACHE_TTL_MINUTES),
+    provider,
+    country,
+    search_lang,
+    ui_lang,
+    freshness,
+    perplexityBaseUrl: resolvePerplexityBaseUrl(
+      perplexityConfig,
+      perplexityAuth?.source,
+      perplexityAuth?.apiKey,
+    ),
+    perplexityModel: resolvePerplexityModel(perplexityConfig),
+    grokModel: resolveGrokModel(grokConfig),
+    grokInlineCitations: resolveGrokInlineCitations(grokConfig),
+  });
+}
+
 export function createWebSearchTool(options?: {
   config?: BuilderForceAgentsConfig;
   sandboxed?: boolean;
 }): AnyAgentTool | null {
-  const search = resolveSearchConfig(options?.config);
-  if (!resolveSearchEnabled({ search, sandboxed: options?.sandboxed })) {
+  const backend = resolveSearchBackend(options?.config);
+  if (!resolveSearchEnabled({ search: backend.search, sandboxed: options?.sandboxed })) {
     return null;
   }
 
-  const provider = resolveSearchProvider(search);
-  const perplexityConfig = resolvePerplexityConfig(search);
-  const grokConfig = resolveGrokConfig(search);
-
+  const { provider } = backend;
   const description =
     provider === "perplexity"
       ? "Search the web using Perplexity Sonar (direct or via OpenRouter). Returns AI-synthesized answers with citations from real-time web search."
@@ -731,64 +816,60 @@ export function createWebSearchTool(options?: {
     description,
     parameters: WebSearchSchema,
     execute: async (_toolCallId, args) => {
-      const perplexityAuth =
-        provider === "perplexity" ? resolvePerplexityApiKey(perplexityConfig) : undefined;
-      const apiKey =
-        provider === "perplexity"
-          ? perplexityAuth?.apiKey
-          : provider === "grok"
-            ? resolveGrokApiKey(grokConfig)
-            : resolveSearchApiKey(search);
-
-      if (!apiKey) {
-        return jsonResult(missingSearchKeyPayload(provider));
-      }
-      const params = args as Record<string, unknown>;
-      const query = readStringParam(params, "query", { required: true });
-      const count =
-        readNumberParam(params, "count", { integer: true }) ?? search?.maxResults ?? undefined;
-      const country = readStringParam(params, "country");
-      const search_lang = readStringParam(params, "search_lang");
-      const ui_lang = readStringParam(params, "ui_lang");
-      const rawFreshness = readStringParam(params, "freshness");
-      if (rawFreshness && provider !== "brave" && provider !== "perplexity") {
-        return jsonResult({
-          error: "unsupported_freshness",
-          message: "freshness is only supported by the Brave and Perplexity web_search providers.",
-          docs: "https://docs.builderforce.ai/tools/web",
-        });
-      }
-      const freshness = rawFreshness ? normalizeFreshness(rawFreshness) : undefined;
-      if (rawFreshness && !freshness) {
-        return jsonResult({
-          error: "invalid_freshness",
-          message:
-            "freshness must be one of pd, pw, pm, py, or a range like YYYY-MM-DDtoYYYY-MM-DD.",
-          docs: "https://docs.builderforce.ai/tools/web",
-        });
-      }
-      const result = await runWebSearch({
-        query,
-        count: resolveSearchCount(count, DEFAULT_SEARCH_COUNT),
-        apiKey,
-        timeoutSeconds: resolveTimeoutSeconds(search?.timeoutSeconds, DEFAULT_TIMEOUT_SECONDS),
-        cacheTtlMs: resolveCacheTtlMs(search?.cacheTtlMinutes, DEFAULT_CACHE_TTL_MINUTES),
-        provider,
-        country,
-        search_lang,
-        ui_lang,
-        freshness,
-        perplexityBaseUrl: resolvePerplexityBaseUrl(
-          perplexityConfig,
-          perplexityAuth?.source,
-          perplexityAuth?.apiKey,
-        ),
-        perplexityModel: resolvePerplexityModel(perplexityConfig),
-        grokModel: resolveGrokModel(grokConfig),
-        grokInlineCitations: resolveGrokInlineCitations(grokConfig),
-      });
-      return jsonResult(result);
+      return jsonResult(await executeWebSearch(backend, args as Record<string, unknown>));
     },
+  };
+}
+
+/**
+ * Adapt the on-prem web-search backend to the shared {@link SharedWebSearchResult}
+ * shape so the Node {@link CapabilityProvider} can back `web.search` (PRD 11 §5.2) —
+ * the SAME backend the `web_search` tool uses. Returns null when web search is not
+ * configured/enabled, so the provider then does NOT advertise the `web.search`
+ * capability and the registry never offers `web_search` on-prem.
+ */
+export function createNodeWebSearch(options?: {
+  config?: BuilderForceAgentsConfig;
+  sandboxed?: boolean;
+}): ((query: string) => Promise<SharedWebSearchResult>) | null {
+  const backend = resolveSearchBackend(options?.config);
+  if (!resolveSearchEnabled({ search: backend.search, sandboxed: options?.sandboxed })) {
+    return null;
+  }
+  return async (query: string): Promise<SharedWebSearchResult> => {
+    if (!query.trim()) return { ok: false, query, error: "query is required" };
+    try {
+      const payload = await executeWebSearch(backend, { query });
+      if (typeof payload.error === "string") {
+        const message = typeof payload.message === "string" ? payload.message : payload.error;
+        return { ok: false, query, error: message };
+      }
+      // Brave returns `results: [{ title, url, description, … }]`; Perplexity/Grok
+      // return a synthesized `content` string + `citations`. Normalize both to the
+      // shared `{ title, url, snippet }[]` shape.
+      if (Array.isArray(payload.results)) {
+        const results = (payload.results as Array<Record<string, unknown>>).map((r) => ({
+          title: typeof r.title === "string" ? r.title : undefined,
+          url: typeof r.url === "string" ? r.url : undefined,
+          snippet: typeof r.description === "string" ? r.description : undefined,
+        }));
+        return { ok: true, query, results };
+      }
+      if (typeof payload.content === "string") {
+        const citations = Array.isArray(payload.citations) ? (payload.citations as unknown[]) : [];
+        const firstUrl = typeof citations[0] === "string" ? citations[0] : undefined;
+        return {
+          ok: true,
+          query,
+          results: [
+            { title: `${backend.provider} answer`, url: firstUrl, snippet: payload.content },
+          ],
+        };
+      }
+      return { ok: true, query, results: [] };
+    } catch (e) {
+      return { ok: false, query, error: e instanceof Error ? e.message : String(e) };
+    }
   };
 }
 

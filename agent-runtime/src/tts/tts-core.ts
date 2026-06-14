@@ -7,7 +7,7 @@ import {
   resolveModelRefFromString,
   type ModelRef,
 } from "../agents/model-selection.js";
-import { resolveModel } from "../agents/pi-embedded-runner/model.js";
+import { resolveModel } from "../agents/embedded-runner/model.js";
 import { nativeComplete } from "../builderforce/model/native-llm.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";

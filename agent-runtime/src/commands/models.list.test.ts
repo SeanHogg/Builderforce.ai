@@ -4,7 +4,7 @@ let modelsListCommand: typeof import("./models/list.list-command.js").modelsList
 
 const loadConfig = vi.fn();
 const ensureBuilderForceAgentsModelsJson = vi.fn().mockResolvedValue(undefined);
-const ensurePiAuthJsonFromAuthProfiles = vi
+const ensureAuthJsonFromAuthProfiles = vi
   .fn()
   .mockResolvedValue({ wrote: false, authPath: "/tmp/builderforce-agent/auth.json" });
 const resolveBuilderForceAgentsAgentDir = vi.fn().mockReturnValue("/tmp/builderforce-agent");
@@ -36,8 +36,8 @@ vi.mock("../agents/models-config.js", () => ({
   ensureBuilderForceAgentsModelsJson,
 }));
 
-vi.mock("../agents/pi-auth-json.js", () => ({
-  ensurePiAuthJsonFromAuthProfiles,
+vi.mock("../agents/auth-json.js", () => ({
+  ensureAuthJsonFromAuthProfiles,
 }));
 
 vi.mock("../agents/agent-paths.js", () => ({
@@ -58,7 +58,7 @@ vi.mock("../agents/model-auth.js", () => ({
   getCustomProviderApiKey,
 }));
 
-vi.mock("../agents/pi-model-discovery.js", () => {
+vi.mock("../agents/model-discovery.js", () => {
   class MockModelRegistry {
     find(provider: string, id: string) {
       return (
@@ -88,7 +88,7 @@ vi.mock("../agents/pi-model-discovery.js", () => {
   };
 });
 
-vi.mock("../agents/pi-embedded-runner/model.js", () => ({
+vi.mock("../agents/embedded-runner/model.js", () => ({
   resolveModel: () => {
     throw new Error("resolveModel should not be called from models.list tests");
   },
@@ -108,7 +108,7 @@ beforeEach(() => {
   modelRegistryState.getAllError = undefined;
   modelRegistryState.getAvailableError = undefined;
   listProfilesForProvider.mockReturnValue([]);
-  ensurePiAuthJsonFromAuthProfiles.mockClear();
+  ensureAuthJsonFromAuthProfiles.mockClear();
 });
 
 afterEach(() => {
@@ -282,7 +282,7 @@ describe("models list/status", () => {
 
     await modelsListCommand({ all: true, json: true }, runtime);
 
-    expect(ensurePiAuthJsonFromAuthProfiles).toHaveBeenCalledWith("/tmp/builderforce-agent");
+    expect(ensureAuthJsonFromAuthProfiles).toHaveBeenCalledWith("/tmp/builderforce-agent");
   });
 
   it("models list outputs canonical zai key for configured z.ai model", async () => {

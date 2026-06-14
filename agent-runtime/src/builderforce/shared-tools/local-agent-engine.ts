@@ -22,7 +22,12 @@ import type {
   ToolRegistry,
   ToolSchema,
 } from "@builderforce/agent-tools";
-import { nativeComplete, type LlmMessage, type LlmToolSchema } from "../model/native-llm.js";
+import {
+  nativeComplete,
+  nativeStream,
+  type LlmMessage,
+  type LlmToolSchema,
+} from "../model/native-llm.js";
 
 /** One tool call in an OpenAI-compatible completion (mirrors the cloud `RawToolCall`). */
 export interface RawToolCall {
@@ -43,21 +48,47 @@ export type LlmComplete = (
   signal?: AbortSignal,
 ) => Promise<{ content: string; toolCalls: RawToolCall[] }>;
 
+/** A TOKEN-STREAMING variant of {@link LlmComplete}. Emits incremental assistant
+ *  text via `onDelta` as it arrives, then resolves with the assembled turn. Inject
+ *  this (alongside `complete`) to give the on-prem chat/channel UX incremental
+ *  output (PRD 11 §5.2); the engine prefers it when present and falls back to the
+ *  non-streaming `complete` otherwise. */
+export type LlmStream = (
+  req: {
+    messages: Array<Record<string, unknown>>;
+    tools: ToolSchema[];
+    model?: string;
+  },
+  onDelta: (delta: string) => void,
+  signal?: AbortSignal,
+) => Promise<{ content: string; toolCalls: RawToolCall[] }>;
+
 /** Optional observability sinks so a host (the relay) can mirror the run onto the
  *  same frames the cloud/V2 paths emit — assistant text + per-tool events. */
 export interface LocalEngineSinks {
   onAssistantText?: (text: string) => void;
+  /** Incremental assistant text deltas (streaming) — fired only when a streaming
+   *  client is injected. Hosts use it to forward `chat.delta` frames for live UX. */
+  onAssistantDelta?: (delta: string) => void;
   onToolUse?: (name: string, toolCallId: string, args: Record<string, unknown>) => void;
   onToolResult?: (name: string, toolCallId: string, result: Record<string, unknown>) => void;
   /** Rich output blocks (media/extra text) a tool emitted — surfaced so the host can
    *  deliver them (channel attachment, transcript). Ignored by surfaces without media. */
-  onToolContent?: (name: string, toolCallId: string, content: import("@builderforce/agent-tools").ToolContentBlock[]) => void;
+  onToolContent?: (
+    name: string,
+    toolCallId: string,
+    content: import("@builderforce/agent-tools").ToolContentBlock[],
+  ) => void;
 }
 
 export interface LocalEngineDeps {
   registry: ToolRegistry;
   provider: CapabilityProvider;
   complete: LlmComplete;
+  /** Optional token-streaming client. When present the engine streams each turn
+   *  (firing `sinks.onAssistantDelta`) and ignores `complete`; otherwise it uses
+   *  the non-streaming `complete`. */
+  stream?: LlmStream;
   /** Absolute path of the checked-out working tree. Threaded into the {@link ToolContext}
    *  so Node-native tools (git/rg over the repo) have a path to operate on. */
   workspaceRoot?: string;
@@ -73,10 +104,14 @@ export class LocalAgentEngine implements AgentEngine {
   constructor(private readonly deps: LocalEngineDeps) {}
 
   async run(input: AgentRunInput): Promise<AgentRunResult> {
-    const { registry, provider, complete, sinks } = this.deps;
+    const { registry, provider, complete, stream, sinks } = this.deps;
     const maxSteps = this.deps.maxSteps ?? DEFAULT_MAX_STEPS;
     const tools = registry.schemasFor(provider);
-    const ctx: ToolContext = { caps: provider, signal: input.signal, workspaceRoot: this.deps.workspaceRoot };
+    const ctx: ToolContext = {
+      caps: provider,
+      signal: input.signal,
+      workspaceRoot: this.deps.workspaceRoot,
+    };
     const messages: Array<Record<string, unknown>> = [
       { role: "system", content: input.systemPrompt },
       { role: "user", content: input.userContent },
@@ -84,16 +119,25 @@ export class LocalAgentEngine implements AgentEngine {
 
     let finalOutput = "";
     for (let step = 0; step < maxSteps; step++) {
-      if (input.signal?.aborted) return { ok: true, output: finalOutput, cancelled: true, finished: false };
+      if (input.signal?.aborted)
+        return { ok: true, output: finalOutput, cancelled: true, finished: false };
 
-      const { content, toolCalls } = await complete({ messages, tools, model: input.model }, input.signal);
+      // Stream when a streaming client is injected (incremental UX), else complete.
+      const { content, toolCalls } = stream
+        ? await stream(
+            { messages, tools, model: input.model },
+            (d) => sinks?.onAssistantDelta?.(d),
+            input.signal,
+          )
+        : await complete({ messages, tools, model: input.model }, input.signal);
       if (content) {
         finalOutput = content;
         sinks?.onAssistantText?.(content);
       }
 
       // No tool calls → the model is done.
-      if (!toolCalls.length) return { ok: true, output: finalOutput, cancelled: false, finished: true };
+      if (!toolCalls.length)
+        return { ok: true, output: finalOutput, cancelled: false, finished: true };
 
       messages.push({ role: "assistant", content, tool_calls: toolCalls });
 
@@ -101,7 +145,9 @@ export class LocalAgentEngine implements AgentEngine {
         const name = tc.function?.name ?? "unknown";
         let args: Record<string, unknown> = {};
         try {
-          args = tc.function?.arguments ? (JSON.parse(tc.function.arguments) as Record<string, unknown>) : {};
+          args = tc.function?.arguments
+            ? (JSON.parse(tc.function.arguments) as Record<string, unknown>)
+            : {};
         } catch {
           /* leave empty */
         }
@@ -115,21 +161,36 @@ export class LocalAgentEngine implements AgentEngine {
 
         if (result.control?.kind === "finish") {
           if (result.control.summary) finalOutput = result.control.summary;
-          messages.push({ role: "tool", tool_call_id: tc.id ?? "", content: JSON.stringify({ ok: true }) });
+          messages.push({
+            role: "tool",
+            tool_call_id: tc.id ?? "",
+            content: JSON.stringify({ ok: true }),
+          });
           return { ok: true, output: finalOutput, cancelled: false, finished: true };
         }
         if (result.control?.kind === "ask_human") {
-          messages.push({ role: "tool", tool_call_id: tc.id ?? "", content: JSON.stringify(toolResult) });
+          messages.push({
+            role: "tool",
+            tool_call_id: tc.id ?? "",
+            content: JSON.stringify(toolResult),
+          });
           return {
             ok: true,
             output: finalOutput,
             cancelled: false,
             finished: false,
-            awaitingInput: { approvalId: result.control.approvalId ?? "", question: result.control.question },
+            awaitingInput: {
+              approvalId: result.control.approvalId ?? "",
+              question: result.control.question,
+            },
           };
         }
 
-        messages.push({ role: "tool", tool_call_id: tc.id ?? "", content: JSON.stringify(toolResult) });
+        messages.push({
+          role: "tool",
+          tool_call_id: tc.id ?? "",
+          content: JSON.stringify(toolResult),
+        });
       }
     }
 
@@ -148,7 +209,37 @@ export function createGatewayComplete(opts: { baseUrl: string; apiKey: string })
   return async (req, signal) => {
     const result = await nativeComplete(
       client,
-      { messages: req.messages as LlmMessage[], tools: req.tools as LlmToolSchema[] | undefined, model: req.model },
+      {
+        messages: req.messages as LlmMessage[],
+        tools: req.tools as LlmToolSchema[] | undefined,
+        model: req.model,
+      },
+      signal,
+    );
+    return { content: result.content, toolCalls: result.toolCalls as RawToolCall[] };
+  };
+}
+
+/**
+ * A token-streaming {@link LlmStream} backed by the gateway's OpenAI-compatible SSE
+ * endpoint ({@link nativeStream}) — the streaming counterpart of
+ * {@link createGatewayComplete}. Forwards text deltas to `onDelta` and resolves with
+ * the assembled turn (content + tool calls), so the on-prem engine gets incremental
+ * output with the SAME gateway client and no third-party SDK (PRD 11 §5.2).
+ */
+export function createGatewayStream(opts: { baseUrl: string; apiKey: string }): LlmStream {
+  const client = { baseUrl: opts.baseUrl, apiKey: opts.apiKey };
+  return async (req, onDelta, signal) => {
+    const result = await nativeStream(
+      client,
+      {
+        messages: req.messages as LlmMessage[],
+        tools: req.tools as LlmToolSchema[] | undefined,
+        model: req.model,
+      },
+      (e) => {
+        if (e.type === "text-delta") onDelta(e.delta);
+      },
       signal,
     );
     return { content: result.content, toolCalls: result.toolCalls as RawToolCall[] };

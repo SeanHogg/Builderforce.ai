@@ -3,9 +3,9 @@ import path from "node:path";
 import { beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { withTempHome as withTempHomeBase } from "../../test/helpers/temp-home.js";
 
-vi.mock("../agents/pi-embedded.js", () => ({
-  abortEmbeddedPiRun: vi.fn().mockReturnValue(false),
-  runEmbeddedPiAgent: vi.fn(),
+vi.mock("../agents/embedded.js", () => ({
+  abortEmbeddedRun: vi.fn().mockReturnValue(false),
+  runEmbeddedAgent: vi.fn(),
   resolveEmbeddedSessionLane: (key: string) => `session:${key.trim() || "main"}`,
 }));
 vi.mock("../agents/model-catalog.js", () => ({
@@ -15,7 +15,7 @@ vi.mock("../agents/model-catalog.js", () => ({
 import { telegramPlugin } from "../../extensions/telegram/src/channel.js";
 import { setTelegramRuntime } from "../../extensions/telegram/src/runtime.js";
 import { loadModelCatalog } from "../agents/model-catalog.js";
-import { runEmbeddedPiAgent } from "../agents/pi-embedded.js";
+import { runEmbeddedAgent } from "../agents/embedded.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import * as configModule from "../config/config.js";
 import { emitAgentEvent, onAgentEvent } from "../infra/agent-events.js";
@@ -73,7 +73,7 @@ function writeSessionStoreSeed(
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(runEmbeddedPiAgent).mockResolvedValue({
+  vi.mocked(runEmbeddedAgent).mockResolvedValue({
     payloads: [{ text: "ok" }],
     meta: {
       durationMs: 5,
@@ -115,7 +115,7 @@ describe("agentCommand", () => {
       expect(entry.thinkingLevel).toBe("high");
       expect(entry.verboseLevel).toBe("on");
 
-      const callArgs = vi.mocked(runEmbeddedPiAgent).mock.calls.at(-1)?.[0];
+      const callArgs = vi.mocked(runEmbeddedAgent).mock.calls.at(-1)?.[0];
       expect(callArgs?.thinkLevel).toBe("high");
       expect(callArgs?.verboseLevel).toBe("on");
     });
@@ -135,7 +135,7 @@ describe("agentCommand", () => {
 
       await agentCommand({ message: "resume me", sessionId: "session-123" }, runtime);
 
-      const callArgs = vi.mocked(runEmbeddedPiAgent).mock.calls.at(-1)?.[0];
+      const callArgs = vi.mocked(runEmbeddedAgent).mock.calls.at(-1)?.[0];
       expect(callArgs?.sessionId).toBe("session-123");
     });
   });
@@ -156,7 +156,7 @@ describe("agentCommand", () => {
         });
       });
 
-      vi.mocked(runEmbeddedPiAgent).mockImplementationOnce(async (params) => {
+      vi.mocked(runEmbeddedAgent).mockImplementationOnce(async (params) => {
         const runId = (params as { runId?: string } | undefined)?.runId ?? "run";
         const data = { text: "hello", delta: "hello" };
         (
@@ -192,7 +192,7 @@ describe("agentCommand", () => {
 
       await agentCommand({ message: "hi", to: "+1555" }, runtime);
 
-      const callArgs = vi.mocked(runEmbeddedPiAgent).mock.calls.at(-1)?.[0];
+      const callArgs = vi.mocked(runEmbeddedAgent).mock.calls.at(-1)?.[0];
       expect(callArgs?.provider).toBe("openai");
       expect(callArgs?.model).toBe("gpt-4.1-mini");
     });
@@ -227,7 +227,7 @@ describe("agentCommand", () => {
         { id: "gpt-4.1-mini", name: "GPT-4.1 Mini", provider: "openai" },
         { id: "gpt-5.2", name: "GPT-5.2", provider: "openai" },
       ]);
-      vi.mocked(runEmbeddedPiAgent)
+      vi.mocked(runEmbeddedAgent)
         .mockRejectedValueOnce(Object.assign(new Error("rate limited"), { status: 429 }))
         .mockResolvedValueOnce({
           payloads: [{ text: "ok" }],
@@ -246,7 +246,7 @@ describe("agentCommand", () => {
       );
 
       const attempts = vi
-        .mocked(runEmbeddedPiAgent)
+        .mocked(runEmbeddedAgent)
         .mock.calls.map((call) => ({ provider: call[0]?.provider, model: call[0]?.model }));
       expect(attempts).toEqual([
         { provider: "anthropic", model: "claude-opus-4-5" },
@@ -275,7 +275,7 @@ describe("agentCommand", () => {
         runtime,
       );
 
-      const callArgs = vi.mocked(runEmbeddedPiAgent).mock.calls.at(-1)?.[0];
+      const callArgs = vi.mocked(runEmbeddedAgent).mock.calls.at(-1)?.[0];
       expect(callArgs?.sessionKey).toBe("agent:main:subagent:abc");
 
       const saved = JSON.parse(fs.readFileSync(store, "utf-8")) as Record<
@@ -293,7 +293,7 @@ describe("agentCommand", () => {
 
       await agentCommand({ message: "hi", agentId: "ops" }, runtime);
 
-      const callArgs = vi.mocked(runEmbeddedPiAgent).mock.calls.at(-1)?.[0];
+      const callArgs = vi.mocked(runEmbeddedAgent).mock.calls.at(-1)?.[0];
       expect(callArgs?.sessionKey).toBe("agent:ops:main");
       expect(callArgs?.sessionFile).toContain(`${path.sep}agents${path.sep}ops${path.sep}sessions`);
     });
@@ -325,14 +325,14 @@ describe("agentCommand", () => {
 
       await agentCommand({ message: "hi", to: "+1555" }, runtime);
 
-      const callArgs = vi.mocked(runEmbeddedPiAgent).mock.calls.at(-1)?.[0];
+      const callArgs = vi.mocked(runEmbeddedAgent).mock.calls.at(-1)?.[0];
       expect(callArgs?.thinkLevel).toBe("low");
     });
   });
 
   it("prints JSON payload when requested", async () => {
     await withTempHome(async (home) => {
-      vi.mocked(runEmbeddedPiAgent).mockResolvedValue({
+      vi.mocked(runEmbeddedAgent).mockResolvedValue({
         payloads: [{ text: "json-reply", mediaUrl: "http://x.test/a.jpg" }],
         meta: {
           durationMs: 42,
@@ -362,7 +362,7 @@ describe("agentCommand", () => {
 
       await agentCommand({ message: "ping", to: "+1333" }, runtime);
 
-      const callArgs = vi.mocked(runEmbeddedPiAgent).mock.calls.at(-1)?.[0];
+      const callArgs = vi.mocked(runEmbeddedAgent).mock.calls.at(-1)?.[0];
       expect(callArgs?.prompt).toBe("ping");
     });
   });
@@ -420,7 +420,7 @@ describe("agentCommand", () => {
 
       await agentCommand({ message: "hi", agentId: "ops", replyChannel: "slack" }, runtime);
 
-      const callArgs = vi.mocked(runEmbeddedPiAgent).mock.calls.at(-1)?.[0];
+      const callArgs = vi.mocked(runEmbeddedAgent).mock.calls.at(-1)?.[0];
       expect(callArgs?.messageChannel).toBe("slack");
     });
   });
@@ -440,7 +440,7 @@ describe("agentCommand", () => {
         runtime,
       );
 
-      const callArgs = vi.mocked(runEmbeddedPiAgent).mock.calls.at(-1)?.[0];
+      const callArgs = vi.mocked(runEmbeddedAgent).mock.calls.at(-1)?.[0];
       expect(callArgs?.messageChannel).toBe("slack");
       expect(callArgs?.agentAccountId).toBe("acct-2");
     });
@@ -453,7 +453,7 @@ describe("agentCommand", () => {
 
       await agentCommand({ message: "hi", to: "+1555", accountId: "kev" }, runtime);
 
-      const callArgs = vi.mocked(runEmbeddedPiAgent).mock.calls.at(-1)?.[0];
+      const callArgs = vi.mocked(runEmbeddedAgent).mock.calls.at(-1)?.[0];
       expect(callArgs?.agentAccountId).toBe("kev");
     });
   });

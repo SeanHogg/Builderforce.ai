@@ -1,7 +1,7 @@
 import type { AgentTool } from "../builderforce/model/agent-types.js";
 import { Type } from "@sinclair/typebox";
 import { describe, expect, it } from "vitest";
-import { toToolDefinitions } from "./pi-tool-definition-adapter.js";
+import { toToolDefinitions } from "./tool-definition-adapter.js";
 
 type ToolExecute = ReturnType<typeof toToolDefinitions>[number]["execute"];
 const extensionContext = {} as Parameters<ToolExecute>[4];

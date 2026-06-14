@@ -1,15 +1,15 @@
 import { emitAgentEvent } from "../infra/agent-events.js";
 import { createInlineCodeState } from "../markdown/code-spans.js";
-import { formatAssistantErrorText } from "./pi-embedded-helpers.js";
-import type { EmbeddedPiSubscribeContext } from "./pi-embedded-subscribe.handlers.types.js";
-import { isAssistantMessage } from "./pi-embedded-utils.js";
+import { formatAssistantErrorText } from "./embedded-helpers.js";
+import type { EmbeddedSubscribeContext } from "./embedded-subscribe.handlers.types.js";
+import { isAssistantMessage } from "./embedded-utils.js";
 
 export {
   handleAutoCompactionEnd,
   handleAutoCompactionStart,
-} from "./pi-embedded-subscribe.handlers.compaction.js";
+} from "./embedded-subscribe.handlers.compaction.js";
 
-export function handleAgentStart(ctx: EmbeddedPiSubscribeContext) {
+export function handleAgentStart(ctx: EmbeddedSubscribeContext) {
   ctx.log.debug(`embedded run agent start: runId=${ctx.params.runId}`);
   emitAgentEvent({
     runId: ctx.params.runId,
@@ -25,7 +25,7 @@ export function handleAgentStart(ctx: EmbeddedPiSubscribeContext) {
   });
 }
 
-export function handleAgentEnd(ctx: EmbeddedPiSubscribeContext) {
+export function handleAgentEnd(ctx: EmbeddedSubscribeContext) {
   const lastAssistant = ctx.state.lastAssistant;
   const isError = isAssistantMessage(lastAssistant) && lastAssistant.stopReason === "error";
 

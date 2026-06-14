@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { createTempHomeHarness, makeReplyConfig } from "./reply.test-harness.js";
 
-const runEmbeddedPiAgentMock = vi.fn();
+const runEmbeddedAgentMock = vi.fn();
 
 vi.mock("../agents/model-fallback.js", () => ({
   runWithModelFallback: async ({
@@ -20,13 +20,13 @@ vi.mock("../agents/model-fallback.js", () => ({
   }),
 }));
 
-vi.mock("../agents/pi-embedded.js", () => ({
-  abortEmbeddedPiRun: vi.fn().mockReturnValue(false),
-  runEmbeddedPiAgent: (params: unknown) => runEmbeddedPiAgentMock(params),
-  queueEmbeddedPiMessage: vi.fn().mockReturnValue(false),
+vi.mock("../agents/embedded.js", () => ({
+  abortEmbeddedRun: vi.fn().mockReturnValue(false),
+  runEmbeddedAgent: (params: unknown) => runEmbeddedAgentMock(params),
+  queueEmbeddedMessage: vi.fn().mockReturnValue(false),
   resolveEmbeddedSessionLane: (key: string) => `session:${key.trim() || "main"}`,
-  isEmbeddedPiRunActive: vi.fn().mockReturnValue(false),
-  isEmbeddedPiRunStreaming: vi.fn().mockReturnValue(false),
+  isEmbeddedRunActive: vi.fn().mockReturnValue(false),
+  isEmbeddedRunStreaming: vi.fn().mockReturnValue(false),
 }));
 
 const webMocks = vi.hoisted(() => ({
@@ -41,7 +41,7 @@ import { getReplyFromConfig } from "./reply.js";
 
 const { withTempHome } = createTempHomeHarness({
   prefix: "builderforce-typing-",
-  beforeEachCase: () => runEmbeddedPiAgentMock.mockClear(),
+  beforeEachCase: () => runEmbeddedAgentMock.mockClear(),
 });
 
 afterEach(() => {
@@ -55,7 +55,7 @@ describe("getReplyFromConfig typing (heartbeat)", () => {
 
   it("starts typing for normal runs", async () => {
     await withTempHome(async (home) => {
-      runEmbeddedPiAgentMock.mockResolvedValueOnce({
+      runEmbeddedAgentMock.mockResolvedValueOnce({
         payloads: [{ text: "ok" }],
         meta: {},
       });
@@ -73,7 +73,7 @@ describe("getReplyFromConfig typing (heartbeat)", () => {
 
   it("does not start typing for heartbeat runs", async () => {
     await withTempHome(async (home) => {
-      runEmbeddedPiAgentMock.mockResolvedValueOnce({
+      runEmbeddedAgentMock.mockResolvedValueOnce({
         payloads: [{ text: "ok" }],
         meta: {},
       });

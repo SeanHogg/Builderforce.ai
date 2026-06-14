@@ -3,7 +3,7 @@
  * coding-agent `ToolDefinition` (PI cutover). Faithful to pi 0.54: like {@link AgentTool}
  * but with the extra trailing `ctx` execute arg + optional UI render hooks. The native loop
  * never passes `ctx` or renders, so those are kept optional/loose; the on-prem tool pipeline
- * (`pi-tool-definition-adapter.ts`, `tool-split.ts`) compiles + runs unchanged.
+ * (`tool-definition-adapter.ts`, `tool-split.ts`) compiles + runs unchanged.
  */
 
 import type { Static, TSchema } from "@sinclair/typebox";

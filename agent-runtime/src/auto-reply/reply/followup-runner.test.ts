@@ -6,7 +6,7 @@ import { loadSessionStore, saveSessionStore, type SessionEntry } from "../../con
 import type { FollowupRun } from "./queue.js";
 import { createMockTypingController } from "./test-helpers.js";
 
-const runEmbeddedPiAgentMock = vi.fn();
+const runEmbeddedAgentMock = vi.fn();
 
 vi.mock("../../agents/model-fallback.js", () => ({
   runWithModelFallback: async ({
@@ -24,8 +24,8 @@ vi.mock("../../agents/model-fallback.js", () => ({
   }),
 }));
 
-vi.mock("../../agents/pi-embedded.js", () => ({
-  runEmbeddedPiAgent: (params: unknown) => runEmbeddedPiAgentMock(params),
+vi.mock("../../agents/embedded.js", () => ({
+  runEmbeddedAgent: (params: unknown) => runEmbeddedAgentMock(params),
 }));
 
 import { createFollowupRunner } from "./followup-runner.js";
@@ -75,7 +75,7 @@ describe("createFollowupRunner compaction", () => {
     };
     const onBlockReply = vi.fn(async () => {});
 
-    runEmbeddedPiAgentMock.mockImplementationOnce(
+    runEmbeddedAgentMock.mockImplementationOnce(
       async (params: {
         onAgentEvent?: (evt: { stream: string; data: Record<string, unknown> }) => void;
       }) => {
@@ -149,7 +149,7 @@ describe("createFollowupRunner compaction", () => {
     await saveSessionStore(storePath, sessionStore);
     const onBlockReply = vi.fn(async () => {});
 
-    runEmbeddedPiAgentMock.mockImplementationOnce(
+    runEmbeddedAgentMock.mockImplementationOnce(
       async (params: {
         onAgentEvent?: (evt: { stream: string; data: Record<string, unknown> }) => void;
       }) => {
@@ -199,7 +199,7 @@ describe("createFollowupRunner compaction", () => {
 describe("createFollowupRunner messaging tool dedupe", () => {
   it("drops payloads already sent via messaging tool", async () => {
     const onBlockReply = vi.fn(async () => {});
-    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+    runEmbeddedAgentMock.mockResolvedValueOnce({
       payloads: [{ text: "hello world!" }],
       messagingToolSentTexts: ["hello world!"],
       meta: {},
@@ -219,7 +219,7 @@ describe("createFollowupRunner messaging tool dedupe", () => {
 
   it("delivers payloads when not duplicates", async () => {
     const onBlockReply = vi.fn(async () => {});
-    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+    runEmbeddedAgentMock.mockResolvedValueOnce({
       payloads: [{ text: "hello world!" }],
       messagingToolSentTexts: ["different message"],
       meta: {},
@@ -239,7 +239,7 @@ describe("createFollowupRunner messaging tool dedupe", () => {
 
   it("suppresses replies when a messaging tool sent via the same provider + target", async () => {
     const onBlockReply = vi.fn(async () => {});
-    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+    runEmbeddedAgentMock.mockResolvedValueOnce({
       payloads: [{ text: "hello world!" }],
       messagingToolSentTexts: ["different message"],
       messagingToolSentTargets: [{ tool: "slack", provider: "slack", to: "channel:C1" }],
@@ -260,7 +260,7 @@ describe("createFollowupRunner messaging tool dedupe", () => {
 
   it("drops media URL from payload when messaging tool already sent it", async () => {
     const onBlockReply = vi.fn(async () => {});
-    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+    runEmbeddedAgentMock.mockResolvedValueOnce({
       payloads: [{ mediaUrl: "/tmp/img.png" }],
       messagingToolSentMediaUrls: ["/tmp/img.png"],
       meta: {},
@@ -281,7 +281,7 @@ describe("createFollowupRunner messaging tool dedupe", () => {
 
   it("delivers media payload when not a duplicate", async () => {
     const onBlockReply = vi.fn(async () => {});
-    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+    runEmbeddedAgentMock.mockResolvedValueOnce({
       payloads: [{ mediaUrl: "/tmp/img.png" }],
       messagingToolSentMediaUrls: ["/tmp/other.png"],
       meta: {},
@@ -310,7 +310,7 @@ describe("createFollowupRunner messaging tool dedupe", () => {
     await saveSessionStore(storePath, sessionStore);
 
     const onBlockReply = vi.fn(async () => {});
-    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+    runEmbeddedAgentMock.mockResolvedValueOnce({
       payloads: [{ text: "hello world!" }],
       messagingToolSentTexts: ["different message"],
       messagingToolSentTargets: [{ tool: "slack", provider: "slack", to: "channel:C1" }],

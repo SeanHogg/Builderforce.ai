@@ -37,12 +37,12 @@ import {
   ensureSessionHeader,
   validateAnthropicTurns,
   validateGeminiTurns,
-} from "../pi-embedded-helpers.js";
+} from "../embedded-helpers.js";
 import {
-  ensurePiCompactionReserveTokens,
+  ensureCompactionReserveTokens,
   resolveCompactionReserveTokensFloor,
-} from "../pi-settings.js";
-import { createBuilderForceAgentsCodingTools } from "../pi-tools.js";
+} from "../agent-settings.js";
+import { createBuilderForceAgentsCodingTools } from "../coding-tools.js";
 import { resolveSandboxContext } from "../sandbox.js";
 import { repairSessionFileIfNeeded } from "../session-file-repair.js";
 import { guardSessionManager } from "../session-tool-result-guard-wrapper.js";
@@ -82,11 +82,11 @@ import {
   createSystemPromptOverride,
 } from "./system-prompt.js";
 import { splitSdkTools } from "./tool-split.js";
-import type { EmbeddedPiCompactResult } from "./types.js";
+import type { EmbeddedCompactResult } from "./types.js";
 import { describeUnknownError, mapThinkingLevel } from "./utils.js";
 import { flushPendingToolResultsAfterIdle } from "./wait-for-idle-before-flush.js";
 
-export type CompactEmbeddedPiSessionParams = {
+export type CompactEmbeddedSessionParams = {
   sessionId: string;
   runId?: string;
   sessionKey?: string;
@@ -245,9 +245,9 @@ function classifyCompactionReason(reason?: string): string {
  * Core compaction logic without lane queueing.
  * Use this when already inside a session/global lane to avoid deadlocks.
  */
-export async function compactEmbeddedPiSessionDirect(
-  params: CompactEmbeddedPiSessionParams,
-): Promise<EmbeddedPiCompactResult> {
+export async function compactEmbeddedSessionDirect(
+  params: CompactEmbeddedSessionParams,
+): Promise<EmbeddedCompactResult> {
   const startedAt = Date.now();
   const diagId = params.diagId?.trim() || createCompactionDiagId();
   const trigger = params.trigger ?? "manual";
@@ -259,7 +259,7 @@ export async function compactEmbeddedPiSessionDirect(
 
   const provider = (params.provider ?? DEFAULT_PROVIDER).trim() || DEFAULT_PROVIDER;
   const modelId = (params.model ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
-  const fail = (reason: string): EmbeddedPiCompactResult => {
+  const fail = (reason: string): EmbeddedCompactResult => {
     log.warn(
       `[compaction-diag] end runId=${runId} sessionKey=${params.sessionKey ?? params.sessionId} ` +
         `diagId=${diagId} trigger=${trigger} provider=${provider}/${modelId} ` +
@@ -536,7 +536,7 @@ export async function compactEmbeddedPiSessionDirect(
       });
       trackSessionManagerAccess(params.sessionFile);
       const settingsManager = SettingsManager.create(effectiveWorkspace, agentDir);
-      ensurePiCompactionReserveTokens({
+      ensureCompactionReserveTokens({
         settingsManager,
         minReserveTokens: resolveCompactionReserveTokensFloor(params.config),
       });
@@ -729,16 +729,16 @@ export async function compactEmbeddedPiSessionDirect(
 /**
  * Compacts a session with lane queueing (session lane + global lane).
  * Use this from outside a lane context. If already inside a lane, use
- * `compactEmbeddedPiSessionDirect` to avoid deadlocks.
+ * `compactEmbeddedSessionDirect` to avoid deadlocks.
  */
-export async function compactEmbeddedPiSession(
-  params: CompactEmbeddedPiSessionParams,
-): Promise<EmbeddedPiCompactResult> {
+export async function compactEmbeddedSession(
+  params: CompactEmbeddedSessionParams,
+): Promise<EmbeddedCompactResult> {
   const sessionLane = resolveSessionLane(params.sessionKey?.trim() || params.sessionId);
   const globalLane = resolveGlobalLane(params.lane);
   const enqueueGlobal =
     params.enqueue ?? ((task, opts) => enqueueCommandInLane(globalLane, task, opts));
   return enqueueCommandInLane(sessionLane, () =>
-    enqueueGlobal(async () => compactEmbeddedPiSessionDirect(params)),
+    enqueueGlobal(async () => compactEmbeddedSessionDirect(params)),
   );
 }

@@ -6,7 +6,7 @@ import {
   loadModelCatalog,
   makeWhatsAppDirectiveConfig,
   replyText,
-  runEmbeddedPiAgent,
+  runEmbeddedAgent,
   sessionStorePath,
   withTempHome,
 } from "./reply.directive.directive-behavior.e2e-harness.js";
@@ -50,7 +50,7 @@ describe("directive behavior", () => {
       expect(text).toContain("- openai");
       expect(text).toContain("Use: /models <provider>");
       expect(text).toContain("Switch: /model <provider/model>");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("shows current model when catalog is unavailable", async () => {
@@ -61,7 +61,7 @@ describe("directive behavior", () => {
       expect(text).toContain("Switch: /model <provider/model>");
       expect(text).toContain("Browse: /models (providers) or /models <provider> (models)");
       expect(text).toContain("More: /model status");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("includes catalog providers when no allowlist is set", async () => {
@@ -86,7 +86,7 @@ describe("directive behavior", () => {
       expect(text).toContain("- openai");
       expect(text).toContain("- xai");
       expect(text).toContain("Use: /models <provider>");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("lists config-only providers when catalog is present", async () => {
@@ -124,7 +124,7 @@ describe("directive behavior", () => {
       });
       expect(text).toContain("Models (minimax)");
       expect(text).toContain("minimax/MiniMax-M2.1");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("does not repeat missing auth labels on /model list", async () => {
@@ -138,7 +138,7 @@ describe("directive behavior", () => {
       });
       expect(text).toContain("Providers:");
       expect(text).not.toContain("missing (missing)");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("sets model override on /model directive", async () => {
@@ -165,7 +165,7 @@ describe("directive behavior", () => {
         model: "gpt-4.1-mini",
         provider: "openai",
       });
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("supports model aliases on /model directive", async () => {
@@ -192,7 +192,7 @@ describe("directive behavior", () => {
         model: "claude-opus-4-5",
         provider: "anthropic",
       });
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
 });

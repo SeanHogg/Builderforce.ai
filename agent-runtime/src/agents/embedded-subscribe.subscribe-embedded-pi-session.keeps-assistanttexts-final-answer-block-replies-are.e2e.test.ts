@@ -1,12 +1,12 @@
 import type { AssistantMessage } from "../builderforce/model/types.js";
 import { describe, expect, it, vi } from "vitest";
-import { subscribeEmbeddedPiSession } from "./pi-embedded-subscribe.js";
+import { subscribeEmbeddedSession } from "./embedded-subscribe.js";
 
 type StubSession = {
   subscribe: (fn: (evt: unknown) => void) => () => void;
 };
 
-describe("subscribeEmbeddedPiSession", () => {
+describe("subscribeEmbeddedSession", () => {
   it("keeps assistantTexts to the final answer when block replies are disabled", () => {
     let handler: ((evt: unknown) => void) | undefined;
     const session: StubSession = {
@@ -16,8 +16,8 @@ describe("subscribeEmbeddedPiSession", () => {
       },
     };
 
-    const subscription = subscribeEmbeddedPiSession({
-      session: session as unknown as Parameters<typeof subscribeEmbeddedPiSession>[0]["session"],
+    const subscription = subscribeEmbeddedSession({
+      session: session as unknown as Parameters<typeof subscribeEmbeddedSession>[0]["session"],
       runId: "run",
       reasoningMode: "on",
     });
@@ -70,8 +70,8 @@ describe("subscribeEmbeddedPiSession", () => {
 
     const onPartialReply = vi.fn();
 
-    const subscription = subscribeEmbeddedPiSession({
-      session: session as unknown as Parameters<typeof subscribeEmbeddedPiSession>[0]["session"],
+    const subscription = subscribeEmbeddedSession({
+      session: session as unknown as Parameters<typeof subscribeEmbeddedSession>[0]["session"],
       runId: "run",
       reasoningMode: "on",
       onPartialReply,

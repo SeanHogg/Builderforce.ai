@@ -5,9 +5,9 @@ import type { CliDeps } from "../cli/deps.js";
 import { makeCfg, makeJob, withTempCronHome } from "./isolated-agent.test-harness.js";
 import type { CronJob } from "./types.js";
 
-vi.mock("../agents/pi-embedded.js", () => ({
-  abortEmbeddedPiRun: vi.fn().mockReturnValue(false),
-  runEmbeddedPiAgent: vi.fn(),
+vi.mock("../agents/embedded.js", () => ({
+  abortEmbeddedRun: vi.fn().mockReturnValue(false),
+  runEmbeddedAgent: vi.fn(),
   resolveEmbeddedSessionLane: (key: string) => `session:${key.trim() || "main"}`,
 }));
 vi.mock("../agents/model-catalog.js", () => ({
@@ -15,7 +15,7 @@ vi.mock("../agents/model-catalog.js", () => ({
 }));
 
 import { loadModelCatalog } from "../agents/model-catalog.js";
-import { runEmbeddedPiAgent } from "../agents/pi-embedded.js";
+import { runEmbeddedAgent } from "../agents/embedded.js";
 import { runCronIsolatedAgentTurn } from "./isolated-agent.js";
 const withTempHome = withTempCronHome;
 
@@ -31,7 +31,7 @@ function makeDeps(): CliDeps {
 }
 
 function mockEmbeddedTexts(texts: string[]) {
-  vi.mocked(runEmbeddedPiAgent).mockResolvedValue({
+  vi.mocked(runEmbeddedAgent).mockResolvedValue({
     payloads: texts.map((text) => ({ text })),
     meta: {
       durationMs: 5,
@@ -45,7 +45,7 @@ function mockEmbeddedOk() {
 }
 
 function expectEmbeddedProviderModel(expected: { provider: string; model: string }) {
-  const call = vi.mocked(runEmbeddedPiAgent).mock.calls[0]?.[0] as {
+  const call = vi.mocked(runEmbeddedAgent).mock.calls[0]?.[0] as {
     provider?: string;
     model?: string;
   };
@@ -110,7 +110,7 @@ async function runCronTurn(home: string, options: RunCronTurnOptions = {}) {
   const storePath = options.storePath ?? (await writeSessionStore(home, options.storeEntries));
   const deps = options.deps ?? makeDeps();
   if (options.mockTexts === null) {
-    vi.mocked(runEmbeddedPiAgent).mockReset();
+    vi.mocked(runEmbeddedAgent).mockReset();
   } else {
     mockEmbeddedTexts(options.mockTexts ?? ["ok"]);
   }
@@ -167,7 +167,7 @@ async function runTurnWithStoredModelOverride(
 
 describe("runCronIsolatedAgentTurn", () => {
   beforeEach(() => {
-    vi.mocked(runEmbeddedPiAgent).mockReset();
+    vi.mocked(runEmbeddedAgent).mockReset();
     vi.mocked(loadModelCatalog).mockResolvedValue([]);
   });
 
@@ -178,7 +178,7 @@ describe("runCronIsolatedAgentTurn", () => {
       });
 
       expect(res.status).toBe("ok");
-      expect(vi.mocked(runEmbeddedPiAgent)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(runEmbeddedAgent)).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -200,7 +200,7 @@ describe("runCronIsolatedAgentTurn", () => {
         jobPayload: DEFAULT_AGENT_TURN_PAYLOAD,
       });
 
-      const call = vi.mocked(runEmbeddedPiAgent).mock.calls.at(-1)?.[0] as {
+      const call = vi.mocked(runEmbeddedAgent).mock.calls.at(-1)?.[0] as {
         prompt?: string;
       };
       const lines = call?.prompt?.split("\n") ?? [];
@@ -249,7 +249,7 @@ describe("runCronIsolatedAgentTurn", () => {
       });
 
       expect(res.status).toBe("ok");
-      const call = vi.mocked(runEmbeddedPiAgent).mock.calls.at(-1)?.[0] as {
+      const call = vi.mocked(runEmbeddedAgent).mock.calls.at(-1)?.[0] as {
         sessionKey?: string;
         workspaceDir?: string;
         sessionFile?: string;
@@ -342,7 +342,7 @@ describe("runCronIsolatedAgentTurn", () => {
       });
 
       expect(res.status).toBe("ok");
-      const call = vi.mocked(runEmbeddedPiAgent).mock.calls[0]?.[0] as { prompt?: string };
+      const call = vi.mocked(runEmbeddedAgent).mock.calls[0]?.[0] as { prompt?: string };
       expect(call?.prompt).toContain("EXTERNAL, UNTRUSTED");
       expect(call?.prompt).toContain("Hello");
     });
@@ -364,7 +364,7 @@ describe("runCronIsolatedAgentTurn", () => {
       });
 
       expect(res.status).toBe("ok");
-      const call = vi.mocked(runEmbeddedPiAgent).mock.calls[0]?.[0] as { prompt?: string };
+      const call = vi.mocked(runEmbeddedAgent).mock.calls[0]?.[0] as { prompt?: string };
       expect(call?.prompt).not.toContain("EXTERNAL, UNTRUSTED");
       expect(call?.prompt).toContain("Hello");
     });
@@ -401,7 +401,7 @@ describe("runCronIsolatedAgentTurn", () => {
       });
 
       expect(res.status).toBe("ok");
-      const call = vi.mocked(runEmbeddedPiAgent).mock.calls[0]?.[0] as {
+      const call = vi.mocked(runEmbeddedAgent).mock.calls[0]?.[0] as {
         provider?: string;
         model?: string;
       };
@@ -423,7 +423,7 @@ describe("runCronIsolatedAgentTurn", () => {
 
       expect(res.status).toBe("error");
       expect(res.error).toMatch("invalid model");
-      expect(vi.mocked(runEmbeddedPiAgent)).not.toHaveBeenCalled();
+      expect(vi.mocked(runEmbeddedAgent)).not.toHaveBeenCalled();
     });
   });
 
@@ -443,7 +443,7 @@ describe("runCronIsolatedAgentTurn", () => {
         mockTexts: ["done"],
       });
 
-      const callArgs = vi.mocked(runEmbeddedPiAgent).mock.calls.at(-1)?.[0];
+      const callArgs = vi.mocked(runEmbeddedAgent).mock.calls.at(-1)?.[0];
       expect(callArgs?.thinkLevel).toBe("low");
     });
   });

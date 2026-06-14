@@ -4,12 +4,12 @@ import {
   createParagraphChunkedBlockReplyHarness,
   emitAssistantTextDeltaAndEnd,
   expectFencedChunks,
-} from "./pi-embedded-subscribe.e2e-harness.js";
-import { subscribeEmbeddedPiSession } from "./pi-embedded-subscribe.js";
+} from "./embedded-subscribe.e2e-harness.js";
+import { subscribeEmbeddedSession } from "./embedded-subscribe.js";
 
 type SessionEventHandler = (evt: unknown) => void;
 
-describe("subscribeEmbeddedPiSession", () => {
+describe("subscribeEmbeddedSession", () => {
   it("splits long single-line fenced blocks with reopen/close", () => {
     const onBlockReply = vi.fn();
     const { emit } = createParagraphChunkedBlockReplyHarness({
@@ -36,9 +36,9 @@ describe("subscribeEmbeddedPiSession", () => {
           }
         };
       },
-    } as unknown as Parameters<typeof subscribeEmbeddedPiSession>[0]["session"];
+    } as unknown as Parameters<typeof subscribeEmbeddedSession>[0]["session"];
 
-    const subscription = subscribeEmbeddedPiSession({
+    const subscription = subscribeEmbeddedSession({
       session,
       runId: "run-1",
     });
@@ -86,9 +86,9 @@ describe("subscribeEmbeddedPiSession", () => {
         listeners.push(listener);
         return () => {};
       },
-    } as unknown as Parameters<typeof subscribeEmbeddedPiSession>[0]["session"];
+    } as unknown as Parameters<typeof subscribeEmbeddedSession>[0]["session"];
 
-    const subscription = subscribeEmbeddedPiSession({
+    const subscription = subscribeEmbeddedSession({
       session,
       runId: "run-2",
     });

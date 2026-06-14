@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { normalizeTestText } from "../../test/helpers/normalize-text.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import {
-  getRunEmbeddedPiAgentMock,
+  getRunEmbeddedAgentMock,
   installTriggerHandlingE2eTestHooks,
   makeCfg,
   withTempHome,
@@ -60,7 +60,7 @@ describe("trigger handling", () => {
   });
   it("rejects /restart by default", async () => {
     await withTempHome(async (home) => {
-      const runEmbeddedPiAgentMock = getRunEmbeddedPiAgentMock();
+      const runEmbeddedAgentMock = getRunEmbeddedAgentMock();
       const res = await getReplyFromConfig(
         {
           Body: "  [Dec 5] /restart",
@@ -73,12 +73,12 @@ describe("trigger handling", () => {
       );
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text).toContain("/restart is disabled");
-      expect(runEmbeddedPiAgentMock).not.toHaveBeenCalled();
+      expect(runEmbeddedAgentMock).not.toHaveBeenCalled();
     });
   });
   it("restarts when enabled", async () => {
     await withTempHome(async (home) => {
-      const runEmbeddedPiAgentMock = getRunEmbeddedPiAgentMock();
+      const runEmbeddedAgentMock = getRunEmbeddedAgentMock();
       const cfg = { ...makeCfg(home), commands: { restart: true } } as BuilderForceAgentsConfig;
       const res = await getReplyFromConfig(
         {
@@ -92,12 +92,12 @@ describe("trigger handling", () => {
       );
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text?.startsWith("⚙️ Restarting") || text?.startsWith("⚠️ Restart failed")).toBe(true);
-      expect(runEmbeddedPiAgentMock).not.toHaveBeenCalled();
+      expect(runEmbeddedAgentMock).not.toHaveBeenCalled();
     });
   });
   it("reports status without invoking the agent", async () => {
     await withTempHome(async (home) => {
-      const runEmbeddedPiAgentMock = getRunEmbeddedPiAgentMock();
+      const runEmbeddedAgentMock = getRunEmbeddedAgentMock();
       const res = await getReplyFromConfig(
         {
           Body: "/status",
@@ -110,7 +110,7 @@ describe("trigger handling", () => {
       );
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text).toContain("BuilderForceAgents");
-      expect(runEmbeddedPiAgentMock).not.toHaveBeenCalled();
+      expect(runEmbeddedAgentMock).not.toHaveBeenCalled();
     });
   });
 });

@@ -1,14 +1,14 @@
 import type { AssistantMessage } from "../builderforce/model/types.js";
 import { describe, expect, it, vi } from "vitest";
-import { createStubSessionHarness } from "./pi-embedded-subscribe.e2e-harness.js";
-import { subscribeEmbeddedPiSession } from "./pi-embedded-subscribe.js";
+import { createStubSessionHarness } from "./embedded-subscribe.e2e-harness.js";
+import { subscribeEmbeddedSession } from "./embedded-subscribe.js";
 
-describe("subscribeEmbeddedPiSession lifecycle billing errors", () => {
+describe("subscribeEmbeddedSession lifecycle billing errors", () => {
   it("includes provider and model context in lifecycle billing errors", () => {
     const { session, emit } = createStubSessionHarness();
     const onAgentEvent = vi.fn();
 
-    subscribeEmbeddedPiSession({
+    subscribeEmbeddedSession({
       session,
       runId: "run-billing-error",
       onAgentEvent,
