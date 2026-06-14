@@ -1,0 +1,26 @@
+name: Track Scope
+
+# Enforces the README '🧵 Isolation Tracks' boundaries (T9 · Platform · DB · CI).
+# A PR from a `track/<id>` branch may edit only files under that track's `owns`
+# globs (minus `excludes`) plus the shared hubs, and may add migrations only in its
+# reserved band. Source of truth: .github/isolation-tracks.json. Branches that are
+# not `track/<id>` (e.g. main, feature branches) are skipped by the guard itself.
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  track-scope:
+    name: Isolation-track scope guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so the guard can diff the PR head against origin/main.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check track scope
+        run: node api/scripts/check-track-scope.mjs
