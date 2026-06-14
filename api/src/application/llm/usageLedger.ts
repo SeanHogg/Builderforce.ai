@@ -24,6 +24,30 @@ import { getCatalogCached } from './modelCatalog';
 const CACHE_READ_MULTIPLIER = 0.1;
 const CACHE_CREATION_MULTIPLIER = 1.25;
 
+/** Coerce one token count to a non-negative finite integer. Upstream usage SHOULD
+ *  be clean, but a vendor/stream edge (a failed turn, a malformed chunk, a synthetic
+ *  retry) can surface NaN, Infinity, a negative, or a fractional value — and those
+ *  must NEVER reach the billing ledger, where they poison the SUM()-based cost
+ *  rollups (a single NaN makes a whole tenant/project total NaN). Floors anything
+ *  non-finite or negative to 0; truncates fractions. Identity for a clean integer. */
+export function clampTokenCount(n: number | undefined | null): number {
+  return Number.isFinite(n) ? Math.max(0, Math.floor(n as number)) : 0;
+}
+
+/** Sanitize every token field on a usage record via {@link clampTokenCount}, so the
+ *  single ledger writer ({@link recordUsageRow}) and any direct snapshot writer share
+ *  ONE clamp. Preserves "cache field absent" (undefined) so an upstream with no cache
+ *  breakdown is not misrecorded as an explicit 0. */
+export function sanitizeUsage(usage: LlmUsage): LlmUsage {
+  return {
+    promptTokens:     clampTokenCount(usage.promptTokens),
+    completionTokens: clampTokenCount(usage.completionTokens),
+    totalTokens:      clampTokenCount(usage.totalTokens),
+    ...(usage.cacheReadTokens     != null ? { cacheReadTokens:     clampTokenCount(usage.cacheReadTokens) }     : {}),
+    ...(usage.cacheCreationTokens != null ? { cacheCreationTokens: clampTokenCount(usage.cacheCreationTokens) } : {}),
+  };
+}
+
 /** Authoritative per-call cost in millicents (1/100000 USD), priced from the
  *  resolved model's catalog price incl. the cache-read/creation discount split.
  *  Returns 0 when the model isn't in the catalog (e.g. a BYO-key passthrough). */
@@ -120,6 +144,11 @@ export async function recordProxyUsage(
  *  Best-effort — never throws (logging must not fail a run). */
 export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Promise<void> {
   try {
+    // Clamp tokens ONCE at the canonical write boundary so neither the cost price
+    // nor the persisted columns can carry a NaN/negative/fractional from a bad
+    // upstream turn — every usage producer (gateway + cloud) funnels through here.
+    const usage = sanitizeUsage(row.usage);
+
     // Price the call at write time so the dashboard/billing sums a recorded
     // column instead of re-pricing tokens against a moving catalog. Catalog read
     // is L1+KV cached, so this is a cheap lookup on the hot logging path.
@@ -127,7 +156,7 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
     try {
       const catalog = await getCatalogCached(env);
       const pricing = catalog.find((m) => m.id === row.model)?.pricing;
-      costUsdMillicents = computeCostMillicents(pricing, row.usage);
+      costUsdMillicents = computeCostMillicents(pricing, usage);
     } catch { /* pricing unavailable — record tokens with cost 0 */ }
 
     await db.insert(llmUsageLog).values({
@@ -135,11 +164,11 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       userId:              row.userId,
       llmProduct:          row.llmProduct,
       model:               row.model,
-      promptTokens:        row.usage.promptTokens,
-      completionTokens:    row.usage.completionTokens,
-      totalTokens:         row.usage.totalTokens,
-      cacheReadTokens:     row.usage.cacheReadTokens     ?? 0,
-      cacheCreationTokens: row.usage.cacheCreationTokens ?? 0,
+      promptTokens:        usage.promptTokens,
+      completionTokens:    usage.completionTokens,
+      totalTokens:         usage.totalTokens,
+      cacheReadTokens:     usage.cacheReadTokens     ?? 0,
+      cacheCreationTokens: usage.cacheCreationTokens ?? 0,
       retries:             row.retries ?? 0,
       streamed:            row.streamed ?? false,
       metadata:            row.metadata ? JSON.stringify(row.metadata) : null,

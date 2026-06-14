@@ -21,7 +21,7 @@ import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
 import { scanWrittenForPlaceholders } from '../repos/scanForPlaceholders';
 import { CODING_BACKSTOP_MODELS, CODING_MODEL_POOL, codingModelsForPlan, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
-import { recordUsageRow } from '../llm/usageLedger';
+import { recordUsageRow, clampTokenCount } from '../llm/usageLedger';
 import { ensureTaskPrdRecord, appendTaskPrdRevision } from '../prd/taskPrd';
 import { loadCapabilityContext } from '../artifact/capabilityContext';
 import { pullPendingSteering, releasePendingSteers } from './executionSteering';
@@ -529,6 +529,10 @@ export async function recordCloudUsage(
   db: Db,
   args: { tenantId: number; cloudAgentRef?: string; executionId: number; taskId: number; projectId?: number | null; model: string; inputTokens: number; outputTokens: number },
 ): Promise<void> {
+  // Clamp at the boundary so a bad-usage turn (NaN/negative tokens) can't poison the
+  // snapshot's context math or the billing ledger — same shared clamp recordUsageRow uses.
+  const inputTokens = clampTokenCount(args.inputTokens);
+  const outputTokens = clampTokenCount(args.outputTokens);
   try {
     await db.insert(usageSnapshots).values({
       tenantId:      args.tenantId,
@@ -536,9 +540,9 @@ export async function recordCloudUsage(
       cloudAgentRef: args.cloudAgentRef ?? null,
       executionId:   args.executionId,
       sessionKey:    `exec:${args.executionId}`,
-      inputTokens:   args.inputTokens,
-      outputTokens:  args.outputTokens,
-      contextTokens: args.inputTokens + args.outputTokens,
+      inputTokens,
+      outputTokens,
+      contextTokens: inputTokens + outputTokens,
     });
   } catch { /* best-effort */ }
   await recordUsageRow(db, env, {
@@ -546,7 +550,7 @@ export async function recordCloudUsage(
     userId:     null,
     llmProduct: 'builderforceLLM',
     model:      args.model,
-    usage:      { promptTokens: args.inputTokens, completionTokens: args.outputTokens, totalTokens: args.inputTokens + args.outputTokens },
+    usage:      { promptTokens: inputTokens, completionTokens: outputTokens, totalTokens: inputTokens + outputTokens },
     metadata:   { engine: 'cloud', executionId: args.executionId, taskId: args.taskId, projectId: args.projectId ?? null },
     useCase:    'task_execution',
     // Attribute the spend to the run's cloud agent + ticket + project so cost

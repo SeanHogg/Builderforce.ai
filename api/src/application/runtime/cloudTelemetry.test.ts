@@ -284,7 +284,7 @@ describe('cloud telemetry — defensive boundaries', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('recordCloudUsage tolerates non-finite / negative token counts (best-effort, no crash)', async () => {
+  it('recordCloudUsage CLAMPS non-finite / negative token counts to 0 in both ledgers', async () => {
     const { db, rowsFor } = makeFakeDb();
     await expect(
       recordCloudUsage(env, db, {
@@ -292,9 +292,9 @@ describe('cloud telemetry — defensive boundaries', () => {
         inputTokens: Number.NaN, outputTokens: -3,
       }),
     ).resolves.toBeUndefined();
-    // The run is never blocked on bad usage numbers — both ledgers are still attempted.
-    expect(rowsFor(usageSnapshots)).toHaveLength(1);
-    expect(rowsFor(llmUsageLog)).toHaveLength(1);
+    // Bad usage is floored at the boundary so it can't poison SUM()-based cost rollups.
+    expect(rowsFor(usageSnapshots)[0]).toMatchObject({ inputTokens: 0, outputTokens: 0, contextTokens: 0 });
+    expect(rowsFor(llmUsageLog)[0]).toMatchObject({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
   });
 
   it('emitModelSelection does not throw on an unknown plan + blank model', async () => {
