@@ -5,7 +5,7 @@ vi.mock("../../utils.js", () => ({
   resolveUserPath: vi.fn((p: string) => p),
 }));
 
-vi.mock("../pi-embedded-helpers.js", async () => {
+vi.mock("../embedded-helpers.js", async () => {
   return {
     isCompactionFailureError: (msg?: string) => {
       if (!msg) {
@@ -47,9 +47,9 @@ vi.mock("../pi-embedded-helpers.js", async () => {
   };
 });
 
-import { compactEmbeddedPiSessionDirect } from "./compact.js";
+import { compactEmbeddedSessionDirect } from "./compact.js";
 import { log } from "./logger.js";
-import { runEmbeddedPiAgent } from "./run.js";
+import { runEmbeddedAgent } from "./run.js";
 import { makeAttemptResult } from "./run.overflow-compaction.fixture.js";
 import { runEmbeddedAttempt } from "./run/attempt.js";
 import type { EmbeddedRunAttemptResult } from "./run/types.js";
@@ -59,7 +59,7 @@ import {
 } from "./tool-result-truncation.js";
 
 const mockedRunEmbeddedAttempt = vi.mocked(runEmbeddedAttempt);
-const mockedCompactDirect = vi.mocked(compactEmbeddedPiSessionDirect);
+const mockedCompactDirect = vi.mocked(compactEmbeddedSessionDirect);
 const mockedSessionLikelyHasOversizedToolResults = vi.mocked(sessionLikelyHasOversizedToolResults);
 const mockedTruncateOversizedToolResultsInSession = vi.mocked(
   truncateOversizedToolResultsInSession,
@@ -103,7 +103,7 @@ describe("overflow compaction in run loop", () => {
       },
     });
 
-    const result = await runEmbeddedPiAgent(baseParams);
+    const result = await runEmbeddedAgent(baseParams);
 
     expect(mockedCompactDirect).toHaveBeenCalledTimes(1);
     expect(mockedCompactDirect).toHaveBeenCalledWith(
@@ -137,7 +137,7 @@ describe("overflow compaction in run loop", () => {
       },
     });
 
-    const result = await runEmbeddedPiAgent(baseParams);
+    const result = await runEmbeddedAgent(baseParams);
 
     expect(mockedCompactDirect).toHaveBeenCalledTimes(1);
     expect(mockedRunEmbeddedAttempt).toHaveBeenCalledTimes(2);
@@ -156,7 +156,7 @@ describe("overflow compaction in run loop", () => {
       reason: "nothing to compact",
     });
 
-    const result = await runEmbeddedPiAgent(baseParams);
+    const result = await runEmbeddedAgent(baseParams);
 
     expect(mockedCompactDirect).toHaveBeenCalledTimes(1);
     expect(mockedRunEmbeddedAttempt).toHaveBeenCalledTimes(1);
@@ -193,7 +193,7 @@ describe("overflow compaction in run loop", () => {
       truncatedCount: 1,
     });
 
-    const result = await runEmbeddedPiAgent(baseParams);
+    const result = await runEmbeddedAgent(baseParams);
 
     expect(mockedCompactDirect).toHaveBeenCalledTimes(1);
     expect(mockedSessionLikelyHasOversizedToolResults).toHaveBeenCalledWith(
@@ -234,7 +234,7 @@ describe("overflow compaction in run loop", () => {
         result: { summary: "Compacted 3", firstKeptEntryId: "entry-7", tokensBefore: 140000 },
       });
 
-    const result = await runEmbeddedPiAgent(baseParams);
+    const result = await runEmbeddedAgent(baseParams);
 
     // Compaction attempted 3 times (max)
     expect(mockedCompactDirect).toHaveBeenCalledTimes(3);
@@ -264,7 +264,7 @@ describe("overflow compaction in run loop", () => {
         result: { summary: "Compacted 2", firstKeptEntryId: "entry-5", tokensBefore: 160000 },
       });
 
-    const result = await runEmbeddedPiAgent(baseParams);
+    const result = await runEmbeddedAgent(baseParams);
 
     expect(mockedCompactDirect).toHaveBeenCalledTimes(2);
     expect(mockedRunEmbeddedAttempt).toHaveBeenCalledTimes(3);
@@ -280,7 +280,7 @@ describe("overflow compaction in run loop", () => {
       makeAttemptResult({ promptError: compactionFailureError }),
     );
 
-    const result = await runEmbeddedPiAgent(baseParams);
+    const result = await runEmbeddedAgent(baseParams);
 
     expect(mockedCompactDirect).not.toHaveBeenCalled();
     expect(mockedRunEmbeddedAttempt).toHaveBeenCalledTimes(1);
@@ -310,7 +310,7 @@ describe("overflow compaction in run loop", () => {
       },
     });
 
-    const result = await runEmbeddedPiAgent(baseParams);
+    const result = await runEmbeddedAgent(baseParams);
 
     expect(mockedCompactDirect).toHaveBeenCalledTimes(1);
     expect(mockedRunEmbeddedAttempt).toHaveBeenCalledTimes(2);
@@ -329,7 +329,7 @@ describe("overflow compaction in run loop", () => {
       }),
     );
 
-    await expect(runEmbeddedPiAgent(baseParams)).rejects.toThrow("transport disconnected");
+    await expect(runEmbeddedAgent(baseParams)).rejects.toThrow("transport disconnected");
 
     expect(mockedCompactDirect).not.toHaveBeenCalled();
     expect(log.warn).not.toHaveBeenCalledWith(expect.stringContaining("source=assistantError"));
@@ -345,7 +345,7 @@ describe("overflow compaction in run loop", () => {
       }),
     );
 
-    const result = await runEmbeddedPiAgent(baseParams);
+    const result = await runEmbeddedAgent(baseParams);
 
     expect(result.payloads?.[0]?.isError).toBe(true);
     expect(result.payloads?.[0]?.text).toContain("timed out");
@@ -372,7 +372,7 @@ describe("overflow compaction in run loop", () => {
       }),
     );
 
-    const result = await runEmbeddedPiAgent(baseParams);
+    const result = await runEmbeddedAgent(baseParams);
 
     expect(result.meta.agentMeta?.usage?.input).toBe(4_000);
     expect(result.meta.agentMeta?.promptTokens).toBe(2_000);

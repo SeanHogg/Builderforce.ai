@@ -7,7 +7,7 @@ import { maybeRemoveDeprecatedCliAuthProfiles } from "./doctor-auth.js";
 import type { DoctorPrompter } from "./doctor-prompter.js";
 
 let originalAgentDir: string | undefined;
-let originalPiAgentDir: string | undefined;
+let originalCodingAgentDir: string | undefined;
 let tempAgentDir: string | undefined;
 
 function makePrompter(confirmValue: boolean): DoctorPrompter {
@@ -24,7 +24,7 @@ function makePrompter(confirmValue: boolean): DoctorPrompter {
 
 beforeEach(() => {
   originalAgentDir = process.env.BUILDERFORCE_AGENTS_AGENT_DIR;
-  originalPiAgentDir = process.env.PI_CODING_AGENT_DIR;
+  originalCodingAgentDir = process.env.PI_CODING_AGENT_DIR;
   tempAgentDir = fs.mkdtempSync(path.join(os.tmpdir(), "builderforce-auth-"));
   process.env.BUILDERFORCE_AGENTS_AGENT_DIR = tempAgentDir;
   process.env.PI_CODING_AGENT_DIR = tempAgentDir;
@@ -36,10 +36,10 @@ afterEach(() => {
   } else {
     process.env.BUILDERFORCE_AGENTS_AGENT_DIR = originalAgentDir;
   }
-  if (originalPiAgentDir === undefined) {
+  if (originalCodingAgentDir === undefined) {
     delete process.env.PI_CODING_AGENT_DIR;
   } else {
-    process.env.PI_CODING_AGENT_DIR = originalPiAgentDir;
+    process.env.PI_CODING_AGENT_DIR = originalCodingAgentDir;
   }
   if (tempAgentDir) {
     fs.rmSync(tempAgentDir, { recursive: true, force: true });

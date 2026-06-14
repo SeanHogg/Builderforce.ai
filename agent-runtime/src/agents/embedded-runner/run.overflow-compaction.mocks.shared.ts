@@ -36,7 +36,7 @@ vi.mock("../workspace-run.js", () => ({
   redactRunIdentifier: vi.fn((value?: string) => value ?? ""),
 }));
 
-vi.mock("../pi-embedded-helpers.js", () => ({
+vi.mock("../embedded-helpers.js", () => ({
   formatBillingErrorMessage: vi.fn(() => ""),
   classifyFailoverReason: vi.fn(() => null),
   formatAssistantErrorText: vi.fn(() => ""),
@@ -61,7 +61,7 @@ vi.mock("./run/attempt.js", () => ({
 }));
 
 vi.mock("./compact.js", () => ({
-  compactEmbeddedPiSessionDirect: vi.fn(),
+  compactEmbeddedSessionDirect: vi.fn(),
 }));
 
 vi.mock("./model.js", () => ({

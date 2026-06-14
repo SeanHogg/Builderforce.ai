@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EmbeddedBlockChunker } from "./pi-embedded-block-chunker.js";
+import { EmbeddedBlockChunker } from "./embedded-block-chunker.js";
 
 describe("EmbeddedBlockChunker", () => {
   it("breaks at paragraph boundary right after fence close", () => {

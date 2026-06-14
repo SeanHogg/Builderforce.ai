@@ -54,8 +54,8 @@ vi.mock("../../agents/model-fallback.js", () => ({
 
 const runWithModelFallbackMock = vi.mocked(runWithModelFallback);
 
-vi.mock("../../agents/pi-embedded.js", () => ({
-  runEmbeddedPiAgent: vi.fn().mockResolvedValue({
+vi.mock("../../agents/embedded.js", () => ({
+  runEmbeddedAgent: vi.fn().mockResolvedValue({
     payloads: [{ text: "test output" }],
     meta: { agentMeta: { usage: { input: 10, output: 20 } } },
   }),

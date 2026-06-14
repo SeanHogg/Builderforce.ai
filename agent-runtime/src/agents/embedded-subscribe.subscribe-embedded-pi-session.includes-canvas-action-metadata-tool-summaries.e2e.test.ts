@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { createSubscribedSessionHarness } from "./pi-embedded-subscribe.e2e-harness.js";
+import { createSubscribedSessionHarness } from "./embedded-subscribe.e2e-harness.js";
 
-describe("subscribeEmbeddedPiSession", () => {
+describe("subscribeEmbeddedSession", () => {
   it("includes canvas action metadata in tool summaries", async () => {
     const onToolResult = vi.fn();
 

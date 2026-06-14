@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  getRunEmbeddedPiAgentMock,
+  getRunEmbeddedAgentMock,
   installTriggerHandlingE2eTestHooks,
   loadGetReplyFromConfig,
   MAIN_SESSION_KEY,
@@ -55,7 +55,7 @@ describe("trigger handling", () => {
   });
   it("ignores elevated directive in groups when not mentioned", async () => {
     await withTempHome(async (home) => {
-      getRunEmbeddedPiAgentMock().mockResolvedValue({
+      getRunEmbeddedAgentMock().mockResolvedValue({
         payloads: [{ text: "ok" }],
         meta: {
           durationMs: 1,
@@ -79,7 +79,7 @@ describe("trigger handling", () => {
       );
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text).toBeUndefined();
-      expect(getRunEmbeddedPiAgentMock()).not.toHaveBeenCalled();
+      expect(getRunEmbeddedAgentMock()).not.toHaveBeenCalled();
     });
   });
 });

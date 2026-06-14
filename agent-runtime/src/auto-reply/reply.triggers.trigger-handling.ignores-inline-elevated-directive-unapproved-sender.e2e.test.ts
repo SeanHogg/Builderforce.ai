@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import {
-  getRunEmbeddedPiAgentMock,
+  getRunEmbeddedAgentMock,
   installTriggerHandlingE2eTestHooks,
   loadGetReplyFromConfig,
   MAIN_SESSION_KEY,
@@ -23,7 +23,7 @@ installTriggerHandlingE2eTestHooks();
 describe("trigger handling", () => {
   it("ignores inline elevated directive for unapproved sender", async () => {
     await withTempHome(async (home) => {
-      getRunEmbeddedPiAgentMock().mockResolvedValue({
+      getRunEmbeddedAgentMock().mockResolvedValue({
         payloads: [{ text: "ok" }],
         meta: {
           durationMs: 1,
@@ -45,7 +45,7 @@ describe("trigger handling", () => {
       );
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text).not.toContain("elevated is not available right now");
-      expect(getRunEmbeddedPiAgentMock()).toHaveBeenCalled();
+      expect(getRunEmbeddedAgentMock()).toHaveBeenCalled();
     });
   });
   it("uses tools.elevated.allowFrom.discord for elevated approval", async () => {
@@ -113,12 +113,12 @@ describe("trigger handling", () => {
       );
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text).toContain("tools.elevated.allowFrom.discord");
-      expect(getRunEmbeddedPiAgentMock()).not.toHaveBeenCalled();
+      expect(getRunEmbeddedAgentMock()).not.toHaveBeenCalled();
     });
   });
   it("returns a context overflow fallback when the embedded agent throws", async () => {
     await withTempHome(async (home) => {
-      getRunEmbeddedPiAgentMock().mockRejectedValue(new Error("Context window exceeded"));
+      getRunEmbeddedAgentMock().mockRejectedValue(new Error("Context window exceeded"));
 
       const res = await getReplyFromConfig(
         {
@@ -134,7 +134,7 @@ describe("trigger handling", () => {
       expect(text).toBe(
         "⚠️ Context overflow — prompt too large for this model. Try a shorter message or a larger-context model.",
       );
-      expect(getRunEmbeddedPiAgentMock()).toHaveBeenCalledOnce();
+      expect(getRunEmbeddedAgentMock()).toHaveBeenCalledOnce();
     });
   });
 });

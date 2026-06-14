@@ -9,27 +9,27 @@ import Ajv from "ajv";
 // So we resolve internal imports dynamically with src-first, dist-fallback.
 import type { BuilderForceAgentsPluginApi } from "../../../src/plugins/types.js";
 
-type RunEmbeddedPiAgentFn = (params: Record<string, unknown>) => Promise<unknown>;
+type RunEmbeddedAgentFn = (params: Record<string, unknown>) => Promise<unknown>;
 
-async function loadRunEmbeddedPiAgent(): Promise<RunEmbeddedPiAgentFn> {
+async function loadRunEmbeddedAgent(): Promise<RunEmbeddedAgentFn> {
   // Source checkout (tests/dev)
   try {
-    const mod = await import("../../../src/agents/pi-embedded-runner.js");
+    const mod = await import("../../../src/agents/embedded-runner.js");
     // oxlint-disable-next-line typescript/no-explicit-any
-    if (typeof (mod as any).runEmbeddedPiAgent === "function") {
+    if (typeof (mod as any).runEmbeddedAgent === "function") {
       // oxlint-disable-next-line typescript/no-explicit-any
-      return (mod as any).runEmbeddedPiAgent;
+      return (mod as any).runEmbeddedAgent;
     }
   } catch {
     // ignore
   }
 
   // Bundled install (built)
-  const mod = await import("../../../src/agents/pi-embedded-runner.js");
-  if (typeof mod.runEmbeddedPiAgent !== "function") {
-    throw new Error("Internal error: runEmbeddedPiAgent not available");
+  const mod = await import("../../../src/agents/embedded-runner.js");
+  if (typeof mod.runEmbeddedAgent !== "function") {
+    throw new Error("Internal error: runEmbeddedAgent not available");
   }
-  return mod.runEmbeddedPiAgent as RunEmbeddedPiAgentFn;
+  return mod.runEmbeddedAgent as RunEmbeddedAgentFn;
 }
 
 function stripCodeFences(s: string): string {
@@ -180,9 +180,9 @@ export function createLlmTaskTool(api: BuilderForceAgentsPluginApi) {
         const sessionId = `llm-task-${Date.now()}`;
         const sessionFile = path.join(tmpDir, "session.json");
 
-        const runEmbeddedPiAgent = await loadRunEmbeddedPiAgent();
+        const runEmbeddedAgent = await loadRunEmbeddedAgent();
 
-        const result = await runEmbeddedPiAgent({
+        const result = await runEmbeddedAgent({
           sessionId,
           sessionFile,
           workspaceDir: api.config?.agents?.defaults?.workspace ?? process.cwd(),

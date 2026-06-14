@@ -83,7 +83,7 @@ describe("abort pattern: .bind() vs arrow closure (#7174)", () => {
   });
 
   it("bindAbortRelay() forwards abort through combined signals", () => {
-    // Simulates the combineAbortSignals pattern from pi-tools.abort.ts
+    // Simulates the combineAbortSignals pattern from coding-tools.abort.ts
     const signalA = new AbortController();
     const signalB = new AbortController();
     const combined = new AbortController();

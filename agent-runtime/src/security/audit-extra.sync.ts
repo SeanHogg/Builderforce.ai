@@ -1,4 +1,4 @@
-import { isToolAllowedByPolicies } from "../agents/pi-tools.policy.js";
+import { isToolAllowedByPolicies } from "../agents/coding-tools.policy.js";
 import {
   resolveSandboxConfigForAgent,
   resolveSandboxToolPolicyForAgent,

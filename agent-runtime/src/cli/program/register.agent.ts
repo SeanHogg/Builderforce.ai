@@ -156,7 +156,7 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/agent", "docs.builderforce.ai/cli
 ${theme.heading("Examples:")}
 ${formatHelpExamples([
   [
-    'builderforce agents set-identity --agent main --name "BuilderForceAgents" --emoji "🦞"',
+    'builderforce agents set-identity --agent main --name "BuilderForceAgents" --emoji "🤖"',
     "Set name + emoji.",
   ],
   ["builderforce agents set-identity --agent main --avatar avatars/builderforce.png", "Set avatar path."],

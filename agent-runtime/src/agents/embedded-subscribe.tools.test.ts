@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractToolErrorMessage } from "./pi-embedded-subscribe.tools.js";
+import { extractToolErrorMessage } from "./embedded-subscribe.tools.js";
 
 describe("extractToolErrorMessage", () => {
   it("ignores non-error status values", () => {

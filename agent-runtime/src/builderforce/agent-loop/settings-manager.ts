@@ -2,7 +2,7 @@
  * Native settings manager — the pi-free replacement for `@mariozechner/pi-coding-agent`'s
  * `SettingsManager` (PI cutover, loop stage). The embedded runtime drives all behavior
  * from {@link BuilderForceAgentsConfig}, so only the compaction-budget surface that the
- * agent loop + `pi-settings.ts` actually read is reproduced here (defaults faithful to
+ * agent loop + `agent-settings.ts` actually read is reproduced here (defaults faithful to
  * pi 0.54: reserve 16384, keep-recent 20000); `applyOverrides` deep-merges at runtime.
  */
 

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  getRunEmbeddedPiAgentMock,
+  getRunEmbeddedAgentMock,
   installTriggerHandlingE2eTestHooks,
   makeCfg,
   runGreetingPromptForBareNewOrReset,
@@ -34,12 +34,12 @@ describe("trigger handling", () => {
       );
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text).toBe("⚙️ Group activation set to mention.");
-      expect(getRunEmbeddedPiAgentMock()).not.toHaveBeenCalled();
+      expect(getRunEmbeddedAgentMock()).not.toHaveBeenCalled();
     });
   });
   it("injects group activation context into the system prompt", async () => {
     await withTempHome(async (home) => {
-      getRunEmbeddedPiAgentMock().mockResolvedValue({
+      getRunEmbeddedAgentMock().mockResolvedValue({
         payloads: [{ text: "ok" }],
         meta: {
           durationMs: 1,
@@ -81,8 +81,8 @@ describe("trigger handling", () => {
 
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text).toBe("ok");
-      expect(getRunEmbeddedPiAgentMock()).toHaveBeenCalledOnce();
-      const extra = getRunEmbeddedPiAgentMock().mock.calls[0]?.[0]?.extraSystemPrompt ?? "";
+      expect(getRunEmbeddedAgentMock()).toHaveBeenCalledOnce();
+      const extra = getRunEmbeddedAgentMock().mock.calls[0]?.[0]?.extraSystemPrompt ?? "";
       expect(extra).toContain('"chat_type": "group"');
       expect(extra).toContain("Activation: always-on");
     });

@@ -1,7 +1,7 @@
 import type { AgentMessage } from "../builderforce/model/agent-types.js";
 import type { SessionManager } from "../builderforce/agent-loop/index.js";
 import { expect, vi } from "vitest";
-import * as helpers from "./pi-embedded-helpers.js";
+import * as helpers from "./embedded-helpers.js";
 
 export type SessionEntry = { type: string; customType: string; data: unknown };
 export type SanitizeSessionHistoryFn = (params: {
@@ -56,7 +56,7 @@ export function makeSimpleUserMessages(): AgentMessage[] {
 export async function loadSanitizeSessionHistoryWithCleanMocks(): Promise<SanitizeSessionHistoryFn> {
   vi.resetAllMocks();
   vi.mocked(helpers.sanitizeSessionMessagesImages).mockImplementation(async (msgs) => msgs);
-  const mod = await import("./pi-embedded-runner/google.js");
+  const mod = await import("./embedded-runner/google.js");
   return mod.sanitizeSessionHistory;
 }
 

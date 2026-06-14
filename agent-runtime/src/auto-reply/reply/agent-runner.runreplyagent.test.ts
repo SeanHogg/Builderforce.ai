@@ -26,7 +26,7 @@ type EmbeddedRunParams = {
 };
 
 const state = vi.hoisted(() => ({
-  runEmbeddedPiAgentMock: vi.fn(),
+  runEmbeddedAgentMock: vi.fn(),
   runCliAgentMock: vi.fn(),
 }));
 
@@ -57,9 +57,9 @@ vi.mock("../../agents/model-fallback.js", () => ({
   }),
 }));
 
-vi.mock("../../agents/pi-embedded.js", () => ({
-  queueEmbeddedPiMessage: vi.fn().mockReturnValue(false),
-  runEmbeddedPiAgent: (params: unknown) => state.runEmbeddedPiAgentMock(params),
+vi.mock("../../agents/embedded.js", () => ({
+  queueEmbeddedMessage: vi.fn().mockReturnValue(false),
+  runEmbeddedAgent: (params: unknown) => state.runEmbeddedAgentMock(params),
 }));
 
 vi.mock("../../agents/cli-runner.js", () => ({
@@ -77,7 +77,7 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  state.runEmbeddedPiAgentMock.mockReset();
+  state.runEmbeddedAgentMock.mockReset();
   state.runCliAgentMock.mockReset();
   vi.stubEnv("BUILDERFORCE_AGENTS_TEST_FAST", "1");
 });
@@ -330,7 +330,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
 
   it("signals typing for normal runs", async () => {
     const onPartialReply = vi.fn();
-    state.runEmbeddedPiAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
+    state.runEmbeddedAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
       await params.onPartialReply?.({ text: "hi" });
       return { payloads: [{ text: "final" }], meta: {} };
     });
@@ -347,7 +347,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
 
   it("never signals typing for heartbeat runs", async () => {
     const onPartialReply = vi.fn();
-    state.runEmbeddedPiAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
+    state.runEmbeddedAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
       await params.onPartialReply?.({ text: "hi" });
       return { payloads: [{ text: "final" }], meta: {} };
     });
@@ -364,7 +364,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
 
   it("suppresses partial streaming for NO_REPLY", async () => {
     const onPartialReply = vi.fn();
-    state.runEmbeddedPiAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
+    state.runEmbeddedAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
       await params.onPartialReply?.({ text: "NO_REPLY" });
       return { payloads: [{ text: "NO_REPLY" }], meta: {} };
     });
@@ -381,7 +381,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
   });
 
   it("does not start typing on assistant message start without prior text in message mode", async () => {
-    state.runEmbeddedPiAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
+    state.runEmbeddedAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
       await params.onAssistantMessageStart?.();
       return { payloads: [{ text: "final" }], meta: {} };
     });
@@ -396,7 +396,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
   });
 
   it("starts typing from reasoning stream in thinking mode", async () => {
-    state.runEmbeddedPiAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
+    state.runEmbeddedAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
       await params.onReasoningStream?.({ text: "Reasoning:\n_step_" });
       await params.onPartialReply?.({ text: "hi" });
       return { payloads: [{ text: "final" }], meta: {} };
@@ -412,7 +412,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
   });
 
   it("suppresses typing in never mode", async () => {
-    state.runEmbeddedPiAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
+    state.runEmbeddedAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
       await params.onPartialReply?.({ text: "hi" });
       return { payloads: [{ text: "final" }], meta: {} };
     });
@@ -428,7 +428,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
 
   it("signals typing on normalized block replies", async () => {
     const onBlockReply = vi.fn();
-    state.runEmbeddedPiAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
+    state.runEmbeddedAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
       await params.onBlockReply?.({ text: "\n\nchunk", mediaUrls: [] });
       return { payloads: [{ text: "final" }], meta: {} };
     });
@@ -452,7 +452,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
 
   it("signals typing on tool results", async () => {
     const onToolResult = vi.fn();
-    state.runEmbeddedPiAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
+    state.runEmbeddedAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
       await params.onToolResult?.({ text: "tooling", mediaUrls: [] });
       return { payloads: [{ text: "final" }], meta: {} };
     });
@@ -472,7 +472,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
 
   it("skips typing for silent tool results", async () => {
     const onToolResult = vi.fn();
-    state.runEmbeddedPiAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
+    state.runEmbeddedAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
       await params.onToolResult?.({ text: "NO_REPLY", mediaUrls: [] });
       return { payloads: [{ text: "final" }], meta: {} };
     });
@@ -493,7 +493,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
       const sessionEntry: SessionEntry = { sessionId: "session", updatedAt: Date.now() };
       const sessionStore = { main: sessionEntry };
 
-      state.runEmbeddedPiAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
+      state.runEmbeddedAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
         params.onAgentEvent?.({
           stream: "compaction",
           data: { phase: "end", willRetry: false },
@@ -530,7 +530,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
       await fs.mkdir(path.dirname(transcriptPath), { recursive: true });
       await fs.writeFile(transcriptPath, "ok", "utf-8");
 
-      state.runEmbeddedPiAgentMock.mockImplementationOnce(async () => {
+      state.runEmbeddedAgentMock.mockImplementationOnce(async () => {
         throw new Error(
           'Context overflow: Summarization failed: 400 {"message":"prompt is too long"}',
         );
@@ -544,7 +544,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
       });
       const res = await run();
 
-      expect(state.runEmbeddedPiAgentMock).toHaveBeenCalledTimes(1);
+      expect(state.runEmbeddedAgentMock).toHaveBeenCalledTimes(1);
       const payload = Array.isArray(res) ? res[0] : res;
       expect(payload).toMatchObject({
         text: expect.stringContaining("Context limit exceeded during compaction"),
@@ -573,7 +573,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
       await fs.mkdir(path.dirname(transcriptPath), { recursive: true });
       await fs.writeFile(transcriptPath, "ok", "utf-8");
 
-      state.runEmbeddedPiAgentMock.mockImplementationOnce(async () => ({
+      state.runEmbeddedAgentMock.mockImplementationOnce(async () => ({
         payloads: [{ text: "Context overflow: prompt too large", isError: true }],
         meta: {
           durationMs: 1,
@@ -592,7 +592,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
       });
       const res = await run();
 
-      expect(state.runEmbeddedPiAgentMock).toHaveBeenCalledTimes(1);
+      expect(state.runEmbeddedAgentMock).toHaveBeenCalledTimes(1);
       const payload = Array.isArray(res) ? res[0] : res;
       expect(payload).toMatchObject({
         text: expect.stringContaining("Context limit exceeded"),
@@ -621,7 +621,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
       await fs.mkdir(path.dirname(transcriptPath), { recursive: true });
       await fs.writeFile(transcriptPath, "ok", "utf-8");
 
-      state.runEmbeddedPiAgentMock.mockImplementationOnce(async () => ({
+      state.runEmbeddedAgentMock.mockImplementationOnce(async () => ({
         payloads: [{ text: "Message ordering conflict - please try again.", isError: true }],
         meta: {
           durationMs: 1,
@@ -665,7 +665,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
           persistStore: true,
         });
 
-      state.runEmbeddedPiAgentMock.mockImplementationOnce(async () => {
+      state.runEmbeddedAgentMock.mockImplementationOnce(async () => {
         throw new Error(
           "function call turn comes immediately after a user turn or after a function response turn",
         );
@@ -704,7 +704,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
       await fs.mkdir(path.dirname(transcriptPath), { recursive: true });
       await fs.writeFile(transcriptPath, "ok", "utf-8");
 
-      state.runEmbeddedPiAgentMock.mockImplementationOnce(async () => {
+      state.runEmbeddedAgentMock.mockImplementationOnce(async () => {
         throw new Error("INVALID_ARGUMENT: some other failure");
       });
 
@@ -740,7 +740,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
             persistStore: false,
           });
 
-        state.runEmbeddedPiAgentMock.mockImplementationOnce(async () => {
+        state.runEmbeddedAgentMock.mockImplementationOnce(async () => {
           throw new Error(
             "function call turn comes immediately after a user turn or after a function response turn",
           );
@@ -766,7 +766,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
   });
 
   it("returns friendly message for role ordering errors thrown as exceptions", async () => {
-    state.runEmbeddedPiAgentMock.mockImplementationOnce(async () => {
+    state.runEmbeddedAgentMock.mockImplementationOnce(async () => {
       throw new Error("400 Incorrect role information");
     });
 
@@ -782,7 +782,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
   });
 
   it("rewrites Bun socket errors into friendly text", async () => {
-    state.runEmbeddedPiAgentMock.mockImplementationOnce(async () => ({
+    state.runEmbeddedAgentMock.mockImplementationOnce(async () => ({
       payloads: [
         {
           text: "TypeError: The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()",
@@ -834,7 +834,7 @@ describe("runReplyAgent memory flush", () => {
 
       await seedSessionStore({ storePath, sessionKey, entry: sessionEntry });
 
-      state.runEmbeddedPiAgentMock.mockImplementation(async () => ({
+      state.runEmbeddedAgentMock.mockImplementation(async () => ({
         payloads: [{ text: "ok" }],
         meta: { agentMeta: { usage: { input: 1, output: 1 } } },
       }));
@@ -860,7 +860,7 @@ describe("runReplyAgent memory flush", () => {
       expect(state.runCliAgentMock).toHaveBeenCalledTimes(1);
       const call = state.runCliAgentMock.mock.calls[0]?.[0] as { prompt?: string } | undefined;
       expect(call?.prompt).toBe("hello");
-      expect(state.runEmbeddedPiAgentMock).not.toHaveBeenCalled();
+      expect(state.runEmbeddedAgentMock).not.toHaveBeenCalled();
     });
   });
 
@@ -877,7 +877,7 @@ describe("runReplyAgent memory flush", () => {
       await seedSessionStore({ storePath, sessionKey, entry: sessionEntry });
 
       const calls: Array<{ prompt?: string }> = [];
-      state.runEmbeddedPiAgentMock.mockImplementation(async (params: EmbeddedRunParams) => {
+      state.runEmbeddedAgentMock.mockImplementation(async (params: EmbeddedRunParams) => {
         calls.push({ prompt: params.prompt });
         if (params.prompt?.includes("Pre-compaction memory flush.")) {
           return { payloads: [], meta: {} };
@@ -925,7 +925,7 @@ describe("runReplyAgent memory flush", () => {
 
       await seedSessionStore({ storePath, sessionKey, entry: sessionEntry });
 
-      state.runEmbeddedPiAgentMock.mockImplementation(async () => ({
+      state.runEmbeddedAgentMock.mockImplementation(async () => ({
         payloads: [{ text: "ok" }],
         meta: { agentMeta: { usage: { input: 1, output: 1 } } },
       }));
@@ -944,8 +944,8 @@ describe("runReplyAgent memory flush", () => {
         commandBody: "hello",
       });
 
-      expect(state.runEmbeddedPiAgentMock).toHaveBeenCalledTimes(1);
-      const call = state.runEmbeddedPiAgentMock.mock.calls[0]?.[0] as
+      expect(state.runEmbeddedAgentMock).toHaveBeenCalledTimes(1);
+      const call = state.runEmbeddedAgentMock.mock.calls[0]?.[0] as
         | { prompt?: string }
         | undefined;
       expect(call?.prompt).toBe("hello");
@@ -969,7 +969,7 @@ describe("runReplyAgent memory flush", () => {
       await seedSessionStore({ storePath, sessionKey, entry: sessionEntry });
 
       const calls: Array<{ prompt?: string }> = [];
-      state.runEmbeddedPiAgentMock.mockImplementation(async (params: EmbeddedRunParams) => {
+      state.runEmbeddedAgentMock.mockImplementation(async (params: EmbeddedRunParams) => {
         calls.push({ prompt: params.prompt });
         return {
           payloads: [{ text: "ok" }],
@@ -1006,7 +1006,7 @@ describe("runReplyAgent memory flush", () => {
 
       await seedSessionStore({ storePath, sessionKey, entry: sessionEntry });
 
-      state.runEmbeddedPiAgentMock.mockImplementation(async (params: EmbeddedRunParams) => {
+      state.runEmbeddedAgentMock.mockImplementation(async (params: EmbeddedRunParams) => {
         if (params.prompt?.includes("Pre-compaction memory flush.")) {
           params.onAgentEvent?.({
             stream: "compaction",

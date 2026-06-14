@@ -20,8 +20,8 @@ import {
   resolveConfiguredModelRef,
   resolveModelRefFromString,
 } from "./model-selection.js";
-import type { FailoverReason } from "./pi-embedded-helpers.js";
-import { isLikelyContextOverflowError } from "./pi-embedded-helpers.js";
+import type { FailoverReason } from "./embedded-helpers.js";
+import { isLikelyContextOverflowError } from "./embedded-helpers.js";
 
 /**
  * Providers that are local-brain preprocessors (hippocampus), not full agent

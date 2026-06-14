@@ -137,5 +137,3 @@ OpenProse 程序映射到 BuilderForce Agents 原语：
 ## 安全 + 批准
 
 将 `.prose` 文件视为代码。运行前请审查。使用 BuilderForce Agents 工具白名单和批准门控来控制副作用。
-
-对于确定性的、批准门控的工作流，可与 [Lobster](/tools/lobster) 比较。

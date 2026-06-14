@@ -3,28 +3,28 @@ import type { Mock } from "vitest";
 import {
   handleToolExecutionEnd,
   handleToolExecutionStart,
-} from "./pi-embedded-subscribe.handlers.tools.js";
-import type { EmbeddedPiSubscribeContext } from "./pi-embedded-subscribe.handlers.types.js";
-import type { SubscribeEmbeddedPiSessionParams } from "./pi-embedded-subscribe.types.js";
+} from "./embedded-subscribe.handlers.tools.js";
+import type { EmbeddedSubscribeContext } from "./embedded-subscribe.handlers.types.js";
+import type { SubscribeEmbeddedSessionParams } from "./embedded-subscribe.types.js";
 
 /**
  * Narrowed params type that omits the `session` class instance (never accessed
  * by the handler paths under test).
  */
-type TestParams = Omit<SubscribeEmbeddedPiSessionParams, "session">;
+type TestParams = Omit<SubscribeEmbeddedSessionParams, "session">;
 
 /**
- * The subset of {@link EmbeddedPiSubscribeContext} that the media-emission
+ * The subset of {@link EmbeddedSubscribeContext} that the media-emission
  * tests actually populate.  Using this avoids the need for `as unknown as`
  * double-assertion in every mock factory.
  */
-export type MockEmbeddedContext = Omit<EmbeddedPiSubscribeContext, "params"> & {
+export type MockEmbeddedContext = Omit<EmbeddedSubscribeContext, "params"> & {
   params: TestParams;
 };
 
 /** Type-safe bridge: narrows parameter type so callers avoid assertions. */
-function asFullContext(ctx: MockEmbeddedContext): EmbeddedPiSubscribeContext {
-  return ctx as unknown as EmbeddedPiSubscribeContext;
+function asFullContext(ctx: MockEmbeddedContext): EmbeddedSubscribeContext {
+  return ctx as unknown as EmbeddedSubscribeContext;
 }
 
 /** Typed wrapper around {@link handleToolExecutionStart}. */

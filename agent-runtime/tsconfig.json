@@ -22,7 +22,9 @@
       "@seanhogg/builderforce-agents/plugin-sdk/*": ["./src/plugin-sdk/*.ts"],
       "@seanhogg/builderforce-agents/plugin-sdk/account-id": ["./src/plugin-sdk/account-id.ts"],
       "@builderforce/agent-tools": ["../packages/agent-tools/src/index.ts"],
-      "@builderforce/agent-tools/*": ["../packages/agent-tools/src/*"]
+      "@builderforce/agent-tools/*": ["../packages/agent-tools/src/*"],
+      "@builderforce/tui": ["../packages/tui/src/index.ts"],
+      "@builderforce/tui/*": ["../packages/tui/src/*"]
     }
   },
   "include": ["src/**/*", "ui/**/*", "extensions/**/*"],

@@ -1,11 +1,11 @@
 import "./run.overflow-compaction.mocks.shared.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { runEmbeddedPiAgent } from "./run.js";
+import { runEmbeddedAgent } from "./run.js";
 import { runEmbeddedAttempt } from "./run/attempt.js";
 
 const mockedRunEmbeddedAttempt = vi.mocked(runEmbeddedAttempt);
 
-describe("runEmbeddedPiAgent usage reporting", () => {
+describe("runEmbeddedAgent usage reporting", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -40,7 +40,7 @@ describe("runEmbeddedPiAgent usage reporting", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
-    const result = await runEmbeddedPiAgent({
+    const result = await runEmbeddedAgent({
       sessionId: "test-session",
       sessionKey: "test-key",
       sessionFile: "/tmp/session.json",

@@ -1,4 +1,4 @@
-import type { AnyAgentTool } from "./pi-tools.types.js";
+import type { AnyAgentTool } from "./coding-tools.types.js";
 import { cleanSchemaForGemini } from "./schema/clean-for-gemini.js";
 
 function extractEnumValues(schema: unknown): unknown[] | undefined {

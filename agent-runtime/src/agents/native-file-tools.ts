@@ -3,7 +3,7 @@
  * `createReadTool`/`createWriteTool`/`createEditTool` (PI cutover). Returns native
  * {@link AgentTool}s with schemas + behavior faithful to pi 0.54: `read` (offset/limit +
  * head truncation to 2000 lines / 50KB, image attachments by MIME), `write` (mkdir -p +
- * overwrite), `edit` (exact unique-match replace, BOM/CRLF tolerant). `pi-tools.read.ts`'s
+ * overwrite), `edit` (exact unique-match replace, BOM/CRLF tolerant). `coding-tools.read.ts`'s
  * Claude-compat + workspace-root + param-normalization wrappers continue to apply on top.
  */
 

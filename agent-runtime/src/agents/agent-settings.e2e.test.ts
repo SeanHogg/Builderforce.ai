@@ -1,18 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR,
-  ensurePiCompactionReserveTokens,
+  ensureCompactionReserveTokens,
   resolveCompactionReserveTokensFloor,
-} from "./pi-settings.js";
+} from "./agent-settings.js";
 
-describe("ensurePiCompactionReserveTokens", () => {
+describe("ensureCompactionReserveTokens", () => {
   it("bumps reserveTokens when below floor", () => {
     const settingsManager = {
       getCompactionReserveTokens: () => 16_384,
       applyOverrides: vi.fn(),
     };
 
-    const result = ensurePiCompactionReserveTokens({ settingsManager });
+    const result = ensureCompactionReserveTokens({ settingsManager });
 
     expect(result).toEqual({
       didOverride: true,
@@ -29,7 +29,7 @@ describe("ensurePiCompactionReserveTokens", () => {
       applyOverrides: vi.fn(),
     };
 
-    const result = ensurePiCompactionReserveTokens({ settingsManager });
+    const result = ensureCompactionReserveTokens({ settingsManager });
 
     expect(result).toEqual({ didOverride: false, reserveTokens: 32_000 });
     expect(settingsManager.applyOverrides).not.toHaveBeenCalled();

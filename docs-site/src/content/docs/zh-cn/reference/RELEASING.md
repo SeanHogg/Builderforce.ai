@@ -113,7 +113,6 @@ x-i18n:
 - @builderforce/bluebubbles
 - @builderforce/diagnostics-otel
 - @builderforce/discord
-- @builderforce/lobster
 - @builderforce/matrix
 - @builderforce/msteams
 - @builderforce/nextcloud-talk

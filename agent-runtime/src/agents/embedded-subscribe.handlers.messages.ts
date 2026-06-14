@@ -6,9 +6,9 @@ import { createInlineCodeState } from "../markdown/code-spans.js";
 import {
   isMessagingToolDuplicateNormalized,
   normalizeTextForComparison,
-} from "./pi-embedded-helpers.js";
-import type { EmbeddedPiSubscribeContext } from "./pi-embedded-subscribe.handlers.types.js";
-import { appendRawStream } from "./pi-embedded-subscribe.raw-stream.js";
+} from "./embedded-helpers.js";
+import type { EmbeddedSubscribeContext } from "./embedded-subscribe.handlers.types.js";
+import { appendRawStream } from "./embedded-subscribe.raw-stream.js";
 import {
   extractAssistantText,
   extractAssistantThinking,
@@ -16,7 +16,7 @@ import {
   extractThinkingFromTaggedText,
   formatReasoningMessage,
   promoteThinkingTagsToBlocks,
-} from "./pi-embedded-utils.js";
+} from "./embedded-utils.js";
 
 const stripTrailingDirective = (text: string): string => {
   const openIndex = text.lastIndexOf("[[");
@@ -46,7 +46,7 @@ export function resolveSilentReplyFallbackText(params: {
 }
 
 export function handleMessageStart(
-  ctx: EmbeddedPiSubscribeContext,
+  ctx: EmbeddedSubscribeContext,
   evt: AgentEvent & { message: AgentMessage },
 ) {
   const msg = evt.message;
@@ -65,7 +65,7 @@ export function handleMessageStart(
 }
 
 export function handleMessageUpdate(
-  ctx: EmbeddedPiSubscribeContext,
+  ctx: EmbeddedSubscribeContext,
   evt: AgentEvent & { message: AgentMessage; assistantMessageEvent?: unknown },
 ) {
   const msg = evt.message;
@@ -206,7 +206,7 @@ export function handleMessageUpdate(
 }
 
 export function handleMessageEnd(
-  ctx: EmbeddedPiSubscribeContext,
+  ctx: EmbeddedSubscribeContext,
   evt: AgentEvent & { message: AgentMessage },
 ) {
   const msg = evt.message;

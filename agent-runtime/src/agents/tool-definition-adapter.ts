@@ -3,13 +3,13 @@ import type { ToolDefinition } from "./tool-definition.js";
 import { logDebug, logError } from "../logger.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import { isPlainObject } from "../utils.js";
-import type { ClientToolDefinition } from "./pi-embedded-runner/run/params.js";
-import type { HookContext } from "./pi-tools.before-tool-call.js";
+import type { ClientToolDefinition } from "./embedded-runner/run/params.js";
+import type { HookContext } from "./coding-tools.before-tool-call.js";
 import {
   consumeAdjustedParamsForToolCall,
   isToolWrappedWithBeforeToolCallHook,
   runBeforeToolCallHook,
-} from "./pi-tools.before-tool-call.js";
+} from "./coding-tools.before-tool-call.js";
 import { normalizeToolName } from "./tool-policy.js";
 import { jsonResult } from "./tools/common.js";
 

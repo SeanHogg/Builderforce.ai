@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
-import { getDmHistoryLimitFromSessionKey } from "./pi-embedded-runner.js";
+import { getDmHistoryLimitFromSessionKey } from "./embedded-runner.js";
 
 describe("getDmHistoryLimitFromSessionKey", () => {
   it("keeps backward compatibility for dm/direct session kinds", () => {

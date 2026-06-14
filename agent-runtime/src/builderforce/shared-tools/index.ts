@@ -11,8 +11,13 @@ import { NODE_ORCHESTRATION_TOOLS } from "./node-orchestration-tools.js";
 import { buildNodeServiceTools, type NodeServiceToolDeps } from "./node-service-tools.js";
 
 export { buildNodeCapabilityProvider, NODE_SURFACE_CAPS } from "./node-capability-provider.js";
-export { LocalAgentEngine, createGatewayComplete } from "./local-agent-engine.js";
-export type { LlmComplete, LocalEngineDeps, RawToolCall } from "./local-agent-engine.js";
+export type { NodeProviderOptions } from "./node-capability-provider.js";
+export {
+  LocalAgentEngine,
+  createGatewayComplete,
+  createGatewayStream,
+} from "./local-agent-engine.js";
+export type { LlmComplete, LlmStream, LocalEngineDeps, RawToolCall } from "./local-agent-engine.js";
 export { NODE_CODE_TOOLS } from "./node-code-tools.js";
 export { NODE_ORCHESTRATION_TOOLS, createOrchestrateToolDef } from "./node-orchestration-tools.js";
 export { buildNodeServiceTools } from "./node-service-tools.js";
@@ -33,6 +38,7 @@ export function buildNodeToolRegistry(deps?: NodeServiceToolDeps): ToolRegistry 
   // The factory always emits its deps-independent tools (agents_list, gateway) and
   // adds config-gated ones (memory_*) only when `deps` supply the backing.
   const serviceTools = buildNodeServiceTools(deps ?? {});
-  for (const tool of [...NODE_CODE_TOOLS, ...NODE_ORCHESTRATION_TOOLS, ...serviceTools]) registry.register(tool);
+  for (const tool of [...NODE_CODE_TOOLS, ...NODE_ORCHESTRATION_TOOLS, ...serviceTools])
+    registry.register(tool);
   return registry;
 }

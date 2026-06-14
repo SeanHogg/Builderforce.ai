@@ -1,15 +1,15 @@
 import type { AssistantMessage } from "../builderforce/model/types.js";
 import { describe, expect, it, vi } from "vitest";
-import { createStubSessionHarness } from "./pi-embedded-subscribe.e2e-harness.js";
-import { subscribeEmbeddedPiSession } from "./pi-embedded-subscribe.js";
+import { createStubSessionHarness } from "./embedded-subscribe.e2e-harness.js";
+import { subscribeEmbeddedSession } from "./embedded-subscribe.js";
 
-describe("subscribeEmbeddedPiSession", () => {
+describe("subscribeEmbeddedSession", () => {
   it("does not emit duplicate block replies when text_end repeats", () => {
     const { session, emit } = createStubSessionHarness();
 
     const onBlockReply = vi.fn();
 
-    const subscription = subscribeEmbeddedPiSession({
+    const subscription = subscribeEmbeddedSession({
       session,
       runId: "run",
       onBlockReply,
@@ -47,7 +47,7 @@ describe("subscribeEmbeddedPiSession", () => {
   it("does not duplicate assistantTexts when message_end repeats", () => {
     const { session, emit } = createStubSessionHarness();
 
-    const subscription = subscribeEmbeddedPiSession({
+    const subscription = subscribeEmbeddedSession({
       session,
       runId: "run",
     });
@@ -65,7 +65,7 @@ describe("subscribeEmbeddedPiSession", () => {
   it("does not duplicate assistantTexts when message_end repeats with trailing whitespace changes", () => {
     const { session, emit } = createStubSessionHarness();
 
-    const subscription = subscribeEmbeddedPiSession({
+    const subscription = subscribeEmbeddedSession({
       session,
       runId: "run",
     });
@@ -88,7 +88,7 @@ describe("subscribeEmbeddedPiSession", () => {
   it("does not duplicate assistantTexts when message_end repeats with reasoning blocks", () => {
     const { session, emit } = createStubSessionHarness();
 
-    const subscription = subscribeEmbeddedPiSession({
+    const subscription = subscribeEmbeddedSession({
       session,
       runId: "run",
       reasoningMode: "on",
@@ -112,7 +112,7 @@ describe("subscribeEmbeddedPiSession", () => {
     // must still populate assistantTexts so providers can deliver a final reply.
     const { session, emit } = createStubSessionHarness();
 
-    const subscription = subscribeEmbeddedPiSession({
+    const subscription = subscribeEmbeddedSession({
       session,
       runId: "run",
       blockReplyChunking: { minChars: 50, maxChars: 200 }, // Chunking enabled

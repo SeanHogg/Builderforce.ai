@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   makeInMemorySessionManager,
   makeModelSnapshotEntry,
-} from "./pi-embedded-runner.sanitize-session-history.test-harness.js";
-import { sanitizeSessionHistory } from "./pi-embedded-runner/google.js";
+} from "./embedded-runner.sanitize-session-history.test-harness.js";
+import { sanitizeSessionHistory } from "./embedded-runner/google.js";
 
 describe("sanitizeSessionHistory openai tool id preservation", () => {
   it("keeps canonical call_id|fc_id pairings for same-model openai replay", async () => {

@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createParagraphChunkedBlockReplyHarness,
   emitAssistantTextDeltaAndEnd,
-} from "./pi-embedded-subscribe.e2e-harness.js";
+} from "./embedded-subscribe.e2e-harness.js";
 
-describe("subscribeEmbeddedPiSession", () => {
+describe("subscribeEmbeddedSession", () => {
   it("streams soft chunks with paragraph preference", () => {
     const onBlockReply = vi.fn();
     const { emit, subscription } = createParagraphChunkedBlockReplyHarness({

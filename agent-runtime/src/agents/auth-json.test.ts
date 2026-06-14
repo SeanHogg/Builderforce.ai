@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { saveAuthProfileStore } from "./auth-profiles.js";
-import { ensurePiAuthJsonFromAuthProfiles } from "./pi-auth-json.js";
+import { ensureAuthJsonFromAuthProfiles } from "./auth-json.js";
 
 type AuthProfileStore = Parameters<typeof saveAuthProfileStore>[0];
 
@@ -26,7 +26,7 @@ async function readAuthJson(agentDir: string) {
   return JSON.parse(await fs.readFile(authPath, "utf8")) as Record<string, unknown>;
 }
 
-describe("ensurePiAuthJsonFromAuthProfiles", () => {
+describe("ensureAuthJsonFromAuthProfiles", () => {
   it("writes openai-codex oauth credentials into auth.json for pi-coding-agent discovery", async () => {
     const agentDir = await createAgentDir();
 
@@ -40,7 +40,7 @@ describe("ensurePiAuthJsonFromAuthProfiles", () => {
       },
     });
 
-    const first = await ensurePiAuthJsonFromAuthProfiles(agentDir);
+    const first = await ensureAuthJsonFromAuthProfiles(agentDir);
     expect(first.wrote).toBe(true);
 
     const auth = await readAuthJson(agentDir);
@@ -50,7 +50,7 @@ describe("ensurePiAuthJsonFromAuthProfiles", () => {
       refresh: "refresh-token",
     });
 
-    const second = await ensurePiAuthJsonFromAuthProfiles(agentDir);
+    const second = await ensureAuthJsonFromAuthProfiles(agentDir);
     expect(second.wrote).toBe(false);
   });
 
@@ -65,7 +65,7 @@ describe("ensurePiAuthJsonFromAuthProfiles", () => {
       },
     });
 
-    const result = await ensurePiAuthJsonFromAuthProfiles(agentDir);
+    const result = await ensureAuthJsonFromAuthProfiles(agentDir);
     expect(result.wrote).toBe(true);
 
     const auth = await readAuthJson(agentDir);
@@ -86,7 +86,7 @@ describe("ensurePiAuthJsonFromAuthProfiles", () => {
       },
     });
 
-    const result = await ensurePiAuthJsonFromAuthProfiles(agentDir);
+    const result = await ensureAuthJsonFromAuthProfiles(agentDir);
     expect(result.wrote).toBe(true);
 
     const auth = await readAuthJson(agentDir);
@@ -119,7 +119,7 @@ describe("ensurePiAuthJsonFromAuthProfiles", () => {
       },
     });
 
-    const result = await ensurePiAuthJsonFromAuthProfiles(agentDir);
+    const result = await ensureAuthJsonFromAuthProfiles(agentDir);
     expect(result.wrote).toBe(true);
 
     const auth = await readAuthJson(agentDir);
@@ -140,7 +140,7 @@ describe("ensurePiAuthJsonFromAuthProfiles", () => {
       },
     });
 
-    const result = await ensurePiAuthJsonFromAuthProfiles(agentDir);
+    const result = await ensureAuthJsonFromAuthProfiles(agentDir);
     expect(result.wrote).toBe(false);
   });
 
@@ -156,7 +156,7 @@ describe("ensurePiAuthJsonFromAuthProfiles", () => {
       },
     });
 
-    const result = await ensurePiAuthJsonFromAuthProfiles(agentDir);
+    const result = await ensureAuthJsonFromAuthProfiles(agentDir);
     expect(result.wrote).toBe(false);
   });
 
@@ -171,7 +171,7 @@ describe("ensurePiAuthJsonFromAuthProfiles", () => {
       },
     });
 
-    const result = await ensurePiAuthJsonFromAuthProfiles(agentDir);
+    const result = await ensureAuthJsonFromAuthProfiles(agentDir);
     expect(result.wrote).toBe(true);
 
     const auth = await readAuthJson(agentDir);
@@ -197,7 +197,7 @@ describe("ensurePiAuthJsonFromAuthProfiles", () => {
       },
     });
 
-    await ensurePiAuthJsonFromAuthProfiles(agentDir);
+    await ensureAuthJsonFromAuthProfiles(agentDir);
 
     const auth = await readAuthJson(agentDir);
     expect(auth["legacy-provider"]).toMatchObject({ type: "api_key", key: "legacy-key" });

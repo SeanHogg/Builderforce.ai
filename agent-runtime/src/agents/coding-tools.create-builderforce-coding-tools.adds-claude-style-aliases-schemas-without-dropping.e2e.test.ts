@@ -6,8 +6,8 @@ import { Type } from "@sinclair/typebox";
 import { describe, expect, it, vi } from "vitest";
 import "./test-helpers/fast-coding-tools.js";
 import { createBuilderForceAgentsTools } from "./builderforce-tools.js";
-import { __testing, createBuilderForceAgentsCodingTools } from "./pi-tools.js";
-import { createBuilderForceAgentsReadTool, createSandboxedReadTool } from "./pi-tools.read.js";
+import { __testing, createBuilderForceAgentsCodingTools } from "./coding-tools.js";
+import { createBuilderForceAgentsReadTool, createSandboxedReadTool } from "./coding-tools.read.js";
 import { createHostSandboxFsBridge } from "./test-helpers/host-sandbox-fs-bridge.js";
 import { createBrowserTool } from "./tools/browser-tool.js";
 
@@ -379,7 +379,7 @@ describe("createBuilderForceAgentsCodingTools", () => {
   it("supports allow-only sub-agent tool policy", () => {
     const tools = createBuilderForceAgentsCodingTools({
       sessionKey: "agent:main:subagent:test",
-      // Intentionally partial config; only fields used by pi-tools are provided.
+      // Intentionally partial config; only fields used by coding-tools are provided.
       config: {
         tools: {
           subagents: {

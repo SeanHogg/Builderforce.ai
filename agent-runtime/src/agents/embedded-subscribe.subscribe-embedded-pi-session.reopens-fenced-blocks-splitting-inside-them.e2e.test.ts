@@ -3,9 +3,9 @@ import {
   createParagraphChunkedBlockReplyHarness,
   emitAssistantTextDeltaAndEnd,
   expectFencedChunks,
-} from "./pi-embedded-subscribe.e2e-harness.js";
+} from "./embedded-subscribe.e2e-harness.js";
 
-describe("subscribeEmbeddedPiSession", () => {
+describe("subscribeEmbeddedSession", () => {
   it("reopens fenced blocks when splitting inside them", () => {
     const onBlockReply = vi.fn();
     const { emit } = createParagraphChunkedBlockReplyHarness({

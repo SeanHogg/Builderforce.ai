@@ -25,7 +25,7 @@ import {
 } from "../../shared/subagents-format.js";
 import { INTERNAL_MESSAGE_CHANNEL } from "../../utils/message-channel.js";
 import { AGENT_LANE_SUBAGENT } from "../lanes.js";
-import { abortEmbeddedPiRun } from "../pi-embedded.js";
+import { abortEmbeddedRun } from "../embedded.js";
 import { optionalStringEnum } from "../schema/typebox.js";
 import { getSubagentDepthFromSessionStore } from "../subagent-depth.js";
 import {
@@ -241,7 +241,7 @@ async function killSubagentRun(params: {
     cache: params.cache,
   });
   const sessionId = resolved.entry?.sessionId;
-  const aborted = sessionId ? abortEmbeddedPiRun(sessionId) : false;
+  const aborted = sessionId ? abortEmbeddedRun(sessionId) : false;
   const cleared = clearSessionQueues([childSessionKey, sessionId]);
   if (cleared.followupCleared > 0 || cleared.laneCleared > 0) {
     logVerbose(
@@ -593,7 +593,7 @@ export async function runSubagents(
 
         // Interrupt current work first so steer takes precedence immediately.
         if (sessionId) {
-          abortEmbeddedPiRun(sessionId);
+          abortEmbeddedRun(sessionId);
         }
         const cleared = clearSessionQueues([resolved.entry.childSessionKey, sessionId]);
         if (cleared.followupCleared > 0 || cleared.laneCleared > 0) {

@@ -6,7 +6,7 @@ import {
   makeWhatsAppDirectiveConfig,
   replyText,
   replyTexts,
-  runEmbeddedPiAgent,
+  runEmbeddedAgent,
   sessionStorePath,
   withTempHome,
 } from "./reply.directive.directive-behavior.e2e-harness.js";
@@ -28,7 +28,7 @@ async function runThinkDirectiveAndGetText(
 }
 
 function mockEmbeddedResponse(text: string) {
-  vi.mocked(runEmbeddedPiAgent).mockResolvedValue({
+  vi.mocked(runEmbeddedAgent).mockResolvedValue({
     payloads: [{ text }],
     meta: {
       durationMs: 5,
@@ -87,7 +87,7 @@ describe("directive behavior", () => {
       const texts = replyTexts(res);
       expect(texts).toContain("done");
 
-      expect(runEmbeddedPiAgent).toHaveBeenCalledOnce();
+      expect(runEmbeddedAgent).toHaveBeenCalledOnce();
     });
   });
   it("keeps reasoning acks for rapid mixed directives", async () => {
@@ -111,7 +111,7 @@ describe("directive behavior", () => {
         blockReplies,
       });
 
-      expect(runEmbeddedPiAgent).toHaveBeenCalledTimes(2);
+      expect(runEmbeddedAgent).toHaveBeenCalledTimes(2);
       expect(blockReplies.length).toBe(0);
     });
   });
@@ -125,7 +125,7 @@ describe("directive behavior", () => {
 
       const text = replyText(res);
       expect(text).toMatch(/^⚙️ Verbose logging enabled\./);
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("persists verbose off when directive is standalone", async () => {
@@ -149,7 +149,7 @@ describe("directive behavior", () => {
       const store = loadSessionStore(storePath);
       const entry = Object.values(store)[0];
       expect(entry?.verboseLevel).toBe("off");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("shows current think level when /think has no argument", async () => {
@@ -157,7 +157,7 @@ describe("directive behavior", () => {
       const text = await runThinkDirectiveAndGetText(home, { thinkingDefault: "high" });
       expect(text).toContain("Current thinking level: high");
       expect(text).toContain("Options: off, minimal, low, medium, high.");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("shows off when /think has no argument and no default set", async () => {
@@ -165,7 +165,7 @@ describe("directive behavior", () => {
       const text = await runThinkDirectiveAndGetText(home);
       expect(text).toContain("Current thinking level: off");
       expect(text).toContain("Options: off, minimal, low, medium, high.");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
 });

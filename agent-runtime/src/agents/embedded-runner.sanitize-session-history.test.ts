@@ -1,6 +1,6 @@
 import type { AgentMessage } from "../builderforce/model/agent-types.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import * as helpers from "./pi-embedded-helpers.js";
+import * as helpers from "./embedded-helpers.js";
 import {
   expectGoogleModelApiFullSanitizeCall,
   loadSanitizeSessionHistoryWithCleanMocks,
@@ -13,13 +13,13 @@ import {
   type SanitizeSessionHistoryFn,
   sanitizeWithOpenAIResponses,
   TEST_SESSION_ID,
-} from "./pi-embedded-runner.sanitize-session-history.test-harness.js";
+} from "./embedded-runner.sanitize-session-history.test-harness.js";
 
 let sanitizeSessionHistory: SanitizeSessionHistoryFn;
 
 // Mock dependencies
-vi.mock("./pi-embedded-helpers.js", async () => {
-  const actual = await vi.importActual("./pi-embedded-helpers.js");
+vi.mock("./embedded-helpers.js", async () => {
+  const actual = await vi.importActual("./embedded-helpers.js");
   return {
     ...actual,
     isGoogleModelApi: vi.fn(),

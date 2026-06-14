@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
-import { getActiveEmbeddedRunCount } from "../agents/pi-embedded-runner/runs.js";
+import { getActiveEmbeddedRunCount } from "../agents/embedded-runner/runs.js";
 import {
   bumpSkillsSnapshotVersion,
   registerSkillsChangeListener,

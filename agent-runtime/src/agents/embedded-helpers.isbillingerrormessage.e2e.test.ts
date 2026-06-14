@@ -14,7 +14,7 @@ import {
   isTransientHttpError,
   parseImageDimensionError,
   parseImageSizeError,
-} from "./pi-embedded-helpers.js";
+} from "./embedded-helpers.js";
 
 describe("isAuthErrorMessage", () => {
   it("matches credential validation errors", () => {

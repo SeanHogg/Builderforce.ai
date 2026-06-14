@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   compactWithSafetyTimeout,
   EMBEDDED_COMPACTION_TIMEOUT_MS,
-} from "./pi-embedded-runner/compaction-safety-timeout.js";
+} from "./embedded-runner/compaction-safety-timeout.js";
 
 describe("compactWithSafetyTimeout", () => {
   afterEach(() => {

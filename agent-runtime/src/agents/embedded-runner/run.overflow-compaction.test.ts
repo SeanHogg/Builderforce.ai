@@ -1,14 +1,14 @@
 import "./run.overflow-compaction.mocks.shared.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { compactEmbeddedPiSessionDirect } from "./compact.js";
-import { runEmbeddedPiAgent } from "./run.js";
+import { compactEmbeddedSessionDirect } from "./compact.js";
+import { runEmbeddedAgent } from "./run.js";
 import { makeAttemptResult } from "./run.overflow-compaction.fixture.js";
 import { runEmbeddedAttempt } from "./run/attempt.js";
 
 const mockedRunEmbeddedAttempt = vi.mocked(runEmbeddedAttempt);
-const mockedCompactDirect = vi.mocked(compactEmbeddedPiSessionDirect);
+const mockedCompactDirect = vi.mocked(compactEmbeddedSessionDirect);
 
-describe("runEmbeddedPiAgent overflow compaction trigger routing", () => {
+describe("runEmbeddedAgent overflow compaction trigger routing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -30,7 +30,7 @@ describe("runEmbeddedPiAgent overflow compaction trigger routing", () => {
       },
     });
 
-    await runEmbeddedPiAgent({
+    await runEmbeddedAgent({
       sessionId: "test-session",
       sessionKey: "test-key",
       sessionFile: "/tmp/session.json",

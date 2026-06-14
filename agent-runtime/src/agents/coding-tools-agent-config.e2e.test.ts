@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import "./test-helpers/fast-coding-tools.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
-import { createBuilderForceAgentsCodingTools } from "./pi-tools.js";
+import { createBuilderForceAgentsCodingTools } from "./coding-tools.js";
 import type { SandboxDockerConfig } from "./sandbox.js";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 
@@ -35,7 +35,7 @@ describe("Agent-specific tool filtering", () => {
       patch: string;
     }) => Promise<void>,
   ) {
-    const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "builderforce-pi-tools-"));
+    const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "builderforce-coding-tools-"));
     const escapedPath = path.join(
       path.dirname(workspaceDir),
       `escaped-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.txt`,

@@ -1,9 +1,9 @@
 import {
-  abortEmbeddedPiRun,
-  compactEmbeddedPiSession,
-  isEmbeddedPiRunActive,
-  waitForEmbeddedPiRunEnd,
-} from "../../agents/pi-embedded.js";
+  abortEmbeddedRun,
+  compactEmbeddedSession,
+  isEmbeddedRunActive,
+  waitForEmbeddedRunEnd,
+} from "../../agents/embedded.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import {
   resolveFreshSessionTotalTokens,
@@ -64,9 +64,9 @@ export const handleCompactCommand: CommandHandler = async (params) => {
     };
   }
   const sessionId = params.sessionEntry.sessionId;
-  if (isEmbeddedPiRunActive(sessionId)) {
-    abortEmbeddedPiRun(sessionId);
-    await waitForEmbeddedPiRunEnd(sessionId, 15_000);
+  if (isEmbeddedRunActive(sessionId)) {
+    abortEmbeddedRun(sessionId);
+    await waitForEmbeddedRunEnd(sessionId, 15_000);
   }
   const customInstructions = extractCompactInstructions({
     rawBody: params.ctx.CommandBody ?? params.ctx.RawBody ?? params.ctx.Body,
@@ -75,7 +75,7 @@ export const handleCompactCommand: CommandHandler = async (params) => {
     agentId: params.agentId,
     isGroup: params.isGroup,
   });
-  const result = await compactEmbeddedPiSession({
+  const result = await compactEmbeddedSession({
     sessionId,
     sessionKey: params.sessionKey,
     messageChannel: params.command.channel,

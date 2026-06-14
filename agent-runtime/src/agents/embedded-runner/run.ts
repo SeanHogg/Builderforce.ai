@@ -42,22 +42,22 @@ import {
   isTimeoutErrorMessage,
   pickFallbackThinkingLevel,
   type FailoverReason,
-} from "../pi-embedded-helpers.js";
+} from "../embedded-helpers.js";
 import { derivePromptTokens, normalizeUsage, type UsageLike } from "../usage.js";
 import { redactRunIdentifier, resolveRunWorkspaceDir } from "../workspace-run.js";
-import { compactEmbeddedPiSessionDirect } from "./compact.js";
+import { compactEmbeddedSessionDirect } from "./compact.js";
 import { buildAutoContinuePrompt, shouldAutoContinueRun } from "./continuation-policy.js";
 import { resolveGlobalLane, resolveSessionLane } from "./lanes.js";
 import { log } from "./logger.js";
 import { resolveModel } from "./model.js";
 import { runEmbeddedAttempt } from "./run/attempt.js";
-import type { RunEmbeddedPiAgentParams } from "./run/params.js";
+import type { RunEmbeddedAgentParams } from "./run/params.js";
 import { buildEmbeddedRunPayloads } from "./run/payloads.js";
 import {
   truncateOversizedToolResultsInSession,
   sessionLikelyHasOversizedToolResults,
 } from "./tool-result-truncation.js";
-import type { EmbeddedPiAgentMeta, EmbeddedPiRunResult } from "./types.js";
+import type { EmbeddedAgentMeta, EmbeddedRunResult } from "./types.js";
 import { describeUnknownError } from "./utils.js";
 
 type ApiKeyInfo = ResolvedProviderAuth;
@@ -172,9 +172,9 @@ function resolveActiveErrorContext(params: {
   };
 }
 
-export async function runEmbeddedPiAgent(
-  params: RunEmbeddedPiAgentParams,
-): Promise<EmbeddedPiRunResult> {
+export async function runEmbeddedAgent(
+  params: RunEmbeddedAgentParams,
+): Promise<EmbeddedRunResult> {
   const sessionLane = resolveSessionLane(params.sessionKey?.trim() || params.sessionId);
   const globalLane = resolveGlobalLane(params.lane);
   const enqueueGlobal =
@@ -206,7 +206,7 @@ export async function runEmbeddedPiAgent(
       const redactedWorkspace = redactRunIdentifier(resolvedWorkspace);
       if (workspaceResolution.usedFallback) {
         log.warn(
-          `[workspace-fallback] caller=runEmbeddedPiAgent reason=${workspaceResolution.fallbackReason} run=${params.runId} session=${redactedSessionId} sessionKey=${redactedSessionKey} agent=${workspaceResolution.agentId} workspace=${redactedWorkspace}`,
+          `[workspace-fallback] caller=runEmbeddedAgent reason=${workspaceResolution.fallbackReason} run=${params.runId} session=${redactedSessionId} sessionKey=${redactedSessionKey} agent=${workspaceResolution.agentId} workspace=${redactedWorkspace}`,
         );
       }
       const prevCwd = process.cwd();
@@ -645,7 +645,7 @@ export async function runEmbeddedPiAgent(
               log.warn(
                 `context overflow detected (attempt ${overflowCompactionAttempts}/${MAX_OVERFLOW_COMPACTION_ATTEMPTS}); attempting auto-compaction for ${provider}/${modelId}`,
               );
-              const compactResult = await compactEmbeddedPiSessionDirect({
+              const compactResult = await compactEmbeddedSessionDirect({
                 sessionId: params.sessionId,
                 sessionKey: params.sessionKey,
                 messageChannel: params.messageChannel,
@@ -982,7 +982,7 @@ export async function runEmbeddedPiAgent(
           // the final call, giving an accurate snapshot of current context.
           const lastCallUsage = normalizeUsage(lastAssistant?.usage as UsageLike);
           const promptTokens = derivePromptTokens(lastRunPromptUsage);
-          const agentMeta: EmbeddedPiAgentMeta = {
+          const agentMeta: EmbeddedAgentMeta = {
             sessionId: sessionIdUsed,
             provider: lastAssistant?.provider ?? provider,
             model: lastAssistant?.model ?? model.id,

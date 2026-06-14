@@ -32,8 +32,9 @@ import {
   MAX_CLOUD_TOOL_STEPS, MAX_PLACEHOLDER_FINISH_BLOCKS,
   CONTAINER_MAX_STEPS, assertsUnrunVerification, type RawToolCall,
 } from './cloudAgentTools';
-import type {
-  AgentEngine, AgentRunInput, AgentRunResult, CapabilityProvider, ToolContext,
+import {
+  DEFAULT_ENGINE_ID,
+  type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext,
 } from '@builderforce/agent-tools';
 import { parseRemediation, parseFollowUp, parseCloudAgentRef } from './cloudDispatch';
 import { RuntimeService } from './RuntimeService';
@@ -69,12 +70,12 @@ export async function resolveCloudAgent(
   tenantId: number,
   ref: string | undefined,
 ): Promise<ResolvedCloudAgent> {
-  const DEFAULT: ResolvedCloudAgent = { engine: 'builderforce-v1', ref, runtimeSurface: 'durable' };
+  const DEFAULT: ResolvedCloudAgent = { engine: DEFAULT_ENGINE_ID, ref, runtimeSurface: 'durable' };
   if (!ref) return DEFAULT;
   try {
     const sql = neon(env.NEON_DATABASE_URL);
     const rows = (await sql`SELECT engine, name, runtime_surface, base_model FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ engine?: string; name?: string; runtime_surface?: string; base_model?: string }>;
-    const engine = typeof rows[0]?.engine === 'string' && rows[0].engine ? rows[0].engine : 'builderforce-v1';
+    const engine = typeof rows[0]?.engine === 'string' && rows[0].engine ? rows[0].engine : DEFAULT_ENGINE_ID;
     const label = typeof rows[0]?.name === 'string' && rows[0].name ? rows[0].name : undefined;
     const runtimeSurface = rows[0]?.runtime_surface === 'container' ? 'container' : 'durable';
     const rawModel = typeof rows[0]?.base_model === 'string' ? rows[0].base_model.trim() : '';

@@ -2,12 +2,12 @@ import type { AgentSession } from "../builderforce/agent-loop/index.js";
 import type { ReasoningLevel, VerboseLevel } from "../auto-reply/thinking.js";
 import type { BuilderForceAgentsConfig } from "../config/types.builderforce.js";
 import type { HookRunner } from "../plugins/hooks.js";
-import type { BlockReplyChunking } from "./pi-embedded-block-chunker.js";
-import type { BlockReplyPayload } from "./pi-embedded-payloads.js";
+import type { BlockReplyChunking } from "./embedded-block-chunker.js";
+import type { BlockReplyPayload } from "./embedded-payloads.js";
 
 export type ToolResultFormat = "markdown" | "plain";
 
-export type SubscribeEmbeddedPiSessionParams = {
+export type SubscribeEmbeddedSessionParams = {
   session: AgentSession;
   runId: string;
   hookRunner?: HookRunner;
@@ -33,4 +33,4 @@ export type SubscribeEmbeddedPiSessionParams = {
   sessionKey?: string;
 };
 
-export type { BlockReplyChunking } from "./pi-embedded-block-chunker.js";
+export type { BlockReplyChunking } from "./embedded-block-chunker.js";

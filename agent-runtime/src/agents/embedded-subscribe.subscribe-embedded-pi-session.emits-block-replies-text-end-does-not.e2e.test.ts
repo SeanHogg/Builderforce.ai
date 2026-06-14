@@ -1,14 +1,14 @@
 import type { AssistantMessage } from "../builderforce/model/types.js";
 import { describe, expect, it, vi } from "vitest";
-import { createStubSessionHarness } from "./pi-embedded-subscribe.e2e-harness.js";
-import { subscribeEmbeddedPiSession } from "./pi-embedded-subscribe.js";
+import { createStubSessionHarness } from "./embedded-subscribe.e2e-harness.js";
+import { subscribeEmbeddedSession } from "./embedded-subscribe.js";
 
-describe("subscribeEmbeddedPiSession", () => {
+describe("subscribeEmbeddedSession", () => {
   function createTextEndBlockReplyHarness() {
     const { session, emit } = createStubSessionHarness();
     const onBlockReply = vi.fn();
 
-    const subscription = subscribeEmbeddedPiSession({
+    const subscription = subscribeEmbeddedSession({
       session,
       runId: "run",
       onBlockReply,

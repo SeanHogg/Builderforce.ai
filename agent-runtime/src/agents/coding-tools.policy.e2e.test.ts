@@ -6,7 +6,7 @@ import {
   filterToolsByPolicy,
   isToolAllowedByPolicyName,
   resolveSubagentToolPolicy,
-} from "./pi-tools.policy.js";
+} from "./coding-tools.policy.js";
 
 function createStubTool(name: string): AgentTool {
   return {
@@ -18,7 +18,7 @@ function createStubTool(name: string): AgentTool {
   };
 }
 
-describe("pi-tools.policy", () => {
+describe("coding-tools.policy", () => {
   it("treats * in allow as allow-all", () => {
     const tools = [createStubTool("read"), createStubTool("exec")];
     const filtered = filterToolsByPolicy(tools, { allow: ["*"] });

@@ -14,6 +14,7 @@ import { promisify } from "node:util";
 import type {
   Capability,
   CapabilityProvider,
+  HumanCapability,
   RepoDeleteResult,
   RepoEditResult,
   RepoListResult,
@@ -27,15 +28,39 @@ import type {
 
 const execAsync = promisify(exec);
 
-/** Every capability a Node workspace can physically back. No `static-check` (it has
- *  a real shell, so it runs the actual build/tests); `human` is wired separately
- *  (the legacy on-prem loop has its own ask-human), so it is omitted here by default.
+/** The capabilities a Node workspace ALWAYS backs from just a working tree. No
+ *  `static-check` (it has a real shell, so it runs the actual build/tests). The
+ *  optional `human` and `web.search` backings are NOT in this base set — they are
+ *  added to the provider's advertised set only when their backing is injected (see
+ *  {@link NodeProviderOptions}), so the surface advertises a capability iff it can
+ *  physically back it (PRD 11 §5.2 — "no reduced sets", but also no phantom caps).
  *  `orchestrate` + `memory` are advertised because their tools reach module-level
  *  Node singletons (the workflow orchestrator, the project session/knowledge store)
  *  directly — no provider service object is needed, only the capability gate. */
 export const NODE_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
-  "repo.read", "repo.search", "repo.write", "repo.edit", "repo.delete", "shell", "process", "web", "orchestrate", "memory", "message", "media",
+  "repo.read",
+  "repo.search",
+  "repo.write",
+  "repo.edit",
+  "repo.delete",
+  "shell",
+  "process",
+  "web",
+  "orchestrate",
+  "memory",
+  "message",
+  "media",
 ]);
+
+/** Optional backings a host injects so the Node provider can advertise the matching
+ *  capability. Omitted → the cap is not advertised → the registry never offers the
+ *  tool on-prem (it stays defensively unavailable). */
+export interface NodeProviderOptions {
+  /** Human-in-the-loop concretion (e.g. the relay approval-gate). Adds `human`. */
+  human?: HumanCapability;
+  /** Web-search backend (e.g. the config-resolved provider). Adds `web.search`. */
+  webSearch?: (query: string) => Promise<WebSearchResult>;
+}
 
 const MAX_WEB_BYTES = 256 * 1024;
 
@@ -72,7 +97,10 @@ async function walk(root: string, dir: string, out: string[]): Promise<void> {
  * Build a Node provider rooted at `workspaceRoot`. All file ops are confined to the
  * root; `shell` runs commands with `cwd = workspaceRoot`.
  */
-export function buildNodeCapabilityProvider(workspaceRoot: string): CapabilityProvider {
+export function buildNodeCapabilityProvider(
+  workspaceRoot: string,
+  options?: NodeProviderOptions,
+): CapabilityProvider {
   const root = path.resolve(workspaceRoot);
 
   const repoRead = {
@@ -89,7 +117,12 @@ export function buildNodeCapabilityProvider(workspaceRoot: string): CapabilityPr
       try {
         const buf = await fs.readFile(abs);
         const truncated = buf.byteLength > MAX_FILE_BYTES;
-        return { ok: true, path: rel, content: buf.subarray(0, MAX_FILE_BYTES).toString("utf8"), truncated };
+        return {
+          ok: true,
+          path: rel,
+          content: buf.subarray(0, MAX_FILE_BYTES).toString("utf8"),
+          truncated,
+        };
       } catch (e) {
         return { ok: false, error: (e as Error).message };
       }
@@ -141,7 +174,12 @@ export function buildNodeCapabilityProvider(workspaceRoot: string): CapabilityPr
         return { ok: false, error: (e as Error).message };
       }
     },
-    async editFile(rel: string, oldString: string, newString: string, replaceAll?: boolean): Promise<RepoEditResult> {
+    async editFile(
+      rel: string,
+      oldString: string,
+      newString: string,
+      replaceAll?: boolean,
+    ): Promise<RepoEditResult> {
       const abs = resolveInRoot(root, rel);
       if (!abs) return { ok: false, error: `path escapes workspace: ${rel}` };
       let content: string;
@@ -153,9 +191,14 @@ export function buildNodeCapabilityProvider(workspaceRoot: string): CapabilityPr
       const count = content.split(oldString).length - 1;
       if (count === 0) return { ok: false, error: `old_string not found in '${rel}'` };
       if (count > 1 && !replaceAll) {
-        return { ok: false, error: `old_string is not unique in '${rel}' (${count} matches) — add context or set replace_all` };
+        return {
+          ok: false,
+          error: `old_string is not unique in '${rel}' (${count} matches) — add context or set replace_all`,
+        };
       }
-      const updated = replaceAll ? content.split(oldString).join(newString) : content.replace(oldString, newString);
+      const updated = replaceAll
+        ? content.split(oldString).join(newString)
+        : content.replace(oldString, newString);
       try {
         await fs.writeFile(abs, updated, "utf8");
         return { ok: true, change: "modified", replaced: replaceAll ? count : 1 };
@@ -169,7 +212,11 @@ export function buildNodeCapabilityProvider(workspaceRoot: string): CapabilityPr
       try {
         await fs.access(abs);
       } catch {
-        return { ok: true, deleted: false, note: `'${rel}' does not exist, so there is nothing to delete.` };
+        return {
+          ok: true,
+          deleted: false,
+          note: `'${rel}' does not exist, so there is nothing to delete.`,
+        };
       }
       try {
         await fs.rm(abs);
@@ -183,7 +230,10 @@ export function buildNodeCapabilityProvider(workspaceRoot: string): CapabilityPr
   const shell = {
     async run(command: string): Promise<ShellResult> {
       try {
-        const { stdout, stderr } = await execAsync(command, { cwd: root, maxBuffer: 8 * 1024 * 1024 });
+        const { stdout, stderr } = await execAsync(command, {
+          cwd: root,
+          maxBuffer: 8 * 1024 * 1024,
+        });
         return { ok: true, exitCode: 0, stdout: `${stdout}${stderr}` };
       } catch (e) {
         const err = e as { code?: number; stdout?: string; stderr?: string; message?: string };
@@ -235,12 +285,19 @@ export function buildNodeCapabilityProvider(workspaceRoot: string): CapabilityPr
       }
     },
     async search(query: string): Promise<WebSearchResult> {
-      // The Node provider does not advertise `web.search` (NODE_SURFACE_CAPS), so the
-      // registry never dispatches web_search here. Implemented defensively for when a
-      // search backend is wired (then add `web.search` to the cap set).
+      // Backed only when a host injects `options.webSearch` (and then `web.search`
+      // is advertised below). Without it the cap is absent, so the registry never
+      // dispatches here — this branch is the defensive fallback.
+      if (options?.webSearch) return options.webSearch(query);
       return { ok: false, query, error: "no web-search backend configured on this surface" };
     },
   };
 
-  return { capabilities: NODE_SURFACE_CAPS, repoRead, repoWrite, shell, web };
+  // Advertise the optional capabilities ONLY when their backing is wired, so the
+  // surface never offers a tool it cannot fulfill (PRD 11 §5.2).
+  const capabilities = new Set<Capability>(NODE_SURFACE_CAPS);
+  if (options?.human) capabilities.add("human");
+  if (options?.webSearch) capabilities.add("web.search");
+
+  return { capabilities, repoRead, repoWrite, shell, web, human: options?.human };
 }

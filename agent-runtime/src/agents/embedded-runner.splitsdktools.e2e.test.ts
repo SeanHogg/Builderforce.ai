@@ -1,7 +1,7 @@
 import type { AgentTool, AgentToolResult } from "../builderforce/model/agent-types.js";
 import { Type } from "@sinclair/typebox";
 import { describe, expect, it } from "vitest";
-import { splitSdkTools } from "./pi-embedded-runner.js";
+import { splitSdkTools } from "./embedded-runner.js";
 
 function createStubTool(name: string): AgentTool {
   return {

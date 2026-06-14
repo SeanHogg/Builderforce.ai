@@ -156,7 +156,7 @@ const createStubPluginRegistry = (): PluginRegistry => ({
 
 const hoisted = vi.hoisted(() => ({
   testTailnetIPv4: { value: undefined as string | undefined },
-  piSdkMock: {
+  modelSdkMock: {
     enabled: false,
     discoverCalls: 0,
     models: [] as Array<{
@@ -208,7 +208,7 @@ export const setTestConfigRoot = (root: string) => {
 
 export const testTailnetIPv4 = hoisted.testTailnetIPv4;
 export const testTailscaleWhois = hoisted.testTailscaleWhois;
-export const piSdkMock = hoisted.piSdkMock;
+export const modelSdkMock = hoisted.modelSdkMock;
 export const cronIsolatedRun = hoisted.cronIsolatedRun;
 export const agentCommand: Mock<() => void> = hoisted.agentCommand;
 export const getReplyFromConfig: Mock<GetReplyFromConfigFn> = hoisted.getReplyFromConfig;
@@ -238,19 +238,19 @@ export const testIsNixMode = hoisted.testIsNixMode;
 export const sessionStoreSaveDelayMs = hoisted.sessionStoreSaveDelayMs;
 export const embeddedRunMock = hoisted.embeddedRunMock;
 
-vi.mock("../agents/pi-model-discovery.js", async () => {
-  const actual = await vi.importActual<typeof import("../agents/pi-model-discovery.js")>(
-    "../agents/pi-model-discovery.js",
+vi.mock("../agents/model-discovery.js", async () => {
+  const actual = await vi.importActual<typeof import("../agents/model-discovery.js")>(
+    "../agents/model-discovery.js",
   );
 
   class MockModelRegistry extends actual.ModelRegistry {
     override getAll(): ReturnType<typeof actual.ModelRegistry.prototype.getAll> {
-      if (!piSdkMock.enabled) {
+      if (!modelSdkMock.enabled) {
         return super.getAll();
       }
-      piSdkMock.discoverCalls += 1;
+      modelSdkMock.discoverCalls += 1;
       // Cast to expected type for testing purposes
-      return piSdkMock.models as ReturnType<typeof actual.ModelRegistry.prototype.getAll>;
+      return modelSdkMock.models as ReturnType<typeof actual.ModelRegistry.prototype.getAll>;
     }
   }
 
@@ -540,18 +540,18 @@ vi.mock("../config/config.js", async () => {
   };
 });
 
-vi.mock("../agents/pi-embedded.js", async () => {
-  const actual = await vi.importActual<typeof import("../agents/pi-embedded.js")>(
-    "../agents/pi-embedded.js",
+vi.mock("../agents/embedded.js", async () => {
+  const actual = await vi.importActual<typeof import("../agents/embedded.js")>(
+    "../agents/embedded.js",
   );
   return {
     ...actual,
-    isEmbeddedPiRunActive: (sessionId: string) => embeddedRunMock.activeIds.has(sessionId),
-    abortEmbeddedPiRun: (sessionId: string) => {
+    isEmbeddedRunActive: (sessionId: string) => embeddedRunMock.activeIds.has(sessionId),
+    abortEmbeddedRun: (sessionId: string) => {
       embeddedRunMock.abortCalls.push(sessionId);
       return embeddedRunMock.activeIds.has(sessionId);
     },
-    waitForEmbeddedPiRunEnd: async (sessionId: string) => {
+    waitForEmbeddedRunEnd: async (sessionId: string) => {
       embeddedRunMock.waitCalls.push(sessionId);
       return embeddedRunMock.waitResults.get(sessionId) ?? true;
     },

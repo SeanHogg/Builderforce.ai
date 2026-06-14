@@ -189,32 +189,6 @@ builderforce cron add --name "Weekly review" --cron "0 9 * * 1" --session isolat
 builderforce cron add --name "Call back" --at "2h" --session main --system-event "Call back the client" --wake now
 ```
 
-## Lobster：带审批的确定性工作流
-
-Lobster 是用于**多步骤工具管道**的工作流运行时，适用于需要确定性执行和明确审批的场景。当任务不只是单次智能体轮次，且你需要可恢复的带人工检查点的工作流时，使用它。
-
-### 何时适合使用 Lobster
-
-- **多步骤自动化**：你需要一个固定的工具调用管道，而不是一次性提示。
-- **审批关卡**：副作用应暂停直到你批准，然后继续执行。
-- **可恢复运行**：继续暂停的工作流而无需重新运行之前的步骤。
-
-### 如何与心跳和定时任务配合
-
-- **心跳/定时任务**决定*何时*运行。
-- **Lobster** 定义运行开始后*执行哪些步骤*。
-
-对于计划性工作流，使用定时任务或心跳触发一次调用 Lobster 的智能体轮次。对于临时工作流，直接调用 Lobster。
-
-### 操作说明（来自代码）
-
-- Lobster 以**本地子进程**（`lobster` CLI）在工具模式下运行，并返回 **JSON 信封**。
-- 如果工具返回 `needs_approval`，你需要使用 `resumeToken` 和 `approve` 标志来恢复。
-- 该工具是**可选插件**；建议通过 `tools.alsoAllow: ["lobster"]` 附加启用。
-- 如果传入 `lobsterPath`，必须是**绝对路径**。
-
-完整用法和示例请参阅 [Lobster](/tools/lobster)。
-
 ## 主会话与隔离会话
 
 心跳和定时任务都可以与主会话交互，但方式不同：

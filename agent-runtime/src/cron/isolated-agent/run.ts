@@ -20,8 +20,8 @@ import {
   resolveHooksGmailModel,
   resolveThinkingDefault,
 } from "../../agents/model-selection.js";
-import type { MessagingToolSend } from "../../agents/pi-embedded-messaging.js";
-import { runEmbeddedPiAgent } from "../../agents/pi-embedded.js";
+import type { MessagingToolSend } from "../../agents/embedded-messaging.js";
+import { runEmbeddedAgent } from "../../agents/embedded.js";
 import { runSubagentAnnounceFlow } from "../../agents/subagent-announce.js";
 import { countActiveDescendantRuns } from "../../agents/subagent-registry.js";
 import { resolveAgentTimeoutMs } from "../../agents/timeout.js";
@@ -431,7 +431,7 @@ export async function runCronIsolatedAgentTurn(params: {
   cronSession.sessionEntry.systemSent = true;
   await persistSessionEntry();
 
-  let runResult: Awaited<ReturnType<typeof runEmbeddedPiAgent>>;
+  let runResult: Awaited<ReturnType<typeof runEmbeddedAgent>>;
   let fallbackProvider = provider;
   let fallbackModel = model;
   const runStartedAt = Date.now();
@@ -472,7 +472,7 @@ export async function runCronIsolatedAgentTurn(params: {
             cliSessionId,
           });
         }
-        return runEmbeddedPiAgent({
+        return runEmbeddedAgent({
           sessionId: cronSession.sessionEntry.sessionId,
           sessionKey: agentSessionKey,
           agentId,

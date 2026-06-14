@@ -4,11 +4,11 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { resolveSessionKey } from "../config/sessions.js";
 import {
   createBlockReplyCollector,
-  getRunEmbeddedPiAgentMock,
+  getRunEmbeddedAgentMock,
   installTriggerHandlingE2eTestHooks,
   loadGetReplyFromConfig,
   makeCfg,
-  mockRunEmbeddedPiAgentOk,
+  mockRunEmbeddedAgentOk,
   requireSessionStorePath,
   withTempHome,
 } from "./reply.triggers.trigger-handling.test-harness.js";
@@ -23,7 +23,7 @@ installTriggerHandlingE2eTestHooks();
 describe("trigger handling", () => {
   it("reports active auth profile and key snippet in status", async () => {
     await withTempHome(async (home) => {
-      const runEmbeddedPiAgentMock = getRunEmbeddedPiAgentMock();
+      const runEmbeddedAgentMock = getRunEmbeddedAgentMock();
       const cfg = makeCfg(home);
       const agentDir = join(home, ".builderforce", "agents", "main", "agent");
       await fs.mkdir(agentDir, { recursive: true });
@@ -83,13 +83,13 @@ describe("trigger handling", () => {
       expect(text).toMatch(/\u2026|\.{3}/);
       expect(text).toContain("(anthropic:work)");
       expect(text).not.toContain("mixed");
-      expect(runEmbeddedPiAgentMock).not.toHaveBeenCalled();
+      expect(runEmbeddedAgentMock).not.toHaveBeenCalled();
     });
   });
 
   it("strips inline /status and still runs the agent", async () => {
     await withTempHome(async (home) => {
-      const runEmbeddedPiAgentMock = mockRunEmbeddedPiAgentOk();
+      const runEmbeddedAgentMock = mockRunEmbeddedAgentOk();
       const { blockReplies, handlers } = createBlockReplyCollector();
       await getReplyFromConfig(
         {
@@ -104,19 +104,19 @@ describe("trigger handling", () => {
         handlers,
         makeCfg(home),
       );
-      expect(runEmbeddedPiAgentMock).toHaveBeenCalled();
+      expect(runEmbeddedAgentMock).toHaveBeenCalled();
       // Allowlisted senders: inline /status runs immediately (like /help) and is
       // stripped from the prompt; the remaining text continues through the agent.
       expect(blockReplies.length).toBe(1);
       expect(String(blockReplies[0]?.text ?? "").length).toBeGreaterThan(0);
-      const prompt = runEmbeddedPiAgentMock.mock.calls[0]?.[0]?.prompt ?? "";
+      const prompt = runEmbeddedAgentMock.mock.calls[0]?.[0]?.prompt ?? "";
       expect(prompt).not.toContain("/status");
     });
   });
 
   it("handles inline /help and strips it before the agent", async () => {
     await withTempHome(async (home) => {
-      const runEmbeddedPiAgentMock = mockRunEmbeddedPiAgentOk();
+      const runEmbeddedAgentMock = mockRunEmbeddedAgentOk();
       const { blockReplies, handlers } = createBlockReplyCollector();
       const res = await getReplyFromConfig(
         {
@@ -131,8 +131,8 @@ describe("trigger handling", () => {
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(blockReplies.length).toBe(1);
       expect(blockReplies[0]?.text).toContain("Help");
-      expect(runEmbeddedPiAgentMock).toHaveBeenCalled();
-      const prompt = runEmbeddedPiAgentMock.mock.calls[0]?.[0]?.prompt ?? "";
+      expect(runEmbeddedAgentMock).toHaveBeenCalled();
+      const prompt = runEmbeddedAgentMock.mock.calls[0]?.[0]?.prompt ?? "";
       expect(prompt).not.toContain("/help");
       expect(text).toBe("ok");
     });

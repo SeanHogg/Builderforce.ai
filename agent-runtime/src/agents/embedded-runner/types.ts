@@ -1,7 +1,7 @@
 import type { SessionSystemPromptReport } from "../../config/sessions/types.js";
-import type { MessagingToolSend } from "../pi-embedded-messaging.js";
+import type { MessagingToolSend } from "../embedded-messaging.js";
 
-export type EmbeddedPiAgentMeta = {
+export type EmbeddedAgentMeta = {
   sessionId: string;
   provider: string;
   model: string;
@@ -30,9 +30,9 @@ export type EmbeddedPiAgentMeta = {
   };
 };
 
-export type EmbeddedPiRunMeta = {
+export type EmbeddedRunMeta = {
   durationMs: number;
-  agentMeta?: EmbeddedPiAgentMeta;
+  agentMeta?: EmbeddedAgentMeta;
   aborted?: boolean;
   systemPromptReport?: SessionSystemPromptReport;
   error?: {
@@ -49,7 +49,7 @@ export type EmbeddedPiRunMeta = {
   }>;
 };
 
-export type EmbeddedPiRunResult = {
+export type EmbeddedRunResult = {
   payloads?: Array<{
     text?: string;
     mediaUrl?: string;
@@ -57,7 +57,7 @@ export type EmbeddedPiRunResult = {
     replyToId?: string;
     isError?: boolean;
   }>;
-  meta: EmbeddedPiRunMeta;
+  meta: EmbeddedRunMeta;
   // True if a messaging tool (telegram, whatsapp, discord, slack, sessions_send)
   // successfully sent a message. Used to suppress agent's confirmation text.
   didSendViaMessagingTool?: boolean;
@@ -71,7 +71,7 @@ export type EmbeddedPiRunResult = {
   successfulCronAdds?: number;
 };
 
-export type EmbeddedPiCompactResult = {
+export type EmbeddedCompactResult = {
   ok: boolean;
   compacted: boolean;
   reason?: string;

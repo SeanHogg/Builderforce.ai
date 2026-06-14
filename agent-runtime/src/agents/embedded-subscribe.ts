@@ -6,18 +6,18 @@ import { emitAgentEvent } from "../infra/agent-events.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import type { InlineCodeState } from "../markdown/code-spans.js";
 import { buildCodeSpanIndex, createInlineCodeState } from "../markdown/code-spans.js";
-import { EmbeddedBlockChunker } from "./pi-embedded-block-chunker.js";
+import { EmbeddedBlockChunker } from "./embedded-block-chunker.js";
 import {
   isMessagingToolDuplicateNormalized,
   normalizeTextForComparison,
-} from "./pi-embedded-helpers.js";
-import { createEmbeddedPiSessionEventHandler } from "./pi-embedded-subscribe.handlers.js";
+} from "./embedded-helpers.js";
+import { createEmbeddedSessionEventHandler } from "./embedded-subscribe.handlers.js";
 import type {
-  EmbeddedPiSubscribeContext,
-  EmbeddedPiSubscribeState,
-} from "./pi-embedded-subscribe.handlers.types.js";
-import type { SubscribeEmbeddedPiSessionParams } from "./pi-embedded-subscribe.types.js";
-import { formatReasoningMessage, stripDowngradedToolCallText } from "./pi-embedded-utils.js";
+  EmbeddedSubscribeContext,
+  EmbeddedSubscribeState,
+} from "./embedded-subscribe.handlers.types.js";
+import type { SubscribeEmbeddedSessionParams } from "./embedded-subscribe.types.js";
+import { formatReasoningMessage, stripDowngradedToolCallText } from "./embedded-utils.js";
 import { hasNonzeroUsage, normalizeUsage, type UsageLike } from "./usage.js";
 
 const THINKING_TAG_SCAN_RE = /<\s*(\/?)\s*(?:think(?:ing)?|thought|antthinking)\s*>/gi;
@@ -26,15 +26,15 @@ const log = createSubsystemLogger("agent/embedded");
 
 export type {
   BlockReplyChunking,
-  SubscribeEmbeddedPiSessionParams,
+  SubscribeEmbeddedSessionParams,
   ToolResultFormat,
-} from "./pi-embedded-subscribe.types.js";
+} from "./embedded-subscribe.types.js";
 
-export function subscribeEmbeddedPiSession(params: SubscribeEmbeddedPiSessionParams) {
+export function subscribeEmbeddedSession(params: SubscribeEmbeddedSessionParams) {
   const reasoningMode = params.reasoningMode ?? "off";
   const toolResultFormat = params.toolResultFormat ?? "markdown";
   const useMarkdown = toolResultFormat === "markdown";
-  const state: EmbeddedPiSubscribeState = {
+  const state: EmbeddedSubscribeState = {
     assistantTexts: [],
     toolMetas: [],
     toolMetaById: new Map(),
@@ -295,7 +295,7 @@ export function subscribeEmbeddedPiSession(params: SubscribeEmbeddedPiSessionPar
   const blockChunker = blockChunking ? new EmbeddedBlockChunker(blockChunking) : null;
   // KNOWN: Provider streams are not strictly once-only or perfectly ordered.
   // `text_end` can repeat full content; late `text_end` can arrive after `message_end`.
-  // Tests: `src/agents/pi-embedded-subscribe.test.ts` (e.g. late text_end cases).
+  // Tests: `src/agents/embedded-subscribe.test.ts` (e.g. late text_end cases).
   const shouldEmitToolResult = () =>
     typeof params.shouldEmitToolResult === "function"
       ? params.shouldEmitToolResult()
@@ -599,7 +599,7 @@ export function subscribeEmbeddedPiSession(params: SubscribeEmbeddedPiSessionPar
     }
   };
 
-  const ctx: EmbeddedPiSubscribeContext = {
+  const ctx: EmbeddedSubscribeContext = {
     params,
     state,
     log,
@@ -631,7 +631,7 @@ export function subscribeEmbeddedPiSession(params: SubscribeEmbeddedPiSessionPar
     getCompactionCount: () => compactionCount,
   };
 
-  const sessionUnsubscribe = params.session.subscribe(createEmbeddedPiSessionEventHandler(ctx));
+  const sessionUnsubscribe = params.session.subscribe(createEmbeddedSessionEventHandler(ctx));
 
   const unsubscribe = () => {
     if (state.unsubscribed) {

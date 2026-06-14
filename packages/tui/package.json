@@ -1,0 +1,11 @@
+{
+  "name": "@builderforce/tui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Framework-agnostic render seam for the interactive CLI: one TuiRenderer contract, resolved by id from a DI registry, so the terminal TUI framework is swappable (ink today, native node:tty tomorrow).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts"
+}

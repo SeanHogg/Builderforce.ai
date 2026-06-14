@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { getApiKeyForModel } from "../agents/model-auth.js";
-import { resolveModel } from "../agents/pi-embedded-runner/model.js";
+import { resolveModel } from "../agents/embedded-runner/model.js";
 import { nativeComplete } from "../builderforce/model/native-llm.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { withEnv } from "../test-utils/env.js";
@@ -10,7 +10,7 @@ vi.mock("../builderforce/model/native-llm.js", () => ({
   nativeComplete: vi.fn(),
 }));
 
-vi.mock("../agents/pi-embedded-runner/model.js", () => ({
+vi.mock("../agents/embedded-runner/model.js", () => ({
   resolveModel: vi.fn((provider: string, modelId: string) => ({
     model: {
       provider,

@@ -5,19 +5,19 @@ import type { SessionManager } from "../../builderforce/agent-loop/index.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import { resolveContextWindowInfo } from "../context-window-guard.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../defaults.js";
-import { setCompactionSafeguardRuntime } from "../pi-extensions/compaction-safeguard-runtime.js";
-import { setContextPruningRuntime } from "../pi-extensions/context-pruning/runtime.js";
-import { computeEffectiveSettings } from "../pi-extensions/context-pruning/settings.js";
-import { makeToolPrunablePredicate } from "../pi-extensions/context-pruning/tools.js";
-import { ensurePiCompactionReserveTokens } from "../pi-settings.js";
+import { setCompactionSafeguardRuntime } from "../agent-extensions/compaction-safeguard-runtime.js";
+import { setContextPruningRuntime } from "../agent-extensions/context-pruning/runtime.js";
+import { computeEffectiveSettings } from "../agent-extensions/context-pruning/settings.js";
+import { makeToolPrunablePredicate } from "../agent-extensions/context-pruning/tools.js";
+import { ensureCompactionReserveTokens } from "../agent-settings.js";
 import { isCacheTtlEligibleProvider, readLastCacheTtlTimestamp } from "./cache-ttl.js";
 
-function resolvePiExtensionPath(id: string): string {
+function resolveExtensionPath(id: string): string {
   const self = fileURLToPath(import.meta.url);
   const dir = path.dirname(self);
   // In dev this file is `.ts` (tsx), in production it's `.js`.
   const ext = path.extname(self) === ".ts" ? "ts" : "js";
-  return path.join(dir, "..", "pi-extensions", `${id}.${ext}`);
+  return path.join(dir, "..", "agent-extensions", `${id}.${ext}`);
 }
 
 function resolveContextWindowTokens(params: {
@@ -63,7 +63,7 @@ function buildContextPruningExtension(params: {
   });
 
   return {
-    additionalExtensionPaths: [resolvePiExtensionPath("context-pruning")],
+    additionalExtensionPaths: [resolveExtensionPath("context-pruning")],
   };
 }
 
@@ -92,7 +92,7 @@ export function buildEmbeddedExtensionPaths(params: {
       maxHistoryShare: compactionCfg?.maxHistoryShare,
       contextWindowTokens: contextWindowInfo.tokens,
     });
-    paths.push(resolvePiExtensionPath("compaction-safeguard"));
+    paths.push(resolveExtensionPath("compaction-safeguard"));
   }
   const pruning = buildContextPruningExtension(params);
   if (pruning.additionalExtensionPaths) {
@@ -101,4 +101,4 @@ export function buildEmbeddedExtensionPaths(params: {
   return paths;
 }
 
-export { ensurePiCompactionReserveTokens };
+export { ensureCompactionReserveTokens };

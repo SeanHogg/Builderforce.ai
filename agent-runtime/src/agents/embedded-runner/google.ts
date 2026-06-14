@@ -15,8 +15,8 @@ import {
   isGoogleModelApi,
   sanitizeGoogleTurnOrdering,
   sanitizeSessionMessagesImages,
-} from "../pi-embedded-helpers.js";
-import { cleanToolSchemaForGemini } from "../pi-tools.schema.js";
+} from "../embedded-helpers.js";
+import { cleanToolSchemaForGemini } from "../coding-tools.schema.js";
 import {
   sanitizeToolCallInputs,
   stripToolResultDetails,

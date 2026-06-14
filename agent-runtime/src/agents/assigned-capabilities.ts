@@ -8,7 +8,7 @@
  *
  * This module turns that state into prompt text so the running agent actually
  * adopts what was assigned — the single source shared by both engines:
- *   • V1 (pi-embedded) injects {@link buildAssignedPersonaPrompt} as a system-prompt
+ *   • V1 (embedded) injects {@link buildAssignedPersonaPrompt} as a system-prompt
  *     section (skills + workspace content are already injected by the run path).
  *   • V2 (Claude Agent SDK) prepends {@link buildAssignedCapabilityAppend} as a
  *     guidance preamble to the SDK prompt (its run path injects nothing otherwise).

@@ -5,7 +5,7 @@ import {
   formatBillingErrorMessage,
   formatAssistantErrorText,
   formatRawAssistantErrorForUi,
-} from "./pi-embedded-helpers.js";
+} from "./embedded-helpers.js";
 
 describe("formatAssistantErrorText", () => {
   const makeAssistantError = (errorMessage: string): AssistantMessage => ({

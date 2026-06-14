@@ -7,7 +7,7 @@ import {
   assertElevatedOffStatusReply,
   installDirectiveBehaviorE2EHooks,
   makeRestrictedElevatedDisabledConfig,
-  runEmbeddedPiAgent,
+  runEmbeddedAgent,
   withTempHome,
 } from "./reply.directive.directive-behavior.e2e-harness.js";
 import { getReplyFromConfig } from "./reply.js";
@@ -77,7 +77,7 @@ describe("directive behavior", () => {
 
       const store = loadSessionStore(storePath);
       expect(store["agent:main:main"]?.elevatedLevel).toBe("off");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("shows elevated off in status when per-agent elevated is disabled", async () => {
@@ -98,7 +98,7 @@ describe("directive behavior", () => {
 
       const text = extractReplyText(res);
       expect(text).not.toContain("elevated");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("acks queue directive and persists override", async () => {
@@ -116,7 +116,7 @@ describe("directive behavior", () => {
       const store = loadSessionStore(storePath);
       const entry = Object.values(store)[0];
       expect(entry?.queueMode).toBe("interrupt");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("persists queue options when directive is standalone", async () => {
@@ -140,7 +140,7 @@ describe("directive behavior", () => {
       expect(entry?.queueDebounceMs).toBe(2000);
       expect(entry?.queueCap).toBe(5);
       expect(entry?.queueDrop).toBe("old");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("resets queue mode to default", async () => {
@@ -157,7 +157,7 @@ describe("directive behavior", () => {
       expect(entry?.queueDebounceMs).toBeUndefined();
       expect(entry?.queueCap).toBeUndefined();
       expect(entry?.queueDrop).toBeUndefined();
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
 });

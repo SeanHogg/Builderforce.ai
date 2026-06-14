@@ -20,7 +20,7 @@ import {
 import { isModernModelRef } from "../agents/live-model-filter.js";
 import { getApiKeyForModel } from "../agents/model-auth.js";
 import { ensureBuilderForceAgentsModelsJson } from "../agents/models-config.js";
-import { discoverAuthStorage, discoverModels } from "../agents/pi-model-discovery.js";
+import { discoverAuthStorage, discoverModels } from "../agents/model-discovery.js";
 import { loadConfig } from "../config/config.js";
 import type { ModelsConfig, BuilderForceAgentsConfig, ModelProviderConfig } from "../config/types.js";
 import { isTruthyEnvValue } from "../infra/env.js";
@@ -502,7 +502,7 @@ async function runGatewayModelSuite(params: GatewayModelSuiteParams) {
     skipCron: process.env.BUILDERFORCE_AGENTS_SKIP_CRON,
     skipCanvas: process.env.BUILDERFORCE_AGENTS_SKIP_CANVAS_HOST,
     agentDir: process.env.BUILDERFORCE_AGENTS_AGENT_DIR,
-    piAgentDir: process.env.PI_CODING_AGENT_DIR,
+    codingAgentDir: process.env.PI_CODING_AGENT_DIR,
     stateDir: process.env.BUILDERFORCE_AGENTS_STATE_DIR,
   };
   let tempAgentDir: string | undefined;
@@ -1008,7 +1008,7 @@ async function runGatewayModelSuite(params: GatewayModelSuiteParams) {
     process.env.BUILDERFORCE_AGENTS_SKIP_CRON = previous.skipCron;
     process.env.BUILDERFORCE_AGENTS_SKIP_CANVAS_HOST = previous.skipCanvas;
     process.env.BUILDERFORCE_AGENTS_AGENT_DIR = previous.agentDir;
-    process.env.PI_CODING_AGENT_DIR = previous.piAgentDir;
+    process.env.PI_CODING_AGENT_DIR = previous.codingAgentDir;
     process.env.BUILDERFORCE_AGENTS_STATE_DIR = previous.stateDir;
   }
 }

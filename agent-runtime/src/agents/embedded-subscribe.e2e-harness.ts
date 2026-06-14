@@ -1,14 +1,14 @@
 import type { AssistantMessage } from "../builderforce/model/types.js";
 import { expect } from "vitest";
-import { subscribeEmbeddedPiSession } from "./pi-embedded-subscribe.js";
+import { subscribeEmbeddedSession } from "./embedded-subscribe.js";
 
-type SubscribeEmbeddedPiSession = typeof subscribeEmbeddedPiSession;
-type SubscribeEmbeddedPiSessionParams = Parameters<SubscribeEmbeddedPiSession>[0];
-type PiSession = Parameters<SubscribeEmbeddedPiSession>[0]["session"];
-type OnBlockReply = NonNullable<SubscribeEmbeddedPiSessionParams["onBlockReply"]>;
+type SubscribeEmbeddedSession = typeof subscribeEmbeddedSession;
+type SubscribeEmbeddedSessionParams = Parameters<SubscribeEmbeddedSession>[0];
+type HarnessSession = Parameters<SubscribeEmbeddedSession>[0]["session"];
+type OnBlockReply = NonNullable<SubscribeEmbeddedSessionParams["onBlockReply"]>;
 
 export function createStubSessionHarness(): {
-  session: PiSession;
+  session: HarnessSession;
   emit: (evt: unknown) => void;
 } {
   let handler: ((evt: unknown) => void) | undefined;
@@ -17,24 +17,24 @@ export function createStubSessionHarness(): {
       handler = fn;
       return () => {};
     },
-  } as unknown as PiSession;
+  } as unknown as HarnessSession;
 
   return { session, emit: (evt: unknown) => handler?.(evt) };
 }
 
 export function createSubscribedSessionHarness(
-  params: Omit<Parameters<SubscribeEmbeddedPiSession>[0], "session"> & {
-    sessionExtras?: Partial<PiSession>;
+  params: Omit<Parameters<SubscribeEmbeddedSession>[0], "session"> & {
+    sessionExtras?: Partial<HarnessSession>;
   },
 ): {
   emit: (evt: unknown) => void;
-  session: PiSession;
-  subscription: ReturnType<SubscribeEmbeddedPiSession>;
+  session: HarnessSession;
+  subscription: ReturnType<SubscribeEmbeddedSession>;
 } {
   const { sessionExtras, ...subscribeParams } = params;
   const { session, emit } = createStubSessionHarness();
   const mergedSession = Object.assign(session, sessionExtras ?? {});
-  const subscription = subscribeEmbeddedPiSession({
+  const subscription = subscribeEmbeddedSession({
     ...subscribeParams,
     session: mergedSession,
   });
@@ -48,7 +48,7 @@ export function createParagraphChunkedBlockReplyHarness(params: {
 }): {
   emit: (evt: unknown) => void;
   onBlockReply: OnBlockReply;
-  subscription: ReturnType<SubscribeEmbeddedPiSession>;
+  subscription: ReturnType<SubscribeEmbeddedSession>;
 } {
   const onBlockReply: OnBlockReply = params.onBlockReply ?? (() => {});
   const { emit, subscription } = createSubscribedSessionHarness({

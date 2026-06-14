@@ -1,12 +1,12 @@
 import type { AssistantMessage } from "../builderforce/model/types.js";
 import { describe, expect, it, vi } from "vitest";
-import { createStubSessionHarness } from "./pi-embedded-subscribe.e2e-harness.js";
-import { subscribeEmbeddedPiSession } from "./pi-embedded-subscribe.js";
+import { createStubSessionHarness } from "./embedded-subscribe.e2e-harness.js";
+import { subscribeEmbeddedSession } from "./embedded-subscribe.js";
 
 function createBlockReplyHarness(blockReplyBreak: "message_end" | "text_end") {
   const { session, emit } = createStubSessionHarness();
   const onBlockReply = vi.fn();
-  subscribeEmbeddedPiSession({
+  subscribeEmbeddedSession({
     session,
     runId: "run",
     onBlockReply,
@@ -60,7 +60,7 @@ function emitAssistantTextEndBlock(emit: (evt: unknown) => void, text: string) {
   });
 }
 
-describe("subscribeEmbeddedPiSession", () => {
+describe("subscribeEmbeddedSession", () => {
   it("suppresses message_end block replies when the message tool already sent", async () => {
     const { emit, onBlockReply } = createBlockReplyHarness("message_end");
 

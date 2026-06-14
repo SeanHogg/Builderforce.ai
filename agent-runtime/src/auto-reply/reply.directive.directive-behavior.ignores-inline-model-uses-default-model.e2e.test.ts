@@ -6,7 +6,7 @@ import {
   makeWhatsAppDirectiveConfig,
   mockEmbeddedTextResult,
   replyTexts,
-  runEmbeddedPiAgent,
+  runEmbeddedAgent,
   withTempHome,
 } from "./reply.directive.directive-behavior.e2e-harness.js";
 import { getReplyFromConfig } from "./reply.js";
@@ -40,8 +40,8 @@ describe("directive behavior", () => {
 
       const texts = replyTexts(res);
       expect(texts).toContain("done");
-      expect(runEmbeddedPiAgent).toHaveBeenCalledOnce();
-      const call = vi.mocked(runEmbeddedPiAgent).mock.calls[0]?.[0];
+      expect(runEmbeddedAgent).toHaveBeenCalledOnce();
+      const call = vi.mocked(runEmbeddedAgent).mock.calls[0]?.[0];
       expect(call?.provider).toBe("anthropic");
       expect(call?.model).toBe("claude-opus-4-5");
     });
@@ -68,8 +68,8 @@ describe("directive behavior", () => {
         makeWhatsAppDirectiveConfig(home, { model: { primary: "anthropic/claude-opus-4-5" } }),
       );
 
-      expect(runEmbeddedPiAgent).toHaveBeenCalledOnce();
-      const call = vi.mocked(runEmbeddedPiAgent).mock.calls[0]?.[0];
+      expect(runEmbeddedAgent).toHaveBeenCalledOnce();
+      const call = vi.mocked(runEmbeddedAgent).mock.calls[0]?.[0];
       expect(call?.thinkLevel).toBe("low");
     });
   });
@@ -99,8 +99,8 @@ describe("directive behavior", () => {
         ),
       );
 
-      expect(runEmbeddedPiAgent).toHaveBeenCalledOnce();
-      const call = vi.mocked(runEmbeddedPiAgent).mock.calls[0]?.[0];
+      expect(runEmbeddedAgent).toHaveBeenCalledOnce();
+      const call = vi.mocked(runEmbeddedAgent).mock.calls[0]?.[0];
       expect(call?.bashElevated).toEqual({
         enabled: true,
         allowed: true,

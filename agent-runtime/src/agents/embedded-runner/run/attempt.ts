@@ -50,17 +50,17 @@ import {
   resolveBootstrapTotalMaxChars,
   validateAnthropicTurns,
   validateGeminiTurns,
-} from "../../pi-embedded-helpers.js";
-import { subscribeEmbeddedPiSession } from "../../pi-embedded-subscribe.js";
+} from "../../embedded-helpers.js";
+import { subscribeEmbeddedSession } from "../../embedded-subscribe.js";
 import {
-  ensurePiCompactionReserveTokens,
+  ensureCompactionReserveTokens,
   resolveCompactionReserveTokensFloor,
-} from "../../pi-settings.js";
-import { toClientToolDefinitions } from "../../pi-tool-definition-adapter.js";
+} from "../../agent-settings.js";
+import { toClientToolDefinitions } from "../../tool-definition-adapter.js";
 import {
   createBuilderForceAgentsCodingTools,
   resolveToolLoopDetectionConfig,
-} from "../../pi-tools.js";
+} from "../../coding-tools.js";
 import { resolveSandboxContext } from "../../sandbox.js";
 import { resolveSandboxRuntimeStatus } from "../../sandbox/runtime-status.js";
 import { repairSessionFileIfNeeded } from "../../session-file-repair.js";
@@ -96,7 +96,7 @@ import { log } from "../logger.js";
 import { buildModelAliasLines } from "../model.js";
 import {
   clearActiveEmbeddedRun,
-  type EmbeddedPiQueueHandle,
+  type EmbeddedQueueHandle,
   setActiveEmbeddedRun,
 } from "../runs.js";
 import { buildEmbeddedSandboxInfo } from "../sandbox-info.js";
@@ -547,7 +547,7 @@ export async function runEmbeddedAttempt(
       });
 
       const settingsManager = SettingsManager.create(effectiveWorkspace, agentDir);
-      ensurePiCompactionReserveTokens({
+      ensureCompactionReserveTokens({
         settingsManager,
         minReserveTokens: resolveCompactionReserveTokensFloor(params.config),
       });
@@ -599,7 +599,7 @@ export async function runEmbeddedAttempt(
         model: params.model,
         thinkingLevel: mapThinkingLevel(params.thinkLevel),
         // transitional bridge: pi-built coding tools are structurally native AgentTools
-        // (same execute shape); pi-tools.ts migrates to native AgentTool next, making this identity.
+        // (same execute shape); coding-tools.ts migrates to native AgentTool next, making this identity.
         tools: builtInTools as unknown as AgentTool[],
         customTools: allCustomTools as unknown as AgentTool[],
         sessionManager,
@@ -808,7 +808,7 @@ export async function runEmbeddedAttempt(
         });
       };
 
-      const subscription = subscribeEmbeddedPiSession({
+      const subscription = subscribeEmbeddedSession({
         session: activeSession,
         runId: params.runId,
         hookRunner: getGlobalHookRunner() ?? undefined,
@@ -847,7 +847,7 @@ export async function runEmbeddedAttempt(
         getCompactionCount,
       } = subscription;
 
-      const queueHandle: EmbeddedPiQueueHandle = {
+      const queueHandle: EmbeddedQueueHandle = {
         queueMessage: async (text: string) => {
           await activeSession.steer(text);
         },

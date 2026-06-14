@@ -17,14 +17,14 @@ import { listChannelAgentTools } from "./channel-tools.js";
 import { resolveImageSanitizationLimits } from "./image-sanitization.js";
 import type { ModelAuthMode } from "./model-auth.js";
 import { createEditTool, createReadTool, createWriteTool } from "./native-file-tools.js";
-import { wrapToolWithAbortSignal } from "./pi-tools.abort.js";
-import { wrapToolWithBeforeToolCallHook } from "./pi-tools.before-tool-call.js";
+import { wrapToolWithAbortSignal } from "./coding-tools.abort.js";
+import { wrapToolWithBeforeToolCallHook } from "./coding-tools.before-tool-call.js";
 import {
   isToolAllowedByPolicies,
   resolveEffectiveToolPolicy,
   resolveGroupToolPolicy,
   resolveSubagentToolPolicy,
-} from "./pi-tools.policy.js";
+} from "./coding-tools.policy.js";
 import {
   assertRequiredParams,
   CLAUDE_PARAM_GROUPS,
@@ -37,9 +37,9 @@ import {
   patchToolSchemaForClaudeCompatibility,
   wrapToolWorkspaceRootGuard,
   wrapToolParamNormalization,
-} from "./pi-tools.read.js";
-import { cleanToolSchemaForGemini, normalizeToolParameters } from "./pi-tools.schema.js";
-import type { AnyAgentTool } from "./pi-tools.types.js";
+} from "./coding-tools.read.js";
+import { cleanToolSchemaForGemini, normalizeToolParameters } from "./coding-tools.schema.js";
+import type { AnyAgentTool } from "./coding-tools.types.js";
 import type { SandboxContext } from "./sandbox.js";
 import { getSubagentDepthFromSessionStore } from "./subagent-depth.js";
 import {

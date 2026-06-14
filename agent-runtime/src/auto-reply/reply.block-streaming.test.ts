@@ -6,28 +6,28 @@ import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { withTempHome as withTempHomeHarness } from "../config/home-env.test-harness.js";
 import { getReplyFromConfig } from "./reply.js";
 
-type RunEmbeddedPiAgent = typeof import("../agents/pi-embedded.js").runEmbeddedPiAgent;
-type RunEmbeddedPiAgentParams = Parameters<RunEmbeddedPiAgent>[0];
-type RunEmbeddedPiAgentReply = Awaited<ReturnType<RunEmbeddedPiAgent>>;
+type RunEmbeddedAgent = typeof import("../agents/embedded.js").runEmbeddedAgent;
+type RunEmbeddedAgentParams = Parameters<RunEmbeddedAgent>[0];
+type RunEmbeddedAgentReply = Awaited<ReturnType<RunEmbeddedAgent>>;
 
-const piEmbeddedMock = vi.hoisted(() => ({
-  abortEmbeddedPiRun: vi.fn().mockReturnValue(false),
-  runEmbeddedPiAgent: vi.fn<RunEmbeddedPiAgent>(),
-  queueEmbeddedPiMessage: vi.fn().mockReturnValue(false),
+const embeddedMock = vi.hoisted(() => ({
+  abortEmbeddedRun: vi.fn().mockReturnValue(false),
+  runEmbeddedAgent: vi.fn<RunEmbeddedAgent>(),
+  queueEmbeddedMessage: vi.fn().mockReturnValue(false),
   resolveEmbeddedSessionLane: (key: string) => `session:${key.trim() || "main"}`,
-  isEmbeddedPiRunActive: vi.fn().mockReturnValue(false),
-  isEmbeddedPiRunStreaming: vi.fn().mockReturnValue(false),
+  isEmbeddedRunActive: vi.fn().mockReturnValue(false),
+  isEmbeddedRunStreaming: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock("/src/agents/pi-embedded.js", () => piEmbeddedMock);
-vi.mock("../agents/pi-embedded.js", () => piEmbeddedMock);
+vi.mock("/src/agents/embedded.js", () => embeddedMock);
+vi.mock("../agents/embedded.js", () => embeddedMock);
 vi.mock("../agents/model-catalog.js", () => ({
   loadModelCatalog: vi.fn(),
 }));
 
 type GetReplyOptions = NonNullable<Parameters<typeof getReplyFromConfig>[1]>;
 
-function createEmbeddedReply(text: string): RunEmbeddedPiAgentReply {
+function createEmbeddedReply(text: string): RunEmbeddedAgentReply {
   return {
     payloads: [{ text }],
     meta: {
@@ -91,11 +91,11 @@ async function withTempHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
 describe("block streaming", () => {
   beforeEach(() => {
     vi.stubEnv("BUILDERFORCE_AGENTS_TEST_FAST", "1");
-    piEmbeddedMock.abortEmbeddedPiRun.mockReset().mockReturnValue(false);
-    piEmbeddedMock.queueEmbeddedPiMessage.mockReset().mockReturnValue(false);
-    piEmbeddedMock.isEmbeddedPiRunActive.mockReset().mockReturnValue(false);
-    piEmbeddedMock.isEmbeddedPiRunStreaming.mockReset().mockReturnValue(false);
-    piEmbeddedMock.runEmbeddedPiAgent.mockReset();
+    embeddedMock.abortEmbeddedRun.mockReset().mockReturnValue(false);
+    embeddedMock.queueEmbeddedMessage.mockReset().mockReturnValue(false);
+    embeddedMock.isEmbeddedRunActive.mockReset().mockReturnValue(false);
+    embeddedMock.isEmbeddedRunStreaming.mockReset().mockReturnValue(false);
+    embeddedMock.runEmbeddedAgent.mockReset();
     vi.mocked(loadModelCatalog).mockResolvedValue([
       { id: "claude-opus-4-5", name: "Opus 4.5", provider: "anthropic" },
       { id: "gpt-4.1-mini", name: "GPT-4.1 Mini", provider: "openai" },
@@ -121,7 +121,7 @@ describe("block streaming", () => {
         seen.push(payload.text ?? "");
       });
 
-      const impl = async (params: RunEmbeddedPiAgentParams) => {
+      const impl = async (params: RunEmbeddedAgentParams) => {
         void params.onBlockReply?.({ text: "first" });
         void params.onBlockReply?.({ text: "second" });
         return {
@@ -129,7 +129,7 @@ describe("block streaming", () => {
           meta: createEmbeddedReply("first").meta,
         };
       };
-      piEmbeddedMock.runEmbeddedPiAgent.mockImplementation(impl);
+      embeddedMock.runEmbeddedAgent.mockImplementation(impl);
 
       const replyPromise = runTelegramReply({
         home,
@@ -147,7 +147,7 @@ describe("block streaming", () => {
       expect(seen).toEqual(["first\n\nsecond"]);
 
       const onBlockReplyStreamMode = vi.fn().mockResolvedValue(undefined);
-      piEmbeddedMock.runEmbeddedPiAgent.mockImplementation(async () =>
+      embeddedMock.runEmbeddedAgent.mockImplementation(async () =>
         createEmbeddedReply("final"),
       );
 
@@ -171,8 +171,8 @@ describe("block streaming", () => {
         seen.push(payload.text ?? "");
       });
 
-      piEmbeddedMock.runEmbeddedPiAgent.mockImplementation(
-        async (params: RunEmbeddedPiAgentParams) => {
+      embeddedMock.runEmbeddedAgent.mockImplementation(
+        async (params: RunEmbeddedAgentParams) => {
           void params.onBlockReply?.({ text: "\n\n  Hello from stream" });
           return createEmbeddedReply("\n\n  Hello from stream");
         },
@@ -195,8 +195,8 @@ describe("block streaming", () => {
     await withTempHome(async (home) => {
       const onBlockReply = vi.fn();
 
-      piEmbeddedMock.runEmbeddedPiAgent.mockImplementation(
-        async (params: RunEmbeddedPiAgentParams) => {
+      embeddedMock.runEmbeddedAgent.mockImplementation(
+        async (params: RunEmbeddedAgentParams) => {
           void params.onBlockReply?.({ text: "Result\nMEDIA: ./image.png" });
           return createEmbeddedReply("Result\nMEDIA: ./image.png");
         },

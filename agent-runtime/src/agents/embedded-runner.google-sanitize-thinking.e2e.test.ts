@@ -1,7 +1,7 @@
 import type { AgentMessage } from "../builderforce/model/agent-types.js";
 import { SessionManager } from "../builderforce/agent-loop/index.js";
 import { describe, expect, it } from "vitest";
-import { sanitizeSessionHistory } from "./pi-embedded-runner/google.js";
+import { sanitizeSessionHistory } from "./embedded-runner/google.js";
 
 type AssistantThinking = { type?: string; thinking?: string; thinkingSignature?: string };
 
