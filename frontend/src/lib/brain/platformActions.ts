@@ -235,10 +235,11 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     // ---- Tasks (kanban) --------------------------------------------------
     { domain: 'tasks', method: 'list', mutates: false, description: 'List tasks, optionally filtered by project.', parameters: obj({ projectId: N }), run: (a) => tasksApi.list(f(a, 'projectId')) },
     { domain: 'tasks', method: 'get', mutates: false, description: 'Get a task by id.', parameters: obj({ id: N }, ['id']), run: (a) => tasksApi.get(f(a, 'id')) },
-    { domain: 'tasks', method: 'create', mutates: true, description: 'Create a task on a project board.', parameters: obj({ projectId: N, title: S, description: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }, dueDate: S }, ['projectId', 'title']), run: (a) => tasksApi.create(a as Parameters<typeof tasksApi.create>[0]) },
-    updateCap({ domain: 'tasks', method: 'update', description: "Update a task (title, description, status/lane, priority, dueDate, archived).", parameters: obj({ id: N, title: S, description: S, status: S, priority: S, dueDate: S, archived: B }, ['id']) }, (a, patch) => tasksApi.update(f(a, 'id'), patch as Parameters<typeof tasksApi.update>[1])),
+    { domain: 'tasks', method: 'create', mutates: true, description: 'Create a task on a project board. Set taskType="epic" to create a planning Epic (a container for other tasks), or pass parentTaskId to nest the new task under an existing Epic. Assign it by passing exactly one of: assignedUserId (a human member — resolve a name like "Bob" to its id with tasks.assignees), assignedAgentRef (a cloud agent) or assignedAgentHostId (a self-hosted agent host).', parameters: obj({ projectId: N, title: S, description: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }, dueDate: S, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: N, assignedUserId: S, assignedAgentRef: S, assignedAgentHostId: N }, ['projectId', 'title']), run: (a) => tasksApi.create(a as Parameters<typeof tasksApi.create>[0]) },
+    updateCap({ domain: 'tasks', method: 'update', description: "Update a task. Link it under an Epic with parentTaskId (or null to detach), reclassify with taskType ('task'|'epic'), schedule into a sprint with sprintId, or (re)assign via exactly one of assignedUserId (human member — resolve a name with tasks.assignees; null unassigns), assignedAgentRef (cloud agent) or assignedAgentHostId (agent host). Also supports title, description, status/lane, priority, dueDate, archived.", parameters: obj({ id: N, title: S, description: S, status: S, priority: S, dueDate: S, archived: B, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: { type: ['number', 'null'] }, sprintId: { type: ['string', 'null'] }, assignedUserId: { type: ['string', 'null'] }, assignedAgentRef: { type: ['string', 'null'] }, assignedAgentHostId: { type: ['number', 'null'] } }, ['id']) }, (a, patch) => tasksApi.update(f(a, 'id'), patch as Parameters<typeof tasksApi.update>[1])),
     { domain: 'tasks', method: 'delete', mutates: true, description: 'Delete a task.', parameters: obj({ id: N }, ['id']), run: (a) => tasksApi.delete(f(a, 'id')) },
     { domain: 'tasks', method: 'move', mutates: true, description: 'Move a task to another project board (re-keys it).', parameters: obj({ id: N, projectId: N }, ['id', 'projectId']), run: (a) => tasksApi.move(f(a, 'id'), f(a, 'projectId')) },
+    { domain: 'tasks', method: 'assignees', mutates: false, description: 'List the human members a task can be assigned to (id + name). Use this to resolve a person’s name (e.g. "Bob") to the assignedUserId expected by tasks.create / tasks.update.', parameters: EMPTY, run: () => tasksApi.assignees() },
 
     // ---- Executions (runtime) -------------------------------------------
     { domain: 'executions', method: 'submit', mutates: true, description: 'Submit a task for agent execution (dispatches to an agent host or all connected hosts).', parameters: obj({ taskId: N, agentHostId: N, sessionId: S, payload: S }, ['taskId']), run: (a) => runtimeApi.submitExecution(a as Parameters<typeof runtimeApi.submitExecution>[0]) },
@@ -441,17 +442,71 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
   // that domain (e.g. the Tasks board) refetches live instead of going stale
   // until a manual reload. Wrapping `run` here covers BOTH the Tier-1 promoted
   // tools and the Tier-2 dispatcher, since both ultimately call `cap.run`.
+  //
+  // `create` also gets an idempotency guard: the Brain occasionally emits the
+  // SAME create tool-call twice in one turn (it "plans" a ticket, then "creates
+  // the right ticket"), which spawned duplicate tasks. Collapsing an identical
+  // create (same domain + args) within a short window to the first call's
+  // promise means a double-fire can't double-write. This is a request-dedupe
+  // guard, NOT a data cache — successful results are not retained past the
+  // window and errors are dropped immediately so a genuine retry isn't blocked.
   for (const c of caps) {
     if (!c.mutates) continue;
     const inner = c.run;
+    const announce = (out: unknown) => {
+      if (!isErrorResult(out)) dispatchBrainDataChanged({ domain: c.domain, method: c.method });
+    };
+    if (c.method === 'create') {
+      c.run = (args: Json) => {
+        const key = `${ctx.getTenantId() ?? 'none'}:${c.domain}:${stableStringify(args)}`;
+        const now = nowMs();
+        const prior = recentCreates.get(key);
+        if (prior && now - prior.at < CREATE_DEDUPE_MS) return prior.result;
+        const result = (async () => {
+          const out = await inner(args);
+          if (isErrorResult(out)) recentCreates.delete(key); // let a real retry through
+          else announce(out);
+          return out;
+        })();
+        recentCreates.set(key, { at: now, result });
+        pruneRecentCreates(now);
+        return result;
+      };
+      continue;
+    }
     c.run = async (args: Json) => {
       const out = await inner(args);
-      if (!isErrorResult(out)) dispatchBrainDataChanged({ domain: c.domain, method: c.method });
+      announce(out);
       return out;
     };
   }
 
   return caps;
+}
+
+// Short-window dedupe of identical `*.create` calls (see buildPlatformCapabilities).
+// Module-scoped so it survives the per-render rebuild of the manifest; keyed by
+// tenant so two workspaces never share an entry.
+const CREATE_DEDUPE_MS = 8000;
+const recentCreates = new Map<string, { at: number; result: Promise<unknown> }>();
+
+function nowMs(): number {
+  return typeof Date !== 'undefined' ? Date.now() : 0;
+}
+
+/** Drop entries past the dedupe window so the map can't grow unbounded. */
+function pruneRecentCreates(now: number): void {
+  for (const [k, v] of recentCreates) {
+    if (now - v.at >= CREATE_DEDUPE_MS) recentCreates.delete(k);
+  }
+}
+
+/** Deterministic JSON for the dedupe key (object key order can vary per call). */
+function stableStringify(value: unknown): string {
+  if (value == null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const obj = value as Record<string, unknown>;
+  return `{${Object.keys(obj).sort().map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(',')}}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -485,6 +540,7 @@ const STATIC_PROMOTIONS: ReadonlyArray<readonly [string, string, string]> = [
   ['tasks', 'list', 'list_tasks'],
   ['tasks', 'create', 'create_task'],
   ['tasks', 'update', 'update_task'],
+  ['tasks', 'assignees', 'list_task_assignees'],
   ['workflows', 'list', 'list_workflows'],
   ['workflows', 'run', 'run_workflow'],
   ['specs', 'list', 'list_specs'],
