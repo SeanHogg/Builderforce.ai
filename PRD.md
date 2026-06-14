@@ -1,43 +1,59 @@
-> **PRD** — drafted by Coder Agent (V2) (Durable) · task #63
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #78
 > _Each agent that updates this PRD signs its change below._
 
-# WIP: Cloud Agent Concurrency Issue
+```markdown
+# Product Requirements Document: Team Member Avatar Filters on Task Board
 
-## Problem & Goal
+## 1. Problem & Goal
 
-**Problem:** When a user attempts to run multiple cloud agents simultaneously, subsequent agents enter a "pending" state and do not execute if another agent is already running. This prevents users from leveraging the parallel processing capabilities of cloud agents.
+### 1.1. Problem
+Users currently lack the ability to efficiently filter the task board by assigned team members. This hinders quick identification of individual workloads, progress, and relevant tasks, leading to slower navigation and analysis of board contents.
 
-**Goal:** Enable multiple cloud agents to run concurrently.
+### 1.2. Goal
+Enable users to quickly filter the task board by assigned team member(s) through an intuitive, interactive avatar-based filter interface, thereby improving task visibility and board navigation efficiency.
 
-## Target Users / ICP Roles
+## 2. Target Users / ICP Roles
 
-This issue affects all users of the cloud agent functionality. Specific roles include:
+*   **Project Managers / Team Leads:** To monitor individual team member workloads and progress at a glance.
+*   **Individual Contributors:** To quickly filter the board to see only their assigned tasks or tasks assigned to specific colleagues they are collaborating with.
+*   **Stakeholders:** To gain immediate insight into who is working on what without extensive searching.
 
-*   Data Scientists
-*   ML Engineers
-*   DevOps Engineers
-*   Any user requiring parallel execution of cloud-based tasks.
+## 3. Scope
 
-## Scope
+This feature focuses on adding a new filter mechanism to the existing task board filter bar. It specifically includes the display of team member avatars as clickable filter chips, the associated filtering logic, and visual states.
 
-This PRD addresses the root cause of the cloud agent concurrency limitation, ensuring that multiple instances of cloud agents can be initiated and run in parallel.
+**Location:** Task board filter bar — adjacent to status & priority dropdowns.
 
-## Functional Requirements
+## 4. Functional Requirements
 
-1.  **Concurrent Agent Execution:** The system must allow for multiple cloud agents to be initiated and run simultaneously without blocking subsequent agent executions.
-2.  **Resource Management (Implied):** The underlying infrastructure must be capable of handling the concurrent execution of multiple agents, implying that resource allocation mechanisms should be reviewed and potentially adjusted.
-3.  **Status Reporting:** The system should accurately reflect the running status of all concurrently executing agents.
+*   **FR.1: Display Avatar Filter Chips:** The system shall display a row of clickable team member avatars within the task board's filter bar.
+    *   **FR.1.1:** Avatars should represent all team members assigned tasks visible on the current board view.
+    *   **FR.1.2:** Each avatar must include a badge indicating the count of tasks currently assigned to that member.
+*   **FR.2: Filter by Single Member:** Upon clicking a single team member avatar, the task board shall dynamically filter to display only tasks assigned to that specific member.
+*   **FR.3: Filter by Multiple Members:** The system shall allow users to select multiple team member avatars.
+    *   **FR.3.1:** When multiple avatars are selected, the board shall display tasks assigned to *any* of the selected members (OR logic). A clear UI toggle for AND/OR logic is outside this scope but should be considered for future iterations if user feedback indicates a need for AND logic.
+*   **FR.4: Visual Filter State:** The UI shall clearly indicate which team member avatars are currently active filters (e.g., highlighted, distinct chip style).
+*   **FR.5: Clear/Reset Filter:** A dedicated option (e.g., "All" avatar, "Clear Filters" button) shall be available to reset the team member filter, showing tasks for all team members.
+*   **FR.6: Responsiveness:** The avatar filter row shall adapt gracefully to different screen sizes, potentially using horizontal scrolling or collapsing into a dropdown for smaller viewports.
+*   **FR.7: Composability:** The team member avatar filter must function correctly and compose with existing filters (e.g., search, status, priority), applying all active filters in conjunction.
 
-## Acceptance Criteria
+## 5. Acceptance Criteria
 
-*   **AC1:** A user can successfully initiate and run two or more cloud agents at the same time.
-*   **AC2:** All initiated cloud agents are in a "running" state (or their expected active state) and are executing their tasks.
-*   **AC3:** No initiated cloud agent enters a "pending" state due to another agent already running.
-*   **AC4:** The UI accurately displays the status of all concurrently running agents.
+*   [x] Display team member avatars as clickable filter chips (row or horizontal scroll).
+*   [x] Clicking an avatar filters the board to show only tasks assigned to that member.
+*   [x] Multiple avatars can be selected (OR logic initially; AND/OR toggle is a future enhancement).
+*   [x] Active filter state is visually clear (highlighted avatar, chip style).
+*   [x] "All" / clear option to reset the filter.
+*   [x] Responsive — works on smaller screens (horizontal scroll or collapse).
+*   [x] Avatars should show a count badge of assigned tasks.
+*   [x] Works alongside existing search, status, and priority filters (composable).
 
-## Out of Scope
+## 6. Out of Scope
 
-*   Agent performance optimization (beyond enabling concurrency).
-*   Introduction of new agent types or functionalities.
-*   Changes to agent resource quotas or limits, unless directly necessitated by enabling concurrency and specifically documented.
-*   User interface redesign related to agent management.
+*   **`parentTaskId` Surfacing:** Addressing the problem of `parentTaskId` not being surfaced to make epic groupings visible is a separate feature for board hierarchy and grouping, and is not covered by this PRD.
+*   **New Filter Types:** Any filter types beyond team member assignment (e.g., "unassigned tasks," "tasks I'm following").
+*   **Avatar Management:** Functionality for adding, editing, or deleting team member avatars or managing their association with user profiles. This assumes avatar data is provided by an existing user management system.
+*   **Complex Filtering Logic:** Advanced conditional filtering (e.g., "show tasks assigned to A AND (B OR C)").
+*   **Saved Filters:** Persisting selected team member filters across sessions or as part of custom saved board views.
+*   **Filter Sharing:** Functionality to share specific filtered board views with other users.
+```
