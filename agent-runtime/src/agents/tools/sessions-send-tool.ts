@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
 import { Type } from "@sinclair/typebox";
 import { loadConfig } from "../../config/config.js";
 import { callGateway } from "../../gateway/call.js";
@@ -11,7 +10,7 @@ import {
 } from "../../utils/message-channel.js";
 import { AGENT_LANE_NESTED } from "../lanes.js";
 import type { AgentToolResult, AnyAgentTool } from "./common.js";
-import { detailsData, jsonResult, readStringParam } from "./common.js";
+import { jsonResult, readStringParam } from "./common.js";
 import {
   createSessionVisibilityGuard,
   createAgentToAgentPolicy,
@@ -365,19 +364,4 @@ export function createSessionsSendTool(opts?: SessionsSendDeps): AnyAgentTool {
     parameters: SessionsSendToolSchema,
     execute: async (_toolCallId, args) => runSessionsSend(opts, args as Record<string, unknown>),
   };
-}
-
-/** Native shared {@link ToolDefinition} (cap `message`) — reuses the TypeBox schema and
- *  the shared `runSessionsSend` body. */
-export function buildSessionsSendToolDef(opts?: SessionsSendDeps): ToolDefinition {
-  return defineTool({
-    name: "sessions_send",
-    description:
-      "Send a message into another session. Use sessionKey or label to identify the target.",
-    parameters: SessionsSendToolSchema as unknown as ToolDefinition["schema"]["function"]["parameters"],
-    requires: ["message"],
-    async execute(args): Promise<ToolResult> {
-      return { data: detailsData(await runSessionsSend(opts, args)) };
-    },
-  });
 }

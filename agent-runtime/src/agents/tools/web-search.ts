@@ -1,4 +1,3 @@
-import type { WebSearchResult as SharedWebSearchResult } from "@builderforce/agent-tools";
 import { Type } from "@sinclair/typebox";
 import { formatCliCommand } from "../../cli/command-format.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
@@ -818,58 +817,6 @@ export function createWebSearchTool(options?: {
     execute: async (_toolCallId, args) => {
       return jsonResult(await executeWebSearch(backend, args as Record<string, unknown>));
     },
-  };
-}
-
-/**
- * Adapt the on-prem web-search backend to the shared {@link SharedWebSearchResult}
- * shape so the Node {@link CapabilityProvider} can back `web.search` (PRD 11 §5.2) —
- * the SAME backend the `web_search` tool uses. Returns null when web search is not
- * configured/enabled, so the provider then does NOT advertise the `web.search`
- * capability and the registry never offers `web_search` on-prem.
- */
-export function createNodeWebSearch(options?: {
-  config?: BuilderForceAgentsConfig;
-  sandboxed?: boolean;
-}): ((query: string) => Promise<SharedWebSearchResult>) | null {
-  const backend = resolveSearchBackend(options?.config);
-  if (!resolveSearchEnabled({ search: backend.search, sandboxed: options?.sandboxed })) {
-    return null;
-  }
-  return async (query: string): Promise<SharedWebSearchResult> => {
-    if (!query.trim()) return { ok: false, query, error: "query is required" };
-    try {
-      const payload = await executeWebSearch(backend, { query });
-      if (typeof payload.error === "string") {
-        const message = typeof payload.message === "string" ? payload.message : payload.error;
-        return { ok: false, query, error: message };
-      }
-      // Brave returns `results: [{ title, url, description, … }]`; Perplexity/Grok
-      // return a synthesized `content` string + `citations`. Normalize both to the
-      // shared `{ title, url, snippet }[]` shape.
-      if (Array.isArray(payload.results)) {
-        const results = (payload.results as Array<Record<string, unknown>>).map((r) => ({
-          title: typeof r.title === "string" ? r.title : undefined,
-          url: typeof r.url === "string" ? r.url : undefined,
-          snippet: typeof r.description === "string" ? r.description : undefined,
-        }));
-        return { ok: true, query, results };
-      }
-      if (typeof payload.content === "string") {
-        const citations = Array.isArray(payload.citations) ? (payload.citations as unknown[]) : [];
-        const firstUrl = typeof citations[0] === "string" ? citations[0] : undefined;
-        return {
-          ok: true,
-          query,
-          results: [
-            { title: `${backend.provider} answer`, url: firstUrl, snippet: payload.content },
-          ],
-        };
-      }
-      return { ok: true, query, results: [] };
-    } catch (e) {
-      return { ok: false, query, error: e instanceof Error ? e.message : String(e) };
-    }
   };
 }
 

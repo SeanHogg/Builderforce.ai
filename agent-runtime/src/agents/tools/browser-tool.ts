@@ -26,8 +26,7 @@ import { applyBrowserProxyPaths, persistBrowserProxyFiles } from "../../browser/
 import { loadConfig } from "../../config/config.js";
 import { wrapExternalContent } from "../../security/external-content.js";
 import { BrowserToolSchema } from "./browser-tool.schema.js";
-import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
-import { type AgentToolResult, type AnyAgentTool, imageResultFromFile, jsonResult, nativeToolResult, readStringParam } from "./common.js";
+import { type AgentToolResult, type AnyAgentTool, imageResultFromFile, jsonResult, readStringParam } from "./common.js";
 import { callGatewayTool } from "./gateway.js";
 import { listNodes, resolveNodeIdFromList, type NodeListNode } from "./nodes-utils.js";
 
@@ -840,18 +839,4 @@ export function createBrowserTool(opts?: BrowserDeps): AnyAgentTool {
     parameters: BrowserToolSchema,
     execute: async (_toolCallId, args) => runBrowser(opts, args as Record<string, unknown>),
   };
-}
-
-/** Native shared {@link ToolDefinition} (cap `process`) — reuses the schema and the shared
- *  `runBrowser` body; snapshots/screenshots ride {@link ToolResult.content}. */
-export function buildBrowserToolDef(opts?: BrowserDeps): ToolDefinition {
-  return defineTool({
-    name: "browser",
-    description: browserToolDescription(opts),
-    parameters: BrowserToolSchema as unknown as ToolDefinition["schema"]["function"]["parameters"],
-    requires: ["process"],
-    async execute(args): Promise<ToolResult> {
-      return nativeToolResult(() => runBrowser(opts, args));
-    },
-  });
 }

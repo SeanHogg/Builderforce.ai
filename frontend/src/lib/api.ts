@@ -525,10 +525,10 @@ export async function fetchAgentPackage(agentId: string): Promise<AgentPackage> 
 export type AgentRuntimeSupport = 'cloud' | 'host' | 'both';
 export type AgentPricingModel = 'flat_fee' | 'consumption';
 /**
- * Agent runtime engine. `builderforce-v1` is the pi-coding-agent embedded runner
- * (default); `builderforce-v2` is the Claude Agent SDK runner.
+ * Agent runtime engine. **V1 is RETIRED (2026-06-13)** — `builderforce-v2` (the Claude
+ * Agent SDK runner, gateway-routed) is the only engine. The `builderforce-v1` pi loop is gone.
  */
-export type AgentEngine = 'builderforce-v1' | 'builderforce-v2';
+export type AgentEngine = 'builderforce-v2';
 /**
  * Execution surface for a V2 cloud agent — the two types the user picks at
  * creation. Both run the full task IN THE CLOUD (all Cloudflare, no local/hybrid

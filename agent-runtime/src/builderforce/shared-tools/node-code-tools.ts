@@ -1,23 +1,19 @@
 /**
- * Node-native code-intelligence tools, as shared {@link ToolDefinition}s.
+ * Node-native code-intelligence tool backends (`run*` functions).
  *
  * These are the on-prem tools that read the checked-out working tree directly
  * (`git`, `rg`/`grep`, the project's `.builderForceAgents` knowledge dir, AST code
- * maps). They have NO cloud concretion — a bare Worker/DO cannot shell out — so,
- * unlike the runtime-agnostic core tools, they are defined HERE in the Node package
- * and use `node:*` directly, reaching the working tree through `ctx.workspaceRoot`.
- * They are registered ONLY on a filesystem-backed surface (capability-gated on
- * `repo.read`/`shell`, which the Node provider advertises and the bare cloud does not).
- *
- * The pure logic lives in the `run*` functions below so the legacy pi-wrapped tools
- * (`builderforce/tools/*-tool.ts`) delegate to the SAME implementation (DRY) until pi
- * is removed — this module stays 100% pi-free.
+ * maps). They have NO cloud concretion — a bare Worker/DO cannot shell out — so they
+ * use `node:*` directly. The pure logic lives here in the `run*` functions; the live
+ * native `create*Tool` `AgentTool`s (`builderforce/tools/*-tool.ts`) delegate to the
+ * SAME implementation (DRY). 100% pi-free. (The earlier duplicate `*Tool`
+ * `ToolDefinition` wrappers + `NODE_CODE_TOOLS` array were deleted with the
+ * `builderforce-local` engine — PRD 11 §5.5(a).)
  */
 
 import { execFileSync, execSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { defineTool, type ToolContext, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
 import { buildCodeMap, buildDependencyGraph } from "../code-map.js";
 import {
   loadCustomAgentRoles,
@@ -27,15 +23,6 @@ import {
   loadProjectRules,
   resolveBuilderForceAgentsDir,
 } from "../project-context.js";
-
-/** The working-tree root a Node code tool operates on: prefer the surface-bound root,
- *  fall back to an explicit `projectRoot` arg (legacy pi-tool call shape). */
-function rootFrom(ctx: ToolContext, args: Record<string, unknown>): string {
-  const fromCtx = typeof ctx.workspaceRoot === "string" ? ctx.workspaceRoot.trim() : "";
-  if (fromCtx) return fromCtx;
-  const fromArg = typeof args.projectRoot === "string" ? args.projectRoot.trim() : "";
-  return fromArg;
-}
 
 // ── git_history ────────────────────────────────────────────────────────────────
 
@@ -590,148 +577,3 @@ export async function runSemanticSearch(projectRoot: string, opts: SemanticSearc
   };
 }
 
-// ── Native shared ToolDefinitions ────────────────────────────────────────────────
-
-function requireRoot(ctx: ToolContext, args: Record<string, unknown>): string | { data: Record<string, unknown> } {
-  const root = rootFrom(ctx, args);
-  if (!root) return { data: { error: "no workspace root available for this tool" } };
-  return root;
-}
-
-export const gitHistoryTool: ToolDefinition = defineTool({
-  name: "git_history",
-  description: "Analyze git history for a file or directory. Shows commits, authors, and change patterns.",
-  parameters: {
-    type: "object",
-    properties: {
-      path: { type: "string", description: "Specific file or directory to analyze. If omitted, analyzes entire repo." },
-      limit: { type: "number", description: "Maximum number of commits to return. Defaults to 50." },
-      author: { type: "string", description: "Filter commits by author email or name." },
-    },
-  },
-  requires: ["shell"],
-  async execute(args, ctx): Promise<ToolResult> {
-    const root = requireRoot(ctx, args);
-    if (typeof root !== "string") return root;
-    return {
-      data: runGitHistory(root, {
-        path: typeof args.path === "string" ? args.path : undefined,
-        limit: typeof args.limit === "number" ? args.limit : undefined,
-        author: typeof args.author === "string" ? args.author : undefined,
-      }),
-    };
-  },
-});
-
-export const codeAnalysisTool: ToolDefinition = defineTool({
-  name: "code_analysis",
-  description:
-    "Analyze code structure, dependencies, and semantic relationships in the project. Returns AST information, dependency graphs, and code maps.",
-  parameters: {
-    type: "object",
-    properties: {
-      filePatterns: { type: "array", items: { type: "string" }, description: "File patterns (e.g. ['**/*.ts']). Defaults to common patterns." },
-      includeTests: { type: "boolean", description: "Whether to include test files. Defaults to false." },
-    },
-  },
-  requires: ["repo.read"],
-  async execute(args, ctx): Promise<ToolResult> {
-    const root = requireRoot(ctx, args);
-    if (typeof root !== "string") return root;
-    return {
-      data: await runCodeAnalysis(root, {
-        filePatterns: Array.isArray(args.filePatterns) ? (args.filePatterns as string[]) : undefined,
-        includeTests: args.includeTests === true,
-      }),
-    };
-  },
-});
-
-export const projectKnowledgeTool: ToolDefinition = defineTool({
-  name: "project_knowledge",
-  description:
-    "Query project-specific knowledge: context, rules, governance, architecture, custom agent roles, and recent agent activity memory from the .builderForceAgents directory.",
-  parameters: {
-    type: "object",
-    properties: {
-      query: { type: "string", description: "What to query: 'context', 'rules', 'governance', 'architecture', 'agents', 'memory', or 'all'." },
-    },
-    required: ["query"],
-  },
-  requires: ["repo.read"],
-  async execute(args, ctx): Promise<ToolResult> {
-    const root = requireRoot(ctx, args);
-    if (typeof root !== "string") return root;
-    const query = typeof args.query === "string" ? args.query : "all";
-    return { data: await runProjectKnowledge(root, query) };
-  },
-});
-
-export const codebaseSearchTool: ToolDefinition = defineTool({
-  name: "codebase_search",
-  description:
-    "Semantically search the project source using natural language or keywords (ripgrep/grep ranked). Returns ranked files with representative snippets — like Cursor @codebase.",
-  parameters: {
-    type: "object",
-    properties: {
-      query: { type: "string", description: "Natural-language or keyword query, e.g. 'user authentication', 'rate limiting middleware'." },
-      topK: { type: "number", description: "Maximum results to return. Defaults to 10." },
-      language: { type: "string", description: "Limit to files of this extension (e.g. 'ts', 'py'). Optional." },
-    },
-    required: ["query"],
-  },
-  requires: ["repo.read"],
-  async execute(args, ctx): Promise<ToolResult> {
-    const root = requireRoot(ctx, args);
-    if (typeof root !== "string") return root;
-    const query = typeof args.query === "string" ? args.query : "";
-    if (!query.trim()) return { data: { error: "query is required" } };
-    return {
-      data: await runCodebaseSearch(root, {
-        query,
-        topK: typeof args.topK === "number" ? args.topK : undefined,
-        language: typeof args.language === "string" ? args.language : undefined,
-      }),
-    };
-  },
-});
-
-export const semanticSearchTool: ToolDefinition = defineTool({
-  name: "codebase_semantic_search",
-  description:
-    "Semantically search the project using a TF-IDF/BM25 ranked index of exported symbols plus file content. Builds a local index on first use. Better than keyword search for natural-language and symbol lookups.",
-  parameters: {
-    type: "object",
-    properties: {
-      query: { type: "string", description: "Natural-language query or symbol name, e.g. 'PaymentService class', 'handleCheckout'." },
-      topK: { type: "number", description: "Number of results (default 10, max 20)." },
-      language: { type: "string", description: "Limit to files of this extension, e.g. 'ts', 'py'. Optional." },
-      rebuild: { type: "boolean", description: "Force a rebuild of the search index." },
-    },
-    required: ["query"],
-  },
-  requires: ["repo.read"],
-  async execute(args, ctx): Promise<ToolResult> {
-    const root = requireRoot(ctx, args);
-    if (typeof root !== "string") return root;
-    const query = typeof args.query === "string" ? args.query : "";
-    if (!query.trim()) return { data: { error: "query is required" } };
-    return {
-      data: await runSemanticSearch(root, {
-        query,
-        topK: typeof args.topK === "number" ? args.topK : undefined,
-        language: typeof args.language === "string" ? args.language : undefined,
-        rebuild: args.rebuild === true,
-      }),
-    };
-  },
-});
-
-/** The Node-native code-intelligence tools, in canonical order. */
-export const NODE_CODE_TOOLS: readonly ToolDefinition[] = [
-  gitHistoryTool,
-  codeAnalysisTool,
-  projectKnowledgeTool,
-  codebaseSearchTool,
-  semanticSearchTool,
-];

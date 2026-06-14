@@ -35,7 +35,7 @@ export interface CloudAgentFormState {
 
 export const EMPTY_CLOUD_AGENT_FORM: CloudAgentFormState = {
   name: '', title: '', bio: '', skills: '', baseModel: '', runtimeSupport: 'cloud', preferredRuntime: 'cloud',
-  engine: 'builderforce-v1', runtimeSurface: 'durable',
+  engine: 'builderforce-v2', runtimeSurface: 'durable',
 };
 
 export const RUNTIME_LABELS: Record<AgentRuntimeSupport, string> = {
@@ -45,7 +45,6 @@ export const RUNTIME_LABELS: Record<AgentRuntimeSupport, string> = {
 };
 
 export const ENGINE_LABELS: Record<AgentEngine, string> = {
-  'builderforce-v1': 'BuilderForce-V1 (pi-coding-agent)',
   'builderforce-v2': 'BuilderForce-V2 (Anthropic — Claude Agent SDK)',
 };
 

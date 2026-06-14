@@ -22,9 +22,8 @@ import { normalizeMessageChannel } from "../../utils/message-channel.js";
 import { resolveSessionAgentId } from "../agent-scope.js";
 import { listChannelSupportedActions } from "../channel-tools.js";
 import { channelTargetSchema, channelTargetsSchema, stringEnum } from "../schema/typebox.js";
-import { defineTool, type ToolDefinition, type ToolResult } from "@builderforce/agent-tools";
 import type { AgentToolResult, AnyAgentTool } from "./common.js";
-import { jsonResult, nativeToolResult, readNumberParam, readStringParam } from "./common.js";
+import { jsonResult, readNumberParam, readStringParam } from "./common.js";
 import { resolveGatewayOptions } from "./gateway.js";
 
 const AllMessageActions = CHANNEL_MESSAGE_ACTION_NAMES;
@@ -696,19 +695,4 @@ export function createMessageTool(options?: MessageToolOptions): AnyAgentTool {
     execute: async (_toolCallId, args, signal) =>
       runMessage(options, agentAccountId, args as Record<string, unknown>, signal),
   };
-}
-
-/** Native shared {@link ToolDefinition} (cap `message`) — reuses the dynamic schema and the
- *  shared `runMessage` body; media replies ride {@link ToolResult.content}. */
-export function buildMessageToolDef(options?: MessageToolOptions): ToolDefinition {
-  const { agentAccountId, schema, description } = messageToolSetup(options);
-  return defineTool({
-    name: "message",
-    description,
-    parameters: schema as unknown as ToolDefinition["schema"]["function"]["parameters"],
-    requires: ["message"],
-    async execute(args, ctx): Promise<ToolResult> {
-      return nativeToolResult(() => runMessage(options, agentAccountId, args, ctx.signal));
-    },
-  });
 }

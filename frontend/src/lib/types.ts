@@ -220,8 +220,8 @@ export interface PublishedAgent {
   tenant_id?: number | null;
   runtime_support?: 'cloud' | 'host' | 'both';
   preferred_runtime?: 'cloud' | 'host' | null;
-  /** Agent runtime engine (migration 0087): pi-coding-agent vs Claude Agent SDK. */
-  engine?: 'builderforce-v1' | 'builderforce-v2';
+  /** Agent runtime engine: Claude Agent SDK (V1 retired 2026-06-13, migrations 0087/0120). */
+  engine?: 'builderforce-v2';
   /** V2 execution surface (migration 0105): durable DO vs long-lived Cloudflare Container. */
   runtime_surface?: 'durable' | 'container';
   price_cents?: number;
