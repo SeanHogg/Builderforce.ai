@@ -14,9 +14,13 @@
  * (running / streaming delta / error / pending confirmation) into render state,
  * and seeds + starts a run on send / auto-reply.
  *
- * Persistence note: only the user message and the FINAL assistant text are
- * persisted (the chat tables have no tool columns). Intermediate
- * assistant-tool-call turns and tool results live in the run store for the loop.
+ * Persistence note: the user message and EVERY assistant turn that produced
+ * visible text are persisted — both a tool-call turn's narration and the final
+ * answer — so each shows as its own durable bubble instead of being erased when
+ * the next turn reuses the streaming buffer. Only the tool plumbing (the
+ * `tool_calls` metadata and tool results) stays in-memory in the run store (the
+ * chat tables have no tool columns); pure tool-call turns with no text persist
+ * nothing.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -156,14 +160,22 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   }, [persistence, chatId]);
 
   // A run (possibly started in another, now-unmounted Brain instance) persisted
-  // a new assistant message — splice it in without a refetch. Keyed on the
-  // store's messagesEpoch so it fires once per completed turn for EVERY mounted
+  // assistant messages — splice them in without a refetch. The store delivers
+  // the FULL run-appended list (narration turns + final answer), not just the
+  // latest, and we merge by id: React coalesces the rapid mid-run emits into one
+  // render, so a "last value only" hand-off would drop the intermediate
+  // narration turns and the next turn's stream would appear to erase them. Keyed
+  // on messagesEpoch so it fires once per completed turn for EVERY mounted
   // instance, not just the one that drove the loop.
   useEffect(() => {
-    const msg = snapshot.lastAssistant;
-    if (!msg) return;
-    setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
-  }, [snapshot.messagesEpoch, snapshot.lastAssistant]);
+    const appended = snapshot.appended;
+    if (appended.length === 0) return;
+    setMessages((prev) => {
+      const have = new Set(prev.map((m) => m.id));
+      const fresh = appended.filter((m) => !have.has(m.id));
+      return fresh.length === 0 ? prev : [...prev, ...fresh];
+    });
+  }, [snapshot.messagesEpoch, snapshot.appended]);
 
   // Derive feedback state from persisted message metadata.
   useEffect(() => {

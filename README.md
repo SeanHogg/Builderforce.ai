@@ -1257,11 +1257,16 @@ Dispatch **one agent per track**. Tracks are **file-disjoint by construction**, 
 
 ### 🔓 Newly logged (open)
 
+- **Brain renders XML-style `<tool_call>…</tool_call>` markup as plain text (T2 · `brain-embedded/streamChatCompletion.ts`).** `streamChatCompletion` only parses native OpenAI-structured `tool_calls` deltas; when a model (e.g. a weaker gateway-routed one) emits tool calls as `<tool_call>name<arg_key>…</arg_key><arg_value>…</arg_value></tool_call>` inside the content stream, that markup is treated as ordinary text and shown verbatim in the bubble (and now persists, since narration turns are durable). Fixing it (parse/strip XML-style tool-call markup from streamed content into structured `toolCalls`, or at minimum hide the markup from the rendered text) would make tool-call narration clean for models that don't support native tool calling. Distinct root cause from the erase bug fixed 2026-06-14 below.
 - **Brain agent loop does not survive Brain-initiated navigation (T2 · `frontend/src/components/brain/*`, `brain-embedded/useBrainConversation.ts`).** When the Brain navigates the user (`navigate_to`/`open_project`) off the full-page `/brainstorm` or the IDE-embedded Brain, the route-scoped panel unmounts and any *in-flight* streaming/tool loop aborts. As of 2026-06-14 the floating drawer is force-opened on nav and resumes the same chat history (continuity of the conversation), and an 8s identical-`create` dedupe guard prevents the double-write that an aborted-then-retried turn produced — but a multi-step run that was mid-execution is **not** resumed; it just stops. Fixing it (hoist the conversation/tool-loop runner above the route, or hand the in-flight run off to the drawer instance) would make Brain actions that include a navigation step fully reliable end-to-end.
 
 ### ✅ Done / Resolved (53)
 
 _Resolved/closed register items, grouped by the work they came from. Newest dates win; `git log` is the full audit trail._
+
+#### 🧠 Brain conversation rendering (1)
+
+- **Brain reused the streaming bubble and erased a turn's narration — FIXED 2026-06-14 (`brain-embedded/brainRunStore.ts` + `useBrainConversation.ts`).** The agent tool-loop streamed every model turn into one shared `streamingText` buffer that the UI rendered as a single trailing bubble; a turn that narrated *and* called a tool showed its text only transiently, then the next iteration cleared the buffer and reused the same bubble — erasing what the user just read (only the final answer was ever persisted). Fix: each turn that produces visible text now persists as its own durable message block, delivered to mounted views as the full run-appended list (merged by id) so React's coalescing of the rapid mid-run emits can't drop the intermediate narration turns. Pure tool-call turns with no text persist nothing. Covered by two new tests in `useBrainConversation.test.tsx`.
 
 #### 🏷️ CoderClaw → BuilderForce rebrand (15)
 

@@ -597,7 +597,7 @@ var EMPTY_SNAPSHOT = {
   error: "",
   pendingConfirm: null,
   messagesEpoch: 0,
-  lastAssistant: null,
+  appended: [],
   hasTrace: false
 };
 function makeCell() {
@@ -609,7 +609,7 @@ function makeCell() {
     error: "",
     pendingConfirm: null,
     confirmResolver: null,
-    lastAssistant: null,
+    appended: [],
     messagesEpoch: 0,
     listeners: /* @__PURE__ */ new Set(),
     snapshot: EMPTY_SNAPSHOT
@@ -630,7 +630,7 @@ function emit(c) {
     error: c.error,
     pendingConfirm: c.pendingConfirm,
     messagesEpoch: c.messagesEpoch,
-    lastAssistant: c.lastAssistant,
+    appended: c.appended,
     hasTrace: c.trace.length > 0
   };
   for (const l of c.listeners) l();
@@ -757,6 +757,14 @@ async function runLoop(chatId, c, req) {
           function: { name: tc.name, arguments: tc.args }
         }))
       });
+      const narration = result.text.trim();
+      if (narration) {
+        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: result.text }]);
+        c.appended = [...c.appended, narrationMsg];
+        c.messagesEpoch += 1;
+      }
+      c.streamingText = "";
+      emit(c);
       for (const tc of result.toolCalls) {
         const args = parseArgs(tc.args);
         if (needsConfirm && needsConfirm({ name: tc.name, args })) {
@@ -785,15 +793,13 @@ async function runLoop(chatId, c, req) {
         convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(out ?? null) });
         pushTrace(c, { ts: nowIso(), category: "tool", label: tc.name, durationMs: nowMs() - toolStart, args, result: out ?? null, isError: isFailedToolResult(out) });
       }
-      c.streamingText = "";
-      emit(c);
       continue;
     }
     const finalText = result.text.trim() || "No response.";
     convo.push({ role: "assistant", content: finalText });
     const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
     c.streamingText = "";
-    c.lastAssistant = assistantMsg;
+    c.appended = [...c.appended, assistantMsg];
     c.messagesEpoch += 1;
     emit(c);
     onActivity?.(chatId);
@@ -861,10 +867,14 @@ function useBrainConversation(options) {
     };
   }, [persistence, chatId]);
   (0, import_react6.useEffect)(() => {
-    const msg = snapshot.lastAssistant;
-    if (!msg) return;
-    setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
-  }, [snapshot.messagesEpoch, snapshot.lastAssistant]);
+    const appended = snapshot.appended;
+    if (appended.length === 0) return;
+    setMessages((prev) => {
+      const have = new Set(prev.map((m) => m.id));
+      const fresh = appended.filter((m) => !have.has(m.id));
+      return fresh.length === 0 ? prev : [...prev, ...fresh];
+    });
+  }, [snapshot.messagesEpoch, snapshot.appended]);
   (0, import_react6.useEffect)(() => {
     const map = {};
     for (const msg of messages) {

@@ -15,11 +15,13 @@
  *
  * The fix: one run per chat lives here, keyed by chatId, single-flight. Any
  * mounted Brain instance subscribes to its chat's cell and renders the live run;
- * a second instance that tries to start the same chat is a no-op. The loop's
- * results (assistant text) are persisted exactly as before; mounted instances
- * pick them up via `messagesEpoch`. The confirm gate also lives here, so a
- * navigation that swaps which panel is mounted can still resolve a pending
- * confirmation.
+ * a second instance that tries to start the same chat is a no-op. Every turn
+ * that produces visible text — both intermediate tool-call narration and the
+ * final answer — is persisted as its own message; mounted instances pick each
+ * one up via `messagesEpoch`, so a turn's narration is a durable block instead
+ * of transient streaming text the next turn overwrites. The confirm gate also
+ * lives here, so a navigation that swaps which panel is mounted can still
+ * resolve a pending confirmation.
  *
  * This module owns NO React — `useBrainConversation` is the thin binding.
  */
@@ -85,8 +87,13 @@ export interface BrainRunSnapshot {
   pendingConfirm: { name: string; args: unknown } | null;
   /** Bumped whenever a new assistant message is persisted. */
   messagesEpoch: number;
-  /** The most recently persisted assistant message (to append without a refetch). */
-  lastAssistant: BrainMessage | null;
+  /**
+   * Every assistant message this run has persisted, in order (narration turns +
+   * the final answer). Delivered as a list — not a single "last" value — so a
+   * mounted view merges them all by id even when React coalesces the rapid
+   * mid-run emits into one render and never sees the intermediate snapshots.
+   */
+  appended: BrainMessage[];
   hasTrace: boolean;
 }
 
@@ -99,7 +106,7 @@ interface RunCell {
   error: string;
   pendingConfirm: { name: string; args: unknown } | null;
   confirmResolver: ((ok: boolean) => void) | null;
-  lastAssistant: BrainMessage | null;
+  appended: BrainMessage[];
   messagesEpoch: number;
   listeners: Set<() => void>;
   /** Cached immutable snapshot; identity changes only when something changed. */
@@ -114,7 +121,7 @@ const EMPTY_SNAPSHOT: BrainRunSnapshot = {
   error: '',
   pendingConfirm: null,
   messagesEpoch: 0,
-  lastAssistant: null,
+  appended: [],
   hasTrace: false,
 };
 
@@ -127,7 +134,7 @@ function makeCell(): RunCell {
     error: '',
     pendingConfirm: null,
     confirmResolver: null,
-    lastAssistant: null,
+    appended: [],
     messagesEpoch: 0,
     listeners: new Set(),
     snapshot: EMPTY_SNAPSHOT,
@@ -151,7 +158,7 @@ function emit(c: RunCell): void {
     error: c.error,
     pendingConfirm: c.pendingConfirm,
     messagesEpoch: c.messagesEpoch,
-    lastAssistant: c.lastAssistant,
+    appended: c.appended,
     hasTrace: c.trace.length > 0,
   };
   for (const l of c.listeners) l();
@@ -323,6 +330,20 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           function: { name: tc.name, arguments: tc.args },
         })),
       });
+      // Commit this turn's visible narration as its OWN permanent message block
+      // before we clear the streaming buffer for the next iteration. Without
+      // this, the narration only lived in the transient `streamingText` bubble,
+      // and the next turn's stream reused that same bubble — erasing what the
+      // user just read. Each turn that says something now gets a durable block;
+      // empty (pure tool-call) turns persist nothing.
+      const narration = result.text.trim();
+      if (narration) {
+        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: result.text }]);
+        c.appended = [...c.appended, narrationMsg];
+        c.messagesEpoch += 1;
+      }
+      c.streamingText = '';
+      emit(c);
       for (const tc of result.toolCalls) {
         const args = parseArgs(tc.args);
         // Human-in-the-loop gate: pause for an explicit confirm when the host's
@@ -354,8 +375,6 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out ?? null) });
         pushTrace(c, { ts: nowIso(), category: 'tool', label: tc.name, durationMs: nowMs() - toolStart, args, result: out ?? null, isError: isFailedToolResult(out) });
       }
-      c.streamingText = '';
-      emit(c);
       continue;
     }
 
@@ -364,7 +383,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     convo.push({ role: 'assistant', content: finalText });
     const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: finalText }]);
     c.streamingText = '';
-    c.lastAssistant = assistantMsg;
+    c.appended = [...c.appended, assistantMsg];
     c.messagesEpoch += 1;
     emit(c);
     onActivity?.(chatId);
