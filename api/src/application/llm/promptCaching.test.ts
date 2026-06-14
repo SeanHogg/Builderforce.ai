@@ -112,3 +112,37 @@ describe('applyPromptCaching — history boundary', () => {
     expect(out[1]!.content).toBe('tool-result'); // tool turn not marked
   });
 });
+
+// ---------------------------------------------------------------------------
+// applyPromptCaching — TTL opt-in (5m default vs 1h long retention).
+// ---------------------------------------------------------------------------
+
+describe('applyPromptCaching — cache TTL', () => {
+  it('defaults to bare ephemeral (5-min) when no ttl is passed', () => {
+    const messages = [
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: 'hi' },
+    ];
+    const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-4.6');
+    expect(out[0]!.content).toEqual([{ type: 'text', text: 'sys', cache_control: { type: 'ephemeral' } }]);
+  });
+
+  it("emits ttl:'1h' on every breakpoint when ttl='1h'", () => {
+    const messages = [
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: 'q1' },
+      { role: 'assistant', content: 'a1' },
+      { role: 'user', content: 'q2' },
+    ];
+    const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-4.6', '1h');
+    expect(out[0]!.content).toEqual([{ type: 'text', text: 'sys', cache_control: { type: 'ephemeral', ttl: '1h' } }]);
+    expect(out[2]!.content).toEqual([{ type: 'text', text: 'a1', cache_control: { type: 'ephemeral', ttl: '1h' } }]);
+    expect(out[3]!.content).toBe('q2'); // final turn still unmarked
+  });
+
+  it("treats ttl='5m' as the default bare ephemeral marker", () => {
+    const messages = [{ role: 'system', content: 'sys' }, { role: 'user', content: 'hi' }];
+    const out = applyPromptCaching(messages, 'anthropic/claude-haiku-4.5', '5m');
+    expect(out[0]!.content).toEqual([{ type: 'text', text: 'sys', cache_control: { type: 'ephemeral' } }]);
+  });
+});

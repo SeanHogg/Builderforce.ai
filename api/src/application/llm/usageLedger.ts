@@ -21,8 +21,32 @@ import { getCatalogCached } from './modelCatalog';
 /** Cache-tier multipliers relative to the base input (prompt) price. cache_read
  *  is billed ~0.1x input, cache_creation ~1.25x — both are subsets of
  *  promptTokens (see schema). Mirrors the discount the usage columns record. */
-const CACHE_READ_MULTIPLIER = 0.1;
-const CACHE_CREATION_MULTIPLIER = 1.25;
+export const CACHE_READ_MULTIPLIER = 0.1;
+export const CACHE_CREATION_MULTIPLIER = 1.25;
+
+/** Default daily paid-overflow $ ceiling (millicents, 1/100000 USD) for a FREE
+ *  tenant with no explicit cap — $0.50/day. Paid plans (pro/teams) are treated
+ *  as effectively unlimited unless they set an explicit cap. See migration 0130
+ *  and the gateway overflow gate. */
+export const DEFAULT_PAID_OVERFLOW_CAP_MILLICENTS = 50_000; // $0.50
+
+/**
+ * Resolve a tenant's effective daily paid-overflow cap (millicents) from its
+ * per-tenant override + effective plan:
+ *   • override === -1            → -1 (unlimited; the caller skips the gate)
+ *   • override >= 0              → that explicit value
+ *   • override null, free plan   → {@link DEFAULT_PAID_OVERFLOW_CAP_MILLICENTS}
+ *   • override null, pro/teams   → -1 (unlimited)
+ * Single source of truth so the gate and any superadmin display agree.
+ */
+export function resolvePaidOverflowCapMillicents(
+  override: number | null | undefined,
+  effectivePlan: 'free' | 'pro' | 'teams',
+): number {
+  if (override === -1) return -1;
+  if (override != null && override >= 0) return override;
+  return effectivePlan === 'free' ? DEFAULT_PAID_OVERFLOW_CAP_MILLICENTS : -1;
+}
 
 /** Coerce one token count to a non-negative finite integer. Upstream usage SHOULD
  *  be clean, but a vendor/stream edge (a failed turn, a malformed chunk, a synthetic
@@ -101,6 +125,10 @@ export interface RecordUsageRow {
   attribution?: UsageAttribution | null;
   /** Links this usage row to its `llm_traces.trace_id` for billing→trace pivot [1299]. */
   traceId?: string | null;
+  /** True when the call resolved via the funded paid-overflow path (premium
+   *  fallback / backstop on Builderforce's key, not a plan-pool model). Metered
+   *  against the per-tenant `paid_overflow_daily_cap`. See isPaidOverflowModel. */
+  paidOverflow?: boolean | null;
 }
 
 /** Minimal shape of a ProxyResult this helper needs — avoids importing the full type. */
@@ -182,6 +210,7 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       projectId:           row.attribution?.projectId ?? null,
       costUsdMillicents,
       traceId:             row.traceId ?? null,
+      paidOverflow:        row.paidOverflow ?? false,
     });
   } catch { /* never let usage logging fail the request */ }
 }
