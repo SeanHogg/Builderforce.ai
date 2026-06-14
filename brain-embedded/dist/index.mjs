@@ -684,6 +684,9 @@ function buildBrainTriageReport(opts) {
 // src/brainRunStore.ts
 var MAX_TOOL_ITERATIONS = 25;
 var HISTORY_WINDOW = 80;
+var MAX_CELLS = 50;
+var MAX_TRACE_EVENTS = 500;
+var MAX_APPENDED = 50;
 var cells = /* @__PURE__ */ new Map();
 var EMPTY_SNAPSHOT = {
   running: false,
@@ -710,12 +713,24 @@ function makeCell() {
   };
 }
 function getCell(chatId) {
-  let c = cells.get(chatId);
-  if (!c) {
-    c = makeCell();
-    cells.set(chatId, c);
+  const existing = cells.get(chatId);
+  if (existing) {
+    cells.delete(chatId);
+    cells.set(chatId, existing);
+    return existing;
   }
+  const c = makeCell();
+  cells.set(chatId, c);
+  evictIdleCells(chatId);
   return c;
+}
+function evictIdleCells(protectId) {
+  if (cells.size <= MAX_CELLS) return;
+  for (const [id, cell] of cells) {
+    if (cells.size <= MAX_CELLS) break;
+    if (id === protectId || cell.running || cell.listeners.size > 0) continue;
+    cells.delete(id);
+  }
 }
 function emit(c) {
   c.snapshot = {
@@ -731,7 +746,13 @@ function emit(c) {
 }
 function pushTrace(c, ev) {
   c.trace.push(ev);
+  if (c.trace.length > MAX_TRACE_EVENTS) c.trace.splice(0, c.trace.length - MAX_TRACE_EVENTS);
   emit(c);
+}
+function recordAppended(c, msg) {
+  const next = [...c.appended, msg];
+  c.appended = next.length > MAX_APPENDED ? next.slice(next.length - MAX_APPENDED) : next;
+  c.messagesEpoch += 1;
 }
 function nowMs() {
   return typeof Date !== "undefined" ? Date.now() : 0;
@@ -854,8 +875,7 @@ async function runLoop(chatId, c, req) {
       const narration = result.text.trim();
       if (narration) {
         const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: result.text }]);
-        c.appended = [...c.appended, narrationMsg];
-        c.messagesEpoch += 1;
+        recordAppended(c, narrationMsg);
       }
       c.streamingText = "";
       emit(c);
@@ -893,8 +913,7 @@ async function runLoop(chatId, c, req) {
     convo.push({ role: "assistant", content: finalText });
     const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
     c.streamingText = "";
-    c.appended = [...c.appended, assistantMsg];
-    c.messagesEpoch += 1;
+    recordAppended(c, assistantMsg);
     emit(c);
     onActivity?.(chatId);
     return;
