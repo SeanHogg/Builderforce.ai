@@ -124,6 +124,7 @@ import { runRetentionPurge } from './application/maintenance/retentionPurge';
 import { runDueTriggers } from './application/workflow/runDueTriggers';
 import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
 import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
+import { runWebhookRetrySweep } from './application/seams/webhookService';
 import { handleInboundEmail } from './application/workflow/inboundEmail';
 
 // Middleware
@@ -446,6 +447,13 @@ export default {
       ctx.waitUntil(
         reapStaleExecutions(env).catch((err) => {
           console.error('[cron:exec-reaper] failed', err);
+        }),
+      );
+      // Redeliver failed outbound webhook deliveries with capped exponential
+      // backoff (at-least-once semantics for the cross-domain seam events).
+      ctx.waitUntil(
+        runWebhookRetrySweep(env).catch((err) => {
+          console.error('[cron:webhook-retry] failed', err);
         }),
       );
     }
