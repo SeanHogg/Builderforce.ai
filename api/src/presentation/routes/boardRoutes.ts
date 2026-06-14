@@ -173,6 +173,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       needsAttentionLane?: string;
       standupTurnMode?: string;
       standupTurnSeconds?: number;
+      hideDoneItems?: boolean;
     }>();
 
     await db
@@ -183,6 +184,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         ...(body.needsAttentionLane !== undefined ? { needsAttentionLane: body.needsAttentionLane } : {}),
         ...(body.standupTurnMode !== undefined ? { standupTurnMode: body.standupTurnMode } : {}),
         ...(body.standupTurnSeconds !== undefined ? { standupTurnSeconds: body.standupTurnSeconds } : {}),
+        ...(body.hideDoneItems !== undefined ? { hideDoneItems: body.hideDoneItems } : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)));

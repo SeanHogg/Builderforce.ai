@@ -496,6 +496,7 @@ function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) 
   const [name, setName] = useState(board.name);
   const [turnMode, setTurnMode] = useState<'facilitator' | 'timeboxed'>(board.standupTurnMode ?? 'facilitator');
   const [turnSeconds, setTurnSeconds] = useState(board.standupTurnSeconds ?? 90);
+  const [hideDoneItems, setHideDoneItems] = useState(board.hideDoneItems ?? false);
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
@@ -506,6 +507,7 @@ function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) 
         maxConcurrentTickets: maxConcurrent,
         standupTurnMode: turnMode,
         standupTurnSeconds: turnSeconds,
+        hideDoneItems,
       });
       onSaved();
     } finally { setSaving(false); }
@@ -522,6 +524,13 @@ function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) 
       <label style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
         Max concurrent tickets
         <input type="number" min={1} style={{ ...inputStyle, width: 120, marginTop: 4 }} value={maxConcurrent} onChange={(e) => setMaxConcurrent(Number(e.target.value))} />
+      </label>
+
+      {/* Hide tickets sitting in a terminal (Done) lane so the board shows only
+          live work. Display-only — the tickets and their history are untouched. */}
+      <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input type="checkbox" checked={hideDoneItems} onChange={(e) => setHideDoneItems(e.target.checked)} />
+        Hide done items
       </label>
 
       {/* Standup turn timer — drives the ceremony round-table's "who's next". */}
