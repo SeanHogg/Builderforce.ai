@@ -14,7 +14,7 @@ x-i18n:
 
 ## 名称由来
 
-BuilderForce Agents = CLAW + TARDIS，因为每个智能体都需要一台时空机器。
+BuilderForce Agents = 智能体 + TARDIS，因为每个智能体都需要一台时空机器。
 
 ## 致谢
 

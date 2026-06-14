@@ -230,7 +230,7 @@ print_gum_status() {
 print_installer_banner() {
     if [[ -n "$GUM" ]]; then
         local title tagline hint card
-        title="$("$GUM" style --foreground "#ff4d4d" --bold "🦞 CoderClaw Installer")"
+        title="$("$GUM" style --foreground "#ff4d4d" --bold "CoderClaw Installer")"
         tagline="$("$GUM" style --foreground "#8892b0" "$TAGLINE")"
         hint="$("$GUM" style --foreground "#5a6480" "modern installer mode")"
         card="$(printf '%s\n%s\n%s' "$title" "$tagline" "$hint")"
@@ -240,7 +240,7 @@ print_installer_banner() {
     fi
 
     echo -e "${ACCENT}${BOLD}"
-    echo "  🦞 CoderClaw Installer"
+    echo "  CoderClaw Installer"
     echo -e "${NC}${INFO}  ${TAGLINE}${NC}"
     echo ""
 }
@@ -1939,14 +1939,12 @@ main() {
     if [[ "$is_upgrade" == "true" ]]; then
         local update_messages=(
             "Leveled up! New skills unlocked. You're welcome."
-            "Fresh code, same lobster. Miss me?"
             "Back and better. Did you even notice I was gone?"
             "Update complete. I learned some new tricks while I was out."
             "Upgraded! Now with 23% more sass."
-            "I've evolved. Try to keep up. 🦞"
+            "I've evolved. Try to keep up. 🤖"
             "New version, who dis? Oh right, still me but shinier."
-            "Patched, polished, and ready to pinch. Let's go."
-            "The lobster has molted. Harder shell, sharper claws."
+            "Patched, polished, and ready to go. Let's go."
             "Update done! Check the changelog or just trust me, it's good."
             "Reborn from the boiling waters of npm. Stronger now."
             "I went away and came back smarter. You should try it sometime."
@@ -1956,7 +1954,7 @@ main() {
             "I've seen things you wouldn't believe. Anyway, I'm updated."
             "Back online. The changelog is long but our friendship is longer."
             "Upgraded! Peter fixed stuff. Blame him if it breaks."
-            "Molting complete. Please don't look at my soft shell phase."
+            "Upgrade complete. Please don't look at my fresh-install phase."
             "Version bump! Same chaos energy, fewer crashes (probably)."
         )
         local update_message
@@ -1971,8 +1969,8 @@ main() {
             "Settled in. Time to automate your life whether you're ready or not."
             "Cozy. I've already read your calendar. We need to talk."
             "Finally unpacked. Now point me at your problems."
-            "cracks claws Alright, what are we building?"
-            "The lobster has landed. Your terminal will never be the same."
+            "cracks knuckles Alright, what are we building?"
+            "The agent has landed. Your terminal will never be the same."
             "All done! I promise to only judge your code a little bit."
         )
         local completion_message

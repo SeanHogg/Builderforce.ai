@@ -40,7 +40,7 @@ describe("ui.seamColor", () => {
   });
 
   it("rejects non-hex colors", () => {
-    const res = validateConfigObject({ ui: { seamColor: "lobster" } });
+    const res = validateConfigObject({ ui: { seamColor: "notacolor" } });
     expect(res.ok).toBe(false);
   });
 

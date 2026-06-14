@@ -566,13 +566,25 @@ export class BuilderforceRelayService implements IRelayService {
       },
     };
     let webSearch: NodeProviderOptions["webSearch"];
+    let config: ReturnType<typeof loadConfig> | undefined;
     try {
-      webSearch = createNodeWebSearch({ config: loadConfig() }) ?? undefined;
+      config = loadConfig();
+      webSearch = createNodeWebSearch({ config }) ?? undefined;
     } catch {
-      webSearch = undefined; // no config / search disabled → cap simply not advertised
+      config = undefined; // no config → memory/web.search caps simply not advertised
+      webSearch = undefined;
     }
     const provider = buildNodeCapabilityProvider(cwd, { human, webSearch });
-    const registry = buildNodeToolRegistry();
+    // FULL on-prem tool set (PRD 11 §5.1 Stage 5): pass the NodeServiceToolDeps bag so
+    // `local` carries the ~12 service/media/memory tools, not just core+code+orchestration.
+    // A task dispatch has no chat session key, so the service tools resolve to the default
+    // agent at call time — the SAME `build*ToolDef` the V1 path uses (consistent behavior).
+    const registry = buildNodeToolRegistry({
+      config,
+      workspaceDir: cwd,
+      agentDir: cwd,
+      sandboxed: false,
+    });
     const gatewayLlm = {
       // The gateway's OpenAI-compatible endpoint lives under /llm (parity with the
       // V2 path's Anthropic-Messages base); the factories append /v1/chat/completions.

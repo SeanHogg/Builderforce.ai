@@ -288,6 +288,7 @@ export {
   readReactionParams,
   readStringParam,
 } from "../agents/tools/common.js";
+export type { AgentToolResult } from "../builderforce/model/agent-types.js";
 export { formatDocsLink } from "../terminal/links.js";
 export type { HookEntry } from "../hooks/types.js";
 export { clamp, escapeRegExp, normalizeE164, safeParseJson, sleep } from "../utils.js";

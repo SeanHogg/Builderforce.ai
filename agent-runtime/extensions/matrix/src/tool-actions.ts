@@ -1,5 +1,5 @@
-import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import {
+  type AgentToolResult,
   createActionGate,
   jsonResult,
   readNumberParam,
