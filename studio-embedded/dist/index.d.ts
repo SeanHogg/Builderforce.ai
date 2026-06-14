@@ -38,6 +38,8 @@ interface VideoVersionParams {
     coherenceStrength: number;
     motionAmount: number;
     imgToImgStrength: number;
+    /** Anchor-refresh interval used (0 = never) to bound img2img recursion drift. */
+    anchorRefreshInterval: number;
     cameraMotion: {
         dx: number;
         dy: number;
@@ -175,14 +177,25 @@ declare function ProgressFeedback({ progressLabel, error }: ProgressFeedbackProp
 interface DebugSnapshotProps {
     prompt: string;
     expandedPrompt: string;
+    /** The Quality tier the user picked (simple mode), for triage context. */
+    quality: QualityMode;
+    /** RESOLVED primary model that actually ran — the tier's primary OR the
+     *  Advanced override — never the stale Advanced picker default. */
     model: DiffusionModelId;
+    /** RESOLVED refinement model (two-pass tier), else null. Without this a
+     *  "Refined" capture read `Model: lcm-tiny-sd` with no sign a second pass ran. */
+    refinementModel: DiffusionModelId | null;
     resolution: number;
     frames: number;
     fps: number;
+    /** Keyframe interpolation factor (1 = every frame fully generated). */
+    interpolationFactor: number;
     coherenceMode: CoherenceMode;
     coherenceStrength: number;
     motionAmount: number;
     imgToImgStrength: number;
+    /** Anchor-refresh interval (0 = never) bounding img2img recursion drift. */
+    anchorRefreshInterval: number;
     cameraMotion: {
         dx: number;
         dy: number;

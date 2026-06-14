@@ -7,7 +7,7 @@
  * GET   /v1/health             – health check
  */
 import { Hono, type Context } from 'hono';
-import { and, eq, gte, sql, sum } from 'drizzle-orm';
+import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Env, HonoEnv } from '../../env';
 import {
   llmProxyForPlan,
@@ -21,6 +21,7 @@ import {
   type ChatCompletionRequest,
   type LlmUsage,
 } from '../../application/llm/LlmProxyService';
+import { CACHE_READ_MULTIPLIER, CACHE_CREATION_MULTIPLIER, resolvePaidOverflowCapMillicents } from '../../application/llm/usageLedger';
 import { logTrace, backfillTraceUsage } from '../../application/llm/traceLogger';
 import { recordUsageRow, type UsageAttribution, type RecordUsageRow } from '../../application/llm/usageLedger';
 import { pickUsage } from '../../application/llm/vendors';
@@ -163,6 +164,12 @@ type TenantAccess = {
    *   >= 0 → use this value
    */
   tokenDailyLimitOverride: number | null;
+  /**
+   * Per-tenant daily ceiling on paid-overflow spend (millicents), or null to use
+   * the plan default. -1 = unlimited (gate skipped). See migration 0130 and
+   * DEFAULT_PAID_OVERFLOW_CAP_MILLICENTS.
+   */
+  paidOverflowDailyCap: number | null;
   /** Superadmin grant of premium routing — when true the LLM proxy uses the
    *  premium model pool (top PREMIUM-tier models) and the extended per-vendor
    *  timeout regardless of plan/billingStatus. Comped / beta access. */
@@ -188,7 +195,7 @@ function toTenantPlan(ep: TenantAccess['effectivePlan']): TenantPlan {
 export async function resolveTenantPlan(
   env: Env,
   tenantId: number,
-): Promise<Pick<TenantAccess, 'plan' | 'billingStatus' | 'effectivePlan' | 'tokenDailyLimitOverride' | 'premiumOverride'>> {
+): Promise<Pick<TenantAccess, 'plan' | 'billingStatus' | 'effectivePlan' | 'tokenDailyLimitOverride' | 'paidOverflowDailyCap' | 'premiumOverride'>> {
   const db = buildDatabase(env);
   const [tenantRow] = await db
     .select({
@@ -196,6 +203,7 @@ export async function resolveTenantPlan(
       plan: tenants.plan,
       billingStatus: tenants.billingStatus,
       tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
+      paidOverflowDailyCap: tenants.paidOverflowDailyCap,
       premiumOverride: tenants.premiumOverride,
     })
     .from(tenants)
@@ -214,8 +222,129 @@ export async function resolveTenantPlan(
     billingStatus,
     effectivePlan,
     tokenDailyLimitOverride: tenantRow.tokenDailyLimitOverride ?? null,
+    paidOverflowDailyCap: tenantRow.paidOverflowDailyCap ?? null,
     premiumOverride: tenantRow.premiumOverride === true,
   };
+}
+
+/** Start of the current UTC day — the per-day reset boundary for both the daily
+ *  token cap and the paid-overflow cap. */
+function utcDayStart(): Date {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
+
+/**
+ * Enforce the per-tenant daily token cap (plan-level + optional per-agentHost),
+ * shared by `/v1/chat/completions` and the our-models branch of `/v1/messages`
+ * so neither surface can bill on our pool without the gate. Returns the 429
+ * `Response` to send (cap exceeded), or `{ usageToday, planDailyLimit }` for the
+ * response headers when the request may proceed.
+ *
+ * The "used today" total is **cache-discounted**: cache_read tokens count at
+ * ~0.1x and cache_creation at ~1.25x (mirroring the cost weighting), so a tenant
+ * with a large cached prefix gets the discount in their budget — not just logged.
+ */
+async function enforceDailyTokenCap(
+  c: Context<HonoEnv>,
+  access: TenantAccess,
+): Promise<{ blocked: Response } | { usageToday: number; planDailyLimit: number }> {
+  const planLimitDefault = getLimits(toTenantPlan(access.effectivePlan)).tokenDailyLimit;
+  const override = access.tokenDailyLimitOverride;
+  const planUnlimited = override === -1 || access.isSuperadmin;
+  const planDailyLimit = planUnlimited
+    ? 0 // 0 disables the plan gate below; real "unlimited" is encoded by planUnlimited
+    : (override !== null && override >= 0 ? override : planLimitDefault);
+  const needsTenantUsageQuery =
+    planDailyLimit > 0 || (access.agentHostId !== null && access.agentHostTokenDailyLimit !== null);
+
+  let usageToday = 0;
+  if (needsTenantUsageQuery) {
+    const db = buildDatabase(c.env);
+    // Cache-discounted effective-token sum: totalTokens counts cached input at
+    // 1x, so subtract the cache-read discount (0.9x of cache_read) and add the
+    // cache-creation surcharge (0.25x of cache_creation) to land on the billed
+    // weight. Mirrors computeCostMillicents' tiering, token-side.
+    const [usageRow] = await db
+      .select({
+        used: sql<number>`COALESCE(SUM(
+          ${llmUsageLog.totalTokens}
+          - (${llmUsageLog.cacheReadTokens} * ${1 - CACHE_READ_MULTIPLIER})
+          + (${llmUsageLog.cacheCreationTokens} * ${CACHE_CREATION_MULTIPLIER - 1})
+        ), 0)`,
+      })
+      .from(llmUsageLog)
+      .where(and(eq(llmUsageLog.tenantId, access.tenantId), gte(llmUsageLog.createdAt, utcDayStart())));
+    usageToday = Math.max(0, Math.floor(Number(usageRow?.used ?? 0)));
+
+    // Per-agentHost cap (optional, set per-agentHost in portal)
+    if (access.agentHostId !== null && access.agentHostTokenDailyLimit !== null
+        && usageToday >= access.agentHostTokenDailyLimit) {
+      return {
+        blocked: c.json({
+          error: `Per-agentHost daily token limit reached (${access.agentHostTokenDailyLimit.toLocaleString()} tokens). Increase the limit in the Builderforce portal under AgentHosts → Settings.`,
+          code: 'agent_host_token_limit_exceeded',
+          terminal: true,
+          retryAfter: secondsUntilNextUtcMidnight(),
+        }, 429),
+      };
+    }
+
+    // Plan-level cap (always enforced)
+    if (planDailyLimit > 0 && usageToday >= planDailyLimit) {
+      const upgradeHint = access.effectivePlan === 'free'
+        ? ' Upgrade to Pro at builderforce.ai/pricing.'
+        : access.effectivePlan === 'pro'
+        ? ' Upgrade to Teams for a 5× higher daily budget.'
+        : '';
+      return {
+        blocked: c.json({
+          error: `Plan daily token limit reached (${planDailyLimit.toLocaleString()} tokens).${upgradeHint}`,
+          code: 'plan_token_limit_exceeded',
+          plan: access.effectivePlan,
+          dailyLimit: planDailyLimit,
+          usedToday: usageToday,
+          terminal: true,
+          retryAfter: secondsUntilNextUtcMidnight(),
+        }, 429, { 'Retry-After': String(secondsUntilNextUtcMidnight()) }),
+      };
+    }
+  }
+
+  return { usageToday, planDailyLimit };
+}
+
+/**
+ * Decide whether to close the funded paid-overflow path for this tenant — true
+ * once today's overflow spend (premium-fallback / backstop calls on our keys)
+ * has reached the tenant's daily cap. When true the proxy keeps serving the
+ * tenant's PRIMARY pool but won't fall through to a model we fund, putting a
+ * hard ceiling on overflow cost (migration 0130). Superadmins and unlimited
+ * caps (-1) are never disabled. Best-effort: a query error fails OPEN (the
+ * reliability backstop matters more than a perfectly precise cap).
+ */
+async function isPaidOverflowExhausted(
+  c: Context<HonoEnv>,
+  access: TenantAccess,
+): Promise<boolean> {
+  if (access.isSuperadmin) return false;
+  const cap = resolvePaidOverflowCapMillicents(access.paidOverflowDailyCap, access.effectivePlan);
+  if (cap < 0) return false; // unlimited
+  try {
+    const db = buildDatabase(c.env);
+    const [row] = await db
+      .select({ spent: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)` })
+      .from(llmUsageLog)
+      .where(and(
+        eq(llmUsageLog.tenantId, access.tenantId),
+        eq(llmUsageLog.paidOverflow, true),
+        gte(llmUsageLog.createdAt, utcDayStart()),
+      ));
+    return Math.max(0, Number(row?.spent ?? 0)) >= cap;
+  } catch {
+    return false; // fail open — never let the cap query break a request
+  }
 }
 
 export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAccess> {
@@ -584,10 +713,17 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
     if (!requiredKey) return c.json({ error: 'LLM proxy not configured', code: 'proxy_unconfigured' }, 503);
 
+    // Our-models path bills US (not the tenant's Anthropic key), so apply the
+    // SAME daily-token cap as /v1/chat/completions — and close the funded
+    // overflow path once the tenant's overflow $ cap is hit.
+    const capResult = await enforceDailyTokenCap(c, access);
+    if ('blocked' in capResult) return capResult.blocked;
+    const disablePaidOverflow = await isPaidOverflowExhausted(c, access);
+
     const openaiBody = anthropicToOpenAiRequest(parsed);
     const traceId = newTraceId();
     const messageId = `msg_${traceId}`;
-    const service = llmProxyForPlan(c.env, access.effectivePlan, access.premiumOverride);
+    const service = llmProxyForPlan(c.env, access.effectivePlan, access.premiumOverride, { disablePaidOverflow });
     const result = await service.complete(openaiBody as unknown as ChatCompletionRequest, undefined, traceId);
     logFailovers(c.env, c.executionCtx, result.failovers);
 
@@ -600,6 +736,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           metadata: { engine: 'builderforce-v2', resolvedModel: result.resolvedModel }, idempotencyKey,
           useCase: 'v2_agent', tenantApiKeyId: access.tenantApiKeyId,
           attribution: { agentHostId: access.agentHostId }, traceId,
+          paidOverflow: result.paidOverflow,
         });
       });
       return new Response(stream, {
@@ -616,6 +753,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       metadata: { engine: 'builderforce-v2', resolvedModel: result.resolvedModel }, idempotencyKey,
       useCase: 'v2_agent', tenantApiKeyId: access.tenantApiKeyId,
       attribution: { agentHostId: access.agentHostId }, traceId,
+      paidOverflow: result.paidOverflow,
     });
     return new Response(JSON.stringify(openAiToAnthropicMessage(openaiJson, result.resolvedModel, messageId)), {
       status: result.response.status,
@@ -775,73 +913,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
 
     // ── Daily token usage + limit checks ────────────────────────────────────
-    // Single query — value is reused for both the 429 gate and the
-    // X-Builderforce-Daily-Tokens-* response headers callers use to
-    // pre-emptively throttle before they hit the gate.
-    //
-    // Effective plan-level cap (per tenant, per UTC day):
-    //   override === -1   → unlimited (gate skipped, no headers emitted)
-    //   override >= 0     → use override
-    //   override === null → use plan default
-    //   Superadmins (sa: true) also bypass — admin diagnostic tools (e.g. the
-    //   /admin?tab=usage AI Analyze button) must not be gated by tenant caps.
-    const planLimitDefault = getLimits(toTenantPlan(access.effectivePlan)).tokenDailyLimit;
-    const override = access.tokenDailyLimitOverride;
-    const planUnlimited = override === -1 || access.isSuperadmin;
-    const planDailyLimit = planUnlimited
-      ? 0  // 0 disables the plan gate below; real "unlimited" is encoded by planUnlimited
-      : (override !== null && override >= 0 ? override : planLimitDefault);
-    const needsTenantUsageQuery =
-      planDailyLimit > 0 || (access.agentHostId !== null && access.agentHostTokenDailyLimit !== null);
-
-    let usageToday = 0;
-    if (needsTenantUsageQuery) {
-      const todayStart = new Date();
-      todayStart.setUTCHours(0, 0, 0, 0);
-      const db = buildDatabase(c.env);
-      const [usageRow] = await db
-        .select({ used: sum(llmUsageLog.totalTokens) })
-        .from(llmUsageLog)
-        .where(
-          and(
-            eq(llmUsageLog.tenantId, access.tenantId),
-            gte(llmUsageLog.createdAt, todayStart),
-          ),
-        );
-      usageToday = Number(usageRow?.used ?? 0);
-
-      // Per-agentHost cap (optional, set per-agentHost in portal)
-      if (access.agentHostId !== null && access.agentHostTokenDailyLimit !== null) {
-        if (usageToday >= access.agentHostTokenDailyLimit) {
-          return c.json({
-            error: `Per-agentHost daily token limit reached (${access.agentHostTokenDailyLimit.toLocaleString()} tokens). Increase the limit in the Builderforce portal under AgentHosts → Settings.`,
-            code: 'agent_host_token_limit_exceeded',
-            // `terminal` tells consumer-side fallback chains "no point retrying
-            // this on a different model — the cap is per-tenant/agentHost, not per-model."
-            terminal: true,
-            retryAfter: secondsUntilNextUtcMidnight(),
-          }, 429);
-        }
-      }
-
-      // Plan-level cap (always enforced)
-      if (planDailyLimit > 0 && usageToday >= planDailyLimit) {
-        const upgradeHint = access.effectivePlan === 'free'
-          ? ' Upgrade to Pro at builderforce.ai/pricing.'
-          : access.effectivePlan === 'pro'
-          ? ' Upgrade to Teams for a 5× higher daily budget.'
-          : '';
-        return c.json({
-          error: `Plan daily token limit reached (${planDailyLimit.toLocaleString()} tokens).${upgradeHint}`,
-          code: 'plan_token_limit_exceeded',
-          plan: access.effectivePlan,
-          dailyLimit: planDailyLimit,
-          usedToday: usageToday,
-          terminal: true,
-          retryAfter: secondsUntilNextUtcMidnight(),
-        }, 429, { 'Retry-After': String(secondsUntilNextUtcMidnight()) });
-      }
-    }
+    // Shared cache-discounted gate (per tenant, per UTC day) — also enforced on
+    // /v1/messages' our-models branch. Returns the 429 to send, or the usage
+    // numbers reused below for the X-Builderforce-Daily-Tokens-* headers.
+    const capResult = await enforceDailyTokenCap(c, access);
+    if ('blocked' in capResult) return capResult.blocked;
+    const { usageToday, planDailyLimit } = capResult;
 
     // ── Idempotency-Key replay (10-min window) ──────────────────────────────
     // First choice: REPLAY the cached original response body (200) so a cron
@@ -915,7 +992,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const reqOrigin = c.req.header('Origin') ?? null;
     const reqUserAgent = c.req.header('User-Agent') ?? null;
 
-    const service = llmProxyForPlan(c.env, access.effectivePlan, access.premiumOverride);
+    // Close the funded overflow path once the tenant has hit its daily overflow
+    // $ cap — the primary pool still runs, only the paid fallback/backstop is
+    // disabled. Hard ceiling on what a tight retry loop can spend on our keys.
+    const disablePaidOverflow = await isPaidOverflowExhausted(c, access);
+    const service = llmProxyForPlan(c.env, access.effectivePlan, access.premiumOverride, { disablePaidOverflow });
     const result = await service.complete(body, undefined, traceId);
 
     // Clone upstream headers we care about
@@ -967,6 +1048,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             model: result.resolvedModel, retries: result.retries, streamed: true, usage,
             metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
             tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId }, traceId,
+            paidOverflow: result.paidOverflow,
           });
           // Back-fill the streamed trace row (logged above with 0 tokens) [1298].
           backfillTraceUsage(c.env, c.executionCtx, traceId, usage);
@@ -990,6 +1072,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       usage: result.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
       tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId }, traceId,
+      paidOverflow: result.paidOverflow,
     });
 
     // Surface the trace id inside the error envelope too, so a consumer hitting

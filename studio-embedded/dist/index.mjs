@@ -355,6 +355,9 @@ function ProgressFeedback({ progressLabel, error }) {
 // src/components/DebugCopyButton.tsx
 import { useCallback, useState as useState2 } from "react";
 import { jsx as jsx5 } from "react/jsx-runtime";
+function describeModelChain(p) {
+  return p.refinementModel ? `${p.model} \u2192 ${p.refinementModel} (two-pass)` : `${p.model} (single pass)`;
+}
 async function bitmapToBase64(bitmap, maxSize = 128, quality = 0.6) {
   const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
   const w = Math.max(1, Math.round(bitmap.width * scale));
@@ -402,9 +405,11 @@ async function buildMarkdownSnapshot(p) {
     p.device?.approxMemoryMb != null ? `- Approx memory: ${(p.device.approxMemoryMb / 1024).toFixed(1)} GB` : "- Approx memory: unknown",
     "",
     "### Configuration",
-    `- Model: \`${p.model}\``,
+    `- Quality tier: \`${p.quality}\``,
+    `- Model chain: \`${describeModelChain(p)}\``,
     `- Resolution: ${p.resolution}\xD7${p.resolution}`,
     `- Frames: ${p.frames}, FPS: ${p.fps}, Duration: ${(p.frames / p.fps).toFixed(2)}s`,
+    `- Keyframe interpolation: ${p.interpolationFactor === 1 ? "off" : `${p.interpolationFactor}\xD7`}`,
     "",
     "### Prompt",
     p.prompt ? `> ${p.prompt.replace(/\n/g, "\n> ")}` : "> (empty)",
@@ -415,6 +420,7 @@ async function buildMarkdownSnapshot(p) {
     `- Mamba mode: \`${p.coherenceMode}\` (strength ${p.coherenceStrength.toFixed(2)})`,
     `- motionAmount: ${p.motionAmount.toFixed(2)}`,
     `- imgToImgStrength: ${p.imgToImgStrength.toFixed(2)}`,
+    `- anchorRefreshInterval: ${p.anchorRefreshInterval > 0 ? `${p.anchorRefreshInterval} keyframes` : "off"}`,
     `- cameraMotion: ${p.cameraMotion ? `dx=${p.cameraMotion.dx}, dy=${p.cameraMotion.dy}` : "none"}`,
     "",
     "### Version chain",
@@ -457,10 +463,14 @@ async function buildJsonSnapshot(p) {
       capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
       device: p.device ? { kind: p.device.kind, label: p.device.label, approxMemoryMb: p.device.approxMemoryMb } : null,
       config: {
+        quality: p.quality,
         model: p.model,
+        refinementModel: p.refinementModel,
+        modelChain: describeModelChain(p),
         resolution: p.resolution,
         frames: p.frames,
-        fps: p.fps
+        fps: p.fps,
+        interpolationFactor: p.interpolationFactor
       },
       prompt: { user: p.prompt, expanded: p.expandedPrompt || null },
       continuity: {
@@ -468,6 +478,7 @@ async function buildJsonSnapshot(p) {
         coherenceStrength: p.coherenceStrength,
         motionAmount: p.motionAmount,
         imgToImgStrength: p.imgToImgStrength,
+        anchorRefreshInterval: p.anchorRefreshInterval,
         cameraMotion: p.cameraMotion
       },
       version: { currentId: p.currentVersionId },
@@ -517,7 +528,7 @@ function DebugCopyButton(props) {
 }
 
 // src/components/QualityTierPicker.tsx
-import { jsx as jsx6, jsxs as jsxs5 } from "react/jsx-runtime";
+import { Fragment as Fragment2, jsx as jsx6, jsxs as jsxs5 } from "react/jsx-runtime";
 var QUALITY_TIERS = [
   {
     id: "fast",
@@ -542,6 +553,43 @@ var QUALITY_TIERS = [
 function resolveQualityTier(tier) {
   const found = QUALITY_TIERS.find((t) => t.id === tier) ?? QUALITY_TIERS[0];
   return { primary: found.primary, refinement: found.refinement };
+}
+function resolveEffectiveChain(opts) {
+  if (opts.showAdvanced) {
+    return { primary: opts.advancedModel, refinement: null, overridesQuality: true };
+  }
+  const tier = resolveQualityTier(opts.quality);
+  return { primary: tier.primary, refinement: tier.refinement ?? null, overridesQuality: false };
+}
+function describeChain(chain) {
+  return chain.refinement ? `${chain.primary} \u2192 ${chain.refinement} (two-pass)` : `${chain.primary} (single pass)`;
+}
+function EffectiveChainBadge(props) {
+  const chain = resolveEffectiveChain(props);
+  return /* @__PURE__ */ jsxs5(
+    "p",
+    {
+      className: "bfs-hint",
+      style: {
+        marginTop: 6,
+        padding: "6px 8px",
+        borderRadius: 6,
+        border: "1px solid var(--bfs-border)",
+        background: "var(--bfs-surface, transparent)"
+      },
+      children: [
+        /* @__PURE__ */ jsx6("strong", { children: "Effective model chain:" }),
+        " ",
+        /* @__PURE__ */ jsx6("span", { className: "bfs-mono", children: describeChain(chain) }),
+        chain.overridesQuality ? /* @__PURE__ */ jsxs5(Fragment2, { children: [
+          " ",
+          "\u2014 Advanced model override is active, so the ",
+          /* @__PURE__ */ jsx6("strong", { children: "Quality" }),
+          " tier above is ignored (no refinement pass). Close Advanced or clear the model to use the tier."
+        ] }) : null
+      ]
+    }
+  );
 }
 function QualityTierPicker({ value, onChange, disabled }) {
   const current = QUALITY_TIERS.find((t) => t.id === value) ?? QUALITY_TIERS[0];
@@ -935,6 +983,7 @@ function StudioPanel({
   const [coherenceStrength, setCoherenceStrength] = useState4(0.5);
   const [motionAmount, setMotionAmount] = useState4(0.15);
   const [imgToImgStrength, setImgToImgStrength] = useState4(0);
+  const [anchorRefreshInterval, setAnchorRefreshInterval] = useState4(0);
   const [cameraDx, setCameraDx] = useState4(0);
   const [cameraDy, setCameraDy] = useState4(0);
   const [frames, setFrames] = useState4(defaultFrames);
@@ -1018,12 +1067,12 @@ function StudioPanel({
   }, []);
   const ensureEngine = useCallback2(async () => {
     if (engineRef.current) return engineRef.current;
-    const tier = resolveQualityTier(quality);
+    const chain = resolveEffectiveChain({ showAdvanced, advancedModel: model, quality });
     const engine = await VideoEngine.create({
       apiKey: token,
       baseUrl,
-      model: showAdvanced ? model : tier.primary,
-      refinementModel: showAdvanced ? void 0 : tier.refinement,
+      model: chain.primary,
+      refinementModel: chain.refinement ?? void 0,
       mambaState: initialMambaState,
       width: resolution,
       height: resolution,
@@ -1042,12 +1091,12 @@ function StudioPanel({
       onVideoGenerated?.(generated.blob, generated.mambaState);
       if (onSaveVersion) {
         try {
-          const tier = resolveQualityTier(quality);
+          const chain = resolveEffectiveChain({ showAdvanced, advancedModel: model, quality });
           const params = {
             prompt,
             quality,
-            model: showAdvanced ? model : tier.primary,
-            refinementModel: showAdvanced ? null : tier.refinement ?? null,
+            model: chain.primary,
+            refinementModel: chain.refinement,
             width: resolution,
             height: resolution,
             frames,
@@ -1063,6 +1112,7 @@ function StudioPanel({
             coherenceStrength,
             motionAmount,
             imgToImgStrength,
+            anchorRefreshInterval,
             cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0) ? { dx: cameraDx, dy: cameraDy } : null,
             mambaState: generated.mambaState,
             elapsedMs: generated.elapsedMs,
@@ -1095,6 +1145,7 @@ function StudioPanel({
       coherenceStrength,
       motionAmount,
       imgToImgStrength,
+      anchorRefreshInterval,
       cameraDx,
       cameraDy,
       currentVersionId,
@@ -1230,6 +1281,7 @@ function StudioPanel({
         coherenceStrength,
         motionAmount,
         imgToImgStrength,
+        anchorRefreshInterval,
         interpolationFactor,
         interpolationBackend,
         cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0) ? { dx: cameraDx, dy: cameraDy } : void 0,
@@ -1251,6 +1303,7 @@ function StudioPanel({
     coherenceStrength,
     motionAmount,
     imgToImgStrength,
+    anchorRefreshInterval,
     interpolationFactor,
     interpolationBackend,
     cameraDx,
@@ -1312,6 +1365,7 @@ function StudioPanel({
       setCoherenceStrength(p.coherenceStrength);
       setMotionAmount(p.motionAmount);
       setImgToImgStrength(p.imgToImgStrength);
+      setAnchorRefreshInterval(p.anchorRefreshInterval ?? 0);
       setCameraDx(p.cameraMotion?.dx ?? 0);
       setCameraDy(p.cameraMotion?.dy ?? 0);
       setCurrentVersionId(entry.id);
@@ -1336,6 +1390,7 @@ function StudioPanel({
     ] });
   }
   const device = status.device;
+  const effectiveChain = resolveEffectiveChain({ showAdvanced, advancedModel: model, quality });
   return /* @__PURE__ */ jsxs7("div", { className: "bfs-root", children: [
     !hideHeader && /* @__PURE__ */ jsx8("header", { className: "bfs-header", children: /* @__PURE__ */ jsxs7("div", { children: [
       /* @__PURE__ */ jsx8("h1", { className: "bfs-title", children: "AI Video Studio" }),
@@ -1388,7 +1443,15 @@ function StudioPanel({
             expandedPrompt
           ] })
         ] }),
-        /* @__PURE__ */ jsx8(QualityTierPicker, { value: quality, onChange: setQuality, disabled: isGenerating }),
+        /* @__PURE__ */ jsx8(
+          QualityTierPicker,
+          {
+            value: quality,
+            onChange: setQuality,
+            disabled: isGenerating || showAdvanced
+          }
+        ),
+        /* @__PURE__ */ jsx8(EffectiveChainBadge, { showAdvanced, advancedModel: model, quality }),
         /* @__PURE__ */ jsxs7(
           "label",
           {
@@ -1623,7 +1686,24 @@ function StudioPanel({
                   onCameraDyChange: setCameraDy,
                   disabled: isGenerating
                 }
-              )
+              ),
+              imgToImgStrength > 0 && /* @__PURE__ */ jsxs7("div", { className: "bfs-field", style: { marginTop: 12 }, children: [
+                /* @__PURE__ */ jsx8("label", { className: "bfs-label", htmlFor: "bfs-anchor-refresh", children: "Anchor refresh (img2img drift bound)" }),
+                /* @__PURE__ */ jsx8(
+                  "input",
+                  {
+                    id: "bfs-anchor-refresh",
+                    type: "number",
+                    className: "bfs-input",
+                    min: 0,
+                    max: 120,
+                    value: anchorRefreshInterval,
+                    onChange: (e) => setAnchorRefreshInterval(Math.max(0, Math.min(120, Number(e.target.value) || 0))),
+                    disabled: isGenerating
+                  }
+                ),
+                /* @__PURE__ */ jsx8("p", { className: "bfs-hint", children: "Restart from fresh noise every N keyframes so long clips don't progressively blur as img2img recursion accumulates VAE round-trip error. 0 = never refresh (carry content forward indefinitely). Try 8\u201312 for clips past ~30 frames." })
+              ] })
             ]
           }
         ),
@@ -1667,14 +1747,18 @@ function StudioPanel({
           {
             prompt,
             expandedPrompt,
-            model,
+            quality,
+            model: effectiveChain.primary,
+            refinementModel: effectiveChain.refinement,
             resolution,
             frames,
             fps,
+            interpolationFactor,
             coherenceMode,
             coherenceStrength,
             motionAmount,
             imgToImgStrength,
+            anchorRefreshInterval,
             cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0) ? { dx: cameraDx, dy: cameraDy } : null,
             device: status.state === "ready" ? status.device : null,
             progressLabel,

@@ -356,6 +356,12 @@ export const llmUsageLog = pgTable('llm_usage_log', {
    *  can pivot from a usage/billing row to its full diagnostic trace [1299].
    *  Null for usage rows written without a trace (e.g. BYO-key passthrough). */
   traceId:          varchar('trace_id', { length: 48 }),
+  /** True when this call resolved via the funded paid-overflow path (premium
+   *  fallback / reliability backstop on Builderforce's own key, not a plan-pool
+   *  model) — migration 0130. Summed (by cost) against the tenant's
+   *  `paid_overflow_daily_cap` so a Free tenant can't run up arbitrary spend on
+   *  our keys via a tight retry loop. */
+  paidOverflow:     boolean('paid_overflow').notNull().default(false),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -611,6 +617,18 @@ export const tenants = pgTable('tenants', {
    * for comped / beta access without flipping the billing plan.
    */
   premiumOverride:        boolean('premium_override').notNull().default(false),
+  /**
+   * Per-tenant daily ceiling on PAID-OVERFLOW spend (premium-fallback / backstop
+   * calls Builderforce funds on its own keys), in millicents (1/100000 USD) —
+   * migration 0130.
+   *   NULL  → use the plan default (free = $0.50/day; pro/teams effectively
+   *           unlimited — see DEFAULT_PAID_OVERFLOW_CAP_MILLICENTS).
+   *   -1    → unlimited; the overflow gate is skipped.
+   *   >= 0  → use this value instead of the plan default.
+   * Once exceeded the gateway closes the funded overflow path for the rest of the
+   * UTC day (the tenant's primary pool still runs); resets at UTC midnight.
+   */
+  paidOverflowDailyCap:   integer('paid_overflow_daily_cap'),
   // Segment tier / identity federation (migration 0054).
   kind:                   tenantKindEnum('kind').notNull().default('direct'),
   idpIssuer:              varchar('idp_issuer', { length: 500 }),

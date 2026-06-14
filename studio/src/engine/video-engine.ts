@@ -43,9 +43,10 @@ import {
   applyToLatent,
   applyToPrompt,
   emptyState,
+  isAnchorRefreshFrame,
+  latentResidualBiasScale,
   scaleLatent,
   shiftLatent,
-  shouldApplyLatentResidualBias,
 } from './mamba-coherence';
 import {
   buildInterpolatedSequence,
@@ -183,6 +184,7 @@ export class VideoEngine {
       seed,
       motionAmount: clamp01(args.motionAmount ?? DEFAULT_MOTION_AMOUNT),
       imgToImgStrength: clamp01(args.imgToImgStrength ?? 0),
+      anchorRefreshInterval: normaliseRefreshInterval(args.anchorRefreshInterval),
       cameraMotion: args.cameraMotion,
       interpolationFactor: normaliseFactor(args.interpolationFactor),
       interpolationBackend: args.interpolationBackend ?? 'latent-slerp',
@@ -426,6 +428,9 @@ export class VideoEngine {
         seed: args.baseSeed + attempt * 7919,
         motionAmount: args.motionAmount,
         imgToImgStrength: motion.imgToImgStrength,
+        // Shots are short and Mamba state resets per shot, so per-shot recursion
+        // drift is already bounded by the shot length — no periodic refresh.
+        anchorRefreshInterval: 0,
         cameraMotion: motion.cameraMotion,
         interpolationFactor: args.interpolationFactor,
         interpolationBackend: args.interpolationBackend,
@@ -493,6 +498,7 @@ export class VideoEngine {
       seed,
       motionAmount,
       imgToImgStrength,
+      anchorRefreshInterval,
       cameraMotion,
       interpolationFactor,
       interpolationBackend,
@@ -546,9 +552,20 @@ export class VideoEngine {
             })
           : promptEmbedding;
 
-      const useImg2Img = imgToImgStrength > 0 && prevLatent !== null;
+      // Periodically drop back to a fresh full-noise anchor to bound img2img
+      // recursion's accumulating VAE round-trip blur on long clips. On a refresh
+      // keyframe we take the anchor-walk (fresh-noise) branch instead of carrying
+      // the prior latent forward. See `isAnchorRefreshFrame`.
+      const refresh = isAnchorRefreshFrame(k, anchorRefreshInterval);
+      const useImg2Img = imgToImgStrength > 0 && prevLatent !== null && !refresh;
       let latent: Float32Array;
       let frameTimesteps: number[];
+      if (refresh) {
+        reportProgress(
+          `${label} ${frameIdx + 1}/${frameCount}: anchor refresh (bounding recursion drift)…`,
+          onProgress,
+        );
+      }
       if (useImg2Img) {
         // Carry the prior keyframe's clean latent forward, optionally pan +
         // zoom it for camera motion, then re-noise to a partial timestep so the
@@ -571,12 +588,21 @@ export class VideoEngine {
         latent = anchorWalkLatent(anchorLatent, walkStart, walkEnd, frameIdx, frameCount, motionAmount);
         frameTimesteps = timesteps;
       }
-      // Gate via the shared helper so the rule has one source of truth and is
-      // unit-testable. See `shouldApplyLatentResidualBias` for the why.
-      if (shouldApplyLatentResidualBias(coherenceMode, useImg2Img)) {
+      // Scale the latent-residual Mamba bias by the latent's noise fraction so
+      // it composes with img2img recursion instead of disfiguring the carried-
+      // forward signal. On the fresh-noise path the scale is 1 (pure noise);
+      // under img2img it's sqrt(1-ᾱ_t) at the re-noise timestep. The rule lives
+      // in one unit-tested helper — see `latentResidualBiasScale`.
+      const biasNoiseScale = latentResidualBiasScale(
+        coherenceMode,
+        useImg2Img,
+        useImg2Img ? this.diffusion.noiseScaleForTimestep(frameTimesteps[0]) : 1,
+      );
+      if (biasNoiseScale > 0) {
         latent = applyToLatent({
           ctx: { mode: coherenceMode, strength: coherenceStrength, state: this.mambaState },
           latent,
+          noiseScale: biasNoiseScale,
         });
       }
 
@@ -890,6 +916,8 @@ interface ClipSpec {
   seed: number;
   motionAmount: number;
   imgToImgStrength: number;
+  /** Restart img2img recursion from fresh noise every N keyframes (0 = never). */
+  anchorRefreshInterval: number;
   cameraMotion?: { dx: number; dy: number; zoom?: number };
   interpolationFactor: number;
   interpolationBackend: InterpolationBackend;
@@ -934,6 +962,12 @@ function closeClip(clip: ProducedClip): void {
 function normaliseFactor(factor: number | undefined): number {
   if (factor === undefined || !Number.isFinite(factor)) return 1;
   return Math.max(1, Math.floor(factor));
+}
+
+/** Normalise an anchor-refresh interval to an integer ≥ 0 (0 = never refresh). */
+function normaliseRefreshInterval(interval: number | undefined): number {
+  if (interval === undefined || !Number.isFinite(interval) || interval <= 0) return 0;
+  return Math.floor(interval);
 }
 
 /**

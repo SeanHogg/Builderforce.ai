@@ -1,5 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import { computeCostMillicents, clampTokenCount, sanitizeUsage } from './usageLedger';
+import {
+  computeCostMillicents,
+  clampTokenCount,
+  sanitizeUsage,
+  resolvePaidOverflowCapMillicents,
+  DEFAULT_PAID_OVERFLOW_CAP_MILLICENTS,
+} from './usageLedger';
+
+describe('resolvePaidOverflowCapMillicents', () => {
+  it('uses the $0.50 default for a free tenant with no override', () => {
+    expect(resolvePaidOverflowCapMillicents(null, 'free')).toBe(DEFAULT_PAID_OVERFLOW_CAP_MILLICENTS);
+    expect(DEFAULT_PAID_OVERFLOW_CAP_MILLICENTS).toBe(50_000); // $0.50
+  });
+
+  it('treats paid plans (pro/teams) as unlimited when no override is set', () => {
+    expect(resolvePaidOverflowCapMillicents(null, 'pro')).toBe(-1);
+    expect(resolvePaidOverflowCapMillicents(null, 'teams')).toBe(-1);
+  });
+
+  it('honours an explicit -1 (unlimited) on any plan', () => {
+    expect(resolvePaidOverflowCapMillicents(-1, 'free')).toBe(-1);
+  });
+
+  it('honours an explicit non-negative override over the plan default', () => {
+    expect(resolvePaidOverflowCapMillicents(0, 'free')).toBe(0);
+    expect(resolvePaidOverflowCapMillicents(250_000, 'pro')).toBe(250_000);
+  });
+});
 
 describe('computeCostMillicents', () => {
   // $1/1M input ($1e-6/token), $2/1M output ($2e-6/token).

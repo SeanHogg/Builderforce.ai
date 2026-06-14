@@ -56,6 +56,11 @@ export interface VendorCallParams {
   topP?: number;
   /** Vendor-specific passthrough. Last write wins over the standard fields above. */
   extraBody?: Record<string, unknown>;
+  /** Prompt-cache breakpoint retention for caching-capable (Anthropic-family)
+   *  models: `'5m'` (default ephemeral) or `'1h'` (long retention, ~2x write
+   *  cost). Carried from a caller's `_builderforce.cacheTtl` hint; only the
+   *  OpenRouter module honours it (other vendors cache implicitly / ignore it). */
+  cacheTtl?: '5m' | '1h';
   /** Sent as `X-Title` header for OpenRouter analytics; ignored by other vendors. */
   title?: string;
   /** Per-vendor-call deadline. Overrides `DEFAULT_VENDOR_CALL_TIMEOUT_MS` when

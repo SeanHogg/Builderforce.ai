@@ -183,6 +183,20 @@ export function resolveVendorTimeoutOverride(
 }
 
 /**
+ * Per-request prompt-cache retention opt-in — lets a bursty tenant with a large
+ * stable prefix keep it warm across idle gaps longer than the 5-minute ephemeral
+ * default. Carried as `body._builderforce.cacheTtl` ('1h'); any other value
+ * (including absent) resolves to the 5-minute default. Honoured only for
+ * caching-capable (Anthropic-family) models by the OpenRouter vendor module —
+ * see promptCaching.ts. Returns `'1h'` or `undefined` (= default 5m).
+ */
+export function resolveCacheTtl(body: Record<string, unknown>): '1h' | undefined {
+  const envelope = body['_builderforce'];
+  if (!envelope || typeof envelope !== 'object') return undefined;
+  return (envelope as Record<string, unknown>).cacheTtl === '1h' ? '1h' : undefined;
+}
+
+/**
  * Premium routing pool — top PREMIUM-tier models only, used when a tenant has
  * `premium_override` set. Skips FREE and STANDARD entirely so a single attempt
  * lands on a high-quality model. Three candidates so the cascade has fallback
@@ -263,6 +277,29 @@ export const PREMIUM_FALLBACK_MODELS: readonly string[] = [
   'googleai/gemini-2.5-flash-lite',
   'google/gemini-2.5-flash-lite', // via OpenRouter — vendor-diverse backup
 ];
+
+/**
+ * Paid-overflow model set — the models Builderforce funds on its OWN keys when a
+ * tenant's primary cascade is exhausted: the premium fallback chain plus every
+ * reliability-floor backstop (general + coding). A usage row resolved to one of
+ * these is "overflow spend" — metered against a per-tenant daily $ cap so a Free
+ * tenant in a tight retry loop can't run up arbitrary spend on our keys (the cap
+ * is enforced in the gateway route; see `paid_overflow_daily_cap`). None of these
+ * ids appear in any plan's PRIMARY pool (FREE/PRO), so resolving to one
+ * unambiguously means the request fell through to the funded overflow path.
+ */
+export const PAID_OVERFLOW_MODELS: ReadonlySet<string> = new Set<string>([
+  ...PREMIUM_FALLBACK_MODELS,
+  ...CODING_BACKSTOP_MODELS,
+  GUARANTEED_BACKSTOP_MODEL,
+]);
+
+/** True when `model` resolved via the funded overflow path (premium fallback or
+ *  a reliability-floor backstop) — i.e. Builderforce paid for it, not the tenant
+ *  via their plan pool. Drives the `paid_overflow` usage flag + per-tenant cap. */
+export function isPaidOverflowModel(model: string | undefined | null): boolean {
+  return model != null && PAID_OVERFLOW_MODELS.has(model);
+}
 
 /**
  * Maximum number of FREE-tier attempts the cascade walks before falling through
@@ -384,6 +421,11 @@ export interface ProxyResult {
   failovers: FailoverEvent[];
   /** Token usage from non-streaming responses; undefined for streams (route intercepts). */
   usage?: LlmUsage;
+  /** True when the request resolved via the funded overflow path (premium
+   *  fallback / backstop on Builderforce's own key) rather than a plan-pool
+   *  model. The route stamps this onto the usage row so overflow spend can be
+   *  capped per tenant. See {@link isPaidOverflowModel}. */
+  paidOverflow?: boolean;
   /** Number of times the gateway re-dispatched on non-conforming JSON output
    *  (only applies when `body.response_format.type` is `json_object`/`json_schema`). */
   schemaRetries?: number;
@@ -455,6 +497,13 @@ export interface LlmProxyOptions {
    *  pass `CODING_BACKSTOP_MODELS` so an exhausted coding cascade floors onto a
    *  coder, not the general-purpose backstop. Tried in order. */
   backstopModels?: readonly string[];
+  /** When true, the cascade drops the premium fallback chain AND skips the paid
+   *  backstop — so an exhausted primary pool surfaces `cascade_exhausted` instead
+   *  of falling through to a model Builderforce funds on its own key. Set by the
+   *  gateway route once a tenant has exceeded its daily paid-overflow $ cap, to
+   *  put a hard ceiling on overflow spend (a Free tenant's primary free pool
+   *  still runs — only the funded overflow path is closed). */
+  disablePaidOverflow?: boolean;
 }
 
 export class LlmProxyService {
@@ -465,6 +514,7 @@ export class LlmProxyService {
   private readonly isPro: boolean;
   private readonly vendorCallTimeoutMs: number | undefined;
   private readonly backstopModels: readonly string[];
+  private readonly disablePaidOverflow: boolean;
 
   constructor(env: ProxyEnv, options?: LlmProxyOptions) {
     this.env = env;
@@ -474,6 +524,14 @@ export class LlmProxyService {
     this.isPro = this.productName === 'builderforceLLMPro' || this.productName === 'builderforceLLMTeams';
     this.vendorCallTimeoutMs = options?.vendorCallTimeoutMs;
     this.backstopModels = options?.backstopModels?.length ? options.backstopModels : [GUARANTEED_BACKSTOP_MODEL];
+    this.disablePaidOverflow = options?.disablePaidOverflow ?? false;
+  }
+
+  /** The premium fallback chain appended to every cascade — empty when the tenant
+   *  has exhausted its paid-overflow cap, so the chain composer won't fall through
+   *  to a funded model. Single source for both the cooldown-prefetch and the chain. */
+  private get premiumFallback(): readonly string[] {
+    return this.disablePaidOverflow ? [] : PREMIUM_FALLBACK_MODELS;
   }
 
   // --- Public entry points --------------------------------------------------
@@ -541,7 +599,7 @@ export class LlmProxyService {
     //    chain composer skips any individually cooled entry instead of
     //    firing a doomed retry against a saturated endpoint.
     const seedPrefix = seed.slice(0, COOLDOWN_PREFETCH_LIMIT);
-    const fallbackPairs = PREMIUM_FALLBACK_MODELS.map((m) => ({ vendor: vendorForModel(m), model: m }));
+    const fallbackPairs = this.premiumFallback.map((m) => ({ vendor: vendorForModel(m), model: m }));
     const seedVendors = Array.from(new Set([
       ...seedPrefix.map((m) => vendorForModel(m)),
       ...fallbackPairs.map((p) => p.vendor),
@@ -564,9 +622,13 @@ export class LlmProxyService {
     if (candidates.length === 0) {
       // Every model in the seed + premium fallback list is on cooldown. The
       // guaranteed paid backstop (credited key) is the last chance before we
-      // surface a hard failure.
-      const backstop = await this.dispatchBackstop(body, requestHeaders);
-      if (backstop) return this.finalize(backstop, tid, startedAt, [...this.backstopModels], 'success');
+      // surface a hard failure — unless the tenant has exhausted its paid-overflow
+      // cap, in which case we don't fund another paid call.
+      const backstop = this.disablePaidOverflow ? null : await this.dispatchBackstop(body, requestHeaders);
+      if (backstop) {
+        backstop.paidOverflow = true;
+        return this.finalize(backstop, tid, startedAt, [...this.backstopModels], 'success');
+      }
       return this.finalize(
         this.exhaustedResponse(
           seed.slice(),
@@ -579,6 +641,9 @@ export class LlmProxyService {
 
     const primary = await this.dispatch(candidates, body, requestHeaders, { signal });
     if (primary.response.status < 400) {
+      // Mark overflow when the primary cascade itself landed on an appended
+      // premium-fallback model (vs a plan-pool model) so the route meters it.
+      primary.paidOverflow = isPaidOverflowModel(primary.resolvedModel);
       return this.finalize(primary, tid, startedAt, candidates);
     }
 
@@ -594,11 +659,12 @@ export class LlmProxyService {
     // the caller gets a real answer instead of `AI_UNAVAILABLE`. On success,
     // splice the primary cascade's diagnostics in front of the backstop's so the
     // trace still records everything that was tried.
-    const backstop = await this.dispatchBackstop(body, requestHeaders);
+    const backstop = this.disablePaidOverflow ? null : await this.dispatchBackstop(body, requestHeaders);
     if (backstop) {
       backstop.failovers = [...primary.failovers, ...backstop.failovers];
       backstop.retries   = primary.retries + backstop.retries;
       backstop.attempts  = [...(primary.attempts ?? []), ...(backstop.attempts ?? [])];
+      backstop.paidOverflow = true;
       return this.finalize(backstop, tid, startedAt, [...candidates, ...this.backstopModels], 'success');
     }
     return this.finalize(primary, tid, startedAt, candidates);
@@ -709,7 +775,7 @@ export class LlmProxyService {
   ): string[] {
     return composeFreeCappedCascade({
       seed,
-      premiumFallback: PREMIUM_FALLBACK_MODELS,
+      premiumFallback: this.premiumFallback,
       freeBudget: FREE_ATTEMPT_BUDGET,
       tierOf: tierForModel,
       isUnavailable: buildCooldownPredicate({
@@ -796,12 +862,14 @@ export class LlmProxyService {
       ?? resolveVendorTimeoutOverride(sanitizedBody as unknown as Record<string, unknown>)
       ?? this.vendorCallTimeoutMs;
     const vendorEnv = overrides?.vendorEnv ?? this.vendorEnv();
+    const cacheTtl = resolveCacheTtl(sanitizedBody as unknown as Record<string, unknown>);
     const callParams = {
       messages,
       ...(sanitizedBody.max_tokens  != null ? { maxTokens:   sanitizedBody.max_tokens  } : {}),
       ...(sanitizedBody.temperature != null ? { temperature: sanitizedBody.temperature } : {}),
       ...(sanitizedBody.top_p       != null ? { topP:        sanitizedBody.top_p       } : {}),
       ...(Object.keys(extraBody).length > 0 ? { extraBody } : {}),
+      ...(cacheTtl ? { cacheTtl } : {}),
       title: this.productName,
       ...(effectiveTimeoutMs ? { timeoutMs: effectiveTimeoutMs } : {}),
       ...(overrides?.signal ? { signal: overrides.signal } : {}),
@@ -1264,7 +1332,7 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-  opts?: { backstopModels?: readonly string[] },
+  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean },
 ): LlmProxyService {
   const { productName, modelPool, vendorCallTimeoutMs } = resolveRouting(effectivePlan, premiumOverride);
   return new LlmProxyService(env, {
@@ -1273,6 +1341,7 @@ export function llmProxyForPlan(
     productName,
     ...(vendorCallTimeoutMs ? { vendorCallTimeoutMs } : {}),
     ...(opts?.backstopModels ? { backstopModels: opts.backstopModels } : {}),
+    ...(opts?.disablePaidOverflow ? { disablePaidOverflow: true } : {}),
   });
 }
 

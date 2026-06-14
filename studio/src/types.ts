@@ -208,10 +208,24 @@ export interface GenerateOptions {
    *   0.5 → start halfway through the schedule (strong continuity, slow evolution)
    *   0.7 → start at 30 %  (moderate continuity, more evolution)
    *   1.0 → start at the beginning  (≈ pure anchor walk, same as 0)
-   * Long clips (~30+ frames) drift / blur — refresh by setting back to 0 on
-   * a periodic frame, or split into multiple short calls.
+   * Long clips (~30+ frames) drift / blur — bound this automatically with
+   * `anchorRefreshInterval`, or split into multiple short calls.
    */
   imgToImgStrength?: number;
+  /**
+   * Bound img2img-recursion drift by restarting from a fresh full-noise anchor
+   * every N generated keyframes. img2img recursion (`imgToImgStrength > 0`)
+   * carries each frame's clean latent into the next, but every VAE round-trip
+   * adds a little error, so frames ~30+ progressively blur / lose detail. With
+   * `anchorRefreshInterval = N`, keyframes N, 2N, … skip the carry-forward and
+   * re-sample fresh noise (a full denoise pass), capping accumulated drift at N
+   * keyframes while keeping continuity within each segment.
+   *   0 / omitted (default) → never refresh (carry forward indefinitely)
+   *   8                     → refresh every 8 keyframes
+   * Only consulted when `imgToImgStrength > 0`. Counts GENERATED keyframes, not
+   * interpolated tweens (drift accrues per denoise, not per output frame).
+   */
+  anchorRefreshInterval?: number;
   /**
    * Per-frame camera transform applied to the prior latent BEFORE re-noising.
    * `dx`/`dy` are a directional shift in latent-pixel units (1 latent pixel =

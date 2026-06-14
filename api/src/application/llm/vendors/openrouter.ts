@@ -107,7 +107,7 @@ function tierForOpenRouterModel(modelId: string): AiModelTier {
 }
 
 function buildBody(params: VendorCallParams): Record<string, unknown> {
-  const { model, messages, tools, toolChoice, maxTokens, temperature, topP, extraBody } = params;
+  const { model, messages, tools, toolChoice, maxTokens, temperature, topP, extraBody, cacheTtl } = params;
   // OpenRouter routes many free-tier model ids (`qwen/qwen3-coder:free`,
   // `qwen/qwen3-next-80b-a3b-instruct:free`, etc.) to Cerebras as the upstream
   // provider. Cerebras's strict JSON-Schema validator rejects draft-07
@@ -121,7 +121,7 @@ function buildBody(params: VendorCallParams): Record<string, unknown> {
   // next cascade candidate. See ../promptCaching.ts.
   return {
     model,
-    messages: applyPromptCaching(messages, model),
+    messages: applyPromptCaching(messages, model, cacheTtl),
     ...(tools ? { tools } : {}),
     ...(toolChoice ? { tool_choice: toolChoice } : {}),
     ...(maxTokens != null ? { max_tokens: maxTokens } : {}),
