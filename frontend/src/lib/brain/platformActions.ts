@@ -205,6 +205,35 @@ function resolveRoute(page: string, id?: string | number, query?: string): strin
   return query ? `${path}?${String(query).replace(/^\?/, '')}` : path;
 }
 
+/** One assignable identity — a human teammate OR an agent. Humans and agents are
+ *  one team, so each entry carries the SINGLE assignee field the Brain must set on
+ *  tasks.create / tasks.update (the three id-spaces are disjoint, see taskAssignee.ts). */
+type TaskAssignee =
+  | { kind: 'human'; name: string; assignedUserId: string }
+  | { kind: 'cloud_agent'; name: string; assignedAgentRef: string }
+  | { kind: 'agent_host'; name: string; assignedAgentHostId: number };
+
+/**
+ * The FULL team a task can be assigned to — humans AND agents in one roster.
+ *
+ * The Brain resolves an assignee name (e.g. "Bob") through this single seam. Bob
+ * may be a person, a cloud agent, or a self-hosted host; composing all three here
+ * is why the Brain no longer mistakes a named cloud agent for "not on the team".
+ * Reuses the human roster (tasks.assignees) and the workspace run-targets
+ * (workflowDefinitions.runTargets already merges cloud agents + hosts, server-cached).
+ */
+async function listTaskAssignees(): Promise<TaskAssignee[]> {
+  const [members, runTargets] = await Promise.all([
+    tasksApi.assignees().catch(() => [] as { id: string; name: string }[]),
+    workflowDefinitions.runTargets().catch(() => ({ hosts: [], cloudAgents: [] })),
+  ]);
+  return [
+    ...members.map((m): TaskAssignee => ({ kind: 'human', name: m.name, assignedUserId: m.id })),
+    ...runTargets.cloudAgents.map((a): TaskAssignee => ({ kind: 'cloud_agent', name: a.name, assignedAgentRef: a.ref })),
+    ...runTargets.hosts.map((h): TaskAssignee => ({ kind: 'agent_host', name: h.name, assignedAgentHostId: h.id })),
+  ];
+}
+
 // ---------------------------------------------------------------------------
 // The manifest. One entry per capability; run() wraps the existing client.
 // ---------------------------------------------------------------------------
@@ -235,11 +264,11 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     // ---- Tasks (kanban) --------------------------------------------------
     { domain: 'tasks', method: 'list', mutates: false, description: 'List tasks, optionally filtered by project.', parameters: obj({ projectId: N }), run: (a) => tasksApi.list(f(a, 'projectId')) },
     { domain: 'tasks', method: 'get', mutates: false, description: 'Get a task by id.', parameters: obj({ id: N }, ['id']), run: (a) => tasksApi.get(f(a, 'id')) },
-    { domain: 'tasks', method: 'create', mutates: true, description: 'Create a task on a project board. Set taskType="epic" to create a planning Epic (a container for other tasks), or pass parentTaskId to nest the new task under an existing Epic. Assign it by passing exactly one of: assignedUserId (a human member — resolve a name like "Bob" to its id with tasks.assignees), assignedAgentRef (a cloud agent) or assignedAgentHostId (a self-hosted agent host).', parameters: obj({ projectId: N, title: S, description: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }, dueDate: S, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: N, assignedUserId: S, assignedAgentRef: S, assignedAgentHostId: N }, ['projectId', 'title']), run: (a) => tasksApi.create(a as Parameters<typeof tasksApi.create>[0]) },
-    updateCap({ domain: 'tasks', method: 'update', description: "Update a task. Link it under an Epic with parentTaskId (or null to detach), reclassify with taskType ('task'|'epic'), schedule into a sprint with sprintId, or (re)assign via exactly one of assignedUserId (human member — resolve a name with tasks.assignees; null unassigns), assignedAgentRef (cloud agent) or assignedAgentHostId (agent host). Also supports title, description, status/lane, priority, dueDate, archived.", parameters: obj({ id: N, title: S, description: S, status: S, priority: S, dueDate: S, archived: B, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: { type: ['number', 'null'] }, sprintId: { type: ['string', 'null'] }, assignedUserId: { type: ['string', 'null'] }, assignedAgentRef: { type: ['string', 'null'] }, assignedAgentHostId: { type: ['number', 'null'] } }, ['id']) }, (a, patch) => tasksApi.update(f(a, 'id'), patch as Parameters<typeof tasksApi.update>[1])),
+    { domain: 'tasks', method: 'create', mutates: true, description: 'Create a task on a project board. Set taskType="epic" to create a planning Epic (a container for other tasks), or pass parentTaskId to nest the new task under an existing Epic. Assign it by passing exactly one of: assignedUserId (a human member), assignedAgentRef (a cloud agent, e.g. one named "Bob") or assignedAgentHostId (a self-hosted agent host). Resolve ANY assignee name — person OR agent — with tasks.assignees, which returns the whole team and tells you which id field to set (humans and agents are one team).', parameters: obj({ projectId: N, title: S, description: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }, dueDate: S, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: N, assignedUserId: S, assignedAgentRef: S, assignedAgentHostId: N }, ['projectId', 'title']), run: (a) => tasksApi.create(a as Parameters<typeof tasksApi.create>[0]) },
+    updateCap({ domain: 'tasks', method: 'update', description: "Update a task. Link it under an Epic with parentTaskId (or null to detach), reclassify with taskType ('task'|'epic'), schedule into a sprint with sprintId, or (re)assign via exactly one of assignedUserId (human member; null unassigns), assignedAgentRef (cloud agent, e.g. one named 'Bob') or assignedAgentHostId (agent host) — resolve ANY assignee name, person OR agent, with tasks.assignees, which returns the whole team and the id field to set (humans and agents are one team). Also supports title, description, status/lane, priority, dueDate, archived.", parameters: obj({ id: N, title: S, description: S, status: S, priority: S, dueDate: S, archived: B, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: { type: ['number', 'null'] }, sprintId: { type: ['string', 'null'] }, assignedUserId: { type: ['string', 'null'] }, assignedAgentRef: { type: ['string', 'null'] }, assignedAgentHostId: { type: ['number', 'null'] } }, ['id']) }, (a, patch) => tasksApi.update(f(a, 'id'), patch as Parameters<typeof tasksApi.update>[1])),
     { domain: 'tasks', method: 'delete', mutates: true, description: 'Delete a task.', parameters: obj({ id: N }, ['id']), run: (a) => tasksApi.delete(f(a, 'id')) },
     { domain: 'tasks', method: 'move', mutates: true, description: 'Move a task to another project board (re-keys it).', parameters: obj({ id: N, projectId: N }, ['id', 'projectId']), run: (a) => tasksApi.move(f(a, 'id'), f(a, 'projectId')) },
-    { domain: 'tasks', method: 'assignees', mutates: false, description: 'List the human members a task can be assigned to (id + name). Use this to resolve a person’s name (e.g. "Bob") to the assignedUserId expected by tasks.create / tasks.update.', parameters: EMPTY, run: () => tasksApi.assignees() },
+    { domain: 'tasks', method: 'assignees', mutates: false, description: 'List the FULL team a task can be assigned to — humans AND agents are one team. Each entry is { kind, name, …idField }: kind="human" carries assignedUserId; kind="cloud_agent" carries assignedAgentRef (a named cloud agent, e.g. "Bob"); kind="agent_host" carries assignedAgentHostId (a self-hosted runner). Resolve ANY assignee name here, then pass that ONE id field to tasks.create / tasks.update. A name that has no human match may well be an agent — check this roster before telling the user the person isn’t on the team.', parameters: EMPTY, run: () => listTaskAssignees() },
 
     // ---- Executions (runtime) -------------------------------------------
     { domain: 'executions', method: 'submit', mutates: true, description: 'Submit a task for agent execution (dispatches to an agent host or all connected hosts).', parameters: obj({ taskId: N, agentHostId: N, sessionId: S, payload: S }, ['taskId']), run: (a) => runtimeApi.submitExecution(a as Parameters<typeof runtimeApi.submitExecution>[0]) },

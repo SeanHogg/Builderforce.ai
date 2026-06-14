@@ -139,6 +139,53 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     ]);
   });
 
+  it('keeps each tool-call turn’s narration as its own block (no streaming-buffer erase)', async () => {
+    // Two tool-call turns that each narrate, then a final answer. Regression for
+    // the bug where the next turn's stream reused/erased the prior narration.
+    mockStream
+      .mockResolvedValueOnce(result({ text: 'Let me clean up the duplicate.', toolCalls: [{ id: 'a', name: 'do_thing', args: '{}' }], finishReason: 'tool_calls' }))
+      .mockResolvedValueOnce(result({ text: 'Now linking the parent.', toolCalls: [{ id: 'b', name: 'do_thing', args: '{}' }], finishReason: 'tool_calls' }))
+      .mockResolvedValueOnce(result({ text: 'All done.' }));
+    const runTool = vi.fn(async () => ({ ok: true }));
+
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 3, toolSpecs: [TOOL], runTool }),
+      { wrapper },
+    );
+
+    await act(async () => { await hook.current.send('fix the epic'); });
+
+    // Every narrating turn is its own durable bubble — none erased by the next.
+    await waitFor(() => {
+      expect(hook.current.messages.map((m) => m.content)).toEqual([
+        'fix the epic',
+        'Let me clean up the duplicate.',
+        'Now linking the parent.',
+        'All done.',
+      ]);
+    });
+    // user + 2 narrations + final answer.
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(4);
+  });
+
+  it('persists nothing extra for a pure tool-call turn with no text', async () => {
+    mockStream
+      .mockResolvedValueOnce(result({ text: '', toolCalls: [{ id: 'c1', name: 'do_thing', args: '{}' }], finishReason: 'tool_calls' }))
+      .mockResolvedValueOnce(result({ text: 'done' }));
+    const runTool = vi.fn(async () => ({ ok: true }));
+
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 9, toolSpecs: [TOOL], runTool }),
+      { wrapper },
+    );
+
+    await act(async () => { await hook.current.send('go'); });
+
+    // Empty narration ⇒ only user + final assistant persist.
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toEqual(['go', 'done']));
+  });
+
   it('honours the max-iteration cap when the model never stops calling tools', async () => {
     mockStream.mockResolvedValue(
       result({ toolCalls: [{ id: 'c', name: 'do_thing', args: '{}' }], finishReason: 'tool_calls' }),
@@ -178,7 +225,9 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     const toolMsg = secondCallMessages.find((m) => m.role === 'tool');
     expect(toolMsg?.content).toContain('"ok":false');
     expect(toolMsg?.content).toContain('no repo bound');
-    await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toEqual(['go', 'recovered']));
+    // The intermediate turn's narration ('trying') persists as its own block so
+    // the next turn's stream can't erase it; the final answer follows.
+    await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toEqual(['go', 'trying', 'recovered']));
 
     // The execution is captured: the report counts the error and names the tool.
     expect(hook.current.hasTrace).toBe(true);
