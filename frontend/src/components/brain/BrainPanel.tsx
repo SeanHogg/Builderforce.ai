@@ -21,6 +21,7 @@ import {
   useBrainChats,
   useBrainConversation,
   useBrainActions,
+  useOptionalBrainContext,
   PLATFORM_BRAIN_SYSTEM_PROMPT,
   type BrainModality,
 } from '@/lib/brain';
@@ -150,9 +151,18 @@ export function BrainPanel({
     return pooled?.baseModel ?? undefined;
   }, [personaSel, brainAgents, agentPool]);
 
-  const chats = useBrainChats(
-    pinnedProjectId != null ? { pinnedProjectId } : { filterProjectId },
-  );
+  // Share the live chat selection across co-mounted docked Brain instances (the
+  // IDE Designer left-panel and the floating drawer) via BrainContext, so
+  // switching chats in one reflects in the other. The full-page Brain Storm
+  // route owns its own selection (it's never co-mounted with the drawer).
+  const brainCtx = useOptionalBrainContext();
+  const syncSelection = !isPage && brainCtx != null;
+  const chats = useBrainChats({
+    ...(pinnedProjectId != null ? { pinnedProjectId } : { filterProjectId }),
+    ...(syncSelection
+      ? { activeChatId: brainCtx.activeChatId, onActiveChatChange: brainCtx.setActiveChatId }
+      : {}),
+  });
 
   const ensureChatId = useCallback(async () => {
     const c = await chats.create();

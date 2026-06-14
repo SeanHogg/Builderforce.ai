@@ -45,6 +45,14 @@ export interface BrainContextValue extends BrainPageContext {
   setOpen(open: boolean): void;
   /** Merge partial page context (call from a page effect). */
   setContext(patch: Partial<BrainPageContext>): void;
+  /**
+   * The chat currently selected in the docked Brain. Lifted here so co-mounted
+   * Brain instances (e.g. the IDE Designer left-panel and the floating drawer)
+   * stay on the same conversation. Distinct from `initialChatId` (a one-shot
+   * deep-link); this tracks the live selection.
+   */
+  activeChatId: number | null;
+  setActiveChatId(id: number | null): void;
 }
 
 const DEFAULT_CONTEXT: BrainPageContext = {
@@ -60,6 +68,7 @@ const BrainContext = createContext<BrainContextValue | null>(null);
 export function BrainContextProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [pageContext, setPageContext] = useState<BrainPageContext>(DEFAULT_CONTEXT);
+  const [activeChatId, setActiveChatId] = useState<number | null>(null);
 
   const setContext = useCallback((patch: Partial<BrainPageContext>) => {
     setPageContext((prev) => {
@@ -79,8 +88,8 @@ export function BrainContextProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const value = useMemo<BrainContextValue>(
-    () => ({ ...pageContext, open, setOpen, setContext }),
-    [pageContext, open, setContext],
+    () => ({ ...pageContext, open, setOpen, setContext, activeChatId, setActiveChatId }),
+    [pageContext, open, setContext, activeChatId],
   );
 
   return <BrainContext.Provider value={value}>{children}</BrainContext.Provider>;

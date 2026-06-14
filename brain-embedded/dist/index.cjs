@@ -359,6 +359,7 @@ var BrainContext = (0, import_react4.createContext)(null);
 function BrainContextProvider({ children }) {
   const [open, setOpen] = (0, import_react4.useState)(false);
   const [pageContext, setPageContext] = (0, import_react4.useState)(DEFAULT_CONTEXT);
+  const [activeChatId, setActiveChatId] = (0, import_react4.useState)(null);
   const setContext = (0, import_react4.useCallback)((patch) => {
     setPageContext((prev) => {
       const next = { ...prev, ...patch };
@@ -369,8 +370,8 @@ function BrainContextProvider({ children }) {
     });
   }, []);
   const value = (0, import_react4.useMemo)(
-    () => ({ ...pageContext, open, setOpen, setContext }),
-    [pageContext, open, setContext]
+    () => ({ ...pageContext, open, setOpen, setContext, activeChatId, setActiveChatId }),
+    [pageContext, open, setContext, activeChatId]
   );
   return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(BrainContext.Provider, { value, children });
 }
@@ -387,12 +388,23 @@ function useOptionalBrainContext() {
 var import_react5 = require("react");
 function useBrainChats(options = {}) {
   const { persistence } = useBrainConfig();
-  const { filterProjectId, pinnedProjectId } = options;
+  const { filterProjectId, pinnedProjectId, activeChatId: controlledActiveId, onActiveChatChange } = options;
   const [chats, setChats] = (0, import_react5.useState)([]);
   const [loading, setLoading] = (0, import_react5.useState)(true);
   const [error, setError] = (0, import_react5.useState)("");
-  const [activeChatId, setActiveChatId] = (0, import_react5.useState)(null);
+  const [internalActiveId, setInternalActiveId] = (0, import_react5.useState)(null);
   const assigningRef = (0, import_react5.useRef)(false);
+  const isControlled = controlledActiveId !== void 0;
+  const activeChatId = isControlled ? controlledActiveId ?? null : internalActiveId;
+  const activeIdRef = (0, import_react5.useRef)(activeChatId);
+  activeIdRef.current = activeChatId;
+  const setActiveChatId = (0, import_react5.useCallback)(
+    (id) => {
+      if (isControlled) onActiveChatChange?.(id);
+      else setInternalActiveId(id);
+    },
+    [isControlled, onActiveChatChange]
+  );
   const defaultProjectId = (0, import_react5.useCallback)(() => {
     if (pinnedProjectId != null) return pinnedProjectId;
     return filterProjectId && filterProjectId !== "none" ? Number(filterProjectId) : null;
@@ -430,7 +442,7 @@ function useBrainChats(options = {}) {
       setError(e instanceof Error ? e.message : "Failed to open chat");
       return null;
     }
-  }, [persistence, chats]);
+  }, [persistence, chats, setActiveChatId]);
   const create = (0, import_react5.useCallback)(async (opts) => {
     setError("");
     try {
@@ -443,7 +455,7 @@ function useBrainChats(options = {}) {
       setError(e instanceof Error ? e.message : "Failed to create chat");
       return null;
     }
-  }, [persistence, defaultProjectId]);
+  }, [persistence, defaultProjectId, setActiveChatId]);
   const rename = (0, import_react5.useCallback)(async (id, title) => {
     const trimmed = title.trim();
     if (!trimmed) return;
@@ -474,11 +486,11 @@ function useBrainChats(options = {}) {
     try {
       await persistence.deleteChat(id);
       setChats((prev) => prev.filter((c) => c.id !== id));
-      setActiveChatId((cur) => cur === id ? null : cur);
+      if (activeIdRef.current === id) setActiveChatId(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Delete failed");
     }
-  }, [persistence]);
+  }, [persistence, setActiveChatId]);
   const assignToProject = (0, import_react5.useCallback)(async (id, projectId) => {
     if (assigningRef.current) return;
     assigningRef.current = true;
@@ -495,7 +507,7 @@ function useBrainChats(options = {}) {
   const touch = (0, import_react5.useCallback)(async (id) => {
     await reload();
     setActiveChatId(id);
-  }, [reload]);
+  }, [reload, setActiveChatId]);
   const activeChat = (0, import_react5.useMemo)(
     () => chats.find((c) => c.id === activeChatId) ?? null,
     [chats, activeChatId]
