@@ -9,6 +9,8 @@ import { SkillTags } from '@/components/SkillTags';
 import { WorkforceCard } from './WorkforceCard';
 import { RUNTIME_LABELS } from './CloudAgentFormFields';
 import { AgentOwnerActions } from './AgentOwnerActions';
+import { AgentManifestSection } from './AgentManifestSection';
+import type { AgentManifest } from '@/lib/builderforceApi';
 import type { CloudAgentPanelTab } from './CloudAgentSlideOutPanel';
 
 /**
@@ -37,6 +39,7 @@ const pricePillStyle: React.CSSProperties = { padding: '2px 8px', borderRadius: 
 
 export function AgentCard({
   agent,
+  manifest,
   hired = false,
   onOpenPanel,
   onUnpublish,
@@ -47,6 +50,9 @@ export function AgentCard({
   unhiring = false,
 }: {
   agent: PublishedAgent;
+  /** The agent's assigned-capability manifest (skills/personas/content). Owners
+   *  always see the section (empty included); others only when one is provided. */
+  manifest?: AgentManifest;
   /** Has the current tenant already hired this agent? Drives Hire vs Unhire. */
   hired?: boolean;
   /** owner: open the slide-out panel on a given tab (edit / pricing). */
@@ -85,6 +91,10 @@ export function AgentCard({
             </span>
             <span style={pricePillStyle}>{formatAgentPrice(agent)}</span>
           </div>
+          {/* Assigned configuration + Copy manifest. Owners always see it (an empty
+              section is the "nothing configured" signal); non-owners only when the
+              caller supplies a manifest. */}
+          {(owner || manifest) && <AgentManifestSection agent={agent} manifest={manifest} />}
         </>
       }
       footer={

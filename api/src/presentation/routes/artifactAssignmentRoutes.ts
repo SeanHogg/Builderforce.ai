@@ -29,7 +29,8 @@ import {
   AssignmentScope,
 } from '../../domain/shared/types';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
-import type { HonoEnv } from '../../env';
+import { loadAgentManifests, invalidateAgentManifests } from '../../application/artifact/agentManifest';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 const VALID_TYPES = new Set(Object.values(ArtifactType));
@@ -76,6 +77,16 @@ export function createArtifactAssignmentRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ assignments: rows });
   });
 
+  // ── Per-agent capability manifests (all workforce agents of the tenant) ──
+  // The /workforce cards' "Assigned configuration" + "Copy manifest" source.
+  // Cached per tenant; invalidated on every agent-scoped assignment write below.
+
+  router.get('/agent-manifests', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const manifests = await loadAgentManifests(c.env as Env, db, tenantId);
+    return c.json({ manifests });
+  });
+
   // ── Assign an artifact ──────────────────────────────────────────────────
 
   router.post('/', requireRole(TenantRole.MANAGER), async (c) => {
@@ -118,6 +129,9 @@ export function createArtifactAssignmentRoutes(db: Db): Hono<HonoEnv> {
       })
       .onConflictDoNothing();
 
+    // Keep the cached per-agent manifests (the /workforce cards) in sync on write.
+    if (body.scope === AssignmentScope.AGENT) await invalidateAgentManifests(c.env as Env, tenantId);
+
     return c.json({
       ok: true,
       artifactType: body.artifactType,
@@ -152,6 +166,8 @@ export function createArtifactAssignmentRoutes(db: Db): Hono<HonoEnv> {
           eq(artifactAssignments.scope, scope),
           eq(artifactAssignments.scopeId, scopeId),
         ));
+
+      if (scope === AssignmentScope.AGENT) await invalidateAgentManifests(c.env as Env, tenantId);
 
       return c.body(null, 204);
     },
