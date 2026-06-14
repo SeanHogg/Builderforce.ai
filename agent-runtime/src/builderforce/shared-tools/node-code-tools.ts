@@ -177,7 +177,9 @@ export async function runProjectKnowledge(projectRoot: string, query: string): P
 
 // ── codebase_search (ripgrep/grep keyword ranking) ───────────────────────────────
 
-const IGNORED_DIRS = [
+/** Directories never walked by the on-prem code tools (searcher + file lister). Shared
+ *  so the disk capability provider's `list_files` uses the SAME ignore set (DRY). */
+export const IGNORED_DIRS = [
   "node_modules", ".git", "dist", "build", ".next", ".nuxt", "coverage", ".cache", "__pycache__", ".venv", "vendor",
 ];
 const SOURCE_EXTENSIONS = [

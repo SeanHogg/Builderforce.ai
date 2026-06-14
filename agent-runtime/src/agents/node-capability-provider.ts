@@ -39,22 +39,11 @@ import type {
   RepoSearchResult,
   RepoWriteResult,
 } from "@builderforce/agent-tools";
-import { runCodebaseSearch } from "../builderforce/shared-tools/node-code-tools.js";
+import { IGNORED_DIRS, runCodebaseSearch } from "../builderforce/shared-tools/node-code-tools.js";
 
-/** Directories never walked by `list_files` (mirrors the on-prem searcher's ignores). */
-const LIST_IGNORED_DIRS = new Set([
-  "node_modules",
-  ".git",
-  "dist",
-  "build",
-  ".next",
-  ".nuxt",
-  "coverage",
-  ".cache",
-  "__pycache__",
-  ".venv",
-  "vendor",
-]);
+/** Directories never walked by `list_files` — the SAME ignore set the on-prem searcher
+ *  uses (DRY: one source in node-code-tools), as a Set for O(1) membership. */
+const LIST_IGNORED_DIRS = new Set(IGNORED_DIRS);
 const LIST_MAX_FILES = 5_000;
 
 /** The capability set an on-prem disk surface backs for the converged file tools. No

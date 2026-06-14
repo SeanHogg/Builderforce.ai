@@ -33,6 +33,10 @@ import { buildNodeCapabilityProvider } from "./node-capability-provider.js";
  *  exact objects. */
 const CONVERGED_FILE_TOOLS = [writeFileTool, editFileTool, deleteFileTool, listFilesTool] as const;
 
+/** The registry is workspace-INDEPENDENT (the tool defs are static), so it is built once
+ *  at module load — only the disk provider is per-session (it closes over `workspaceRoot`). */
+const CONVERGED_REGISTRY = new ToolRegistry(CONVERGED_FILE_TOOLS);
+
 /** Shared name → model-facing name, so converged tools replace the native ones under the
  *  SAME name the loop/display already use. */
 const NATIVE_NAME_ALIASES: Readonly<Record<string, string>> = {
@@ -51,6 +55,5 @@ export const CONVERGED_TOOL_NAMES: ReadonlySet<string> = new Set(["write", "edit
  */
 export function buildConvergedFileTools(params: { workspaceRoot: string }): AnyAgentTool[] {
   const provider = buildNodeCapabilityProvider({ workspaceRoot: params.workspaceRoot });
-  const registry = new ToolRegistry(CONVERGED_FILE_TOOLS);
-  return registryToAgentTools(registry, provider, params.workspaceRoot, NATIVE_NAME_ALIASES);
+  return registryToAgentTools(CONVERGED_REGISTRY, provider, params.workspaceRoot, NATIVE_NAME_ALIASES);
 }

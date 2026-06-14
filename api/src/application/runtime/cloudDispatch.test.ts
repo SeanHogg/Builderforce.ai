@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, isTerminalExecutionStatus,
   parseFollowUp, buildFollowUpPayload,
+  parseModel, parseCloudAgentRef, parseRepoId, parseRemediation,
+  markReaperRequeued, wasReaperRequeued, withDefaultModel,
 } from './cloudDispatch';
 
 describe('chooseCloudExecutor', () => {
@@ -114,5 +116,67 @@ describe('resolveCloudSurface', () => {
     expect(resolveCloudSurface(undefined, false)).toBe('durable');
     expect(resolveCloudSurface(null, false)).toBe('durable');
     expect(resolveCloudSurface('something-else', false)).toBe('durable');
+  });
+});
+
+// ── Defensive boundaries: every payload reader is fed hostile/malformed input ──
+// These parsers are the dispatch input layer — they take an UNTRUSTED execution
+// payload string. A bad payload must degrade to a safe default (undefined/null/
+// unchanged), NEVER throw and abort a dispatch. We inject the wrong JSON shape,
+// the wrong value type, and non-JSON garbage at each one.
+describe('payload parsers — malformed / wrong-type input is defended', () => {
+  // Inputs that are NOT a JSON object with the expected field. `'null'` is the
+  // sharp edge: JSON.parse('null') === null, so a naive `p.field` would throw.
+  const GARBAGE = [undefined, '', 'not json at all', '{bad', 'null', '[]', '"a string"', '42'] as const;
+
+  it('parseModel: garbage in → undefined out, valid string trimmed, wrong type ignored', () => {
+    for (const g of GARBAGE) expect(parseModel(g)).toBeUndefined();
+    expect(parseModel(JSON.stringify({ model: 42 }))).toBeUndefined();          // wrong type
+    expect(parseModel(JSON.stringify({ model: '   ' }))).toBeUndefined();        // blank
+    expect(parseModel(JSON.stringify({ model: '  claude-x ' }))).toBe('claude-x'); // trimmed
+  });
+
+  it('parseCloudAgentRef: garbage in → undefined out, wrong type ignored, valid trimmed', () => {
+    for (const g of GARBAGE) expect(parseCloudAgentRef(g)).toBeUndefined();
+    expect(parseCloudAgentRef(JSON.stringify({ cloudAgentRef: { id: 1 } }))).toBeUndefined();
+    expect(parseCloudAgentRef(JSON.stringify({ cloudAgentRef: '  agent-7 ' }))).toBe('agent-7');
+  });
+
+  it('parseRepoId: tri-state survives garbage (absent=undefined, wrong-type=clear, valid=trimmed)', () => {
+    for (const g of GARBAGE) expect(parseRepoId(g)).toBeUndefined();             // absent / unparseable → leave pin
+    expect(parseRepoId(JSON.stringify({ other: 1 }))).toBeUndefined();           // key absent → leave pin
+    expect(parseRepoId(JSON.stringify({ repoId: 42 }))).toBe('');                // wrong type → explicit clear
+    expect(parseRepoId(JSON.stringify({ repoId: null }))).toBe('');              // explicit null → clear
+    expect(parseRepoId(JSON.stringify({ repoId: ' r1 ' }))).toBe('r1');          // valid → trimmed pin
+  });
+
+  it('parseRemediation: only a well-formed build_failure block parses; everything else → null', () => {
+    for (const g of GARBAGE) expect(parseRemediation(g)).toBeNull();
+    expect(parseRemediation(JSON.stringify({ remediation: { kind: 'other', buildError: 'x' } }))).toBeNull();
+    expect(parseRemediation(JSON.stringify({ remediation: { kind: 'build_failure', buildError: 99 } }))).toBeNull();
+    // attempt/maxAttempts of the wrong type fall back to their safe defaults.
+    expect(
+      parseRemediation(JSON.stringify({ remediation: { kind: 'build_failure', buildError: 'boom', attempt: '3', runUrl: 5 } })),
+    ).toEqual({ attempt: 1, maxAttempts: 2, buildError: 'boom', runUrl: null });
+  });
+
+  it('markReaperRequeued / wasReaperRequeued: a non-JSON payload resets to a clean flagged object', () => {
+    // Garbage prior payload must not corrupt the one-retry flag (else the reaper loops).
+    expect(JSON.parse(markReaperRequeued('not json')).reaperRequeued).toBe(true);
+    expect(JSON.parse(markReaperRequeued(undefined)).reaperRequeued).toBe(true);
+    expect(JSON.parse(markReaperRequeued(JSON.stringify({ model: 'm' }))).model).toBe('m'); // preserves real fields
+    // The reader is strict-`=== true`: a stringy "true" must NOT count as flagged.
+    expect(wasReaperRequeued(JSON.stringify({ reaperRequeued: 'true' }))).toBe(false);
+    expect(wasReaperRequeued('not json')).toBe(false);
+    expect(wasReaperRequeued(undefined)).toBe(false);
+    expect(wasReaperRequeued(JSON.stringify({ reaperRequeued: true }))).toBe(true);
+  });
+
+  it('withDefaultModel: an unparseable payload is returned UNCHANGED (never clobbered)', () => {
+    expect(withDefaultModel('not json', 'm')).toBe('not json');                  // can't parse → leave as-is
+    expect(withDefaultModel(undefined, undefined)).toBeUndefined();              // nothing to add
+    expect(withDefaultModel(JSON.stringify({ model: 'pinned' }), 'm')).toBe(JSON.stringify({ model: 'pinned' })); // pin wins
+    expect(JSON.parse(withDefaultModel(undefined, 'm')!).model).toBe('m');       // seeds the fallback
+    expect(JSON.parse(withDefaultModel(JSON.stringify({ x: 1 }), 'm')!)).toEqual({ x: 1, model: 'm' });
   });
 });
