@@ -13,7 +13,6 @@ import {
   COMPETITOR_SLUG_TO_KEY,
 } from '@/lib/content';
 
-export const runtime = 'edge';
 export const dynamicParams = false;
 
 export function generateStaticParams() {

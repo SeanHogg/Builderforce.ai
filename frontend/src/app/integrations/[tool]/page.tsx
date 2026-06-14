@@ -6,7 +6,6 @@ import { pageMetadata } from '@/lib/seo';
 import { integrationSchema } from '@/lib/structured-data';
 import { SEO_INTEGRATIONS, INTEGRATION_SLUG_MAP } from '@/lib/content';
 
-export const runtime = 'edge';
 export const dynamicParams = false;
 
 export function generateStaticParams() {
