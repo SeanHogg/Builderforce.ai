@@ -489,7 +489,7 @@ function useBrainChats(options = {}) {
 }
 
 // src/useBrainConversation.ts
-import { useCallback as useCallback4, useEffect as useEffect4, useMemo as useMemo6, useRef as useRef3, useState as useState5 } from "react";
+import { useCallback as useCallback4, useEffect as useEffect4, useRef as useRef3, useState as useState5 } from "react";
 
 // src/brainTriage.ts
 function isFailedToolResult(result) {
@@ -545,9 +545,64 @@ function buildBrainTriageReport(opts) {
   return lines.join("\n");
 }
 
-// src/useBrainConversation.ts
+// src/brainRunStore.ts
 var MAX_TOOL_ITERATIONS = 25;
 var HISTORY_WINDOW = 80;
+var cells = /* @__PURE__ */ new Map();
+var EMPTY_SNAPSHOT = {
+  running: false,
+  streamingText: "",
+  error: "",
+  pendingConfirm: null,
+  messagesEpoch: 0,
+  lastAssistant: null,
+  hasTrace: false
+};
+function makeCell() {
+  return {
+    transcript: [],
+    trace: [],
+    running: false,
+    streamingText: "",
+    error: "",
+    pendingConfirm: null,
+    confirmResolver: null,
+    lastAssistant: null,
+    messagesEpoch: 0,
+    listeners: /* @__PURE__ */ new Set(),
+    snapshot: EMPTY_SNAPSHOT
+  };
+}
+function getCell(chatId) {
+  let c = cells.get(chatId);
+  if (!c) {
+    c = makeCell();
+    cells.set(chatId, c);
+  }
+  return c;
+}
+function emit(c) {
+  c.snapshot = {
+    running: c.running,
+    streamingText: c.streamingText,
+    error: c.error,
+    pendingConfirm: c.pendingConfirm,
+    messagesEpoch: c.messagesEpoch,
+    lastAssistant: c.lastAssistant,
+    hasTrace: c.trace.length > 0
+  };
+  for (const l of c.listeners) l();
+}
+function pushTrace(c, ev) {
+  c.trace.push(ev);
+  emit(c);
+}
+function nowMs() {
+  return typeof Date !== "undefined" ? Date.now() : 0;
+}
+function nowIso() {
+  return typeof Date !== "undefined" ? (/* @__PURE__ */ new Date()).toISOString() : "";
+}
 function parseArgs(raw) {
   try {
     return raw ? JSON.parse(raw) : {};
@@ -560,6 +615,161 @@ function windowed(convo) {
   while (w.length > 0 && w[0].role === "tool") w = w.slice(1);
   return w;
 }
+function subscribeRun(chatId, listener) {
+  const c = getCell(chatId);
+  c.listeners.add(listener);
+  return () => {
+    c.listeners.delete(listener);
+  };
+}
+function getRunSnapshot(chatId) {
+  if (chatId == null) return EMPTY_SNAPSHOT;
+  return cells.get(chatId)?.snapshot ?? EMPTY_SNAPSHOT;
+}
+function isRunning(chatId) {
+  return chatId != null && (cells.get(chatId)?.running ?? false);
+}
+function getRunTrace(chatId) {
+  if (chatId == null) return [];
+  return cells.get(chatId)?.trace ?? [];
+}
+function resolveRunConfirm(chatId, ok) {
+  const c = cells.get(chatId);
+  if (!c || !c.confirmResolver) return;
+  const resolve = c.confirmResolver;
+  c.confirmResolver = null;
+  c.pendingConfirm = null;
+  emit(c);
+  resolve(ok);
+}
+async function startRun(chatId, req) {
+  const c = getCell(chatId);
+  if (c.running) return;
+  c.running = true;
+  c.error = "";
+  c.streamingText = "";
+  if (req.seed && c.transcript.length === 0) c.transcript = req.seed.slice();
+  if (req.userTurn !== void 0) c.transcript.push({ role: "user", content: req.userTurn });
+  emit(c);
+  try {
+    await runLoop(chatId, c, req);
+  } catch (e) {
+    c.error = e instanceof Error ? e.message : "Reply failed";
+  } finally {
+    c.running = false;
+    c.streamingText = "";
+    emit(c);
+  }
+}
+async function runLoop(chatId, c, req) {
+  const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity } = req;
+  const convo = c.transcript;
+  const tools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
+  for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+    c.streamingText = "";
+    emit(c);
+    const working = [
+      { role: "system", content: resolvedSystemPrompt },
+      ...windowed(convo)
+    ];
+    const llmStart = nowMs();
+    let result;
+    try {
+      result = await stream(
+        { messages: working, tools, tool_choice: tools ? "auto" : void 0, model },
+        { onTextDelta: (d) => {
+          c.streamingText += d;
+          emit(c);
+        } }
+      );
+    } catch (e) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "error",
+        label: "llm.complete",
+        durationMs: nowMs() - llmStart,
+        args: { model: model ?? "default", step: iter },
+        result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+        isError: true
+      });
+      throw e;
+    }
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "llm",
+      label: "llm.complete",
+      durationMs: nowMs() - llmStart,
+      args: { model: model ?? "default", step: iter, toolCalls: result.toolCalls.length },
+      result: `${result.toolCalls.length} tool call(s) \xB7 ${result.text.length} chars \xB7 finish: ${result.finishReason ?? "\u2014"}`
+    });
+    if (result.text.trim()) {
+      pushTrace(c, { ts: nowIso(), category: "message", label: "agent.message", args: { step: iter }, result: result.text });
+    }
+    if (result.toolCalls.length > 0 && runTool) {
+      convo.push({
+        role: "assistant",
+        content: result.text,
+        tool_calls: result.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: "function",
+          function: { name: tc.name, arguments: tc.args }
+        }))
+      });
+      for (const tc of result.toolCalls) {
+        const args = parseArgs(tc.args);
+        if (needsConfirm && needsConfirm({ name: tc.name, args })) {
+          const ok = await new Promise((resolve) => {
+            c.pendingConfirm = { name: tc.name, args };
+            c.confirmResolver = resolve;
+            emit(c);
+          });
+          if (!ok) {
+            convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify({ cancelled: true, reason: "User declined this action." }) });
+            pushTrace(c, { ts: nowIso(), category: "tool", label: tc.name, args, result: { cancelled: true, reason: "User declined this action." } });
+            continue;
+          }
+        }
+        const toolStart = nowMs();
+        let out;
+        try {
+          out = await runTool(tc.name, args);
+        } catch (e) {
+          const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+          out = { ok: false, error: message };
+          convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(out) });
+          pushTrace(c, { ts: nowIso(), category: "tool", label: tc.name, durationMs: nowMs() - toolStart, args, result: out, isError: true });
+          continue;
+        }
+        convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(out ?? null) });
+        pushTrace(c, { ts: nowIso(), category: "tool", label: tc.name, durationMs: nowMs() - toolStart, args, result: out ?? null, isError: isFailedToolResult(out) });
+      }
+      c.streamingText = "";
+      emit(c);
+      continue;
+    }
+    const finalText = result.text.trim() || "No response.";
+    convo.push({ role: "assistant", content: finalText });
+    const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
+    c.streamingText = "";
+    c.lastAssistant = assistantMsg;
+    c.messagesEpoch += 1;
+    emit(c);
+    onActivity?.(chatId);
+    return;
+  }
+  c.streamingText = "";
+  pushTrace(c, {
+    ts: nowIso(),
+    category: "error",
+    label: "agent.loop",
+    result: `Loop exhausted after ${MAX_TOOL_ITERATIONS} tool iterations`,
+    isError: true
+  });
+  c.error = "The assistant kept calling tools without finishing. Try rephrasing.";
+  emit(c);
+}
+
+// src/useBrainConversation.ts
 function useBrainConversation(options) {
   const { persistence, resolveSystemPrompt, stream } = useBrainConfig();
   const {
@@ -570,29 +780,25 @@ function useBrainConversation(options) {
     model,
     toolSpecs,
     runTool,
-    confirmTool,
+    needsConfirm,
     ensureChatId,
     onActivity
   } = options;
   const [messages, setMessages] = useState5([]);
   const [loadingMessages, setLoadingMessages] = useState5(false);
-  const [sending, setSending] = useState5(false);
-  const [error, setError] = useState5("");
-  const [streamingText, setStreamingText] = useState5("");
+  const [localSending, setLocalSending] = useState5(false);
+  const [localError, setLocalError] = useState5("");
   const [copiedMessageId, setCopiedMessageId] = useState5(null);
   const [feedbackMap, setFeedbackMap] = useState5({});
   const [pendingAttachments, setPendingAttachments] = useState5([]);
   const [uploading, setUploading] = useState5(false);
   const autoRepliedChatIdRef = useRef3(null);
-  const transcriptRef = useRef3(/* @__PURE__ */ new Map());
-  const traceRef = useRef3(/* @__PURE__ */ new Map());
-  const [traceVersion, setTraceVersion] = useState5(0);
-  const pushTrace = useCallback4((id, ev) => {
-    const list = traceRef.current.get(id) ?? [];
-    list.push(ev);
-    traceRef.current.set(id, list);
-    setTraceVersion((v) => v + 1);
-  }, []);
+  const [snapshot, setSnapshot] = useState5(() => getRunSnapshot(chatId));
+  useEffect4(() => {
+    setSnapshot(getRunSnapshot(chatId));
+    if (chatId == null) return;
+    return subscribeRun(chatId, () => setSnapshot(getRunSnapshot(chatId)));
+  }, [chatId]);
   useEffect4(() => {
     let cancelled = false;
     if (chatId == null) {
@@ -600,11 +806,11 @@ function useBrainConversation(options) {
       return;
     }
     setLoadingMessages(true);
-    setError("");
+    setLocalError("");
     persistence.getMessages(chatId).then((list) => {
       if (!cancelled) setMessages(list);
     }).catch((e) => {
-      if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load messages");
+      if (!cancelled) setLocalError(e instanceof Error ? e.message : "Failed to load messages");
     }).finally(() => {
       if (!cancelled) setLoadingMessages(false);
     });
@@ -612,6 +818,11 @@ function useBrainConversation(options) {
       cancelled = true;
     };
   }, [persistence, chatId]);
+  useEffect4(() => {
+    const msg = snapshot.lastAssistant;
+    if (!msg) return;
+    setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
+  }, [snapshot.messagesEpoch, snapshot.lastAssistant]);
   useEffect4(() => {
     const map = {};
     for (const msg of messages) {
@@ -624,163 +835,41 @@ function useBrainConversation(options) {
     }
     setFeedbackMap(map);
   }, [messages]);
-  const resolvedSystemPrompt = useMemo6(() => {
-    const base = systemPrompt ?? resolveSystemPrompt(modality);
-    return extraSystem ? `${base}
-${extraSystem}` : base;
-  }, [resolveSystemPrompt, systemPrompt, modality, extraSystem]);
-  const startUserTurn = useCallback4((id, priorHistory, userContent) => {
-    let convo = transcriptRef.current.get(id);
-    if (!convo) {
-      convo = priorHistory.map((m) => ({
-        role: m.role,
-        content: m.content
-      }));
-      transcriptRef.current.set(id, convo);
-    }
-    convo.push({ role: "user", content: userContent });
-  }, []);
-  const runAgentLoop = useCallback4(
-    async (id) => {
-      const convo = transcriptRef.current.get(id) ?? [];
-      transcriptRef.current.set(id, convo);
-      const tools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
-      for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
-        setStreamingText("");
-        const working = [
-          { role: "system", content: resolvedSystemPrompt },
-          ...windowed(convo)
-        ];
-        const llmStart = Date.now();
-        let result;
-        try {
-          result = await stream(
-            { messages: working, tools, tool_choice: tools ? "auto" : void 0, model },
-            { onTextDelta: (d) => setStreamingText((s) => s + d) }
-          );
-        } catch (e) {
-          pushTrace(id, {
-            ts: (/* @__PURE__ */ new Date()).toISOString(),
-            category: "error",
-            label: "llm.complete",
-            durationMs: Date.now() - llmStart,
-            args: { model: model ?? "default", step: iter },
-            result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
-            isError: true
-          });
-          throw e;
-        }
-        pushTrace(id, {
-          ts: (/* @__PURE__ */ new Date()).toISOString(),
-          category: "llm",
-          label: "llm.complete",
-          durationMs: Date.now() - llmStart,
-          args: { model: model ?? "default", step: iter, toolCalls: result.toolCalls.length },
-          result: `${result.toolCalls.length} tool call(s) \xB7 ${result.text.length} chars \xB7 finish: ${result.finishReason ?? "\u2014"}`
-        });
-        if (result.text.trim()) {
-          pushTrace(id, {
-            ts: (/* @__PURE__ */ new Date()).toISOString(),
-            category: "message",
-            label: "agent.message",
-            args: { step: iter },
-            result: result.text
-          });
-        }
-        if (result.toolCalls.length > 0 && runTool) {
-          convo.push({
-            role: "assistant",
-            content: result.text,
-            tool_calls: result.toolCalls.map((tc) => ({
-              id: tc.id,
-              type: "function",
-              function: { name: tc.name, arguments: tc.args }
-            }))
-          });
-          for (const tc of result.toolCalls) {
-            const args = parseArgs(tc.args);
-            if (confirmTool && !await confirmTool({ name: tc.name, args })) {
-              convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify({ cancelled: true, reason: "User declined this action." }) });
-              pushTrace(id, {
-                ts: (/* @__PURE__ */ new Date()).toISOString(),
-                category: "tool",
-                label: tc.name,
-                args,
-                result: { cancelled: true, reason: "User declined this action." }
-              });
-              continue;
-            }
-            const toolStart = Date.now();
-            let out;
-            try {
-              out = await runTool(tc.name, args);
-            } catch (e) {
-              const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-              out = { ok: false, error: message };
-              convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(out) });
-              pushTrace(id, {
-                ts: (/* @__PURE__ */ new Date()).toISOString(),
-                category: "tool",
-                label: tc.name,
-                durationMs: Date.now() - toolStart,
-                args,
-                result: out,
-                isError: true
-              });
-              continue;
-            }
-            convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(out ?? null) });
-            pushTrace(id, {
-              ts: (/* @__PURE__ */ new Date()).toISOString(),
-              category: "tool",
-              label: tc.name,
-              durationMs: Date.now() - toolStart,
-              args,
-              result: out ?? null,
-              isError: isFailedToolResult(out)
-            });
-          }
-          setStreamingText("");
-          continue;
-        }
-        const finalText = result.text.trim() || "No response.";
-        convo.push({ role: "assistant", content: finalText });
-        const [assistantMsg] = await persistence.sendMessages(id, [{ role: "assistant", content: finalText }]);
-        setMessages((prev) => [...prev, assistantMsg]);
-        setStreamingText("");
-        onActivity?.(id);
-        return;
-      }
-      setStreamingText("");
-      const exhausted = "The assistant kept calling tools without finishing. Try rephrasing.";
-      pushTrace(id, {
-        ts: (/* @__PURE__ */ new Date()).toISOString(),
-        category: "error",
-        label: "agent.loop",
-        result: `Loop exhausted after ${MAX_TOOL_ITERATIONS} tool iterations`,
-        isError: true
-      });
-      setError(exhausted);
-    },
-    [persistence, stream, resolvedSystemPrompt, toolSpecs, runTool, confirmTool, onActivity, model, pushTrace]
+  const resolvedSystemPrompt = systemPrompt ?? resolveSystemPrompt(modality);
+  const fullSystemPrompt = extraSystem ? `${resolvedSystemPrompt}
+${extraSystem}` : resolvedSystemPrompt;
+  const buildRequest = useCallback4(
+    (seed, userTurn) => ({
+      resolvedSystemPrompt: fullSystemPrompt,
+      tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0,
+      model,
+      runTool,
+      needsConfirm,
+      stream,
+      persistence,
+      onActivity,
+      seed,
+      userTurn
+    }),
+    [fullSystemPrompt, toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity]
   );
   const send = useCallback4(
     async (text) => {
       const trimmed = text.trim();
-      if (!trimmed || sending) return;
+      if (!trimmed || localSending || isRunning(chatId)) return;
       let id = chatId;
       if (id == null) {
         id = await ensureChatId?.() ?? null;
         if (id == null) {
-          setError("Could not start a chat.");
+          setLocalError("Could not start a chat.");
           return;
         }
       }
       autoRepliedChatIdRef.current = id;
       const attachments = [...pendingAttachments];
       setPendingAttachments([]);
-      setSending(true);
-      setError("");
+      setLocalSending(true);
+      setLocalError("");
       let displayContent = trimmed;
       if (attachments.length > 0) {
         const refs = attachments.map((a) => `[Attached: ${a.name}](${persistence.uploadUrl(a.key)})`).join("\n");
@@ -793,36 +882,42 @@ ${refs}`;
       let modelContent = displayContent;
       if (imageAtts.length > 0) {
         const nonImageRefs = attachments.filter((a) => !a.imageUrl).map((a) => `[Attached: ${a.name}](${persistence.uploadUrl(a.key)})`).join("\n");
-        const text2 = [trimmed, nonImageRefs].filter(Boolean).join("\n\n");
+        const textPart = [trimmed, nonImageRefs].filter(Boolean).join("\n\n");
         modelContent = [
-          { type: "text", text: text2 },
+          { type: "text", text: textPart },
           ...imageAtts.map((a) => ({ type: "image_url", image_url: { url: a.imageUrl } }))
         ];
       }
       try {
         const [userMsg] = await persistence.sendMessages(id, [{ role: "user", content: displayContent, metadata }]);
         setMessages((prev) => [...prev, userMsg]);
-        startUserTurn(id, messages, modelContent);
-        await runAgentLoop(id);
+        const seed = messages.map((m) => ({
+          role: m.role,
+          content: m.content
+        }));
+        await startRun(id, buildRequest(seed, modelContent));
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Send failed");
+        setLocalError(e instanceof Error ? e.message : "Send failed");
       } finally {
-        setSending(false);
+        setLocalSending(false);
       }
     },
-    [persistence, chatId, sending, pendingAttachments, messages, ensureChatId, runAgentLoop, startUserTurn]
+    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest]
   );
   useEffect4(() => {
-    if (chatId == null || loadingMessages || sending || messages.length === 0) return;
+    if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
+    if (isRunning(chatId)) return;
     const last = messages[messages.length - 1];
     if (last.role !== "user") return;
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
-    setSending(true);
-    setError("");
-    startUserTurn(chatId, messages.slice(0, -1), last.content);
-    runAgentLoop(chatId).catch((e) => setError(e instanceof Error ? e.message : "Reply failed")).finally(() => setSending(false));
-  }, [chatId, loadingMessages, sending, messages, runAgentLoop, startUserTurn]);
+    setLocalError("");
+    const seed = messages.slice(0, -1).map((m) => ({
+      role: m.role,
+      content: m.content
+    }));
+    void startRun(chatId, buildRequest(seed, last.content));
+  }, [chatId, loadingMessages, localSending, messages, buildRequest]);
   const copyMessage = useCallback4(async (msg) => {
     try {
       await navigator.clipboard.writeText(msg.content);
@@ -861,7 +956,7 @@ ${refs}`;
       }
       setPendingAttachments((prev) => [...prev, attachment]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed");
+      setLocalError(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setUploading(false);
     }
@@ -869,26 +964,26 @@ ${refs}`;
   const removeAttachment = useCallback4((key) => {
     setPendingAttachments((prev) => prev.filter((a) => a.key !== key));
   }, []);
-  const activeTrace = chatId != null ? traceRef.current.get(chatId) ?? [] : [];
-  const hasTrace = activeTrace.length > 0;
-  void traceVersion;
+  const resolveConfirm = useCallback4((ok) => {
+    if (chatId != null) resolveRunConfirm(chatId, ok);
+  }, [chatId]);
   const buildTriageReport = useCallback4(
     (agentLabel) => buildBrainTriageReport({
       capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      events: chatId != null ? traceRef.current.get(chatId) ?? [] : [],
+      events: getRunTrace(chatId),
       messages,
       chatId,
       agentLabel,
-      error
+      error: localError || snapshot.error
     }),
-    [chatId, messages, error]
+    [chatId, messages, localError, snapshot.error]
   );
   return {
     messages,
     loadingMessages,
-    sending,
-    error,
-    streamingText,
+    sending: localSending || snapshot.running,
+    error: localError || snapshot.error,
+    streamingText: snapshot.streamingText,
     copiedMessageId,
     feedbackMap,
     pendingAttachments,
@@ -898,8 +993,10 @@ ${refs}`;
     submitFeedback,
     attach,
     removeAttachment,
-    setError,
-    hasTrace,
+    setError: setLocalError,
+    pendingConfirm: snapshot.pendingConfirm,
+    resolveConfirm,
+    hasTrace: snapshot.hasTrace,
     buildTriageReport
   };
 }

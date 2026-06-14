@@ -415,15 +415,17 @@ interface UseBrainConversationOptions {
     /** Dispatch a tool call to the registry. */
     runTool?: (name: string, args: unknown) => Promise<unknown>;
     /**
-     * Confirm a tool call before it runs (the human-in-the-loop gate). Return
-     * false to skip the call — a `{ cancelled: true }` result is fed back to the
-     * model so it can adjust. Omit to run every requested tool immediately.
+     * Pure predicate: return true to pause the loop for an explicit user
+     * confirmation before the tool runs (the human-in-the-loop gate). The prompt
+     * UI is driven by `pendingConfirm` + `resolveConfirm` on the return value, so
+     * the gate survives a navigation that swaps which Brain panel is mounted.
      * Hosts typically gate only mutating tools (see BrainActions `isMutating`).
+     * Omit to run every requested tool immediately.
      */
-    confirmTool?: (req: {
+    needsConfirm?: (req: {
         name: string;
         args: unknown;
-    }) => Promise<boolean>;
+    }) => boolean;
     /** Create-on-demand when sending without an active chat; returns the new chat id. */
     ensureChatId?: () => Promise<number | null>;
     /** Notify the host (chats hook) that this chat got new activity. */
@@ -446,6 +448,13 @@ interface UseBrainConversation {
     attach(file: File): Promise<void>;
     removeAttachment(key: string): void;
     setError(msg: string): void;
+    /** A tool call awaiting the user's Approve/Cancel decision (or null). */
+    pendingConfirm: {
+        name: string;
+        args: unknown;
+    } | null;
+    /** Resolve the pending confirmation. */
+    resolveConfirm(ok: boolean): void;
     /**
      * True once the active chat has any recorded execution steps (LLM/tool/error)
      * — drives the "capture execution" affordance.
