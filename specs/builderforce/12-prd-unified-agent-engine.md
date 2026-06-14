@@ -1,6 +1,9 @@
 # 12 — PRD: Unified Agent Engine (one loop, one tool contract, V3-ready)
 
-**Status: PHASES A + D DONE & VERIFIED; PHASE B/C BLOCKED on a live-verification environment (2026-06-14).**
+**Status: PHASES A + D DONE & VERIFIED; PHASE B TOOL-CONTRACT CONVERGENCE LANDED for the file
+subset (built + wired + unit-tested, config opt-in `tools.fs.convergedFileTools`); only the live
+cross-provider smoke test + default-on flip + sandbox-fs-bridge provider + read/exec/process convergence
+remain (2026-06-14).**
 On-prem now drives the **shared `AgentEngine` contract** (same interface the cloud `CloudToolLoopEngine`
 implements) and both surfaces resolve engines through one shared `resolveEngineById` helper — so a V3 is
 a sibling `AgentEngine` registered the same way on either surface. The user's primary ask ("easily swap
@@ -348,3 +351,47 @@ sandbox/image-read/per-provider-schema hardening holds.
   bridge) = **9/9 passed**. No code changed; Phases A + D intact, the live loops untouched and working,
   no dead/speculative code added. The Consolidated Gap Register entry (README "Unified Agent Engine")
   already carries the gated Phase B/C remainder + the exact live gate — no new gap to log.
+
+**2026-06-14 — Phase B tool-CONTRACT convergence LANDED for the file subset (operator: "close the
+blocker").** Superseding the "keep gated" decision above. The on-prem session loop can now source its
+overlapping FILE tools from the shared `@builderforce/agent-tools` registry instead of a second native
+copy — `registryToAgentTools` has a PRODUCTION caller and the shared `core-tools` are the single
+definition for the converged subset. Landed as a config opt-in (default OFF) so the live default path is
+untouched and the only remaining step is a flag flip after a cross-provider smoke test — i.e. the live
+gate shrank from "can't land headless" to "flip one flag after one verification."
+- **New — the missing Node concretion:** [`agents/node-capability-provider.ts`](../../agent-runtime/src/agents/node-capability-provider.ts)
+  `buildNodeCapabilityProvider({workspaceRoot})` — the disk twin of cloud `buildCloudProvider`:
+  `repoRead` (list via a guarded tree-walk that skips `node_modules`/`.git`/…, read via `node:fs`,
+  search via the shared `runCodebaseSearch` backend — DRY), `repoWrite` (write = mkdir-p + overwrite,
+  edit = BOM/CRLF-tolerant exact-unique replace faithful to native `edit`, delete = rm with a benign
+  no-op on a missing file). Every path resolves INSIDE `workspaceRoot`; a `..`/absolute escape is
+  rejected (self-guarding — no external `workspaceOnly` wrapper needed).
+- **New — the production caller:** [`agents/converged-coding-tools.ts`](../../agent-runtime/src/agents/converged-coding-tools.ts)
+  `buildConvergedFileTools({workspaceRoot})` = `registryToAgentTools(registry, nodeProvider, root, aliases)`
+  over `[writeFileTool, editFileTool, deleteFileTool, listFilesTool]`, exposing shared `write_file`→
+  **`write`** and `edit_file`→**`edit`** (native names preserved → the model-facing contract AND the
+  `tool-display.json` keys are unchanged); `delete_file`/`list_files` are additive (the native base loop
+  had neither). `read`/`exec`/`process`/`search` stay native (read = images + model-context-scaled
+  budgets the text-only shared `read_file` cannot yet express; exec/process = shell/streaming — the §5
+  Phase B prereqs).
+- **Adapter:** `toAgentTool`/`registryToAgentTools` gained an optional `exposedName`/`aliases` so a shared
+  def is offered under its native name (PRD §5 Phase B(4)) — backward-compatible (extra optional args; the
+  2 existing adapter tests still pass).
+- **Wired LIVE (config opt-in):** `createBuilderForceAgentsCodingTools` takes `convergedFileTools?`
+  (default from new `tools.fs.convergedFileTools`, default OFF). When on AND **non-sandboxed**, native
+  `write`/`edit` are skipped and the converged set is folded into the tool array BEFORE the existing
+  owner-only/policy/`normalizeToolParameters`/before-tool-call-hook/abort pipeline — so the hardening is
+  preserved, not bypassed. Sandboxed sessions ignore it (the disk provider does not use the fs-bridge —
+  the sandbox-aware provider is the documented follow-up). Removed the now-dead `execToolName` local.
+- **Verification (headless):** `pnpm tsgo` 0; `oxlint --type-aware` 0; **25 tests green** —
+  `node-capability-provider.test.ts` (6: write/read/list-ignores/edit-unique+replaceAll/delete-noop/
+  traversal-reject), `converged-coding-tools.test.ts` (3: native-name aliasing + a disk round-trip
+  write→list→edit→delete + escape-as-error), `coding-tools.converged-file-tools.test.ts` (2: the LIVE
+  wiring replaces write/edit one-each + adds delete_file/list_files + a real disk write; default-OFF keeps
+  native), plus the existing coding-tools param-norm + sandbox-workspace-only + adapter suites unchanged.
+- **What remains (the irreducible live gate — now a flag flip, not a code blocker):** (1) an owner-run
+  cross-provider smoke test (Anthropic-OAuth/OpenAI/Gemini) confirming the model drives the converged
+  tools as well as the native ones, then flip `tools.fs.convergedFileTools` ON by default; (2) a
+  sandbox-aware Node provider (fs-bridge backed) so sandboxed sessions converge too; (3) converge `read`
+  (needs the shared read-capability media affordance) + `exec`/`process` (needs the streaming
+  `ctx.onUpdate?`), per the §5 prereqs. Logged to the gap register.

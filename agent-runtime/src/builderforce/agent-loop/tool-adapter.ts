@@ -44,19 +44,28 @@ function toAgentToolResult(result: ToolResult): AgentToolResult<ToolResult> {
 }
 
 /** Adapt one shared {@link ToolDefinition} to a native {@link AgentTool}, bound to a
- *  capability provider + workspace root. */
+ *  capability provider + workspace root.
+ *
+ *  `exposedName` overrides the model-facing tool name (and the schema's `function.name`)
+ *  so a shared definition can be offered on-prem under the SAME name the native loop
+ *  already uses — e.g. expose shared `write_file` as `write` — keeping the model-facing
+ *  contract (and the `tool-display.json` key) unchanged while the DEFINITION is the
+ *  single shared one (PRD 12 §5 Phase B(4): native-name aliasing without a prompt rewrite). */
 export function toAgentTool(
   def: ToolDefinition,
   provider: CapabilityProvider,
   workspaceRoot?: string,
+  exposedName?: string,
 ): AgentTool {
+  const name = exposedName ?? def.name;
+  const parameters = def.schema.function.parameters as unknown as TSchema;
   return {
-    name: def.name,
-    label: def.name,
+    name,
+    label: name,
     description: def.schema.function.description,
     // TypeBox schemas ARE JSON-Schema objects; the shared schema's `parameters` is the
     // same structural shape the loop forwards to the model.
-    parameters: def.schema.function.parameters as unknown as TSchema,
+    parameters,
     execute: async (_toolCallId, params, signal) => {
       const ctx: ToolContext = {
         caps: provider,
@@ -69,11 +78,16 @@ export function toAgentTool(
   };
 }
 
-/** Adapt every shared tool a surface can run (capability-gated) to native {@link AgentTool}s. */
+/** Adapt every shared tool a surface can run (capability-gated) to native {@link AgentTool}s.
+ *  `aliases` maps a shared tool name to the model-facing name to expose it under (see
+ *  {@link toAgentTool}); unmapped tools keep their shared name. */
 export function registryToAgentTools(
   registry: ToolRegistry,
   provider: CapabilityProvider,
   workspaceRoot?: string,
+  aliases?: Readonly<Record<string, string>>,
 ): AgentTool[] {
-  return registry.toolsFor(provider).map((def) => toAgentTool(def, provider, workspaceRoot));
+  return registry
+    .toolsFor(provider)
+    .map((def) => toAgentTool(def, provider, workspaceRoot, aliases?.[def.name]));
 }

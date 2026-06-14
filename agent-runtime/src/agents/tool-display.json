@@ -50,6 +50,16 @@
       "title": "Edit",
       "detailKeys": ["path"]
     },
+    "list_files": {
+      "emoji": "📂",
+      "title": "List Files",
+      "detailKeys": ["path"]
+    },
+    "delete_file": {
+      "emoji": "🗑️",
+      "title": "Delete File",
+      "detailKeys": ["path"]
+    },
     "apply_patch": {
       "emoji": "🩹",
       "title": "Apply Patch",
