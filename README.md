@@ -1255,6 +1255,10 @@ Dispatch **one agent per track**. Tracks are **file-disjoint by construction**, 
 **Dispatch example:** _"Agent A → T1 (Growth) · Agent B → T3 (Gateway/Direct) · Agent C → T9 (Internal/DB),"_ each in its own worktree/branch. Three agents, zero file overlap.
 
 
+### 🔓 Newly logged (open)
+
+- **Brain agent loop does not survive Brain-initiated navigation (T2 · `frontend/src/components/brain/*`, `brain-embedded/useBrainConversation.ts`).** When the Brain navigates the user (`navigate_to`/`open_project`) off the full-page `/brainstorm` or the IDE-embedded Brain, the route-scoped panel unmounts and any *in-flight* streaming/tool loop aborts. As of 2026-06-14 the floating drawer is force-opened on nav and resumes the same chat history (continuity of the conversation), and an 8s identical-`create` dedupe guard prevents the double-write that an aborted-then-retried turn produced — but a multi-step run that was mid-execution is **not** resumed; it just stops. Fixing it (hoist the conversation/tool-loop runner above the route, or hand the in-flight run off to the drawer instance) would make Brain actions that include a navigation step fully reliable end-to-end.
+
 ### ✅ Done / Resolved (53)
 
 _Resolved/closed register items, grouped by the work they came from. Newest dates win; `git log` is the full audit trail._

@@ -189,6 +189,17 @@ export function BrainPanel({
       : {}),
   });
 
+  // Mirror the full-page Brain's active chat into the shared BrainContext so a
+  // Brain-initiated navigation (which unmounts this route-scoped page) hands the
+  // conversation off to the floating drawer — PlatformActionsBridge force-opens
+  // it on nav, and it resumes this exact chat instead of a blank one. Docked
+  // variants already share the selection via useBrainChats' controlled mode; the
+  // page is uncontrolled, so it publishes here.
+  const publishActiveChat = brainCtx?.setActiveChatId;
+  useEffect(() => {
+    if (isPage) publishActiveChat?.(chats.activeChatId);
+  }, [isPage, publishActiveChat, chats.activeChatId]);
+
   const ensureChatId = useCallback(async () => {
     const c = await chats.create();
     return c?.id ?? null;
