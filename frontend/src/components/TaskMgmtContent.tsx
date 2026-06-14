@@ -31,6 +31,7 @@ import {
 } from '@/lib/taskAssignee';
 import { BoardConfigPanel } from './board/BoardConfigPanel';
 import { AgentChip } from './board/AgentChip';
+import { TeamMemberAvatarFilter } from './board/TeamMemberAvatarFilter';
 import { useBoardConfig } from './board/useBoardConfig';
 import { SlideOutPanel } from './SlideOutPanel';
 import { MoveToBoardControl } from './MoveToBoardControl';
@@ -170,6 +171,9 @@ export function TaskMgmtContent({
   const [filterProject, setFilterProject] = useState<string>(projectId != null ? String(projectId) : '');
   const [filterPriority, setFilterPriority] = useState<string>('');
   const [search, setSearch] = useState('');
+  // Team member avatar filter: an array of assigneeKeys (e.g. "u:123", "h:456", "c:abc").
+  // Empty array means "All" (no filter).
+  const [filterAssignees, setFilterAssignees] = useState<string[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Task | null>(null);
   const [form, setForm] = useState<Partial<Task> & { title?: string }>({
@@ -310,6 +314,12 @@ export function TaskMgmtContent({
     // Board-level "hide done items": drop tickets sitting in a terminal lane.
     // Applies only on the board view (where the board/lanes are loaded).
     if (board?.hideDoneItems && view === 'board' && doneStatuses.has(t.status)) return false;
+    // Team member avatar filter: if assignees are selected, only show tasks
+    // whose assignee matches one of the selected keys (OR logic).
+    if (filterAssignees.length > 0) {
+      const taskAssigneeKey = assigneeSelectValue(t.assignedAgentHostId, t.assignedAgentRef, t.assignedUserId);
+      if (!filterAssignees.includes(taskAssigneeKey)) return false;
+    }
     return true;
   });
 
@@ -846,50 +856,39 @@ export function TaskMgmtContent({
       )}
 
       {!compact && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <input
-            type="text"
-            placeholder="Search…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{
-              maxWidth: 200,
-              height: 32,
-              padding: '4px 10px',
-              fontSize: 13,
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
-              background: 'var(--bg-deep)',
-              color: 'var(--text-primary)',
-            }}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* First row: avatar filter chips */}
+          <TeamMemberAvatarFilter
+            tasks={tasks}
+            agentHosts={agentHostsList}
+            cloudAgents={cloudAgentsList}
+            members={membersList}
+            selectedAssignees={filterAssignees}
+            onSelectAssignees={setFilterAssignees}
           />
-          <Select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            style={{
-              maxWidth: 160,
-              height: 32,
-              padding: '4px 10px',
-              fontSize: 13,
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
-              background: 'var(--bg-deep)',
-              color: 'var(--text-primary)',
-            }}
-          >
-            <option value="">All statuses</option>
-            {statusChoices.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </Select>
-          {!projectId && (
-            <Select
-              value={filterProject}
-              onChange={(e) => setFilterProject(e.target.value)}
+          {/* Second row: existing search, status, project, priority filters */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input
+              type="text"
+              placeholder="Search…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
               style={{
-                maxWidth: 180,
+                maxWidth: 200,
+                height: 32,
+                padding: '4px 10px',
+                fontSize: 13,
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 8,
+                background: 'var(--bg-deep)',
+                color: 'var(--text-primary)',
+              }}
+            />
+            <Select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              style={{
+                maxWidth: 160,
                 height: 32,
                 padding: '4px 10px',
                 fontSize: 13,
@@ -899,35 +898,58 @@ export function TaskMgmtContent({
                 color: 'var(--text-primary)',
               }}
             >
-              <option value="">All projects</option>
-              {projects.map((p) => (
-                <option key={p.id} value={String(p.id)}>
-                  {p.name}
+              <option value="">All statuses</option>
+              {statusChoices.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
                 </option>
               ))}
             </Select>
-          )}
-          <Select
-            value={filterPriority}
-            onChange={(e) => setFilterPriority(e.target.value)}
-            style={{
-              maxWidth: 140,
-              height: 32,
-              padding: '4px 10px',
-              fontSize: 13,
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 8,
-              background: 'var(--bg-deep)',
-              color: 'var(--text-primary)',
-            }}
-          >
-            <option value="">All priorities</option>
-            {PRIORITIES.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </Select>
+            {!projectId && (
+              <Select
+                value={filterProject}
+                onChange={(e) => setFilterProject(e.target.value)}
+                style={{
+                  maxWidth: 180,
+                  height: 32,
+                  padding: '4px 10px',
+                  fontSize: 13,
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 8,
+                  background: 'var(--bg-deep)',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                <option value="">All projects</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={String(p.id)}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            )}
+            <Select
+              value={filterPriority}
+              onChange={(e) => setFilterPriority(e.target.value)}
+              style={{
+                maxWidth: 140,
+                height: 32,
+                padding: '4px 10px',
+                fontSize: 13,
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 8,
+                background: 'var(--bg-deep)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              <option value="">All priorities</option>
+              {PRIORITIES.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </Select>
+          </div>
         </div>
       )}
 
