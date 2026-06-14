@@ -780,7 +780,7 @@ export async function handleContainerOp(
     // coding model. The container holds its own loop state, so per-op pinning is
     // the caller's explicit `model`; the default lands on a strong coding model.
     const pick = pickCloudModel(model, ctx.effectivePlan, ctx.premiumOverride);
-    const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS }).complete({
+    const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true }).complete({
       messages: messages as unknown as ChatMessage[], tools: CONTAINER_AGENT_TOOLS, tool_choice: 'auto',
       ...(pick.model ? { model: pick.model, ...(pick.strict ? { modelStrict: true } : {}) } : {}),
       useCase: 'task_execution',
@@ -1079,7 +1079,10 @@ export async function runCloudToolLoop(
   // models instead of the fixed free pool. Reused across every turn (and persisted
   // so DO ticks don't re-query the plan).
   const routing = opts?.resume?.routing ?? await resolveCloudRouting(env, tenantId);
-  const proxy = llmProxyForPlan(env, routing.effectivePlan, routing.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS });
+  // `codingOnly` keeps the failover cascade inside the curated coding pool, so an
+  // exhausted free run escalates to the paid coding backstop instead of degrading
+  // onto a non-coder (gemini-flash-lite) or a tool-unreliable vendor (Ollama).
+  const proxy = llmProxyForPlan(env, routing.effectivePlan, routing.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true });
 
   // Per-run model pin. A coding agent must drive the WHOLE task on one model, not
   // hop between pool models per turn (the gateway's round-robin cursor would

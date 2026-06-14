@@ -407,11 +407,16 @@ async function startDispatchedExecution(
     ]);
   }
 
+  // Fold the agent's own model into the payload up front so EVERY surface — the
+  // on-prem host included — runs AS the agent's model, never silently the gateway
+  // default. (The cloud branch reuses this same effective payload below.)
+  const effectivePayload = withDefaultModel(payload, agent.baseModel);
+
   const message: DispatchMessage = {
     type: 'task.assign',
     executionId: execution.id,
     taskId: taskRow.id,
-    payload,
+    payload: effectivePayload,
     engine: agent.engine,
     agentLabel: agent.label,
     repo: repoRef ? { repoId: repoRef.repoId, defaultBranch: repoRef.defaultBranch } : undefined,
@@ -419,27 +424,27 @@ async function startDispatchedExecution(
     artifacts,
   };
 
-  // The three CLOUD agent types — see agent taxonomy ([[agent-types-taxonomy]]):
-  //   • V1 Cloud Agent                  — engine builderforce-v1.
-  //   • V2 Cloud Agent (Durable Object) — engine builderforce-v2, surface durable.
-  //   • V2 Cloud Agent (Node/Container) — engine builderforce-v2, surface container.
-  // ALL cloud agents execute ONLY in the cloud (all Cloudflare) — a cloud agent is
-  // NEVER dispatched to an On-Prem (hosted) agent. On-Prem hosts run as a host
-  // only when one is explicitly pinned on the task.
+  // ONE agent engine (the V2 Agent) runs on three interchangeable long-lived
+  // surfaces — see agent taxonomy ([[agent-types-taxonomy]]):
+  //   • Durable Object (CloudRunnerDO)         — cloud, on-demand serverless.
+  //   • Container (long-lived Cloudflare)      — cloud, persistent process + shell.
+  //   • On-Prem machine                        — the client's machine, reached via
+  //     the AGENT_HOST_RELAY. It is ALSO a long-lived runtime (equivalent to a
+  //     container) and runs the SAME V2 Agent (Claude-Agent-SDK) the cloud surfaces
+  //     do, so a V2 agent pinned to a host executes ON the machine — no engine fork.
   const surface = resolveCloudSurface(agent.runtimeSurface, pinnedHostId != null);
-  const isV2 = agent.engine === 'builderforce-v2';
-  const typeLabel = cloudAgentTypeLabel(agent.engine, surface);
+  const typeLabel = cloudAgentTypeLabel(surface);
 
-  // Dispatch to an On-Prem host ONLY for an explicitly pinned host run (legacy
-  // AgentHost path). A V2 cloud agent never reaches a host: the 'container' surface
-  // targets a long-lived Cloudflare Container (cloud), not a client machine. We also
-  // enforce the agent's declared `runtime_support` here: an agent marked cloud-only
-  // is never delivered to a pinned host (it falls through to the cloud executor),
-  // closing the "declared metadata not enforced at dispatch" gap. preferred_runtime
-  // (for runtime_support==='both') is resolved on the swimlane path; here a host run
-  // still requires an explicit pin, so it cannot route AWAY from a pinned host.
+  // Dispatch to an On-Prem host when one is explicitly pinned AND the agent's
+  // declared `runtime_support` permits host execution (an agent marked cloud-only
+  // is never delivered to a pinned host — it falls through to the cloud executor).
+  // The engine no longer gates this: the on-prem host runtime runs the V2 Agent
+  // natively, so V2 IS delivered to the machine (the surface is just where the one
+  // engine runs). preferred_runtime (for runtime_support==='both') is resolved on
+  // the swimlane path; here a host run still requires an explicit pin, so it cannot
+  // route AWAY from a pinned host.
   const hostAllowed = agentAllowsHostExecution(agent.runtimeSupport);
-  if (pinnedHostId != null && !isV2 && !hostAllowed) {
+  if (pinnedHostId != null && !hostAllowed) {
     await recordCloudToolEvent(db, {
       tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
       toolName: 'runtime.route', category: 'planning',
@@ -447,7 +452,7 @@ async function startDispatchedExecution(
       result: `Agent "${agent.label ?? agent.ref ?? 'cloud agent'}" is cloud-only (runtime_support=cloud); the pinned On-Prem host was not used — running in the cloud.`,
     }).catch(() => { /* best-effort telemetry */ });
   }
-  const delivered = pinnedHostId != null && !isV2 && hostAllowed
+  const delivered = pinnedHostId != null && hostAllowed
     ? (await Promise.all(hostTargets.map((targetId) => dispatchToAgentHost(env as RuntimeHonoEnv['Bindings'], targetId, message).catch(() => false)))).some(Boolean)
     : false;
 
@@ -463,15 +468,14 @@ async function startDispatchedExecution(
   };
 
   if (!delivered) {
-    // Route a V2 Cloud Agent (Node/Container) to the REAL long-lived Cloudflare
-    // Container (AgentContainerDO) when it's bound; everything else — V1 Cloud
-    // Agent, V2 Cloud Agent (Durable Object), and a container run with no Container
-    // binding — runs on the durable executor (CloudRunnerDO). A V2 run carries its
-    // OWN model so it is never silently executed/attributed as the v1 gateway default.
-    const wantsContainer = isV2 && surface === 'container';
+    // Route a container-surface run to the REAL long-lived Cloudflare Container
+    // (AgentContainerDO) when it's bound; everything else — a durable-surface run,
+    // and a container run with no Container binding — runs on the durable executor
+    // (CloudRunnerDO). The run carries its OWN model so it is never silently
+    // attributed to the gateway default. (One engine: the V2 Agent; V1 is deleted.)
+    const wantsContainer = surface === 'container';
     const hasContainerBinding = wantsContainer && !!env.AGENT_CONTAINER;
     const hasCloudRunner = !!env.CLOUD_RUNNER;
-    const effectivePayload = withDefaultModel(payload, agent.baseModel);
 
     const runWorkerFallback = async () => {
       await runCloudExecution(env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, effectivePayload, artifacts);

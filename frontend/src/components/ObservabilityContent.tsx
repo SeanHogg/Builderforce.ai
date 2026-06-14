@@ -491,6 +491,52 @@ export function ObservabilityContent({
     if (hasHostSelection) lines.push(`Host link: ${connState}`);
     lines.push(`Events: ${flatEvents.length} · Errors: ${errors.length} · Log lines: ${mergedLogs.length}`);
 
+    // Agent Configuration — surface WHO ran and WITH WHAT config (resolved personas /
+    // skills / content + the model decision), parsed from the capabilities.load +
+    // model.select + runtime.dispatch telemetry. Without this a triage paste shows
+    // the events a run produced but not, say, that a docs/BA persona set was loaded
+    // for a coding task, or which model pool the gateway seeded — the exact context a
+    // reviewer needs to spot a mis-staffed or mis-routed run.
+    const parseArgs = (raw: string | null | undefined): Record<string, unknown> | null => {
+      if (!raw) return null;
+      try { const v: unknown = JSON.parse(raw); return v && typeof v === 'object' ? (v as Record<string, unknown>) : null; }
+      catch { return null; }
+    };
+    const list = (v: unknown): string => (Array.isArray(v) && v.length ? v.join(', ') : '—');
+    const evsByAgent = new Map<string, ToolAuditEvent[]>();
+    for (const { ev, agentName } of flatEvents) {
+      const arr = evsByAgent.get(agentName) ?? [];
+      arr.push(ev);
+      evsByAgent.set(agentName, arr);
+    }
+    const configLines: string[] = [];
+    for (const [agentName, evs] of evsByAgent) {
+      const argsFor = (tool: string) => parseArgs(evs.find((e) => e.toolName === tool)?.args);
+      const dispatch = argsFor('runtime.dispatch');
+      const caps = argsFor('capabilities.load');
+      const sel = argsFor('model.select');
+      if (!dispatch && !caps && !sel) continue;
+      configLines.push(`• ${agentName}`);
+      if (dispatch) {
+        const parts = [dispatch.agentType, dispatch.engine && `engine=${dispatch.engine}`,
+          dispatch.surface && `surface=${dispatch.surface}`, dispatch.executor && `executor=${dispatch.executor}`,
+          dispatch.model && `model=${dispatch.model}`].filter(Boolean);
+        if (parts.length) configLines.push(`    dispatch:   ${parts.join(' · ')}`);
+      }
+      if (caps) {
+        configLines.push(`    personas:   ${list(caps.personas)}`);
+        configLines.push(`    skills:     ${list(caps.skills)}`);
+        if (Array.isArray(caps.content) && caps.content.length) configLines.push(`    content:    ${list(caps.content)}`);
+        if (Array.isArray(caps.missing) && caps.missing.length) configLines.push(`    missing:    ${list(caps.missing)}`);
+      }
+      if (sel) {
+        configLines.push(`    model.seed: ${sel.seed ?? '—'}${sel.seedIsCoder != null ? ` (coder=${sel.seedIsCoder})` : ''}`
+          + ` · requested=${sel.requested ?? 'gateway-default'} · pin=${sel.pin ?? '—'} · plan=${sel.plan ?? '—'}${sel.premium ? ' · premium' : ''}`);
+        if (Array.isArray(sel.planCoders) && sel.planCoders.length) configLines.push(`    planCoders: ${sel.planCoders.join(', ')}`);
+      }
+    }
+    if (configLines.length) lines.push('', '--- Agent Configuration ---', ...configLines);
+
     // Materials & Context + Code Changes (transaction) injected by the panel — put
     // them up top so a reviewer reads the goal and the actual diffs before the
     // raw telemetry that produced them.

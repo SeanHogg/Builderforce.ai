@@ -17,6 +17,21 @@ import { recordStatusTransition } from '../../application/task/taskLifecycle';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { decideLaneAutoRun, type LaneAgentLike } from '../../application/swimlane/laneAutoRun';
+import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
+
+/** Parse a swimlane assignment's `required_capabilities` (JSON array stored as
+ *  text) into a clean string[]. Tolerates null / malformed / non-array values by
+ *  returning [] (no requirement) so a bad row never blocks auto-run with a throw. */
+function parseRequiredCapabilities(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).map((v) => v.trim());
+  } catch {
+    return [];
+  }
+}
 
 /** Minimal shape of the agentHost relay Durable Object namespace binding. */
 type RelayNamespace = {
@@ -109,12 +124,16 @@ async function dispatchTaskFinalize(
  * Board "autonomous trigger" — the SERVER-SIDE source of truth. When a ticket
  * enters a lane (created into it, or its status PATCHed into it by ANY client —
  * board drag, the status dropdown, the brain, a raw API call) and that lane has
- * a configured cloud agent with a non-human gate, auto-start the run AS that
- * agent. This used to live only in the board frontend, so brain-created / API /
- * non-board status changes silently skipped the run (the reported bug). The
- * decision lives in one place ({@link decideLaneAutoRun}); this just resolves the
- * lane's agents/gate, guards against double-dispatch, and hands off to the same
- * cloud dispatch path the manual run and CI auto-fix use.
+ * a configured agent with a non-human gate, auto-start the run AS that agent.
+ * This used to live only in the board frontend, so brain-created / API / non-
+ * board status changes silently skipped the run (the reported bug).
+ *
+ * There is ONE agent engine (the V2 Agent) behind ONE surface-aware dispatcher
+ * ({@link dispatchCloudRunForTask}): the agent's backplane — Durable Object,
+ * Container, or an on-prem machine (a long-lived runtime, equivalent to a
+ * container) — is resolved inside the dispatcher, not here. So this trigger just
+ * hands the lane's agent ref + model to that single dispatcher, the same one the
+ * manual run and CI auto-fix use.
  *
  * Best-effort and meant for `waitUntil`: a dispatch failure must never block or
  * fail the status change itself.
@@ -131,9 +150,9 @@ async function maybeAutoRunOnLaneEntry(
     // for it — that path is handled by dispatchTaskFinalize.
     if (args.status === TaskStatus.DONE) return;
 
-    // Resolve the lane the ticket just entered + its configured agents and gate.
-    // No board / no matching lane → agents stay undefined and the decision falls
-    // back to the legacy default-column behaviour.
+    // Resolve the lane the ticket just entered (the swimlane keyed by its status)
+    // plus that lane's configured agents and gate. No board / no matching lane →
+    // no configured agent → no auto-run.
     let agents: LaneAgentLike[] | undefined;
     let gate: 'auto' | 'human' | undefined;
     const [board] = await db
@@ -149,18 +168,53 @@ async function maybeAutoRunOnLaneEntry(
         .limit(1);
       if (lane) {
         gate = lane.gate === 'human' ? 'human' : 'auto';
-        agents = await db
+        const rows = await db
           .select({
-            runtime: swimlaneAgentAssignments.runtime,
             agentRef: swimlaneAgentAssignments.agentRef,
             model: swimlaneAgentAssignments.model,
+            requiredCapabilities: swimlaneAgentAssignments.requiredCapabilities,
           })
           .from(swimlaneAgentAssignments)
           .where(eq(swimlaneAgentAssignments.swimlaneId, lane.id));
+
+        // Capability guardrail: when a lane assignment declares
+        // `required_capabilities`, resolve the agent's actual capabilities (its
+        // assigned skill + persona slugs, in this task's scope) so `decideLaneAutoRun`
+        // can skip an agent that lacks them — e.g. a docs/BA agent on a coding lane.
+        // Resolution is per-agent and only done when there's a requirement to check,
+        // so the common (unconfigured) case stays a single cheap query.
+        agents = await Promise.all(
+          rows.map(async (r): Promise<LaneAgentLike> => {
+            const requiredCapabilities = parseRequiredCapabilities(r.requiredCapabilities);
+            let capabilities: string[] | undefined;
+            if (requiredCapabilities.length > 0 && r.agentRef) {
+              const resolved = await resolveArtifacts(db, {
+                tenantId: args.tenantId,
+                taskId: args.taskId,
+                cloudAgentRef: r.agentRef,
+              }).catch(() => ({ skills: [], personas: [], content: [] }));
+              capabilities = [...resolved.skills, ...resolved.personas];
+            }
+            return { agentRef: r.agentRef, model: r.model, requiredCapabilities, capabilities };
+          }),
+        );
       }
     }
 
-    const decision = decideLaneAutoRun(agents, args.status, gate);
+    const decision = decideLaneAutoRun(agents, gate);
+
+    // A lane staffed with an agent that lacks the lane's required capabilities is a
+    // configuration error, not a silent no-op. Emit a `capability_mismatch` warning
+    // (Worker telemetry sink) so a mis-staffed lane is diagnosable. There is no
+    // execution to attach a timeline event to yet — see the README gap register entry
+    // for surfacing this on the Observability timeline.
+    if (decision.capabilityMismatches?.length) {
+      for (const m of decision.capabilityMismatches) {
+        console.warn(
+          `[capability_mismatch] task ${args.taskId} lane '${args.status}': agent '${m.agentRef}' lacks required capabilities [${m.missing.join(', ')}] — skipped for auto-run`,
+        );
+      }
+    }
     if (!decision.autoRun) return;
 
     // Idempotency: never stack a second run on a ticket that already has a live
@@ -176,11 +230,11 @@ async function maybeAutoRunOnLaneEntry(
       .limit(1);
     if (active.length > 0) return;
 
-    // Pass the lane's pinned agent + model so the run executes AS that agent
-    // instead of falling back to the gateway default (legacy lanes send no
-    // payload and fall back to the ticket's assignee / gateway default).
+    // Hand the lane's agent + model to the single surface-aware dispatcher (the
+    // `cloudAgentRef` payload key is the existing dispatch contract — the V2 agent
+    // ref the dispatcher resolves + attributes the run to).
     const payloadObj: { cloudAgentRef?: string; model?: string } = {};
-    if (decision.cloudAgentRef) payloadObj.cloudAgentRef = decision.cloudAgentRef;
+    if (decision.agentRef) payloadObj.cloudAgentRef = decision.agentRef;
     if (decision.model) payloadObj.model = decision.model;
 
     await dispatchCloudRunForTask(env, db, runtimeService, waitUntil, {

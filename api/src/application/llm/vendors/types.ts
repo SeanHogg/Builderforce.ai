@@ -125,6 +125,16 @@ export interface VendorModule {
   call(params: VendorCallParams): Promise<VendorCallResult>;
   /** Optional streaming variant. Vendors that omit this are skipped during streaming dispatch. */
   callStream?(params: VendorCallParams): Promise<VendorStreamResult>;
+  /**
+   * Whether this vendor's models may be AUTO-SELECTED into the gateway's failover
+   * pools (FREE/PRO). Default `true`. Set `false` for a vendor that should only ever
+   * run when a caller hard-pins it with an explicit `<vendor>/<id>` prefix — e.g.
+   * a local/self-hosted-style runtime (Ollama) that is not a reliable cloud coding
+   * backend and must never be the model a cloud agent silently cascades onto.
+   * Excludes the vendor from `autoRoutableModelsByTier` (the pool composer) WITHOUT
+   * removing it from the catalog, so explicit `ollama/<id>` pins still resolve.
+   */
+  autoRoute?: boolean;
 }
 
 export type ResponseParser = (raw: unknown) => {

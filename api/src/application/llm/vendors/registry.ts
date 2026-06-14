@@ -146,6 +146,28 @@ export function modelsByTier(...tiers: AiModelTier[]): string[] {
   );
 }
 
+/** Whether a vendor's models may be auto-selected into a failover pool. A vendor
+ *  is auto-routable unless it opts out (`autoRoute: false`) — e.g. Ollama, which
+ *  must only run when a caller explicitly pins `ollama/<id>`. */
+export function vendorAutoRoutes(vendor: VendorId): boolean {
+  return MODULES_BY_ID[vendor].autoRoute !== false;
+}
+
+/**
+ * Like {@link modelsByTier}, but EXCLUDES vendors that opt out of auto-routing
+ * (`autoRoute: false`). This is the composer for the gateway's auto-selected
+ * FREE/PRO pools: a non-auto-route vendor (Ollama) stays in the catalog — and so
+ * remains reachable via an explicit `ollama/<id>` pin — but can never be the model
+ * a cascade silently falls onto. Keeping this separate from `modelsByTier` leaves
+ * the "all models of a tier" query (catalog/admin) honest.
+ */
+export function autoRoutableModelsByTier(...tiers: AiModelTier[]): string[] {
+  const set = new Set(tiers);
+  return MODULES.filter((mod) => mod.autoRoute !== false).flatMap((mod) =>
+    mod.catalog.filter((m) => set.has(m.tier)).map((m) => m.id),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Dispatch — walk a model chain across vendors
 // ---------------------------------------------------------------------------
