@@ -16,7 +16,7 @@ import {
 } from "../../src/builderforce/code-map.js";
 
 async function main() {
-  console.log("🦞 Deep Code Analysis Example\n");
+  console.log("🤖 Deep Code Analysis Example\n");
 
   // Example 1: Parse a single file
   console.log("1. AST Parsing - Extracting semantic information\n");

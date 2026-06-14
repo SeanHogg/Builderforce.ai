@@ -61,7 +61,7 @@ export async function upsertAuthProfile(params: {
         : params.credential;
   const store = await ensureAuthProfileStore(params.agentDir);
   store.profiles[params.profileId] = credential;
-  saveAuthProfileStore(store, params.agentDir);
+  await saveAuthProfileStore(store, params.agentDir);
 }
 
 export async function upsertAuthProfileWithLock(params: {
@@ -112,5 +112,5 @@ export async function markAuthProfileGood(params: {
     return;
   }
   store.lastGood = { ...store.lastGood, [provider]: profileId };
-  saveAuthProfileStore(store, agentDir);
+  await saveAuthProfileStore(store, agentDir);
 }
