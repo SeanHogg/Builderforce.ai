@@ -15,6 +15,15 @@ export interface UseBrainChatsOptions {
   filterProjectId?: string | null;
   /** Project pages: lock the list (and new chats) to this project; no filter UI. */
   pinnedProjectId?: number | null;
+  /**
+   * Controlled active chat. When provided (not `undefined`), the active chat id
+   * is owned by the caller instead of internal state — so two co-mounted Brain
+   * instances (e.g. the IDE Designer left-panel and the floating drawer) can
+   * share one selection via a common store. Pair with `onActiveChatChange`.
+   */
+  activeChatId?: number | null;
+  /** Controlled-mode setter, called whenever the hook would change the selection. */
+  onActiveChatChange?: (id: number | null) => void;
 }
 
 export interface UseBrainChats {
@@ -38,12 +47,29 @@ export interface UseBrainChats {
 
 export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats {
   const { persistence } = useBrainConfig();
-  const { filterProjectId, pinnedProjectId } = options;
+  const { filterProjectId, pinnedProjectId, activeChatId: controlledActiveId, onActiveChatChange } = options;
   const [chats, setChats] = useState<BrainChat[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeChatId, setActiveChatId] = useState<number | null>(null);
+  const [internalActiveId, setInternalActiveId] = useState<number | null>(null);
   const assigningRef = useRef(false);
+
+  // Controlled when the caller passes `activeChatId` (even null); otherwise the
+  // hook owns the selection. Either way `setActiveChatId` is the single mutation
+  // point so co-mounted instances can share one active chat via a common store.
+  const isControlled = controlledActiveId !== undefined;
+  const activeChatId = isControlled ? (controlledActiveId ?? null) : internalActiveId;
+  // Keep the latest active id in a ref so callbacks can read it without being
+  // re-created on every selection change (and without stale-closure bugs).
+  const activeIdRef = useRef(activeChatId);
+  activeIdRef.current = activeChatId;
+  const setActiveChatId = useCallback(
+    (id: number | null) => {
+      if (isControlled) onActiveChatChange?.(id);
+      else setInternalActiveId(id);
+    },
+    [isControlled, onActiveChatChange],
+  );
 
   /** Resolve the projectId new chats should be associated with. */
   const defaultProjectId = useCallback((): number | null => {
@@ -94,7 +120,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
       setError(e instanceof Error ? e.message : 'Failed to open chat');
       return null;
     }
-  }, [persistence, chats]);
+  }, [persistence, chats, setActiveChatId]);
 
   const create = useCallback(async (opts?: { title?: string; projectId?: number | null }): Promise<BrainChat | null> => {
     setError('');
@@ -108,7 +134,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
       setError(e instanceof Error ? e.message : 'Failed to create chat');
       return null;
     }
-  }, [persistence, defaultProjectId]);
+  }, [persistence, defaultProjectId, setActiveChatId]);
 
   const rename = useCallback(async (id: number, title: string) => {
     const trimmed = title.trim();
@@ -142,11 +168,11 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     try {
       await persistence.deleteChat(id);
       setChats((prev) => prev.filter((c) => c.id !== id));
-      setActiveChatId((cur) => (cur === id ? null : cur));
+      if (activeIdRef.current === id) setActiveChatId(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed');
     }
-  }, [persistence]);
+  }, [persistence, setActiveChatId]);
 
   const assignToProject = useCallback(async (id: number, projectId: number | null) => {
     if (assigningRef.current) return;
@@ -166,7 +192,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     // After new messages, refresh so updatedAt ordering + any title change reflect.
     await reload();
     setActiveChatId(id);
-  }, [reload]);
+  }, [reload, setActiveChatId]);
 
   const activeChat = useMemo(
     () => chats.find((c) => c.id === activeChatId) ?? null,

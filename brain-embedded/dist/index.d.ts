@@ -343,6 +343,14 @@ interface BrainContextValue extends BrainPageContext {
     setOpen(open: boolean): void;
     /** Merge partial page context (call from a page effect). */
     setContext(patch: Partial<BrainPageContext>): void;
+    /**
+     * The chat currently selected in the docked Brain. Lifted here so co-mounted
+     * Brain instances (e.g. the IDE Designer left-panel and the floating drawer)
+     * stay on the same conversation. Distinct from `initialChatId` (a one-shot
+     * deep-link); this tracks the live selection.
+     */
+    activeChatId: number | null;
+    setActiveChatId(id: number | null): void;
 }
 declare function BrainContextProvider({ children }: {
     children: React.ReactNode;
@@ -360,6 +368,15 @@ interface UseBrainChatsOptions {
     filterProjectId?: string | null;
     /** Project pages: lock the list (and new chats) to this project; no filter UI. */
     pinnedProjectId?: number | null;
+    /**
+     * Controlled active chat. When provided (not `undefined`), the active chat id
+     * is owned by the caller instead of internal state — so two co-mounted Brain
+     * instances (e.g. the IDE Designer left-panel and the floating drawer) can
+     * share one selection via a common store. Pair with `onActiveChatChange`.
+     */
+    activeChatId?: number | null;
+    /** Controlled-mode setter, called whenever the hook would change the selection. */
+    onActiveChatChange?: (id: number | null) => void;
 }
 interface UseBrainChats {
     chats: BrainChat[];
