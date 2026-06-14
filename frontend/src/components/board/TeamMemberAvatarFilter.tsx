@@ -1,147 +1,287 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import type { Task } from '@/lib/builderforceApi';
-import { assigneeName, type TeamMember, type CloudAgentTarget } from '@/lib/taskAssignee';
+import { useState, useMemo, useRef, useEffect, type CSSProperties } from 'react';
+import type { AgentHost } from '@/lib/builderforceApi';
+import type { CloudAgentTarget, TeamMember } from '@/lib/taskAssignee';
 
-// Placeholder for TeamMemberAvatar component if it exists, otherwise use InitialAvatar or similar
-// For now, we'll create a basic avatar component here.
+/**
+ * One clickable avatar chip in the member filter row. Shows a circular initial
+ * badge with a count badge below it. Active state is a highlighted border.
+ */
+function AvatarChip({
+  label,
+  count,
+  active,
+  onClick,
+  isAll,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+  isAll?: boolean;
+}) {
+  const chipStyle: CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 2,
+    cursor: 'pointer',
+    padding: 2,
+    borderRadius: 12,
+    border: active ? '2px solid var(--coral-bright)' : '2px solid transparent',
+    transition: 'border-color 0.15s, opacity 0.15s',
+    opacity: active ? 1 : 0.6,
+    flexShrink: 0,
+    minWidth: 44,
+  };
 
-const Avatar = ({ name, taskCount }: { name: string; taskCount: number }) => (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', padding: '4px' }}>
-        <div
-            style={{
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
-                backgroundColor: 'var(--bg-deep)', // Placeholder color
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 14,
-                fontWeight: 700,
-                color: 'var(--coral-bright)', // Placeholder color
-            }}
-        >
-            {name.charAt(0).toUpperCase()}
-        </div>
-        <span style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>{taskCount}</span>
+  const avatarStyle: CSSProperties = {
+    width: 32,
+    height: 32,
+    borderRadius: '50%',
+    background: active ? 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))' : 'var(--bg-deep)',
+    color: active ? '#fff' : 'var(--text-secondary)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 12,
+    fontWeight: 700,
+    lineHeight: 1,
+  };
+
+  const badgeStyle: CSSProperties = {
+    fontSize: 10,
+    fontWeight: 600,
+    color: 'var(--text-muted)',
+    lineHeight: 1.2,
+  };
+
+  return (
+    <div style={chipStyle} onClick={onClick} title={`${label} — ${count} task${count !== 1 ? 's' : ''}`} role="button" tabIndex={0}>
+      <div style={avatarStyle}>
+        {isAll ? 'A' : label.slice(0, 1).toUpperCase()}
+      </div>
+      <span style={badgeStyle}>{count}</span>
     </div>
-);
-
-interface TeamMemberAvatarFilterProps {
-    tasks: Task[];
-    members: TeamMember[];
-    cloudAgents: CloudAgentTarget[];
-    agentHosts: any[]; // Placeholder for AgentHost type if needed
-    onFilterChange: (selectedMembers: string[]) => void;
+  );
 }
 
-export const TeamMemberAvatarFilter: React.FC<TeamMemberAvatarFilterProps> = ({
-    tasks,
-    members,
-    cloudAgents,
-    agentHosts,
-    onFilterChange,
-}) => {
-    const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+export interface TeamMemberAvatarFilterProps {
+  /** All tasks currently visible on the board (unfiltered by assignee). */
+  tasks: Array<{
+    assignedAgentHostId?: number | null;
+    assignedAgentRef?: string | null;
+    assignedUserId?: string | null;
+  }>;
+  /** Human teammates. */
+  members: TeamMember[];
+  /** Cloud agents. */
+  cloudAgents: CloudAgentTarget[];
+  /** Self-hosted agent hosts. */
+  agentHosts: AgentHost[];
+  /** Currently selected member keys (encoded `h:<id>` / `c:<ref>` / `u:<id>`). */
+  selectedKeys: string[];
+  /** Called when the selection changes. */
+  onChange: (keys: string[]) => void;
+}
 
-    const memberTaskCounts = useMemo(() => {
-        const counts: Record<string, number> = {};
-        members.forEach(m => counts[assigneeName(null, null, m.id, [], [], [m])] = 0);
-        cloudAgents.forEach(a => counts[assigneeName(null, a.ref, null, [], [a], [])] = 0);
-        agentHosts.forEach(h => counts[assigneeName(h.id, null, null, [h], [], [])] = 0);
+/**
+ * A row of clickable team member avatars that filter the task board by
+ * assigned member(s). Supports multiple selection (OR logic). The first chip
+ * is an "All" chip that clears all selections. Responsive via horizontal
+ * scroll on overflow.
+ */
+export function TeamMemberAvatarFilter({
+  tasks,
+  members,
+  cloudAgents,
+  agentHosts,
+  selectedKeys,
+  onChange,
+}: TeamMemberAvatarFilterProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [showScrollButtons, setShowScrollButtons] = useState(false);
 
-        tasks.forEach(task => {
-            const assigneeName = assigneeName(
-                task.assignedAgentHostId,
-                task.assignedAgentRef,
-                task.assignedUserId,
-                agentHosts,
-                cloudAgents,
-                members
-            );
-            if (assigneeName !== 'Unassigned' && counts[assigneeName] !== undefined) {
-                counts[assigneeName]++;
-            }
-        });
-        return counts;
-    }, [tasks, members, cloudAgents, agentHosts]);
+  // Check if the container overflows for scroll-button affordance.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const check = () => setShowScrollButtons(el.scrollWidth > el.clientWidth + 8);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
-    const allWorkforce = useMemo(() => {
-        return [
-            ...members.map(m => ({ id: `u:${m.id}`, name: m.name, kind: 'human' as const })),
-            ...cloudAgents.map(a => ({ id: `c:${a.ref}`, name: a.name, kind: 'cloud_agent' as const })),
-            ...agentHosts.map(h => ({ id: `h:${h.id}`, name: h.name, kind: 'host_agent' as const })),
-        ];
-    }, [members, cloudAgents, agentHosts]);
+  // Build a unified list: every member/host/agent that has at least one
+  // assigned task in the current (pre-filtered) set. The key is the same
+  // encoded form used by assigneeSelectValue so filtering is a simple match.
+  const workforceChips = useMemo(() => {
+    // Count assignments per member for the badge
+    const counts = new Map<string, number>();
+    const names = new Map<string, string>();
 
-    const handleMemberClick = (memberId: string) => {
-        setSelectedMembers(prev => {
-            const newSelected = prev.includes(memberId)
-                ? prev.filter(id => id !== memberId)
-                : [...prev, memberId];
-            onFilterChange(newSelected);
-            return newSelected;
-        });
-    };
+    // Seed every known assignable so names are always resolved
+    for (const m of members) {
+      const k = `u:${m.id}`;
+      counts.set(k, 0);
+      names.set(k, m.name);
+    }
+    for (const a of cloudAgents) {
+      const k = `c:${a.ref}`;
+      counts.set(k, 0);
+      names.set(k, a.name);
+    }
+    for (const h of agentHosts) {
+      const k = `h:${h.id}`;
+      counts.set(k, 0);
+      names.set(k, h.name);
+    }
 
-    // Filtered workforce to show only those with tasks assigned
-    const workforceWithTasks = useMemo(() => {
-        return allWorkforce.filter(w => memberTaskCounts[w.name] > 0);
-    }, [allWorkforce, memberTaskCounts]);
+    // Tally from the tasks
+    for (const t of tasks) {
+      let k = '';
+      let name = '';
+      if (t.assignedAgentHostId != null) {
+        k = `h:${t.assignedAgentHostId}`;
+        const host = agentHosts.find((h) => h.id === t.assignedAgentHostId);
+        name = host?.name ?? String(t.assignedAgentHostId);
+      } else if (t.assignedAgentRef) {
+        k = `c:${t.assignedAgentRef}`;
+        const ca = cloudAgents.find((a) => a.ref === t.assignedAgentRef);
+        name = ca?.name ?? t.assignedAgentRef;
+      } else if (t.assignedUserId) {
+        k = `u:${t.assignedUserId}`;
+        const m = members.find((m) => m.id === t.assignedUserId);
+        name = m?.name ?? t.assignedUserId;
+      }
+      if (k) {
+        counts.set(k, (counts.get(k) ?? 0) + 1);
+        if (name) names.set(k, name);
+      }
+    }
 
-    return (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', paddingBottom: 8 }}>
-            {/* "All" filter option */}
-            <div
-                style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    cursor: 'pointer',
-                    padding: '4px',
-                    opacity: selectedMembers.length === 0 ? 1 : 0.5,
-                }}
-                onClick={() => {
-                    setSelectedMembers([]);
-                    onFilterChange([]);
-                }}
-            >
-                <div
-                    style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: '50%',
-                        backgroundColor: 'var(--bg-deep)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 14,
-                        fontWeight: 700,
-                        color: 'var(--coral-bright)',
-                    }}
-                >
-                    All
-                </div>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>{tasks.length}</span>
-            </div>
+    // Only surface members with at least one task
+    const result: Array<{ key: string; name: string; count: number }> = [];
+    for (const [k, count] of counts) {
+      if (count > 0) {
+        result.push({ key: k, name: names.get(k) ?? k, count });
+      }
+    }
+    // Sort alphabetically by name
+    result.sort((a, b) => a.name.localeCompare(b.name));
+    return result;
+  }, [tasks, members, cloudAgents, agentHosts]);
 
-            {/* Team member avatars */}
-            {workforceWithTasks.map(w => (
-                <div
-                    key={w.id}
-                    onClick={() => handleMemberClick(w.id)}
-                    style={{
-                        opacity: selectedMembers.includes(w.id) ? 1 : 0.7,
-                        border: selectedMembers.includes(w.id) ? '2px solid var(--coral-bright)' : '2px solid transparent',
-                        borderRadius: '50%',
-                        transition: 'opacity 0.2s, border-color 0.2s',
-                    }}
-                >
-                    <Avatar name={w.name} taskCount={memberTaskCounts[w.name] || 0} />
-                </div>
-            ))}
-        </div>
-    );
-};
+  const totalCount = workforceChips.reduce((sum, c) => sum + c.count, 0);
+
+  // Scroll helpers
+  const scrollLeft = () => {
+    scrollRef.current?.scrollBy({ left: -160, behavior: 'smooth' });
+  };
+  const scrollRight = () => {
+    scrollRef.current?.scrollBy({ left: 160, behavior: 'smooth' });
+  };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
+      {showScrollButtons && (
+        <button
+          type="button"
+          onClick={scrollLeft}
+          style={{
+            flexShrink: 0,
+            width: 24,
+            height: 24,
+            borderRadius: 6,
+            border: '1px solid var(--border-subtle)',
+            background: 'var(--bg-deep)',
+            color: 'var(--text-muted)',
+            fontSize: 12,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 0,
+          }}
+          aria-label="Scroll left"
+        >
+          ◀
+        </button>
+      )}
+
+      <div
+        ref={scrollRef}
+        style={{
+          display: 'flex',
+          gap: 4,
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          scrollSnapType: 'x proximity',
+          paddingBottom: 2,
+          flex: 1,
+          scrollbarWidth: 'thin',
+        }}
+      >
+        {/* "All" chip — clear all selections */}
+        <AvatarChip
+          label="All"
+          count={totalCount}
+          active={selectedKeys.length === 0}
+          onClick={() => onChange([])}
+          isAll
+        />
+
+        {/* One chip per assignable with tasks */}
+        {workforceChips.map((chip) => (
+          <AvatarChip
+            key={chip.key}
+            label={chip.name}
+            count={chip.count}
+            active={selectedKeys.includes(chip.key)}
+            onClick={() => {
+              if (selectedKeys.includes(chip.key)) {
+                onChange(selectedKeys.filter((k) => k !== chip.key));
+              } else {
+                onChange([...selectedKeys, chip.key]);
+              }
+            }}
+          />
+        ))}
+
+        {/* Empty state */}
+        {workforceChips.length === 0 && (
+          <span style={{ fontSize: 12, color: 'var(--text-muted)', padding: '4px 0' }}>
+            No assigned tasks
+          </span>
+        )}
+      </div>
+
+      {showScrollButtons && (
+        <button
+          type="button"
+          onClick={scrollRight}
+          style={{
+            flexShrink: 0,
+            width: 24,
+            height: 24,
+            borderRadius: 6,
+            border: '1px solid var(--border-subtle)',
+            background: 'var(--bg-deep)',
+            color: 'var(--text-muted)',
+            fontSize: 12,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 0,
+          }}
+          aria-label="Scroll right"
+        >
+          ▶
+        </button>
+      )}
+    </div>
+  );
+}
