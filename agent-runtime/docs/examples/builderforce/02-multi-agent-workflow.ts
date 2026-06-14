@@ -15,7 +15,7 @@ import {
 import { EnhancedAgentOrchestrator } from "../../src/builderforce/orchestrator-enhanced.js";
 
 async function main() {
-  console.log("🦞 Multi-Agent Workflow Example\n");
+  console.log("🤖 Multi-Agent Workflow Example\n");
   console.log("Orchestrating: Creator → Reviewer → Tester\n");
 
   const orchestrator = new EnhancedAgentOrchestrator();

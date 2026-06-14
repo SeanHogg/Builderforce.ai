@@ -9,7 +9,7 @@ import { getBuiltInAgentRoles } from "../../src/builderforce/agent-roles.js";
 import type { AgentRole } from "../../src/builderforce/types.js";
 
 async function main() {
-  console.log("🦞 Custom Agent Roles Example\n");
+  console.log("🤖 Custom Agent Roles Example\n");
 
   // Show built-in agent roles
   console.log("Built-in Agent Roles:");
