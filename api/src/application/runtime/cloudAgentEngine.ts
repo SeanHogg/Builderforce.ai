@@ -54,6 +54,21 @@ export interface ResolvedCloudAgent {
    *  agent must execute AS this model so a run is never silently attributed to the
    *  v1 gateway default. */
   baseModel?: string;
+  /** Declared execution support: 'cloud' | 'host' | 'both' (undefined = the
+   *  gateway-default bucket, treated as permissive). Enforced at dispatch so a
+   *  cloud-only agent is never delivered to a pinned On-Prem host. */
+  runtimeSupport?: string;
+  /** When runtimeSupport==='both', the runtime to prefer ('cloud' | 'host'). The
+   *  swimlane coordinator resolves this to an assignment runtime; the direct
+   *  dispatch path uses it only to break a tie when a host is available. */
+  preferredRuntime?: string | null;
+}
+
+/** Does an agent's declared runtime_support permit running on an On-Prem host?
+ *  Undefined (gateway default / legacy) is permissive so existing host runs keep
+ *  working; only an explicit 'cloud' marks the agent cloud-only. */
+export function agentAllowsHostExecution(runtimeSupport: string | undefined): boolean {
+  return runtimeSupport !== 'cloud';
 }
 
 /** `ide_agents.base_model` sentinel meaning "no explicit model — use the default". */
@@ -74,13 +89,15 @@ export async function resolveCloudAgent(
   if (!ref) return DEFAULT;
   try {
     const sql = neon(env.NEON_DATABASE_URL);
-    const rows = (await sql`SELECT engine, name, runtime_surface, base_model FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ engine?: string; name?: string; runtime_surface?: string; base_model?: string }>;
+    const rows = (await sql`SELECT engine, name, runtime_surface, base_model, runtime_support, preferred_runtime FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ engine?: string; name?: string; runtime_surface?: string; base_model?: string; runtime_support?: string; preferred_runtime?: string | null }>;
     const engine = typeof rows[0]?.engine === 'string' && rows[0].engine ? rows[0].engine : DEFAULT_ENGINE_ID;
     const label = typeof rows[0]?.name === 'string' && rows[0].name ? rows[0].name : undefined;
     const runtimeSurface = rows[0]?.runtime_surface === 'container' ? 'container' : 'durable';
     const rawModel = typeof rows[0]?.base_model === 'string' ? rows[0].base_model.trim() : '';
     const baseModel = rawModel && rawModel !== AGENT_DEFAULT_MODEL_SENTINEL ? rawModel : undefined;
-    return { engine, label, ref, runtimeSurface, baseModel };
+    const runtimeSupport = typeof rows[0]?.runtime_support === 'string' ? rows[0].runtime_support : undefined;
+    const preferredRuntime = rows[0]?.preferred_runtime ?? null;
+    return { engine, label, ref, runtimeSurface, baseModel, runtimeSupport, preferredRuntime };
   } catch {
     return DEFAULT;
   }
