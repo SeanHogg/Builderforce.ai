@@ -23,8 +23,12 @@ type TableRef = typeof tasks | typeof projectRepositories | typeof pullRequests 
 
 function makeFakeDb(opts: {
   selectByTable: Map<TableRef, unknown[]>;
+  /** Extra columns the .returning() of an update on a table should echo back
+   *  (e.g. the pullRequests row's taskId/projectId the writeback path reads). */
+  updateReturnByTable?: Map<TableRef, Record<string, unknown>>;
 }) {
   const inserts: Array<{ table: TableRef; values: Record<string, unknown> }> = [];
+  const updates: Array<{ table: TableRef; values: Record<string, unknown> }> = [];
 
   function selectChain(rows: unknown[]) {
     const chain: Record<string, unknown> = {};
@@ -63,21 +67,26 @@ function makeFakeDb(opts: {
     update(table: TableRef) {
       return {
         set(values: Record<string, unknown>) {
-          return {
-            where() {
-              return {
-                returning() {
-                  return Promise.resolve([{ id: 'updated', _table: table, ...values }]);
-                },
-              };
+          updates.push({ table, values });
+          const seed = opts.updateReturnByTable?.get(table) ?? {};
+          const row = { id: 'updated', _table: table, ...seed, ...values };
+          // .where() is both awaitable (writeback path uses no .returning()) and
+          // exposes .returning() (the PR update path reads the row back).
+          const whereResult = {
+            returning() {
+              return Promise.resolve([row]);
+            },
+            then(resolve: (v: unknown[]) => unknown) {
+              return resolve([row]);
             },
           };
+          return { where: () => whereResult };
         },
       };
     },
   };
 
-  return { db: db as never, inserts };
+  return { db: db as never, inserts, updates };
 }
 
 const TENANT = 1;
@@ -219,5 +228,86 @@ describe('RepoService.recordPrResult', () => {
     const svc = new RepoService(db, vi.fn(async () => true));
     const row = (await svc.recordPrResult('pr-1', TENANT, { status: 'bogus' })) as Record<string, unknown>;
     expect(row.status).toBeUndefined();
+  });
+
+  it('writes the PR url + number back onto the linked task (surfaces on the card)', async () => {
+    const { db, updates } = makeFakeDb({
+      selectByTable: new Map(),
+      // the PR update returns a row carrying its taskId/projectId so the writeback fires.
+      updateReturnByTable: new Map<TableRef, Record<string, unknown>>([
+        [pullRequests, { taskId: 5, projectId: 10 }],
+      ]),
+    });
+    const svc = new RepoService(db, vi.fn(async () => true));
+    await svc.recordPrResult('pr-1', TENANT, { number: 42, url: 'https://x/pr/42', status: 'open' });
+
+    const taskUpdate = updates.find((u) => u.table === tasks);
+    expect(taskUpdate).toBeTruthy();
+    expect(taskUpdate?.values.githubPrUrl).toBe('https://x/pr/42');
+    expect(taskUpdate?.values.githubPrNumber).toBe(42);
+  });
+
+  it('does NOT touch the task on a status-only callback (no url/number known yet)', async () => {
+    const { db, updates } = makeFakeDb({
+      selectByTable: new Map(),
+      updateReturnByTable: new Map<TableRef, Record<string, unknown>>([
+        [pullRequests, { taskId: 5, projectId: 10 }],
+      ]),
+    });
+    const svc = new RepoService(db, vi.fn(async () => true));
+    await svc.recordPrResult('pr-1', TENANT, { status: 'open' });
+    expect(updates.find((u) => u.table === tasks)).toBeUndefined();
+  });
+});
+
+describe('RepoService.dispatchPrCreation — explicit repo pin', () => {
+  it("honors the task's sticky explicit_repo_id over the project default", async () => {
+    const defaultRepo = {
+      id: 'repo-default', tenantId: TENANT, segmentId: null, projectId: 10,
+      provider: 'github', host: 'github.com', owner: 'acme', repo: 'web',
+      defaultBranch: 'main', isDefault: true, matchHints: null,
+    };
+    const pinnedRepo = {
+      id: 'repo-pinned', tenantId: TENANT, segmentId: null, projectId: 10,
+      provider: 'github', host: 'github.com', owner: 'acme', repo: 'api',
+      defaultBranch: 'develop', isDefault: false, matchHints: null,
+    };
+    const { db } = makeFakeDb({
+      selectByTable: new Map<TableRef, unknown[]>([
+        [tasks, [{ id: 5, projectId: 10, title: 'T', description: 'd', status: 'ready', source: null, assignedAgentHostId: 7, explicitRepoId: 'repo-pinned' }]],
+        [projectRepositories, [defaultRepo, pinnedRepo]],
+      ]),
+    });
+    const svc = new RepoService(db, vi.fn(async () => true));
+    const res = await svc.dispatchPrCreation(5, TENANT);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      // base comes from the pinned repo's defaultBranch, proving it was chosen.
+      expect(res.message.base).toBe('develop');
+      expect(res.message.repo.repo).toBe('api');
+    }
+  });
+
+  it('lets a request-body repoId override win over the task pin', async () => {
+    const a = {
+      id: 'repo-a', tenantId: TENANT, segmentId: null, projectId: 10,
+      provider: 'github', host: 'github.com', owner: 'acme', repo: 'web',
+      defaultBranch: 'main', isDefault: true, matchHints: null,
+    };
+    const b = {
+      id: 'repo-b', tenantId: TENANT, segmentId: null, projectId: 10,
+      provider: 'github', host: 'github.com', owner: 'acme', repo: 'api',
+      defaultBranch: 'develop', isDefault: false, matchHints: null,
+    };
+    const { db } = makeFakeDb({
+      selectByTable: new Map<TableRef, unknown[]>([
+        [tasks, [{ id: 5, projectId: 10, title: 'T', description: 'd', status: 'ready', source: null, assignedAgentHostId: 7, explicitRepoId: 'repo-a' }]],
+        [projectRepositories, [a, b]],
+      ]),
+    });
+    const svc = new RepoService(db, vi.fn(async () => true));
+    const res = await svc.dispatchPrCreation(5, TENANT, { explicitRepoId: 'repo-b' });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.message.repo.repo).toBe('api');
   });
 });

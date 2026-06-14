@@ -1,6 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { isCodingModelDegraded } from './cloudAgentEngine';
+import { isCodingModelDegraded, agentAllowsHostExecution } from './cloudAgentEngine';
 import { CODING_MODEL_POOL, CODING_BACKSTOP_MODELS } from '../llm/LlmProxyService';
+
+describe('agentAllowsHostExecution', () => {
+  it('blocks a cloud-only agent from a pinned host', () => {
+    expect(agentAllowsHostExecution('cloud')).toBe(false);
+  });
+  it('permits host/both/legacy (undefined) agents', () => {
+    expect(agentAllowsHostExecution('host')).toBe(true);
+    expect(agentAllowsHostExecution('both')).toBe(true);
+    expect(agentAllowsHostExecution(undefined)).toBe(true);
+  });
+});
 
 describe('isCodingModelDegraded', () => {
   it('does NOT flag a curated coding-pool model', () => {
