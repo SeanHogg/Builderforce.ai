@@ -64,6 +64,7 @@ class InMemoryStore implements CoordinatorStore {
       currentSwimlaneId: data.currentSwimlaneId,
       lifecycle: data.lifecycle,
       currentWorkflowId: null,
+      awaitingWorkflowId: null,
       stageHistory: data.stageHistory,
       error: null,
     };
@@ -75,13 +76,20 @@ class InMemoryStore implements CoordinatorStore {
   }
   async updateTicketRun(
     id: string, tenantId: number,
-    patch: { lifecycle: string; currentSwimlaneId: string | null; stageHistory: string; error: string | null },
+    patch: { lifecycle: string; currentSwimlaneId: string | null; stageHistory: string; error: string | null; awaitingWorkflowId?: string | null },
   ) {
     const run = this.runs.get(id);
     if (!run || run.tenantId !== tenantId) return null;
     const updated = { ...run, ...patch };
     this.runs.set(id, updated);
     return updated;
+  }
+  async findAwaitingWorkflowRun(workflowId: string) {
+    return (
+      [...this.runs.values()].find(
+        (r) => r.awaitingWorkflowId === workflowId && r.lifecycle === 'awaiting_workflow',
+      ) ?? null
+    );
   }
   async recordTransition(t: TransitionRecord) {
     this.transitions.push(t);
@@ -381,8 +389,8 @@ describe('SwimlaneCoordinator — execution loop', () => {
     expect(cur.currentSwimlaneId).toBe('l2'); // jumped past l1 to the named lane
   });
 
-  it('run_workflow action: a successful stage fires the workflow runner, then advances', async () => {
-    const runner = { run: vi.fn(async () => {}) };
+  it('run_workflow action: a successful stage fires the runner and PARKS (does not advance) until the workflow settles', async () => {
+    const runner = { run: vi.fn(async () => ({ ok: true as const, workflowId: 'wf-run-1' })) };
     store.seedBoard({ id: 'b1', tenantId: TENANT });
     store.seedLane({ id: 'l0', boardId: 'b1', position: 0, isTerminal: true, actionType: 'run_workflow', actionTarget: 'wf-123' });
     store.seedAssignment('l0', { id: 'a0', role: 'impl', runtime: 'browser' });
@@ -393,7 +401,78 @@ describe('SwimlaneCoordinator — execution loop', () => {
 
     expect(runner.run).toHaveBeenCalledTimes(1);
     expect(runner.run).toHaveBeenCalledWith('wf-123', expect.objectContaining({ tenantId: TENANT, taskId: 8 }));
-    expect((await store.getTicketRun(run.id))!.lifecycle).toBe('done');
+    // Parked on the spawned workflow — NOT auto-advanced to done.
+    const parked = (await store.getTicketRun(run.id))!;
+    expect(parked.lifecycle).toBe('awaiting_workflow');
+    expect(parked.awaitingWorkflowId).toBe('wf-run-1');
+  });
+
+  it('run_workflow gate: the parked ticket reaches done only once the spawned workflow completes', async () => {
+    const runner = { run: vi.fn(async () => ({ ok: true as const, workflowId: 'wf-run-2' })) };
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
+    store.seedLane({ id: 'l0', boardId: 'b1', position: 0, isTerminal: true, actionType: 'run_workflow', actionTarget: 'wf-123' });
+    store.seedAssignment('l0', { id: 'a0', role: 'impl', runtime: 'browser' });
+
+    const coord = new SwimlaneCoordinator(store, undefined, runner);
+    const run = await coord.startTicket('b1', 8, TENANT);
+    await coord.reportDispatchResult(store.pending(run.id)[0]!.id, TENANT, { status: 'completed' });
+    expect((await store.getTicketRun(run.id))!.lifecycle).toBe('awaiting_workflow');
+
+    // Spawned workflow settles → ticket resumes to done (terminal lane).
+    await coord.onSpawnedWorkflowSettled('wf-run-2', 'completed');
+    const resumed = (await store.getTicketRun(run.id))!;
+    expect(resumed.lifecycle).toBe('done');
+    expect(resumed.awaitingWorkflowId).toBeNull();
+  });
+
+  it('run_workflow gate: a non-terminal lane advances to the next lane when the workflow completes', async () => {
+    const runner = { run: vi.fn(async () => ({ ok: true as const, workflowId: 'wf-run-3' })) };
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
+    store.seedLane({ id: 'l0', boardId: 'b1', position: 0, actionType: 'run_workflow', actionTarget: 'wf-123' });
+    store.seedLane({ id: 'l1', boardId: 'b1', position: 1, isTerminal: true });
+    store.seedAssignment('l0', { id: 'a0', role: 'impl', runtime: 'browser' });
+    store.seedAssignment('l1', { id: 'a1', role: 'rev', runtime: 'browser' });
+
+    const coord = new SwimlaneCoordinator(store, acceptingDispatcher, runner);
+    const run = await coord.startTicket('b1', 8, TENANT);
+    await coord.reportDispatchResult(store.pending(run.id)[0]!.id, TENANT, { status: 'completed' });
+    expect((await store.getTicketRun(run.id))!.lifecycle).toBe('awaiting_workflow');
+
+    await coord.onSpawnedWorkflowSettled('wf-run-3', 'completed');
+    const resumed = (await store.getTicketRun(run.id))!;
+    expect(resumed.lifecycle).toBe('stage_running');
+    expect(resumed.currentSwimlaneId).toBe('l1');
+  });
+
+  it('run_workflow gate: a failed spawned workflow routes the parked ticket to needs_attention (never a silent advance)', async () => {
+    const runner = { run: vi.fn(async () => ({ ok: true as const, workflowId: 'wf-run-4' })) };
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
+    store.seedLane({ id: 'l0', boardId: 'b1', position: 0, isTerminal: true, actionType: 'run_workflow', actionTarget: 'wf-123' });
+    store.seedAssignment('l0', { id: 'a0', role: 'impl', runtime: 'browser' });
+
+    const coord = new SwimlaneCoordinator(store, undefined, runner);
+    const run = await coord.startTicket('b1', 8, TENANT);
+    await coord.reportDispatchResult(store.pending(run.id)[0]!.id, TENANT, { status: 'completed' });
+
+    await coord.onSpawnedWorkflowSettled('wf-run-4', 'failed');
+    const resumed = (await store.getTicketRun(run.id))!;
+    expect(resumed.lifecycle).toBe('needs_attention');
+    expect(resumed.awaitingWorkflowId).toBeNull();
+  });
+
+  it('run_workflow action: a missing/unstartable workflow definition surfaces as needs_attention instead of a silent advance', async () => {
+    const runner = { run: vi.fn(async () => ({ ok: false as const, error: 'workflow definition wf-123 not found' })) };
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
+    store.seedLane({ id: 'l0', boardId: 'b1', position: 0, isTerminal: true, actionType: 'run_workflow', actionTarget: 'wf-123' });
+    store.seedAssignment('l0', { id: 'a0', role: 'impl', runtime: 'browser' });
+
+    const coord = new SwimlaneCoordinator(store, undefined, runner);
+    const run = await coord.startTicket('b1', 8, TENANT);
+    await coord.reportDispatchResult(store.pending(run.id)[0]!.id, TENANT, { status: 'completed' });
+
+    const cur = (await store.getTicketRun(run.id))!;
+    expect(cur.lifecycle).toBe('needs_attention');
+    expect(cur.error).toContain('run_workflow action failed');
   });
 
   it("success policy 'any': a parallel stage advances when one agent succeeds even though another fails", async () => {

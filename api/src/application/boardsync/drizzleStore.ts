@@ -27,13 +27,22 @@ import type {
 import type { SyncState } from './reconciler';
 import type { ChangeSet } from './providers';
 
-function parseFields(raw: string | null): Record<string, unknown> | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    return null;
+/**
+ * Coerce a stored `fields` jsonb value back into a plain object. The driver may
+ * hand back an already-parsed object (neon-http) or a JSON string; both resolve
+ * to the same bag. Non-object/empty values become null.
+ */
+function normalizeFields(raw: unknown): Record<string, unknown> | null {
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
   }
+  return typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
 }
 
 export function createDrizzleStore(db: Db): BoardSyncStore {
@@ -74,7 +83,7 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
         externalVersion: row.externalVersion,
         contentHash: row.contentHash,
         syncState: row.syncState as SyncState,
-        fields: parseFields(null), // fields are reconstructed from task; not stored as column
+        fields: normalizeFields(row.fields),
       };
     },
 
@@ -92,6 +101,7 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
           externalUrl: input.externalUrl,
           externalVersion: input.externalVersion,
           contentHash: input.contentHash,
+          fields: input.fields,
           syncState: input.syncState,
           lastInboundAt: now,
           createdAt: now,
@@ -104,6 +114,7 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
             externalUrl: input.externalUrl,
             externalVersion: input.externalVersion,
             contentHash: input.contentHash,
+            fields: input.fields,
             syncState: input.syncState,
             lastInboundAt: now,
             updatedAt: now,

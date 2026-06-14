@@ -9,7 +9,7 @@ import { workflowDefinitions } from '../../infrastructure/database/schema';
 import { parseDefinition } from '../../domain/workflowGraph';
 import { instantiateWorkflowRun, runTargetFromDefinition } from '../workflow/instantiateRun';
 import type { Db } from '../../infrastructure/database/connection';
-import type { StageWorkflowRunner } from './SwimlaneCoordinator';
+import type { StageWorkflowRunner, StageWorkflowRunResult } from './SwimlaneCoordinator';
 
 export class DrizzleStageWorkflowRunner implements StageWorkflowRunner {
   constructor(private readonly db: Db) {}
@@ -17,16 +17,19 @@ export class DrizzleStageWorkflowRunner implements StageWorkflowRunner {
   async run(
     workflowDefId: string,
     ctx: { tenantId: number; ticketRunId: string; taskId: number },
-  ): Promise<void> {
+  ): Promise<StageWorkflowRunResult> {
     const [defRow] = await this.db
       .select()
       .from(workflowDefinitions)
       .where(and(eq(workflowDefinitions.id, workflowDefId), eq(workflowDefinitions.tenantId, ctx.tenantId)));
-    // Definition deleted/renamed since assignment — skip rather than fail the
-    // ticket (the stage already succeeded; the action is best-effort here).
-    if (!defRow) return;
+    // Definition deleted/renamed since assignment — surface as an error so the
+    // coordinator routes the ticket to needs_attention instead of silently
+    // advancing past an action that never ran.
+    if (!defRow) {
+      return { ok: false, error: `workflow definition ${workflowDefId} not found` };
+    }
 
-    await instantiateWorkflowRun(this.db, {
+    const result = await instantiateWorkflowRun(this.db, {
       tenantId: ctx.tenantId,
       segmentId: defRow.segmentId ?? null,
       definition: parseDefinition(defRow.definition),
@@ -36,5 +39,7 @@ export class DrizzleStageWorkflowRunner implements StageWorkflowRunner {
       target: runTargetFromDefinition(defRow),
       triggerSource: `swimlane:ticket:${ctx.ticketRunId}`,
     });
+    if (!result.ok) return { ok: false, error: result.error };
+    return { ok: true, workflowId: result.workflowId };
   }
 }

@@ -11,14 +11,15 @@
 
 /** The full ticket lifecycle status union. */
 export type TicketLifecycle =
-  | 'queued'           // created, not yet started into a lane
-  | 'awaiting_gate'    // stage done but a human gate must approve before advancing
-  | 'stage_running'    // a stage workflow is currently executing
-  | 'stage_completed'  // a stage workflow finished successfully (terminal-lane case)
-  | 'advancing'        // moving to the next lane after a successful stage
-  | 'needs_attention'  // a stage failed (or a non-recoverable error) — no silent advance
-  | 'done'             // reached a terminal lane successfully
-  | 'cancelled';       // explicitly cancelled
+  | 'queued'             // created, not yet started into a lane
+  | 'awaiting_gate'      // stage done but a human gate must approve before advancing
+  | 'awaiting_workflow'  // stage done + its run_workflow action fired — parked until that workflow settles
+  | 'stage_running'      // a stage workflow is currently executing
+  | 'stage_completed'    // a stage workflow finished successfully (terminal-lane case)
+  | 'advancing'          // moving to the next lane after a successful stage
+  | 'needs_attention'    // a stage failed (or a non-recoverable error) — no silent advance
+  | 'done'               // reached a terminal lane successfully
+  | 'cancelled';         // explicitly cancelled
 
 /** Workflow engine statuses we map up into ticket lifecycle events. */
 export type WorkflowStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
@@ -29,17 +30,21 @@ export type WorkflowStatus = 'pending' | 'running' | 'completed' | 'failed' | 'c
  * outgoing transitions.
  */
 export const VALID_TICKET_TRANSITIONS: Readonly<Record<TicketLifecycle, readonly TicketLifecycle[]>> = {
-  queued:          ['stage_running', 'cancelled'],
-  stage_running:   ['stage_completed', 'awaiting_gate', 'advancing', 'needs_attention', 'cancelled'],
+  queued:            ['stage_running', 'cancelled'],
+  stage_running:     ['stage_completed', 'awaiting_gate', 'advancing', 'needs_attention', 'cancelled'],
   // After a successful stage we either advance (autonomous), wait for a gate,
-  // or — when the stage was the terminal lane — mark the whole ticket done.
-  stage_completed: ['advancing', 'awaiting_gate', 'done', 'cancelled'],
-  awaiting_gate:   ['advancing', 'needs_attention', 'cancelled'],
-  advancing:       ['stage_running', 'done', 'cancelled'],
+  // park on a run_workflow side-effect, or — when the stage was the terminal
+  // lane — mark the whole ticket done.
+  stage_completed:   ['advancing', 'awaiting_gate', 'awaiting_workflow', 'done', 'cancelled'],
+  awaiting_gate:     ['advancing', 'needs_attention', 'cancelled'],
+  // Parked on a run_workflow action: when that workflow settles the ticket either
+  // advances (success), is done (terminal lane), or parks for a human (failure).
+  awaiting_workflow: ['advancing', 'done', 'needs_attention', 'cancelled'],
+  advancing:         ['stage_running', 'done', 'cancelled'],
   // Recovery: a retry re-runs the stage; a manual decision may still advance it.
-  needs_attention: ['stage_running', 'advancing', 'cancelled'],
-  done:            [],
-  cancelled:       [],
+  needs_attention:   ['stage_running', 'advancing', 'cancelled'],
+  done:              [],
+  cancelled:         [],
 };
 
 /** True iff a ticket may move from `from` to `to`. */
