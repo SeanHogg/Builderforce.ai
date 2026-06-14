@@ -32,7 +32,7 @@ import { CoherenceControls } from './CoherenceControls';
 import { VideoPreview } from './VideoPreview';
 import { ProgressFeedback } from './ProgressFeedback';
 import { DebugCopyButton } from './DebugCopyButton';
-import { QualityTierPicker, resolveQualityTier } from './QualityTierPicker';
+import { QualityTierPicker, resolveEffectiveChain, EffectiveChainBadge } from './QualityTierPicker';
 import { StoryboardEditor } from './StoryboardEditor';
 import { useEngineStatus } from './useEngineStatus';
 
@@ -72,6 +72,8 @@ export interface VideoVersionParams {
   coherenceStrength: number;
   motionAmount: number;
   imgToImgStrength: number;
+  /** Anchor-refresh interval used (0 = never) to bound img2img recursion drift. */
+  anchorRefreshInterval: number;
   cameraMotion: { dx: number; dy: number } | null;
   mambaState: MambaStateSnapshot;
   elapsedMs: number;
@@ -186,6 +188,10 @@ export function StudioPanel({
   // wobbling" — anchor-walk alone can't deliver "walking forward through a
   // forest path" because the model has no temporal training.
   const [imgToImgStrength, setImgToImgStrength] = useState(0);
+  // Anchor-refresh interval — only meaningful with img2img recursion on. 0 =
+  // never refresh (carry content forward indefinitely, may blur past ~30 frames);
+  // N = restart from fresh noise every N keyframes to bound the accumulated drift.
+  const [anchorRefreshInterval, setAnchorRefreshInterval] = useState(0);
   const [cameraDx, setCameraDx] = useState(0);
   const [cameraDy, setCameraDy] = useState(0);
   const [frames, setFrames] = useState(defaultFrames);
@@ -309,12 +315,12 @@ export function StudioPanel({
   // Source of truth for tier → model id lives in QualityTierPicker.
   const ensureEngine = useCallback(async (): Promise<VideoEngine> => {
     if (engineRef.current) return engineRef.current;
-    const tier = resolveQualityTier(quality);
+    const chain = resolveEffectiveChain({ showAdvanced, advancedModel: model, quality });
     const engine = await VideoEngine.create({
       apiKey: token,
       baseUrl,
-      model: showAdvanced ? model : tier.primary,
-      refinementModel: showAdvanced ? undefined : tier.refinement,
+      model: chain.primary,
+      refinementModel: chain.refinement ?? undefined,
       mambaState: initialMambaState,
       width: resolution,
       height: resolution,
@@ -344,13 +350,14 @@ export function StudioPanel({
 
       if (onSaveVersion) {
         try {
-          // Record the RESOLVED model pair (not the stale picker default).
-          const tier = resolveQualityTier(quality);
+          // Record the RESOLVED model pair (not the stale picker default) via
+          // the same chain resolver the engine used.
+          const chain = resolveEffectiveChain({ showAdvanced, advancedModel: model, quality });
           const params: VideoVersionParams = {
             prompt,
             quality,
-            model: showAdvanced ? model : tier.primary,
-            refinementModel: showAdvanced ? null : tier.refinement ?? null,
+            model: chain.primary,
+            refinementModel: chain.refinement,
             width: resolution,
             height: resolution,
             frames,
@@ -366,6 +373,7 @@ export function StudioPanel({
             coherenceStrength,
             motionAmount,
             imgToImgStrength,
+            anchorRefreshInterval,
             cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0)
               ? { dx: cameraDx, dy: cameraDy }
               : null,
@@ -387,7 +395,8 @@ export function StudioPanel({
     [
       onVideoGenerated, onSaveVersion, quality, showAdvanced, model, resolution, prompt,
       frames, fps, interpolationFactor, interpolationBackend, coherenceMode, coherenceStrength,
-      motionAmount, imgToImgStrength, cameraDx, cameraDy, currentVersionId, storyboard, validate,
+      motionAmount, imgToImgStrength, anchorRefreshInterval, cameraDx, cameraDy, currentVersionId,
+      storyboard, validate,
     ],
   );
 
@@ -528,6 +537,7 @@ export function StudioPanel({
           coherenceStrength,
           motionAmount,
           imgToImgStrength,
+          anchorRefreshInterval,
           interpolationFactor,
           interpolationBackend,
           cameraMotion:
@@ -543,8 +553,8 @@ export function StudioPanel({
     );
   }, [
     cinematic, handlePlan, prompt, runGeneration, frames, fps, coherenceMode,
-    coherenceStrength, motionAmount, imgToImgStrength, interpolationFactor,
-    interpolationBackend, cameraDx, cameraDy, handleProgress, handleFrame,
+    coherenceStrength, motionAmount, imgToImgStrength, anchorRefreshInterval,
+    interpolationFactor, interpolationBackend, cameraDx, cameraDy, handleProgress, handleFrame,
   ]);
 
   const handleCancel = useCallback(() => {
@@ -633,6 +643,8 @@ export function StudioPanel({
       setCoherenceStrength(p.coherenceStrength);
       setMotionAmount(p.motionAmount);
       setImgToImgStrength(p.imgToImgStrength);
+      // Field added after the first release — guard legacy sidecars.
+      setAnchorRefreshInterval(p.anchorRefreshInterval ?? 0);
       setCameraDx(p.cameraMotion?.dx ?? 0);
       setCameraDy(p.cameraMotion?.dy ?? 0);
       setCurrentVersionId(entry.id);
@@ -666,6 +678,9 @@ export function StudioPanel({
   }
 
   const device = status.device;
+  // The model chain that will actually run — shared by the debug snapshot and
+  // (internally) the EffectiveChainBadge, so every readout agrees.
+  const effectiveChain = resolveEffectiveChain({ showAdvanced, advancedModel: model, quality });
 
   return (
     <div className="bfs-root">
@@ -727,8 +742,17 @@ export function StudioPanel({
 
           {/* Simple mode: Quality preset is the only required choice. The user
               picks "Fast / Balanced / Refined" and the engine resolves it to a
-              concrete model (or two for the Refined two-pass chain). */}
-          <QualityTierPicker value={quality} onChange={setQuality} disabled={isGenerating} />
+              concrete model (or two for the Refined two-pass chain). Disabled
+              while an Advanced model override is in effect so the two surfaces
+              can't silently contradict — the badge below states what runs. */}
+          <QualityTierPicker
+            value={quality}
+            onChange={setQuality}
+            disabled={isGenerating || showAdvanced}
+          />
+          {/* Single authoritative readout of the model chain that will actually
+              run, flagging when Advanced has overridden the Quality tier. */}
+          <EffectiveChainBadge showAdvanced={showAdvanced} advancedModel={model} quality={quality} />
 
           {/* Cinematic mode — routes the prompt through the Director / Shot-
               Planner (planScene) into a multi-shot storyboard with per-shot
@@ -979,6 +1003,34 @@ export function StudioPanel({
               onCameraDyChange={setCameraDy}
               disabled={isGenerating}
             />
+
+            {/* Anchor refresh — only relevant once img2img recursion is on,
+                since it bounds THAT path's accumulating blur. Hidden otherwise
+                to keep the simple cases uncluttered. */}
+            {imgToImgStrength > 0 && (
+              <div className="bfs-field" style={{ marginTop: 12 }}>
+                <label className="bfs-label" htmlFor="bfs-anchor-refresh">
+                  Anchor refresh (img2img drift bound)
+                </label>
+                <input
+                  id="bfs-anchor-refresh"
+                  type="number"
+                  className="bfs-input"
+                  min={0}
+                  max={120}
+                  value={anchorRefreshInterval}
+                  onChange={(e) =>
+                    setAnchorRefreshInterval(Math.max(0, Math.min(120, Number(e.target.value) || 0)))
+                  }
+                  disabled={isGenerating}
+                />
+                <p className="bfs-hint">
+                  Restart from fresh noise every N keyframes so long clips don't progressively
+                  blur as img2img recursion accumulates VAE round-trip error. 0 = never refresh
+                  (carry content forward indefinitely). Try 8–12 for clips past ~30 frames.
+                </p>
+              </div>
+            )}
           </details>
 
           <div className="bfs-actions">
@@ -1046,14 +1098,18 @@ export function StudioPanel({
             <DebugCopyButton
               prompt={prompt}
               expandedPrompt={expandedPrompt}
-              model={model}
+              quality={quality}
+              model={effectiveChain.primary}
+              refinementModel={effectiveChain.refinement}
               resolution={resolution}
               frames={frames}
               fps={fps}
+              interpolationFactor={interpolationFactor}
               coherenceMode={coherenceMode}
               coherenceStrength={coherenceStrength}
               motionAmount={motionAmount}
               imgToImgStrength={imgToImgStrength}
+              anchorRefreshInterval={anchorRefreshInterval}
               cameraMotion={
                 imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0)
                   ? { dx: cameraDx, dy: cameraDy }

@@ -589,15 +589,27 @@ export class DiffusionEngine {
    * — the standard DDPM forward diffusion at timestep t.
    */
   addNoiseToLatent(clean: Float32Array, timestep: number, seed: number): Float32Array {
-    const alpha = ALPHAS_CUMPROD[timestep] ?? 0.001;
-    const sqrtAlpha = Math.sqrt(alpha);
-    const sqrtOneMinusAlpha = Math.sqrt(1 - alpha);
+    const sqrtOneMinusAlpha = this.noiseScaleForTimestep(timestep);
+    const sqrtAlpha = Math.sqrt(Math.max(0, 1 - sqrtOneMinusAlpha * sqrtOneMinusAlpha));
     const noise = gaussianNoise(clean.length, seed);
     const out = new Float32Array(clean.length);
     for (let i = 0; i < clean.length; i++) {
       out[i] = sqrtAlpha * clean[i] + sqrtOneMinusAlpha * noise[i];
     }
     return out;
+  }
+
+  /**
+   * The noise fraction `sqrt(1 - ᾱ_t)` of a latent re-noised to `timestep` via
+   * the shared DDPM schedule — i.e. the coefficient on the noise term in
+   * `addNoiseToLatent`. Exposed so the coherence layer can scale the
+   * latent-residual Mamba bias by the same noise level the engine actually
+   * injected, letting that bias compose with img2img recursion (see
+   * `latentResidualBiasScale`). Single source of truth for the schedule.
+   */
+  noiseScaleForTimestep(timestep: number): number {
+    const alpha = ALPHAS_CUMPROD[timestep] ?? 0.001;
+    return Math.sqrt(1 - alpha);
   }
 
   /**

@@ -16,19 +16,31 @@ import type {
   DiffusionModelId,
   GenerateResult,
   ProbedDevice,
+  QualityMode,
 } from '@seanhogg/builderforce-studio';
 
 export interface DebugSnapshotProps {
   prompt: string;
   expandedPrompt: string;
+  /** The Quality tier the user picked (simple mode), for triage context. */
+  quality: QualityMode;
+  /** RESOLVED primary model that actually ran — the tier's primary OR the
+   *  Advanced override — never the stale Advanced picker default. */
   model: DiffusionModelId;
+  /** RESOLVED refinement model (two-pass tier), else null. Without this a
+   *  "Refined" capture read `Model: lcm-tiny-sd` with no sign a second pass ran. */
+  refinementModel: DiffusionModelId | null;
   resolution: number;
   frames: number;
   fps: number;
+  /** Keyframe interpolation factor (1 = every frame fully generated). */
+  interpolationFactor: number;
   coherenceMode: CoherenceMode;
   coherenceStrength: number;
   motionAmount: number;
   imgToImgStrength: number;
+  /** Anchor-refresh interval (0 = never) bounding img2img recursion drift. */
+  anchorRefreshInterval: number;
   cameraMotion: { dx: number; dy: number } | null;
   device: ProbedDevice | null;
   progressLabel: string;
@@ -38,6 +50,14 @@ export interface DebugSnapshotProps {
   currentVersionId: string | null;
   /** Set true to write JSON instead of markdown — useful for machine ingest. */
   asJson?: boolean;
+}
+
+/** One-line model-chain readout for the snapshot — mirrors the panel's badge so
+ *  a debug paste states exactly which model(s) ran, not a stale picker value. */
+function describeModelChain(p: DebugSnapshotProps): string {
+  return p.refinementModel
+    ? `${p.model} → ${p.refinementModel} (two-pass)`
+    : `${p.model} (single pass)`;
 }
 
 /**
@@ -111,9 +131,11 @@ async function buildMarkdownSnapshot(p: DebugSnapshotProps): Promise<string> {
       : '- Approx memory: unknown',
     '',
     '### Configuration',
-    `- Model: \`${p.model}\``,
+    `- Quality tier: \`${p.quality}\``,
+    `- Model chain: \`${describeModelChain(p)}\``,
     `- Resolution: ${p.resolution}×${p.resolution}`,
     `- Frames: ${p.frames}, FPS: ${p.fps}, Duration: ${(p.frames / p.fps).toFixed(2)}s`,
+    `- Keyframe interpolation: ${p.interpolationFactor === 1 ? 'off' : `${p.interpolationFactor}×`}`,
     '',
     '### Prompt',
     p.prompt ? `> ${p.prompt.replace(/\n/g, '\n> ')}` : '> (empty)',
@@ -125,6 +147,7 @@ async function buildMarkdownSnapshot(p: DebugSnapshotProps): Promise<string> {
     `- Mamba mode: \`${p.coherenceMode}\` (strength ${p.coherenceStrength.toFixed(2)})`,
     `- motionAmount: ${p.motionAmount.toFixed(2)}`,
     `- imgToImgStrength: ${p.imgToImgStrength.toFixed(2)}`,
+    `- anchorRefreshInterval: ${p.anchorRefreshInterval > 0 ? `${p.anchorRefreshInterval} keyframes` : 'off'}`,
     `- cameraMotion: ${p.cameraMotion ? `dx=${p.cameraMotion.dx}, dy=${p.cameraMotion.dy}` : 'none'}`,
     '',
     '### Version chain',
@@ -172,10 +195,14 @@ async function buildJsonSnapshot(p: DebugSnapshotProps): Promise<string> {
         ? { kind: p.device.kind, label: p.device.label, approxMemoryMb: p.device.approxMemoryMb }
         : null,
       config: {
+        quality: p.quality,
         model: p.model,
+        refinementModel: p.refinementModel,
+        modelChain: describeModelChain(p),
         resolution: p.resolution,
         frames: p.frames,
         fps: p.fps,
+        interpolationFactor: p.interpolationFactor,
       },
       prompt: { user: p.prompt, expanded: p.expandedPrompt || null },
       continuity: {
@@ -183,6 +210,7 @@ async function buildJsonSnapshot(p: DebugSnapshotProps): Promise<string> {
         coherenceStrength: p.coherenceStrength,
         motionAmount: p.motionAmount,
         imgToImgStrength: p.imgToImgStrength,
+        anchorRefreshInterval: p.anchorRefreshInterval,
         cameraMotion: p.cameraMotion,
       },
       version: { currentId: p.currentVersionId },

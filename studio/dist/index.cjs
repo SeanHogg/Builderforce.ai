@@ -629,15 +629,26 @@ var DiffusionEngine = class {
    * — the standard DDPM forward diffusion at timestep t.
    */
   addNoiseToLatent(clean, timestep, seed) {
-    const alpha = ALPHAS_CUMPROD[timestep] ?? 1e-3;
-    const sqrtAlpha = Math.sqrt(alpha);
-    const sqrtOneMinusAlpha = Math.sqrt(1 - alpha);
+    const sqrtOneMinusAlpha = this.noiseScaleForTimestep(timestep);
+    const sqrtAlpha = Math.sqrt(Math.max(0, 1 - sqrtOneMinusAlpha * sqrtOneMinusAlpha));
     const noise = gaussianNoise(clean.length, seed);
     const out = new Float32Array(clean.length);
     for (let i = 0; i < clean.length; i++) {
       out[i] = sqrtAlpha * clean[i] + sqrtOneMinusAlpha * noise[i];
     }
     return out;
+  }
+  /**
+   * The noise fraction `sqrt(1 - ᾱ_t)` of a latent re-noised to `timestep` via
+   * the shared DDPM schedule — i.e. the coefficient on the noise term in
+   * `addNoiseToLatent`. Exposed so the coherence layer can scale the
+   * latent-residual Mamba bias by the same noise level the engine actually
+   * injected, letting that bias compose with img2img recursion (see
+   * `latentResidualBiasScale`). Single source of truth for the schedule.
+   */
+  noiseScaleForTimestep(timestep) {
+    const alpha = ALPHAS_CUMPROD[timestep] ?? 1e-3;
+    return Math.sqrt(1 - alpha);
   }
   /**
    * VAE-decode a clean latent to RGB pixels ([-1..1], layout [3, h, w]) WITHOUT
@@ -1002,6 +1013,11 @@ function anchorWalkLatent(anchor, walkStart, walkEnd, frameIdx, frameCount, moti
   const frameNoise = slerp(walkStart, walkEnd, t);
   return blendNoise(anchor, frameNoise, motionAmount);
 }
+function isAnchorRefreshFrame(keyframeIndex, interval) {
+  if (!Number.isFinite(interval) || interval <= 0) return false;
+  const k = Math.floor(interval);
+  return keyframeIndex > 0 && keyframeIndex % k === 0;
+}
 function shiftLatent(latent, shape, dx, dy) {
   const { channels, height, width } = shape;
   if (latent.length !== channels * height * width) {
@@ -1056,18 +1072,22 @@ function scaleLatent(latent, shape, scale) {
   }
   return out;
 }
-function shouldApplyLatentResidualBias(mode, useImg2Img) {
-  return mode === "latent-residual" && !useImg2Img;
+function latentResidualBiasScale(mode, useImg2Img, img2imgNoiseScale) {
+  if (mode !== "latent-residual") return 0;
+  if (!useImg2Img) return 1;
+  if (!Number.isFinite(img2imgNoiseScale) || img2imgNoiseScale <= 0) return 0;
+  return Math.min(1, img2imgNoiseScale);
 }
 function applyToLatent(args) {
   const { ctx, latent } = args;
-  if (ctx.strength <= 0) return latent;
+  const noiseScale = args.noiseScale ?? 1;
+  if (ctx.strength <= 0 || noiseScale <= 0) return latent;
   const channels = 4;
   const spatial = latent.length / channels;
   const stateVec = projectState(ctx.state, channels);
   const out = new Float32Array(latent);
   for (let c = 0; c < channels; c++) {
-    const bias = stateVec[c] * ctx.strength;
+    const bias = stateVec[c] * ctx.strength * noiseScale;
     const base = c * spatial;
     for (let i = 0; i < spatial; i++) {
       out[base + i] += bias;
@@ -1803,6 +1823,7 @@ var VideoEngine = class _VideoEngine {
       seed,
       motionAmount: clamp012(args.motionAmount ?? DEFAULT_MOTION_AMOUNT),
       imgToImgStrength: clamp012(args.imgToImgStrength ?? 0),
+      anchorRefreshInterval: normaliseRefreshInterval(args.anchorRefreshInterval),
       cameraMotion: args.cameraMotion,
       interpolationFactor: normaliseFactor(args.interpolationFactor),
       interpolationBackend: args.interpolationBackend ?? "latent-slerp",
@@ -1988,6 +2009,9 @@ var VideoEngine = class _VideoEngine {
         seed: args.baseSeed + attempt * 7919,
         motionAmount: args.motionAmount,
         imgToImgStrength: motion.imgToImgStrength,
+        // Shots are short and Mamba state resets per shot, so per-shot recursion
+        // drift is already bounded by the shot length — no periodic refresh.
+        anchorRefreshInterval: 0,
         cameraMotion: motion.cameraMotion,
         interpolationFactor: args.interpolationFactor,
         interpolationBackend: args.interpolationBackend,
@@ -2045,6 +2069,7 @@ var VideoEngine = class _VideoEngine {
       seed,
       motionAmount,
       imgToImgStrength,
+      anchorRefreshInterval,
       cameraMotion,
       interpolationFactor,
       interpolationBackend,
@@ -2075,9 +2100,16 @@ var VideoEngine = class _VideoEngine {
         seqLen: descriptor.sequenceLength,
         embedDim: descriptor.textEmbedDim
       }) : promptEmbedding;
-      const useImg2Img = imgToImgStrength > 0 && prevLatent !== null;
+      const refresh = isAnchorRefreshFrame(k, anchorRefreshInterval);
+      const useImg2Img = imgToImgStrength > 0 && prevLatent !== null && !refresh;
       let latent;
       let frameTimesteps;
+      if (refresh) {
+        reportProgress(
+          `${label} ${frameIdx + 1}/${frameCount}: anchor refresh (bounding recursion drift)\u2026`,
+          onProgress
+        );
+      }
       if (useImg2Img) {
         let transformed = prevLatent;
         const latentShape = { channels: 4, height: latentH, width: latentW };
@@ -2096,10 +2128,16 @@ var VideoEngine = class _VideoEngine {
         latent = anchorWalkLatent(anchorLatent, walkStart, walkEnd, frameIdx, frameCount, motionAmount);
         frameTimesteps = timesteps;
       }
-      if (shouldApplyLatentResidualBias(coherenceMode, useImg2Img)) {
+      const biasNoiseScale = latentResidualBiasScale(
+        coherenceMode,
+        useImg2Img,
+        useImg2Img ? this.diffusion.noiseScaleForTimestep(frameTimesteps[0]) : 1
+      );
+      if (biasNoiseScale > 0) {
         latent = applyToLatent({
           ctx: { mode: coherenceMode, strength: coherenceStrength, state: this.mambaState },
-          latent
+          latent,
+          noiseScale: biasNoiseScale
         });
       }
       reportProgress(
@@ -2340,6 +2378,10 @@ function closeClip(clip) {
 function normaliseFactor(factor) {
   if (factor === void 0 || !Number.isFinite(factor)) return 1;
   return Math.max(1, Math.floor(factor));
+}
+function normaliseRefreshInterval(interval) {
+  if (interval === void 0 || !Number.isFinite(interval) || interval <= 0) return 0;
+  return Math.floor(interval);
 }
 async function rgbaToDataUrl(rgba, width, height) {
   if (typeof OffscreenCanvas === "undefined") return null;
