@@ -11,6 +11,27 @@ import {
   getStoredWebToken,
 } from './auth';
 import { planLimitErrorFromResponse } from './planLimitError';
+import { dispatchApiError } from './errors/apiErrorEvent';
+
+/**
+ * Surface a non-ok response as the global error toast (so failures like a board
+ * move 500 are visible and copyable instead of failing silently) and throw.
+ * Shared by request()/webRequest() so both paths report errors identically.
+ */
+async function throwApiError(res: Response, method: string, path: string): Promise<never> {
+  const body = await res.json().catch(() => ({})) as { error?: string; code?: string; details?: unknown };
+  const message = body.error || res.statusText || `Request failed (${res.status})`;
+  dispatchApiError({
+    method: (method || 'GET').toUpperCase(),
+    url: `${AUTH_API_URL}${path}`,
+    status: res.status,
+    code: body.code,
+    message,
+    details: body.details,
+    requestId: res.headers.get('x-request-id') ?? undefined,
+  });
+  throw new Error(message);
+}
 
 function authHeaders(): Record<string, string> {
   const token = getStoredTenantToken();
@@ -35,10 +56,7 @@ async function webRequest<T>(path: string, opts: RequestInit = {}): Promise<T> {
   });
   checkUnauthorizedAndRedirect(res, hadToken);
   if (res.status === 402) throw await planLimitErrorFromResponse(res);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error || res.statusText || 'Request failed');
-  }
+  if (!res.ok) await throwApiError(res, (opts.method as string) ?? 'GET', path);
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
@@ -52,10 +70,7 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   });
   checkUnauthorizedAndRedirect(res, hadToken);
   if (res.status === 402) throw await planLimitErrorFromResponse(res);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error || res.statusText || 'Request failed');
-  }
+  if (!res.ok) await throwApiError(res, (opts.method as string) ?? 'GET', path);
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
@@ -1349,6 +1364,12 @@ export interface Approval {
   updatedAt: string;
 }
 
+/** A resolved approval — adds the run started when a `task.execution` gate is approved. */
+export interface ResolvedApproval extends Approval {
+  /** The execution auto-started by approving a task.execution gate (else null/absent). */
+  startedExecutionId?: number | null;
+}
+
 export const approvalsApi = {
   list: (params?: { status?: ApprovalStatus; agentHostId?: number | null }): Promise<Approval[]> => {
     const q = new URLSearchParams();
@@ -1360,12 +1381,14 @@ export const approvalsApi = {
 
   get: (id: string): Promise<Approval> => request<Approval>(`/api/approvals/${id}`),
 
-  /** Approve/reject an action, or answer a question/feedback request with free text. */
+  /** Approve/reject an action, or answer a question/feedback request with free text.
+   *  Approving a `task.execution` gate auto-starts the run and returns its
+   *  `startedExecutionId` so the caller can follow the new execution. */
   decide: (
     id: string,
     body: { status: 'approved' | 'rejected' | 'answered'; reviewNote?: string; responseText?: string }
-  ): Promise<Approval> =>
-    request<Approval>(`/api/approvals/${id}`, {
+  ): Promise<ResolvedApproval> =>
+    request<ResolvedApproval>(`/api/approvals/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),

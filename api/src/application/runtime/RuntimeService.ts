@@ -9,7 +9,7 @@ import {
   asExecutionId, asTaskId, asAgentId, asAgentHostId, asTenantId, TaskStatus,
 } from '../../domain/shared/types';
 import { NotFoundError, ForbiddenError } from '../../domain/shared/errors';
-import { CLOUD_ORPHAN_REASON, HOST_ORPHAN_REASON } from './orphanReasons';
+import { cloudOrphanReason, HOST_ORPHAN_REASON } from './orphanReasons';
 
 export interface SubmitTaskDto {
   taskId:      number;
@@ -117,14 +117,16 @@ export class RuntimeService {
    * process to recover, so once a run exceeds a per-kind ceiling we mark it failed
    * on read.
    *
-   * Cloud ceiling is tight on purpose: Cloudflare stops `waitUntil` work shortly
-   * after the HTTP response returns (observed ~30s), so a serverless cloud run
-   * physically cannot make progress past that. 90s = that wall + margin for the
-   * terminal-status write + clock skew, so a genuinely-dead run surfaces in ~1.5
-   * min instead of the old 8 min. A self-hosted host has a real long-lived process
-   * and legitimately runs much longer, so it keeps a far larger ceiling.
-   * (Durable multi-step cloud execution is the planned fix — see the Consolidated
-   * Gap Register's CloudRunnerDO entry; this is the interim fast-fail.)
+   * Cloud ceiling is tight on purpose: the interim Worker loop runs in `waitUntil`,
+   * which Cloudflare stops shortly after the HTTP response returns (observed ~30s),
+   * so that serverless path cannot make progress past the wall. 90s = that wall +
+   * margin for the terminal-status write + clock skew, so a genuinely-dead run
+   * surfaces in ~1.5 min instead of the old 8 min. A long-lived executor (durable
+   * CloudRunnerDO or a Cloudflare Container) heartbeats `updatedAt` as it works, so
+   * the ceiling is measured from last activity below and only a SILENT long-lived
+   * run is reaped — and {@link orphanReason} then reports it as a crash, not a 30s
+   * timeout. A self-hosted host has a real long-lived process and legitimately runs
+   * much longer, so it keeps a far larger ceiling.
    *
    * Read-path repair (no cron needed): the stream's reconciliation poll calls
    * `getExecution` every few seconds, so an orphan self-heals on next view.
@@ -157,10 +159,16 @@ export class RuntimeService {
     return nowMs - sinceMs > ceiling;
   }
 
-  /** Actionable reason for a reaped run — cloud runs hit the serverless wall and
-   *  need a durable runtime; host runs lost their process/connection. */
+  /** Actionable reason for a reaped run. Cloud runs split by how long they made
+   *  progress: a short-lived one hit the serverless ~30s wall, while one that
+   *  heartbeated past the wall ran on a long-lived executor (durable/container) and
+   *  crashed — so it must NOT be told to "downgrade to a durable runtime". Host runs
+   *  lost their process/connection. */
   private orphanReason(e: Execution): string {
-    return this.isCloudRun(e) ? CLOUD_ORPHAN_REASON : HOST_ORPHAN_REASON;
+    if (!this.isCloudRun(e)) return HOST_ORPHAN_REASON;
+    const startedMs = (e.startedAt ?? e.createdAt)?.getTime();
+    const lastActivityMs = (e.updatedAt ?? e.createdAt)?.getTime();
+    return cloudOrphanReason(startedMs, lastActivityMs);
   }
 
   private async reapIfOrphaned(e: Execution): Promise<Execution> {

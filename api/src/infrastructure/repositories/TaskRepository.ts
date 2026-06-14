@@ -1,4 +1,4 @@
-import { eq, count, inArray, and, sql, asc } from 'drizzle-orm';
+import { eq, inArray, and, sql, asc } from 'drizzle-orm';
 import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { Task } from '../../domain/task/Task';
 import {
@@ -46,9 +46,15 @@ export class TaskRepository implements ITaskRepository {
     return rows.map(toDomain);
   }
 
-  async countByProject(projectId: ProjectId): Promise<number> {
+  async maxKeySeqByProject(projectId: ProjectId): Promise<number> {
+    // Highest numeric suffix among this project's keys (`${projectKey}-${NNN}`).
+    // Strip everything up to the last '-' (so project keys may contain dashes),
+    // and only count purely-numeric suffixes so any legacy/odd key is ignored.
     const [row] = await this.db
-      .select({ value: count() })
+      .select({
+        value: sql<number>`COALESCE(MAX(CASE WHEN regexp_replace(${tasksTable.key}, '^.*-', '') ~ '^[0-9]+$'
+          THEN CAST(regexp_replace(${tasksTable.key}, '^.*-', '') AS INTEGER) END), 0)`,
+      })
       .from(tasksTable)
       .where(eq(tasksTable.projectId, projectId));
     return Number(row?.value ?? 0);

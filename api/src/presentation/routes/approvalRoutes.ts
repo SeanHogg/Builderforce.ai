@@ -18,7 +18,9 @@ import { checkAutoApprovalRules } from './approvalRuleRoutes';
 import { normalizeRequestKind, isAnswerableKind } from '../../domain/approval/requestKind';
 import { sendSlackNotification, notifyApprovalRequested } from '../../application/approval/approvalNotifier';
 import { resumePausedExecution } from '../../application/runtime/executionResume';
-import type { HonoEnv } from '../../env';
+import { dispatchCloudRunForTask, parseApprovalReplay } from './runtimeRoutes';
+import type { RuntimeService } from '../../application/runtime/RuntimeService';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 
@@ -46,7 +48,7 @@ async function verifyAgentHostApiKey(db: Db, id: number, key?: string | null): P
 // Routes
 // ---------------------------------------------------------------------------
 
-export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
+export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Hono<ApprovalHonoEnv> {
   const router = new Hono<ApprovalHonoEnv>();
 
   // ── GET /api/approvals/escalate ─────────────────────────────────────────
@@ -283,6 +285,32 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
       });
     }
 
+    // Approving a `task.execution` gate must actually START the run — approval only
+    // unlocks the gate, so without this the task would sit idle until a human went
+    // back to the ticket and clicked Run again. Replay the original submit (stored
+    // on the approval) AS the same agent + model. dispatchCloudRunForTask calls
+    // runtimeService.submit directly (no gate), so this can't loop. The LLM loop
+    // runs in waitUntil; we await setup so the execution exists before responding.
+    let startedExecutionId: number | null = null;
+    if (body.status === 'approved' && existing.actionType === 'task.execution') {
+      const replay = parseApprovalReplay(existing.metadata);
+      if (replay) {
+        startedExecutionId = await dispatchCloudRunForTask(
+          env as Env,
+          db,
+          runtimeService,
+          (p) => c.executionCtx.waitUntil(p),
+          {
+            taskId: replay.taskId,
+            tenantId,
+            payload: replay.payload,
+            agentHostId: replay.agentHostId,
+            submittedBy: existing.requestedBy ?? userId,
+          },
+        ).catch(() => null);
+      }
+    }
+
     // Notify the agentHost about the decision via the relay so the blocked gate resumes.
     if (existing.agentHostId && env.AGENT_HOST_RELAY) {
       const stub = env.AGENT_HOST_RELAY.get(env.AGENT_HOST_RELAY.idFromName(String(existing.agentHostId)));
@@ -314,7 +342,9 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
     }
 
     const [row] = await db.select().from(approvals).where(and(eq(approvals.id, id), eq(approvals.tenantId, tenantId)));
-    return c.json(row);
+    // startedExecutionId is set when approving a task.execution gate auto-started a
+    // run — lets the caller (ticket panel / board) follow the new execution.
+    return c.json({ ...row, startedExecutionId });
   });
 
   return router;

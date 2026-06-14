@@ -41,8 +41,7 @@
         "frontend/src/components/blog/**",
         "frontend/public/robots.txt",
         "frontend/public/install.*",
-        "api/src/presentation/routes/pendingPromptRoutes.ts",
-        "api/src/presentation/routes/pushSubscriptionRoutes.ts"
+        "api/src/presentation/routes/pendingPromptRoutes.ts"
       ],
       "excludes": []
     },

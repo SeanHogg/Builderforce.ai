@@ -485,6 +485,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                 <th style={thStyle}>Status</th>
                 <th style={thStyle}>Runtime</th>
                 <th style={thStyle}>Price</th>
+                <th style={thStyle}>Configuration</th>
                 <th style={thStyle} aria-label="Actions" />
               </tr>
             </thead>
@@ -495,6 +496,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                   <td style={tdStyle}>{m.displayName ?? m.username ?? m.email}</td>
                   <td style={tdStyle}><AgentTypePill kind="human" /></td>
                   <td style={tdMutedStyle}>{m.email}</td>
+                  <td style={tdMutedStyle}>—</td>
                   <td style={tdMutedStyle}>—</td>
                   <td style={tdMutedStyle}>—</td>
                   <td style={tdStyle}>
@@ -511,6 +513,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                   <td style={tdStyle}>{inv.email}</td>
                   <td style={tdStyle}><AgentTypePill kind="pending" /></td>
                   <td style={tdMutedStyle}>Invited as {inv.role}</td>
+                  <td style={tdMutedStyle}>—</td>
                   <td style={tdMutedStyle}>—</td>
                   <td style={tdMutedStyle}>—</td>
                   <td style={tdStyle}>
@@ -541,6 +544,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                     <td style={tdMutedStyle}>{connected ? 'Online' : 'Offline'}</td>
                     <td style={tdMutedStyle}>Remote</td>
                     <td style={tdMutedStyle}>—</td>
+                    <td style={tdMutedStyle}>—</td>
                     <td style={tdStyle} onClick={(e) => e.stopPropagation()}>
                       <button type="button" onClick={() => setSelectedHost(host)} style={btnSubtle}>Open</button>
                     </td>
@@ -556,6 +560,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                   <td style={tdMutedStyle}>{a.published ? 'Published' : 'Draft'}</td>
                   <td style={tdMutedStyle}>{RUNTIME_LABELS[a.runtime_support ?? 'cloud']}</td>
                   <td style={tdMutedStyle}>{formatAgentPrice(a)}</td>
+                  <td style={tdStyle}><AgentManifestInline agent={a} manifest={agentManifests[a.id]} /></td>
                   <td style={tdStyle}>
                     <AgentOwnerActions
                       agent={a}
@@ -577,6 +582,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                   <td style={tdMutedStyle}>—</td>
                   <td style={tdMutedStyle}>{RUNTIME_LABELS[a.runtime_support ?? 'cloud']}</td>
                   <td style={tdMutedStyle}>{formatAgentPrice(a)}</td>
+                  <td style={tdStyle}><AgentManifestInline agent={a} manifest={agentManifests[a.id]} /></td>
                   <td style={tdStyle}>
                     <button type="button" style={btnSubtle} disabled={unhiringId === a.id} onClick={() => unhire(a.id)}>
                       {unhiringId === a.id ? 'Unhiring…' : 'Unhire'}
