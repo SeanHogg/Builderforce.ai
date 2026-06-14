@@ -156,6 +156,15 @@ jobs:
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  publish-voice:
+    name: Publish Voice client (@seanhogg/builderforce-voice)
+    uses: ./.github/workflows/publish-npm-package.yml
+    with:
+      package-dir: voice
+      package-name: '@seanhogg/builderforce-voice'
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
   deploy-docs:
     name: Deploy Docs (builderforce.ai/docs)
     runs-on: ubuntu-latest
