@@ -3091,6 +3091,10 @@ export const boards = pgTable('boards', {
    *  gets `standupTurnSeconds` then auto-advances. Snapshotted onto a session at start. */
   standupTurnMode:      varchar('standup_turn_mode', { length: 16 }).notNull().default('facilitator'),
   standupTurnSeconds:   integer('standup_turn_seconds').notNull().default(90),
+  /** When true, the task board hides tickets sitting in a terminal (Done) lane
+   *  so only live work is shown (migration 0194). Display-only — does not affect
+   *  the coordinator lifecycle or capacity. */
+  hideDoneItems:        boolean('hide_done_items').notNull().default(false),
   createdAt:            timestamp('created_at').notNull().defaultNow(),
   updatedAt:            timestamp('updated_at').notNull().defaultNow(),
 });

@@ -2779,6 +2779,8 @@ export interface Board {
   /** Standup turn-timer behaviour for this board's ceremonies (migration 0119). */
   standupTurnMode: 'facilitator' | 'timeboxed';
   standupTurnSeconds: number;
+  /** Hide tickets sitting in a terminal (Done) lane from the board (migration 0194). */
+  hideDoneItems: boolean;
   createdAt: string;
   updatedAt: string;
   swimlanes?: Swimlane[];
@@ -2850,7 +2852,7 @@ export const boardsApi = {
   create: (body: { projectId: number; name: string; maxConcurrentTickets?: number; needsAttentionLane?: string | null }): Promise<Board> =>
     request('/api/boards', { method: 'POST', body: JSON.stringify(body) }),
 
-  update: (boardId: string, body: Partial<{ name: string; maxConcurrentTickets: number; needsAttentionLane: string | null; standupTurnMode: 'facilitator' | 'timeboxed'; standupTurnSeconds: number }>): Promise<Board> =>
+  update: (boardId: string, body: Partial<{ name: string; maxConcurrentTickets: number; needsAttentionLane: string | null; standupTurnMode: 'facilitator' | 'timeboxed'; standupTurnSeconds: number; hideDoneItems: boolean }>): Promise<Board> =>
     request(`/api/boards/${boardId}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   remove: (boardId: string): Promise<void> =>

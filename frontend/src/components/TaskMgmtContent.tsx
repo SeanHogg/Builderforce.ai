@@ -277,14 +277,6 @@ export function TaskMgmtContent({
     setEditingField(null);
   }, [drawerTask?.id, drawerTab]);
 
-  const filtered = tasks.filter((t) => {
-    if (filterStatus && t.status !== filterStatus) return false;
-    if (filterProject && String(t.projectId) !== filterProject) return false;
-    if (filterPriority && t.priority !== filterPriority) return false;
-    if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
-
   const projectNameById = (id?: number | null) =>
     id ? projects.find((p) => p.id === id)?.name ?? String(id) : '—';
   // Resolve a task's assignee (human teammate, self-hosted host, OR cloud agent) to its display name.
@@ -303,6 +295,25 @@ export function TaskMgmtContent({
     effectiveProjectId,
     effectiveProjectId != null && view === 'board' && !compact,
   );
+
+  // Statuses that count as "done" for the board's hide-done-items toggle: the
+  // keys of every terminal lane. Falls back to the canonical `done` status when
+  // the board has no configured lanes (default kanban columns).
+  const doneStatuses = useMemo(() => {
+    const terminal = lanes.filter((l) => l.isTerminal).map((l) => l.key);
+    return new Set<string>(terminal.length > 0 ? terminal : ['done']);
+  }, [lanes]);
+
+  const filtered = tasks.filter((t) => {
+    if (filterStatus && t.status !== filterStatus) return false;
+    if (filterProject && String(t.projectId) !== filterProject) return false;
+    if (filterPriority && t.priority !== filterPriority) return false;
+    if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
+    // Board-level "hide done items": drop tickets sitting in a terminal lane.
+    // Applies only on the board view (where the board/lanes are loaded).
+    if (board?.hideDoneItems && view === 'board' && doneStatuses.has(t.status)) return false;
+    return true;
+  });
 
   // Live per-agent dispatch status for the board, so each lane's configured-agent
   // chips light up with their current execution status (pending→running→done/failed).
