@@ -95,11 +95,31 @@ export function BrainPanel({
   // Human-in-the-loop gate: a mutating tool (create/update/delete/run/…) pauses
   // the agent loop here for an explicit Approve/Cancel before it runs. The loop
   // (useBrainConversation) awaits the promise we hand back from `confirmTool`.
+  //
+  // Auto-approve mode lets the user skip the per-action prompt — essential for
+  // bulk runs (link 50 tickets, archive 18) where approving each one by hand is
+  // unworkable. It's read through a ref so `confirmTool` stays referentially
+  // stable, mirrored to state for the toggle UI, and persisted per-browser.
   const [pendingConfirm, setPendingConfirm] = useState<{ name: string; args: unknown } | null>(null);
   const confirmResolverRef = useRef<((ok: boolean) => void) | null>(null);
+  const [autoApprove, setAutoApprove] = useState(false);
+  const autoApproveRef = useRef(false);
+  useEffect(() => {
+    try {
+      const on = localStorage.getItem('brain.autoApprove') === '1';
+      autoApproveRef.current = on;
+      setAutoApprove(on);
+    } catch { /* ignore */ }
+  }, []);
+  const setAutoApproveMode = useCallback((on: boolean) => {
+    autoApproveRef.current = on;
+    setAutoApprove(on);
+    try { localStorage.setItem('brain.autoApprove', on ? '1' : '0'); } catch { /* ignore */ }
+  }, []);
   const confirmTool = useCallback(
     (req: { name: string; args: unknown }) => {
       if (!isMutating(req.name, req.args)) return Promise.resolve(true);
+      if (autoApproveRef.current) return Promise.resolve(true);
       return new Promise<boolean>((resolve) => {
         confirmResolverRef.current = resolve;
         setPendingConfirm(req);
@@ -112,6 +132,11 @@ export function BrainPanel({
     confirmResolverRef.current = null;
     setPendingConfirm(null);
   }, []);
+  // "Approve all": run this action and auto-approve the rest of the run/session.
+  const approveAll = useCallback(() => {
+    setAutoApproveMode(true);
+    resolveConfirm(true);
+  }, [setAutoApproveMode, resolveConfirm]);
 
   // Brain agent/persona switcher: the user can run the Brain as the default
   // assistant, as a built-in modality persona, or as one of the agents assigned
@@ -482,8 +507,8 @@ export function BrainPanel({
             )}
           </div>
           <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : '12px 16px', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }}>
-            {pendingConfirm && <ToolConfirmBar req={pendingConfirm} onDecide={resolveConfirm} />}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+            {pendingConfirm && <ToolConfirmBar req={pendingConfirm} onDecide={resolveConfirm} onApproveAll={approveAll} />}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Acting as</span>
               <Select
                 value={personaSel}
@@ -505,6 +530,18 @@ export function BrainPanel({
                   </optgroup>
                 )}
               </Select>
+              <label
+                title="Skip the per-action approval prompt and run mutating actions automatically. Useful for bulk operations."
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: autoApprove ? 'var(--coral-bright, #f4726e)' : 'var(--text-muted)', cursor: 'pointer', marginLeft: 'auto' }}
+              >
+                <input
+                  type="checkbox"
+                  checked={autoApprove}
+                  onChange={(e) => setAutoApproveMode(e.target.checked)}
+                  style={{ cursor: 'pointer' }}
+                />
+                Auto-approve actions
+              </label>
             </div>
             <ChatInput
               value={input}
@@ -609,7 +646,7 @@ export function BrainPanel({
  * Human-in-the-loop confirm bar. Shown when the agent loop pauses on a mutating
  * tool call; Approve runs it, Cancel feeds a declined result back to the model.
  */
-function ToolConfirmBar({ req, onDecide }: { req: { name: string; args: unknown }; onDecide: (ok: boolean) => void }) {
+function ToolConfirmBar({ req, onDecide, onApproveAll }: { req: { name: string; args: unknown }; onDecide: (ok: boolean) => void; onApproveAll: () => void }) {
   const label = req.name.replace(/_/g, ' ');
   let preview = '';
   try {
@@ -628,8 +665,9 @@ function ToolConfirmBar({ req, onDecide }: { req: { name: string; args: unknown 
       {preview && preview !== '{}' && (
         <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', wordBreak: 'break-all', marginBottom: 8 }}>{preview}</div>
       )}
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button type="button" onClick={() => onDecide(true)} style={{ padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Approve</button>
+        <button type="button" onClick={onApproveAll} title="Approve this and auto-approve every following action in this conversation" style={{ padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--bg-base)', color: 'var(--coral-bright, #f4726e)', border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 8, cursor: 'pointer' }}>Approve all</button>
         <button type="button" onClick={() => onDecide(false)} style={{ padding: '6px 14px', fontSize: 13, background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}>Cancel</button>
       </div>
     </div>

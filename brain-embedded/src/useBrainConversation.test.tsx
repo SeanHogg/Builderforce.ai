@@ -147,9 +147,9 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
 
     await act(async () => { await hook.current.send('loop'); });
 
-    // 5 iterations, then it gives up.
-    expect(mockStream).toHaveBeenCalledTimes(5);
-    expect(runTool).toHaveBeenCalledTimes(5);
+    // Runs up to the max-iteration cap, then it gives up.
+    expect(mockStream).toHaveBeenCalledTimes(25);
+    expect(runTool).toHaveBeenCalledTimes(25);
     // user persisted, but no final assistant text.
     expect(persistence.sendMessages).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(hook.current.error).toMatch(/kept calling tools/i));

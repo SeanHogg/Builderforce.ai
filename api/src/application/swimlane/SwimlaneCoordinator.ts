@@ -325,6 +325,20 @@ export class SwimlaneCoordinator {
       });
     }
 
+    // do_nothing action: the stage finished, the ticket simply rests in its lane
+    // (no advance/move/workflow). next IS 'stage_completed', so we must NOT also
+    // pass it as an intermediate — that would chain stage_completed -> stage_completed.
+    if (plan.lifecycle === 'stage_completed') {
+      return this.applyLifecycle(run, {
+        next: 'stage_completed',
+        currentSwimlaneId: run.currentSwimlaneId,
+        reason: 'autonomous',
+        workflowStatus,
+        historyStatus: 'completed',
+        toSwimlaneId: run.currentSwimlaneId,
+      });
+    }
+
     return this.applyLifecycle(run, {
       next: plan.lifecycle,
       currentSwimlaneId: run.currentSwimlaneId,

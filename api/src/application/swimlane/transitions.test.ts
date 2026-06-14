@@ -197,6 +197,17 @@ describe('resolveStageAction', () => {
     expect(plan.runWorkflowId).toBe('wf-1');
   });
 
+  it('do_nothing → stage_completed: ticket rests in its lane, no move/workflow target', () => {
+    const plan = resolveStageAction({ ...base, actionType: 'do_nothing' });
+    expect(plan.lifecycle).toBe('stage_completed');
+    expect(plan.moveToLaneKey).toBeUndefined();
+    expect(plan.runWorkflowId).toBeUndefined();
+    // Even on a terminal lane, do_nothing stays put rather than auto-completing.
+    expect(resolveStageAction({ ...base, isTerminalLane: true, actionType: 'do_nothing' }).lifecycle).toBe('stage_completed');
+    // The coordinator reaches it directly from stage_running (no stage_completed intermediate).
+    expect(canTransitionTicket('stage_running', plan.lifecycle)).toBe(true);
+  });
+
   it('every resolved lifecycle is a transition the lifecycle allows from stage_completed', () => {
     const plans = [
       resolveStageAction({ ...base, isTerminalLane: true }),

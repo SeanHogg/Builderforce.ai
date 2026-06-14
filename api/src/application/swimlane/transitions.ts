@@ -124,7 +124,7 @@ export function countLaneFailures(stageHistory: string | null | undefined, swiml
 }
 
 /** The lane action that fires once a stage succeeds (migration 0084). */
-export type StageActionType = 'advance' | 'move_ticket' | 'run_workflow';
+export type StageActionType = 'advance' | 'move_ticket' | 'run_workflow' | 'do_nothing';
 
 /** What a successful stage should do: the lifecycle + any action side-effect. */
 export interface StageActionPlan {
@@ -143,6 +143,7 @@ export interface StageActionPlan {
  * action decides WHERE it advances.
  *
  * - human gate         → 'awaiting_gate' (gate wins over any action)
+ * - action do_nothing  → 'stage_completed' (ticket rests in its lane, no advance)
  * - terminal lane      → 'done'
  * - action move_ticket → 'advancing' to actionTarget (a lane key)
  * - action run_workflow→ 'advancing' to the next lane, plus run actionTarget
@@ -151,11 +152,14 @@ export interface StageActionPlan {
 export function resolveStageAction(opts: {
   isTerminalLane: boolean;
   gate: string;                  // 'auto' | 'human'
-  actionType: string | null;     // null|'advance' | 'move_ticket' | 'run_workflow'
+  actionType: string | null;     // null|'advance' | 'move_ticket' | 'run_workflow' | 'do_nothing'
   actionTarget: string | null;
 }): StageActionPlan {
   // A human gate pauses everything — no action fires until approval.
   if (opts.gate === 'human') return { lifecycle: 'awaiting_gate' };
+  // do_nothing: the stage finishes but the ticket simply stays put — no advance,
+  // no move, no workflow, and not auto-marked done even on a terminal lane.
+  if (opts.actionType === 'do_nothing') return { lifecycle: 'stage_completed' };
   // move_ticket redirects where the ticket lands (overrides terminal/next-lane).
   if (opts.actionType === 'move_ticket') {
     return { lifecycle: 'advancing', moveToLaneKey: opts.actionTarget };

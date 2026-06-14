@@ -588,7 +588,7 @@ function buildBrainTriageReport(opts) {
 }
 
 // src/useBrainConversation.ts
-var MAX_TOOL_ITERATIONS = 5;
+var MAX_TOOL_ITERATIONS = 25;
 var HISTORY_WINDOW = 80;
 function parseArgs(raw) {
   try {

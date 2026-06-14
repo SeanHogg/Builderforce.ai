@@ -20,8 +20,14 @@ import type { BrainToolSpec, ChatCompletionMessage, ContentPart } from './stream
 import { prepareImageDataUrl } from './imagePrep';
 import { buildBrainTriageReport, isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 
-/** Max agent-loop iterations before we stop chaining tool calls (runaway guard). */
-const MAX_TOOL_ITERATIONS = 5;
+/**
+ * Max agent-loop iterations before we stop chaining tool calls (runaway guard).
+ * Each iteration is one model turn and can batch several tool calls, but models
+ * commonly emit one call per turn — so the cap must be high enough for real bulk
+ * operations (e.g. "link 50 tickets to their epics, archive 18 duplicates") to
+ * complete instead of dying with "kept calling tools without finishing".
+ */
+const MAX_TOOL_ITERATIONS = 25;
 /** How much history we send to the model. */
 const HISTORY_WINDOW = 80;
 

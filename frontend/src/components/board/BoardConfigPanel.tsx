@@ -263,6 +263,7 @@ function LaneActionRow({ lane, lanes, workflows, patchLane }: {
         <option value="advance">Advance to next lane</option>
         <option value="move_ticket">Move ticket to…</option>
         <option value="run_workflow">Run workflow…</option>
+        <option value="do_nothing">Do nothing</option>
       </Select>
       {actionType === 'move_ticket' && (
         <Select value={lane.actionTarget ?? ''} onChange={(e) => patchLane(lane.id, { actionTarget: e.target.value })} style={inputStyle} title="Destination lane">

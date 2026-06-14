@@ -46,6 +46,7 @@ import {
   agentHostConfigApi, agentHostProjectsApi, chatSessionsApi, usageApi,
 } from '@/lib/builderforceApi';
 import type { BrainAction } from '@/lib/brain';
+import { dispatchBrainDataChanged } from './brainDataEvent';
 
 // ---------------------------------------------------------------------------
 // Types + tiny JSON-Schema helpers (keep param specs terse)
@@ -91,6 +92,19 @@ const EMPTY = obj({});
 /** Read a field off the loosely-typed args bag. */
 function f<T = unknown>(args: Json, key: string): T {
   return args[key] as T;
+}
+
+/**
+ * Narrow "did this write actually fail?" check for the data-changed gate. We
+ * only announce a change when the call did NOT come back as a recoverable error
+ * object (`{ ok:false }` / `{ error }`, e.g. the tenant guard). Deliberately
+ * narrower than the triage report's `isFailedToolResult` (which regex-scans the
+ * whole payload and would misfire on legit data containing the word "error").
+ */
+function isErrorResult(out: unknown): boolean {
+  if (out == null || typeof out !== 'object') return false;
+  const r = out as Record<string, unknown>;
+  return r.ok === false || (typeof r.error === 'string' && r.error.length > 0);
 }
 
 /**
@@ -422,6 +436,20 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     { domain: 'api_keys', method: 'mint', mutates: true, description: 'Mint a new gateway API key. The raw key is returned once — show it carefully.', parameters: obj({ name: S, allowedOrigins: arr(S) }, ['name']), run: (a) => tenant((tid) => tenantApiKeysApi.mint(tid, a as unknown as Parameters<typeof tenantApiKeysApi.mint>[1])) },
     { domain: 'api_keys', method: 'revoke', mutates: true, description: 'Revoke a gateway API key.', parameters: obj({ keyId: S }, ['keyId']), run: (a) => tenant((tid) => tenantApiKeysApi.revoke(tid, f(a, 'keyId'))) },
   ];
+
+  // Announce every successful write on the brain-data bus so the page rendering
+  // that domain (e.g. the Tasks board) refetches live instead of going stale
+  // until a manual reload. Wrapping `run` here covers BOTH the Tier-1 promoted
+  // tools and the Tier-2 dispatcher, since both ultimately call `cap.run`.
+  for (const c of caps) {
+    if (!c.mutates) continue;
+    const inner = c.run;
+    c.run = async (args: Json) => {
+      const out = await inner(args);
+      if (!isErrorResult(out)) dispatchBrainDataChanged({ domain: c.domain, method: c.method });
+      return out;
+    };
+  }
 
   return caps;
 }
