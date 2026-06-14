@@ -57,18 +57,25 @@ export interface StageDispatcher {
   dispatch(d: DispatchLite): Promise<{ accepted: boolean; externalRef?: string; error?: string }>;
 }
 
+/** Outcome of starting a lane's `run_workflow` action. */
+export type StageWorkflowRunResult =
+  | { ok: true; workflowId: string }
+  | { ok: false; error: string };
+
 /**
  * Runs a workflow definition as the side-effect of a lane's `run_workflow`
  * action. Injected so the coordinator stays IO-free and unit-testable with a
  * fake; the Drizzle-backed implementation loads the definition and calls
- * instantiateWorkflowRun. Optional — when absent, a run_workflow action simply
- * advances the ticket without firing the workflow.
+ * instantiateWorkflowRun, returning the spawned workflow id. Optional — when
+ * absent, a run_workflow action simply advances the ticket without firing the
+ * workflow. When present, the ticket PARKS at 'awaiting_workflow' until that
+ * workflow settles (see {@link SwimlaneCoordinator.onSpawnedWorkflowSettled}).
  */
 export interface StageWorkflowRunner {
   run(
     workflowDefId: string,
     ctx: { tenantId: number; ticketRunId: string; taskId: number },
-  ): Promise<void>;
+  ): Promise<StageWorkflowRunResult>;
 }
 
 /**
@@ -106,6 +113,7 @@ export class InvalidTicketTransitionError extends Error {
 const ACTIVE_LIFECYCLES: TicketLifecycle[] = [
   'queued',
   'awaiting_gate',
+  'awaiting_workflow',
   'stage_running',
   'stage_completed',
   'advancing',
@@ -263,13 +271,40 @@ export class SwimlaneCoordinator {
       actionTarget: currentLane?.actionTarget ?? null,
     });
 
-    // run_workflow action: fire the workflow as a side-effect wherever the
-    // ticket lands (advancing or done — never on a human gate, which pauses).
+    // run_workflow action: start the workflow, then PARK the ticket on it. The
+    // ticket does NOT advance here — it waits at 'awaiting_workflow' until the
+    // spawned workflow settles (onSpawnedWorkflowSettled maps its outcome onto
+    // the ticket). A human gate already pre-empted this (plan.lifecycle would be
+    // 'awaiting_gate', not reached here). Without an injected runner we fall
+    // through to the legacy fire-nothing/advance behaviour.
     if (plan.runWorkflowId && this.workflowRunner) {
-      await this.workflowRunner.run(plan.runWorkflowId, {
+      const wfResult = await this.workflowRunner.run(plan.runWorkflowId, {
         tenantId: run.tenantId,
         ticketRunId: run.id,
         taskId: run.taskId,
+      });
+      if (!wfResult.ok) {
+        // The action could not start (e.g. definition deleted/renamed since
+        // assignment) — surface it instead of silently advancing.
+        return this.applyLifecycle(run, {
+          next: 'needs_attention',
+          currentSwimlaneId: run.currentSwimlaneId,
+          reason: 'failed',
+          workflowStatus: 'failed',
+          historyStatus: 'failed',
+          toSwimlaneId: run.currentSwimlaneId,
+          error: `run_workflow action failed: ${wfResult.error}`,
+        });
+      }
+      return this.applyLifecycle(run, {
+        next: 'awaiting_workflow',
+        currentSwimlaneId: run.currentSwimlaneId,
+        reason: 'pending',
+        workflowStatus,
+        historyStatus: 'awaiting_workflow',
+        toSwimlaneId: run.currentSwimlaneId,
+        intermediate: 'stage_completed',
+        setAwaitingWorkflowId: wfResult.workflowId,
       });
     }
 
@@ -298,6 +333,52 @@ export class SwimlaneCoordinator {
       historyStatus: 'completed',
       toSwimlaneId: run.currentSwimlaneId,
       intermediate: 'stage_completed',
+    });
+  }
+
+  /**
+   * A spawned `run_workflow` side-effect settled. Resume the ticket parked on it:
+   * success → advance (next lane, or done on a terminal lane); failure/cancel →
+   * needs_attention (never a silent advance). No-op when no ticket is parked on
+   * the workflow or the store can't resolve it (browser/test stores). This is the
+   * back-edge that makes a `run_workflow` lane action genuinely GATE on its
+   * downstream workflow's outcome rather than fire-and-forget.
+   */
+  async onSpawnedWorkflowSettled(
+    workflowId: string,
+    status: WorkflowStatus,
+  ): Promise<TicketRunLite | null> {
+    if (!this.store.findAwaitingWorkflowRun) return null;
+    const run = await this.store.findAwaitingWorkflowRun(workflowId);
+    if (!run || run.lifecycle !== 'awaiting_workflow') return null;
+
+    if (status === 'completed') {
+      const currentLane = await this.loadLane(run.currentSwimlaneId, run.tenantId);
+      const destLane = currentLane?.isTerminal
+        ? undefined
+        : await this.nextLane(run.boardId, run.tenantId, currentLane?.position ?? 0);
+      return this.applyLifecycle(run, {
+        next: destLane ? 'stage_running' : 'done',
+        currentSwimlaneId: destLane?.id ?? run.currentSwimlaneId,
+        reason: 'autonomous',
+        workflowStatus: status,
+        historyStatus: 'completed',
+        toSwimlaneId: destLane?.id ?? run.currentSwimlaneId,
+        intermediate: destLane ? 'advancing' : undefined,
+        setAwaitingWorkflowId: null,
+      });
+    }
+
+    // failed | cancelled | (defensive) anything non-success → park for a human.
+    return this.applyLifecycle(run, {
+      next: 'needs_attention',
+      currentSwimlaneId: run.currentSwimlaneId,
+      reason: 'failed',
+      workflowStatus: status,
+      historyStatus: status === 'cancelled' ? 'cancelled' : 'failed',
+      toSwimlaneId: run.currentSwimlaneId,
+      error: `run_workflow side-effect ${status}`,
+      setAwaitingWorkflowId: null,
     });
   }
 
@@ -566,6 +647,8 @@ export class SwimlaneCoordinator {
       intermediate?: TicketLifecycle | TicketLifecycle[];
       error?: string | null;
       clearError?: boolean;
+      /** Set/clear the parked-on workflow id (omit to leave unchanged). */
+      setAwaitingWorkflowId?: string | null;
     },
   ): Promise<TicketRunLite> {
     const from = run.lifecycle as TicketLifecycle;
@@ -595,6 +678,9 @@ export class SwimlaneCoordinator {
       currentSwimlaneId: opts.currentSwimlaneId,
       stageHistory: JSON.stringify(history),
       error: opts.clearError ? null : opts.error ?? run.error,
+      ...(opts.setAwaitingWorkflowId !== undefined
+        ? { awaitingWorkflowId: opts.setAwaitingWorkflowId }
+        : {}),
     });
     if (!updated) throw new TicketRunNotFoundError();
 
