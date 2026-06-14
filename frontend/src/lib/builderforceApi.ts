@@ -2897,3 +2897,55 @@ interface LaneWriteBody {
   successPolicy: string;
   successThreshold: number;
 }
+
+
+// ── Anonymous pending prompts (landing-page → Brain handoff, cross-device) ──
+// Durable server record alongside the localStorage fast path. `save` is public
+// (pre-auth); `claim` sends the web token so the server can associate the row to
+// the user. Both are best-effort — failures never block the funnel. [1517]
+const ANON_ID_KEY = 'bf_anon_id';
+
+function getAnonId(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    let id = window.localStorage.getItem(ANON_ID_KEY);
+    if (!id) {
+      id = (crypto?.randomUUID?.() ?? `a-${Date.now()}-${Math.random().toString(36).slice(2)}`).slice(0, 64);
+      window.localStorage.setItem(ANON_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    return '';
+  }
+}
+
+export const pendingPromptsApi = {
+  /** Record an anonymous landing prompt server-side (best-effort, fire-and-forget). */
+  save(prompt: string, path?: string): void {
+    const anonId = getAnonId();
+    if (!anonId || !prompt.trim()) return;
+    void fetch(`${AUTH_API_URL}/api/pending-prompts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ anonId, prompt: prompt.trim(), path }),
+    }).catch(() => {});
+  },
+
+  /** Claim this browser's anon prompt after auth (cross-device fallback). Returns null on miss. */
+  async claim(): Promise<string | null> {
+    const anonId = getAnonId();
+    if (!anonId) return null;
+    try {
+      const res = await fetch(`${AUTH_API_URL}/api/pending-prompts/claim`, {
+        method: 'POST',
+        headers: webAuthHeaders(),
+        body: JSON.stringify({ anonId }),
+      });
+      if (!res.ok) return null;
+      const body = (await res.json().catch(() => ({}))) as { prompt?: string | null };
+      return body.prompt ?? null;
+    } catch {
+      return null;
+    }
+  },
+};

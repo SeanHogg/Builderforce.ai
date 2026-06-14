@@ -972,6 +972,20 @@ export const pushSubscriptions = pgTable('push_subscriptions', {
   lastNotifiedAt: timestamp('last_notified_at'),
 });
 
+// Anonymous landing-page prompts (0128) — durable, cross-device handoff of a
+// prompt typed before signup. Claimed on first authenticated request. No tenant
+// scope (the user has none yet).
+export const pendingPrompts = pgTable('pending_prompts', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  anonId:     varchar('anon_id', { length: 64 }).notNull(),
+  prompt:     text('prompt').notNull(),
+  path:       varchar('path', { length: 512 }),
+  userId:     varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  expiresAt:  timestamp('expires_at').notNull(),
+  claimedAt:  timestamp('claimed_at'),
+});
+
 export const agents = pgTable('agents', {
   id:         serial('id').primaryKey(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),

@@ -15,7 +15,11 @@ import type { Db } from '../../infrastructure/database/connection';
 import * as schema from '../../infrastructure/database/schema';
 import { signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
-import type { HonoEnv } from '../../env';
+import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import type { Env, HonoEnv } from '../../env';
+
+/** Read-through cache key for a single published skill's SEO/SSR payload. */
+const skillSeoCacheKey = (slug: string): string => `mp:skill:seo:${slug}`;
 
 // ---------------------------------------------------------------------------
 // Password hashing (PBKDF2 via Web Crypto – works in CF Workers)
@@ -92,6 +96,40 @@ const requireMarketplaceAuth: MiddlewareHandler<HonoEnv> = async (c, next) => {
 
 export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+
+  /** Load one published skill + its author for the public detail/SSR surface. */
+  async function loadPublishedSkill(slug: string) {
+    const [row] = await db
+      .select({
+        id:              schema.marketplaceSkills.id,
+        name:            schema.marketplaceSkills.name,
+        slug:            schema.marketplaceSkills.slug,
+        description:     schema.marketplaceSkills.description,
+        category:        schema.marketplaceSkills.category,
+        tags:            schema.marketplaceSkills.tags,
+        version:         schema.marketplaceSkills.version,
+        readme:          schema.marketplaceSkills.readme,
+        icon_url:        schema.marketplaceSkills.iconUrl,
+        repo_url:        schema.marketplaceSkills.repoUrl,
+        downloads:       schema.marketplaceSkills.downloads,
+        likes:           schema.marketplaceSkills.likes,
+        created_at:      schema.marketplaceSkills.createdAt,
+        updated_at:      schema.marketplaceSkills.updatedAt,
+        author_username: schema.users.username,
+        author_display_name: schema.users.displayName,
+        author_avatar_url:   schema.users.avatarUrl,
+      })
+      .from(schema.marketplaceSkills)
+      .innerJoin(schema.users, eq(schema.marketplaceSkills.authorId, schema.users.id))
+      .where(
+        and(
+          eq(schema.marketplaceSkills.slug, slug),
+          eq(schema.marketplaceSkills.published, true),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
 
   // ── Auth ────────────────────────────────────────────────────────────────
 
@@ -379,35 +417,19 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
    */
   router.get('/skills/:slug', async (c) => {
     const slug = c.req.param('slug');
-    const [row] = await db
-      .select({
-        id:              schema.marketplaceSkills.id,
-        name:            schema.marketplaceSkills.name,
-        slug:            schema.marketplaceSkills.slug,
-        description:     schema.marketplaceSkills.description,
-        category:        schema.marketplaceSkills.category,
-        tags:            schema.marketplaceSkills.tags,
-        version:         schema.marketplaceSkills.version,
-        readme:          schema.marketplaceSkills.readme,
-        icon_url:        schema.marketplaceSkills.iconUrl,
-        repo_url:        schema.marketplaceSkills.repoUrl,
-        downloads:       schema.marketplaceSkills.downloads,
-        likes:           schema.marketplaceSkills.likes,
-        created_at:      schema.marketplaceSkills.createdAt,
-        updated_at:      schema.marketplaceSkills.updatedAt,
-        author_username: schema.users.username,
-        author_display_name: schema.users.displayName,
-        author_avatar_url:   schema.users.avatarUrl,
-      })
-      .from(schema.marketplaceSkills)
-      .innerJoin(schema.users, eq(schema.marketplaceSkills.authorId, schema.users.id))
-      .where(
-        and(
-          eq(schema.marketplaceSkills.slug, slug),
-          eq(schema.marketplaceSkills.published, true),
-        ),
-      )
-      .limit(1);
+    // `?seo=1` is the indexable detail-page / sitemap read: served through the
+    // read-through cache and WITHOUT the download-counter increment, so crawler
+    // and SSR renders don't inflate downloads (invalidated on PUT). [1333]
+    const seo = c.req.query('seo') === '1';
+    if (seo) {
+      const skill = await getOrSetCached(c.env as Env, skillSeoCacheKey(slug), () =>
+        loadPublishedSkill(slug),
+      );
+      if (!skill) return c.json({ error: 'Skill not found' }, 404);
+      return c.json({ skill });
+    }
+
+    const row = await loadPublishedSkill(slug);
     if (!row) return c.json({ error: 'Skill not found' }, 404);
 
     // Fire-and-forget download counter increment
@@ -514,6 +536,9 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
     // Invalidate the cloud capability cache so the next cloud run re-reads the
     // edited skill body (name/description/readme).
     await invalidateCapabilityCache(c.env, 'skill', slug);
+    // Invalidate the public SEO/SSR read-through cache so the detail page + its
+    // metadata reflect the edit (and publish/unpublish) on next render. [1333]
+    await invalidateCached(c.env as Env, skillSeoCacheKey(slug));
     return c.json({ skill: updated });
   });
 

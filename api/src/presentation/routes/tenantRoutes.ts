@@ -18,8 +18,10 @@ import {
   sourceControlIntegrations,
   tenantInvitations,
   tenantMembers,
+  tenants,
   users,
 } from '../../infrastructure/database/schema';
+import { sendWorkspaceInviteEmail } from '../../infrastructure/email/EmailService';
 
 type SourceControlProvider = 'github' | 'bitbucket';
 
@@ -674,6 +676,28 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     }
 
     await invalidateInvitations(c.env as Env, id);
+
+    // Tell the cold invitee they were invited (best-effort — no-ops without
+    // RESEND_API_KEY). The signup link pre-fills the invited address so the
+    // pending invitation auto-converts on first login (see GET /mine). [1248]
+    try {
+      const [[tenantRow], [inviter]] = await Promise.all([
+        db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, id)).limit(1),
+        db.select({ displayName: users.displayName, email: users.email })
+          .from(users).where(eq(users.id, actorUserId)).limit(1),
+      ]);
+      const frontendBase = ((c.env as Env).APP_URL ?? 'https://builderforce.ai').split(',')[0]!.trim();
+      const signupUrl = `${frontendBase}/register?email=${encodeURIComponent(email)}`;
+      await sendWorkspaceInviteEmail(c.env as Env, email, {
+        workspaceName: tenantRow?.name ?? 'a Builderforce workspace',
+        inviterName: inviter?.displayName ?? inviter?.email ?? 'A teammate',
+        signupUrl,
+        role,
+      });
+    } catch (err) {
+      console.error('[invite-by-email] notification failed (invite still recorded):', err);
+    }
+
     return c.json({ ok: true, status: 'pending', email });
   });
 

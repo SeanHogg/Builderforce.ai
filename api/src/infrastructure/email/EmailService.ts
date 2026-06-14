@@ -193,6 +193,50 @@ export async function sendAdminPasswordResetEmail(
   await provider.send({ to, subject: 'Your Builderforce account access has been reset', html });
 }
 
+const WORKSPACE_INVITE_BODY = `
+      <p>Hi,</p>
+      <p><strong>{{InviterName}}</strong> invited you to join the
+         <strong>{{WorkspaceName}}</strong> workspace on Builderforce as a
+         <strong>{{Role}}</strong>.</p>
+      <p>Builderforce.ai is your AI agent workforce — build, train and govern AI
+         agents that ship code, run workflows and connect your systems.</p>
+      <p style="text-align:center; margin: 28px 0;">
+        <a href="{{SignupUrl}}" class="button">Accept your invitation</a>
+      </p>
+      <p style="font-size:13px; color:#64748b;">
+        Sign up with this email address ({{Email}}) and you will join
+        {{WorkspaceName}} automatically. If you were not expecting this, you can
+        ignore this email.
+      </p>`;
+
+/**
+ * Cold-invite email: tells someone with no Builderforce account that they were
+ * invited to a workspace and links them to sign up with the invited address (so
+ * the pending invitation auto-converts on first login). Best-effort — no-ops
+ * when RESEND_API_KEY is unset, like the other senders.
+ */
+export async function sendWorkspaceInviteEmail(
+  env: EmailEnv,
+  to: string,
+  opts: { workspaceName: string; inviterName: string; signupUrl: string; role: string },
+): Promise<void> {
+  const provider = getEmailProvider(env);
+  if (!provider) return;
+
+  const subject = `${opts.inviterName} invited you to ${opts.workspaceName} on Builderforce`;
+  const html = render(HEADER + WORKSPACE_INVITE_BODY + FOOTER, {
+    Subject: subject,
+    InviterName: opts.inviterName,
+    WorkspaceName: opts.workspaceName,
+    Role: opts.role,
+    SignupUrl: opts.signupUrl,
+    Email: to,
+    Year: String(new Date().getFullYear()),
+  });
+
+  await provider.send({ to, subject, html });
+}
+
 // ---------------------------------------------------------------------------
 // LLM vendor health alert — sent by the scheduled() cron when one or more
 // vendors' status differs from the previous run. Plain string template (no

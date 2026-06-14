@@ -16,6 +16,7 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { BrainPanel } from './BrainPanel';
 import { useBrainContext, takePendingPrompt } from '@/lib/brain';
+import { pendingPromptsApi } from '@/lib/builderforceApi';
 import { useAuth } from '@/lib/AuthContext';
 import { useModalDismiss } from '@/hooks/useModalDismiss';
 
@@ -46,7 +47,20 @@ export function FloatingBrain() {
     if (p) {
       setInitialPrompt(p);
       setOpen(true);
+      return;
     }
+    // Same-browser miss → try the durable server record (cross-device handoff,
+    // e.g. typed on phone, signed up on laptop). Best-effort. [1517]
+    let cancelled = false;
+    void pendingPromptsApi.claim().then((serverPrompt) => {
+      if (!cancelled && serverPrompt) {
+        setInitialPrompt(serverPrompt);
+        setOpen(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [hasTenant, setOpen, pathname]);
 
   // On the full Brain Storm page the docked Brain is redundant; on the auth

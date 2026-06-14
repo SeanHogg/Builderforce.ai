@@ -8,6 +8,7 @@ import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
 import { HOMEPAGE_FAQ, FOOTER_LINKS, COMPARE } from '@/lib/content';
 import { savePendingPrompt } from '@/lib/brain';
+import { pendingPromptsApi } from '@/lib/builderforceApi';
 import { BLOG_POSTS } from '@/lib/blogData';
 import { ArticleCardGrid } from '@/components/blog/ArticleCard';
 import QuickStart from '@/components/QuickStart';
@@ -31,6 +32,7 @@ export default function LandingPage() {
     // Stash the prompt, send the visitor through auth; the Brain replays it
     // once they're inside the app (see lib/brain/pendingPrompt + FloatingBrain).
     savePendingPrompt(text);
+    pendingPromptsApi.save(text, '/'); // durable, cross-device fallback
     router.push('/register');
   }
 

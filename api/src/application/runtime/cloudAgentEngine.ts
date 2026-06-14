@@ -33,7 +33,7 @@ import {
   CONTAINER_MAX_STEPS, assertsUnrunVerification, type RawToolCall,
 } from './cloudAgentTools';
 import {
-  DEFAULT_ENGINE_ID, ENGINE_IDS,
+  DEFAULT_ENGINE_ID, ENGINE_IDS, resolveEngineById,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext,
 } from '@builderforce/agent-tools';
 import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel } from './cloudDispatch';
@@ -1367,14 +1367,19 @@ export class CloudToolLoopEngine implements AgentEngine {
 }
 
 /**
- * The single composition root for cloud engine selection. Exactly one engine is
- * reachable from this in-Worker loop today — {@link CloudToolLoopEngine} — so this
- * returns it directly; the seam exists so "the next engine" is injected HERE without
- * editing the call site. (Surface routing — durable DO / container / worker — is a
+ * The single composition root for cloud engine selection. An id-keyed registry of
+ * engine factories resolved via the shared {@link resolveEngineById} — the SAME
+ * pattern the on-prem relay `resolveEngine` uses — so adding a V3 is one registry
+ * entry on BOTH surfaces, never a new branch. Today the only entry is
+ * {@link CloudToolLoopEngine} (`builderforce-v2`); any legacy/unknown id falls back to
+ * `DEFAULT_ENGINE_ID`. (Surface routing — durable DO / container / worker — is a
  * separate decision made in `runtimeRoutes.ts`, not an engine choice.)
  */
-export function resolveAgentEngine(rc: CloudEngineContext): AgentEngine {
-  return new CloudToolLoopEngine(rc);
+export function resolveAgentEngine(rc: CloudEngineContext, engineId?: string): AgentEngine {
+  const registry: Record<string, (c: CloudEngineContext) => AgentEngine> = {
+    [ENGINE_IDS.v2]: (c) => new CloudToolLoopEngine(c),
+  };
+  return resolveEngineById(registry, engineId)(rc);
 }
 
 /**

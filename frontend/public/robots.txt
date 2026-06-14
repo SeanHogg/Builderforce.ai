@@ -9,6 +9,10 @@ Allow: /blog
 Allow: /blog/
 Allow: /pricing
 Allow: /marketplace
+Allow: /compare
+Allow: /compare/
+Allow: /integrations
+Allow: /integrations/
 Allow: /agents
 Allow: /agents/
 Allow: /login
