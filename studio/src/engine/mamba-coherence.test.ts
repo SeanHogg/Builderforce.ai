@@ -1,11 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
   anchorWalkLatent,
+  applyToLatent,
   blendNoise,
+  isAnchorRefreshFrame,
+  latentResidualBiasScale,
   scaleLatent,
   shiftLatent,
-  shouldApplyLatentResidualBias,
 } from './mamba-coherence';
+import type { MambaStateSnapshot } from '../types';
 
 /**
  * blendNoise is the latent-walk primitive VideoEngine.generate uses to keep
@@ -153,6 +156,39 @@ describe('anchorWalkLatent (smooth-motion trajectory primitive)', () => {
   });
 });
 
+describe('isAnchorRefreshFrame (img2img-drift bound)', () => {
+  it('never refreshes when the interval is 0 / negative / non-finite (default: carry forward)', () => {
+    for (const bad of [0, -1, NaN, Infinity]) {
+      for (let k = 0; k < 40; k++) {
+        expect(isAnchorRefreshFrame(k, bad)).toBe(false);
+      }
+    }
+  });
+
+  it('refreshes on multiples of the interval but never on keyframe 0 (which starts fresh already)', () => {
+    expect(isAnchorRefreshFrame(0, 8)).toBe(false);
+    expect(isAnchorRefreshFrame(8, 8)).toBe(true);
+    expect(isAnchorRefreshFrame(16, 8)).toBe(true);
+    // Between refreshes the recursion is left to carry content forward.
+    for (const k of [1, 2, 7, 9, 15]) expect(isAnchorRefreshFrame(k, 8)).toBe(false);
+  });
+
+  it('floors a fractional interval to whole keyframes', () => {
+    // interval 4.9 → effective 4: refresh on 4, 8, 12.
+    expect(isAnchorRefreshFrame(4, 4.9)).toBe(true);
+    expect(isAnchorRefreshFrame(8, 4.9)).toBe(true);
+    expect(isAnchorRefreshFrame(5, 4.9)).toBe(false);
+  });
+
+  it('caps accumulated drift: at least one refresh occurs within any window of `interval` keyframes', () => {
+    const interval = 8;
+    for (let start = 1; start <= 30; start++) {
+      const window = Array.from({ length: interval }, (_, i) => start + i);
+      expect(window.some((k) => isAnchorRefreshFrame(k, interval))).toBe(true);
+    }
+  });
+});
+
 describe('shiftLatent (img2img camera-motion primitive)', () => {
   // NCHW layout: 2 channels, 3 rows, 3 cols. Channel 0 = 1..9, channel 1 = 11..19.
   function fixture(): Float32Array {
@@ -234,28 +270,79 @@ describe('scaleLatent (dolly / latent-zoom primitive)', () => {
   });
 });
 
-describe('shouldApplyLatentResidualBias (img2img disfigurement guard)', () => {
-  // The bug this guards: a user with `coherenceMode='latent-residual'` AND
-  // `imgToImgStrength > 0` reported frame 0 was crisp but every subsequent
-  // frame was progressively disfigured. Root cause: applyToLatent adds a
-  // constant per-channel offset broadcast to every pixel — designed for
-  // unit-variance noise (frame 0 / anchor-walk). On a partially-denoised
-  // img2img latent, the same constant shift moves the signal out of the
-  // UNet's trained distribution and compounds frame-to-frame as Mamba state
-  // accumulates. This helper is the SINGLE place the engine decides whether
-  // to apply that bias; this suite locks the rule.
+describe('latentResidualBiasScale (img2img-composable bias gate)', () => {
+  // History: the latent-residual Mamba bias is a constant per-channel offset
+  // broadcast to every pixel — designed for unit-variance noise (frame 0 /
+  // anchor-walk). Applying it at full strength to a partially-denoised img2img
+  // latent shifted the SIGNAL out of the UNet's trained range and disfigured
+  // every frame after the first, compounding as Mamba state accumulated. The
+  // first fix SKIPPED the bias entirely under img2img (coherence lost there).
+  // The proper fix scales the bias by the latent's noise fraction sqrt(1-ᾱ_t)
+  // so it perturbs only the noise component — letting latent-residual coherence
+  // and img2img recursion finally compose. This helper is the SINGLE place that
+  // rule lives; this suite locks it against regressing to either prior state.
 
-  it('applies bias under latent-residual + fresh-noise (the original use case)', () => {
-    expect(shouldApplyLatentResidualBias('latent-residual', false)).toBe(true);
+  it('full bias under latent-residual + fresh-noise (pure unit-variance latent)', () => {
+    expect(latentResidualBiasScale('latent-residual', false, 1)).toBe(1);
   });
 
-  it('SKIPS bias under latent-residual + img2img (the bug fix)', () => {
-    expect(shouldApplyLatentResidualBias('latent-residual', true)).toBe(false);
+  it('scales bias by the noise fraction under latent-residual + img2img (the fix)', () => {
+    // A mid-schedule img2img re-noise (sqrt(1-ᾱ_t) ≈ 0.6) → partial, not zero,
+    // not full. This is what lets both mechanisms coexist.
+    expect(latentResidualBiasScale('latent-residual', true, 0.6)).toBeCloseTo(0.6, 6);
+  });
+
+  it('never exceeds 1 even if a degenerate noise scale is passed', () => {
+    expect(latentResidualBiasScale('latent-residual', true, 5)).toBe(1);
+  });
+
+  it('skips bias when the img2img noise fraction is ~0 (latent is essentially clean signal)', () => {
+    expect(latentResidualBiasScale('latent-residual', true, 0)).toBe(0);
+    expect(latentResidualBiasScale('latent-residual', true, NaN)).toBe(0);
   });
 
   it('never applies bias under prompt-bias (mode is a no-op on the latent path)', () => {
-    expect(shouldApplyLatentResidualBias('prompt-bias', false)).toBe(false);
-    expect(shouldApplyLatentResidualBias('prompt-bias', true)).toBe(false);
+    expect(latentResidualBiasScale('prompt-bias', false, 1)).toBe(0);
+    expect(latentResidualBiasScale('prompt-bias', true, 0.6)).toBe(0);
+  });
+});
+
+describe('applyToLatent (noise-scaled per-channel bias)', () => {
+  const state: MambaStateSnapshot = {
+    data: [0.5, -0.3, 0.8, -0.1, 0.2, 0.6, -0.4, 0.9],
+    dim: 64,
+    order: 2,
+    channels: 4,
+    step: 3,
+  };
+  // 4 channels × 4 spatial positions = 16, matching the engine's NCHW latent.
+  const latent = () => new Float32Array(16).fill(0);
+
+  it('noiseScale defaults to 1 — backward-compatible full bias', () => {
+    const withDefault = applyToLatent({ ctx: { mode: 'latent-residual', strength: 0.5, state }, latent: latent() });
+    const withExplicit = applyToLatent({
+      ctx: { mode: 'latent-residual', strength: 0.5, state },
+      latent: latent(),
+      noiseScale: 1,
+    });
+    expect(Array.from(withDefault)).toEqual(Array.from(withExplicit));
+  });
+
+  it('a smaller noiseScale produces a proportionally smaller offset (perturbs only the noise portion)', () => {
+    const full = applyToLatent({ ctx: { mode: 'latent-residual', strength: 0.5, state }, latent: latent(), noiseScale: 1 });
+    const half = applyToLatent({ ctx: { mode: 'latent-residual', strength: 0.5, state }, latent: latent(), noiseScale: 0.5 });
+    // Every non-zero offset under half-scale is exactly half the full-scale one.
+    for (let i = 0; i < full.length; i++) {
+      expect(half[i]).toBeCloseTo(full[i] * 0.5, 6);
+    }
+    // And the bias is actually non-trivial (guards against a no-op test).
+    expect(full.some((v) => Math.abs(v) > 1e-6)).toBe(true);
+  });
+
+  it('noiseScale = 0 is a no-op (returns the latent untouched)', () => {
+    const l = latent();
+    const out = applyToLatent({ ctx: { mode: 'latent-residual', strength: 0.5, state }, latent: l, noiseScale: 0 });
+    expect(out).toBe(l);
   });
 });
 
