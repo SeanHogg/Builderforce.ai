@@ -7,7 +7,7 @@ title: "Credits"
 
 ## The name
 
-BuilderForce Agents = CLAW + TARDIS, because every agent needs a time and space machine.
+BuilderForce Agents = agents + TARDIS, because every agent needs a time and space machine.
 
 ## Credits
 

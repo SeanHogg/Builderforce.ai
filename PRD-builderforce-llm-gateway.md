@@ -8,7 +8,7 @@
 
 ## 1. Goal
 
-Make Builderforce.ai the shared, billed, white-label LLM gateway behind every product in the portfolio. Tenant apps (hired.video, burnrateos.com, the IDE itself, CoderClaw) consume a thin SDK with **only an API key**; Builderforce handles vendor selection, free-vs-paid pool composition, failover, metering, and per-tenant daily limits.
+Make Builderforce.ai the shared, billed, white-label LLM gateway behind every product in the portfolio. Tenant apps (hired.video, burnrateos.com, the IDE itself, the agent runtimes) consume a thin SDK with **only an API key**; Builderforce handles vendor selection, free-vs-paid pool composition, failover, metering, and per-tenant daily limits.
 
 ### Constraints
 
@@ -51,7 +51,7 @@ Make Builderforce.ai the shared, billed, white-label LLM gateway behind every pr
                  ▼
         ┌─────────────────────────────┐
         │ llm_usage_log (Neon)        │
-        │ tenant + claw daily caps    │
+        │ tenant + agent daily caps   │
         │ failover_log + telemetry    │
         └─────────────────────────────┘
 ```
