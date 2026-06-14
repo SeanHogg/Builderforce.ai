@@ -61,6 +61,80 @@ export function resolveQualityTier(tier: QualityMode): {
   return { primary: found.primary, refinement: found.refinement };
 }
 
+/** The model chain that will ACTUALLY run, after reconciling the Quality tier
+ *  with the Advanced model override. `overridesQuality` is true when the
+ *  Advanced picker has superseded the tier (single pass, no refinement) — the
+ *  panel uses it to stop the two control surfaces from silently contradicting
+ *  each other (the Quality tier still glowing "two-pass" while one pass runs). */
+export interface EffectiveChain {
+  primary: DiffusionModelId;
+  refinement: DiffusionModelId | null;
+  overridesQuality: boolean;
+}
+
+/**
+ * Single source of truth for "which model(s) run this generation". When Advanced
+ * is open the explicit model picker wins (single pass, no refinement); otherwise
+ * the Quality tier resolves to its (primary, refinement) pair. Both the engine
+ * factory, the saved-version params, the resolved-chain badge, and the debug
+ * snapshot resolve through this one function so they can never disagree.
+ */
+export function resolveEffectiveChain(opts: {
+  showAdvanced: boolean;
+  advancedModel: DiffusionModelId;
+  quality: QualityMode;
+}): EffectiveChain {
+  if (opts.showAdvanced) {
+    return { primary: opts.advancedModel, refinement: null, overridesQuality: true };
+  }
+  const tier = resolveQualityTier(opts.quality);
+  return { primary: tier.primary, refinement: tier.refinement ?? null, overridesQuality: false };
+}
+
+/** One-line description of an effective chain, e.g. "lcm-tiny-sd → lcm-dreamshaper-v7 (two-pass)". */
+export function describeChain(chain: EffectiveChain): string {
+  return chain.refinement
+    ? `${chain.primary} → ${chain.refinement} (two-pass)`
+    : `${chain.primary} (single pass)`;
+}
+
+/**
+ * Resolved-state badge: shows the model chain that will actually run and, when
+ * the Advanced model has overridden the Quality tier, says so explicitly. This
+ * closes the "Quality says Refined two-pass but Advanced silently runs one pass"
+ * contradiction — there is now one authoritative readout of the effective chain.
+ * Self-contained: resolves the chain itself from the same inputs the engine uses.
+ */
+export function EffectiveChainBadge(props: {
+  showAdvanced: boolean;
+  advancedModel: DiffusionModelId;
+  quality: QualityMode;
+}) {
+  const chain = resolveEffectiveChain(props);
+  return (
+    <p
+      className="bfs-hint"
+      style={{
+        marginTop: 6,
+        padding: '6px 8px',
+        borderRadius: 6,
+        border: '1px solid var(--bfs-border)',
+        background: 'var(--bfs-surface, transparent)',
+      }}
+    >
+      <strong>Effective model chain:</strong>{' '}
+      <span className="bfs-mono">{describeChain(chain)}</span>
+      {chain.overridesQuality ? (
+        <>
+          {' '}
+          — Advanced model override is active, so the <strong>Quality</strong> tier above is
+          ignored (no refinement pass). Close Advanced or clear the model to use the tier.
+        </>
+      ) : null}
+    </p>
+  );
+}
+
 interface QualityTierPickerProps {
   value: QualityMode;
   onChange: (mode: QualityMode) => void;

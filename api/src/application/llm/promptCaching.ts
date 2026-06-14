@@ -21,7 +21,25 @@
  * non-Anthropic candidate must still see clean, unmarked messages.
  */
 
+/**
+ * Cache-tier marker. Anthropic's default `ephemeral` breakpoint has a ~5-minute
+ * TTL; the opt-in `ttl: '1h'` extends it to one hour (~2x write cost) so a stable
+ * prefix survives multi-minute idle gaps between a bursty tenant's calls. The
+ * gateway selects `'1h'` only when the caller passes `_builderforce.cacheTtl:'1h'`
+ * (see {@link resolveCacheTtl} in LlmProxyService) — otherwise the 5-min default.
+ */
+export type CacheTtl = '5m' | '1h';
+
 const EPHEMERAL = { type: 'ephemeral' as const };
+const EPHEMERAL_1H = { type: 'ephemeral' as const, ttl: '1h' as const };
+
+/** Marker object for the requested TTL. `'5m'` (default) → bare ephemeral;
+ *  `'1h'` → ephemeral with the long-retention flag OpenRouter forwards to
+ *  Anthropic. Returned as a shared frozen literal so placement stays byte-stable
+ *  (no per-call object identity churn that could perturb a cached prefix). */
+function markerForTtl(ttl: CacheTtl | undefined): Record<string, unknown> {
+  return ttl === '1h' ? EPHEMERAL_1H : EPHEMERAL;
+}
 
 type Msg = Record<string, unknown>;
 
@@ -50,14 +68,15 @@ function hasCallerCacheControl(messages: ReadonlyArray<Msg>): boolean {
  * Return a copy of `msg` whose last text content block carries `cache_control`.
  * String content is promoted to a single text block — the form Anthropic via
  * OpenRouter requires for a breakpoint. Returns the original reference when
- * there's no text block to mark (nothing cacheable to attach to).
+ * there's no text block to mark (nothing cacheable to attach to). `marker` is
+ * the TTL-specific `cache_control` object ({@link markerForTtl}).
  */
-function withCacheControl(msg: Msg): Msg {
+function withCacheControl(msg: Msg, marker: Record<string, unknown>): Msg {
   const content = (msg as { content?: unknown }).content;
 
   if (typeof content === 'string') {
     if (content.length === 0) return msg;
-    return { ...msg, content: [{ type: 'text', text: content, cache_control: EPHEMERAL }] };
+    return { ...msg, content: [{ type: 'text', text: content, cache_control: marker }] };
   }
 
   if (Array.isArray(content)) {
@@ -67,7 +86,7 @@ function withCacheControl(msg: Msg): Msg {
       if ((parts[i] as { type?: unknown })?.type === 'text') { idx = i; break; }
     }
     if (idx < 0) return msg;
-    return { ...msg, content: parts.map((p, i) => (i === idx ? { ...p, cache_control: EPHEMERAL } : p)) };
+    return { ...msg, content: parts.map((p, i) => (i === idx ? { ...p, cache_control: marker } : p)) };
   }
 
   return msg;
@@ -82,11 +101,17 @@ function withCacheControl(msg: Msg): Msg {
  *   1. the last `system` message — the largest stable prefix, the biggest win;
  *   2. the message immediately before the final turn (history boundary) — so a
  *      follow-up request reads the whole prior-conversation prefix.
+ *
+ * `ttl` (default `'5m'`) selects the breakpoint retention — pass `'1h'` (from a
+ * caller's `_builderforce.cacheTtl` hint) to keep the prefix warm across idle
+ * gaps longer than the 5-minute ephemeral window.
  */
-export function applyPromptCaching(messages: Array<Msg>, model: string): Array<Msg> {
+export function applyPromptCaching(messages: Array<Msg>, model: string, ttl?: CacheTtl): Array<Msg> {
   if (!Array.isArray(messages) || messages.length === 0) return messages;
   if (!modelSupportsExplicitCaching(model)) return messages;
   if (hasCallerCacheControl(messages)) return messages;
+
+  const marker = markerForTtl(ttl);
 
   const marks = new Set<number>();
 
@@ -109,5 +134,5 @@ export function applyPromptCaching(messages: Array<Msg>, model: string): Array<M
   }
 
   if (marks.size === 0) return messages;
-  return messages.map((m, i) => (marks.has(i) ? withCacheControl(m) : m));
+  return messages.map((m, i) => (marks.has(i) ? withCacheControl(m, marker) : m));
 }

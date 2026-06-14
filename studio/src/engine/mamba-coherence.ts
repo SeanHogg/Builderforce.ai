@@ -39,6 +39,17 @@ export interface ApplyToLatentArgs {
   ctx: CoherenceContext;
   /** Initial latent [1, 4, h/8, w/8]. */
   latent: Float32Array;
+  /**
+   * Fraction of the latent that is fresh noise, in [0, 1]. The bias is a
+   * per-channel constant offset designed for unit-variance Gaussian noise, so
+   * scaling it by the noise fraction keeps it from disfiguring the signal
+   * portion of a partially-denoised (img2img) latent.
+   *   1 (default) → pure noise latent (frame 0 / anchor-walk): full bias.
+   *   sqrt(1-ᾱ_t) → img2img latent re-noised to timestep t: perturb only its
+   *                  noise component, leave the carried-forward signal intact.
+   * See `latentResidualBiasScale` for how the engine derives this.
+   */
+  noiseScale?: number;
 }
 
 /**
@@ -155,6 +166,30 @@ export function anchorWalkLatent(
 }
 
 /**
+ * Whether keyframe `keyframeIndex` should restart from a FRESH anchor latent
+ * instead of carrying the previous frame's latent forward via img2img recursion.
+ *
+ * img2img recursion re-noises frame N's clean latent to seed frame N+1, which
+ * carries scene content forward — but each VAE-encode→denoise round-trip adds a
+ * small error, so on long clips (~30+ frames) detail accumulates blur and the
+ * scene degrades. Periodically dropping back to a fresh full-noise anchor (a
+ * full denoise pass, not a partial img2img one) bounds that accumulation to at
+ * most `interval` keyframes' worth of drift.
+ *
+ *   interval <= 0 / non-finite → never refresh (carry forward indefinitely —
+ *                                the prior unbounded behaviour, still the default)
+ *   interval = K               → refresh on keyframes K, 2K, 3K, … (never on
+ *                                keyframe 0, which already starts fresh)
+ *
+ * Pure + unit-tested so the long-clip drift bound has one source of truth.
+ */
+export function isAnchorRefreshFrame(keyframeIndex: number, interval: number): boolean {
+  if (!Number.isFinite(interval) || interval <= 0) return false;
+  const k = Math.floor(interval);
+  return keyframeIndex > 0 && keyframeIndex % k === 0;
+}
+
+/**
  * 2D spatial shift on an NCHW latent with edge-replicate (clamp) padding.
  * Used by `VideoEngine.generate` to add directional camera motion to
  * img2img-recursion frames: shifting the prior latent down/right before
@@ -257,31 +292,50 @@ export function scaleLatent(
 }
 
 /**
- * Gate for latent-residual Mamba bias application. Returns true only when the
- * user picked the mode AND the engine is on the fresh-noise (anchor-walk) path.
+ * Noise-level scale for the latent-residual Mamba bias — the single source of
+ * truth for "how much (if any) latent-side bias to apply this frame". Returns
+ * the multiplier `applyToLatent` should use for its per-channel offset; `0`
+ * means skip the bias entirely.
  *
- * Skipped under img2img recursion because `applyToLatent` adds a per-channel
- * broadcast constant offset, which was designed for unit-variance Gaussian
- * noise (frame 0 / anchor-walk). On a partially-denoised img2img latent the
- * same offset shifts the signal distribution out of the UNet's trained range
- * and produces catastrophic disfigurement that compounds frame-to-frame as
- * Mamba state accumulates. Locked by a unit test so a future refactor can't
- * silently re-enable both at once.
+ * The bias is a per-channel broadcast constant designed for unit-variance
+ * Gaussian noise. On a partially-denoised img2img latent
+ *   x_t = sqrt(ᾱ_t)·clean + sqrt(1-ᾱ_t)·noise
+ * applying it at full strength shifts the *signal* (clean) component out of the
+ * UNet's trained range, which disfigures the frame and compounds frame-to-frame
+ * as Mamba state accumulates (the original bug — see git history of the previous
+ * binary skip-gate). Scaling the bias by `sqrt(1-ᾱ_t)` (the noise fraction)
+ * perturbs only the noise component, so latent-residual coherence and img2img
+ * recursion can finally compose instead of one being forced off.
+ *
+ *   mode != latent-residual         → 0   (mode is a no-op on the latent path)
+ *   latent-residual + fresh noise   → 1   (frame 0 / anchor-walk: pure noise)
+ *   latent-residual + img2img       → img2imgNoiseScale = sqrt(1-ᾱ_t)
+ *
+ * Locked by a unit test so a future refactor can't silently regress to either
+ * the catastrophic full-strength-under-img2img bug or the conservative
+ * skip-everything stopgap.
  */
-export function shouldApplyLatentResidualBias(
+export function latentResidualBiasScale(
   mode: CoherenceMode,
   useImg2Img: boolean,
-): boolean {
-  return mode === 'latent-residual' && !useImg2Img;
+  img2imgNoiseScale: number,
+): number {
+  if (mode !== 'latent-residual') return 0;
+  if (!useImg2Img) return 1;
+  if (!Number.isFinite(img2imgNoiseScale) || img2imgNoiseScale <= 0) return 0;
+  return Math.min(1, img2imgNoiseScale);
 }
 
 /**
  * Latent-residual mode: add the projected state (broadcast across spatial
- * positions) to the initial noise latent. Strength scales the additive bias.
+ * positions) to the initial noise latent. Strength scales the additive bias;
+ * `noiseScale` (default 1) further scales it by the latent's noise fraction so
+ * the bias composes safely with img2img recursion — see `latentResidualBiasScale`.
  */
 export function applyToLatent(args: ApplyToLatentArgs): Float32Array {
   const { ctx, latent } = args;
-  if (ctx.strength <= 0) return latent;
+  const noiseScale = args.noiseScale ?? 1;
+  if (ctx.strength <= 0 || noiseScale <= 0) return latent;
 
   const channels = 4;
   const spatial = latent.length / channels;
@@ -289,7 +343,7 @@ export function applyToLatent(args: ApplyToLatentArgs): Float32Array {
   const out = new Float32Array(latent);
 
   for (let c = 0; c < channels; c++) {
-    const bias = stateVec[c] * ctx.strength;
+    const bias = stateVec[c] * ctx.strength * noiseScale;
     const base = c * spatial;
     for (let i = 0; i < spatial; i++) {
       out[base + i] += bias;
