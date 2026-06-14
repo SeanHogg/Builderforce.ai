@@ -1,5 +1,5 @@
 import type { AgentTool } from "../../builderforce/model/agent-types.js";
-import type { AgentSession } from "@mariozechner/pi-coding-agent";
+import type { AgentSession } from "../../builderforce/agent-loop/index.js";
 import type { MemoryCitationsMode } from "../../config/types.memory.js";
 import type { ResolvedTimeFormat } from "../date-time.js";
 import type { EmbeddedContextFile } from "../pi-embedded-helpers.js";

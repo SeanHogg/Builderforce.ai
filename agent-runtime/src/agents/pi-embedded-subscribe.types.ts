@@ -1,4 +1,4 @@
-import type { AgentSession } from "@mariozechner/pi-coding-agent";
+import type { AgentSession } from "../builderforce/agent-loop/index.js";
 import type { ReasoningLevel, VerboseLevel } from "../auto-reply/thinking.js";
 import type { BuilderForceAgentsConfig } from "../config/types.builderforce.js";
 import type { HookRunner } from "../plugins/hooks.js";

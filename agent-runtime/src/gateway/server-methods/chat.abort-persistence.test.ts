@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { CURRENT_SESSION_VERSION } from "@mariozechner/pi-coding-agent";
+import { CURRENT_SESSION_VERSION } from "../../builderforce/agent-loop/index.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 type TranscriptLine = {

@@ -31,6 +31,7 @@ const mainNav: NavItem[] = [
     icon: '💻',
     activePaths: ['/ide'],
   },
+  { href: '/ide/voice', label: 'Voice Studio', icon: '🎙', activePaths: ['/ide/voice'] },
   { href: '/workflows', label: 'Workflows', icon: '🔀', activePaths: ['/workflows'] },
 ];
 

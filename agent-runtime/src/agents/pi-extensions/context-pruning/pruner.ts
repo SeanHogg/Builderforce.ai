@@ -1,6 +1,6 @@
 import type { AgentMessage } from "../../../builderforce/model/agent-types.js";
 import type { ImageContent, TextContent, ToolResultMessage } from "../../../builderforce/model/types.js";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "../types.js";
 import type { EffectiveContextPruningSettings } from "./settings.js";
 import { makeToolPrunablePredicate } from "./tools.js";
 

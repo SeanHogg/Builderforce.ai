@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { StreamFn } from "@mariozechner/pi-agent-core";
+import type { StreamFn } from "../builderforce/agent-loop/index.js";
 import type {
   AssistantMessage,
   StopReason,
@@ -8,7 +8,7 @@ import type {
   Tool,
   Usage,
 } from "../builderforce/model/types.js";
-import { createAssistantMessageEventStream } from "@mariozechner/pi-ai";
+import { createAssistantMessageEventStream } from "../builderforce/agent-loop/index.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
 
 export const OLLAMA_NATIVE_BASE_URL = "http://127.0.0.1:11434";

@@ -1,10 +1,15 @@
 import fs from "node:fs/promises";
 import os from "node:os";
-import type { AgentMessage } from "../../../builderforce/model/agent-types.js";
-import type { ImageContent } from "../../../builderforce/model/types.js";
-import { streamSimple } from "@mariozechner/pi-ai";
-import { createAgentSession, SessionManager, SettingsManager } from "@mariozechner/pi-coding-agent";
 import { resolveHeartbeatPrompt } from "../../../auto-reply/heartbeat.js";
+import { nativeStreamSimple } from "../../../builderforce/agent-loop/index.js";
+import {
+  createAgentSession,
+  SessionManager,
+  SettingsManager,
+} from "../../../builderforce/agent-loop/index.js";
+import type { AgentMessage } from "../../../builderforce/model/agent-types.js";
+import type { AgentTool } from "../../../builderforce/model/agent-types.js";
+import type { ImageContent } from "../../../builderforce/model/types.js";
 import { resolveChannelCapabilities } from "../../../config/channel-capabilities.js";
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
@@ -24,13 +29,14 @@ import { isReasoningTagProvider } from "../../../utils/provider-utils.js";
 import { resolveBuilderForceAgentsAgentDir } from "../../agent-paths.js";
 import { resolveSessionAgentIds } from "../../agent-scope.js";
 import { createAnthropicPayloadLogger } from "../../anthropic-payload-log.js";
+import { buildAssignedPersonaPrompt } from "../../assigned-capabilities.js";
 import { makeBootstrapWarn, resolveBootstrapContextForRun } from "../../bootstrap-files.js";
+import { createBuilderForceAgentsLlmLocalStreamFn } from "../../builderforcellm-local-stream.js";
 import { createCacheTrace } from "../../cache-trace.js";
 import {
   listChannelSupportedActions,
   resolveChannelMessageToolHints,
 } from "../../channel-tools.js";
-import { createBuilderForceAgentsLlmLocalStreamFn } from "../../builderforcellm-local-stream.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../defaults.js";
 import { resolveBuilderForceAgentsDocsPath } from "../../docs-path.js";
 import { isTimeoutError } from "../../failover-error.js";
@@ -51,7 +57,10 @@ import {
   resolveCompactionReserveTokensFloor,
 } from "../../pi-settings.js";
 import { toClientToolDefinitions } from "../../pi-tool-definition-adapter.js";
-import { createBuilderForceAgentsCodingTools, resolveToolLoopDetectionConfig } from "../../pi-tools.js";
+import {
+  createBuilderForceAgentsCodingTools,
+  resolveToolLoopDetectionConfig,
+} from "../../pi-tools.js";
 import { resolveSandboxContext } from "../../sandbox.js";
 import { resolveSandboxRuntimeStatus } from "../../sandbox/runtime-status.js";
 import { repairSessionFileIfNeeded } from "../../session-file-repair.js";
@@ -98,7 +107,6 @@ import {
   buildEmbeddedSystemPrompt,
   createSystemPromptOverride,
 } from "../system-prompt.js";
-import { buildAssignedPersonaPrompt } from "../../assigned-capabilities.js";
 import { installToolResultContextGuard } from "../tool-result-context-guard.js";
 import { splitSdkTools } from "../tool-split.js";
 import { describeUnknownError, mapThinkingLevel } from "../utils.js";
@@ -590,8 +598,10 @@ export async function runEmbeddedAttempt(
         modelRegistry: params.modelRegistry,
         model: params.model,
         thinkingLevel: mapThinkingLevel(params.thinkLevel),
-        tools: builtInTools,
-        customTools: allCustomTools,
+        // transitional bridge: pi-built coding tools are structurally native AgentTools
+        // (same execute shape); pi-tools.ts migrates to native AgentTool next, making this identity.
+        tools: builtInTools as unknown as AgentTool[],
+        customTools: allCustomTools as unknown as AgentTool[],
         sessionManager,
         settingsManager,
       }));
@@ -680,7 +690,7 @@ export async function runEmbeddedAttempt(
         log.info(
           `[brain-routing] run=${params.runId} localBrain=off api=${params.model.api} model=${params.modelId} → cortex (SDK stream)`,
         );
-        activeSession.agent.streamFn = streamSimple;
+        activeSession.agent.streamFn = nativeStreamSimple;
       }
 
       applyExtraParamsToAgent(

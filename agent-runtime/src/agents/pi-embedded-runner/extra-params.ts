@@ -1,6 +1,6 @@
-import type { StreamFn } from "@mariozechner/pi-agent-core";
+import type { StreamFn } from "../../builderforce/agent-loop/index.js";
+import { nativeStreamSimple } from "../../builderforce/agent-loop/index.js";
 import type { SimpleStreamOptions } from "../../builderforce/model/types.js";
-import { streamSimple } from "@mariozechner/pi-ai";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import { log } from "./logger.js";
 
@@ -97,7 +97,7 @@ function createStreamFnWithExtraParams(
 
   log.debug(`creating streamFn wrapper with params: ${JSON.stringify(streamParams)}`);
 
-  const underlying = baseStreamFn ?? streamSimple;
+  const underlying = baseStreamFn ?? nativeStreamSimple;
   const wrappedStreamFn: StreamFn = (model, context, options) =>
     underlying(model, context, {
       ...streamParams,
@@ -139,7 +139,7 @@ function shouldForceResponsesStore(model: {
 }
 
 function createOpenAIResponsesStoreWrapper(baseStreamFn: StreamFn | undefined): StreamFn {
-  const underlying = baseStreamFn ?? streamSimple;
+  const underlying = baseStreamFn ?? nativeStreamSimple;
   return (model, context, options) => {
     if (!shouldForceResponsesStore(model)) {
       return underlying(model, context, options);
@@ -222,7 +222,7 @@ function createAnthropicBetaHeadersWrapper(
   baseStreamFn: StreamFn | undefined,
   betas: string[],
 ): StreamFn {
-  const underlying = baseStreamFn ?? streamSimple;
+  const underlying = baseStreamFn ?? nativeStreamSimple;
   return (model, context, options) =>
     underlying(model, context, {
       ...options,
@@ -299,7 +299,7 @@ function createOpenRouterAnthropicSystemCacheWrapper(
   baseStreamFn: StreamFn | undefined,
   modelId: string,
 ): StreamFn {
-  const underlying = baseStreamFn ?? streamSimple;
+  const underlying = baseStreamFn ?? nativeStreamSimple;
   const isAnthropic = modelId.trim().toLowerCase().startsWith("anthropic/");
   return (model, context, options) => {
     if (!isAnthropic) {
@@ -321,7 +321,7 @@ function createOpenRouterAnthropicSystemCacheWrapper(
  * These headers allow BuilderForceAgents to appear on OpenRouter's leaderboard.
  */
 function createOpenRouterHeadersWrapper(baseStreamFn: StreamFn | undefined): StreamFn {
-  const underlying = baseStreamFn ?? streamSimple;
+  const underlying = baseStreamFn ?? nativeStreamSimple;
   return (model, context, options) =>
     underlying(model, context, {
       ...options,
@@ -345,7 +345,7 @@ function createZaiToolStreamWrapper(
   baseStreamFn: StreamFn | undefined,
   enabled: boolean,
 ): StreamFn {
-  const underlying = baseStreamFn ?? streamSimple;
+  const underlying = baseStreamFn ?? nativeStreamSimple;
   return (model, context, options) => {
     if (!enabled) {
       return underlying(model, context, options);

@@ -1,5 +1,5 @@
 import type { AgentMessage } from "../../builderforce/model/agent-types.js";
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "./types.js";
 import { describe, expect, it } from "vitest";
 import {
   computeEffectiveSettings,

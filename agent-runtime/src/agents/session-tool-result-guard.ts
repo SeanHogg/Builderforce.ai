@@ -1,6 +1,6 @@
 import type { AgentMessage } from "../builderforce/model/agent-types.js";
 import type { TextContent } from "../builderforce/model/types.js";
-import type { SessionManager } from "@mariozechner/pi-coding-agent";
+import type { SessionManager } from "../builderforce/agent-loop/index.js";
 import type {
   PluginHookBeforeMessageWriteEvent,
   PluginHookBeforeMessageWriteResult,

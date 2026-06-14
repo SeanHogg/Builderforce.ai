@@ -1,4 +1,4 @@
-import type { SessionManager } from "@mariozechner/pi-coding-agent";
+import type { SessionManager } from "../builderforce/agent-loop/index.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import {
   applyInputProvenanceToUserMessage,

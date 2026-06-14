@@ -78,6 +78,7 @@ import { createPushSubscriptionRoutes } from './presentation/routes/pushSubscrip
 import { createTelemetryRoutes }    from './presentation/routes/telemetryRoutes';
 import { createQaRoutes }           from './presentation/routes/qaRoutes';
 import { createRepoAnalysisRoutes } from './presentation/routes/repoAnalysisRoutes';
+import { createStudioVoiceCloneRoutes } from './presentation/routes/studioVoiceCloneRoutes';
 import { createIntegrationRoutes }  from './presentation/routes/integrationRoutes';
 import { createContributorRoutes }  from './presentation/routes/contributorRoutes';
 import { createDevTeamRoutes }      from './presentation/routes/devTeamRoutes';
@@ -335,6 +336,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/telemetry',       createTelemetryRoutes(db));
   app.route('/api/qa',              createQaRoutes(db));
   app.route('/api/repo-analysis',   createRepoAnalysisRoutes(db, taskService));
+  app.route('/api/studio/voice-clones', createStudioVoiceCloneRoutes(db));
 
   // Phase 6 — Dev Analytics & Team Intelligence
   app.route('/api/integrations',    createIntegrationRoutes(db, env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET));

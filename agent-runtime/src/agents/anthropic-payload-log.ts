@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import path from "node:path";
 import type { AgentMessage } from "../builderforce/model/agent-types.js";
-import type { StreamFn } from "@mariozechner/pi-agent-core";
+import type { StreamFn } from "../builderforce/agent-loop/index.js";
 import type { Api, Model } from "../builderforce/model/types.js";
 import { resolveStateDir } from "../config/paths.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
