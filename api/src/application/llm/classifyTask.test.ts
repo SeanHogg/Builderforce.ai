@@ -47,8 +47,10 @@ describe('classifyTaskAction', () => {
     expect(await classifyTaskAction(env, { title: 'x' })).toEqual({ actionType: 'other', confidence: 0 });
   });
 
-  it('a thrown error → other/0 (best-effort)', async () => {
-    completeMock.mockImplementation(() => { throw new Error('boom'); });
+  it('a malformed gateway result → other/0 (outer catch, best-effort)', async () => {
+    // No `.response` on the result → reading `.response.status` throws inside the
+    // try; the outer catch must absorb it and never propagate.
+    completeMock.mockResolvedValue({} as never);
     expect(await classifyTaskAction(env, { title: 'x' })).toEqual({ actionType: 'other', confidence: 0 });
   });
 
