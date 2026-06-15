@@ -7,6 +7,7 @@
  */
 
 import {
+  buildOpenAIChatBody,
   executeChatCompletion,
   executeChatCompletionStream,
   type AiModelTier,
@@ -32,24 +33,13 @@ function tierForCerebrasModel(modelId: string): AiModelTier {
 }
 
 function buildBody(params: VendorCallParams): Record<string, unknown> {
-  const { model, messages, tools, toolChoice, maxTokens, temperature, topP, extraBody } = params;
-  // Strip draft-07 JSON-Schema keywords Cerebras's strict validator rejects
-  // (`maxLength` / `minLength` / `format` / `pattern` / etc. — see
-  // jsonSchemaSanitize.ts). Without this, any consumer that ran their Zod
-  // schema through `z.toJSONSchema()` gets a 400 back from Cerebras the moment
-  // they include a `.max(N)` on a string field.
-  const safeExtra = sanitizeExtraBodyForVendor('cerebras', extraBody);
-  return {
-    model,
-    messages,
-    ...(tools ? { tools } : {}),
-    ...(toolChoice ? { tool_choice: toolChoice } : {}),
-    // Cerebras prefers `max_completion_tokens` (newer field name).
-    ...(maxTokens != null ? { max_completion_tokens: maxTokens } : {}),
-    ...(temperature != null ? { temperature } : {}),
-    ...(topP != null ? { top_p: topP } : {}),
-    ...(safeExtra ?? {}),
-  };
+  // Cerebras prefers `max_completion_tokens`, and its strict JSON-Schema validator
+  // rejects draft-07 keywords (`maxLength`/`format`/`pattern`/…) that Zod's
+  // `toJSONSchema()` emits — strip them from the passthrough. See jsonSchemaSanitize.ts.
+  return buildOpenAIChatBody(params, {
+    maxTokensField: 'max_completion_tokens',
+    transformExtra: (extra) => sanitizeExtraBodyForVendor('cerebras', extra),
+  });
 }
 
 export const cerebrasModule: VendorModule = {

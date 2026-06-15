@@ -7,6 +7,7 @@
  */
 
 import {
+  buildOpenAIChatBody,
   executeChatCompletion,
   executeChatCompletionStream,
   type AiModelTier,
@@ -17,7 +18,6 @@ import {
   type VendorStreamResult,
 } from './types';
 import { sanitizeExtraBodyForVendor } from '../jsonSchemaSanitize';
-import { applyPromptCaching } from '../promptCaching';
 
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -107,28 +107,14 @@ function tierForOpenRouterModel(modelId: string): AiModelTier {
 }
 
 function buildBody(params: VendorCallParams): Record<string, unknown> {
-  const { model, messages, tools, toolChoice, maxTokens, temperature, topP, extraBody, cacheTtl } = params;
-  // OpenRouter routes many free-tier model ids (`qwen/qwen3-coder:free`,
-  // `qwen/qwen3-next-80b-a3b-instruct:free`, etc.) to Cerebras as the upstream
-  // provider. Cerebras's strict JSON-Schema validator rejects draft-07
-  // keywords like `maxLength` that Zod's `toJSONSchema()` emits by default —
-  // strip them here so the call doesn't bounce with `[cerebras] 400` embedded
-  // in the OpenRouter response. See jsonSchemaSanitize.ts for the keyword set.
-  const safeExtra = sanitizeExtraBodyForVendor('openrouter', extraBody);
-  // Inject Anthropic prompt-cache breakpoints on the stable prefix for
-  // caching-capable models. No-op for non-Anthropic ids and caller-managed
-  // caching; non-destructive so the shared `messages` array stays clean for the
-  // next cascade candidate. See ../promptCaching.ts.
-  return {
-    model,
-    messages: applyPromptCaching(messages, model, cacheTtl),
-    ...(tools ? { tools } : {}),
-    ...(toolChoice ? { tool_choice: toolChoice } : {}),
-    ...(maxTokens != null ? { max_tokens: maxTokens } : {}),
-    ...(temperature != null ? { temperature } : {}),
-    ...(topP != null ? { top_p: topP } : {}),
-    ...(safeExtra ?? {}),
-  };
+  // Prompt-cache breakpoints are injected by the shared builder (caching ON for every
+  // call). OpenRouter-specific tweak: it routes many `:free` ids to Cerebras, whose
+  // strict validator rejects draft-07 JSON-Schema keywords Zod's `toJSONSchema()`
+  // emits — strip them so the call doesn't bounce with `[cerebras] 400`. See
+  // jsonSchemaSanitize.ts.
+  return buildOpenAIChatBody(params, {
+    transformExtra: (extra) => sanitizeExtraBodyForVendor('openrouter', extra),
+  });
 }
 
 const HEADERS = { 'HTTP-Referer': 'https://builderforce.ai' };

@@ -1,14 +1,20 @@
 /**
  * Cloudflare Workers AI vendor module.
  *
- * Cloudflare hosts a catalog of `@cf/<owner>/<model>` checkpoints behind the
- * native `POST /accounts/<id>/ai/run/<model>` endpoint. The URL embeds the
- * model, which differs from the OpenAI-compatible vendors — so this module
- * builds the endpoint per call instead of using a fixed `ENDPOINT` const.
+ * Calls go through Cloudflare's **OpenAI-compatible** endpoint
+ * (`POST /accounts/<id>/ai/v1/chat/completions`) — standard OpenAI request
+ * (`{model, messages, tools, …}`) AND standard OpenAI response, so this module
+ * reuses the shared `executeChatCompletion` transport like every other
+ * OpenAI-shaped vendor. (It previously used the native `/ai/run/<model>` endpoint
+ * with a hand-rolled tool translation that flattened `tools` to `{name, …}` — the
+ * newer FC models, e.g. `@cf/moonshotai/kimi-k2.7-code`, REJECT that shape with
+ * `400: tools[0].function: Field required` because they want the OpenAI-nested
+ * `{type:'function', function:{…}}`. The OpenAI-compatible endpoint takes the
+ * nested shape verbatim, so the translation — and that whole class of bug — is gone.)
  *
  * Bindings:
  *   CLOUDFLARE_AI_API_TOKEN — `cfut_*` token sent as `Authorization: Bearer`.
- *   CLOUDFLARE_ACCOUNT_ID   — embedded in the URL (`/accounts/<id>/ai/run/...`).
+ *   CLOUDFLARE_ACCOUNT_ID   — embedded in the URL (`/accounts/<id>/ai/v1/...`).
  *
  * Both must be present for `apiKeyFrom` to return a non-null value; otherwise
  * the dispatcher skips Cloudflare with `skippedNoKey` exactly as it does any
@@ -17,13 +23,9 @@
  */
 
 import {
-  fetchWithVendorTimeout,
-  VendorRetryableError,
+  buildOpenAIChatBody,
+  executeChatCompletion,
   VendorFatalError,
-  throwClassified4xx,
-  pickUsage,
-  CASCADE_STATUSES,
-  AUTH_STATUSES,
   type AiModelTier,
   type VendorCallParams,
   type VendorCallResult,
@@ -34,10 +36,9 @@ import {
 
 // Paid Workers AI checkpoints joining the PRO paid pool (autoRoutableModelsByTier
 // pulls STANDARD/PREMIUM/ULTRA), LED by Cloudflare (PAID_LEAD_VENDOR) so the free
-// daily neuron allowance is drained before any metered vendor. Every `tools`-capable
-// entry is one the OpenAI↔Cloudflare tool translation below (OpenAI `tools` →
-// Cloudflare `tools`, Cloudflare `result.tool_calls` → OpenAI `tool_calls`) lets
-// drive the multi-turn coding loop, so the coders ALSO sit in CODING_MODEL_POOL.
+// daily neuron allowance is drained before any metered vendor. Tool-capable entries
+// drive the multi-turn coding loop (the OpenAI-compatible endpoint takes OpenAI
+// `tools`/`tool_choice` verbatim), so the coders ALSO sit in CODING_MODEL_POOL.
 //
 // EVERY id + `tools` capability here is verified against the LIVE Cloudflare catalog
 // (`wrangler ai models --json` → `function_calling: true`), 2026-06-15 — a stale id
@@ -68,97 +69,11 @@ function tierForCloudflareModel(modelId: string): AiModelTier {
 }
 
 /**
- * Build the per-call endpoint URL. Cloudflare's native API embeds the model id
- * after `/ai/run/`. The model id starts with `@cf/...` which is URL-safe as-is
- * (RFC 3986 allows `@` in the path component).
+ * Cloudflare's OpenAI-compatible chat-completions endpoint. The account id is in the
+ * path; the model id rides in the body like every other OpenAI-shaped vendor.
  */
-function endpointFor(accountId: string, model: string): string {
-  return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
-}
-
-/**
- * Translate OpenAI tool definitions to Cloudflare's native `/ai/run` shape. OpenAI
- * sends `[{type:'function', function:{name, description, parameters}}]`; Cloudflare's
- * embedded function-calling wants the flat `[{name, description, parameters}]`.
- * Returns `[]` when nothing translatable so the caller omits `tools` entirely.
- */
-function toCloudflareTools(openaiTools: unknown[]): Array<Record<string, unknown>> {
-  const out: Array<Record<string, unknown>> = [];
-  for (const t of openaiTools) {
-    const tool = t as { function?: { name?: string; description?: string; parameters?: unknown }; name?: string; description?: string; parameters?: unknown; input_schema?: unknown } | null;
-    const fn = tool?.function;
-    const name = fn?.name ?? tool?.name;
-    if (!name) continue;
-    out.push({
-      name,
-      description: fn?.description ?? tool?.description ?? '',
-      parameters: fn?.parameters ?? tool?.parameters ?? tool?.input_schema ?? { type: 'object', properties: {} },
-    });
-  }
-  return out;
-}
-
-function buildBody(params: VendorCallParams): Record<string, unknown> {
-  const { messages, maxTokens, temperature, topP, extraBody } = params;
-  // Pull OpenAI `tools`/`tool_choice` out of the passthrough so they don't reach
-  // Cloudflare in the wrong shape; re-add `tools` translated to the native shape.
-  // Cloudflare's native /ai/run has no `tool_choice`, so it's dropped.
-  const extra = { ...(extraBody ?? {}) } as Record<string, unknown>;
-  const openaiTools = Array.isArray(extra.tools) ? (extra.tools as unknown[]) : undefined;
-  delete extra.tools;
-  delete extra.tool_choice;
-  const cfTools = openaiTools ? toCloudflareTools(openaiTools) : [];
-  return {
-    messages,
-    ...(maxTokens   != null ? { max_tokens: maxTokens } : {}),
-    ...(temperature != null ? { temperature } : {}),
-    ...(topP        != null ? { top_p: topP } : {}),
-    ...extra,
-    ...(cfTools.length > 0 ? { tools: cfTools } : {}),
-  };
-}
-
-/**
- * Cloudflare's native /ai/run response shape:
- *   { result: { response: "...", tool_calls?: [{name, arguments}], usage?: {...} }, success: true, ... }
- *
- * Map to OpenAI-style `{ choices: [{ message: { content, tool_calls } }], usage }`
- * so the downstream `_builderforce.resolvedModel` + restore-tool-names path AND the
- * cloud coding loop's `parseLlmChoice` (which reads `choices[0].message.tool_calls`)
- * work uniformly. Cloudflare returns tool calls flat (`{name, arguments}`, no id, and
- * `arguments` may be an object), so we synthesize an id and JSON-stringify the args to
- * match the OpenAI `tool_calls` shape every other vendor emits.
- */
-function adaptCloudflareResponse(raw: unknown): {
-  raw: unknown;
-  content: string;
-  usage?: ReturnType<typeof pickUsage>;
-} {
-  const r = raw as {
-    result?:  { response?: unknown; tool_calls?: unknown; usage?: unknown };
-    success?: boolean;
-    errors?:  unknown;
-  } | null;
-  const response = r?.result?.response;
-  const content  = typeof response === 'string' ? response : '';
-  const usage    = pickUsage(r?.result?.usage);
-
-  const rawToolCalls = Array.isArray(r?.result?.tool_calls) ? r!.result!.tool_calls : [];
-  const toolCalls = rawToolCalls.map((tcRaw, i) => {
-    const tc = tcRaw as { name?: string; arguments?: unknown };
-    const args = typeof tc.arguments === 'string' ? tc.arguments : JSON.stringify(tc.arguments ?? {});
-    return { id: `cf-${i}-${crypto.randomUUID()}`, type: 'function' as const, function: { name: tc.name ?? '', arguments: args } };
-  });
-
-  // Tool-call-only turns legitimately have no text — null content + tool_calls (matches
-  // OpenAI). `isEmptyChatResponse` treats a populated tool_calls array as non-empty.
-  const message: Record<string, unknown> = { role: 'assistant', content: content || (toolCalls.length ? null : '') };
-  if (toolCalls.length) message.tool_calls = toolCalls;
-  const adapted = {
-    choices: [{ index: 0, message, finish_reason: toolCalls.length ? 'tool_calls' : 'stop' }],
-    usage,
-  };
-  return { raw: adapted, content, ...(Object.keys(usage).length > 0 ? { usage } : {}) };
+function endpointFor(accountId: string): string {
+  return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1/chat/completions`;
 }
 
 export const cloudflareModule: VendorModule = {
@@ -180,48 +95,19 @@ export const cloudflareModule: VendorModule = {
     if (!token || !accountId) {
       throw new VendorFatalError('cloudflare', 500, 'malformed cloudflare apiKey sentinel (expected "<token>::<accountId>")');
     }
-    const endpoint = endpointFor(accountId, params.model);
-    const body     = buildBody(params);
-
-    const resp = await fetchWithVendorTimeout('cloudflare', params.model, endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization:  `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'X-Title':      params.title ?? 'Builderforce.ai',
-      },
-      body: JSON.stringify(body),
-    }, params.timeoutMs, params.signal);
-
-    if (resp.ok) {
-      const raw = await resp.json();
-      // Cloudflare returns `success: false` in the 200-body for some failures
-      // (model not enabled, account quota, etc.) — convert to retryable so the
-      // cascade advances and a cooldown is recorded.
-      if (raw && typeof raw === 'object' && (raw as Record<string, unknown>).success === false) {
-        const errs = (raw as { errors?: unknown[] }).errors;
-        const msg = Array.isArray(errs) && errs.length > 0 ? JSON.stringify(errs).slice(0, 240) : 'cloudflare success=false';
-        throw new VendorRetryableError('cloudflare', params.model, 0, `embedded: ${msg}`);
-      }
-      return adaptCloudflareResponse(raw);
-    }
-
-    const errText = (await resp.text()).slice(0, 400);
-    if (CASCADE_STATUSES.has(resp.status)) {
-      throw new VendorRetryableError('cloudflare', params.model, resp.status, errText.slice(0, 240));
-    }
-    if (AUTH_STATUSES.has(resp.status)) {
-      console.error(
-        `[vendors] cloudflare/${params.model} auth ${resp.status} — check CLOUDFLARE_AI_API_TOKEN. Failing over to next model.`,
-        errText.slice(0, 200),
-      );
-      throw new VendorRetryableError('cloudflare', params.model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
-    }
-    // 400/422 → fatal, UNLESS the body is a capacity/billing limit (failover-able).
-    throwClassified4xx('cloudflare', params.model, resp.status, errText);
+    // Shared OpenAI transport: standard request + response + 4xx classification
+    // (incl. the 413 context-overflow cascade and capacity-limit failover).
+    return executeChatCompletion({
+      vendorId: 'cloudflare',
+      endpoint: endpointFor(accountId),
+      apiKey: token,
+      model: params.model,
+      body: buildOpenAIChatBody(params),
+      ...(params.title ? { title: params.title } : {}),
+      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
+      ...(params.signal ? { signal: params.signal } : {}),
+    });
   },
-  // No `callStream` — Cloudflare's `/ai/run/` endpoint doesn't expose SSE
-  // streaming on every model. Skip streaming dispatch; `dispatchVendorStream`
-  // will record `skippedNoStream` and walk past Cloudflare entries when the
-  // caller asked for `stream: true`.
+  // No `callStream` — streaming dispatch skips Cloudflare (records `skippedNoStream`);
+  // the cloud coding loop is non-streaming, so Cloudflare is reached on the `call` path.
 };

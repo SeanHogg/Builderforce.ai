@@ -252,12 +252,23 @@ export const anthropicModule: VendorModule = {
   async call(params: VendorCallParams): Promise<VendorCallResult> {
     const req = toAnthropicRequest(params);
     const maxTokens = Math.min(Math.max(1, params.maxTokens ?? DEFAULT_MAX_TOKENS), MAX_OUTPUT_TOKENS);
+    // Cache the large STABLE prefix (tools + system instructions/repo context) so a
+    // multi-turn coding run pays ~0.1x for it after the first turn instead of full
+    // price on the METERED key. `{type:'ephemeral'}` is the GA 5-minute cache (no beta
+    // header); turns are seconds apart so it stays warm. Marking the system block (and
+    // the last tool) caches everything up to and including them. Sub-1024-token
+    // prefixes are silently ignored by Anthropic, so this is safe for tiny requests.
+    const CACHE = { type: 'ephemeral' as const };
+    const system = req.system ? [{ type: 'text', text: req.system, cache_control: CACHE }] : undefined;
+    const tools = req.tools && req.tools.length
+      ? req.tools.map((t, i) => (i === req.tools!.length - 1 ? { ...t, cache_control: CACHE } : t))
+      : undefined;
     const body: Record<string, unknown> = {
       model: params.model,
       max_tokens: maxTokens,
       messages: req.messages,
-      ...(req.system ? { system: req.system } : {}),
-      ...(req.tools ? { tools: req.tools } : {}),
+      ...(system ? { system } : {}),
+      ...(tools ? { tools } : {}),
       ...(req.tool_choice ? { tool_choice: req.tool_choice } : {}),
       // Extended thinking is OFF on purpose. The gateway round-trips assistant
       // turns through the OpenAI shape, which cannot carry Anthropic `thinking`
