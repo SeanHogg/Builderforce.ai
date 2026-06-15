@@ -15,8 +15,13 @@
 import { eq } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../database/connection';
 import { executions } from '../database/schema';
-import { prepareCloudRun, runCloudToolLoop, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
+import { prepareCloudRun, runCloudToolLoop, markCloudExecutionRunning, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
+import { parseRoutingBias } from '../../application/runtime/cloudDispatch';
+import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
 import { releasePendingSteers } from '../../application/runtime/executionSteering';
+import { buildRuntimeService } from '../../buildRuntimeService';
+import type { RuntimeService } from '../../application/runtime/RuntimeService';
+import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env } from '../../env';
 
@@ -50,8 +55,13 @@ export class CloudRunnerDO implements DurableObject {
   declare readonly '__DURABLE_OBJECT_BRAND': never;
 
   private readonly db: Db;
+  private readonly runtimeService: RuntimeService;
   constructor(private readonly state: DurableObjectState, private readonly env: Env) {
     this.db = buildDatabase(env);
+    // Same canonical RuntimeService the Worker request handler uses, so a durable
+    // run's status transitions move the ticket, record metrics, write audit events,
+    // and trigger the next-lane agent identically — no raw open-coded db.update.
+    this.runtimeService = buildRuntimeService(env, this.db);
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -68,10 +78,7 @@ export class CloudRunnerDO implements DurableObject {
     if (request.method === 'POST' && url.pathname.endsWith('/resume')) {
       const cursor = (await this.state.storage.get<Cursor>(CURSOR_KEY)) ?? null;
       if (!cursor) return new Response(JSON.stringify({ ok: false, reason: 'no paused run' }), { status: 409, headers: { 'Content-Type': 'application/json' } });
-      await this.db.update(executions)
-        .set({ status: 'running', updatedAt: new Date() })
-        .where(eq(executions.id, cursor.executionId))
-        .catch(() => { /* best-effort */ });
+      await markCloudExecutionRunning(this.runtimeService, cursor.executionId);
       await this.state.storage.setAlarm(Date.now());
       return new Response(JSON.stringify({ ok: true }), { status: 202, headers: { 'Content-Type': 'application/json' } });
     }
@@ -90,10 +97,7 @@ export class CloudRunnerDO implements DurableObject {
 
     const cursor: Cursor = { ...body, stage: 'prep', model };
     await this.state.storage.put(CURSOR_KEY, cursor);
-    await this.db.update(executions)
-      .set({ status: 'running', startedAt: new Date(), updatedAt: new Date() })
-      .where(eq(executions.id, body.executionId))
-      .catch(() => { /* best-effort */ });
+    await markCloudExecutionRunning(this.runtimeService, body.executionId);
     await this.state.storage.setAlarm(Date.now());
   }
 
@@ -136,7 +140,7 @@ export class CloudRunnerDO implements DurableObject {
         cursor.systemPrompt ?? '', cursor.userContent ?? '',
         () => this.isCancelled(cursor.executionId),
         cursor.projectId,
-        { resume: cursor.loop, maxSteps: 1, deferFinalize: true },
+        { resume: cursor.loop, maxSteps: 1, deferFinalize: true, routingBias: parseRoutingBias(cursor.payload) },
       );
 
       if (result.cancelled) { await this.cleanup(cursor.executionId); return; }
@@ -160,21 +164,22 @@ export class CloudRunnerDO implements DurableObject {
         return;
       }
 
-      // Terminal: mark the execution and stop ticking.
-      await this.db.update(executions)
-        .set(result.ok
-          ? { status: 'completed', result: result.output, completedAt: new Date(), updatedAt: new Date() }
-          : { status: 'failed', errorMessage: result.output, completedAt: new Date(), updatedAt: new Date() })
-        .where(eq(executions.id, cursor.executionId))
-        .catch(() => { /* best-effort */ });
+      // Terminal: mark the execution (canonical transition — moves the ticket to
+      // In Review, records metrics/audit, and fires the next-lane agent) and stop.
+      await this.runtimeService.update(
+        cursor.executionId,
+        result.ok
+          ? { status: ExecutionStatus.COMPLETED, result: result.output }
+          : { status: ExecutionStatus.FAILED, errorMessage: result.output },
+      ).catch(() => { /* already terminal/cancelled — leave it */ });
       await this.cleanup(cursor.executionId);
     } catch (err) {
       // Don't clobber a cancellation; otherwise fail the run so it isn't stuck.
       if (!(await this.isCancelled(cursor.executionId))) {
-        await this.db.update(executions)
-          .set({ status: 'failed', errorMessage: err instanceof Error ? err.message : String(err), completedAt: new Date(), updatedAt: new Date() })
-          .where(eq(executions.id, cursor.executionId))
-          .catch(() => { /* best-effort */ });
+        await this.runtimeService.update(cursor.executionId, {
+          status: ExecutionStatus.FAILED,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        }).catch(() => { /* already terminal/cancelled — leave it */ });
       }
       await this.cleanup(cursor.executionId);
     }
@@ -202,7 +207,13 @@ export class CloudRunnerDO implements DurableObject {
     // Terminal — drop any steer that arrived after the loop's last tick so it can't
     // dangle unconsumed. Covers the DO error/cancel paths that bypass finalizeCloudRun
     // (the finished path already released inside it); releasePendingSteers is idempotent.
-    if (executionId != null) await releasePendingSteers(this.db, executionId);
+    if (executionId != null) {
+      await releasePendingSteers(this.db, executionId);
+      // Learned Model Routing: the single durable-surface terminal chokepoint —
+      // every DO terminal path (finish, cancel, error) routes through cleanup, so
+      // scoring here covers them all. Idempotent + best-effort (never blocks).
+      await scoreRunOutcome(this.env, this.db, { executionId }).catch(() => { /* best-effort */ });
+    }
     await this.state.storage.delete(CURSOR_KEY);
     await this.state.storage.deleteAlarm();
   }

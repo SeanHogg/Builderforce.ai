@@ -10,6 +10,15 @@ import {
   EpicDecomposer, ChildTaskPlan, heuristicEpicDecomposer,
 } from './EpicDecomposer';
 
+/** Postgres unique-constraint violation (e.g. a task-key insert race). */
+function isUniqueViolation(e: unknown): boolean {
+  const s = e instanceof Error ? e.message : String(e);
+  return /duplicate key|unique constraint|23505/i.test(s);
+}
+
+/** How many times to re-derive a key and retry a persist that lost a key race. */
+const MAX_KEY_ATTEMPTS = 5;
+
 export interface CreateTaskDto {
   projectId: number;
   title: string;
@@ -104,33 +113,56 @@ export class TaskService {
     return task;
   }
 
+  /**
+   * Allocate a collision-free task key and persist, in one place for every key-
+   * minting path (create, move, Epic fan-out). The key sequence is derived from
+   * the project's HIGHEST existing key number — not a row count, which skips the
+   * gaps left by deletes/moves and would collide on the globally-unique key (the
+   * bug that 500'd board moves). `run` receives that base sequence and does the
+   * actual save/update. On the rare insert race (a concurrent writer grabbed the
+   * same number), the base is re-read and bumped so each retry tries a higher,
+   * strictly-increasing number until one is free.
+   */
+  private async withKeyAllocation(
+    projectId: ProjectId,
+    run: (lastKeySeq: number) => Promise<Task>,
+  ): Promise<Task> {
+    for (let attempt = 0; ; attempt++) {
+      const lastKeySeq = (await this.tasks.maxKeySeqByProject(projectId)) + attempt;
+      try {
+        return await run(lastKeySeq);
+      } catch (e) {
+        if (attempt < MAX_KEY_ATTEMPTS - 1 && isUniqueViolation(e)) continue;
+        throw e;
+      }
+    }
+  }
+
   async createTask(dto: CreateTaskDto, callerTenantId: number): Promise<Task> {
     const project = await this.projects.findById(asProjectId(dto.projectId));
     if (!project) throw new NotFoundError('Project', dto.projectId);
     if (project.tenantId !== callerTenantId) throw new ForbiddenError('Project belongs to a different workspace');
 
-    const taskCount = await this.tasks.countByProject(asProjectId(dto.projectId));
-
-    const task = Task.create({
-      projectId: asProjectId(dto.projectId),
-      title: dto.title,
-      description: dto.description ?? null,
-      status: TaskStatus.BACKLOG,
-      priority: dto.priority ?? TaskPriority.MEDIUM,
-      assignedAgentType: dto.assignedAgentType ?? null,
-      assignedAgentHostId: dto.assignedAgentHostId != null ? asAgentHostId(dto.assignedAgentHostId) : null,
-      assignedAgentRef: dto.assignedAgentRef ?? null,
-      assignedUserId: dto.assignedUserId ?? null,
-      taskType: dto.taskType,
-      parentTaskId: dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null,
-      startDate: dto.startDate ? new Date(dto.startDate) : null,
-      dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
-      persona: dto.persona ?? null,
-      projectKey: project.key,
-      projectTaskCount: taskCount,
-    });
-
-    const saved = await this.tasks.save(task);
+    const saved = await this.withKeyAllocation(asProjectId(dto.projectId), (lastKeySeq) =>
+      this.tasks.save(Task.create({
+        projectId: asProjectId(dto.projectId),
+        title: dto.title,
+        description: dto.description ?? null,
+        status: TaskStatus.BACKLOG,
+        priority: dto.priority ?? TaskPriority.MEDIUM,
+        assignedAgentType: dto.assignedAgentType ?? null,
+        assignedAgentHostId: dto.assignedAgentHostId != null ? asAgentHostId(dto.assignedAgentHostId) : null,
+        assignedAgentRef: dto.assignedAgentRef ?? null,
+        assignedUserId: dto.assignedUserId ?? null,
+        taskType: dto.taskType,
+        parentTaskId: dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null,
+        startDate: dto.startDate ? new Date(dto.startDate) : null,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+        persona: dto.persona ?? null,
+        projectKey: project.key,
+        lastKeySeq,
+      })),
+    );
     // A task created already assigned to an agent goes through the same on-assign
     // assessment as one reassigned later (assess scope → maybe Epic → decompose).
     if (saved.isAssignedToAgent && saved.taskType === TaskType.TASK) {
@@ -195,11 +227,10 @@ export class TaskService {
 
     const epic = await this.tasks.update(task.reclassifyAsEpic());
 
-    // Key numbering is sequential off the live project count; create children one
-    // at a time so each gets a distinct key (Task.create derives key from count+1).
+    // Keys are minted off the project's highest existing sequence; create children
+    // one at a time (via withKeyAllocation) so each gets a distinct, gap-safe key.
     for (const child of children) {
       if (!child.title.trim()) continue;
-      const count = await this.tasks.countByProject(task.projectId);
 
       // Planner consumption: a child the decomposition left unassigned gets an
       // owner picked from the project's workforce by capability/availability/WIP,
@@ -215,25 +246,26 @@ export class TaskService {
         else if (pick?.memberKind === 'cloud_agent') agentRef = pick.memberRef;
       }
 
-      const childTask = Task.create({
-        projectId: task.projectId,
-        title: child.title,
-        description: child.description ?? null,
-        status: TaskStatus.BACKLOG,
-        priority: child.priority ?? TaskPriority.MEDIUM,
-        taskType: TaskType.TASK,
-        parentTaskId: epic.id,
-        assignedAgentType: null,
-        assignedAgentHostId: hostId != null ? asAgentHostId(hostId) : null,
-        assignedAgentRef: agentRef,
-        assignedUserId: userId,
-        startDate: null,
-        dueDate: null,
-        persona: null,
-        projectKey: project.key,
-        projectTaskCount: count,
-      });
-      await this.tasks.save(childTask);
+      await this.withKeyAllocation(task.projectId, (lastKeySeq) =>
+        this.tasks.save(Task.create({
+          projectId: task.projectId,
+          title: child.title,
+          description: child.description ?? null,
+          status: TaskStatus.BACKLOG,
+          priority: child.priority ?? TaskPriority.MEDIUM,
+          taskType: TaskType.TASK,
+          parentTaskId: epic.id,
+          assignedAgentType: null,
+          assignedAgentHostId: hostId != null ? asAgentHostId(hostId) : null,
+          assignedAgentRef: agentRef,
+          assignedUserId: userId,
+          startDate: null,
+          dueDate: null,
+          persona: null,
+          projectKey: project.key,
+          lastKeySeq,
+        })),
+      );
     }
 
     return epic;
@@ -267,10 +299,12 @@ export class TaskService {
       throw new ForbiddenError('Project belongs to a different workspace');
     }
 
-    const taskCount = await this.tasks.countByProject(asProjectId(targetProjectId));
-    const key = `${target.key}-${String(taskCount + 1).padStart(3, '0')}`;
-    const moved = task.moveToProject(asProjectId(targetProjectId), key);
-    return this.tasks.update(moved);
+    // Re-key into the target board off its highest existing sequence (gap-safe;
+    // a row count would collide on the globally-unique key — the move-500 bug).
+    return this.withKeyAllocation(asProjectId(targetProjectId), (lastKeySeq) => {
+      const key = Task.buildKey(target.key, lastKeySeq + 1);
+      return this.tasks.update(task.moveToProject(asProjectId(targetProjectId), key));
+    });
   }
 
   async deleteTask(id: number): Promise<void> {

@@ -55,13 +55,23 @@ export class Task {
   // Factory methods
   // ------------------------------------------------------------------
 
+  /**
+   * Canonical task-key format: `${projectKey}-${NNN}` (3-digit, zero-padded).
+   * The single source of truth for key shape — both {@link Task.create} and the
+   * move/re-key path go through here so the format never drifts.
+   */
+  static buildKey(projectKey: string, seq: number): string {
+    return `${projectKey}-${String(seq).padStart(3, '0')}`;
+  }
+
   static create(
     props: Omit<
       TaskProps,
       'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'taskType' | 'parentTaskId' | 'sprintId'
     > & {
       projectKey: string;
-      projectTaskCount: number;
+      /** Highest existing key sequence in the project; this task gets the next one. */
+      lastKeySeq: number;
       /** Optional cloud agent (ide_agents.id) assigned at creation time. */
       assignedAgentRef?: string | null;
       /** Optional human assignee (users.id) at creation time. */
@@ -73,8 +83,7 @@ export class Task {
   ): Task {
     if (!props.title.trim()) throw new ValidationError('Task title is required');
 
-    const seq = String(props.projectTaskCount + 1).padStart(3, '0');
-    const key = `${props.projectKey}-${seq}`;
+    const key = Task.buildKey(props.projectKey, props.lastKeySeq + 1);
     const now = new Date();
 
     return new Task({

@@ -6,9 +6,11 @@ import {
   runtimeApi,
   cloudAgents as cloudAgentsApi,
   taskSpecsApi,
+  approvalsApi,
   isAwaitingApprovalExecution,
   type Task,
   type AgentHost,
+  type Approval,
   type Execution,
   type ExecutionTrace,
   type ExecutionTraceToolEvent,
@@ -17,7 +19,8 @@ import {
 } from '@/lib/builderforceApi';
 import { unifiedDiff } from '@/lib/unifiedDiff';
 import { RunAgentControl } from '../task/RunAgentControl';
-import { ChatMessageContent } from '../ChatMessageContent';
+import { ApprovalResolveControl } from '../humanRequests/ApprovalResolveControl';
+import { ChatMessageBubble } from '../ChatMessageBubble';
 import { EXECUTION_STATUS_COLOR as STATUS_COLOR } from '../board/AgentChip';
 import { ExecutionChip } from './ExecutionChip';
 import { useExecutionStream, type ExecutionFileChange } from './useExecutionStream';
@@ -232,6 +235,9 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   const [trace, setTrace] = useState<ExecutionTrace | null>(null);
   const [loading, setLoading] = useState(true);
   const [gate, setGate] = useState<{ approvalId: string; reason: string } | null>(null);
+  // The full approval row behind the gate, fetched so a manager can resolve it
+  // inline instead of bouncing to the Workforce approvals queue.
+  const [gateApproval, setGateApproval] = useState<Approval | null>(null);
   const [subTab, setSubTab] = useState<SubTab>('output');
   // File whose diff is open in the Changes tab's Monaco viewer (null = list view).
   const [openChange, setOpenChange] = useState<{ path: string; change: ExecutionFileChange['change'] } | null>(null);
@@ -270,6 +276,18 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   }, [task.id, selectedId]);
 
   useEffect(() => { loadExecutions(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [task.id]);
+
+  // Pull the gated approval so the inline resolve control can render. Cleared when
+  // the gate clears (a run started or the gate was resolved/rejected).
+  useEffect(() => {
+    const approvalId = gate?.approvalId;
+    if (!approvalId) { setGateApproval(null); return; }
+    let alive = true;
+    approvalsApi.get(approvalId)
+      .then((a) => { if (alive) setGateApproval(a); })
+      .catch(() => { if (alive) setGateApproval(null); });
+    return () => { alive = false; };
+  }, [gate?.approvalId]);
 
   // Ticket spend, refreshed when the run set changes (a new run adds cost). The
   // endpoint is cached server-side, so this is a cheap aggregate read.
@@ -593,8 +611,25 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
           onAwaitingApproval={(g) => setGate({ approvalId: g.approvalId, reason: g.reason })}
         />
         {gate && (
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, padding: 10, background: 'var(--bg-deep)', borderRadius: 8 }}>
-            Awaiting approval before this can run: {gate.reason}
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, padding: 10, background: 'var(--bg-deep)', borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <span>Awaiting approval before this can run: {gate.reason}</span>
+            {/* Resolve inline — approving auto-starts the run (server replays it as
+                the same agent + model) and we follow the new execution. */}
+            {gateApproval && (
+              <ApprovalResolveControl
+                approval={gateApproval}
+                compact
+                onResolved={(updated) => {
+                  setGate(null);
+                  setGateApproval(null);
+                  if (updated.status === 'approved') {
+                    if (updated.startedExecutionId != null) setSelectedId(updated.startedExecutionId);
+                    loadExecutions(true);
+                    onTaskChanged?.();
+                  }
+                }}
+              />
+            )}
           </div>
         )}
       </div>
@@ -696,9 +731,12 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
 
           {subTab === 'output' && (
             <>
+              {/* Brain-style conversation: each turn is labeled with WHO is talking
+                  — the agent that ran this execution vs. the user's steers — and the
+                  user's directions interleave between the agent's narration. */}
               <div
                 ref={outputRef}
-                style={{ height: 360, overflow: 'auto', padding: '4px 12px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}
+                style={{ height: 360, overflow: 'auto', padding: 12, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 12 }}
               >
                 {thread.length === 0 ? (
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 8 }}>
@@ -706,16 +744,13 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   </div>
                 ) : (
                   thread.map((m, i) => (
-                    m.role === 'assistant' ? (
-                      <div key={i} style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-primary)' }}>
-                        <ChatMessageContent content={m.text} />
-                      </div>
-                    ) : (
-                      <div key={i} style={{ margin: '8px 0', padding: '8px 12px', background: 'var(--surface-coral-soft)', borderRadius: 8, fontSize: 13, color: 'var(--text-primary)' }}>
-                        <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--coral-bright)', marginRight: 6 }}>You</span>
-                        {m.text}
-                      </div>
-                    )
+                    <ChatMessageBubble
+                      key={i}
+                      role={m.role}
+                      content={m.text}
+                      label={m.role === 'assistant' ? (runAgentName || 'Agent') : 'You'}
+                      avatar={m.role === 'assistant' ? (runAgentName ? runAgentName.charAt(0).toUpperCase() : '🤖') : undefined}
+                    />
                   ))
                 )}
               </div>

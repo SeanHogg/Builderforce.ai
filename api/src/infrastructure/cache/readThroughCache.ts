@@ -76,6 +76,59 @@ export async function getOrSetCached<T>(
 }
 
 /**
+ * Peek at the cached value for `key` WITHOUT invoking a loader — L1 then L2, no
+ * write-back of a freshly-loaded value. Returns null on a miss. Use when a caller
+ * must distinguish "cached value present" from "absent" (e.g. an incremental
+ * read-modify-write that reconciles from the source only on a cold miss, instead
+ * of double-counting against a loader that already includes the new write).
+ */
+export async function peekCached<T>(env: Env, key: string): Promise<T | null> {
+  const now = Date.now();
+  const hit = l1.get(key);
+  if (hit && hit.expiresAt > now) return hit.value as T;
+  if (hit) l1.delete(key);
+
+  const kv = env?.AUTH_CACHE_KV;
+  if (kv) {
+    try {
+      const cached = (await kv.get(kvKey(key), 'json')) as T | null;
+      if (cached != null) {
+        l1.set(key, { value: cached, expiresAt: now + L1_TTL_MS });
+        return cached;
+      }
+    } catch {
+      // KV read failure → treat as a miss.
+    }
+  }
+  return null;
+}
+
+/**
+ * Write `value` into both cache layers for `key`. The counterpart to
+ * {@link peekCached} — lets a caller persist a derived value it computed itself
+ * (e.g. an incrementally-updated routing blob) so the next read hits without a
+ * recompute. Best-effort on the KV write.
+ */
+export async function setCached<T>(
+  env: Env,
+  key: string,
+  value: T,
+  opts?: { kvTtlSeconds?: number; l1TtlMs?: number },
+): Promise<void> {
+  l1.set(key, { value, expiresAt: Date.now() + (opts?.l1TtlMs ?? L1_TTL_MS) });
+  const kv = env?.AUTH_CACHE_KV;
+  if (kv) {
+    try {
+      await kv.put(kvKey(key), JSON.stringify(value), {
+        expirationTtl: opts?.kvTtlSeconds ?? DEFAULT_KV_TTL_SECONDS,
+      });
+    } catch {
+      // Best-effort — a miss next read just triggers a reconcile.
+    }
+  }
+}
+
+/**
  * Read (or lazily mint) an opaque version token for `versionKey`. Fold the token
  * into data-cache keys (`...:v:${token}`) when the keyspace is unbounded or one
  * write fans out to many dependent keys (e.g. every epic-tree in a project) —

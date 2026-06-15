@@ -63,6 +63,13 @@ export const ollamaModule: VendorModule = {
   id: 'ollama',
   catalog: CATALOG,
   tierFor: tierForOllamaModel,
+  // Local/self-hosted-style runtime: never auto-cascade a (cloud) run onto it.
+  // Ollama emits a non-OpenAI shape, ships no streaming, and rejects some tool
+  // payloads with a vendor-specific 400 ("Value looks like object…") — so a cloud
+  // coding agent that silently failed over onto `ollama/gpt-oss:120b` just dies.
+  // Stays reachable ONLY via an explicit `ollama/<id>` pin (genuine on-prem use);
+  // excluded from the FREE/PRO failover pools by `autoRoutableModelsByTier`.
+  autoRoute: false,
   apiKeyFrom(env) { return env.OLLAMA_API_KEY ?? null; },
   async call(params: VendorCallParams): Promise<VendorCallResult> {
     const { model, messages, tools, maxTokens, temperature, topP, extraBody } = params;

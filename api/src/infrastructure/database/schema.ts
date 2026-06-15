@@ -833,6 +833,13 @@ export const tasks = pgTable('tasks', {
   lastWorkedAt:      timestamp('last_worked_at'),
   redoCount:         integer('redo_count').notNull().default(0),
   reopenCount:       integer('reopen_count').notNull().default(0),
+  /** Learned Model Routing (0197): the cached action-type label (sql / frontend_ui /
+   *  backend_api / …) a free-model classifier assigns ONCE per task and every re-run
+   *  reuses. Null = unclassified (the router treats it as 'other'). actionTypeConfidence
+   *  is the classifier's 0..1 self-report, kept so low-confidence labels can be
+   *  re-classified later without a schema change. See actionTypes.ts. */
+  actionType:           varchar('action_type', { length: 32 }),
+  actionTypeConfidence: real('action_type_confidence'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
@@ -971,23 +978,6 @@ export const deploymentEvents = pgTable('deployment_events', {
   deployedAt:   timestamp('deployed_at').notNull().defaultNow(),
   restoredAt:   timestamp('restored_at'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
-});
-
-// Web Push subscriptions — one row per browser/device that opted in to OS-level
-// notifications (currently: "a new app version deployed"). The deploy hook
-// (POST /api/push/notify-deploy) fans out to every row; dead endpoints (404/410
-// from the push service) are pruned on send. endpoint is unique so a re-subscribe
-// from the same browser upserts rather than duplicating.
-export const pushSubscriptions = pgTable('push_subscriptions', {
-  id:             serial('id').primaryKey(),
-  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  userId:         varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
-  endpoint:       text('endpoint').notNull().unique(),
-  p256dh:         text('p256dh').notNull(), // client public key (base64url)
-  auth:           text('auth').notNull(),   // client auth secret (base64url)
-  userAgent:      varchar('user_agent', { length: 512 }),
-  createdAt:      timestamp('created_at').notNull().defaultNow(),
-  lastNotifiedAt: timestamp('last_notified_at'),
 });
 
 // Anonymous landing-page prompts (0128) — durable, cross-device handoff of a
@@ -3382,9 +3372,46 @@ export const pullRequests = pgTable('pull_requests', {
   mergedBy:          varchar('merged_by', { length: 128 }),   // user id who approved the in-product merge (0106)
   mergedAt:          timestamp('merged_at'),
   mergeSha:          varchar('merge_sha', { length: 64 }),    // merge commit SHA — correlates post-merge CI (0107)
-  buildStatus:       varchar('build_status', { length: 16 }), // null|pending|success|failure post-merge build (0107)
+  buildStatus:       varchar('build_status', { length: 16 }), // null|pending|success|failure — pre-merge (PR branch) or post-merge build (0107)
+  buildError:        text('build_error'),                     // failing jobs/steps summary when build_status='failure' (0196)
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Learned Model Routing (PRD 13 / migration 0198) — the OUTCOME fact table.
+// One row per TERMINAL cloud run, joining its (action_type, resolved_model) to a
+// composite 0..1 outcome score. The durable source of truth analytics + the
+// derived `routing:<scope>` KV blob read from. Idempotent on execution_id.
+// ---------------------------------------------------------------------------
+export const runModelOutcomes = pgTable('run_model_outcomes', {
+  id:               serial('id').primaryKey(),
+  tenantId:         integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+  projectId:        integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  taskId:           integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  /** The terminal cloud run this outcome scores. Unique (the scorer upserts on it
+   *  so it is idempotent across the multiple terminal paths). No FK — executions is
+   *  pruned independently and a scored outcome should survive the run row. The
+   *  `.unique()` backs the scorer's `onConflictDoNothing({ target: executionId })`
+   *  (migration 0197 creates `run_model_outcomes_execution_id_key`). */
+  executionId:      integer('execution_id').notNull().unique(),
+  cloudAgentRef:    varchar('cloud_agent_ref', { length: 64 }),
+  /** The cached task action-type label at scoring time (defaults to 'other'). */
+  actionType:       varchar('action_type', { length: 32 }).notNull().default('other'),
+  /** The model the run actually locked onto (most-frequent llm_usage_log.model). */
+  resolvedModel:    varchar('resolved_model', { length: 200 }).notNull(),
+  /** effectivePlan at run time (free | pro | teams). */
+  plan:             varchar('plan', { length: 16 }).notNull(),
+  /** Composite 0..1 outcome score (see computeOutcomeScore / PRD D3). */
+  score:            real('score').notNull(),
+  merged:           boolean('merged').notNull().default(false),
+  ciGreen:          boolean('ci_green').notNull().default(false),
+  /** A coding_model_degraded event fired during the run (floored onto a non-coder). */
+  degraded:         boolean('degraded').notNull().default(false),
+  steps:            integer('steps').notNull().default(0),
+  costUsdMillicents: integer('cost_usd_millicents').notNull().default(0),
+  terminalStatus:   varchar('terminal_status', { length: 16 }).notNull(), // completed|failed|cancelled
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------

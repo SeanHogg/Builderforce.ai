@@ -20,6 +20,21 @@ const PRD_SYSTEM_PROMPT =
   'requirements, Acceptance criteria, and Out of scope. Output ONLY the PRD markdown — no preamble and ' +
   'no bracketed placeholders.';
 
+/**
+ * Despite the "Output ONLY the PRD markdown" instruction, models sometimes wrap
+ * the whole document in a ```markdown … ``` fence. Stored verbatim, that renders
+ * as a single raw "MARKDOWN" code box instead of formatted prose. Normalize on
+ * WRITE here so every consumer (render, export, repo commit, Copy) gets clean
+ * markdown — the frontend `unwrapMarkdownFence` stays the render-time safety net
+ * for rows written before this. Idempotent: clean markdown passes through.
+ */
+export function stripPrdMarkdownFence(content: string): string {
+  const text = content.trim();
+  // Whole-document fence: ```[markdown|md] … ``` with nothing but the block.
+  const m = /^```[ \t]*(markdown|md)?[ \t]*\r?\n([\s\S]*?)\r?\n?```$/i.exec(text);
+  return m ? (m[2] ?? '').trim() : text;
+}
+
 /** Draft a PRD body for a task via the gateway. Returns trimmed markdown, or '' on failure. Never throws. */
 export async function draftTaskPrd(
   env: Env,
@@ -39,7 +54,7 @@ export async function draftTaskPrd(
       const raw = await gen.response.json().catch(() => null);
       const content = (raw as { choices?: Array<{ message?: { content?: unknown } }> } | null)
         ?.choices?.[0]?.message?.content;
-      return (typeof content === 'string' ? content : '').trim();
+      return stripPrdMarkdownFence(typeof content === 'string' ? content : '');
     }
   } catch { /* generation failed — caller treats '' as "no PRD" */ }
   return '';

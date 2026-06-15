@@ -11,6 +11,27 @@ import {
   getStoredWebToken,
 } from './auth';
 import { planLimitErrorFromResponse } from './planLimitError';
+import { dispatchApiError } from './errors/apiErrorEvent';
+
+/**
+ * Surface a non-ok response as the global error toast (so failures like a board
+ * move 500 are visible and copyable instead of failing silently) and throw.
+ * Shared by request()/webRequest() so both paths report errors identically.
+ */
+async function throwApiError(res: Response, method: string, path: string): Promise<never> {
+  const body = await res.json().catch(() => ({})) as { error?: string; code?: string; details?: unknown };
+  const message = body.error || res.statusText || `Request failed (${res.status})`;
+  dispatchApiError({
+    method: (method || 'GET').toUpperCase(),
+    url: `${AUTH_API_URL}${path}`,
+    status: res.status,
+    code: body.code,
+    message,
+    details: body.details,
+    requestId: res.headers.get('x-request-id') ?? undefined,
+  });
+  throw new Error(message);
+}
 
 function authHeaders(): Record<string, string> {
   const token = getStoredTenantToken();
@@ -35,10 +56,7 @@ async function webRequest<T>(path: string, opts: RequestInit = {}): Promise<T> {
   });
   checkUnauthorizedAndRedirect(res, hadToken);
   if (res.status === 402) throw await planLimitErrorFromResponse(res);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error || res.statusText || 'Request failed');
-  }
+  if (!res.ok) await throwApiError(res, (opts.method as string) ?? 'GET', path);
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
@@ -52,10 +70,7 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   });
   checkUnauthorizedAndRedirect(res, hadToken);
   if (res.status === 402) throw await planLimitErrorFromResponse(res);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error || res.statusText || 'Request failed');
-  }
+  if (!res.ok) await throwApiError(res, (opts.method as string) ?? 'GET', path);
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
@@ -633,12 +648,30 @@ export interface ArtifactAssignment {
   assignedAt: string;
 }
 
+/** An assigned artifact with its display name (null when unpublished / nameless). */
+export interface NamedArtifact {
+  slug: string;
+  name: string | null;
+}
+
+/** The capabilities pinned directly to one agent (its agent-scoped assignments). */
+export interface AgentManifest {
+  skills: NamedArtifact[];
+  personas: NamedArtifact[];
+  content: NamedArtifact[];
+}
+
 export const artifactAssignments = {
   list: (scope: AssignmentScope, scopeId: number, artifactType?: ArtifactType) => {
     const q = new URLSearchParams({ scope: String(scope), scopeId: String(scopeId) });
     if (artifactType) q.set('artifactType', artifactType);
     return request<{ assignments: ArtifactAssignment[] }>(`/api/artifact-assignments?${q}`).then((r) => r.assignments);
   },
+
+  /** Per-agent assigned-capability manifests for every workforce agent of the tenant,
+   *  keyed by the agent's ref (= PublishedAgent.id). Powers the /workforce cards. */
+  agentManifests: () =>
+    request<{ manifests: Record<string, AgentManifest> }>(`/api/artifact-assignments/agent-manifests`).then((r) => r.manifests),
 
   assign: (
     artifactType: ArtifactType,
@@ -1331,6 +1364,12 @@ export interface Approval {
   updatedAt: string;
 }
 
+/** A resolved approval — adds the run started when a `task.execution` gate is approved. */
+export interface ResolvedApproval extends Approval {
+  /** The execution auto-started by approving a task.execution gate (else null/absent). */
+  startedExecutionId?: number | null;
+}
+
 export const approvalsApi = {
   list: (params?: { status?: ApprovalStatus; agentHostId?: number | null }): Promise<Approval[]> => {
     const q = new URLSearchParams();
@@ -1342,12 +1381,14 @@ export const approvalsApi = {
 
   get: (id: string): Promise<Approval> => request<Approval>(`/api/approvals/${id}`),
 
-  /** Approve/reject an action, or answer a question/feedback request with free text. */
+  /** Approve/reject an action, or answer a question/feedback request with free text.
+   *  Approving a `task.execution` gate auto-starts the run and returns its
+   *  `startedExecutionId` so the caller can follow the new execution. */
   decide: (
     id: string,
     body: { status: 'approved' | 'rejected' | 'answered'; reviewNote?: string; responseText?: string }
-  ): Promise<Approval> =>
-    request<Approval>(`/api/approvals/${id}`, {
+  ): Promise<ResolvedApproval> =>
+    request<ResolvedApproval>(`/api/approvals/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
@@ -1861,10 +1902,38 @@ type EffectivePlanLabel = 'free' | 'pro' | 'teams';
 
 /** Union response for `/llm/v1/models` — see `api/src/presentation/routes/llmRoutes.ts`.
  *  `codingModels` is the curated tool-calling + coding subset the plan can reach —
- *  the list a cloud-agent run should pick from. */
+ *  the list a cloud-agent run should pick from. `premium` is set when a superadmin
+ *  premium override is active (treats a free plan as paid for model selection). */
 export type LlmModelsResponse =
-  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; models: string[]; codingModels?: string[] }
-  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; object: 'list'; data: LlmModelStatus[]; codingModels?: string[] };
+  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; models: string[]; codingModels?: string[] }
+  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; object: 'list'; data: LlmModelStatus[]; codingModels?: string[] };
+
+/** Learned Model Routing (PRD 13) — closed action-type taxonomy. MIRRORS
+ *  `api/src/application/llm/actionTypes.ts` (the api is the source of truth). */
+export const ACTION_TYPES = [
+  'sql', 'frontend_ui', 'backend_api', 'refactor', 'bugfix',
+  'tests', 'docs', 'devops_ci', 'data_migration', 'other',
+] as const;
+export type ActionType = (typeof ACTION_TYPES)[number];
+
+/** One model's learned ranking within an action type — from `/llm/v1/model-analytics`. */
+export interface ModelAnalyticsEntry {
+  model: string;
+  samples: number;
+  avgScore: number;
+  mergeRate: number;
+  avgCostMillicents: number;
+}
+export interface ModelAnalyticsAction {
+  actionType: ActionType;
+  label: string;
+  models: ModelAnalyticsEntry[];
+}
+export interface ModelAnalyticsResponse {
+  scope: string;
+  updatedAt: string;
+  byAction: ModelAnalyticsAction[];
+}
 
 export const llmApi = {
   usage: (): Promise<LlmUsageStats> =>
@@ -1875,7 +1944,26 @@ export const llmApi = {
 
   models: (): Promise<LlmModelsResponse> =>
     request<LlmModelsResponse>('/llm/v1/models'),
+
+  /** Learned Model Routing analytics — the per-action-type model ranking the router
+   *  seeds from. `scope` defaults to the caller's tenant; pass `global` or
+   *  `project:<id>`. */
+  modelAnalytics: (scope: string = 'tenant'): Promise<ModelAnalyticsResponse> =>
+    request<ModelAnalyticsResponse>(`/llm/v1/model-analytics?scope=${encodeURIComponent(scope)}`),
+
+  /** Learned Model Routing (§6.6): seed feed for the client's LOCAL SSM recall memory
+   *  — the tenant's recently-scored outcomes (task text + winning model + score). */
+  recallSeed: (limit = 50): Promise<{ memories: RecallSeedMemory[] }> =>
+    request<{ memories: RecallSeedMemory[] }>(`/llm/v1/recall-seed?limit=${limit}`),
 };
+
+/** One scored outcome from `/llm/v1/recall-seed`, used to warm local recall memory. */
+export interface RecallSeedMemory {
+  id: number;
+  taskText: string;
+  model: string;
+  score: number;
+}
 
 // ---------------------------------------------------------------------------
 // Dispatch (send command to agentHost via relay)
@@ -2680,7 +2768,8 @@ export interface PullRequestRow {
   mergedBy: string | null;
   mergedAt: string | null;
   mergeSha: string | null;
-  buildStatus: string | null;  // null | pending | success | failure (post-merge build)
+  buildStatus: string | null;  // null | pending | success | failure (pre-merge PR-branch or post-merge build)
+  buildError: string | null;   // failing jobs/steps summary when buildStatus === 'failure'
 }
 
 /** Live provider-side state for a PR (mirrors api getPullRequestDetail). */

@@ -27,7 +27,7 @@ import {
   dispatchVendor,
   dispatchVendorStream,
   kindForStatus,
-  modelsByTier,
+  autoRoutableModelsByTier,
   tierForModel,
   vendorForModel,
   vendorKeyBound,
@@ -49,6 +49,7 @@ import {
   recordFailure,
 } from '../../infrastructure/auth/cooldownStore';
 import { validateJsonSchema } from './jsonSchemaValidator';
+import type { ActionType } from './actionTypes';
 
 // ---------------------------------------------------------------------------
 // Pool composition (derived from vendor catalogs — single source of truth)
@@ -62,11 +63,47 @@ import { validateJsonSchema } from './jsonSchemaValidator';
 // `status()` so the admin UI doesn't claim availability for unbound vendors.
 // ---------------------------------------------------------------------------
 
-/** Free-tier model ids across every registered vendor. */
-export const FREE_MODEL_POOL: readonly string[] = modelsByTier('FREE');
+// `autoRoutableModelsByTier` (not `modelsByTier`) is the pool composer: it walks
+// the same registry order but DROPS vendors that opt out of auto-routing
+// (`autoRoute: false`, currently Ollama). A non-auto-route vendor stays in the
+// catalog — reachable via an explicit `ollama/<id>` pin — but is never a model a
+// FREE/PRO cascade can silently fall onto. (Fixes: a cloud coding agent cascading
+// into `ollama/gpt-oss:120b`, which 400s on the tool payload.)
 
-/** Paid-tier model ids (STANDARD / PREMIUM / ULTRA) across every registered vendor. */
-export const PRO_PAID_MODEL_POOL: readonly string[] = modelsByTier('STANDARD', 'PREMIUM', 'ULTRA');
+/**
+ * The vendor whose models lead every PAID list. Cloudflare Workers AI bills in
+ * "neurons" with the first ~10,000/day FREE, so draining a paid pool through
+ * Cloudflare BEFORE any metered vendor makes that overflow effectively free up to
+ * the daily allowance. Single source for the lead-vendor choice so the general
+ * paid pool and the coding pools never disagree on which vendor to prefer.
+ */
+export const PAID_LEAD_VENDOR: VendorId = 'cloudflare';
+
+/**
+ * Reorder a model pool so `vendor`'s models lead, preserving each group's relative
+ * order. Used to surface the free-daily-allowance vendor ({@link PAID_LEAD_VENDOR})
+ * first in PAID pools so metered spend is deferred until its allowance is spent.
+ * No-op for a vendor with no models in the pool (e.g. an unbound Cloudflare key
+ * still leaves the rest of the pool in registry order).
+ */
+export function leadPoolWithVendor(pool: readonly string[], vendor: VendorId): string[] {
+  const lead = pool.filter((m) => vendorForModel(m) === vendor);
+  if (lead.length === 0) return [...pool];
+  const rest = pool.filter((m) => vendorForModel(m) !== vendor);
+  return [...lead, ...rest];
+}
+
+/** Auto-routable free-tier model ids across every registered cloud vendor. */
+export const FREE_MODEL_POOL: readonly string[] = autoRoutableModelsByTier('FREE');
+
+/**
+ * Auto-routable paid-tier model ids (STANDARD / PREMIUM / ULTRA) across vendors,
+ * LED BY {@link PAID_LEAD_VENDOR} (Cloudflare) so its free daily neuron allowance
+ * is spent before any metered vendor; the remaining paid models follow in registry
+ * (TTFT) order.
+ */
+export const PRO_PAID_MODEL_POOL: readonly string[] =
+  leadPoolWithVendor(autoRoutableModelsByTier('STANDARD', 'PREMIUM', 'ULTRA'), PAID_LEAD_VENDOR);
 
 /** Pro tries free first (cost-optimized), falls over to paid. */
 export const PRO_MODEL_POOL: readonly string[] = [...FREE_MODEL_POOL, ...PRO_PAID_MODEL_POOL];
@@ -100,6 +137,7 @@ export const CODING_MODEL_POOL: readonly string[] = [
   'xiaomi/mimo-v2.5',                          // Programming #1 on OpenRouter, $0.14/$0.28
   'qwen/qwen3.7-plus',                         // agentic coder + vision, $0.40/$1.60
   'deepseek/deepseek-v4-flash',               // fast cheap coder, $0.10/$0.20
+  '@cf/qwen/qwen3-30b-a3b-fp8',                // Qwen3 30B coder on Cloudflare Workers AI (paid, tool-capable)
   // FREE — strong agentic coders on the OpenRouter free key (the cloud default).
   // Standardized lead: MiniMax M2.7 is the top free SWE-bench agentic coder, so it
   // sits first here and becomes CODING_DEFAULT_MODEL (the first FREE pool entry).
@@ -117,6 +155,16 @@ export const CODING_MODEL_POOL: readonly string[] = [
   'poolside/laguna-m.1:free',                 // flagship coding-agent model
   'qwen/qwen3-coder:free',
   'qwen/qwen3-next-80b-a3b-instruct:free',
+  // DIRECT-ANTHROPIC reliability floor (NVIDIA-of-last-resort). Served by the
+  // `anthropic` vendor on the operator's CLAUDE_API_KEY — a vendor-diverse path
+  // independent of OpenRouter. These are `autoRoute: false`, so they never enter a
+  // plan pool or the user-facing picker (codingModelsForPlan excludes them); they
+  // are listed here ONLY so the cloud loop recognises them as real coders (not a
+  // "degraded onto a non-coder" backstop) and so the capability-reorder sets treat
+  // them as tool/structured-output capable. Routing onto them happens via
+  // CODING_PREMIUM_FALLBACK_MODELS, never auto-selection.
+  'claude-sonnet-4-6',
+  'claude-opus-4-8',
 ];
 
 /**
@@ -208,7 +256,7 @@ export function resolveCacheTtl(body: Record<string, unknown>): '1h' | undefined
  */
 const PREMIUM_PRIORITY_COUNT = 3;
 export const PREMIUM_PRIORITY_POOL: readonly string[] =
-  modelsByTier('PREMIUM').slice(0, PREMIUM_PRIORITY_COUNT);
+  autoRoutableModelsByTier('PREMIUM').slice(0, PREMIUM_PRIORITY_COUNT);
 
 /**
  * Per-vendor-call timeout for premium routing. PREMIUM-tier models on long-
@@ -247,19 +295,56 @@ export const FREE_VENDOR_CALL_TIMEOUT_MS = 15_000;
 export const GUARANTEED_BACKSTOP_MODEL = 'google/gemini-2.5-flash-lite';
 
 /**
- * Coding-capable backstop chain — the reliability floor for a *coding* run.
+ * Cheapest reliable paid coder — the head of the coding reliability floor and the
+ * ONLY coding model treated as paid-overflow by id (see `PAID_OVERFLOW_MODELS`).
+ * A `CODING_MODEL_POOL` member reachable on the credited OpenRouter key.
+ */
+export const CHEAPEST_PAID_CODER = 'deepseek/deepseek-v4-flash'; // $0.10/$0.20
+
+/**
+ * Coding-capable premium fallback chain — the coding analogue of
+ * `PREMIUM_FALLBACK_MODELS`. A coding run must NEVER fall through to a general
+ * non-coder (the gemini-flash family loops on search and ships no edits — see
+ * execution #59), so when the curated coding pool is exhausted the cascade
+ * escalates to *paid coders* on the credited key instead of the non-coder gemini
+ * chain. Vendor-diverse (Cloudflare / DeepSeek / Xiaomi / Anthropic) so one
+ * upstream outage doesn't sink the floor. Every id is a paid `CODING_MODEL_POOL`
+ * member, so `LlmProxyService.codingPool.test` trips if a rename drifts it off
+ * catalog.
+ *
+ * `leadPoolWithVendor(…, PAID_LEAD_VENDOR)` floats the Cloudflare coder to the
+ * head: its first ~10K neurons/day are free, so an exhausted coding cascade spends
+ * that allowance before any metered coder. The remaining entries stay cheapest-
+ * reliable-first (DeepSeek → Xiaomi → OpenRouter-routed Claude), then the
+ * DIRECT-ANTHROPIC last-resort floor: the OpenRouter-routed coders all share
+ * OpenRouter's availability, so an OpenRouter-wide outage sinks them together —
+ * `claude-sonnet-4-6` / `claude-opus-4-8` call Claude DIRECTLY on CLAUDE_API_KEY
+ * (independent availability), Sonnet first (cheaper). Any vendor whose key is
+ * unbound no-key-skips at dispatch, so the chain degrades cleanly to whatever is
+ * reachable and surfaces an honest exhaustion only if nothing is.
+ */
+export const CODING_PREMIUM_FALLBACK_MODELS: readonly string[] = leadPoolWithVendor([
+  CHEAPEST_PAID_CODER,           // $0.10/$0.20 — cheapest reliable paid coder (OpenRouter)
+  'xiaomi/mimo-v2.5',            // $0.14/$0.28 — OpenRouter Programming #1
+  '@cf/qwen/qwen3-30b-a3b-fp8',  // Cloudflare Workers AI coder — free up to the daily neuron allowance
+  'anthropic/claude-sonnet-4.6', // strongest agentic coder (via OpenRouter)
+  'claude-sonnet-4-6',           // direct-Anthropic last-resort floor (CLAUDE_API_KEY)
+  'claude-opus-4-8',
+], PAID_LEAD_VENDOR);
+
+/**
+ * Coding-capable backstop chain — the reliability floor for a *coding* run,
+ * dispatched on the credited key after the primary coding cascade fails.
  *
  * `GUARANTEED_BACKSTOP_MODEL` (gemini-2.5-flash-lite) is a cheap general model
- * chosen for low variance, NOT for code. When an autonomous coding agent's soft
- * pin exhausts the coding pool, flooring onto a non-coding model means the run
- * flails and gives up without writing code (observed in execution #59). So a
- * coding proxy floors onto the cheapest reliable *paid coder* instead —
- * `deepseek/deepseek-v4-flash` ($0.10/$0.20, a `CODING_MODEL_POOL` member,
- * reachable on the credited OpenRouter key like the general backstop) — and only
- * then onto `GUARANTEED_BACKSTOP_MODEL` as the absolute last resort, so the
- * "never hard-fail" guarantee is preserved while a coder is strongly preferred.
+ * chosen for low variance, NOT for code. Flooring a coding run onto a non-coder
+ * means the run flails and gives up without writing code (observed in execution
+ * #59), so the coding floor is *coders only* — no general backstop tail. If every
+ * paid coder is also down the run surfaces `cascade_exhausted` rather than
+ * silently degrading onto a non-coder, because an honest failure beats a coding
+ * agent that loops on search and ships nothing.
  */
-export const CODING_BACKSTOP_MODELS: readonly string[] = ['deepseek/deepseek-v4-flash', GUARANTEED_BACKSTOP_MODEL];
+export const CODING_BACKSTOP_MODELS: readonly string[] = CODING_PREMIUM_FALLBACK_MODELS;
 
 /**
  * Premium fallback chain — appended to *every* non-strict candidate chain so a
@@ -280,18 +365,33 @@ export const PREMIUM_FALLBACK_MODELS: readonly string[] = [
 
 /**
  * Paid-overflow model set — the models Builderforce funds on its OWN keys when a
- * tenant's primary cascade is exhausted: the premium fallback chain plus every
- * reliability-floor backstop (general + coding). A usage row resolved to one of
- * these is "overflow spend" — metered against a per-tenant daily $ cap so a Free
- * tenant in a tight retry loop can't run up arbitrary spend on our keys (the cap
- * is enforced in the gateway route; see `paid_overflow_daily_cap`). None of these
- * ids appear in any plan's PRIMARY pool (FREE/PRO), so resolving to one
- * unambiguously means the request fell through to the funded overflow path.
+ * tenant's primary cascade is exhausted: the premium fallback chain, the general
+ * reliability backstop, and the cheap coding floor (`CHEAPEST_PAID_CODER`). A
+ * usage row resolved to one of these is "overflow spend" — metered against a
+ * per-tenant daily $ cap so a Free tenant in a tight retry loop can't run up
+ * arbitrary spend on our keys (the cap is enforced in the gateway route; see
+ * `paid_overflow_daily_cap`).
+ *
+ * By-id detection is deliberately conservative here: the *stronger* coding-floor
+ * coders (`xiaomi/mimo-v2.5`, `anthropic/claude-sonnet-4.6`) are Pro plan-pool
+ * models, so flagging them by id would mis-meter a Pro tenant's legitimate plan
+ * usage as overflow. Their genuine overflow case — resolving via the funded
+ * coding *backstop* — is metered directly by `complete()` (which sets
+ * `paidOverflow = true` on any backstop hit), not by this set. Every id that IS
+ * in this set resolves only via the funded path (the gemini fallbacks live in no
+ * plan pool; `CHEAPEST_PAID_CODER` is the historically-funded coding floor).
  */
 export const PAID_OVERFLOW_MODELS: ReadonlySet<string> = new Set<string>([
   ...PREMIUM_FALLBACK_MODELS,
-  ...CODING_BACKSTOP_MODELS,
+  CHEAPEST_PAID_CODER,
   GUARANTEED_BACKSTOP_MODEL,
+  // Direct-Anthropic floor — unlike `anthropic/claude-sonnet-4.6` (a Pro plan-pool
+  // model whose normal use must NOT be metered as overflow), these bare-id direct
+  // models live in NO plan pool: any resolution onto them is Builderforce funding a
+  // call on its own CLAUDE_API_KEY, so they are overflow spend by id on every path
+  // (primary appended-fallback OR credited backstop) and count against the cap.
+  'claude-sonnet-4-6',
+  'claude-opus-4-8',
 ]);
 
 /** True when `model` resolved via the funded overflow path (premium fallback or
@@ -313,6 +413,25 @@ export function isPaidOverflowModel(model: string | undefined | null): boolean {
  * tenants still get the models their plan unlocks.
  */
 export const FREE_ATTEMPT_BUDGET = 2;
+
+/**
+ * FREE-attempt budget for a CODING run — deliberately the WHOLE free coding pool,
+ * not the 2-attempt general cap.
+ *
+ * A coding run is a long-lived background job (container / durable loop, ~180s
+ * outer budget), so unlike an interactive request it values COST over a few
+ * seconds of latency. The general 2-attempt cap escalates to PAID coders — and
+ * ultimately the funded direct-Anthropic floor on a METERED key — after only two
+ * free coders, which is how a $10 Anthropic cap got drained while ~9 free coders
+ * (minimax / glm / nemotron / qwen-coder / …) sat untried. Budgeting the entire
+ * free coding pool means every free coder is attempted BEFORE any paid coder, so
+ * the metered floor is genuinely last-resort (10+ models tried first), not a
+ * second-attempt default.
+ *
+ * Derived from the pool so it tracks automatically as free coders are added.
+ */
+export const CODING_FREE_ATTEMPT_BUDGET: number =
+  CODING_MODEL_POOL.filter((m) => FREE_MODEL_POOL.includes(m)).length;
 
 /** First N models of the active pool form the round-robin "preferred" group.
  *  Aligned with FREE_ATTEMPT_BUDGET so the round-robin window matches the cap. */
@@ -504,6 +623,18 @@ export interface LlmProxyOptions {
    *  put a hard ceiling on overflow spend (a Free tenant's primary free pool
    *  still runs — only the funded overflow path is closed). */
   disablePaidOverflow?: boolean;
+  /** When true, this proxy is serving a CODING run: the appended premium fallback
+   *  chain is the coding-capable one (`CODING_PREMIUM_FALLBACK_MODELS`, paid
+   *  coders) instead of the general non-coder gemini chain, so an exhausted coding
+   *  cascade never resolves onto a generalist. Set by `llmProxyForPlan({codingOnly})`.
+   *  Pairs with `backstopModels: CODING_BACKSTOP_MODELS` for the credited-key floor. */
+  codingOnly?: boolean;
+  /** Max FREE-tier seed models the cascade tries before falling through to the
+   *  premium fallback. Defaults to `FREE_ATTEMPT_BUDGET` (2) for latency-sensitive
+   *  general requests; coding runs pass `CODING_FREE_ATTEMPT_BUDGET` (the whole
+   *  free coding pool) so every free coder is exhausted before any paid/metered
+   *  coder. */
+  freeBudget?: number;
 }
 
 export class LlmProxyService {
@@ -515,6 +646,8 @@ export class LlmProxyService {
   private readonly vendorCallTimeoutMs: number | undefined;
   private readonly backstopModels: readonly string[];
   private readonly disablePaidOverflow: boolean;
+  private readonly codingOnly: boolean;
+  private readonly freeBudget: number;
 
   constructor(env: ProxyEnv, options?: LlmProxyOptions) {
     this.env = env;
@@ -525,13 +658,18 @@ export class LlmProxyService {
     this.vendorCallTimeoutMs = options?.vendorCallTimeoutMs;
     this.backstopModels = options?.backstopModels?.length ? options.backstopModels : [GUARANTEED_BACKSTOP_MODEL];
     this.disablePaidOverflow = options?.disablePaidOverflow ?? false;
+    this.codingOnly = options?.codingOnly ?? false;
+    this.freeBudget = options?.freeBudget && options.freeBudget > 0 ? options.freeBudget : FREE_ATTEMPT_BUDGET;
   }
 
   /** The premium fallback chain appended to every cascade — empty when the tenant
    *  has exhausted its paid-overflow cap, so the chain composer won't fall through
-   *  to a funded model. Single source for both the cooldown-prefetch and the chain. */
+   *  to a funded model. A CODING run uses the coding-capable chain (paid coders)
+   *  so it never resolves onto a general non-coder. Single source for both the
+   *  cooldown-prefetch and the chain. */
   private get premiumFallback(): readonly string[] {
-    return this.disablePaidOverflow ? [] : PREMIUM_FALLBACK_MODELS;
+    if (this.disablePaidOverflow) return [];
+    return this.codingOnly ? CODING_PREMIUM_FALLBACK_MODELS : PREMIUM_FALLBACK_MODELS;
   }
 
   // --- Public entry points --------------------------------------------------
@@ -776,7 +914,7 @@ export class LlmProxyService {
     return composeFreeCappedCascade({
       seed,
       premiumFallback: this.premiumFallback,
-      freeBudget: FREE_ATTEMPT_BUDGET,
+      freeBudget: this.freeBudget,
       tierOf: tierForModel,
       isUnavailable: buildCooldownPredicate({
         cooledModels:  cooledSet,
@@ -798,6 +936,9 @@ export class LlmProxyService {
       NVIDIA_API_KEY:           this.env.NVIDIA_API_KEY           ?? null,
       OLLAMA_API_KEY:           this.env.OLLAMA_API_KEY           ?? null,
       GOOGLE_API_KEY:           this.env.GOOGLE_API_KEY           ?? null,
+      // Direct-Anthropic floor key. Flows through creditedVendorEnv() too (which
+      // spreads this) so the coding backstop can reach Claude regardless of plan.
+      CLAUDE_API_KEY:           this.env.CLAUDE_API_KEY           ?? null,
       CLOUDFLARE_AI_API_TOKEN:  this.env.CLOUDFLARE_AI_API_TOKEN  ?? null,
       CLOUDFLARE_ACCOUNT_ID:    this.env.CLOUDFLARE_ACCOUNT_ID    ?? null,
     };
@@ -1332,16 +1473,24 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean },
+  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean },
 ): LlmProxyService {
   const { productName, modelPool, vendorCallTimeoutMs } = resolveRouting(effectivePlan, premiumOverride);
+  // A CODING run restricts its failover cascade to the curated coding pool, so an
+  // exhausted/failed primary escalates to the paid CODING backstop (deepseek-v4-flash)
+  // — NOT to a random free non-coder (gemini-flash-lite) or a tool-unreliable vendor.
+  // Without this the cascade walks the whole plan pool and "degrades" off the coders.
+  const pool = opts?.codingOnly ? codingModelsForPlan(effectivePlan, premiumOverride) : modelPool;
   return new LlmProxyService(env, {
-    modelPool,
+    modelPool: pool,
     preferredPoolSize: PREFERRED_POOL_SIZE,
     productName,
     ...(vendorCallTimeoutMs ? { vendorCallTimeoutMs } : {}),
     ...(opts?.backstopModels ? { backstopModels: opts.backstopModels } : {}),
     ...(opts?.disablePaidOverflow ? { disablePaidOverflow: true } : {}),
+    // A coding run walks the WHOLE free coding pool before any paid/metered coder
+    // (cost over latency), so the funded direct-Anthropic floor is genuine last-resort.
+    ...(opts?.codingOnly ? { codingOnly: true, freeBudget: CODING_FREE_ATTEMPT_BUDGET } : {}),
   });
 }
 
@@ -1376,17 +1525,125 @@ export function codingDefaultForPlan(effectivePlan: EffectivePlan, premiumOverri
  * Decide the model a cloud-agent run should use for a turn, shared by every cloud
  * executor (durable loop + container op) so the "explicit pick = hard pin, else
  * plan's best coding model" rule lives in ONE place.
- *   • explicit + real catalog id → hard pin (`strict`), dispatched as-is.
+ *   • PAID plan (Pro/Teams, or a premium override) + explicit real catalog id →
+ *     hard pin (`strict`), dispatched as-is.
+ *   • FREE plan → model selection is NOT offered (the picker is hidden, see
+ *     RunAgentControl) and is ALSO enforced here server-side: any explicit pick
+ *     (a user choice OR an agent's pinned base_model) is IGNORED and the run uses
+ *     the free plan's managed coding default. Builderforce manages which model
+ *     free tenants run on; this is the authoritative gate (the UI hide is cosmetic).
  *   • absent / typo'd / off-catalog → the plan's default coding model, soft (so a
  *     cold model can fail over once before the run locks onto what resolved).
  */
+/** Minimal per-model stat shape the learned router ranks on — a structural subset
+ *  of `routingTable.ActionModelStat`, declared here so this pure module never imports
+ *  the routing-table/DB layer (keeps `rankModelsForAction` I/O-free + unit-testable). */
+export interface ActionModelRankStat {
+  model: string;
+  n: number;
+  avgScore: number;
+  avgCostMc: number;
+}
+
+export interface RankModelsOptions {
+  /** Minimum samples a (action_type, model) bucket needs before it can lead. */
+  minSamples?: number;
+  /** Optional client-computed SSM recall nudge (model → +/- weight) applied to the
+   *  learned score BEFORE the sort. Personalization on top of the shared table. */
+  bias?: Record<string, number>;
+}
+
+export const DEFAULT_MIN_SAMPLES = 8;
+
+/**
+ * Learned-routing reorder (PURE — no I/O). Stable-reorders the curated, plan-reachable
+ * coding pool so the empirically-best model for this action type leads:
+ *   • a model is ELIGIBLE to lead only with `n >= minSamples` samples;
+ *   • eligible models sort by `avgScore (+ bias)` desc, ties broken by lower
+ *     `avgCostMc`, then by the curated index (stable);
+ *   • every model below the sample floor keeps the curated order, appended after;
+ *   • when NO model clears the floor, the curated order is returned UNCHANGED
+ *     (cold-start safety — routing degrades to today's static order).
+ * The optional `bias` only nudges ordering AMONG already-eligible models (a nudge on
+ * top of the table, never a way to surface a cold model). Never invents a model: the
+ * output is always a permutation of `reachable`.
+ */
+export function rankModelsForAction(
+  reachable: readonly string[],
+  stats: ReadonlyArray<ActionModelRankStat> | undefined,
+  opts?: RankModelsOptions,
+): string[] {
+  const minSamples = opts?.minSamples ?? DEFAULT_MIN_SAMPLES;
+  const bias = opts?.bias ?? {};
+  const statByModel = new Map<string, ActionModelRankStat>();
+  for (const s of stats ?? []) statByModel.set(s.model, s);
+
+  const curatedIndex = new Map<string, number>();
+  reachable.forEach((m, i) => curatedIndex.set(m, i));
+
+  const eligible: string[] = [];
+  const rest: string[] = [];
+  for (const m of reachable) {
+    const s = statByModel.get(m);
+    if (s && s.n >= minSamples) eligible.push(m);
+    else rest.push(m);
+  }
+  if (eligible.length === 0) return [...reachable]; // cold-start: static order unchanged.
+
+  const scoreOf = (m: string): number => (statByModel.get(m)!.avgScore) + (bias[m] ?? 0);
+  eligible.sort((a, b) => {
+    const d = scoreOf(b) - scoreOf(a);
+    if (d !== 0) return d;
+    const c = statByModel.get(a)!.avgCostMc - statByModel.get(b)!.avgCostMc;
+    if (c !== 0) return c;
+    return (curatedIndex.get(a)! - curatedIndex.get(b)!);
+  });
+  return [...eligible, ...rest];
+}
+
+export interface PickCloudModelOptions {
+  actionType?: ActionType;
+  /** The `byAction[actionType]` slice of the resolved scope's routing blob. */
+  actionStats?: ReadonlyArray<ActionModelRankStat>;
+  /** Client SSM recall nudge (interactive runs only; absent/ignored headless). */
+  bias?: Record<string, number>;
+  minSamples?: number;
+}
+
+export interface PickCloudModelResult {
+  model: string;
+  strict: boolean;
+  /** The learned reorder of the plan-reachable coding pool (soft-seed branch only) —
+   *  surfaced so the caller can explain the choice on the timeline. */
+  ranked?: string[];
+  /** Samples behind the chosen seed (the leading ranked model), 0 when cold/curated. */
+  seedSamples?: number;
+  /** True when the SSM bias map was non-empty and could affect ordering. */
+  biasApplied?: boolean;
+}
+
 export function pickCloudModel(
   explicit: string | undefined,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-): { model: string; strict: boolean } {
-  if (isKnownModel(explicit)) return { model: (explicit as string).trim(), strict: true };
-  return { model: codingDefaultForPlan(effectivePlan, premiumOverride), strict: false };
+  opts?: PickCloudModelOptions,
+): PickCloudModelResult {
+  const canChooseModel = premiumOverride || effectivePlan !== 'free';
+  // Explicit-pin behaviour (paid plans) — byte-for-byte unchanged.
+  if (canChooseModel && isKnownModel(explicit)) return { model: (explicit as string).trim(), strict: true };
+
+  // Soft-seed branch — the ONLY place learned routing changes anything. Reorder the
+  // plan-reachable coding pool by the learned stats (+ optional bias) and seed the
+  // leader. With no stats this is the curated order, so the seed equals
+  // codingDefaultForPlan(...) — the prior behaviour. The free-plan gate is intact:
+  // an explicit pick was already ignored above, and the reorder stays WITHIN the
+  // plan's reachable coding pool (free tenants only ever reorder free coding models).
+  const reachable = codingModelsForPlan(effectivePlan, premiumOverride);
+  const bias = opts?.bias && Object.keys(opts.bias).length > 0 ? opts.bias : undefined;
+  const ranked = rankModelsForAction(reachable, opts?.actionStats, { minSamples: opts?.minSamples, bias });
+  const seed = ranked[0] ?? CODING_DEFAULT_MODEL;
+  const seedSamples = opts?.actionStats?.find((s) => s.model === seed)?.n ?? 0;
+  return { model: seed, strict: false, ranked, seedSamples, biasApplied: !!bias };
 }
 
 /** Free-tier proxy for IDE-internal callers (chat, dataset gen, agent inference, brain).

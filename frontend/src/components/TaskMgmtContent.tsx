@@ -7,12 +7,12 @@ import Link from 'next/link';
 import {
   tasksApi,
   agentHosts,
-  runtimeApi,
-  boardsApi,
   workflowDefinitions,
+  approvalsApi,
   type Task,
   type TaskPriority,
   type AgentHost,
+  type Approval,
   type Execution,
   type SwimlaneAgent,
   type BoardDispatch,
@@ -33,11 +33,14 @@ import { BoardConfigPanel } from './board/BoardConfigPanel';
 import { AgentChip } from './board/AgentChip';
 import { TeamMemberAvatarFilter } from './board/TeamMemberAvatarFilter';
 import { useBoardConfig } from './board/useBoardConfig';
+import { useBoardLiveRuns } from './board/useBoardLiveRuns';
+import { useRealtimeRoom } from '@/lib/embed/useRealtimeRoom';
 import { SlideOutPanel } from './SlideOutPanel';
 import { MoveToBoardControl } from './MoveToBoardControl';
 import { AgentTab } from './agent/AgentTab';
 import { TaskPrdTab } from './task/TaskPrdTab';
 import { RunTaskButton } from './task/RunTaskButton';
+import { ApprovalResolveControl } from './humanRequests/ApprovalResolveControl';
 import { ChatMessageContent } from './ChatMessageContent';
 import { ViewToggle } from './ViewToggle';
 import { CeremonyStage, type CeremonyMode } from './ceremony/CeremonyStage';
@@ -159,10 +162,12 @@ export function TaskMgmtContent({
   const [agentHostsList, setAgentHostsList] = useState<AgentHost[]>([]);
   const [cloudAgentsList, setCloudAgentsList] = useState<CloudAgentTarget[]>([]);
   const [membersList, setMembersList] = useState<TeamMember[]>([]);
-  const [executions, setExecutions] = useState<Execution[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [approvalGate, setApprovalGate] = useState<{ approvalId: string; taskId: number; reason: string } | null>(null);
+  // Full approval row behind the gate, so a manager can approve inline (which
+  // auto-starts the run) instead of leaving the board for the approvals queue.
+  const [gateApproval, setGateApproval] = useState<Approval | null>(null);
   const [view, setView] = useState<TaskView>('board');
   // Standup mode: pivot the board so rows = teammates/agents and columns = stages,
   // surfacing each person's in-flight work at a glance. Board-view only, session-only.
@@ -206,14 +211,24 @@ export function TaskMgmtContent({
     setDrawerTask(t);
   }, []);
 
+  // Fetch the gated approval so the banner can resolve it inline. Cleared with the gate.
+  useEffect(() => {
+    const approvalId = approvalGate?.approvalId;
+    if (!approvalId) { setGateApproval(null); return; }
+    let alive = true;
+    approvalsApi.get(approvalId)
+      .then((a) => { if (alive) setGateApproval(a); })
+      .catch(() => { if (alive) setGateApproval(null); });
+    return () => { alive = false; };
+  }, [approvalGate?.approvalId]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [tasksData, agentHostsData, execData, runTargets, membersData, projectWf] = await Promise.all([
+      const [tasksData, agentHostsData, runTargets, membersData, projectWf] = await Promise.all([
         tasksApi.list(projectId),
         agentHosts.list().catch(() => []),
-        runtimeApi.listRecent().catch(() => []),
         // Cloud agents assignable to a ticket (active, cloud-capable ide_agents).
         // run-targets already merges hosts + cloud agents and is server-cached;
         // we only take the cloud side here since hosts come from agentHosts.list.
@@ -236,7 +251,6 @@ export function TaskMgmtContent({
       setAgentHostsList(teamSet ? agentHostsData.filter((h) => teamSet.has(`host_agent:${h.id}`)) : agentHostsData);
       setCloudAgentsList(teamSet ? runTargets.cloudAgents.filter((a) => teamSet.has(`cloud_agent:${a.ref}`)) : runTargets.cloudAgents);
       setMembersList(teamSet ? membersData.filter((m) => teamSet.has(`human:${m.id}`)) : membersData);
-      setExecutions(execData);
       // Always resolve the full project list (unless the parent supplied one):
       // it backs both the project filter and the "Move to board" destinations,
       // which are needed even in the scoped (single-project) view.
@@ -278,6 +292,16 @@ export function TaskMgmtContent({
   useEffect(() => {
     setEditingField(null);
   }, [drawerTask?.id, drawerTab]);
+
+  // Keep an open drawer live: when a realtime push refreshes the task list (another
+  // teammate or an agent edited the same ticket), re-sync the drawer from the fresh
+  // row — but never while the user is mid-edit, so a live update can't clobber a
+  // field they're typing into. The Agent tab streams its own run updates separately.
+  useEffect(() => {
+    if (!drawerTask || editingField) return;
+    const fresh = tasks.find((t) => t.id === drawerTask.id);
+    if (fresh && fresh !== drawerTask) setDrawerTask(fresh);
+  }, [tasks, drawerTask, editingField]);
 
   const projectNameById = (id?: number | null) =>
     id ? projects.find((p) => p.id === id)?.name ?? String(id) : '—';
@@ -323,17 +347,29 @@ export function TaskMgmtContent({
     return true;
   });
 
-  // Live per-agent dispatch status for the board, so each lane's configured-agent
-  // chips light up with their current execution status (pending→running→done/failed).
-  const [dispatches, setDispatches] = useState<BoardDispatch[]>([]);
-  useEffect(() => {
-    // Only fetch in the board view; stale data from a prior board is harmless as
-    // the status chips render only here (and a board switch refetches).
-    if (!board?.id || view !== 'board' || compact) return;
-    let live = true;
-    boardsApi.dispatches(board.id).then((d) => { if (live) setDispatches(d); }).catch(() => {});
-    return () => { live = false; };
-  }, [board?.id, view, compact]);
+  // Live board run feed: recent executions + per-agent dispatches, self-refreshing
+  // so cards and lane-header chips advance pending→running→done without a manual
+  // reload, and a drag-triggered auto-run shows the moment it's queued. Active on
+  // the chip-bearing views (board/table); idle on calendar/gantt. `refreshRuns` is
+  // fired right after a status PATCH so the user's own drag updates instantly.
+  const { executions, dispatches, refresh: refreshRuns } = useBoardLiveRuns(
+    view === 'board' && !compact ? board?.id : undefined,
+    view === 'board' || view === 'table',
+  );
+
+  // Real-time project room: the server pushes `{type:"changed"}` over a WebSocket
+  // whenever ANYONE — another teammate or an agent run — mutates this project, so
+  // every view (board, table, calendar, gantt) and the open drawer refetch live.
+  // This is the primary liveness path; the run-feed poll above is a reconcile
+  // backstop for a dropped socket (cross-isolate WS is lossy on Workers).
+  const onRealtimeChange = useCallback(() => {
+    void load();
+    refreshRuns();
+  }, [load, refreshRuns]);
+  useRealtimeRoom(
+    effectiveProjectId != null ? `/api/projects/${effectiveProjectId}/stream` : null,
+    onRealtimeChange,
+  );
 
   // Latest dispatch per assignment (configured agent), keyed by assignment id.
   const latestDispatchByAssignment = useMemo(() => {
@@ -413,11 +449,45 @@ export function TaskMgmtContent({
     return m;
   }, [executions]);
 
-  // Resolve the human-facing name of whatever agent ran an execution.
+  // Stable identity for the agent that ran an execution — a cloud agent
+  // (cloudAgentRef), a self-hosted host (agentHostId), or a legacy agentId — so
+  // multiple runs by the same agent collapse into one chip on a card.
+  const execAgentKey = (e: Execution): string =>
+    e.cloudAgentRef ? `c:${e.cloudAgentRef}` :
+    e.agentHostId != null ? `h:${e.agentHostId}` :
+    e.agentId != null ? `a:${e.agentId}` : 'agent';
+
+  // Resolve the human-facing name of whatever agent ran an execution. Cloud
+  // agents (V1/V2) run via cloudAgentRef and MUST be resolved against the cloud
+  // roster — otherwise a queued cloud agent like "Bob" renders as a generic "Agent".
   const execAgentLabel = (e: Execution): string =>
-    (e.agentHostId != null ? agentHostsList.find((c) => c.id === e.agentHostId)?.name : null) ??
-    (e.agentHostId != null ? `AgentHost ${e.agentHostId}` : null) ??
+    (e.cloudAgentRef ? cloudAgentsList.find((a) => a.ref === e.cloudAgentRef)?.name ?? `Agent ${String(e.cloudAgentRef).slice(0, 6)}` : null) ??
+    (e.agentHostId != null ? agentHostsList.find((c) => c.id === e.agentHostId)?.name ?? `AgentHost ${e.agentHostId}` : null) ??
     (e.agentId != null ? `Agent ${e.agentId}` : 'Agent');
+
+  // Every distinct agent that has run (or is queued) on a task, newest-run first,
+  // each carrying its latest execution status. Drives the card's agent-history
+  // chips: a completed prior agent (e.g. Kevin) stays visible alongside the
+  // freshly-queued one (e.g. Bob · pending) so the board shows who ran when.
+  const agentRunsByTask = useMemo(() => {
+    const m = new Map<number, Array<{ key: string; label: string; status: string; execId: number; ts: number }>>();
+    for (const e of executions) {
+      const list = m.get(e.taskId) ?? [];
+      const key = execAgentKey(e);
+      const ts = e.createdAt ? new Date(e.createdAt).getTime() : 0;
+      const existing = list.find((x) => x.key === key);
+      if (existing) {
+        // Keep the most recent execution's status for this agent on the task.
+        if (ts >= existing.ts) { existing.status = e.status; existing.execId = e.id; existing.ts = ts; }
+      } else {
+        list.push({ key, label: execAgentLabel(e), status: e.status, execId: e.id, ts });
+      }
+      m.set(e.taskId, list);
+    }
+    for (const list of m.values()) list.sort((a, b) => b.ts - a.ts);
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [executions, cloudAgentsList, agentHostsList]);
 
   const openCreate = () => {
     setEditTarget(null);
@@ -528,6 +598,12 @@ export function TaskMgmtContent({
       // longer fires its own submitExecution here: doing so duplicated the logic
       // and skipped every non-board path (brain-created / API status changes). The
       // server is the single source of truth.
+      //
+      // The auto-run row is created synchronously inside that PATCH, so refresh the
+      // live run feed immediately — this surfaces the newly-queued agent (e.g.
+      // "Bob · pending") the instant the card is dropped, instead of waiting for
+      // the next poll tick.
+      refreshRuns();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Update failed');
     }
@@ -611,7 +687,7 @@ export function TaskMgmtContent({
   // One draggable task card, shared by the status board and the standup pivot so
   // both render an identical card (inline status editor, priority/PR/exec chips).
   const renderTaskCard = (task: Task) => {
-    const exec = latestExecByTask.get(task.id);
+    const runs = agentRunsByTask.get(task.id) ?? [];
     return (
       <div
         key={task.id}
@@ -685,18 +761,33 @@ export function TaskMgmtContent({
               📄 PRD{task.specCount > 1 ? ` ×${task.specCount}` : ''}
             </span>
           ) : null}
-          {exec ? (
-            <AgentChip
-              label={execAgentLabel(exec)}
-              status={exec.status}
-              title={`${execAgentLabel(exec)} — execution #${exec.id} · ${exec.status}. Click to open the Agent tab.`}
-              onClick={(e) => {
-                e.stopPropagation();
-                openTask(task, 'agent');
-              }}
-            />
+          {runs.length > 0 ? (
+            // One chip per agent that has touched this task, newest run first, so
+            // history reads left-to-right: a freshly-queued agent (Bob · pending)
+            // sits ahead of a prior one (Kevin, completed). The status meta makes
+            // the live state explicit for any non-completed run.
+            runs.map((r) => (
+              <AgentChip
+                key={r.key}
+                label={r.label}
+                status={r.status}
+                meta={r.status !== 'completed' ? r.status : undefined}
+                title={`${r.label} — execution #${r.execId} · ${r.status}. Click to open the Agent tab.`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openTask(task, 'agent');
+                }}
+              />
+            ))
           ) : (task.assignedAgentHostId || task.assignedAgentRef || task.assignedUserId) ? (
-            <span>{taskAssigneeName(task)}</span>
+            // No run yet — show who it's assigned to, flagged "pending" when an
+            // agent owns it so a just-dropped card reads "Bob · pending" before its
+            // execution row materializes.
+            (task.assignedAgentHostId || task.assignedAgentRef) ? (
+              <AgentChip label={taskAssigneeName(task)} status="pending" meta="pending" title={`${taskAssigneeName(task)} — queued`} />
+            ) : (
+              <span>{taskAssigneeName(task)}</span>
+            )
           ) : null}
           {task.githubPrUrl && (
             <a
@@ -753,16 +844,31 @@ export function TaskMgmtContent({
             {' '}
             (Task #{approvalGate.taskId}, approval {approvalGate.approvalId.slice(0, 8)}...)
           </span>
-          <Link
-            href="/workforce?tab=approvals"
-            style={{
-              fontWeight: 700,
-              color: 'var(--coral-bright)',
-              textDecoration: 'none',
-            }}
-          >
-            Open approvals
-          </Link>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            {/* Resolve inline — approving auto-starts the run; otherwise the manager
+                can still jump to the full approvals queue. */}
+            {gateApproval && (
+              <ApprovalResolveControl
+                approval={gateApproval}
+                compact
+                onResolved={(updated) => {
+                  setApprovalGate(null);
+                  setGateApproval(null);
+                  if (updated.status === 'approved') { void load(); }
+                }}
+              />
+            )}
+            <Link
+              href="/workforce?tab=approvals"
+              style={{
+                fontWeight: 700,
+                color: 'var(--coral-bright)',
+                textDecoration: 'none',
+              }}
+            >
+              Open approvals
+            </Link>
+          </span>
         </div>
       )}
 
@@ -1284,6 +1390,7 @@ export function TaskMgmtContent({
                           <AgentChip
                             label={execAgentLabel(exec)}
                             status={exec.status}
+                            meta={exec.status !== 'completed' ? exec.status : undefined}
                             title={`${execAgentLabel(exec)} — execution #${exec.id} · ${exec.status}. Click to open the Agent tab.`}
                             onClick={() => openTask(task, 'agent')}
                           />

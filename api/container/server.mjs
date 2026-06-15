@@ -25,6 +25,13 @@ import { tmpdir } from 'node:os';
 const PORT = Number(process.env.PORT || 8080);
 const MAX_LIST_ENTRIES = 500;
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000; // a build/test step may legitimately take minutes
+// Liveness heartbeat cadence. The Worker reaps a cloud run whose last activity is
+// older than 90s (RuntimeService.CLOUD_ORPHAN_MS / staleExecutionReaper). A single
+// run_command can run for minutes with no LLM round-trip, so we bump the run's
+// `updated_at` on this timer — well under the 90s ceiling — so the reaper never kills
+// a healthy, busy container mid-build. ~3 beats fit the window, so a dropped beat is
+// covered by the next.
+const HEARTBEAT_MS = 30 * 1000;
 
 /** POST a container-op back to the Worker; returns the parsed JSON body. */
 async function op(spec, body) {
@@ -37,17 +44,21 @@ async function op(spec, body) {
   return res.json();
 }
 
-/** Run a shell command in `cwd`, capturing combined stdout/stderr and the exit code. */
-function runShell(command, cwd) {
+/** Run a shell command in `cwd`, capturing combined stdout/stderr and the exit code.
+ *  `proc` (optional) is a holder whose `.current` is set to the live child so the
+ *  heartbeat loop can SIGKILL an in-flight command when the run is cancelled. */
+function runShell(command, cwd, proc) {
   return new Promise((resolve) => {
     const child = spawn('bash', ['-lc', command], { cwd, env: process.env });
+    if (proc) proc.current = child;
     let out = '';
     const cap = (chunk) => { out += chunk; if (out.length > 60_000) out = out.slice(-60_000); };
     child.stdout.on('data', cap);
     child.stderr.on('data', cap);
     const timer = setTimeout(() => { child.kill('SIGKILL'); }, COMMAND_TIMEOUT_MS);
-    child.on('close', (code) => { clearTimeout(timer); resolve({ exitCode: code ?? -1, output: out }); });
-    child.on('error', (e) => { clearTimeout(timer); resolve({ exitCode: -1, output: `${out}\n${e.message}` }); });
+    const done = (result) => { clearTimeout(timer); if (proc && proc.current === child) proc.current = null; resolve(result); };
+    child.on('close', (code) => done({ exitCode: code ?? -1, output: out }));
+    child.on('error', (e) => done({ exitCode: -1, output: `${out}\n${e.message}` }));
   });
 }
 
@@ -73,7 +84,7 @@ async function listFiles(dir, sub) {
 
 /** Execute one tool call. Repo reads/writes hit local disk (the clone); write also
  *  mirrors to the ticket branch via the Worker; run_command runs in the shell. */
-async function execTool(spec, workdir, writtenPaths, name, parsed) {
+async function execTool(spec, workdir, writtenPaths, name, parsed, proc) {
   if (name === 'list_files') {
     if (!workdir) return { ok: false, error: 'no repository bound to this task' };
     return listFiles(workdir, typeof parsed.path === 'string' ? parsed.path : undefined);
@@ -105,11 +116,98 @@ async function execTool(spec, workdir, writtenPaths, name, parsed) {
     if (!command) return { ok: false, error: 'command is required' };
     if (!workdir) return { ok: false, error: 'no repository checked out — run_command needs a bound repo' };
     const t0 = Date.now();
-    const { exitCode, output } = await runShell(command, workdir);
+    const { exitCode, output } = await runShell(command, workdir, proc);
     await op(spec, { op: 'event', args: { toolName: 'run_command', category: 'tool', detail: { command, exitCode }, result: output.slice(0, 300), durationMs: Date.now() - t0 } }).catch(() => {});
     return { ok: exitCode === 0, exitCode, output: output.slice(0, 20_000) };
   }
+  if (name.startsWith('git_')) {
+    if (!workdir) return { ok: false, error: 'no repository checked out — git tools need a bound repo' };
+    return gitTool(spec, workdir, proc, name, parsed);
+  }
   return { ok: false, error: `unknown tool '${name}'` };
+}
+
+/**
+ * Git / version-control tools for the container surface — the execution side of
+ * the shared schemas (`buildGitCommand` in packages/agent-tools/core-tools.ts is
+ * the canonical command reference; the container runs its own loop and this image
+ * has no build step, so it can't import the TS package and mirrors the verbs here).
+ *
+ * Surface-specific twist: the container persists every write as a Worker-side
+ * GitHub-API commit to the remote ticket branch — the local clone does NOT carry
+ * those commits. So before any MUTATING op we first fast-forward the local clone
+ * to the remote branch head (absorb the API commits), then operate, then push —
+ * otherwise a local reset/merge+push would clobber the agent's committed work.
+ * Read ops (status/diff/history) run against the local clone directly.
+ */
+async function gitTool(spec, workdir, proc, name, parsed) {
+  const safe = (v) => (typeof v === 'string' && /^[\w./@-]+$/.test(v) ? v : null);
+  const run = (cmd) => runShell(cmd, workdir, proc);
+  const head = safe(spec.repo && spec.repo.headBranch) || 'HEAD';
+  const clip = (r) => ({ ok: r.exitCode === 0, exitCode: r.exitCode, output: r.output.slice(0, 20_000) });
+
+  if (name === 'git_status') return clip(await run('git status --short --branch'));
+  if (name === 'git_diff') {
+    const p = safe(parsed.path);
+    return clip(await run(`git --no-pager diff${p ? ` -- "${p}"` : ''}`));
+  }
+  if (name === 'git_history') {
+    const p = safe(parsed.path);
+    const limit = Number.isFinite(parsed.limit) && parsed.limit > 0 ? Math.min(Math.floor(parsed.limit), 200) : 30;
+    return clip(await run(`git --no-pager log --oneline -n ${limit}${p ? ` -- "${p}"` : ''}`));
+  }
+
+  // Identity + absorb any Worker-side API commits the local clone is missing, so a
+  // subsequent merge/reset+push builds on the agent's real latest work.
+  const preamble = [
+    'set -e',
+    'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"',
+    'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"',
+    `git fetch origin "${head}" 2>/dev/null && git merge --ff-only "origin/${head}" 2>/dev/null || true`,
+  ];
+
+  if (name === 'git_sync_latest') {
+    const base = safe(parsed.baseBranch);
+    const resolveBase = base
+      ? `BASE="${base}"`
+      : `BASE="$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; [ -n "$BASE" ] || BASE=main`;
+    const cmd = [
+      ...preamble,
+      resolveBase,
+      // Full clone (above) already carries the base branch + a shared merge-base.
+      'git fetch origin "$BASE"',
+      'git merge --no-edit "origin/$BASE" || { git merge --abort; echo MERGE_CONFLICT; exit 3; }',
+      'git push origin HEAD',
+      'echo "Synced with origin/$BASE"',
+    ].join('\n');
+    const r = await run(cmd);
+    if (r.exitCode === 3 || /MERGE_CONFLICT/.test(r.output)) {
+      return { ok: false, error: 'merge conflict — the base branch has changes that conflict with your branch; the merge was aborted (working tree is clean). Resolve the conflicting files and retry, or ask a human.', output: r.output.slice(0, 4000) };
+    }
+    await op(spec, { op: 'event', args: { toolName: 'git_sync_latest', category: 'tool', result: r.output.slice(0, 300) } }).catch(() => {});
+    return clip(r);
+  }
+
+  if (name === 'git_undo' || name === 'git_redo') {
+    const target = name === 'git_undo' ? 'HEAD~1' : '"HEAD@{1}"';
+    const msg = name === 'git_undo' ? 'Undid the last commit (use git_redo to reapply)' : 'Reapplied the last undone change';
+    const cmd = [
+      ...preamble,
+      `[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }`,
+      `git reset --hard ${target}`,
+      // Branch history rewound — publish it (the agent's own ticket branch).
+      `git push --force-with-lease origin HEAD`,
+      `echo "${msg}"`,
+    ].join('\n');
+    const r = await run(cmd);
+    if (r.exitCode === 4 || /\bDIRTY\b/.test(r.output)) {
+      return { ok: false, error: `you have uncommitted changes — commit or discard them before ${name} (it refuses to discard uncommitted work).` };
+    }
+    await op(spec, { op: 'event', args: { toolName: name, category: 'tool', result: r.output.slice(0, 300) } }).catch(() => {});
+    return clip(r);
+  }
+
+  return { ok: false, error: `unknown git tool '${name}'` };
 }
 
 /** Drive the agent loop to completion, then finalize (PR) via the Worker. */
@@ -118,14 +216,48 @@ async function runLoop(spec) {
   const writtenPaths = new Set();
   let finalOutput = '';
   let cancelled = false;
+  let crashed = null;
+  // Holds the live child process so the heartbeat can kill it on cancel.
+  const proc = { current: null };
+  // Liveness heartbeat: bump the run's `updated_at` on a timer so a long shell step
+  // (build/test) doesn't look orphaned to the Worker's reaper (90s ceiling). A beat
+  // that reports the run cancelled also SIGKILLs an in-flight command so a cancel
+  // during a multi-minute build takes effect immediately instead of after timeout.
+  const heartbeat = setInterval(() => {
+    op(spec, { op: 'heartbeat' })
+      .then((r) => { if (r && r.cancelled && proc.current) { cancelled = true; proc.current.kill('SIGKILL'); } })
+      .catch(() => { /* a missed beat is covered by the next */ });
+  }, HEARTBEAT_MS);
+  if (typeof heartbeat.unref === 'function') heartbeat.unref();
   try {
     if (spec.repo && spec.repo.cloneUrl) {
       workdir = await mkdtemp(join(tmpdir(), `bf-exec-${spec.executionId}-`));
-      const branch = spec.repo.baseBranch ? `-b ${spec.repo.baseBranch}` : '';
-      const clone = await runShell(`git clone --depth 1 ${branch} "${spec.repo.cloneUrl}" .`, workdir);
+      const { cloneUrl, headBranch, baseBranch } = spec.repo;
+      // FULL clone (no `--depth`): a shallow clone caused two separate failures —
+      // it hid earlier passes (single-branch), and it has no merge-base with the
+      // base branch, so `git_sync_latest` / `git diff main` / `git merge-base`
+      // couldn't work. A complete clone carries every branch + full history, so the
+      // agent can sync the latest base, diff against it, and never build on stale
+      // code. Prefer the ticket's HEAD branch (prior runs' WIP); fall back to the
+      // base branch on the first run, before the head branch exists on the remote.
+      let checkedOut = null;
+      let clone = headBranch
+        ? await runShell(`git clone -b "${headBranch}" "${cloneUrl}" .`, workdir, proc)
+        : { exitCode: 1, output: 'no head branch' };
+      if (clone.exitCode === 0) {
+        checkedOut = headBranch;
+      } else {
+        const baseArg = baseBranch ? `-b "${baseBranch}"` : '';
+        clone = await runShell(`git clone ${baseArg} "${cloneUrl}" .`, workdir, proc);
+        if (clone.exitCode === 0) checkedOut = baseBranch || '(default)';
+      }
       if (clone.exitCode !== 0) {
         await op(spec, { op: 'event', args: { toolName: 'runtime.clone', category: 'planning', result: `clone failed: ${clone.output.slice(0, 200)}` } }).catch(() => {});
         workdir = null; // continue without a shell workspace; writes still commit via the Worker
+      } else {
+        // Record the branch actually checked out so triage never has to reverse-engineer
+        // it from `git status` (the gap that made execution #67 waste its budget).
+        await op(spec, { op: 'event', args: { toolName: 'runtime.clone', category: 'planning', detail: { branch: checkedOut, requestedHead: headBranch ?? null, base: baseBranch ?? null }, result: `cloned ${spec.repo.cloneUrl.replace(/\/\/[^@]*@/, '//')} on branch ${checkedOut}` } }).catch(() => {});
       }
     }
 
@@ -136,6 +268,9 @@ async function runLoop(spec) {
     const maxSteps = Number(spec.maxSteps) || 20;
 
     for (let step = 0; step < maxSteps; step++) {
+      // A heartbeat may have observed a cancel (and killed an in-flight command)
+      // since the last step — stop before spending another LLM call.
+      if (cancelled) break;
       const turn = await op(spec, { op: 'llm', args: { messages } });
       if (turn.error) { finalOutput = turn.error; break; }
       if (turn.cancelled) { cancelled = true; break; }
@@ -165,7 +300,7 @@ async function runLoop(spec) {
           finished = true;
           result = { ok: true };
         } else {
-          result = await execTool(spec, workdir, writtenPaths, name, parsed);
+          result = await execTool(spec, workdir, writtenPaths, name, parsed, proc);
         }
         messages.push({ role: 'tool', tool_call_id: tc.id ?? '', content: JSON.stringify(result) });
       }
@@ -175,10 +310,21 @@ async function runLoop(spec) {
       if (finished) break;
     }
   } catch (e) {
-    finalOutput = finalOutput || `Container run error: ${e instanceof Error ? e.message : String(e)}`;
+    // The loop threw. Capture the REAL reason and report it on the dedicated `fail`
+    // channel (NOT finalize, which implies an orderly finish) so the Worker can
+    // self-heal or fail the run with what actually broke.
+    crashed = e instanceof Error ? e.message : String(e);
   } finally {
-    await op(spec, { op: 'finalize', args: { writtenPaths: [...writtenPaths], finalOutput, cancelled } }).catch(() => {});
-    if (workdir) await rm(workdir, { recursive: true, force: true }).catch(() => {});
+    clearInterval(heartbeat); // stop beating before the terminal op
+    try {
+      if (crashed) {
+        await op(spec, { op: 'fail', args: { error: crashed } }).catch(() => {});
+      } else {
+        await op(spec, { op: 'finalize', args: { writtenPaths: [...writtenPaths], finalOutput, cancelled } }).catch(() => {});
+      }
+    } finally {
+      if (workdir) await rm(workdir, { recursive: true, force: true }).catch(() => {});
+    }
   }
 }
 

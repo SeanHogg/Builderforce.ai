@@ -23,3 +23,20 @@ export async function broadcastRoom(
     /* best-effort; the surface still works without live push */
   }
 }
+
+/**
+ * Room id for a project's live board channel. One room per project carries every
+ * project-scoped change — task create/update/move/delete AND execution lifecycle
+ * — so all of a project's views (board, kanban, calendar, list) and any open
+ * task drawer re-fetch the instant a teammate OR an agent mutates the project.
+ */
+export const projectRoomName = (projectId: number | string): string => `project:${projectId}`;
+
+/** Push a `{type:"changed"}` signal to a project's live board room (see {@link projectRoomName}). */
+export async function broadcastProjectChanged(
+  ns: DurableObjectNamespace | undefined,
+  projectId: number | string | null | undefined,
+): Promise<void> {
+  if (projectId == null) return;
+  return broadcastRoom(ns, projectRoomName(projectId));
+}

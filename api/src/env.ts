@@ -30,6 +30,13 @@ export interface Env {
    *  (`gemini-2.5-flash` / `gemini-2.5-flash-lite`) so callers always see a successful
    *  response. Set via `wrangler secret put GOOGLE_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   GOOGLE_API_KEY?: string;
+  /** Anthropic (Claude) API key — the last-resort reliability floor for cloud CODING
+   *  runs. When every OpenRouter-routed paid coder is unreachable, the coding cascade
+   *  falls back to Claude DIRECTLY on api.anthropic.com (claude-sonnet-4-6 →
+   *  claude-opus-4-8), vendor-diverse from OpenRouter. Unbound → the cascade simply
+   *  skips the Anthropic floor. Set via `wrangler secret put CLAUDE_API_KEY` (or
+   *  api/.env + `npm run secrets:from-env`). */
+  CLAUDE_API_KEY?: string;
   /** Cloudflare Workers AI auth token — `cfut_*`. Adds Cloudflare-hosted models
    *  (e.g. `@cf/meta/llama-3-8b-instruct`) to the paid pool. Both this AND
    *  `CLOUDFLARE_ACCOUNT_ID` must be set; either missing → Cloudflare is skipped
@@ -195,28 +202,6 @@ export interface Env {
   /** Shared secret for internal cron endpoints (e.g. GET /api/approvals/escalate).
    *  Set via: wrangler secret put CRON_SECRET */
   CRON_SECRET?: string;
-
-  // ---------------------------------------------------------------------------
-  // Web Push (optional — required for OS-level "new version deployed" notifications)
-  // Generate a keypair once: `node api/scripts/gen-vapid-keys.mjs`
-  // ---------------------------------------------------------------------------
-
-  /** VAPID public key (base64url, uncompressed P-256 point). Also handed to the
-   *  browser via GET /api/push/public-key as the applicationServerKey.
-   *  Set via: wrangler secret put VAPID_PUBLIC_KEY */
-  VAPID_PUBLIC_KEY?: string;
-
-  /** VAPID private key (base64url, 32-byte P-256 scalar `d`). Signs the VAPID JWT.
-   *  Set via: wrangler secret put VAPID_PRIVATE_KEY */
-  VAPID_PRIVATE_KEY?: string;
-
-  /** VAPID `sub` claim — a mailto: or https: contact URI required by push services.
-   *  e.g. "mailto:ops@builderforce.ai". Set via: wrangler secret put VAPID_SUBJECT */
-  VAPID_SUBJECT?: string;
-
-  /** Shared secret guarding POST /api/push/notify-deploy, called by the frontend's
-   *  cf-deploy step after a successful deploy. Set via: wrangler secret put DEPLOY_NOTIFY_SECRET */
-  DEPLOY_NOTIFY_SECRET?: string;
 
   // ---------------------------------------------------------------------------
   // DevDynamics / Phase 6 (optional — required for integrations feature)

@@ -32,8 +32,12 @@ class InMemoryTaskRepo implements ITaskRepository {
   async findChildren(parentId: TaskId): Promise<Task[]> {
     return [...this.store.values()].filter(t => (t.parentTaskId as number | null) === (parentId as number));
   }
-  async countByProject(projectId: ProjectId): Promise<number> {
-    return [...this.store.values()].filter(t => (t.projectId as number) === (projectId as number)).length;
+  async maxKeySeqByProject(projectId: ProjectId): Promise<number> {
+    const seqs = [...this.store.values()]
+      .filter(t => (t.projectId as number) === (projectId as number))
+      .map(t => Number(t.toPlain().key.split('-').pop()))
+      .filter(n => Number.isFinite(n));
+    return seqs.length ? Math.max(...seqs) : 0;
   }
   async save(task: Task): Promise<Task> { return this.put(task); }
   async update(task: Task): Promise<Task> { return this.put(task); }
@@ -101,7 +105,7 @@ describe('heuristicEpicDecomposer', () => {
       dueDate: null,
       persona: null,
       projectKey: 'ACME',
-      projectTaskCount: 0,
+      lastKeySeq: 0,
     });
     const plan = await heuristicEpicDecomposer.assess(task);
     expect(plan.isEpic).toBe(true);
@@ -121,7 +125,7 @@ describe('heuristicEpicDecomposer', () => {
       dueDate: null,
       persona: null,
       projectKey: 'ACME',
-      projectTaskCount: 0,
+      lastKeySeq: 0,
     });
     const plan = await heuristicEpicDecomposer.assess(task);
     expect(plan.isEpic).toBe(false);
@@ -144,7 +148,7 @@ describe('Task.reclassifyAsEpic', () => {
       dueDate: null,
       persona: null,
       projectKey: 'ACME',
-      projectTaskCount: 0,
+      lastKeySeq: 0,
     });
     expect(t.isAssignedToAgent).toBe(true);
     const epic = t.reclassifyAsEpic();
