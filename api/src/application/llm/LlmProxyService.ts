@@ -70,11 +70,40 @@ import type { ActionType } from './actionTypes';
 // FREE/PRO cascade can silently fall onto. (Fixes: a cloud coding agent cascading
 // into `ollama/gpt-oss:120b`, which 400s on the tool payload.)
 
+/**
+ * The vendor whose models lead every PAID list. Cloudflare Workers AI bills in
+ * "neurons" with the first ~10,000/day FREE, so draining a paid pool through
+ * Cloudflare BEFORE any metered vendor makes that overflow effectively free up to
+ * the daily allowance. Single source for the lead-vendor choice so the general
+ * paid pool and the coding pools never disagree on which vendor to prefer.
+ */
+export const PAID_LEAD_VENDOR: VendorId = 'cloudflare';
+
+/**
+ * Reorder a model pool so `vendor`'s models lead, preserving each group's relative
+ * order. Used to surface the free-daily-allowance vendor ({@link PAID_LEAD_VENDOR})
+ * first in PAID pools so metered spend is deferred until its allowance is spent.
+ * No-op for a vendor with no models in the pool (e.g. an unbound Cloudflare key
+ * still leaves the rest of the pool in registry order).
+ */
+export function leadPoolWithVendor(pool: readonly string[], vendor: VendorId): string[] {
+  const lead = pool.filter((m) => vendorForModel(m) === vendor);
+  if (lead.length === 0) return [...pool];
+  const rest = pool.filter((m) => vendorForModel(m) !== vendor);
+  return [...lead, ...rest];
+}
+
 /** Auto-routable free-tier model ids across every registered cloud vendor. */
 export const FREE_MODEL_POOL: readonly string[] = autoRoutableModelsByTier('FREE');
 
-/** Auto-routable paid-tier model ids (STANDARD / PREMIUM / ULTRA) across vendors. */
-export const PRO_PAID_MODEL_POOL: readonly string[] = autoRoutableModelsByTier('STANDARD', 'PREMIUM', 'ULTRA');
+/**
+ * Auto-routable paid-tier model ids (STANDARD / PREMIUM / ULTRA) across vendors,
+ * LED BY {@link PAID_LEAD_VENDOR} (Cloudflare) so its free daily neuron allowance
+ * is spent before any metered vendor; the remaining paid models follow in registry
+ * (TTFT) order.
+ */
+export const PRO_PAID_MODEL_POOL: readonly string[] =
+  leadPoolWithVendor(autoRoutableModelsByTier('STANDARD', 'PREMIUM', 'ULTRA'), PAID_LEAD_VENDOR);
 
 /** Pro tries free first (cost-optimized), falls over to paid. */
 export const PRO_MODEL_POOL: readonly string[] = [...FREE_MODEL_POOL, ...PRO_PAID_MODEL_POOL];
@@ -278,30 +307,30 @@ export const CHEAPEST_PAID_CODER = 'deepseek/deepseek-v4-flash'; // $0.10/$0.20
  * non-coder (the gemini-flash family loops on search and ships no edits — see
  * execution #59), so when the curated coding pool is exhausted the cascade
  * escalates to *paid coders* on the credited key instead of the non-coder gemini
- * chain. Ordered cheapest-reliable-first so overflow cost ramps gradually, and
- * vendor-diverse (DeepSeek / Xiaomi / Anthropic) so one upstream outage doesn't
- * sink the floor. Every id is a paid `CODING_MODEL_POOL` member, so
- * `LlmProxyService.codingPool.test` trips if a rename drifts this off catalog.
+ * chain. Vendor-diverse (Cloudflare / DeepSeek / Xiaomi / Anthropic) so one
+ * upstream outage doesn't sink the floor. Every id is a paid `CODING_MODEL_POOL`
+ * member, so `LlmProxyService.codingPool.test` trips if a rename drifts it off
+ * catalog.
+ *
+ * `leadPoolWithVendor(…, PAID_LEAD_VENDOR)` floats the Cloudflare coder to the
+ * head: its first ~10K neurons/day are free, so an exhausted coding cascade spends
+ * that allowance before any metered coder. The remaining entries stay cheapest-
+ * reliable-first (DeepSeek → Xiaomi → OpenRouter-routed Claude), then the
+ * DIRECT-ANTHROPIC last-resort floor: the OpenRouter-routed coders all share
+ * OpenRouter's availability, so an OpenRouter-wide outage sinks them together —
+ * `claude-sonnet-4-6` / `claude-opus-4-8` call Claude DIRECTLY on CLAUDE_API_KEY
+ * (independent availability), Sonnet first (cheaper). Any vendor whose key is
+ * unbound no-key-skips at dispatch, so the chain degrades cleanly to whatever is
+ * reachable and surfaces an honest exhaustion only if nothing is.
  */
-export const CODING_PREMIUM_FALLBACK_MODELS: readonly string[] = [
-  CHEAPEST_PAID_CODER,           // $0.10/$0.20 — cheapest reliable paid coder
+export const CODING_PREMIUM_FALLBACK_MODELS: readonly string[] = leadPoolWithVendor([
+  CHEAPEST_PAID_CODER,           // $0.10/$0.20 — cheapest reliable paid coder (OpenRouter)
   'xiaomi/mimo-v2.5',            // $0.14/$0.28 — OpenRouter Programming #1
-  // Cloudflare Workers AI paid coder — a vendor-diverse path independent of BOTH
-  // OpenRouter AND Anthropic. Tried before any Claude (direct or OpenRouter-routed)
-  // so the cheaper, self-hosted-key option surfaces first. No-key-skips when
-  // CLOUDFLARE_AI_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are unbound.
-  '@cf/qwen/qwen3-30b-a3b-fp8',
+  '@cf/qwen/qwen3-30b-a3b-fp8',  // Cloudflare Workers AI coder — free up to the daily neuron allowance
   'anthropic/claude-sonnet-4.6', // strongest agentic coder (via OpenRouter)
-  // DIRECT-ANTHROPIC last-resort floor — the OpenRouter-routed coders above all
-  // share OpenRouter's availability, so an OpenRouter-wide outage (or an exhausted
-  // OpenRouter key/credit) sinks them together; the Cloudflare entry is one extra
-  // vendor-diverse hop before this. When all of the above are unreachable, call
-  // Claude DIRECTLY on CLAUDE_API_KEY (independent availability). Sonnet first
-  // (cheaper); Opus only if Sonnet is also unreachable. Unbound CLAUDE_API_KEY →
-  // these no-key-skip at dispatch and the cascade surfaces an honest exhaustion.
-  'claude-sonnet-4-6',
+  'claude-sonnet-4-6',           // direct-Anthropic last-resort floor (CLAUDE_API_KEY)
   'claude-opus-4-8',
-];
+], PAID_LEAD_VENDOR);
 
 /**
  * Coding-capable backstop chain — the reliability floor for a *coding* run,

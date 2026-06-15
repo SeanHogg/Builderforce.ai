@@ -7,6 +7,13 @@ import {
   llmProxyForPlan,
   type ProxyEnv,
 } from './LlmProxyService';
+import { vendorForModel } from './vendors';
+
+/** First coder in a chain that this test's env (OpenRouter keys only) can actually
+ *  reach — the chain now LEADS with the Cloudflare coder (free daily allowance),
+ *  which no-key-skips here, so `[0]` is no longer the model the mock can answer. */
+const firstOpenRouterCoder = (chain: readonly string[]): string =>
+  chain.find((m) => vendorForModel(m) === 'openrouter')!;
 
 // ---------------------------------------------------------------------------
 // Guaranteed paid backstop — the reliability floor that fixed hired.video's
@@ -94,7 +101,7 @@ describe('guaranteed paid backstop', () => {
     // Regression for execution #59: a coding run whose coding cascade exhausted was
     // served by gemini-2.5-flash-lite (a non-coding general backstop) and gave up
     // without writing code. A coding proxy must floor onto a coder first.
-    const codingFloor = CODING_BACKSTOP_MODELS[0]; // deepseek/deepseek-v4-flash
+    const codingFloor = firstOpenRouterCoder(CODING_BACKSTOP_MODELS); // deepseek/deepseek-v4-flash (the Cloudflare lead no-key-skips here)
     expect(codingFloor).not.toBe(GUARANTEED_BACKSTOP_MODEL);
     const calls: MockedCall[] = [];
     const fn = vi.fn(async (input: string | URL, init?: RequestInit) => {
@@ -131,7 +138,7 @@ describe('guaranteed paid backstop', () => {
     // in PREMIUM_FALLBACK_MODELS appended inline) and looped on search without writing
     // code. A codingOnly proxy must append CODING_PREMIUM_FALLBACK_MODELS (paid coders)
     // instead — so a non-coder is never even in the candidate chain.
-    const codingFallback = CODING_PREMIUM_FALLBACK_MODELS[0]; // a coder, on OpenRouter
+    const codingFallback = firstOpenRouterCoder(CODING_PREMIUM_FALLBACK_MODELS); // first OpenRouter-reachable coder (chain leads with the no-key Cloudflare coder)
     const calls: MockedCall[] = [];
     const fn = vi.fn(async (input: string | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString();
