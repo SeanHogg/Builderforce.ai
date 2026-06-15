@@ -4,6 +4,9 @@ import {
   CODING_DEFAULT_MODEL,
   CODING_PREMIUM_FALLBACK_MODELS,
   FREE_MODEL_POOL,
+  PRO_PAID_MODEL_POOL,
+  PAID_LEAD_VENDOR,
+  leadPoolWithVendor,
   isKnownModel,
   codingModelsForPlan,
   codingDefaultForPlan,
@@ -57,6 +60,24 @@ describe('auto-route pool composition', () => {
     expect(catalogEntry('gpt-oss:120b')).not.toBeNull();
     expect(modelsByTier('FREE')).toContain('gpt-oss:120b');
     expect(autoRoutableModelsByTier('FREE')).not.toContain('gpt-oss:120b');
+  });
+
+  it('PRO_PAID_MODEL_POOL leads with Cloudflare (free daily neuron allowance spent before metered vendors)', () => {
+    // "use Cloudflare more / first in the list for paid": every Cloudflare paid model
+    // must sort ahead of every non-Cloudflare paid model, so the cascade drains the
+    // free ~10K-neuron/day allowance before any metered vendor.
+    const lastCf = PRO_PAID_MODEL_POOL.map((m) => vendorForModel(m)).lastIndexOf(PAID_LEAD_VENDOR);
+    const firstNonCf = PRO_PAID_MODEL_POOL.findIndex((m) => vendorForModel(m) !== PAID_LEAD_VENDOR);
+    expect(lastCf).toBeGreaterThanOrEqual(0); // Cloudflare actually present in the paid pool
+    expect(lastCf).toBeLessThan(firstNonCf);  // …and entirely ahead of the metered tail
+  });
+
+  it('leadPoolWithVendor floats a vendor first and is a no-op when absent (preserves order)', () => {
+    const cf = '@cf/qwen/qwen3-30b-a3b-fp8'; // a real Cloudflare catalog id
+    const or = 'openai/gpt-4.1';             // a real OpenRouter catalog id
+    expect(leadPoolWithVendor([or, cf, 'deepseek/deepseek-v4-flash'], 'cloudflare')[0]).toBe(cf);
+    // A vendor with no models in the pool leaves the order untouched.
+    expect(leadPoolWithVendor([or, 'deepseek/deepseek-v4-flash'], 'cloudflare')).toEqual([or, 'deepseek/deepseek-v4-flash']);
   });
 });
 
