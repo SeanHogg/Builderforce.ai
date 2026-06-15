@@ -11,6 +11,8 @@
  *   3. Implement a `VendorModule` and register it in `vendors/registry.ts`.
  */
 
+import { applyPromptCaching } from '../promptCaching';
+
 export type VendorId = 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic';
 
 /**
@@ -467,6 +469,50 @@ export async function fetchWithVendorTimeout(
     clearTimeout(timer);
     externalSignal?.removeEventListener('abort', onExternalAbort);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Shared OpenAI-compatible request body builder
+//
+// Every OpenAI-shaped vendor (openrouter / nvidia / cerebras / googleai /
+// cloudflare) was hand-rolling the SAME `{ model, messages, tools, tool_choice,
+// max_tokens, temperature, top_p, ...extraBody }` body. This is the single source.
+// Per-vendor quirks ride the small `opts` (Cerebras's `max_completion_tokens`,
+// OpenRouter's prompt-cache message transform + schema sanitize) so the shape lives
+// in ONE place. (Ollama is genuinely different — native `options`/NDJSON — and keeps
+// its own builder.)
+// ---------------------------------------------------------------------------
+
+export interface OpenAIChatBodyOptions {
+  /** Field name for the output-token cap. Cerebras prefers `max_completion_tokens`. */
+  maxTokensField?: 'max_tokens' | 'max_completion_tokens';
+  /** Transform the passthrough `extraBody` (e.g. strip JSON-Schema keywords a strict
+   *  vendor validator rejects). */
+  transformExtra?: (extraBody: Record<string, unknown> | undefined) => Record<string, unknown> | undefined;
+  /** Opt out of prompt-cache breakpoint injection. Default OFF (caching ON for every
+   *  call) — `applyPromptCaching` no-ops for non-caching-capable models, so it is safe
+   *  everywhere and only marks the stable prefix on caching-capable (Anthropic-family)
+   *  ids, where re-sending a large coding prefix every turn would otherwise pay full
+   *  price instead of the ~0.1x cache-read rate. */
+  noCache?: boolean;
+}
+
+export function buildOpenAIChatBody(params: VendorCallParams, opts?: OpenAIChatBodyOptions): Record<string, unknown> {
+  const { model, messages, tools, toolChoice, maxTokens, temperature, topP, extraBody } = params;
+  const mtField = opts?.maxTokensField ?? 'max_tokens';
+  // Cache the stable prefix on EVERY call by default (no-op for non-caching models).
+  const msgs = opts?.noCache ? messages : applyPromptCaching(messages, model, params.cacheTtl);
+  const extra = opts?.transformExtra ? opts.transformExtra(extraBody) : extraBody;
+  return {
+    model,
+    messages: msgs,
+    ...(tools ? { tools } : {}),
+    ...(toolChoice ? { tool_choice: toolChoice } : {}),
+    ...(maxTokens != null ? { [mtField]: maxTokens } : {}),
+    ...(temperature != null ? { temperature } : {}),
+    ...(topP != null ? { top_p: topP } : {}),
+    ...extra,
+  };
 }
 
 // ---------------------------------------------------------------------------
