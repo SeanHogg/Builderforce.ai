@@ -20,6 +20,7 @@ import { readRepoFile, listRepoFiles, searchRepoCode, listBranchDiff } from '../
 import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
 import { scanWrittenForPlaceholders } from '../repos/scanForPlaceholders';
 import { CODING_BACKSTOP_MODELS, CODING_MODEL_POOL, codingModelsForPlan, estimateRequestTokens, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
+import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
 import { recordUsageRow, clampTokenCount } from '../llm/usageLedger';
 import { ensureTaskPrdRecord, appendTaskPrdRevision } from '../prd/taskPrd';
@@ -888,6 +889,20 @@ export async function handleContainerOp(
         notifyExecutionSubscribers(executionId, { type: 'message', executionId, role: 'user', text: steer, ts: new Date().toISOString() });
       }
     }
+    // Compress the conversation BEFORE the paid call so a long container run never
+    // re-sends a ballooning history. The container owns its loop state, so the
+    // compacted messages are RETURNED below for it to adopt — otherwise it would
+    // re-send (and re-summarize) the full history every turn.
+    const compaction = await compactMessages(messages, CLOUD_COMPACT_DEFAULTS, buildGatewaySummarizer(env));
+    const sendMessages = compaction.compacted ? compaction.messages : messages;
+    if (compaction.compacted) {
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef, executionId,
+        toolName: 'context.compacted', category: 'llm',
+        detail: { beforeTokens: compaction.beforeTokens, afterTokens: compaction.afterTokens, summarized: compaction.summarized, droppedMessages: compaction.droppedMessages },
+        result: `compressed ~${compaction.beforeTokens} → ~${compaction.afterTokens} tokens (${compaction.summarized ? 'builder-memory summary' : 'elided'})`,
+      });
+    }
     const tGen0 = Date.now();
     // Route through the tenant's plan pool/key (not the fixed free pool) and apply
     // the shared cloud model rule: explicit pick = hard pin, else the plan's best
@@ -895,10 +910,10 @@ export async function handleContainerOp(
     // the caller's explicit `model`; the default lands on a strong coding model.
     const pick = pickCloudModel(model, ctx.effectivePlan, ctx.premiumOverride, {
       // Context-aware seed: a small-window model isn't picked for a big container turn.
-      estimatedTokens: estimateRequestTokens(messages, CONTAINER_AGENT_TOOLS),
+      estimatedTokens: estimateRequestTokens(sendMessages, CONTAINER_AGENT_TOOLS),
     });
     const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true }).complete({
-      messages: messages as unknown as ChatMessage[], tools: CONTAINER_AGENT_TOOLS, tool_choice: 'auto',
+      messages: sendMessages as unknown as ChatMessage[], tools: CONTAINER_AGENT_TOOLS, tool_choice: 'auto',
       ...(pick.model ? { model: pick.model, ...(pick.strict ? { modelStrict: true } : {}) } : {}),
       useCase: 'task_execution',
     });
@@ -912,7 +927,13 @@ export async function handleContainerOp(
     // Heartbeat: a live container keeps the run out of the orphan reaper.
     await heartbeatExecution(db, executionId);
     if (!turn.ok) return { status: 200, body: { error: turn.error } };
-    return { status: 200, body: { content: turn.content, toolCalls: turn.toolCalls, steering, cancelled: await isExecutionCancelled(db, executionId) } };
+    return { status: 200, body: {
+      content: turn.content, toolCalls: turn.toolCalls, steering,
+      // When the history was compacted, hand the container the compacted form so it
+      // adopts it as its new loop state (and doesn't re-send the full history next turn).
+      ...(compaction.compacted ? { compactedMessages: compaction.messages } : {}),
+      cancelled: await isExecutionCancelled(db, executionId),
+    } };
   }
 
   if (op === 'write') {
@@ -1327,6 +1348,23 @@ export async function runCloudToolLoop(
         result: steer.slice(0, 280),
       });
       notifyExecutionSubscribers(executionId, { type: 'message', executionId, role: 'user', text: steer, ts: new Date().toISOString() });
+    }
+
+    // Compress the conversation BEFORE the paid call so a long run never re-sends a
+    // ballooning history (the 97K-token turn that 413'd). Compacts only when over
+    // budget; summarizes the bulky middle into a builder-memory note (free pool),
+    // falling back to elision. Mutated IN PLACE so the compacted form persists into
+    // CloudLoopState — the DO surface won't re-summarize the same prefix next tick.
+    const compaction = await compactMessages(messages, CLOUD_COMPACT_DEFAULTS, buildGatewaySummarizer(env));
+    if (compaction.compacted) {
+      messages.length = 0;
+      messages.push(...compaction.messages);
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef, executionId,
+        toolName: 'context.compacted', category: 'llm',
+        detail: { step, beforeTokens: compaction.beforeTokens, afterTokens: compaction.afterTokens, summarized: compaction.summarized, droppedMessages: compaction.droppedMessages },
+        result: `compressed ~${compaction.beforeTokens} → ~${compaction.afterTokens} tokens (${compaction.summarized ? 'builder-memory summary' : 'elided'})`,
+      });
     }
 
     const tGen0 = Date.now();

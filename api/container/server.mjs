@@ -278,6 +278,10 @@ async function runLoop(spec) {
       // never marked COMPLETED on a gateway error.
       if (turn.error) { crashed = `gateway error: ${turn.error}`; break; }
       if (turn.cancelled) { cancelled = true; break; }
+      // The Worker compacted the history (summarized old turns into a builder-memory
+      // note) — adopt it as our loop state so we don't re-send (and re-summarize) the
+      // full history next turn. Pairing-safe: the Worker preserves tool-call pairing.
+      if (Array.isArray(turn.compactedMessages)) { messages.length = 0; messages.push(...turn.compactedMessages); }
       const content = typeof turn.content === 'string' ? turn.content : '';
       const toolCalls = Array.isArray(turn.toolCalls) ? turn.toolCalls : [];
       // Mid-run steering: user follow-ups posted to this run since the last step.
