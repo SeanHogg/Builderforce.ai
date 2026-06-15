@@ -131,13 +131,28 @@ export const PRO_MODEL_POOL: readonly string[] = [...FREE_MODEL_POOL, ...PRO_PAI
 // NIM/Cerebras ids that 404 there. Keep this in sync with the live API, not from
 // memory (`LlmProxyService.codingPool.test` asserts every id is in the catalog).
 export const CODING_MODEL_POOL: readonly string[] = [
-  // PAID — strongest agentic coders, reachable by Pro tenants on the credited key.
+  // PAID, CLOUDFLARE FIRST — every `@cf/*` coder is FREE up to the daily neuron
+  // allowance (Cloudflare = PAID_LEAD_VENDOR), so a paid coding run spends that
+  // free allowance BEFORE any metered coder. This is also why Anthropic is no
+  // longer the lead: the metered coders (OpenRouter-routed Anthropic/OpenAI/etc.)
+  // follow the free Cloudflare neurons. All `@cf/*` ids are verified function-
+  // calling-capable against the live Cloudflare catalog (see cloudflare.ts).
+  //
+  // Ordered BIG-CONTEXT-FIRST, not just by quality: a coding context routinely
+  // exceeds a small window, so a small-window model leading the pool 413s on the
+  // first turn (the 97K-into-32K bug). glm-4.7-flash (128K) leads as the cost-
+  // effective big-window coder; kimi (256K) handles the largest contexts; the 32K
+  // qwen3-30b is LAST (a 413 there cascades up, see CASCADE_STATUSES).
+  '@cf/zai-org/glm-4.7-flash',                 // 128K ctx, STANDARD — big-window coder (Cloudflare) — Pro coding default
+  '@cf/moonshotai/kimi-k2.7-code',             // 256K ctx, PREMIUM — frontier code model for huge contexts (Cloudflare)
+  '@cf/qwen/qwen3-30b-a3b-fp8',                // 32K ctx, STANDARD — small/fast; great first pass for SMALL tasks
+  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',  // 24K ctx, STANDARD — small/fast; great first pass for SMALL tasks
+  // PAID, METERED — strong agentic coders reachable by Pro tenants on the credited key.
   'anthropic/claude-sonnet-4.6',
   'openai/gpt-4.1',
   'xiaomi/mimo-v2.5',                          // Programming #1 on OpenRouter, $0.14/$0.28
   'qwen/qwen3.7-plus',                         // agentic coder + vision, $0.40/$1.60
   'deepseek/deepseek-v4-flash',               // fast cheap coder, $0.10/$0.20
-  '@cf/qwen/qwen3-30b-a3b-fp8',                // Qwen3 30B coder on Cloudflare Workers AI (paid, tool-capable)
   // FREE — strong agentic coders on the OpenRouter free key (the cloud default).
   // Standardized lead: MiniMax M2.7 is the top free SWE-bench agentic coder, so it
   // sits first here and becomes CODING_DEFAULT_MODEL (the first FREE pool entry).
@@ -326,7 +341,13 @@ export const CHEAPEST_PAID_CODER = 'deepseek/deepseek-v4-flash'; // $0.10/$0.20
 export const CODING_PREMIUM_FALLBACK_MODELS: readonly string[] = leadPoolWithVendor([
   CHEAPEST_PAID_CODER,           // $0.10/$0.20 — cheapest reliable paid coder (OpenRouter)
   'xiaomi/mimo-v2.5',            // $0.14/$0.28 — OpenRouter Programming #1
-  '@cf/qwen/qwen3-30b-a3b-fp8',  // Cloudflare Workers AI coder — free up to the daily neuron allowance
+  // Cloudflare Workers AI coders — FREE up to the daily neuron allowance; `leadPoolWithVendor`
+  // floats all of these to the head so the free neurons are spent before any metered coder.
+  // Big-window first (a coding context can exceed a small window → 413 → cascade).
+  '@cf/zai-org/glm-4.7-flash',                 // 128K ctx
+  '@cf/moonshotai/kimi-k2.7-code',             // 256K ctx
+  '@cf/qwen/qwen3-30b-a3b-fp8',                // 32K ctx
+  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',  // 24K ctx
   'anthropic/claude-sonnet-4.6', // strongest agentic coder (via OpenRouter)
   'claude-sonnet-4-6',           // direct-Anthropic last-resort floor (CLAUDE_API_KEY)
   'claude-opus-4-8',
@@ -1608,6 +1629,45 @@ export interface PickCloudModelOptions {
   /** Client SSM recall nudge (interactive runs only; absent/ignored headless). */
   bias?: Record<string, number>;
   minSamples?: number;
+  /** Estimated tokens the first turn will send (prompt + tools). When set, models
+   *  whose catalog `contextWindow` can't hold it are dropped from the FIRST-PASS seed
+   *  (they remain in the cascade as failover) so a small-window model isn't SEEDED
+   *  into a context it would 413 on — the 97K-into-32K bug. Composes with the SSM
+   *  learned ranking: fit FIRST, then rank the fitting set. */
+  estimatedTokens?: number;
+}
+
+/** Headroom over the prompt estimate to reserve for the model's OUTPUT tokens +
+ *  estimate error, when checking whether a context window fits. */
+const CONTEXT_FIT_HEADROOM = 1.25;
+
+/**
+ * Rough token estimate for a chat request (~4 chars/token over the serialized
+ * messages + tools). For MODEL-FIT selection only, NOT billing — a cheap heuristic
+ * that errs slightly high (JSON punctuation), which is the safe direction for a fit
+ * check. Pure + unit-testable.
+ */
+export function estimateRequestTokens(messages: unknown, tools?: unknown): number {
+  const chars = JSON.stringify(messages ?? '').length + (tools != null ? JSON.stringify(tools).length : 0);
+  return Math.ceil(chars / 4);
+}
+
+/**
+ * Drop models whose catalog `contextWindow` can't hold `estimatedTokens` (+ output
+ * headroom) — the context-aware FIRST-PASS filter. Unknown-window models pass
+ * (assumed large enough, e.g. OpenRouter ids carry no window in our catalog). NEVER
+ * returns empty: if NOTHING fits (the request is larger than every window) the full
+ * set is returned so the normal cascade + the 413 failover handle the oversized
+ * request honestly instead of this silently picking nothing. Pure + unit-testable.
+ */
+export function modelsFittingContext(models: readonly string[], estimatedTokens?: number): string[] {
+  if (!estimatedTokens || estimatedTokens <= 0) return [...models];
+  const need = Math.ceil(estimatedTokens * CONTEXT_FIT_HEADROOM);
+  const fit = models.filter((m) => {
+    const cw = catalogEntry(m)?.contextWindow;
+    return cw == null || cw >= need;
+  });
+  return fit.length > 0 ? fit : [...models];
 }
 
 export interface PickCloudModelResult {
@@ -1639,9 +1699,13 @@ export function pickCloudModel(
   // an explicit pick was already ignored above, and the reorder stays WITHIN the
   // plan's reachable coding pool (free tenants only ever reorder free coding models).
   const reachable = codingModelsForPlan(effectivePlan, premiumOverride);
+  // Context-aware first pass: keep only models whose window fits this request, THEN
+  // let the SSM learned routing rank the survivors. Small-window models stay in the
+  // pool (great first pass for small tasks) but aren't seeded into an oversized one.
+  const fitting = modelsFittingContext(reachable, opts?.estimatedTokens);
   const bias = opts?.bias && Object.keys(opts.bias).length > 0 ? opts.bias : undefined;
-  const ranked = rankModelsForAction(reachable, opts?.actionStats, { minSamples: opts?.minSamples, bias });
-  const seed = ranked[0] ?? CODING_DEFAULT_MODEL;
+  const ranked = rankModelsForAction(fitting, opts?.actionStats, { minSamples: opts?.minSamples, bias });
+  const seed = ranked[0] ?? reachable[0] ?? CODING_DEFAULT_MODEL;
   const seedSamples = opts?.actionStats?.find((s) => s.model === seed)?.n ?? 0;
   return { model: seed, strict: false, ranked, seedSamples, biasApplied: !!bias };
 }

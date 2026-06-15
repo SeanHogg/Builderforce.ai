@@ -19,7 +19,7 @@ import { recordPullRequestRow, markPullRequestMergedById } from '../repos/record
 import { readRepoFile, listRepoFiles, searchRepoCode, listBranchDiff } from '../repos/readRepoContents';
 import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
 import { scanWrittenForPlaceholders } from '../repos/scanForPlaceholders';
-import { CODING_BACKSTOP_MODELS, CODING_MODEL_POOL, codingModelsForPlan, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
+import { CODING_BACKSTOP_MODELS, CODING_MODEL_POOL, codingModelsForPlan, estimateRequestTokens, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
 import { recordUsageRow, clampTokenCount } from '../llm/usageLedger';
 import { ensureTaskPrdRecord, appendTaskPrdRevision } from '../prd/taskPrd';
@@ -784,12 +784,16 @@ async function recordCloudLlmTurn(
   const durationMs = Date.now() - opts.tGen0;
   if (result.response.status >= 400) {
     const text = await result.response.text().catch(() => '');
+    // Name the model + the chain that was walked — "which model failed" is the first
+    // triage question (the raw upstream text alone, e.g. "[cloudflare] 413: …context
+    // window limit", doesn't say WHICH gateway model resolved to it).
+    const chain = result.candidateChain?.length ? ` · chain: ${result.candidateChain.join(' → ')}` : '';
     await recordCloudToolEvent(rc.db, {
       ...evtBase, toolName: 'llm.complete', category: 'llm',
-      detail: { model: resolvedModel, traceId: result.traceId ?? null, status: result.response.status, step: opts.step },
-      result: `gateway ${result.response.status}`, durationMs,
+      detail: { model: resolvedModel, traceId: result.traceId ?? null, status: result.response.status, step: opts.step, outcome: result.outcome ?? null, candidateChain: result.candidateChain ?? null },
+      result: `gateway ${result.response.status} on '${resolvedModel}' (${result.outcome ?? 'error'})`, durationMs,
     });
-    return { ok: false, error: `Gateway ${result.response.status}: ${text.slice(0, 300)}`, resolvedModel };
+    return { ok: false, error: `Gateway ${result.response.status} on model '${resolvedModel}'${chain}: ${text.slice(0, 300)}`, resolvedModel };
   }
   const { content, toolCalls } = parseLlmChoice(await result.response.json().catch(() => null));
   await recordCloudToolEvent(rc.db, {
@@ -889,7 +893,10 @@ export async function handleContainerOp(
     // the shared cloud model rule: explicit pick = hard pin, else the plan's best
     // coding model. The container holds its own loop state, so per-op pinning is
     // the caller's explicit `model`; the default lands on a strong coding model.
-    const pick = pickCloudModel(model, ctx.effectivePlan, ctx.premiumOverride);
+    const pick = pickCloudModel(model, ctx.effectivePlan, ctx.premiumOverride, {
+      // Context-aware seed: a small-window model isn't picked for a big container turn.
+      estimatedTokens: estimateRequestTokens(messages, CONTAINER_AGENT_TOOLS),
+    });
     const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true }).complete({
       messages: messages as unknown as ChatMessage[], tools: CONTAINER_AGENT_TOOLS, tool_choice: 'auto',
       ...(pick.model ? { model: pick.model, ...(pick.strict ? { modelStrict: true } : {}) } : {}),
@@ -1241,6 +1248,8 @@ export async function runCloudToolLoop(
     actionType: learned.actionType,
     actionStats: learned.actionStats,
     bias: opts?.routingBias,
+    // Context-aware seed: don't pick a small-window model for a big first turn.
+    estimatedTokens: estimateRequestTokens(messages, CLOUD_AGENT_TOOLS),
   });
   // Mutable: a 429 on the pinned model drops the strict pin so the proxy cascades
   // (see the per-turn cascade below); the run then stays unpinned for later turns.
@@ -1346,13 +1355,19 @@ export async function runCloudToolLoop(
         if (abortController.signal.aborted) { cancelled = true; break; }
         throw e;
       }
-      // Retry only a 429 on a pinned/locked model, and only once.
-      if (result!.response.status !== 429 || attempt >= 1 || (!strictPin && !activeModel)) break;
+      // Retry a pinned/locked model that the gateway rate-limited (429) OR that the
+      // request overflowed (413 — context window too small), and only once. 413 needs
+      // this because a strict pin gets NO in-proxy cascade: dropping the pin lets the
+      // proxy walk to a bigger-window model instead of hard-failing the run.
+      const retryable = result!.response.status === 429 || result!.response.status === 413;
+      if (!retryable || attempt >= 1 || (!strictPin && !activeModel)) break;
       await recordCloudToolEvent(db, {
         tenantId, cloudAgentRef, executionId,
         toolName: 'model.cascade', category: 'llm',
-        detail: { step, from: activeModel || null, reason: '429' },
-        result: 'pinned model rate-limited — dropping pin, walking the cascade',
+        detail: { step, from: activeModel || null, reason: String(result!.response.status) },
+        result: result!.response.status === 413
+          ? 'pinned model context window too small — dropping pin, walking the cascade to a bigger-window model'
+          : 'pinned model rate-limited — dropping pin, walking the cascade',
       });
       // Unlock for this turn AND the rest of the run: don't re-pin after a cascade.
       strictPin = false;
