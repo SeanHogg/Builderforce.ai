@@ -31,8 +31,16 @@ import {
   type VendorModule,
 } from './types';
 
+// Tier note: these are paid Workers AI checkpoints. They join the PRO paid pool
+// (autoRoutableModelsByTier pulls STANDARD/PREMIUM/ULTRA) as general chat models.
+// They are intentionally NOT marked tool-capable and NOT added to CODING_MODEL_POOL:
+// `adaptCloudflareResponse` only surfaces `result.response` text, not Cloudflare's
+// `result.tool_calls`, so a Cloudflare model can't drive the multi-turn coding tool
+// loop until that adapter extracts tool calls (see the Consolidated Gap Register).
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
-  { id: '@cf/meta/llama-3-8b-instruct', tier: 'STANDARD', label: 'Llama 3 8B (Cloudflare)', brand: 'Meta' },
+  { id: '@cf/meta/llama-3-8b-instruct', tier: 'STANDARD', label: 'Llama 3 8B (Cloudflare)',       brand: 'Meta' },
+  { id: '@cf/google/gemma-4-26b-a4b-it', tier: 'STANDARD', label: 'Gemma 4 26B A4B (Cloudflare)', brand: 'Google' },
+  { id: '@cf/qwen/qwen3-30b-a3b-fp8',    tier: 'STANDARD', label: 'Qwen3 30B A3B (Cloudflare)',   brand: 'Qwen' },
 ];
 
 const CATALOG_BY_ID = new Map(CATALOG.map((m) => [m.id, m]));
