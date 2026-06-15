@@ -185,9 +185,11 @@ export function buildFollowUpPayload(priorPayload: string | null | undefined, fo
   return JSON.stringify(obj);
 }
 
-export interface RemediationContext { attempt: number; maxAttempts: number; buildError: string; runUrl: string | null }
+export interface RemediationContext { attempt: number; maxAttempts: number; buildError: string; runUrl: string | null; phase: 'pre_merge' | 'post_merge' }
 
-/** Parse the post-merge build-failure remediation block off an auto-fix run's payload. */
+/** Parse a build-failure remediation block off an auto-fix run's payload. `phase`
+ *  distinguishes a PR-branch (pre-merge) failure from a deploy-branch (post-merge)
+ *  one; absent/garbage → 'post_merge' for back-compat with older payloads. */
 export function parseRemediation(payload: string | undefined): RemediationContext | null {
   if (!payload) return null;
   try {
@@ -198,6 +200,7 @@ export function parseRemediation(payload: string | undefined): RemediationContex
       maxAttempts: typeof r.maxAttempts === 'number' ? r.maxAttempts : 2,
       buildError: r.buildError,
       runUrl: typeof r.runUrl === 'string' ? r.runUrl : null,
+      phase: r.phase === 'pre_merge' ? 'pre_merge' : 'post_merge',
     };
   } catch {
     return null;

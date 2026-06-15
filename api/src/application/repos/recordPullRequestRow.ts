@@ -8,7 +8,7 @@
  * in-product PR list / approval flow. Funnelling both through one helper keeps the
  * recorded shape identical and fixes that gap (DRY — one insert, one column map).
  */
-import { and, desc, eq, isNull, ne } from 'drizzle-orm';
+import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
 import { deploymentEvents, pullRequests } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -124,6 +124,27 @@ export async function markPullRequestMergedByTask(
   return markPullRequestMergedById(db, latest.id, tenantId, opts);
 }
 
+/** The latest still-open (un-merged) PR row for a task — the one whose `builderforce/task-<id>`
+ *  branch a PRE-merge CI build belongs to. Mirrors `findMergedPullRequestBySha` for the
+ *  pre-merge phase so the build status + reason land on the right PR row. */
+export async function findOpenPullRequestByTask(db: Db, tenantId: number, taskId: number) {
+  const [row] = await db
+    .select({
+      id: pullRequests.id,
+      tenantId: pullRequests.tenantId,
+      taskId: pullRequests.taskId,
+      projectId: pullRequests.projectId,
+      repoId: pullRequests.repoId,
+      buildStatus: pullRequests.buildStatus,
+    })
+    .from(pullRequests)
+    .where(and(eq(pullRequests.taskId, taskId), eq(pullRequests.tenantId, tenantId), ne(pullRequests.status, 'merged')))
+    // Prefer a row with a real provider number, then newest (same precedence as the GET route).
+    .orderBy(sql`${pullRequests.number} is not null desc`, desc(pullRequests.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
 /** Find the merged PR a post-merge CI build belongs to, by its recorded merge SHA. */
 export async function findMergedPullRequestBySha(db: Db, mergeSha: string) {
   const [row] = await db
@@ -141,13 +162,16 @@ export async function findMergedPullRequestBySha(db: Db, mergeSha: string) {
   return row ?? null;
 }
 
-/** Record the post-merge build outcome on a PR row, and reconcile its DORA
+/** Record a build outcome on a PR row (pre- OR post-merge), persist the failure
+ *  REASON so the ticket can show WHY (cleared on green), and reconcile its DORA
  *  deployment row: a failing post-merge build is a change failure; a later success
- *  closes MTTR by stamping restored_at on the still-open failure. */
-export async function setPullRequestBuildStatus(db: Db, id: string, buildStatus: string) {
+ *  closes MTTR by stamping restored_at on the still-open failure. (Pre-merge rows have
+ *  no deployment_events row yet, so the DORA reconcile is a harmless no-op for them.) */
+export async function setPullRequestBuildStatus(db: Db, id: string, buildStatus: string, buildError: string | null = null) {
   await db
     .update(pullRequests)
-    .set({ buildStatus, updatedAt: new Date() })
+    // Keep the reason only while the build is red; a green/pending build clears it.
+    .set({ buildStatus, buildError: buildStatus === 'failure' ? buildError : null, updatedAt: new Date() })
     .where(eq(pullRequests.id, id));
 
   try {
