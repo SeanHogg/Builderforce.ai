@@ -2,6 +2,7 @@
 
 import { Avatar } from "@/components/Avatar"; // Assuming an Avatar component exists
 import type { TeamMember } from "@/lib/taskAssignee"; // Assuming TeamMember type is available
+import React from 'react';
 
 type TeamMemberAvatarFilterProps = {
   members: TeamMember[];
@@ -16,16 +17,14 @@ export function TeamMemberAvatarFilter({
   onSelectMember,
   taskCounts,
 }: TeamMemberAvatarFilterProps) {
+  const isSelected = (memberId: string) => selectedMemberIds.includes(memberId);
+
   return (
     <div className="flex items-center space-x-2 overflow-x-auto p-2">
       {/* "All" or "Clear" button */}
       <button
         onClick={() => onSelectMember("all")} // Special value to indicate "all"
-        className={`flex flex-col items-center p-1 rounded-md cursor-pointer transition-colors ${
-          selectedMemberIds.includes("all") || selectedMemberIds.length === 0
-            ? "bg-blue-500 text-white"
-            : "hover:bg-gray-200 dark:hover:bg-gray-700"
-        }`}
+        className={`flex flex-col items-center p-1 rounded-md cursor-pointer transition-colors ${isSelected("all") || selectedMemberIds.length === 0 ? "bg-blue-500 text-white border border-blue-600" : "hover:bg-gray-200 dark:hover:bg-gray-700"}`}
       >
         <Avatar name="All" size="sm" />
         <span className="text-xs font-medium mt-0.5">All</span>
@@ -35,11 +34,7 @@ export function TeamMemberAvatarFilter({
         <button
           key={member.id}
           onClick={() => onSelectMember(member.id)}
-          className={`flex flex-col items-center p-1 rounded-md cursor-pointer transition-colors ${
-            selectedMemberIds.includes(member.id)
-              ? "bg-blue-500 text-white"
-              : "hover:bg-gray-200 dark:hover:bg-gray-700"
-          }`}
+          className={`flex flex-col items-center p-1 rounded-md cursor-pointer transition-colors ${isSelected(member.id) ? "bg-blue-500 text-white border border-blue-600" : "hover:bg-gray-200 dark:hover:bg-gray-700"}`}
         >
           <div className="relative">
             <Avatar name={member.name} size="sm" />
