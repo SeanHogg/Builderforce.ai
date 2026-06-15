@@ -268,6 +268,151 @@ export const askHumanTool: ToolDefinition = defineTool({
   },
 });
 
+// ---------------------------------------------------------------------------
+// Git / version-control tools. Gated to `shell` (a real clone + Linux process),
+// so they reach the Container and on-prem Node surfaces but NOT the shell-less
+// durable Worker. Each is a thin, intent-named wrapper over a git command run
+// through the shell capability — explicit tools the model can call reliably
+// instead of hand-crafting git through run_command (the on-prem agent only ever
+// had a read-only `git_history`; the mutating "get latest / undo / redo" verbs
+// lived nowhere). The Container image runs its OWN loop, so it mirrors these via
+// the SAME command strings (`buildGitCommand`) in its execTool — single source
+// for the command text so the two execution backends can't drift.
+// ---------------------------------------------------------------------------
+
+/** A safe git ref/path token — blocks shell metacharacters so a model-supplied
+ *  branch/path can't inject a second command. */
+function safeGitArg(v: unknown): string | null {
+  return typeof v === "string" && /^[\w./@-]+$/.test(v) ? v : null;
+}
+
+/** The git action verbs exposed as tools. */
+export type GitAction = "status" | "diff" | "history" | "sync_latest" | "undo" | "redo";
+
+/**
+ * Build the shell command for a git action — the SINGLE source of the command
+ * text, shared by the registry's `execute` (via `ctx.caps.shell.run`) and the
+ * Container image's `execTool`. Pure + deterministic so both backends + the unit
+ * tests agree byte-for-byte. `opts` are already-sanitised (see `safeGitArg`).
+ *
+ * `sync_latest` fetches the base branch and merges it into the working branch so
+ * the agent never builds on stale code (the root cause of a branch that compiles
+ * against old deps and whose PR would revert newer base work). On conflict it
+ * aborts the merge and signals `MERGE_CONFLICT` rather than leaving a half-merged
+ * tree. `undo`/`redo` are the classic reflog pair (`HEAD~1` / `HEAD@{1}`) and
+ * refuse to run on a dirty tree so they can never silently discard uncommitted
+ * work. Pushing the synced/rewound branch is the CALLER's job (surface-specific).
+ */
+export function buildGitCommand(action: GitAction, opts?: { path?: string; baseBranch?: string; limit?: number }): string {
+  const path = safeGitArg(opts?.path);
+  const pathArg = path ? ` -- "${path}"` : "";
+  switch (action) {
+    case "status":
+      return "git status --short --branch";
+    case "diff":
+      return `git --no-pager diff${pathArg}`;
+    case "history": {
+      const limit = Number.isFinite(opts?.limit) && (opts!.limit as number) > 0 ? Math.min(Math.floor(opts!.limit as number), 200) : 30;
+      return `git --no-pager log --oneline -n ${limit}${pathArg}`;
+    }
+    case "sync_latest": {
+      const base = safeGitArg(opts?.baseBranch);
+      const resolveBase = base
+        ? `BASE="${base}"`
+        : `BASE="$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; [ -n "$BASE" ] || BASE=main`;
+      return [
+        "set -e",
+        resolveBase,
+        'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"',
+        'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"',
+        'git fetch origin "$BASE" --depth=100',
+        'git merge --no-edit "origin/$BASE" || { git merge --abort; echo MERGE_CONFLICT; exit 3; }',
+        'echo "Synced with origin/$BASE"',
+      ].join("\n");
+    }
+    case "undo":
+      // Drop the last commit, reflog-recoverable via redo. Guard a dirty tree so
+      // uncommitted work is never silently lost.
+      return '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }\ngit reset --hard HEAD~1\necho "Undid the last commit (use git_redo to reapply)"';
+    case "redo":
+      // Reapply the change undone by the most recent reset (the reflog redo).
+      return '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }\ngit reset --hard "HEAD@{1}"\necho "Reapplied the last undone change"';
+  }
+}
+
+/** Map a git ShellResult to a uniform tool result, decoding the sentinel exits
+ *  `buildGitCommand` emits (MERGE_CONFLICT / DIRTY) into actionable messages. */
+function gitToolResult(action: GitAction, r: { ok: boolean; stdout?: string; exitCode?: number; error?: string }): ToolResult {
+  const out = (r.stdout ?? "").trim();
+  if (r.exitCode === 3 || /MERGE_CONFLICT/.test(out)) {
+    return { data: { ok: false, action, error: "merge conflict — the base branch has changes that conflict with your branch; the merge was aborted (working tree is clean). Resolve by editing the conflicting files, or ask a human.", output: out } };
+  }
+  if (r.exitCode === 4 || /\bDIRTY\b/.test(out)) {
+    return { data: { ok: false, action, error: "you have uncommitted changes — commit or discard them before git_" + action + " (it refuses to discard uncommitted work)." } };
+  }
+  return { data: { ok: r.ok, action, output: out.slice(0, 20_000), ...(r.error ? { error: r.error } : {}) } };
+}
+
+async function runGitTool(action: GitAction, opts: { path?: string; baseBranch?: string; limit?: number }, ctx: { caps: { shell?: { run(c: string): Promise<{ ok: boolean; stdout?: string; exitCode?: number; error?: string }> } } }): Promise<ToolResult> {
+  const r = await ctx.caps.shell!.run(buildGitCommand(action, opts));
+  return gitToolResult(action, r);
+}
+
+export const gitStatusTool: ToolDefinition = defineTool({
+  name: "git_status",
+  description: "Show the current branch and any uncommitted changes (git status). Use it to see what you have modified before committing, syncing, or finishing.",
+  parameters: { type: "object", properties: {} },
+  requires: ["shell"],
+  execute: (_args, ctx) => runGitTool("status", {}, ctx),
+});
+
+export const gitDiffTool: ToolDefinition = defineTool({
+  name: "git_diff",
+  description: "Show the uncommitted diff of your working tree (optionally for one path). Use it to review exactly what you changed before finishing.",
+  parameters: { type: "object", properties: { path: { type: "string", description: "Optional repo-relative file/dir to scope the diff to." } } },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("diff", { path: typeof args.path === "string" ? args.path : undefined }, ctx),
+});
+
+export const gitHistoryTool: ToolDefinition = defineTool({
+  name: "git_history",
+  description: "Show recent commit history (git log --oneline), optionally scoped to a path. Use it to understand how a file evolved before changing it.",
+  parameters: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: "Optional repo-relative file/dir to scope history to." },
+      limit: { type: "number", description: "Max commits to return (default 30, max 200)." },
+    },
+  },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("history", { path: typeof args.path === "string" ? args.path : undefined, limit: typeof args.limit === "number" ? args.limit : undefined }, ctx),
+});
+
+export const gitSyncLatestTool: ToolDefinition = defineTool({
+  name: "git_sync_latest",
+  description:
+    "Fetch the latest base branch (e.g. main) and merge it into your working branch so you are NOT building on stale code. Run this FIRST, before editing — a branch created earlier can be far behind main, so its build fails against old dependencies and its pull request would revert newer work. On a merge conflict it safely aborts and tells you which to resolve.",
+  parameters: { type: "object", properties: { baseBranch: { type: "string", description: "Base branch to sync from. Defaults to the remote's default branch (usually main)." } } },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("sync_latest", { baseBranch: typeof args.baseBranch === "string" ? args.baseBranch : undefined }, ctx),
+});
+
+export const gitUndoTool: ToolDefinition = defineTool({
+  name: "git_undo",
+  description: "Undo your most recent commit (keeps the change recoverable — use git_redo to reapply). Refuses if you have uncommitted changes, so it can never discard unsaved work. Use it to back out a change that was wrong.",
+  parameters: { type: "object", properties: {} },
+  requires: ["shell"],
+  execute: (_args, ctx) => runGitTool("undo", {}, ctx),
+});
+
+export const gitRedoTool: ToolDefinition = defineTool({
+  name: "git_redo",
+  description: "Reapply the change you most recently undid with git_undo (reflog redo). Refuses if you have uncommitted changes.",
+  parameters: { type: "object", properties: {} },
+  requires: ["shell"],
+  execute: (_args, ctx) => runGitTool("redo", {}, ctx),
+});
+
 export const finishTool: ToolDefinition = defineTool({
   name: "finish",
   description:
@@ -295,6 +440,12 @@ export const CORE_TOOLS: readonly ToolDefinition[] = [
   deleteFileTool,
   runChecksTool,
   runCommandTool,
+  gitStatusTool,
+  gitDiffTool,
+  gitHistoryTool,
+  gitSyncLatestTool,
+  gitUndoTool,
+  gitRedoTool,
   webFetchTool,
   webSearchTool,
   askHumanTool,

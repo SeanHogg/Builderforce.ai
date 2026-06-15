@@ -120,7 +120,94 @@ async function execTool(spec, workdir, writtenPaths, name, parsed, proc) {
     await op(spec, { op: 'event', args: { toolName: 'run_command', category: 'tool', detail: { command, exitCode }, result: output.slice(0, 300), durationMs: Date.now() - t0 } }).catch(() => {});
     return { ok: exitCode === 0, exitCode, output: output.slice(0, 20_000) };
   }
+  if (name.startsWith('git_')) {
+    if (!workdir) return { ok: false, error: 'no repository checked out — git tools need a bound repo' };
+    return gitTool(spec, workdir, proc, name, parsed);
+  }
   return { ok: false, error: `unknown tool '${name}'` };
+}
+
+/**
+ * Git / version-control tools for the container surface — the execution side of
+ * the shared schemas (`buildGitCommand` in packages/agent-tools/core-tools.ts is
+ * the canonical command reference; the container runs its own loop and this image
+ * has no build step, so it can't import the TS package and mirrors the verbs here).
+ *
+ * Surface-specific twist: the container persists every write as a Worker-side
+ * GitHub-API commit to the remote ticket branch — the local clone does NOT carry
+ * those commits. So before any MUTATING op we first fast-forward the local clone
+ * to the remote branch head (absorb the API commits), then operate, then push —
+ * otherwise a local reset/merge+push would clobber the agent's committed work.
+ * Read ops (status/diff/history) run against the local clone directly.
+ */
+async function gitTool(spec, workdir, proc, name, parsed) {
+  const safe = (v) => (typeof v === 'string' && /^[\w./@-]+$/.test(v) ? v : null);
+  const run = (cmd) => runShell(cmd, workdir, proc);
+  const head = safe(spec.repo && spec.repo.headBranch) || 'HEAD';
+  const clip = (r) => ({ ok: r.exitCode === 0, exitCode: r.exitCode, output: r.output.slice(0, 20_000) });
+
+  if (name === 'git_status') return clip(await run('git status --short --branch'));
+  if (name === 'git_diff') {
+    const p = safe(parsed.path);
+    return clip(await run(`git --no-pager diff${p ? ` -- "${p}"` : ''}`));
+  }
+  if (name === 'git_history') {
+    const p = safe(parsed.path);
+    const limit = Number.isFinite(parsed.limit) && parsed.limit > 0 ? Math.min(Math.floor(parsed.limit), 200) : 30;
+    return clip(await run(`git --no-pager log --oneline -n ${limit}${p ? ` -- "${p}"` : ''}`));
+  }
+
+  // Identity + absorb any Worker-side API commits the local clone is missing, so a
+  // subsequent merge/reset+push builds on the agent's real latest work.
+  const preamble = [
+    'set -e',
+    'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"',
+    'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"',
+    `git fetch origin "${head}" 2>/dev/null && git merge --ff-only "origin/${head}" 2>/dev/null || true`,
+  ];
+
+  if (name === 'git_sync_latest') {
+    const base = safe(parsed.baseBranch);
+    const resolveBase = base
+      ? `BASE="${base}"`
+      : `BASE="$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; [ -n "$BASE" ] || BASE=main`;
+    const cmd = [
+      ...preamble,
+      resolveBase,
+      // Deepen the shallow clone so a merge-base with the base branch exists.
+      'git fetch --unshallow origin "$BASE" 2>/dev/null || git fetch origin "$BASE"',
+      'git merge --no-edit "origin/$BASE" || { git merge --abort; echo MERGE_CONFLICT; exit 3; }',
+      'git push origin HEAD',
+      'echo "Synced with origin/$BASE"',
+    ].join('\n');
+    const r = await run(cmd);
+    if (r.exitCode === 3 || /MERGE_CONFLICT/.test(r.output)) {
+      return { ok: false, error: 'merge conflict — the base branch has changes that conflict with your branch; the merge was aborted (working tree is clean). Resolve the conflicting files and retry, or ask a human.', output: r.output.slice(0, 4000) };
+    }
+    await op(spec, { op: 'event', args: { toolName: 'git_sync_latest', category: 'tool', result: r.output.slice(0, 300) } }).catch(() => {});
+    return clip(r);
+  }
+
+  if (name === 'git_undo' || name === 'git_redo') {
+    const target = name === 'git_undo' ? 'HEAD~1' : '"HEAD@{1}"';
+    const msg = name === 'git_undo' ? 'Undid the last commit (use git_redo to reapply)' : 'Reapplied the last undone change';
+    const cmd = [
+      ...preamble,
+      `[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }`,
+      `git reset --hard ${target}`,
+      // Branch history rewound — publish it (the agent's own ticket branch).
+      `git push --force-with-lease origin HEAD`,
+      `echo "${msg}"`,
+    ].join('\n');
+    const r = await run(cmd);
+    if (r.exitCode === 4 || /\bDIRTY\b/.test(r.output)) {
+      return { ok: false, error: `you have uncommitted changes — commit or discard them before ${name} (it refuses to discard uncommitted work).` };
+    }
+    await op(spec, { op: 'event', args: { toolName: name, category: 'tool', result: r.output.slice(0, 300) } }).catch(() => {});
+    return clip(r);
+  }
+
+  return { ok: false, error: `unknown git tool '${name}'` };
 }
 
 /** Drive the agent loop to completion, then finalize (PR) via the Worker. */
