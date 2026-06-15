@@ -48,7 +48,7 @@ describe('classifyTaskAction', () => {
   });
 
   it('a thrown error → other/0 (best-effort)', async () => {
-    completeMock.mockRejectedValue(new Error('boom'));
+    completeMock.mockImplementation(() => { throw new Error('boom'); });
     expect(await classifyTaskAction(env, { title: 'x' })).toEqual({ actionType: 'other', confidence: 0 });
   });
 
