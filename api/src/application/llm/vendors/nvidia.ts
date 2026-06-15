@@ -7,6 +7,7 @@
  */
 
 import {
+  buildOpenAIChatBody,
   executeChatCompletion,
   executeChatCompletionStream,
   type AiModelTier,
@@ -44,20 +45,6 @@ function tierForNvidiaModel(modelId: string): AiModelTier {
   return CATALOG_BY_ID.get(modelId)?.tier ?? 'FREE';
 }
 
-function buildBody(params: VendorCallParams): Record<string, unknown> {
-  const { model, messages, tools, toolChoice, maxTokens, temperature, topP, extraBody } = params;
-  return {
-    model,
-    messages,
-    ...(tools ? { tools } : {}),
-    ...(toolChoice ? { tool_choice: toolChoice } : {}),
-    ...(maxTokens != null ? { max_tokens: maxTokens } : {}),
-    ...(temperature != null ? { temperature } : {}),
-    ...(topP != null ? { top_p: topP } : {}),
-    ...(extraBody ?? {}),
-  };
-}
-
 export const nvidiaModule: VendorModule = {
   id: 'nvidia',
   catalog: CATALOG,
@@ -69,7 +56,7 @@ export const nvidiaModule: VendorModule = {
       endpoint: ENDPOINT,
       apiKey: params.apiKey,
       model: params.model,
-      body: { ...buildBody(params), stream: false },
+      body: { ...buildOpenAIChatBody(params), stream: false },
       ...(params.title ? { title: params.title } : {}),
       ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
       ...(params.signal ? { signal: params.signal } : {}),
@@ -81,7 +68,7 @@ export const nvidiaModule: VendorModule = {
       endpoint: ENDPOINT,
       apiKey: params.apiKey,
       model: params.model,
-      body: buildBody(params),
+      body: buildOpenAIChatBody(params),
       ...(params.title ? { title: params.title } : {}),
       ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
       ...(params.signal ? { signal: params.signal } : {}),
