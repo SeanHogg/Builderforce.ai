@@ -107,6 +107,7 @@ export const CODING_MODEL_POOL: readonly string[] = [
   'xiaomi/mimo-v2.5',                          // Programming #1 on OpenRouter, $0.14/$0.28
   'qwen/qwen3.7-plus',                         // agentic coder + vision, $0.40/$1.60
   'deepseek/deepseek-v4-flash',               // fast cheap coder, $0.10/$0.20
+  '@cf/qwen/qwen3-30b-a3b-fp8',                // Qwen3 30B coder on Cloudflare Workers AI (paid, tool-capable)
   // FREE — strong agentic coders on the OpenRouter free key (the cloud default).
   // Standardized lead: MiniMax M2.7 is the top free SWE-bench agentic coder, so it
   // sits first here and becomes CODING_DEFAULT_MODEL (the first FREE pool entry).
@@ -284,11 +285,17 @@ export const CHEAPEST_PAID_CODER = 'deepseek/deepseek-v4-flash'; // $0.10/$0.20
 export const CODING_PREMIUM_FALLBACK_MODELS: readonly string[] = [
   CHEAPEST_PAID_CODER,           // $0.10/$0.20 — cheapest reliable paid coder
   'xiaomi/mimo-v2.5',            // $0.14/$0.28 — OpenRouter Programming #1
+  // Cloudflare Workers AI paid coder — a vendor-diverse path independent of BOTH
+  // OpenRouter AND Anthropic. Tried before any Claude (direct or OpenRouter-routed)
+  // so the cheaper, self-hosted-key option surfaces first. No-key-skips when
+  // CLOUDFLARE_AI_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are unbound.
+  '@cf/qwen/qwen3-30b-a3b-fp8',
   'anthropic/claude-sonnet-4.6', // strongest agentic coder (via OpenRouter)
-  // DIRECT-ANTHROPIC last-resort floor — every entry above is routed through
-  // OpenRouter, so an OpenRouter-wide outage (or an exhausted OpenRouter key/credit)
-  // sinks the whole paid-coder tail at once. When that happens, call Claude DIRECTLY
-  // on CLAUDE_API_KEY (vendor-diverse, independent availability). Sonnet first
+  // DIRECT-ANTHROPIC last-resort floor — the OpenRouter-routed coders above all
+  // share OpenRouter's availability, so an OpenRouter-wide outage (or an exhausted
+  // OpenRouter key/credit) sinks them together; the Cloudflare entry is one extra
+  // vendor-diverse hop before this. When all of the above are unreachable, call
+  // Claude DIRECTLY on CLAUDE_API_KEY (independent availability). Sonnet first
   // (cheaper); Opus only if Sonnet is also unreachable. Unbound CLAUDE_API_KEY →
   // these no-key-skip at dispatch and the cascade surfaces an honest exhaustion.
   'claude-sonnet-4-6',
