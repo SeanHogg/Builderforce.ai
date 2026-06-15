@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CODING_MODEL_POOL,
   CODING_DEFAULT_MODEL,
+  CODING_PREMIUM_FALLBACK_MODELS,
   FREE_MODEL_POOL,
   isKnownModel,
   codingModelsForPlan,
@@ -122,5 +123,29 @@ describe('direct-Anthropic coding floor', () => {
   it('is a recognised coder (not flagged as a non-coder degradation)', () => {
     expect(CODING_MODEL_POOL).toContain('claude-sonnet-4-6');
     expect(CODING_MODEL_POOL).toContain('claude-opus-4-8');
+  });
+
+  it('the direct-Anthropic floor is tried LAST — after the Cloudflare + OpenRouter paid coders', () => {
+    const cf = CODING_PREMIUM_FALLBACK_MODELS.indexOf('@cf/qwen/qwen3-30b-a3b-fp8');
+    const sonnetDirect = CODING_PREMIUM_FALLBACK_MODELS.indexOf('claude-sonnet-4-6');
+    const opusDirect = CODING_PREMIUM_FALLBACK_MODELS.indexOf('claude-opus-4-8');
+    expect(cf).toBeGreaterThanOrEqual(0);
+    expect(cf).toBeLessThan(sonnetDirect);   // Cloudflare surfaces before direct Claude
+    expect(sonnetDirect).toBeLessThan(opusDirect);
+  });
+});
+
+describe('Cloudflare paid coder', () => {
+  it('@cf/qwen/qwen3-30b-a3b-fp8 is a tool-capable catalog coder owned by cloudflare', () => {
+    const entry = catalogEntry('@cf/qwen/qwen3-30b-a3b-fp8');
+    expect(entry).not.toBeNull();
+    expect(vendorForModel('@cf/qwen/qwen3-30b-a3b-fp8')).toBe('cloudflare');
+    expect(entry?.capabilities).toContain('tools');
+    expect(CODING_MODEL_POOL).toContain('@cf/qwen/qwen3-30b-a3b-fp8');
+  });
+
+  it('surfaces in the Pro coding picker (paid, auto-routable) but not the Free one', () => {
+    expect(codingModelsForPlan('pro')).toContain('@cf/qwen/qwen3-30b-a3b-fp8');
+    expect(codingModelsForPlan('free')).not.toContain('@cf/qwen/qwen3-30b-a3b-fp8');
   });
 });
