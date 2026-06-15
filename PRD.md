@@ -302,3 +302,242 @@ Error: Process completed with exit code 1.
 ### Update — Bob Developer (V2 (Container)) · 2026-06-15T01:40:33.179Z · execution #68
 
 you should update the ticktes acceptance criteria as you copmlete all the functiaonlity as well. And update the readme. Update the PRD.
+
+---
+
+### Update — Bob Developer (V2 (Container)) · 2026-06-15T02:20:41.075Z · execution #69
+
+you need to fix the errors below. update the tasks acceptance criteria as checked done, update the readme.
+
+Annotations
+4 errors and 8 warnings
+Frontend (Node.js 20)
+failed 37 minutes ago in 1m 46s
+Search logs
+1s
+2s
+1s
+11s
+40s
+3s
+30s
+16s
+Run pnpm test
+
+> builderforce-frontend@2026.05.31 test /home/runner/work/Builderforce.ai/Builderforce.ai/frontend
+> vitest run
+
+
+ RUN  v4.1.5 /home/runner/work/Builderforce.ai/Builderforce.ai/frontend
+
+ ✓ src/lib/api.test.ts (34 tests) 49ms
+ ✓ src/lib/brain/platformActions.test.ts (23 tests) 67ms
+ ✓ src/lib/utils.test.ts (31 tests) 17ms
+ ✓ src/components/agent/AgentExecutionPanel.test.tsx (8 tests) 862ms
+     ✓ does not show a re-run action on a running execution  376ms
+Not implemented: navigation to another Document
+ ✓ src/lib/auth.test.ts (13 tests) 37ms
+ ✓ src/lib/model-provider.test.ts (19 tests) 93ms
+ ✓ src/lib/browserRuntime/runner.test.ts (11 tests) 17ms
+ ✓ src/lib/browserRuntime/coding.test.ts (11 tests) 15ms
+ ✓ src/app/agent-worker/page.test.tsx (4 tests) 130ms
+ ✓ src/components/brain/FloatingBrain.test.tsx (5 tests) 202ms
+ ✓ src/components/workforce/AgentManifestSection.test.tsx (6 tests) 365ms
+ ✓ src/lib/browserRuntime/gitClient.test.ts (5 tests) 18ms
+ ✓ src/lib/browserRuntime/transport.test.ts (5 tests) 8ms
+TypeError: Cannot read properties of undefined (reading 'length')
+    at TeamMemberAvatarFilter (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/src/components/board/TeamMemberAvatarFilter.tsx:117:36)
+    at renderWithHooks (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:15486:18)
+    at mountIndeterminateComponent (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:20103:13)
+    at beginWork (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:21626:16)
+    at HTMLUnknownElement.callCallback (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:4164:14)
+    at HTMLUnknownElement.callTheUserObjectsOperation (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/generated/idl/EventListener.js:26:30)
+    at innerInvokeEventListeners (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:360:16)
+    at invokeEventListeners (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:296:3)
+    at HTMLUnknownElementImpl._dispatch (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:243:9)
+    at HTMLUnknownElementImpl.dispatchEvent (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:114:17)
+stderr | src/components/TaskMgmtContent.live.test.tsx > TaskMgmtContent live run chips > resolves cloud agents by name, shows agent history, and flags the queued run pending
+The above error occurred in the <TeamMemberAvatarFilter> component:
+
+    at TeamMemberAvatarFilter (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/src/components/board/TeamMemberAvatarFilter.tsx:20:35)
+    at div
+    at div
+    at TaskMgmtContent (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/src/components/TaskMgmtContent.tsx:152:28)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+
+TypeError: Cannot read properties of undefined (reading 'length')
+    at TeamMemberAvatarFilter (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/src/components/board/TeamMemberAvatarFilter.tsx:117:36)
+    at renderWithHooks (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:15486:18)
+    at mountIndeterminateComponent (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:20103:13)
+    at beginWork (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:21626:16)
+    at HTMLUnknownElement.callCallback (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:4164:14)
+    at HTMLUnknownElement.callTheUserObjectsOperation (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/generated/idl/EventListener.js:26:30)
+    at innerInvokeEventListeners (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:360:16)
+    at invokeEventListeners (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:296:3)
+    at HTMLUnknownElementImpl._dispatch (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:243:9)
+    at HTMLUnknownElementImpl.dispatchEvent (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:114:17)
+ ❯ src/components/TaskMgmtContent.live.test.tsx (1 test | 1 failed) 160ms
+     × resolves cloud agents by name, shows agent history, and flags the queued run pending 156ms
+TypeError: Cannot read properties of undefined (reading 'length')
+    at TeamMemberAvatarFilter (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/src/components/board/TeamMemberAvatarFilter.tsx:117:36)
+    at renderWithHooks (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:15486:18)
+    at mountIndeterminateComponent (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:20103:13)
+    at beginWork (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:21626:16)
+    at HTMLUnknownElement.callCallback (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:4164:14)
+    at HTMLUnknownElement.callTheUserObjectsOperation (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/generated/idl/EventListener.js:26:30)
+    at innerInvokeEventListeners (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:360:16)
+    at invokeEventListeners (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:296:3)
+    at HTMLUnknownElementImpl._dispatch (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:243:9)
+    at HTMLUnknownElementImpl.dispatchEvent (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:114:17)
+stderr | src/components/TaskMgmtContent.test.tsx > TaskMgmtContent > renders backlog column in board view
+The above error occurred in the <TeamMemberAvatarFilter> component:
+
+    at TeamMemberAvatarFilter (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/src/components/board/TeamMemberAvatarFilter.tsx:20:35)
+    at div
+    at div
+    at TaskMgmtContent (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/src/components/TaskMgmtContent.tsx:152:28)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+
+stderr | src/components/TaskMgmtContent.test.tsx > TaskMgmtContent > shows checkboxes and allows bulk status in list view
+The above error occurred in the <TeamMemberAvatarFilter> component:
+
+    at TeamMemberAvatarFilter (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/src/components/board/TeamMemberAvatarFilter.tsx:20:35)
+    at div
+    at div
+    at TaskMgmtContent (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/src/components/TaskMgmtContent.tsx:152:28)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+
+TypeError: Cannot read properties of undefined (reading 'length')
+    at TeamMemberAvatarFilter (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/src/components/board/TeamMemberAvatarFilter.tsx:117:36)
+    at renderWithHooks (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:15486:18)
+    at mountIndeterminateComponent (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:20103:13)
+    at beginWork (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:21626:16)
+    at HTMLUnknownElement.callCallback (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:4164:14)
+    at HTMLUnknownElement.callTheUserObjectsOperation (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/generated/idl/EventListener.js:26:30)
+    at innerInvokeEventListeners (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:360:16)
+    at invokeEventListeners (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:296:3)
+    at HTMLUnknownElementImpl._dispatch (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:243:9)
+    at HTMLUnknownElementImpl.dispatchEvent (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:114:17)
+TypeError: Cannot read properties of undefined (reading 'length')
+    at TeamMemberAvatarFilter (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/src/components/board/TeamMemberAvatarFilter.tsx:117:36)
+    at renderWithHooks (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:15486:18)
+    at mountIndeterminateComponent (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:20103:13)
+    at beginWork (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:21626:16)
+    at HTMLUnknownElement.callCallback (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:4164:14)
+    at HTMLUnknownElement.callTheUserObjectsOperation (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/generated/idl/EventListener.js:26:30)
+    at innerInvokeEventListeners (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:360:16)
+    at invokeEventListeners (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:296:3)
+    at HTMLUnknownElementImpl._dispatch (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:243:9)
+    at HTMLUnknownElementImpl.dispatchEvent (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:114:17)
+TypeError: Cannot read properties of undefined (reading 'length')
+    at TeamMemberAvatarFilter (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/src/components/board/TeamMemberAvatarFilter.tsx:117:36)
+    at renderWithHooks (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:15486:18)
+    at mountIndeterminateComponent (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:20103:13)
+    at beginWork (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:21626:16)
+    at HTMLUnknownElement.callCallback (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:4164:14)
+    at HTMLUnknownElement.callTheUserObjectsOperation (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/generated/idl/EventListener.js:26:30)
+    at innerInvokeEventListeners (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:360:16)
+    at invokeEventListeners (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:296:3)
+    at HTMLUnknownElementImpl._dispatch (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:243:9)
+    at HTMLUnknownElementImpl.dispatchEvent (/home/runner/work/Builderforce.ai/Builderforce.ai/frontend/node_modules/.pnpm/jsdom@28.1.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:114:17)
+ ❯ src/components/TaskMgmtContent.test.tsx (2 tests | 2 failed) 262ms
+     × renders backlog column in board view 197ms
+     × shows checkboxes and allows bulk status in list view 62ms
+ ✓ src/components/ProjectDetailsPanel.test.tsx (1 test) 228ms
+ ✓ src/lib/blogData.test.ts (9 tests) 17ms
+ ✓ src/lib/coiHeadersParity.test.ts (3 tests) 6ms
+ ✓ src/components/AgentCapabilitiesContent.test.tsx (1 test) 571ms
+     ✓ lists project agents and switches capability scope from project to agent  564ms
+ ✓ src/components/ProjectCard.test.tsx (2 tests) 210ms
+ ✓ src/lib/repoDiagnostic.test.ts (6 tests) 7ms
+ ✓ src/lib/browserRuntime/webcontainer.test.ts (3 tests) 10ms
+ ✓ src/lib/repoIdentifier.test.ts (8 tests) 9ms
+ ✓ src/components/ConditionalAppShell.test.ts (5 tests) 5ms
+ ✓ src/lib/unifiedDiff.test.ts (5 tests) 7ms
+ ✓ src/lib/fileContentGuard.test.ts (5 tests) 7ms
+ ✓ src/lib/structured-data.test.ts (2 tests) 6ms
+ ✓ src/lib/modality.test.ts (5 tests) 7ms
+ ✓ src/components/MobileBottomNav.test.ts (5 tests) 6ms
+ ✓ src/lib/embed/embedTrust.test.ts (4 tests) 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/TaskMgmtContent.live.test.tsx > TaskMgmtContent live run chips > resolves cloud agents by name, shows agent history, and flags the queued run pending
+ FAIL  src/components/TaskMgmtContent.test.tsx > TaskMgmtContent > renders backlog column in board view
+ FAIL  src/components/TaskMgmtContent.test.tsx > TaskMgmtContent > shows checkboxes and allows bulk status in list view
+TypeError: Cannot read properties of undefined (reading 'length')
+ ❯ TeamMemberAvatarFilter src/components/board/TeamMemberAvatarFilter.tsx:117:36
+    115|   }, [tasks, members, agentHosts, cloudAgents]);
+    116|
+    117|   const allSelected = selectedKeys.length === 0;
+       |                                    ^
+    118|   const hasSelection = selectedKeys.length > 0;
+    119|
+ ❯ renderWithHooks node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:15486:18
+ ❯ mountIndeterminateComponent node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:20103:13
+ ❯ beginWork node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:21626:16
+ ❯ beginWork$1 node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:27465:14
+ ❯ performUnitOfWork node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:26599:12
+ ❯ workLoopSync node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:26505:5
+ ❯ renderRootSync node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:26473:7
+ ❯ recoverFromConcurrentError node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:25889:20
+ ❯ performConcurrentWorkOnRoot node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:25789:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+
+ Test Files  2 failed | 28 passed (30)
+      Tests  3 failed | 239 passed (242)
+   Start at  01:42:17
+   Duration  15.00s (transform 2.62s, setup 2.33s, import 8.15s, tests 3.40s, environment 24.42s)
+
+
+Error: TypeError: Cannot read properties of undefined (reading 'length')
+ ❯ TeamMemberAvatarFilter src/components/board/TeamMemberAvatarFilter.tsx:117:36
+ ❯ renderWithHooks node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:15486:18
+ ❯ mountIndeterminateComponent node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:20103:13
+ ❯ beginWork node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:21626:16
+ ❯ beginWork$1 node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:27465:14
+ ❯ performUnitOfWork node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:26599:12
+ ❯ workLoopSync node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:26505:5
+ ❯ renderRootSync node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:26473:7
+ ❯ recoverFromConcurrentError node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:25889:20
+ ❯ performConcurrentWorkOnRoot node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:25789:22
+
+
+
+Error: TypeError: Cannot read properties of undefined (reading 'length')
+ ❯ TeamMemberAvatarFilter src/components/board/TeamMemberAvatarFilter.tsx:117:36
+ ❯ renderWithHooks node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:15486:18
+ ❯ mountIndeterminateComponent node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:20103:13
+ ❯ beginWork node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:21626:16
+ ❯ beginWork$1 node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:27465:14
+ ❯ performUnitOfWork node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:26599:12
+ ❯ workLoopSync node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:26505:5
+ ❯ renderRootSync node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:26473:7
+ ❯ recoverFromConcurrentError node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:25889:20
+ ❯ performConcurrentWorkOnRoot node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:25789:22
+
+
+
+Error: TypeError: Cannot read properties of undefined (reading 'length')
+ ❯ TeamMemberAvatarFilter src/components/board/TeamMemberAvatarFilter.tsx:117:36
+ ❯ renderWithHooks node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:15486:18
+ ❯ mountIndeterminateComponent node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:20103:13
+ ❯ beginWork node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:21626:16
+ ❯ beginWork$1 node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:27465:14
+ ❯ performUnitOfWork node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:26599:12
+ ❯ workLoopSync node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:26505:5
+ ❯ renderRootSync node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:26473:7
+ ❯ recoverFromConcurrentError node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:25889:20
+ ❯ performConcurrentWorkOnRoot node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:25789:22
+
+
+ ELIFECYCLE  Test failed. See above for more details.
+Error: Process completed with exit code 1.
