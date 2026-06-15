@@ -272,7 +272,11 @@ async function runLoop(spec) {
       // since the last step — stop before spending another LLM call.
       if (cancelled) break;
       const turn = await op(spec, { op: 'llm', args: { messages } });
-      if (turn.error) { finalOutput = turn.error; break; }
+      // A gateway LLM error (cascade exhausted: 429 / 413 context-too-big / etc.) is a
+      // FAILURE, not an orderly finish — the model produced no turn. Route it to the
+      // `fail` channel (self-heal/retry) via `crashed`, NOT `finalize`, so the run is
+      // never marked COMPLETED on a gateway error.
+      if (turn.error) { crashed = `gateway error: ${turn.error}`; break; }
       if (turn.cancelled) { cancelled = true; break; }
       const content = typeof turn.content === 'string' ? turn.content : '';
       const toolCalls = Array.isArray(turn.toolCalls) ? turn.toolCalls : [];
