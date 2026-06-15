@@ -38,10 +38,12 @@ export function ModelRoutingAnalytics() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Re-fetch on scope change. Loading/error are reset in the scope-change handler
+  // (an event handler, not synchronously in the effect) so the spinner shows on a
+  // switch without tripping react-hooks/set-state-in-effect; initial mount relies on
+  // the `loading: true` initial state.
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
     llmApi
       .modelAnalytics(scope)
       .then((res) => { if (!cancelled) setData(res); })
@@ -49,6 +51,14 @@ export function ModelRoutingAnalytics() {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [scope]);
+
+  const switchScope = (s: Scope) => {
+    if (s === scope) return;
+    setLoading(true);
+    setError(null);
+    setData(null);
+    setScope(s);
+  };
 
   return (
     <div style={{ ...cardStyle, marginTop: 24 }}>
@@ -63,7 +73,7 @@ export function ModelRoutingAnalytics() {
           {(['tenant', 'global'] as Scope[]).map((s) => (
             <button
               key={s}
-              onClick={() => setScope(s)}
+              onClick={() => switchScope(s)}
               style={{
                 padding: '6px 12px',
                 fontSize: 13,
