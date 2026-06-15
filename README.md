@@ -2316,6 +2316,14 @@ The project board/kanban/calendar/list + open task drawer are now live for concu
 
 ---
 
+### Autonomous lane chaining on agent completion (added 2026-06-14) — next lane's agent now kicks off after an auto-move
+
+A cloud agent finishing a ticket advanced its lane via `RuntimeService.update` writing `tasks.status` directly, which bypassed the `maybeAutoRunOnLaneEntry` trigger that the human board-drag PATCH uses — so the next lane's configured agent never started (only human drags chained). Fixed by an injected `onLaneEntry` sink (wired in `buildRuntimeService`, shared by the Worker and `CloudRunnerDO`) that fires the SAME trigger when a COMPLETED run moves a ticket into a new non-terminal lane. Loop-safe: the auto-run dispatch stamps `laneKey` into its payload, and the trigger skips a same-lane re-entry (keyed on lane, not agent, so a genuine handoff to a different lane staffed by the same agent still runs). **Open residuals:**
+- **No position-based stage routing on the execution path:** `RuntimeService` hardcodes `RUNNING→in_progress` and `COMPLETED→in_review`, so autonomous chaining is a single hop into `in_review` — it does NOT walk `backlog→todo→ready→in_progress` by swimlane position. A ticket whose agent completes in an early lane jumps straight to `in_review`, skipping intermediate lanes' agents. The richer position/`action_type`-driven advance lives only in the parallel `SwimlaneCoordinator` (agent_dispatches model), which the execution-based board does not route through. Fixing = unify the two advance models (or teach the execution path to resolve the next lane by swimlane position + action). Unblocks: true multi-stage BA→Dev→QA pipelines on the V2 cloud-agent board.
+- **`in_review` default gate is `human`:** the loop-prone case only arises if an operator overrides `in_review` (or another completion-target lane) to `gate:'auto'` and staffs it; the same-lane guard covers that, but a mis-staffed auto-gated review lane is still a config smell worth surfacing in the lane editor.
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

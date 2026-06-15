@@ -39,7 +39,9 @@ import {
   type ImageGenerationRequest,
 } from '../../application/llm/ImageProxyService';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, agentHosts, tenantApiKeys, users } from '../../infrastructure/database/schema';
+import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, agentHosts, tenantApiKeys, users, projects } from '../../infrastructure/database/schema';
+import { getRoutingTable, parseScopeToken, scopeToken } from '../../application/llm/routingTable';
+import { actionTypeLabel, type ActionType } from '../../application/llm/actionTypes';
 import { originAllowed, deserializeScopes } from '../../application/llm/tenantApiKeyService';
 import { listToolsForTenant, callMcpTool } from '../../application/llm/mcpExtensionService';
 import { listBuiltinTools, callBuiltinTool, BUILTIN_EXTENSION_ID } from '../../application/llm/builtinMcpService';
@@ -1205,6 +1207,61 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       data: await service.status(),
       codingModels,
     });
+  });
+
+  // -----------------------------------------------------------------------
+  // GET /v1/model-analytics?scope=project:<id>|tenant|global
+  // Learned Model Routing (PRD 13 §6.5): the per-action-type model ranking the
+  // learned router seeds from. Reads the SAME cached `routing:<scope>` KV blob the
+  // router reads (one source) — so it's O(1) and DB-free on a warm cache; a cold
+  // scope reconciles once from the durable outcomes table. Tenant-scoped.
+  // -----------------------------------------------------------------------
+  router.get('/v1/model-analytics', async (c) => {
+    let access: TenantAccess;
+    try {
+      access = await requireTenantAccess(c);
+    } catch (err) {
+      return respondToAccessError(c, err);
+    }
+
+    const rawScope = c.req.query('scope') ?? 'tenant';
+    // `tenant` resolves to the caller's own tenant id; `global` and `project:<id>`
+    // pass through. Anything malformed → 400.
+    const scope = rawScope === 'tenant'
+      ? ({ kind: 'tenant', id: access.tenantId } as const)
+      : parseScopeToken(rawScope);
+    if (!scope) return c.json({ error: `invalid scope '${rawScope}' (use project:<id> | tenant | global)` }, 400);
+
+    const db = buildDatabase(c.env);
+    // Ownership guard: a project scope must belong to the caller's tenant (the blob
+    // is low-sensitivity aggregate model stats, but routing data still stays tenant-scoped).
+    if (scope.kind === 'project') {
+      const [proj] = await db
+        .select({ tenantId: projects.tenantId })
+        .from(projects)
+        .where(eq(projects.id, scope.id))
+        .limit(1);
+      if (!proj || proj.tenantId !== access.tenantId) {
+        return c.json({ error: 'project not found in this tenant' }, 404);
+      }
+    }
+
+    const table = await getRoutingTable(c.env, db, scope);
+    // Shape the blob into a stable, labelled ranking for the panel.
+    const byAction = (Object.entries(table.byAction) as [ActionType, typeof table.byAction[ActionType]][])
+      .filter(([, models]) => models && models.length > 0)
+      .map(([actionType, models]) => ({
+        actionType,
+        label: actionTypeLabel(actionType),
+        models: (models ?? []).map((m) => ({
+          model: m.model,
+          samples: m.n,
+          avgScore: Math.round(m.avgScore * 1000) / 1000,
+          mergeRate: Math.round(m.mergeRate * 1000) / 1000,
+          avgCostMillicents: Math.round(m.avgCostMc),
+        })),
+      }));
+    return c.json({ scope: scopeToken(scope), updatedAt: table.updatedAt, byAction });
   });
 
   // -----------------------------------------------------------------------
