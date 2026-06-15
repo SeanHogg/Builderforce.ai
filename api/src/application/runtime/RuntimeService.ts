@@ -57,6 +57,16 @@ export class RuntimeService {
       tenantId: number; taskId: number; projectId: number;
       fromStatus: string; toStatus: string; terminal: boolean;
     }) => Promise<void>,
+    /**
+     * Optional cloud-orphan self-heal. Invoked for a stale CLOUD run BEFORE it is
+     * failed, so a crashed/evicted run is re-queued once on the durable executor
+     * instead of being permanently failed by whichever reader noticed it first
+     * (the read path used to defeat the cron's self-heal by failing first). Returns
+     * `'requeued'` when it recovered the run (left running) or `'failed'` to let the
+     * normal orphan-fail proceed. Wired to {@link ./cloudSelfHeal} with env+db at the
+     * composition root. Idempotent + once-only by contract.
+     */
+    private readonly onCloudOrphan?: (e: Execution) => Promise<'requeued' | 'failed'>,
   ) {}
 
   async submit(dto: SubmitTaskDto): Promise<Execution> {
@@ -173,6 +183,16 @@ export class RuntimeService {
 
   private async reapIfOrphaned(e: Execution): Promise<Execution> {
     if (!this.isOrphaned(e, Date.now())) return e;
+    // Cloud runs: attempt the once-only durable self-heal BEFORE failing, so a
+    // crashed/evicted run recovers regardless of who detects it first. Idempotent —
+    // a run that already used its retry just falls through to the normal fail.
+    if (this.isCloudRun(e) && this.onCloudOrphan) {
+      try {
+        if ((await this.onCloudOrphan(e)) === 'requeued') {
+          return (await this.executions.findById(asExecutionId(e.id))) ?? e;
+        }
+      } catch { /* fall through to fail */ }
+    }
     try {
       const failed = e.markFailed(this.orphanReason(e));
       const saved = await this.executions.update(failed);

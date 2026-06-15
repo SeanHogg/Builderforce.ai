@@ -2292,6 +2292,13 @@ full `api/src` rename (`Claw*`→`AgentHost*`, table `coderclaw_instances`→`ag
 
 ### Voice cloning (VibeVoice → SSM clone foundation) — Phase 1+2 in studio, server route #1994 shipped, IDE panel shipped; trained weights + marketplace-checkout remain
 
+### Real-time project board (added 2026-06-14) — project room WebSocket push for the whole project surface
+
+The project board/kanban/calendar/list + open task drawer are now live for concurrent humans + agents: a per-project room (`SessionRoomDO`, key `project:<id>`) pushes `{type:"changed"}` over `GET /api/projects/:id/stream`; the frontend subscribes via `useRealtimeRoom` and refetches. Task create/update/move/delete broadcast from `taskRoutes`; execution lifecycle broadcasts via the `setExecutionBoardSink` hook in `executionEvents` → `makeExecutionBoardSink` (resolves taskId→projectId). Card chips also resolve cloud agents by name and show agent run history (prior + queued). **Open residuals:**
+- **Bypassed status writers:** execution status writes that do NOT route through `notifyExecutionSubscribers` (e.g. `staleExecutionReaper` raw SQL, some `CloudRunnerDO`/`AnalysisRunnerDO` direct `db.update(executions)`) won't push to the board — those transitions only surface via the `useBoardLiveRuns` reconcile backstop poll (8s/30s). Fixing = funnel all execution-status writes through one notifier (or add a DB-trigger/outbox fan-out) so every transition is real-time. Unblocks: drop the backstop poll entirely.
+- **Dispatch feed still polled:** lane-header dispatch chips (`boardsApi.dispatches`) refetch on the room push, but `SwimlaneCoordinator` dispatch-only status changes that don't emit an execution `status_change` won't trigger a push. Low impact; covered by the backstop.
+- **Cross-isolate WS loss:** the room DO fan-out is per-isolate like every other room here; the backstop poll is the intentional reconciliation (mirrors `useExecutionStream`). A missed frame self-heals within one poll interval.
+
 ---
 
 ## License

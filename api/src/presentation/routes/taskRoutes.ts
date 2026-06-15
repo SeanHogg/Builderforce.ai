@@ -18,6 +18,7 @@ import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { decideLaneAutoRun, type LaneAgentLike } from '../../application/swimlane/laneAutoRun';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
+import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
 
 /** Parse a swimlane assignment's `required_capabilities` (JSON array stored as
  *  text) into a clean string[]. Tolerates null / malformed / non-array values by
@@ -440,6 +441,8 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const task = await taskService.createTask(body, c.get('tenantId'));
     const created = task.toPlain();
     await bumpTreeVersion(c.env as Env, created.projectId);
+    // Push the new card to everyone watching this project's live board.
+    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, created.projectId));
 
     // Autonomous trigger: a ticket CREATED straight into a lane with a configured
     // cloud agent (e.g. the brain drops a task into an agent-owned lane) must
@@ -488,6 +491,11 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const task = await taskService.updateTask(id, body);
     // A PATCH can change parent/sprint/title/status — any of which reshapes a tree.
     await bumpTreeVersion(c.env as Env, task.toPlain().projectId);
+    // Live board: push the edit (status move, reassignment, field change) to every
+    // client viewing this project so cards/lane chips update without a reload. The
+    // auto-run queued below (lane entry) lands its own execution-lifecycle push, so
+    // the freshly-assigned agent appears pending the moment its run row is created.
+    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, task.toPlain().projectId));
 
     // Any status write can change which tasks fall in the completed-by-assignee
     // window (moved into OR out of a done-class lane), so bust that rollup's
@@ -569,6 +577,9 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const task = await taskService.moveTask(id, body.projectId, c.get('tenantId'));
     await bumpTreeVersion(c.env as Env, before?.projectId);
     await bumpTreeVersion(c.env as Env, body.projectId);
+    // The card leaves one project's board and joins another's — push both.
+    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, before?.projectId));
+    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, body.projectId));
 
     try {
       await db.insert(auditEvents).values({
@@ -592,6 +603,8 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const [before] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, id)).limit(1);
     await taskService.deleteTask(id);
     await bumpTreeVersion(c.env as Env, before?.projectId);
+    // Drop the card from every client viewing this project's live board.
+    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, before?.projectId));
     return c.body(null, 204);
   });
 

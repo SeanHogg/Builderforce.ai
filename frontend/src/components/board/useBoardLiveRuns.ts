@@ -5,9 +5,14 @@ import { runtimeApi, boardsApi, type Execution, type BoardDispatch } from '@/lib
 
 /** Execution/dispatch statuses that mean an agent is still working (or queued). */
 const ACTIVE = new Set(['pending', 'submitted', 'running', 'claimed']);
-/** Poll cadence while something is in-flight vs. when the board is idle. */
-const FAST_MS = 4000;
-const IDLE_MS = 15000;
+/**
+ * Reconcile cadence. This poll is a BACKSTOP behind the project room's WebSocket
+ * push (see TaskMgmtContent) — the push delivers real-time updates; this only
+ * catches a dropped/missed socket frame (cross-isolate WS is lossy on Workers).
+ * So it runs slow: a little quicker while a run is in-flight, lazy when idle.
+ */
+const FAST_MS = 8000;
+const IDLE_MS = 30000;
 
 export interface BoardLiveRuns {
   /** Recent executions across the tenant (newest first); filtered to board tasks by the caller. */
@@ -25,12 +30,12 @@ export interface BoardLiveRuns {
  * appears immediately (the caller invokes {@link BoardLiveRuns.refresh} after the
  * status PATCH resolves).
  *
- * This mirrors {@link useExecutionStream}'s reconciliation model: the runtime has
- * no board-level push channel — execution lifecycle writes happen across Worker
- * isolates (cloud DO ticks, the agentHost relay, the stale-run reaper), so no
- * single socket sees them all. We poll instead: fast while anything is in-flight,
- * slow when idle to stay cheap. A board-level WebSocket room is a future upgrade
- * (see the Consolidated Gap Register).
+ * Real-time updates arrive over the project room WebSocket (TaskMgmtContent
+ * subscribes via {@link useRealtimeRoom} and calls {@link BoardLiveRuns.refresh}
+ * on every push). This poll is only a reconcile BACKSTOP for a dropped socket
+ * frame — cross-isolate WS is lossy on Workers, exactly why {@link useExecutionStream}
+ * also keeps a reconcile poll. It runs slow (see FAST_MS/IDLE_MS) so the push,
+ * not the poll, is what makes the board feel live.
  */
 export function useBoardLiveRuns(boardId: string | undefined, enabled: boolean): BoardLiveRuns {
   const [executions, setExecutions] = useState<Execution[]>([]);

@@ -33,6 +33,7 @@ import { BoardConfigPanel } from './board/BoardConfigPanel';
 import { AgentChip } from './board/AgentChip';
 import { useBoardConfig } from './board/useBoardConfig';
 import { useBoardLiveRuns } from './board/useBoardLiveRuns';
+import { useRealtimeRoom } from '@/lib/embed/useRealtimeRoom';
 import { SlideOutPanel } from './SlideOutPanel';
 import { MoveToBoardControl } from './MoveToBoardControl';
 import { AgentTab } from './agent/AgentTab';
@@ -288,6 +289,16 @@ export function TaskMgmtContent({
     setEditingField(null);
   }, [drawerTask?.id, drawerTab]);
 
+  // Keep an open drawer live: when a realtime push refreshes the task list (another
+  // teammate or an agent edited the same ticket), re-sync the drawer from the fresh
+  // row — but never while the user is mid-edit, so a live update can't clobber a
+  // field they're typing into. The Agent tab streams its own run updates separately.
+  useEffect(() => {
+    if (!drawerTask || editingField) return;
+    const fresh = tasks.find((t) => t.id === drawerTask.id);
+    if (fresh && fresh !== drawerTask) setDrawerTask(fresh);
+  }, [tasks, drawerTask, editingField]);
+
   const projectNameById = (id?: number | null) =>
     id ? projects.find((p) => p.id === id)?.name ?? String(id) : '—';
   // Resolve a task's assignee (human teammate, self-hosted host, OR cloud agent) to its display name.
@@ -334,6 +345,20 @@ export function TaskMgmtContent({
   const { executions, dispatches, refresh: refreshRuns } = useBoardLiveRuns(
     view === 'board' && !compact ? board?.id : undefined,
     view === 'board' || view === 'table',
+  );
+
+  // Real-time project room: the server pushes `{type:"changed"}` over a WebSocket
+  // whenever ANYONE — another teammate or an agent run — mutates this project, so
+  // every view (board, table, calendar, gantt) and the open drawer refetch live.
+  // This is the primary liveness path; the run-feed poll above is a reconcile
+  // backstop for a dropped socket (cross-isolate WS is lossy on Workers).
+  const onRealtimeChange = useCallback(() => {
+    void load();
+    refreshRuns();
+  }, [load, refreshRuns]);
+  useRealtimeRoom(
+    effectiveProjectId != null ? `/api/projects/${effectiveProjectId}/stream` : null,
+    onRealtimeChange,
   );
 
   // Latest dispatch per assignment (configured agent), keyed by assignment id.
