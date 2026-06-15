@@ -22,7 +22,8 @@ import { _resetMemoryCooldowns } from '../../infrastructure/auth/cooldownStore';
 const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const CF_ACCOUNT = 'acct-test';
-const CF_ENDPOINT_PREFIX = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/`;
+// Cloudflare now uses its OpenAI-compatible endpoint (model in the body, not the path).
+const CF_ENDPOINT = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/v1/chat/completions`;
 
 interface Counters {
   cloudflare: number;
@@ -37,9 +38,10 @@ function installFetch(counters: Counters): void {
     if (url === OPENROUTER_ENDPOINT) {
       return new Response(JSON.stringify({ error: { message: 'rate limited' } }), { status: 429 });
     }
-    if (url.startsWith(CF_ENDPOINT_PREFIX)) {
+    if (url === CF_ENDPOINT) {
       counters.cloudflare++;
-      return new Response(JSON.stringify({ result: { response: 'done' }, success: true }), {
+      // OpenAI-compatible response shape (the endpoint is OpenAI-compatible now).
+      return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'done' } }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }), {
         status: 200, headers: { 'content-type': 'application/json' },
       });
     }
