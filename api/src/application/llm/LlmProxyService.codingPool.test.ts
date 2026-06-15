@@ -193,7 +193,7 @@ describe('pickCloudModel with learned routing', () => {
 
   it('seeds the top-scoring reachable model for the action type (soft seed = ranked[0])', () => {
     const reachable = codingModelsForPlan('pro');
-    const leader = reachable[reachable.length - 1]; // pick a NON-default to prove the reorder
+    const leader = reachable[reachable.length - 1]!; // pick a NON-default to prove the reorder
     const pick = pickCloudModel(undefined, 'pro', false, {
       actionType: 'sql',
       actionStats: [{ model: leader, n: 14, avgScore: 0.78, avgCostMc: 0 }],
@@ -206,7 +206,7 @@ describe('pickCloudModel with learned routing', () => {
 
   it('below MIN_SAMPLES → curated default (cold-start), even with a high score', () => {
     const reachable = codingModelsForPlan('pro');
-    const other = reachable[reachable.length - 1];
+    const other = reachable[reachable.length - 1]!;
     const pick = pickCloudModel(undefined, 'pro', false, {
       actionType: 'sql',
       actionStats: [{ model: other, n: 2, avgScore: 0.99, avgCostMc: 0 }],
@@ -225,7 +225,7 @@ describe('pickCloudModel with learned routing', () => {
 
   it('free plan ignores an explicit pick and still reorders only within the free coding pool', () => {
     const freePool = codingModelsForPlan('free');
-    const leader = freePool[freePool.length - 1];
+    const leader = freePool[freePool.length - 1]!;
     const pick = pickCloudModel('openai/gpt-4.1', 'free', false, {
       actionType: 'sql',
       actionStats: [{ model: leader, n: 20, avgScore: 0.9, avgCostMc: 0 }],
